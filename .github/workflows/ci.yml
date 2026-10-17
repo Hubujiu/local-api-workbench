@@ -1,0 +1,58 @@
+name: Validate Local API
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm run check
+      - run: npm test
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/ui-smoke.mjs
+        env:
+          PLAYWRIGHT_BUNDLED: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-evidence
+          path: /tmp/local-api-*.png
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --prefix desktop
+      - name: Assemble portable Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/LocalAPI | Out-Null
+          Copy-Item desktop/node_modules/electron/dist/* dist/LocalAPI -Recurse
+          New-Item -ItemType Directory -Force dist/LocalAPI/resources/app | Out-Null
+          Copy-Item src,public,desktop dist/LocalAPI/resources/app -Recurse
+          Remove-Item dist/LocalAPI/resources/app/desktop/node_modules -Recurse -Force
+          '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
+          Rename-Item dist/LocalAPI/electron.exe LocalAPI.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalAPI-Windows-portable
+          path: dist/LocalAPI

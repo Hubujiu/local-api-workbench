@@ -1,0 +1,43 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-api-workbench@0.1.0 test
+> node --test tests/*.test.mjs
+
+✔ variables substitute deeply and unresolved variables fail (2.220481ms)
+✔ JSON paths preserve falsy values and reject prototype traversal (0.470451ms)
+✔ assertions distinguish expected errors and missing values (0.606494ms)
+✔ OpenAPI import/export preserves HTTP definitions (1.814375ms)
+✔ plans snapshot request state and freeze evidence (2.214522ms)
+✔ plans continue after failure and extract variables (0.969796ms)
+✔ unsafe or invalid imports rejected (0.291985ms)
+✔ extraction failure retains actual request and response evidence (1.116265ms)
+✔ empty plan cannot falsely pass (0.476961ms)
+✔ backup restore preserves environments and plans without overwriting source (1.416823ms)
+✔ OpenAPI references resolve locally and never fetch remote documents (0.900913ms)
+✔ schema sample generation respects examples and falsy defaults (1.860634ms)
+✔ database reads use parameters and refuse writes (13.562142ms)
+✔ bounded worker returns database result (95.508811ms)
+✔ MCP advertises only granted capabilities (2.028485ms)
+✔ MCP filters projects and denies cross-project reads (0.746574ms)
+✔ MCP initialization and notification lifecycle (0.376201ms)
+✔ SSE captures explicit event boundaries and multiline data (41.614866ms)
+✔ TCP sends and receives actual local fixture bytes (13.845795ms)
+✔ protocol validation rejects unrelated protocols (2.357635ms)
+✔ WebSocket exchanges a message with a real local handshake (13.595562ms)
+✔ real HTTP body, query, auth and response evidence (31.390375ms)
+✔ disk store rejects traversal and survives reopening (13.145341ms)
+✔ non HTTP protocols blocked (0.636579ms)
+✔ stale saves rejected, history append preserves latest content (13.292981ms)
+✔ HTTP timeout and cancellation produce explicit failures (126.277178ms)
+✔ compressed responses are decoded with a size limit (5.634742ms)
+✔ multipart files preserve binary bytes (3.242054ms)
+✔ slow drip cannot evade the total timeout (102.120138ms)
+✔ session, project persistence, permission boundary, mock and snapshot plan (113.406657ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 500.514998

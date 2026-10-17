@@ -1,0 +1,1 @@
+{"name":"local-api-desktop","version":"0.1.0","private":true,"type":"module","main":"main.mjs","scripts":{"start":"electron ."},"devDependencies":{"electron":"44.9.0"}}
