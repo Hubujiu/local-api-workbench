@@ -64,6 +64,8 @@ export function normalizeRequest(r = {}) {
     after: r.after || [],
     examples: r.examples || [],
     schema: r.schema || {},
+    proxy: r.proxy || "",
+    tls: r.tls || {},
     timeout: Math.min(60000, Math.max(100, Number(r.timeout) || 15000)),
     ...("deletedAt" in r ? { deletedAt: r.deletedAt } : {}),
   };

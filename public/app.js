@@ -1,3 +1,5 @@
+import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
+import { exportDocumentation } from "./document-export.js";
 import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
@@ -230,7 +232,15 @@ function tree() {
 function render() {
   const r = request();
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects
+      .filter((p) => !p.archived && !p.error)
+      .map(
+        (p) =>
+          `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`,
+      )
+      .join(
+        "",
+      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -348,7 +358,7 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><div class="notice">定义、调试与用例共用同一接口。执行计划保存独立快照，不随接口修改。</div></div>`;
+    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
@@ -371,7 +381,7 @@ function modePanel(r) {
 function renderPage() {
   if (!project) return "";
   if (page === "settings")
-    return `<div class="page"><div class="page-head"><div><h1>项目配置</h1><span class="muted">环境、变量与本地存储</span></div><button id="save" class="primary">保存配置</button></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2>环境管理</h2><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}<div class="notice">数据保存在启动目录的 .local-api 文件夹。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card"><h3>MCP 接入</h3><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
+    return `<div class="page"><div class="page-head"><div><h1>项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2>环境管理</h2><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}<div class="notice">数据保存在启动目录的 .local-api 文件夹。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
   if (page === "plans") {
     const plan = project.plans.find((p) => p.id === planId);
     return `<div class="page"><div class="page-head"><div><h1>AI 执行计划</h1><span class="muted">固定步骤 · 独立快照 · 完整证据 · 可重复运行</span></div><button id="new-plan" class="primary">＋ 新建计划</button></div><div class="toolbar">${project.plans.map((p) => `<button data-plan="${p.id}" class="${planId === p.id ? "primary" : ""}">${esc(p.name)}</button>`).join("") || '<p class="muted">尚无计划。先创建接口，再组合成可重复的业务流程。</p>'}</div>${plan ? `<div class="card"><div class="row"><h3 class="grow">${esc(plan.name)}</h3><button id="edit-plan">编辑 JSON</button><button id="add-step">＋ 添加步骤</button><button id="run-plan" class="primary" ${busy ? "disabled" : ""}>${busy ? "执行中…" : "执行计划"}</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="row"><label>执行环境</label><select id="plan-env">${project.environments.map((e) => `<option value="${e.id}" ${e.id === plan.environmentId ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></div>${plan.steps.map((s, i) => `<div class="plan-step"><span class="step-number">${i + 1}</span><input type="checkbox" data-step-enable="${i}" ${s.enabled ? "checked" : ""} aria-label="启用步骤"><span class="method ${s.request.method}">${s.request.method}</span><div class="grow"><strong>${esc(s.name)}</strong><div class="subtle">${esc(s.request.url)}</div></div><button data-step-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-step-edit="${i}">编辑</button><button data-step-delete="${i}" class="danger">×</button></div>`).join("") || '<div class="notice">添加步骤后执行。每一步保存接口的独立快照。</div>'}</div>` : ""}<h2>执行记录 <span class="subtle">最近 50 条</span></h2>${(lastRun ? [lastRun, ...project.runs.filter((r) => r.id !== lastRun.id)] : project.runs).map((r) => `<details class="card" ${r.id === lastRun?.id ? "open" : ""}><summary><span class="${r.status === "passed" ? "success" : "failed"}">${r.status === "passed" ? "✓ 通过" : r.status === "cancelled" ? "■ 已取消" : "× 失败"}</span> &nbsp; ${esc(r.planName)} &nbsp; <span class="subtle">${esc(r.createdAt)} · ${r.results.length} 步</span></summary><p class="subtle">快照 SHA256: ${esc(r.planHash)}</p>${r.results.map((s, i) => `<details class="card"><summary>${i + 1}. <span class="${s.status === "passed" ? "success" : "failed"}">${s.status}</span> ${esc(s.name)} · ${s.response?.status || ""} ${s.response?.duration || 0}ms</summary><pre>${esc(JSON.stringify(s, null, 2))}</pre></details>`).join("")}<button data-export-run="${r.id}">导出证据 JSON</button></details>`).join("") || '<div class="empty"><span class="empty-symbol">☷</span><p>计划运行后，逐步结果将显示在这里</p></div>'}</div>`;
@@ -379,7 +389,13 @@ function renderPage() {
   if (page === "history")
     return `<div class="page"><div class="page-head"><h1>最近请求</h1><span class="muted">本地保留最近 50 条</span></div>${project.history.map((h) => `<div class="card"><div class="row"><span class="method ${h.request?.method}">${h.request?.method}</span><strong class="grow">${esc(h.name)}</strong><span class="${h.response?.status < 400 ? "success" : "failed"}">${h.response?.status || "ERROR"}</span><button data-history="${h.id}">查看</button></div><p class="subtle">${esc(h.createdAt)} · ${esc(h.request?.url)}</p></div>`).join("") || '<div class="empty"><p>暂无请求历史</p></div>'}</div>`;
   if (page === "trash")
-    return `<div class="page"><h1>回收站</h1><p class="muted">删除的接口在这里保留，可随时恢复。</p>${
+    return `<div class="page"><h1>回收站</h1>${projects
+      .filter((p) => p.archived)
+      .map(
+        (p) =>
+          `<div class="list-row"><strong class="grow">归档项目 · ${esc(p.name)}</strong><button data-restore-project="${p.id}">恢复项目</button></div>`,
+      )
+      .join("")}<p class="muted">删除的接口在这里保留，可随时恢复。</p>${
       project.requests
         .filter((r) => r.deletedAt)
         .map(
@@ -395,8 +411,8 @@ function renderPage() {
   if (page === "database")
     return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL · 只读事务 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名</label><input id="db-name"><label>TLS</label><input id="db-tls" type="checkbox"><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
-    return `<div class="page"><h1>Git 协同</h1><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">本应用不会自动执行 Git 命令、提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
-  return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出 Markdown</button></div></div>${
+    return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
+  return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
     project.documents
       .map(
         (document, index) =>
@@ -498,6 +514,17 @@ function bind() {
     if (current === e.dataset.closeTab) current = opened.at(-1);
     render();
   });
+  on("#git-terminal", "click", async () => {
+    if (window.desktop?.openProjectTerminal)
+      return window.desktop.openProjectTerminal(project.id);
+    const location = await api("/projects/" + project.id + "/location");
+    modal(
+      "项目位置",
+      `<pre>${esc(location.path)}</pre><p>浏览器模式请在该文件所在目录自行打开终端。桌面版可直接打开。</p>`,
+      () => navigator.clipboard.writeText(location.path),
+      "复制路径",
+    );
+  });
   on("#open-location", "click", async () => {
     if (window.desktop?.openProjectLocation)
       return window.desktop.openProjectLocation(project.id);
@@ -507,6 +534,48 @@ function bind() {
       `<pre>${esc(location.path)}</pre><p>浏览器模式请在文件管理器中打开此路径。</p>`,
       () => navigator.clipboard.writeText(location.path),
       "复制路径",
+    );
+  });
+  on("#mcp-config", "click", async () => {
+    const config = await api("/mcp/config");
+    modal(
+      "MCP 项目授权",
+      `<label><input id="mcp-enabled" type="checkbox" ${config.enabled ? "checked" : ""}> 开启本次运行的 MCP 服务</label><label><input id="mcp-write" type="checkbox" ${config.write ? "checked" : ""}> 允许写入项目</label><label><input id="mcp-execute" type="checkbox" ${config.execute ? "checked" : ""}> 允许执行已有计划（会向计划 URL 发送请求）</label><h4>授权项目</h4>${projects.map((p) => `<label><input data-mcp-project="${p.id}" type="checkbox" ${config.projects.includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("")}<div class="notice">凭据只用于本机 MCP 接入。不要分享给不信任的 Agent。关闭服务会立即撤销当前令牌。</div>`,
+      async () => {
+        const result = await api("/mcp/config", "POST", {
+          enabled: $("#mcp-enabled").checked,
+          write: $("#mcp-write").checked,
+          execute: $("#mcp-execute").checked,
+          projects: [
+            ...document.querySelectorAll("[data-mcp-project]:checked"),
+          ].map((e) => e.dataset.mcpProject),
+        });
+        if (result.enabled) {
+          const configuration = {
+            mcpServers: {
+              localapi: {
+                type: "http",
+                url: result.endpoint,
+                headers: { Authorization: "Bearer " + result.token },
+              },
+            },
+          };
+          setTimeout(
+            () =>
+              modal(
+                "MCP 连接配置",
+                `<pre>${esc(JSON.stringify(configuration, null, 2))}</pre><p>把此配置添加到你选择的 MCP 客户端。不会自动配置或联系任何 Agent。</p>`,
+                () =>
+                  navigator.clipboard.writeText(
+                    JSON.stringify(configuration, null, 2),
+                  ),
+                "复制配置",
+              ),
+            0,
+          );
+        } else toast("MCP 已关闭，令牌已撤销");
+      },
+      "应用授权",
     );
   });
   on("#theme", "click", () => {
@@ -595,6 +664,15 @@ function bind() {
   });
   on("#timeout", "change", (_, e) => {
     request().timeout = Number(e.value);
+    mark();
+  });
+  on("#request-proxy", "input", (_, element) => {
+    request().proxy = element.value;
+    mark();
+  });
+  on("[data-tls]", "input", (_, element) => {
+    request().tls ??= {};
+    request().tls[element.dataset.tls] = element.value;
     mark();
   });
   on("#schema", "change", (_, e) => {
@@ -909,6 +987,27 @@ function bind() {
     });
     $("#db-result").textContent = JSON.stringify(result, null, 2);
   });
+  on("#archive-project", "click", async () => {
+    if (!confirm("归档当前项目？文件和历史会保留，可在回收站恢复。")) return;
+    project.archived = true;
+    mark();
+    await save();
+    projects = await api("/projects");
+    let next = projects.find((item) => !item.archived && !item.error);
+    if (!next) {
+      next = await api("/projects", "POST", { name: "默认项目" });
+      projects = await api("/projects");
+    }
+    await openProject(next.id);
+  });
+  on("[data-restore-project]", "click", async (_, element) => {
+    const restored = await api("/projects/" + element.dataset.restoreProject);
+    restored.archived = false;
+    await api("/projects/" + restored.id, "PUT", restored);
+    projects = await api("/projects");
+    render();
+    toast("项目已恢复");
+  });
   on("#project-name", "input", (_, e) => {
     project.name = e.value;
     mark();
@@ -986,7 +1085,9 @@ function bind() {
         await savePlan({
           name: $("#plan-name").value,
           environmentId: env(),
-          steps: request() ? [{ request: structuredClone(request()) }] : [],
+          steps: request()
+            ? [{ request: snapshotInterfaceForPlan(request()) }]
+            : [],
         });
       },
     );
@@ -1014,7 +1115,7 @@ function bind() {
         const p = project.plans.find((p) => p.id === planId);
         const r = project.requests.find((r) => r.id === $("#step-api").value);
         if (!r) throw Error("请先创建接口");
-        p.steps.push({ request: structuredClone(r) });
+        p.steps.push({ request: snapshotInterfaceForPlan(r) });
         await savePlan(p);
       },
     ),
@@ -1093,23 +1194,18 @@ function bind() {
     render();
   });
   on("#export-docs", "click", () =>
-    download(
-      project.name + ".md",
-      "# " +
-        project.name +
-        "\n\n" +
-        project.documents
-          .map((doc) => "## " + doc.title + "\n\n" + doc.content)
-          .join("\n\n") +
-        "\n\n" +
-        project.requests
-          .filter((r) => !r.deletedAt)
-          .map(
-            (r) =>
-              `## ${r.name}\n\n${r.method} ${r.url}\n\n${r.description}\n\n${r.bodyType !== "none" ? "```json\n" + r.body + "\n```" : ""}\n`,
-          )
-          .join("\n"),
-      "text/markdown",
+    modal(
+      "导出离线文档",
+      '<label>格式</label><select id="document-format"><option value="html">独立 HTML（浏览器直接打开）</option><option value="markdown">Markdown</option></select><div class="notice">文档包含请求和响应示例，可能含敏感字段。请检查后再分享。</div>',
+      () => {
+        const format = $("#document-format").value;
+        download(
+          project.name + (format === "html" ? ".html" : ".md"),
+          exportDocumentation(project, format),
+          format === "html" ? "text/html" : "text/markdown",
+        );
+      },
+      "导出",
     ),
   );
 }
@@ -1223,9 +1319,16 @@ window.addEventListener("beforeunload", (e) => {
 async function init() {
   if (localStorage.getItem("theme") === "dark")
     document.body.classList.add("dark");
+  token =
+    new URLSearchParams(location.hash.slice(1)).get("token") ||
+    sessionStorage.getItem("local-api-token") ||
+    "";
+  if (location.hash)
+    history.replaceState(null, "", location.pathname + location.search);
   token = (await api("/session")).token;
+  sessionStorage.setItem("local-api-token", token);
   projects = await api("/projects");
-  if (!projects.length) {
+  if (!projects.some((item) => !item.archived && !item.error)) {
     const p = await api("/projects", "POST", { name: "默认项目" });
     p.environments[0].variables.baseUrl = location.origin;
     const r = defaultRequest("示例 · 本地响应");
@@ -1244,8 +1347,10 @@ async function init() {
     projects = await api("/projects");
   }
   await openProject(
-    projects.find((p) => p.id === sessionStorage.getItem("project"))?.id ||
-      projects[0].id,
+    projects.find(
+      (p) =>
+        !p.archived && !p.error && p.id === sessionStorage.getItem("project"),
+    )?.id || projects.find((p) => !p.archived && !p.error).id,
   );
 }
 init().catch((e) => {

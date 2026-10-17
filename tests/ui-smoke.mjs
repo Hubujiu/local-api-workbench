@@ -1,3 +1,4 @@
+import http from "node:http";
 import { createRequire } from "node:module";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -15,6 +16,22 @@ try {
 }
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
 const app = await createApp({ root, port: 0 });
+const fixture = http.createServer(async (request, response) => {
+  if (request.url === "/sse") {
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.write("data: ui-stream-fixture\n\n");
+  } else if (request.url === "/token") {
+    for await (const _chunk of request) {
+    }
+    response.setHeader("content-type", "application/json");
+    response.end('{"access_token":"ui-fixture-token","token_type":"Bearer"}');
+  } else {
+    response.writeHead(404);
+    response.end();
+  }
+});
+await new Promise((resolve) => fixture.listen(0, "127.0.0.1", resolve));
+const fixtureURL = `http://127.0.0.1:${fixture.address().port}`;
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_BUNDLED
     ? undefined
@@ -22,7 +39,13 @@ const browser = await chromium.launch({
   headless: true,
   args: ["--no-sandbox"],
 });
-const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+const page = await browser.newPage({
+  viewport: { width: 1440, height: 950 },
+  recordVideo: { dir: "/tmp/local-api-video" },
+});
+await page
+  .context()
+  .tracing.start({ screenshots: true, snapshots: true, sources: true });
 async function saveAndWait(selector = "#save-project") {
   await Promise.all([
     page.waitForResponse(
@@ -41,7 +64,7 @@ async function saveAndWait(selector = "#save-project") {
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
-  await page.goto(app.url);
+  await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
@@ -156,10 +179,61 @@ try {
   await saveAndWait();
   await page.reload();
   await page.locator('[data-edit-folder="并发保存保护"]').waitFor();
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-param="auth"]').click();
+  await page.locator("#auth-type").selectOption("oauth2");
+  await page.locator('[data-auth="tokenEndpoint"]').fill(fixtureURL + "/token");
+  await page.locator('[data-auth="clientId"]').fill("ui-client");
+  await page.locator('[data-auth="clientSecret"]').fill("fixture-only");
+  await page.locator("#oauth-get").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-auth="token"]')?.value ===
+      "ui-fixture-token",
+  );
+  await saveAndWait();
+  await page.locator('[data-page="protocols"]').click();
+  await page.locator("#protocol-url").fill(fixtureURL + "/sse");
+  await page.locator("#session-connect").click();
+  await page
+    .locator("#session-events")
+    .getByText("ui-stream-fixture", { exact: false })
+    .waitFor();
+  await page.locator("#session-stop").click();
+  await page.getByText("closed", { exact: true }).waitFor();
+  await page.locator('[data-page="settings"]').click();
+  await page.locator("#mcp-config").click();
+  await page.locator("#mcp-enabled").check();
+  await page.locator("[data-mcp-project]").first().check();
+  await page.locator("#dialog-save").click();
+  await page
+    .locator("#dialog-title")
+    .getByText("MCP 连接配置", { exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#mcp-config").click();
+  assert(await page.locator("#mcp-enabled").isChecked());
+  await page.locator("#mcp-enabled").uncheck();
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-settings.png" });
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
+} catch (error) {
+  await page.screenshot({ path: "/tmp/local-api-failure.png" }).catch(() => {});
+  console.error(
+    "UI_FAILURE_STATE",
+    await page
+      .locator("body")
+      .innerText()
+      .catch(() => "unavailable"),
+  );
+  throw error;
 } finally {
+  await page.context().tracing.stop({ path: "/tmp/local-api-trace.zip" });
   await browser.close();
+  fixture.closeAllConnections();
+  await new Promise((resolve) => fixture.close(resolve));
   await new Promise((r) => app.server.close(r));
   await rm(root, { recursive: true, force: true });
 }

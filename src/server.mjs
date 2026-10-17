@@ -1,3 +1,4 @@
+import { createMCP } from "./mcp.mjs";
 import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
@@ -31,6 +32,9 @@ export async function createApp({
   await store.init();
   const protocolSessions = new ProtocolSessions();
   const oauth = new OAuthManager();
+  let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpToken = "",
+    mcpLastActivity = null;
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   let server;
@@ -72,8 +76,13 @@ export async function createApp({
         parts = u.pathname.split("/").filter(Boolean);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Referrer-Policy", "no-referrer");
-      if (u.pathname === "/api/session" && req.method === "GET")
+      if (u.pathname === "/api/session" && req.method === "GET") {
+        if (req.headers["x-local-token"] !== token)
+          return json(res, 403, {
+            error: "请使用启动时生成的本地链接打开工作台",
+          });
         return json(res, 200, { token, version: "0.1.0" });
+      }
       if (u.pathname === "/oauth/callback" && req.method === "GET") {
         await oauth.complete(Object.fromEntries(u.searchParams));
         res.writeHead(200, {
@@ -83,6 +92,30 @@ export async function createApp({
         return res.end(
           "<!doctype html><meta charset=utf-8><title>授权完成</title><p>授权完成。请回到 Local API 工作台；可以关闭此页。</p>",
         );
+      }
+      if (u.pathname === "/mcp") {
+        if (!mcp.enabled || req.headers.authorization !== "Bearer " + mcpToken)
+          return json(res, 403, { error: "MCP disabled or unauthorized" });
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST");
+          return json(res, 405, { error: "Only POST is supported" });
+        }
+        const message = await body(req);
+        if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
+          return json(res, 400, { error: "Invalid JSON-RPC request" });
+        const dispatch = createMCP({ store, ...mcp });
+        const result = await dispatch(message);
+        if (message.method === "tools/call")
+          mcpLastActivity = {
+            tool: message.params?.name,
+            at: new Date().toISOString(),
+            failed: !!result?.result?.isError,
+          };
+        if (result === null) {
+          res.writeHead(202);
+          return res.end();
+        }
+        return json(res, 200, result);
       }
       if (parts[0] === "mock") {
         const p = await store.get(parts[1]),
@@ -135,6 +168,34 @@ export async function createApp({
               : { grant_type: "client_credentials" };
           return json(res, 200, await exchangeOAuthToken(config, grant));
         }
+        if (u.pathname === "/api/mcp/config") {
+          if (req.method === "POST") {
+            const config = await body(req);
+            if (!Array.isArray(config.projects))
+              throw Error("项目授权列表无效");
+            const existing = new Set(
+              (await store.list()).map((project) => project.id),
+            );
+            if (config.projects.some((id) => !existing.has(id)))
+              throw Error("不能授权不存在的项目");
+            mcp = {
+              enabled: config.enabled === true,
+              projects: config.projects,
+              write: config.write === true,
+              execute: config.write === true && config.execute === true,
+            };
+            if (mcp.enabled && !mcpToken)
+              mcpToken = randomBytes(32).toString("hex");
+            if (!mcp.enabled) mcpToken = "";
+          } else if (req.method !== "GET")
+            return json(res, 405, { error: "Method not allowed" });
+          return json(res, 200, {
+            ...mcp,
+            endpoint: base + "/mcp",
+            token: mcpToken,
+            lastActivity: mcpLastActivity,
+          });
+        }
         if (u.pathname === "/api/projects" && req.method === "GET")
           return json(res, 200, await store.list());
         if (u.pathname === "/api/projects" && req.method === "POST") {
@@ -168,6 +229,8 @@ export async function createApp({
             )
               throw Error("无效项目结构");
             b.requests = b.requests.map(normalizeRequest);
+            if (b.archived)
+              mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
             b.history = p.history;
             return json(res, 200, await store.save(b));
@@ -394,6 +457,7 @@ export async function createApp({
     server,
     store,
     oauthAllowed: (url) => oauth.allowed(url),
+    launchUrl: `http://127.0.0.1:${server.address().port}/#token=${token}`,
     token,
     url: `http://127.0.0.1:${server.address().port}`,
   };
@@ -401,6 +465,6 @@ export async function createApp({
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = await createApp();
   console.log(
-    `Local API Workbench: ${app.url}\nData: ${path.resolve(process.env.LOCAL_API_DATA || ".local-api")}`,
+    `Local API Workbench: ${app.launchUrl}\nData: ${path.resolve(process.env.LOCAL_API_DATA || ".local-api")}`,
   );
 }

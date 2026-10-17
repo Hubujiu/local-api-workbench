@@ -103,10 +103,13 @@ export function createMCP({
         if (!Object.hasOwn(args, key)) throw Error("缺少参数 " + key);
       let output;
       if (params.name === "localapi_list_projects")
-        output = (await store.list()).filter((p) => allowed.has(p.id));
+        output = (await store.list()).filter(
+          (p) => allowed.has(p.id) && !p.archived,
+        );
       else {
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
         const p = await store.get(args.projectId);
+        if (p.archived) throw Error("项目已归档");
         switch (params.name) {
           case "localapi_list_apis":
             output = p.requests

@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { terminalLaunch } from "./terminal.mjs";
 import { app, BrowserWindow, session, ipcMain, shell, dialog } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +41,19 @@ else
         await service.store.get(id);
         shell.showItemInFolder(service.store.file(id));
       });
+      ipcMain.handle("open-project-terminal", async (event, id) => {
+        validateSender(event);
+        await service.store.get(id);
+        const spec = terminalLaunch(path.dirname(service.store.file(id)));
+        return new Promise((resolve, reject) => {
+          const child = spawn(spec.command, spec.args, spec.options);
+          child.once("error", reject);
+          child.once("spawn", () => {
+            child.unref();
+            resolve({ ok: true });
+          });
+        });
+      });
       const win = new BrowserWindow({
         width: 1440,
         height: 960,
@@ -61,7 +76,7 @@ else
         if (new URL(url).origin !== service.url) event.preventDefault();
       });
       win.setMenuBarVisibility(false);
-      await win.loadURL(service.url);
+      await win.loadURL(service.launchUrl);
       console.error("DESKTOP_READY", service.url);
       app.on("window-all-closed", () => app.quit());
       app.on("before-quit", () => service.server.close());

@@ -51,3 +51,79 @@ test("session, project persistence, permission boundary, mock and snapshot plan"
   assert.equal(run.status, "passed");
   assert.equal((await call("/api/projects/" + p.id)).runs.length, 1);
 });
+test("HTTP MCP is disabled by default and enforces token, project and write grants", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-http-mcp-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const project = await app.store.create("Allowed");
+  assert.equal(
+    (await fetch(app.url + "/mcp", { method: "POST", body: "{}" })).status,
+    403,
+  );
+  const configResponse = await fetch(app.url + "/api/mcp/config", {
+    method: "POST",
+    headers: { "x-local-token": app.token, "content-type": "application/json" },
+    body: JSON.stringify({
+      enabled: true,
+      projects: [project.id],
+      write: false,
+      execute: false,
+    }),
+  });
+  const config = await configResponse.json();
+  const call = async (params) =>
+    (
+      await fetch(app.url + "/mcp", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + config.token,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params,
+        }),
+      })
+    ).json();
+  const result = await call({ name: "localapi_list_projects" });
+  assert.equal(JSON.parse(result.result.content[0].text)[0].id, project.id);
+  const denied = await call({
+    name: "localapi_delete_apis",
+    arguments: { projectId: project.id, apiIds: [] },
+  });
+  assert.equal(denied.result.isError, true);
+  await fetch(app.url + "/api/mcp/config", {
+    method: "POST",
+    headers: { "x-local-token": app.token, "content-type": "application/json" },
+    body: JSON.stringify({ enabled: false, projects: [] }),
+  });
+  assert.equal(
+    (
+      await fetch(app.url + "/mcp", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + config.token },
+        body: "{}",
+      })
+    ).status,
+    403,
+  );
+});
+test("UI bootstrap token is not available to unauthenticated loopback clients", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-bootstrap-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  assert.equal((await fetch(app.url + "/api/session")).status, 403);
+  const authorized = await fetch(app.url + "/api/session", {
+    headers: { "x-local-token": app.token },
+  });
+  assert.equal(authorized.status, 200);
+  assert(new URL(app.launchUrl).hash.includes(app.token));
+});

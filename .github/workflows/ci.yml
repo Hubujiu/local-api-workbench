@@ -33,8 +33,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          retention-days: 7
           name: ui-evidence
-          path: /tmp/local-api-*.png
+          path: |
+            /tmp/local-api-*.png
+            /tmp/local-api-trace.zip
+            /tmp/local-api-video/
   desktop:
     runs-on: windows-latest
     steps:
@@ -53,13 +57,15 @@ jobs:
           New-Item -ItemType Directory -Force dist/LocalAPI | Out-Null
           Copy-Item desktop/node_modules/electron/dist/* dist/LocalAPI -Recurse
           New-Item -ItemType Directory -Force dist/LocalAPI/resources/app | Out-Null
-          Copy-Item src,public,desktop,scripts,node_modules,LICENSE dist/LocalAPI/resources/app -Recurse
-          Remove-Item dist/LocalAPI/resources/app/desktop/node_modules -Recurse -Force
+          Copy-Item src,public,scripts,node_modules,LICENSE dist/LocalAPI/resources/app -Recurse
+          New-Item -ItemType Directory -Force dist/LocalAPI/resources/app/desktop | Out-Null
+          Copy-Item desktop/*.mjs,desktop/*.cjs dist/LocalAPI/resources/app/desktop
           '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
           Rename-Item dist/LocalAPI/electron.exe LocalAPI.exe
       - run: node tests/desktop-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: LocalAPI-Windows-portable
           path: dist/LocalAPI
   source-format:
@@ -70,26 +76,7 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci --ignore-scripts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: runtime-dependencies
-          path: |
-            node_modules
-            package-lock.json
       - run: npm run format:check
-      - uses: actions/upload-artifact@v4
-        with:
-          name: formatted-source
-          path: |
-            src
-            scripts
-            tests
-            public
-            desktop/main.mjs
-            desktop/preload.cjs
-            desktop/package.json
-            package.json
-          include-hidden-files: true
   database-integration:
     runs-on: ubuntu-latest
     services:

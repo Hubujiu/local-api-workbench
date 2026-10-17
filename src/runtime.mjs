@@ -1,7 +1,6 @@
+import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
-import http from "node:http";
-import https from "node:https";
 import { performance } from "node:perf_hooks";
 import {
   mkdir,
@@ -253,10 +252,16 @@ export async function executeRequest(input, signal) {
     throw Error("请求体超过 8 MiB");
   if (body) headers["Content-Length"] = Buffer.byteLength(body);
   const start = performance.now();
+  const connection = await prepareConnection(u, r, headers, signal);
+  const remainingTimeout = r.timeout - (performance.now() - start);
+  if (remainingTimeout <= 0) {
+    connection.cleanup();
+    throw Error("请求超时");
+  }
   const response = await new Promise((resolve, reject) => {
-    const req = (u.protocol === "https:" ? https : http).request(
-      u,
-      { method: r.method, headers, signal },
+    const req = connection.client.request(
+      connection.url,
+      { method: r.method, headers, signal, ...connection.options },
       (res) => {
         const chunks = [];
         let size = 0;
@@ -304,16 +309,16 @@ export async function executeRequest(input, signal) {
     );
     const totalTimer = setTimeout(
       () => req.destroy(Error("请求超时（总时限已到）")),
-      r.timeout,
+      remainingTimeout,
     );
-    req.setTimeout(r.timeout, () => req.destroy(Error("请求超时")));
+    req.setTimeout(remainingTimeout, () => req.destroy(Error("请求超时")));
     req.on("error", (error) => {
       clearTimeout(totalTimer);
       reject(error);
     });
     if (body) req.write(body);
     req.end();
-  });
+  }).finally(() => connection.cleanup());
   if (
     r.auth.type === "digest" &&
     response.status === 401 &&

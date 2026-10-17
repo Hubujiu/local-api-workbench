@@ -13,7 +13,7 @@ npm install
 npm start
 ```
 
-浏览器打开 `http://127.0.0.1:4318`。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。所有项目使用格式化 JSON，写入时采用临时文件原子替换和冲突检测。不要把包含密钥、历史或响应的运行目录提交到 Git。
+浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。所有项目使用格式化 JSON，写入时采用临时文件原子替换和冲突检测。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
 桌面包装：在 `desktop/` 执行 `npm install`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 打包与真实桌面 smoke 已在 GitHub Actions 验证；当前仍处于持续迭代。
 
@@ -51,7 +51,7 @@ node tests/ui-smoke.mjs
 - 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
 - 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；更多功能与异常交互仍在持续验证
 - 已创建 PR #1，早期版本六项 CI 全绿；最新迭代以对应提交的 CI 结果为准
-- 证书/代理设置、完整 OpenAPI 引用/YAML、文档分享服务、Git 内置冲突处理尚未完成
+- 外部/循环 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
 - SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
 
@@ -64,3 +64,5 @@ node tests/ui-smoke.mjs
 ## OAuth2 与 Digest
 
 支持 Digest MD5/SHA-256/SHA-512-256 与 auth/auth-int challenge；OAuth2 提供 client_credentials、refresh_token、授权码 PKCE S256。授权码回调地址在界面显示，需要在提供方登记。凭据只发往用户输入的 endpoint，优先使用 HTTPS；本地保存令牌前仍需用户点击保存。
+
+HTTP MCP 可在项目配置中按需启用，默认关闭，每次启动重新授权；提供单独的连接令牌、项目 allowlist 和读写/执行权限。关闭即撤销令牌。TLS 证书校验始终开启，支持自定义 CA、客户端 PEM 证书/私钥与 HTTP/HTTPS CONNECT 代理。
