@@ -775,4 +775,21 @@ dialog footer {
   right: 0;
   background: var(--panel);
 }
-.icon svg{width:20px;height:20px;display:block}.rail button{min-height:52px}.empty-symbol{font-family:system-ui,sans-serif}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}summary{cursor:pointer}
+.icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.rail button {
+  min-height: 52px;
+}
+.empty-symbol {
+  font-family: system-ui, sans-serif;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+summary {
+  cursor: pointer;
+}

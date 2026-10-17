@@ -160,11 +160,17 @@ export async function runPlan(
       }
       let configuredRequest = structuredClone(step.request);
       if (configuredRequest.beforeScript) {
-        const scripted = await runScript(configuredRequest.beforeScript, { variables: vars, request: configuredRequest });
+        const scripted = await runScript(configuredRequest.beforeScript, {
+          variables: vars,
+          request: configuredRequest,
+        });
         replaceVariables(vars, scripted.variables);
         configuredRequest = normalizeRequest(scripted.request);
-        record.logs.push(...scripted.logs.map(message => ({ phase: "before", message })));
-        if (scripted.tests.some(test => !test.passed)) throw Error("前置脚本断言失败");
+        record.logs.push(
+          ...scripted.logs.map((message) => ({ phase: "before", message })),
+        );
+        if (scripted.tests.some((test) => !test.passed))
+          throw Error("前置脚本断言失败");
       }
       record.request = interpolate(configuredRequest, vars);
       record.response = await execute(record.request, signal);
@@ -190,9 +196,15 @@ export async function runPlan(
         });
       }
       if (record.request.afterScript) {
-        const scripted = await runScript(record.request.afterScript, { variables: vars, request: record.request, response: record.response });
+        const scripted = await runScript(record.request.afterScript, {
+          variables: vars,
+          request: record.request,
+          response: record.response,
+        });
         replaceVariables(vars, scripted.variables);
-        record.logs.push(...scripted.logs.map(message => ({ phase: "after", message })));
+        record.logs.push(
+          ...scripted.logs.map((message) => ({ phase: "after", message })),
+        );
         record.assertions.push(...scripted.tests);
       }
       const hasStatusAssertion = record.assertions.some(
@@ -547,7 +559,8 @@ export function sampleFromSchema(schema, depth = 0) {
 
 function replaceVariables(target, source) {
   for (const key of Object.keys(source)) {
-    if (["__proto__", "prototype", "constructor"].includes(key)) throw Error("脚本变量名无效");
+    if (["__proto__", "prototype", "constructor"].includes(key))
+      throw Error("脚本变量名无效");
   }
   for (const key of Object.keys(target)) delete target[key];
   for (const [key, value] of Object.entries(source)) target[key] = value;

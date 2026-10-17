@@ -1,54 +1,35 @@
-# Development checkpoint — 2026-10-17
+# Development checkpoint — 2026-10-17 12:40 UTC
 
-This is an unfinished implementation, not a delivery claim.
+**Unfinished product. No claim of complete one-to-one parity.**
 
-## Current verified evidence
+## Repository and verified CI
 
-- `npm run check` passes.
-- `npm test`: 30/30 passing, no skips. Local HTTP/TCP/SSE/WebSocket fixtures, real SQLite, filesystem restarts and conflict detection, MCP authorization and plan assertions are covered.
-- Raw initial red and current green outputs are in docs/evidence.
-- UI smoke script exists but cannot launch Chromium inside the current restricted sandbox (UNIX socket operation denied). Standard escalated execution fails before startup with a read-only-filesystem runtime error. No workaround to security policy attempted.
-- Own cloud browser cannot reach the per-command isolated loopback service. The original product was successfully inspected using that browser.
-- Desktop wrapper is implemented but has not been packaged or executed. No installer is claimed delivered.
+- Private repository: https://github.com/Hubujiu/local-api-workbench
+- Persistent draft PR #1: develop → main. Main remains initial README commit 5af2f63913e097efd6fb3325103bd5fd2ee0f6a1. No main merge or deployment.
+- Commit 9d3a21ce8bfbd6ac758036be1a09cb39918e5eae passed all six jobs in run 39033215871: three-platform core tests, real Chromium smoke, packaged Windows Electron smoke, formatting artifact generation.
+- Windows Electron 44 downloads its binary on first run, so explicit install-electron was needed before packaging. Removing top-level await from desktop startup resolved the packaged smoke launch timeout. Original failures remain in CI history.
+- Initial screenshots were downloaded and visually inspected: cream/gold workbench, request tree/editor/response panes and plan results render without overlap at 1440×950. This is not a pixel-perfect comparison certificate.
+- Local complete core suite: 33 tests passed, no skips. QuickJS runtime dependencies from the verified CI artifact were hash-checked before local tests.
 
-## Remote gate
+## Current iteration (awaiting its own CI)
 
-GitHub connector has repository read/write primitives, but no create-repository primitive. CLI is not authenticated; own cloud browser shows GitHub login. User has been asked to create Hubujiu/local-api-workbench initialized with README and allow the existing connector access. At 11:11 UTC the repository API still returns 404, which may mean nonexistent or inaccessible. Do not claim it exists.
+- Broader UI smoke: script execution/logs, import dialog repeated open/close, cURL import, dark mode, compact layout.
+- PostgreSQL/MySQL read-only connections and real service-container integration fixtures.
+- Standalone CLI and scoped stdio MCP remain available.
 
-After repository becomes accessible:
-1. Read root instructions and branch state.
-2. Create/reuse one fixed `develop` branch. Do not make per-task branches. Do not merge main without explicit approval.
-3. Publish initial implementation as a draft PR with honest verification limits.
-4. Run all fixed CI, inspect UI screenshots, fix failures without weakening tests.
-5. Finish all remaining parity gaps and real desktop verification before calling the product complete.
+## Remaining work before full delivery
 
-## Important architecture
+1. Finish project/folder/document management workflows and user-facing backup/restore edges.
+2. OAuth2/Digest, certificate/proxy configuration, YAML import, richer protocol sessions and native Git workflows require further implementation and verification.
+3. Script compatibility is explicit subset (apt/pm variables, response, tests, logs); no arbitrary npm/extra network APIs or asynchronous scripts.
+4. Source formatting has improved; further modularization and frozen full acceptance matrix are required.
+5. Complete expanded browser tests and package verification against the final exact tree. Basic smoke alone is not complete product acceptance.
+6. Delivery documentation and install/run experience must be checked against actual artifacts.
 
-- Node 24, no required runtime npm dependencies for browser-mode service.
-- Vanilla module frontend, original cream/gold layout adapted from observed official screenshots, no copied proprietary assets.
-- Loopback-only service with Host/Origin validation, UI session token, no CORS wildcard, CSP.
-- JSON project storage with atomic rename, disk lock, optimistic revision checking.
-- Network responses bounded, total and idle timeout, cancellation, gzip/br/deflate decode. TLS verification is not disabled.
-- Deterministic immutable plan snapshots and SHA256, per-step evidence preserved on extraction failure, expected status assertions, continue-on-failure, maximum 50 records.
-- SQLite read-only worker with 2-second timeout and 1000-row limit.
-- MCP stdio default no access, explicit project allowlist; write and execution separately opted in on the command line. No persistent access configured for a real Agent.
+## Runtime/security boundaries
 
-## Known implementation gaps / review items
+Loopback-only HTTP, Host/Origin checks and per-process UI session token; original frontend assets; no telemetry/CDN/cloud login. JSON storage uses atomic replacement, disk locks and optimistic revision checks. Network timeouts and size limits are enforced. TLS verification remains enabled. Fixed plan snapshots carry SHA256 and retained per-step evidence even on extraction failure. SQLite uses a bounded read-only worker. JS uses an isolated QuickJS VM with no host bindings, memory/CPU limits and worker termination. Database credentials are request-scoped, never auto-persisted. Remote database read-only transactions do not guarantee user-defined server functions have no external side effects.
 
-- Source needs standard formatting and module decomposition before delivery; do not treat compact first-pass source as final quality.
-- UI is not yet browser-verified. Especially verify dialog lifecycle, saving after execution, multi-tab state, project switching during requests, stale revisions, import/export interactions, mobile/narrow view and dark theme.
-- API responses are keyed by project/request after a source-level concurrency fix; this still needs real UI verification.
-- Native backup restore now makes a new project copy with environments/plans and bounded histories; source is not overwritten. Imported hard-coded local URLs may need environment adjustment.
-- Project delete/rename workflows, richer documentation editor and full folder operations need completion.
-- Arbitrary JS scripts, OAuth2/Digest, certificate/proxy configuration, MySQL/PostgreSQL, YAML/remote OpenAPI refs and full native Git conflict workflows remain incomplete.
-- SSE/WebSocket/TCP bounded capture exists and is fixture-tested; continuous interactive session UX and WebSocket custom headers remain incomplete.
-- Multipart file bodies now supported and binary preservation is tested.
-- Public product pricing says no functional tiers and all license terms are paid. No activation/payment bypass. Implement free equivalent functionality, exclude license commerce/paid cloud modules. Do not confuse V7/V8 online edition docs with this offline product.
+The product site's pricing has no functional tiers: all licenses are paid. Independent implementation excludes licensing/payment and paid cloud services; it does not bypass activation or copy proprietary assets.
 
-## User communication constraint
-
-Only root works on this project; no Codex tasks, no cloud task delegation, no subagents. No routine progress reports until complete. Contact user only for an unavoidable blocker. Repository creation question is already pending; do not repeat it.
-
-Latest checkpoint: 11:14 UTC. Added local OpenAPI reference resolution, schema samples, full backup restore-as-copy, multi-tab response attribution and visual assertion/extraction editors. Browser gate and repository access remain pending. No commits/PRs published.
-
-12:29 UTC: User confirmed repository creation. Verified private Hubujiu/local-api-workbench, main initial commit 5af2f63913e097efd6fb3325103bd5fd2ee0f6a1, only README.md. Access blocker resolved. Preparing fixed develop branch and initial draft PR; UI/desktop CI not yet run.
+Root works alone. No Codex delegation or cloud coding tasks. User requested no routine updates until the full product is ready; report only unavoidable blockers. The earlier repository-creation blocker is resolved.

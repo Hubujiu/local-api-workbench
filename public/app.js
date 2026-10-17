@@ -349,7 +349,7 @@ function renderPage() {
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><p class="muted">有界采集 SSE / WebSocket / TCP 响应，不在后台持续连接。</p><div class="form-grid"><label>协议</label><select id="protocol-type"><option value="sse">SSE</option><option value="websocket">WebSocket</option><option value="tcp">TCP</option></select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events"><label>TCP 端口</label><input id="protocol-port" type="number" value="8080"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre></div>`;
   if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite 本地只读查询 · 不会修改数据库 · 最多返回 1000 行</p><div class="form-grid"><label>数据库文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">当前仅实现 SQLite。MySQL / PostgreSQL 尚未实现，不冒充可用连接。</div></div>`;
+    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL · 只读事务 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名</label><input id="db-name"><label>TLS</label><input id="db-tls" type="checkbox"><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">本应用不会自动执行 Git 命令、提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><button id="export-docs" class="primary">导出 Markdown</button></div>${
@@ -630,6 +630,7 @@ function bind() {
     r.name += " 副本";
     project.requests.push(r);
     current = r.id;
+    if (!opened.includes(current)) opened.push(current);
     mark();
     render();
   });
@@ -724,7 +725,7 @@ function bind() {
   });
   on("#db-query", "click", async () => {
     const result = await api("/projects/" + project.id + "/database", "POST", {
-      filename: $("#db-path").value,
+      type: $("#db-type").value, host: $("#db-host").value, port: Number($("#db-port").value), user: $("#db-user").value, password: $("#db-password").value, database: $("#db-name").value, ssl: $("#db-tls").checked, filename: $("#db-path").value,
       sql: $("#db-sql").value,
       parameters: JSON.parse($("#db-params").value),
     });

@@ -6,15 +6,16 @@
 
 ## 启动
 
-安装 Node.js 24 LTS，无需 npm 运行依赖：
+安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
 
 ```
+npm install
 npm start
 ```
 
 浏览器打开 `http://127.0.0.1:4318`。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。所有项目使用格式化 JSON，写入时采用临时文件原子替换和冲突检测。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
-桌面包装：在 `desktop/` 执行 `npm install`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。桌面包尚未在本环境验证。
+桌面包装：在 `desktop/` 执行 `npm install`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 打包与真实桌面 smoke 已在 GitHub Actions 验证；当前仍处于持续迭代。
 
 ## 已实现的核心
 
@@ -24,7 +25,7 @@ npm start
 - 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
 - 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
 - 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
-- SQLite 只读查询，MCP stdio 授权项目读写与计划执行
+- SQLite/PostgreSQL/MySQL 只读查询，MCP stdio 授权项目读写与计划执行
 - 浅色/深色工作台；无 CDN、无遥测、无内置云模型
 
 ## MCP
@@ -48,10 +49,14 @@ node tests/ui-smoke.mjs
 ## 当前差距（不隐藏）
 
 - 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
-- 本环境浏览器进程受沙箱阻塞；UI smoke 尚未通过，不能把单元测试通过等同完整产品验收
-- 远程仓库已建立；PR/CI 验证正在进行，尚未取得全绿证据
-- 任意 JS 前后置脚本、OAuth2/Digest、证书/代理设置、持续交互式 SSE/WebSocket/TCP、MySQL/PostgreSQL、完整 OpenAPI 引用/YAML、文档分享服务、Git 内置冲突处理尚未完成
-- SQLite 当前只读；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集，尚非完整持续会话界面
+- 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；更多功能与异常交互仍在持续验证
+- 已创建 PR #1，早期版本六项 CI 全绿；最新迭代以对应提交的 CI 结果为准
+- OAuth2/Digest、证书/代理设置、持续交互式 SSE/WebSocket/TCP、完整 OpenAPI 引用/YAML、文档分享服务、Git 内置冲突处理尚未完成
+- SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集，尚非完整持续会话界面
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
 
 源文件和文档将通过一个固定开发分支的 PR 迭代；未经批准不合入 main、不部署。
+
+## 脚本
+
+前后置脚本运行在独立 QuickJS/WASM 工作线程中，无 Node、网络或文件 API。支持 apt.setVar/getVar、pm.environment.set/get/unset、pm.response.json/text/code、pm.test 与 pm.expect(...).to.equal(...)，以及 console.log。同步脚本 CPU 截止 250ms、VM 内存限额 16MiB、工作线程总超时 2 秒；不支持任意 npm 包或脚本内额外网络请求。

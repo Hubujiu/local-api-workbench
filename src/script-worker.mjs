@@ -1,5 +1,5 @@
-import { parentPort, workerData } from 'node:worker_threads';
-import { getQuickJS } from 'quickjs-emscripten';
+import { parentPort, workerData } from "node:worker_threads";
+import { getQuickJS } from "quickjs-emscripten";
 let runtime, context;
 try {
   const engine = await getQuickJS();
@@ -32,14 +32,27 @@ try {
   `;
   for (const code of [setup, workerData.code]) {
     const result = context.evalCode(code);
-    if (result.error) { const error = context.dump(result.error); result.error.dispose(); throw Error(error.message || JSON.stringify(error)); }
+    if (result.error) {
+      const error = context.dump(result.error);
+      result.error.dispose();
+      throw Error(error.message || JSON.stringify(error));
+    }
     result.value.dispose();
   }
-  const output = context.evalCode('JSON.stringify({variables, request, logs, tests})');
-  if (output.error) { output.error.dispose(); throw Error('脚本输出不可序列化'); }
+  const output = context.evalCode(
+    "JSON.stringify({variables, request, logs, tests})",
+  );
+  if (output.error) {
+    output.error.dispose();
+    throw Error("脚本输出不可序列化");
+  }
   const json = context.getString(output.value);
   output.value.dispose();
-  if (json.length > 1024 * 1024) throw Error('脚本输出超过 1 MiB');
+  if (json.length > 1024 * 1024) throw Error("脚本输出超过 1 MiB");
   parentPort.postMessage({ result: JSON.parse(json) });
-} catch (error) { parentPort.postMessage({ error: error.message }); }
-finally { context?.dispose(); runtime?.dispose(); }
+} catch (error) {
+  parentPort.postMessage({ error: error.message });
+} finally {
+  context?.dispose();
+  runtime?.dispose();
+}

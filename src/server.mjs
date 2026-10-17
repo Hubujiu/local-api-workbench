@@ -1,3 +1,4 @@
+import { queryRemoteDatabase } from "./remote-database.mjs";
 import { captureSSE, exchangeTCP, exchangeWebSocket } from "./protocols.mjs";
 import { querySQLiteBounded } from "./database.mjs";
 import http from "node:http";
@@ -153,7 +154,7 @@ export async function createApp({
             return json(
               res,
               200,
-              await querySQLiteBounded(b.filename, b.sql, b.parameters || []),
+              b.type && b.type !== "sqlite" ? await queryRemoteDatabase(b) : await querySQLiteBounded(b.filename, b.sql, b.parameters || []),
             );
           }
           if (action === "sample" && req.method === "POST") {

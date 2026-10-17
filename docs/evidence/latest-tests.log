@@ -3,41 +3,44 @@ npm warn Unknown env config "http-proxy". This will stop working in the next maj
 > local-api-workbench@0.1.0 test
 > node --test tests/*.test.mjs
 
-✔ variables substitute deeply and unresolved variables fail (1.839237ms)
-✔ JSON paths preserve falsy values and reject prototype traversal (0.400466ms)
-✔ assertions distinguish expected errors and missing values (0.404041ms)
-✔ OpenAPI import/export preserves HTTP definitions (1.746759ms)
-✔ plans snapshot request state and freeze evidence (1.804765ms)
-✔ plans continue after failure and extract variables (0.700001ms)
-✔ unsafe or invalid imports rejected (0.263432ms)
-✔ extraction failure retains actual request and response evidence (0.649707ms)
-✔ empty plan cannot falsely pass (0.455828ms)
-✔ backup restore preserves environments and plans without overwriting source (0.788644ms)
-✔ OpenAPI references resolve locally and never fetch remote documents (0.635896ms)
-✔ schema sample generation respects examples and falsy defaults (1.300505ms)
-✔ database reads use parameters and refuse writes (9.926971ms)
-✔ bounded worker returns database result (74.765701ms)
-✔ MCP advertises only granted capabilities (1.68038ms)
-✔ MCP filters projects and denies cross-project reads (0.496669ms)
-✔ MCP initialization and notification lifecycle (0.348359ms)
-✔ SSE captures explicit event boundaries and multiline data (29.230543ms)
-✔ TCP sends and receives actual local fixture bytes (7.828598ms)
-✔ protocol validation rejects unrelated protocols (0.885107ms)
-✔ WebSocket exchanges a message with a real local handshake (8.482762ms)
-✔ real HTTP body, query, auth and response evidence (20.457049ms)
-✔ disk store rejects traversal and survives reopening (12.62859ms)
-✔ non HTTP protocols blocked (0.575446ms)
-✔ stale saves rejected, history append preserves latest content (13.625343ms)
-✔ HTTP timeout and cancellation produce explicit failures (124.29198ms)
-✔ compressed responses are decoded with a size limit (4.965088ms)
-✔ multipart files preserve binary bytes (2.692125ms)
-✔ slow drip cannot evade the total timeout (100.960192ms)
-✔ session, project persistence, permission boundary, mock and snapshot plan (95.794867ms)
-ℹ tests 30
+✔ variables substitute deeply and unresolved variables fail (1.650765ms)
+✔ JSON paths preserve falsy values and reject prototype traversal (0.403888ms)
+✔ assertions distinguish expected errors and missing values (0.41902ms)
+✔ OpenAPI import/export preserves HTTP definitions (1.639729ms)
+✔ plans snapshot request state and freeze evidence (1.92584ms)
+✔ plans continue after failure and extract variables (0.658742ms)
+✔ unsafe or invalid imports rejected (0.174333ms)
+✔ extraction failure retains actual request and response evidence (0.586583ms)
+✔ empty plan cannot falsely pass (0.351879ms)
+✔ backup restore preserves environments and plans without overwriting source (0.779093ms)
+✔ OpenAPI references resolve locally and never fetch remote documents (0.673985ms)
+✔ schema sample generation respects examples and falsy defaults (1.131704ms)
+✔ database reads use parameters and refuse writes (7.227581ms)
+✔ bounded worker returns database result (80.001344ms)
+✔ MCP advertises only granted capabilities (1.311064ms)
+✔ MCP filters projects and denies cross-project reads (0.426993ms)
+✔ MCP initialization and notification lifecycle (0.268824ms)
+✔ SSE captures explicit event boundaries and multiline data (39.283863ms)
+✔ TCP sends and receives actual local fixture bytes (10.395251ms)
+✔ protocol validation rejects unrelated protocols (1.249922ms)
+✔ WebSocket exchanges a message with a real local handshake (10.358676ms)
+✔ real HTTP body, query, auth and response evidence (28.199194ms)
+✔ disk store rejects traversal and survives reopening (7.87763ms)
+✔ non HTTP protocols blocked (0.509597ms)
+✔ stale saves rejected, history append preserves latest content (7.942358ms)
+✔ HTTP timeout and cancellation produce explicit failures (123.231273ms)
+✔ compressed responses are decoded with a size limit (4.777002ms)
+✔ multipart files preserve binary bytes (2.71632ms)
+✔ slow drip cannot evade the total timeout (101.149469ms)
+✔ script can set variables and record deterministic assertions (129.379435ms)
+✔ script VM does not expose process, filesystem or network (81.796222ms)
+✔ infinite scripts are interrupted without hanging the runner (323.449815ms)
+✔ session, project persistence, permission boundary, mock and snapshot plan (125.526534ms)
+ℹ tests 33
 ℹ suites 0
-ℹ pass 30
+ℹ pass 33
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 367.852354
+ℹ duration_ms 644.30936

@@ -56,6 +56,29 @@ try {
     .click();
   await page.getByText("✓ 通过", { exact: false }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-plan.png" });
+  // Exercise editable scripts, response evidence and repeated modal dismissal.
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-param="after"]').click();
+  await page.locator('#script-code').fill('pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); console.log("script-done");');
+  await page.locator('#send').click();
+  await page.locator('[data-response="logs"]').click();
+  await page.getByText('script-done', { exact: false }).last().waitFor();
+  await page.locator('#save').click();
+  await page.locator('#import').click();
+  await page.locator('#dialog').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.locator('#dialog').waitFor({ state: 'hidden' });
+  await page.locator('#import').click();
+  await page.locator('#import-text').fill(`curl -X GET '${app.url}/api/session'`);
+  await page.locator('#dialog-save').click();
+  await page.locator('#dialog').waitFor({ state: 'hidden' });
+  assert((await page.locator('[data-request]').count()) === 3);
+  await page.locator('#theme').click();
+  assert(await page.locator('body').evaluate(element => element.classList.contains('dark')));
+  await page.screenshot({ path: '/tmp/local-api-dark.png' });
+  await page.setViewportSize({ width: 1000, height: 760 });
+  assert(await page.locator('#send').isVisible());
+  await page.screenshot({ path: '/tmp/local-api-compact.png' });
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } finally {
