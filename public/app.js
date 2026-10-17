@@ -113,6 +113,13 @@ async function save() {
     button.disabled = true;
   try {
     const saved = await api("/projects/" + snapshot.id, "PUT", snapshot);
+    const metadata = projects.find((item) => item.id === saved.id);
+    if (metadata)
+      Object.assign(metadata, {
+        name: saved.name,
+        archived: !!saved.archived,
+        updatedAt: saved.updatedAt,
+      });
     if (project.id === snapshot.id) {
       if (editVersion === version) {
         project = saved;
@@ -144,6 +151,13 @@ function collect() {
     if ($(selector)) r[key] = $(selector).value;
   }
   if ($("#body-type")) r.bodyType = $("#body-type").value;
+  if ($("#schema")) {
+    try {
+      r.schema = JSON.parse($("#schema").value);
+    } catch {
+      throw Error("JSON Schema 格式无效，请修正后再保存或切换");
+    }
+  }
 }
 async function openProject(id) {
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
@@ -293,7 +307,7 @@ function editor(r) {
         ]
           .map(
             ([key, label]) =>
-              `<button data-param="${key}" class="${param === key ? "active" : ""}">${label}${r[key]?.length ? " (" + r[key].length + ")" : ""}</button>`,
+              `<button data-param="${key}" class="${param === key ? "active" : ""}">${label}${key === "body" ? (r.bodyType !== "none" ? " (1)" : "") : Array.isArray(r[key]) && r[key].length ? " (" + r[key].length + ")" : ""}</button>`,
           )
           .join(
             "",
@@ -398,7 +412,7 @@ function modePanel(r) {
 function renderPage() {
   if (!project) return "";
   if (page === "settings")
-    return `<div class="page"><div class="page-head"><div><h1>项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2>环境管理</h2><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}<div class="notice">数据保存在启动目录的 .local-api 文件夹。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
+    return `<div class="page"><div class="page-head"><div><h1>项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2>环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}<div class="notice">数据保存在启动目录的 .local-api 文件夹。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
   if (page === "plans") {
     const plan = project.plans.find((p) => p.id === planId);
     return `<div class="page"><div class="page-head"><div><h1>AI 执行计划</h1><span class="muted">固定步骤 · 独立快照 · 完整证据 · 可重复运行</span></div><button id="new-plan" class="primary">＋ 新建计划</button></div><div class="toolbar">${project.plans.map((p) => `<button data-plan="${p.id}" class="${planId === p.id ? "primary" : ""}">${esc(p.name)}</button>`).join("") || '<p class="muted">尚无计划。先创建接口，再组合成可重复的业务流程。</p>'}</div>${plan ? `<div class="card"><div class="row"><h3 class="grow">${esc(plan.name)}</h3><button id="edit-plan">编辑 JSON</button><button id="add-step">＋ 添加步骤</button><button id="run-plan" class="primary" ${busy ? "disabled" : ""}>${busy ? "执行中…" : "执行计划"}</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="row"><label>执行环境</label><select id="plan-env">${project.environments.map((e) => `<option value="${e.id}" ${e.id === plan.environmentId ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></div>${plan.steps.map((s, i) => `<div class="plan-step"><span class="step-number">${i + 1}</span><input type="checkbox" data-step-enable="${i}" ${s.enabled ? "checked" : ""} aria-label="启用步骤"><span class="method ${s.request.method}">${s.request.method}</span><div class="grow"><strong>${esc(s.name)}</strong><div class="subtle">${esc(s.request.url)}</div></div><button data-step-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-step-edit="${i}">编辑</button><button data-step-delete="${i}" class="danger">×</button></div>`).join("") || '<div class="notice">添加步骤后执行。每一步保存接口的独立快照。</div>'}</div>` : ""}<h2>执行记录 <span class="subtle">最近 50 条</span></h2>${(lastRun ? [lastRun, ...project.runs.filter((r) => r.id !== lastRun.id)] : project.runs).map((r) => `<details class="card" ${r.id === lastRun?.id ? "open" : ""}><summary><span class="${r.status === "passed" ? "success" : "failed"}">${r.status === "passed" ? "✓ 通过" : r.status === "cancelled" ? "■ 已取消" : "× 失败"}</span> &nbsp; ${esc(r.planName)} &nbsp; <span class="subtle">${esc(r.createdAt)} · ${r.results.length} 步</span></summary><p class="subtle">快照 SHA256: ${esc(r.planHash)}</p>${r.results.map((s, i) => `<details class="card"><summary>${i + 1}. <span class="${s.status === "passed" ? "success" : "failed"}">${s.status}</span> ${esc(s.name)} · ${s.response?.status || ""} ${s.response?.duration || 0}ms</summary><pre>${esc(JSON.stringify(s, null, 2))}</pre></details>`).join("")}<button data-export-run="${r.id}">导出证据 JSON</button></details>`).join("") || '<div class="empty"><span class="empty-symbol">☷</span><p>计划运行后，逐步结果将显示在这里</p></div>'}</div>`;
@@ -533,7 +547,10 @@ function bind() {
   on("[data-close-tab]", "click", (_, e) => {
     collect();
     opened = opened.filter((id) => id !== e.dataset.closeTab);
-    if (current === e.dataset.closeTab) current = opened.at(-1);
+    if (current === e.dataset.closeTab) {
+      current = opened.at(-1);
+      response = responses.get(project.id + ":" + current) || null;
+    }
     render();
   });
   on("#git-terminal", "click", async () => {
@@ -624,27 +641,6 @@ function bind() {
       render();
     }),
   );
-  on("[data-edit-folder]", "click", (_, element) => {
-    const old = element.dataset.editFolder;
-    modal(
-      "编辑目录",
-      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`,
-      () => {
-        const remove = $("#folder-remove").checked,
-          name = $("#folder-name").value.trim();
-        if (!remove && !name) throw Error("名称不能为空");
-        for (const item of project.requests)
-          if ((item.folder || "未分组") === old)
-            item.folder = remove ? "" : name;
-        project.folders = (project.folders || []).filter(
-          (folder) => folder !== old,
-        );
-        if (!remove) project.folders.push(name);
-        mark();
-        render();
-      },
-    );
-  });
   on("#new-document", "click", () => editDocument());
   on("[data-edit-document]", "click", (_, element) =>
     editDocument(Number(element.dataset.editDocument)),
@@ -697,6 +693,7 @@ function bind() {
     request().tls[element.dataset.tls] = element.value;
     mark();
   });
+  on("#schema", "input", () => mark());
   on("#schema", "change", (_, e) => {
     request().schema = JSON.parse(e.value);
     mark();
@@ -882,6 +879,7 @@ function bind() {
     r.name += " 副本";
     project.requests.push(r);
     current = r.id;
+    response = null;
     if (!opened.includes(current)) opened.push(current);
     mark();
     render();
@@ -890,6 +888,7 @@ function bind() {
     if (!confirm("将此接口移到回收站？")) return;
     request().deletedAt = new Date().toISOString();
     current = project.requests.find((r) => !r.deletedAt)?.id;
+    response = responses.get(project.id + ":" + current) || null;
     mark();
     render();
   });
@@ -917,10 +916,11 @@ function bind() {
     collect();
     const r = await api("/projects/" + project.id + "/curl", "POST", {
       request: request(),
+      environmentId: env(),
     });
     modal(
-      "cURL",
-      `<textarea id="curl-output" readonly>${esc(r.curl)}</textarea>`,
+      "cURL（Bash）",
+      `<p class="muted">按当前环境生成，不执行前后置脚本。可能包含认证凭据，请勿公开分享。</p><textarea id="curl-output" readonly>${esc(r.curl)}</textarea>`,
       () => navigator.clipboard.writeText(r.curl),
       "复制",
     );
@@ -930,6 +930,11 @@ function bind() {
       "导入接口",
       `<p class="muted">支持项目 JSON、OpenAPI JSON/YAML、Postman Collection 与 cURL。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
       async () => {
+        if (dirty) {
+          if (!confirm("当前有未保存修改，先保存再导入？"))
+            throw Error("导入已取消，修改仍保留");
+          await save();
+        }
         const f = $("#import-file").files[0],
           document = f ? await f.text() : $("#import-text").value;
         if ($("#import-mode").value === "restore") {
@@ -941,6 +946,7 @@ function bind() {
             document,
           });
           current = project.requests.at(-1)?.id;
+          response = null;
           if (current && !opened.includes(current)) opened.push(current);
           render();
         }
@@ -1058,6 +1064,10 @@ function bind() {
     projects = await api("/projects");
     render();
     toast("项目已恢复");
+  });
+  on("#clear-session", "click", async () => {
+    await api("/projects/" + project.id + "/clear-session", "POST", {});
+    toast("临时变量已清空，后续调试使用已保存的环境值");
   });
   on("#project-name", "input", (_, e) => {
     project.name = e.value;
@@ -1261,6 +1271,28 @@ function bind() {
   );
 }
 function bindTree() {
+  on("[data-edit-folder]", "click", (_, element) => {
+    const old = element.dataset.editFolder;
+    modal(
+      "编辑目录",
+      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`,
+      () => {
+        const remove = $("#folder-remove").checked,
+          name = $("#folder-name").value.trim();
+        if (!remove && !name) throw Error("名称不能为空");
+        for (const item of project.requests)
+          if ((item.folder || "未分组") === old)
+            item.folder = remove ? "" : name;
+        project.folders = (project.folders || []).filter(
+          (folder) => folder !== old,
+        );
+        if (!remove) project.folders.push(name);
+        mark();
+        render();
+      },
+    );
+  });
+
   on("[data-request]", "click", (_, e) => {
     collect();
     current = e.dataset.request;

@@ -264,6 +264,10 @@ export async function runPlan(
           : "failed";
     } catch (error) {
       record.error = error.message;
+      if (!record.request) {
+        record.request = structuredClone(step.request);
+        record.requestUnresolved = true;
+      }
     }
     results.push(record);
     await onStep?.(record);
@@ -283,6 +287,7 @@ export async function runPlan(
         ? "passed"
         : "failed",
     results,
+    initialVariables: structuredClone(variables),
     variables: vars,
   };
 }
@@ -508,8 +513,8 @@ export function importDocument(doc) {
   throw Error("无法识别导入格式");
 }
 export function importCurl(source) {
-  const tokens = source.match(/'(?:[^']*)'|"(?:\\.|[^"\\])*"|[^\s]+/g) || [];
-  const clean = (s) => s?.replace(/^['"]|['"]$/g, "");
+  const tokens = shellTokens(source);
+  const clean = (value) => value;
   let r = { headers: [], method: "GET" };
   for (let i = 1; i < tokens.length; i++) {
     const t = clean(tokens[i]);
@@ -527,7 +532,31 @@ export function importCurl(source) {
       r.bodyType = "raw";
       if (r.method === "GET") r.method = "POST";
     } else if (t === "--url") r.url = clean(tokens[++i]);
-    else if (/^https?:/.test(t)) r.url = t;
+    else if (t === "--digest") r.auth = { ...(r.auth || {}), type: "digest" };
+    else if (t === "-u" || t === "--user") {
+      const value = tokens[++i] || "",
+        colon = value.indexOf(":");
+      r.auth = {
+        type: r.auth?.type === "digest" ? "digest" : "basic",
+        username: colon < 0 ? value : value.slice(0, colon),
+        password: colon < 0 ? "" : value.slice(colon + 1),
+      };
+    } else if (t === "--proxy" || t === "-x") r.proxy = tokens[++i];
+    else if (t === "--max-time" || t === "-m")
+      r.timeout = Number(tokens[++i]) * 1000;
+    else if (t === "--form-string" || t === "--form" || t === "-F") {
+      const value = tokens[++i] || "",
+        equal = value.indexOf("=");
+      if (equal < 0) throw Error("无效表单参数");
+      r.bodyType = "form-data";
+      r.form ??= [];
+      r.form.push({
+        key: value.slice(0, equal),
+        value: value.slice(equal + 1),
+        enabled: true,
+      });
+      if (r.method === "GET") r.method = "POST";
+    } else if (/^https?:/.test(t)) r.url = t;
     else if (
       !["-L", "--location", "--compressed", "-s", "--silent"].includes(t)
     )
@@ -537,7 +566,7 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
-  const paths = {};
+  const paths = Object.create(null);
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
     let path;
     try {
@@ -588,19 +617,78 @@ export function exportOpenAPI(project) {
       : {}),
   };
 }
-export function toCurl(r) {
-  const quote = (s) => "'" + String(s).replaceAll("'", "'\\''") + "'";
-  return [
-    "curl",
-    "-X",
-    r.method,
-    quote(r.url),
-    ...r.headers
-      .filter((h) => h.enabled !== false && h.key)
-      .flatMap((h) => ["-H", quote(`${h.key}: ${h.value}`)]),
-    ...(r.bodyType !== "none" ? ["--data-raw", quote(r.body)] : []),
-  ].join(" ");
+export function toCurl(input) {
+  const r = normalizeRequest(input);
+  const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
+  if (
+    ["binary", "msgpack"].includes(r.bodyType) ||
+    r.form.some((field) => field.type === "file") ||
+    Object.values(r.tls).some(Boolean)
+  )
+    throw Error(
+      "二进制、文件或内联证书请求需手工准备文件；不会生成不等价的 cURL。请使用原始请求/项目导出。",
+    );
+  let raw = r.url;
+  for (const parameter of r.path.filter((item) => item.enabled !== false))
+    raw = raw.replaceAll(
+      "{" + parameter.key + "}",
+      encodeURIComponent(parameter.value),
+    );
+  const url = new URL(raw);
+  for (const parameter of r.query.filter(
+    (item) => item.enabled !== false && item.key,
+  ))
+    url.searchParams.append(parameter.key, parameter.value);
+  const headers = Object.fromEntries(
+    r.headers
+      .filter((item) => item.enabled !== false && item.key)
+      .map((item) => [item.key.toLowerCase(), item.value]),
+  );
+  const args = ["curl", "-X", r.method];
+  if (r.auth.type === "basic" || r.auth.type === "digest") {
+    if (r.auth.type === "digest") args.push("--digest");
+    args.push(
+      "--user",
+      quote((r.auth.username || "") + ":" + (r.auth.password || "")),
+    );
+  }
+  if (["bearer", "oauth2"].includes(r.auth.type))
+    headers.authorization = "Bearer " + (r.auth.token || "");
+  if (r.auth.type === "apiKey") {
+    if (r.auth.in === "query") url.searchParams.set(r.auth.key, r.auth.value);
+    else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
+  }
+  if (r.cookies.length)
+    headers.cookie = r.cookies
+      .filter((item) => item.enabled !== false)
+      .map((item) => item.key + "=" + item.value)
+      .join("; ");
+  if (r.bodyType === "json") headers["content-type"] ??= "application/json";
+  if (r.bodyType === "urlencoded")
+    headers["content-type"] ??= "application/x-www-form-urlencoded";
+  args.push(quote(url.href));
+  for (const [key, value] of Object.entries(headers))
+    args.push("-H", quote(key + ": " + value));
+  if (r.proxy) args.push("--proxy", quote(r.proxy));
+  args.push("--max-time", String(r.timeout / 1000));
+  if (r.bodyType === "form-data")
+    for (const field of r.form.filter((item) => item.enabled !== false))
+      args.push("--form-string", quote(field.key + "=" + field.value));
+  else if (r.bodyType === "urlencoded")
+    args.push(
+      "--data-raw",
+      quote(
+        new URLSearchParams(
+          r.form
+            .filter((item) => item.enabled !== false)
+            .map((item) => [item.key, item.value]),
+        ).toString(),
+      ),
+    );
+  else if (r.bodyType !== "none") args.push("--data-raw", quote(r.body));
+  return args.join(" ");
 }
+
 export function restoreProject(document) {
   if (typeof document === "string") document = JSON.parse(document);
   if (
@@ -620,6 +708,34 @@ export function restoreProject(document) {
     )
       throw Error("环境数据无效");
   }
+  for (const key of ["history", "runs", "dictionary", "documents"]) {
+    if (
+      document[key] !== undefined &&
+      (!Array.isArray(document[key]) ||
+        document[key].some(
+          (item) => !item || typeof item !== "object" || Array.isArray(item),
+        ))
+    )
+      throw Error("备份中的 " + key + " 格式无效");
+  }
+  if (
+    (document.runs || []).some(
+      (run) =>
+        typeof run.id !== "string" ||
+        !Array.isArray(run.results) ||
+        run.results.some((step) => !step || typeof step !== "object"),
+    )
+  )
+    throw Error("执行记录备份格式无效");
+  if ((document.history || []).some((item) => typeof item.id !== "string"))
+    throw Error("请求历史备份格式无效");
+  if (
+    (document.documents || []).some(
+      (item) =>
+        typeof item.title !== "string" || typeof item.content !== "string",
+    )
+  )
+    throw Error("文档备份格式无效");
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
@@ -732,8 +848,12 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const mergedComponents = structuredClone(project.openapiComponents || {});
   if (components) {
     for (const [category, items] of Object.entries(components)) {
+      if (["__proto__", "prototype", "constructor"].includes(category))
+        throw Error("不安全的组件名称");
       mergedComponents[category] ??= {};
       for (const [name, value] of Object.entries(items)) {
+        if (["__proto__", "prototype", "constructor"].includes(name))
+          throw Error("不安全的组件名称");
         const old = mergedComponents[category][name];
         if (
           !sync &&
@@ -778,4 +898,51 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     });
   }
   return output;
+}
+
+function shellTokens(source) {
+  const tokens = [];
+  let value = "",
+    quote = null,
+    started = false;
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (quote === "'") {
+      if (character === "'") quote = null;
+      else value += character;
+      started = true;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      const next = source[++index];
+      if (next === undefined) throw Error("不完整的 cURL 转义");
+      if (next !== "\n") value += next;
+      started = true;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') quote = null;
+      else value += character;
+      started = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (started) {
+        tokens.push(value);
+        value = "";
+        started = false;
+      }
+      continue;
+    }
+    value += character;
+    started = true;
+  }
+  if (quote) throw Error("cURL 引号未闭合");
+  if (started) tokens.push(value);
+  return tokens;
 }

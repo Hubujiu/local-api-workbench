@@ -1,43 +1,24 @@
-# Development checkpoint — 2026-10-17 12:40 UTC
+# Delivery candidate checkpoint — 2026-10-17 13:48 UTC
 
-**Unfinished product. No claim of complete one-to-one parity.**
+Private repository: https://github.com/Hubujiu/local-api-workbench  
+Persistent draft PR: https://github.com/Hubujiu/local-api-workbench/pull/1  
+Main unchanged: 5af2f63913e097efd6fb3325103bd5fd2ee0f6a1. No deployment.
 
-## Repository and verified CI
+## Last verified remote candidate
+03b426bea4eed8c2f8a8318357436d7c5b6718c7 passed all seven jobs in run 39036849008, including the packaged Windows executable, browser videos/screenshots, three-platform core, real database fixtures and dependency audit.
 
-- Private repository: https://github.com/Hubujiu/local-api-workbench
-- Persistent draft PR #1: develop → main. Main remains initial README commit 5af2f63913e097efd6fb3325103bd5fd2ee0f6a1. No main merge or deployment.
-- Commit 9d3a21ce8bfbd6ac758036be1a09cb39918e5eae passed all six jobs in run 39033215871: three-platform core tests, real Chromium smoke, packaged Windows Electron smoke, formatting artifact generation.
-- Windows Electron 44 downloads its binary on first run, so explicit install-electron was needed before packaging. Removing top-level await from desktop startup resolved the packaged smoke launch timeout. Original failures remain in CI history.
-- Initial screenshots were downloaded and visually inspected: cream/gold workbench, request tree/editor/response panes and plan results render without overlap at 1440×950. This is not a pixel-perfect comparison certificate.
-- Local complete core suite: 33 tests passed, no skips. QuickJS runtime dependencies from the verified CI artifact were hash-checked before local tests.
+## Current candidate changes
+- Adopt verified root/desktop lockfiles and npm ci, production-only desktop dependencies.
+- Recover provably orphaned disk locks without overriding a live or unknown owner.
+- Preserve current configuration separately from background history revisions.
+- Clear stale response display on imports/duplicate/close/delete; add UI regression.
+- Bash cURL auth/body/quoting and environment resolution, explicit unsupported binary/certificate errors.
+- Clean delivery matrix and known limitations.
 
-## Current iteration (awaiting its own CI)
+Current local suite: 63 passed, zero failed/skipped; syntax and strict formatting pass. This candidate still requires its own exact-head CI and artifact verification.
 
-- Broader UI smoke: script execution/logs, import dialog repeated open/close, cURL import, dark mode, compact layout.
-- PostgreSQL/MySQL read-only connections and real service-container integration fixtures.
-- Standalone CLI and scoped stdio MCP remain available.
+## Historical issue
+Old run 39036358462 has a hung Windows test and failed an earlier dependency audit. The owner was asked once to cancel it because the connector cannot cancel runs. This old run is not green. Updated mysql2/yaml and bounded desktop cleanup passed later run 39036849008. New jobs have ten-minute timeout and concurrency cancellation.
 
-## Remaining work before full delivery
-
-1. Finish project/folder/document management workflows and user-facing backup/restore edges.
-2. OAuth2/Digest, certificate/proxy configuration, YAML import, richer protocol sessions and native Git workflows require further implementation and verification.
-3. Script compatibility is explicit subset (apt/pm variables, response, tests, logs); no arbitrary npm/extra network APIs or asynchronous scripts.
-4. Source formatting has improved; further modularization and frozen full acceptance matrix are required.
-5. Complete expanded browser tests and package verification against the final exact tree. Basic smoke alone is not complete product acceptance.
-6. Delivery documentation and install/run experience must be checked against actual artifacts.
-
-## Runtime/security boundaries
-
-Loopback-only HTTP, Host/Origin checks and per-process UI session token; original frontend assets; no telemetry/CDN/cloud login. JSON storage uses atomic replacement, disk locks and optimistic revision checks. Network timeouts and size limits are enforced. TLS verification remains enabled. Fixed plan snapshots carry SHA256 and retained per-step evidence even on extraction failure. SQLite uses a bounded read-only worker. JS uses an isolated QuickJS VM with no host bindings, memory/CPU limits and worker termination. Database credentials are request-scoped, never auto-persisted. Remote database read-only transactions do not guarantee user-defined server functions have no external side effects.
-
-The product site's pricing has no functional tiers: all licenses are paid. Independent implementation excludes licensing/payment and paid cloud services; it does not bypass activation or copy proprietary assets.
-
-Root works alone. No Codex delegation or cloud coding tasks. User requested no routine updates until the full product is ready; report only unavoidable blockers. The earlier repository-creation blocker is resolved.
-
-12:48 UTC update: commit 529058cdea6f7f1e90cccd10e082ebe9ff61f49f passed all seven CI jobs in run 39033830721, including real PostgreSQL/MySQL fixture connections and expanded UI checks. Native project directory selection, folder/document editing and persistence passed browser/desktop CI. Current work adds richer Postman import and YAML parsing; dependencies/lockfile will be verified before final freeze.
-
-12:58 UTC: Save-concurrency regression fixed and verified by run 39034280230 on 87df8274a64936325a26604be2580b9a84d27b52 (7/7 jobs success). Current local iteration adds interactive protocol sessions and OAuth2 PKCE/client-credentials/refresh handling; 43 local tests pass, pending exact-tree CI. Digest transport handshake verified with a real local HTTP fixture. Native Git scope was rechecked: original help/git only opens local project terminal/location, not a proprietary conflict-resolution engine; do not invent that as required parity.
-
-13:11 UTC iteration: Local suite now has 51 passing tests. Added optional token-protected HTTP MCP with per-project read/write/execute grants, safe HTML documentation export, explicit project archiving/restoration, custom CA/client certificate settings and HTTP/HTTPS CONNECT proxy support. TLS verification remains mandatory. UI bootstrap now requires the ephemeral launch-link token rather than exposing it to arbitrary loopback clients. Public test-only localhost key/certificate authorize no real service. New plan steps deliberately omit interface-page scripts, matching the observed execution-plan documentation. Expanded browser acceptance now records video/trace and covers OAuth token acquisition, interactive SSE and MCP enable/disable. Pending exact-tree CI; do not call this iteration green before its run completes.
-
-13:29 UTC: Dependency audit identified mysql2 <=3.23.0 credential-downgrade/decompression advisories and yaml <=2.8.2 nesting overflow advisory. Exact dependencies updated to mysql2 3.24.6 and yaml 2.9.1; audit gate is retained, not bypassed. One older Windows smoke run (39036358462) failed to exit and has no cancellation API in the connected tool; owner was asked to cancel it. New CI has explicit 10-minute job limits and concurrency cancellation. Desktop test cleanup now terminates only its own test process, records failure phase, and saves fixture edits before database testing; product adds an explicit discard/stay dialog for unsaved close. OpenAPI sync now upserts stable interface IDs and preserves recursive local schema references/components. These changes require their new exact-tree CI.
+## Scope and trust
+See DELIVERY.md for implemented capabilities, fixed test mapping and limitations. Public screenshot/document parity is not a certificate of undocumented proprietary behavior or pixel-perfect identity. Root implemented the task without delegation or saved cloud coding environments.

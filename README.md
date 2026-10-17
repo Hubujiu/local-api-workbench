@@ -2,26 +2,26 @@
 
 本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
 
-**开发中，尚未通过完整交付验收。不能宣称完整或一比一复刻。**
+**交付候选版 0.1.0。功能与可验证范围见 [交付清单](docs/DELIVERY.md)，不能将公开文档范围的独立实现等同于全部专有行为或像素级一致。**
 
 ## 启动
 
 安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
 
 ```
-npm install
+npm ci
 npm start
 ```
 
 浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。所有项目使用格式化 JSON，写入时采用临时文件原子替换和冲突检测。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
-桌面包装：在 `desktop/` 执行 `npm install`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 打包与真实桌面 smoke 已在 GitHub Actions 验证；当前仍处于持续迭代。
+桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 便携包在 PR 的最新成功 Actions 运行中下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
 ## 已实现的核心
 
 - 项目、接口、目录、搜索、复制、软删除恢复、环境变量与本地持久化
-- HTTP/HTTPS 参数、认证、Cookie、JSON/raw/表单/Base64 二进制请求，真实响应、超时、取消、8 MiB 限制
-- OpenAPI JSON / Postman / cURL 导入，项目/OpenAPI/cURL/Markdown 导出
+- HTTP/HTTPS 参数、认证、Cookie、JSON/raw/表单/文件/Base64 二进制/MessagePack 请求，真实响应、超时、取消、8 MiB 限制
+- OpenAPI JSON/YAML / Postman / cURL 导入，项目/OpenAPI/cURL/Markdown 导出
 - 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
 - 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
 - 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
@@ -49,9 +49,9 @@ node tests/ui-smoke.mjs
 ## 当前差距（不隐藏）
 
 - 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
-- 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；更多功能与异常交互仍在持续验证
-- 已创建 PR #1，早期版本六项 CI 全绿；最新迭代以对应提交的 CI 结果为准
-- 外部/循环 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
+- 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；涵盖保存竞争、脚本、导入、目录/文档持久化、OAuth、SSE 与 MCP 开关
+- 已创建 PR #1，多个候选版本七项 CI 全绿；最新迭代以对应提交的 CI 结果为准
+- 支持本地循环 OpenAPI 引用保留，外部 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
 - SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
 

@@ -127,3 +127,51 @@ test("UI bootstrap token is not available to unauthenticated loopback clients", 
   assert.equal(authorized.status, 200);
   assert(new URL(app.launchUrl).hash.includes(app.token));
 });
+test("manual debug variables remain project scoped and can be cleared", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-debug-vars-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const project = await app.store.create("Variables");
+  project.requests = [
+    {
+      id: "fixture",
+      name: "Fixture",
+      method: "GET",
+      url: app.url + "/mock/" + project.id + "/fixture",
+      examples: [{ status: 200, body: '{"token":"abc"}' }],
+    },
+  ];
+  await app.store.save(project);
+  const call = async (action, data) => {
+    const response = await fetch(
+      app.url + "/api/projects/" + project.id + "/" + action,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-local-token": app.token,
+        },
+        body: JSON.stringify(data),
+      },
+    );
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const first = {
+    ...project.requests[0],
+    extract: [{ name: "token", path: "$.token" }],
+  };
+  await call("execute", { request: first });
+  const next = {
+    ...project.requests[0],
+    url: project.requests[0].url + "?token={{token}}",
+  };
+  const result = await call("execute", { request: next });
+  assert(result.request.url.endsWith("?token=abc"));
+  await call("clear-session", {});
+  const missing = await call("execute", { request: next });
+  assert.match(missing.error, /token/);
+});

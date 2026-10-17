@@ -124,6 +124,10 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   assert((await page.locator("[data-request]").count()) === 3);
+  await page.locator(".response-body .empty").waitFor();
+  assert(
+    !(await page.locator(".response-body").innerText()).includes("script-done"),
+  );
   await page.locator("#theme").click();
   assert(
     await page

@@ -297,3 +297,58 @@ test("Postman collection variables are retained as a separate environment", asyn
   });
   assert.equal(project.environments[0].variables.baseUrl, "http://localhost");
 });
+test("invalid backup records are rejected before they can break the UI", async () => {
+  const { restoreProject } = await import("../src/core.mjs");
+  const base = { version: 1, requests: [], environments: [] };
+  assert.throws(() => restoreProject({ ...base, history: [null] }), /格式/);
+  assert.throws(
+    () => restoreProject({ ...base, runs: [{ id: "run" }] }),
+    /格式/,
+  );
+  assert.throws(
+    () => restoreProject({ ...base, documents: [{ title: "missing body" }] }),
+    /格式/,
+  );
+});
+test("OpenAPI metadata and paths cannot mutate object prototypes", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { requests: [], environments: [] };
+  const malicious = JSON.parse(
+    '{"openapi":"3.0.3","paths":{},"components":{"__proto__":{"polluted":"yes"}}}',
+  );
+  assert.throws(
+    () => importIntoProject(project, malicious, { sync: true }),
+    /不安全/,
+  );
+  assert.equal({}.polluted, undefined);
+  const exported = exportOpenAPI({
+    name: "Guard",
+    requests: [normalizeRequest({ url: "{{baseUrl}}__proto__" })],
+  });
+  assert(Object.hasOwn(exported.paths, "__proto__"));
+  assert.equal(Object.prototype.get, undefined);
+});
+test("cURL export and import preserve JSON headers, auth, query and quoted apostrophes", async () => {
+  const { toCurl, importCurl } = await import("../src/core.mjs");
+  const original = normalizeRequest({
+    url: "http://localhost/users/{id}",
+    method: "POST",
+    path: [{ key: "id", value: "7" }],
+    query: [{ key: "q", value: "a b" }],
+    auth: { type: "basic", username: "user", password: "secret" },
+    bodyType: "json",
+    body: JSON.stringify({ name: "O'Brien" }),
+  });
+  const command = toCurl(original);
+  const restored = importCurl(command);
+  assert.equal(restored.url, "http://localhost/users/7?q=a+b");
+  assert.equal(restored.auth.username, "user");
+  assert.equal(restored.body, original.body);
+  assert(
+    restored.headers.some(
+      (header) =>
+        header.key === "content-type" && header.value === "application/json",
+    ),
+  );
+  assert.throws(() => toCurl({ ...original, bodyType: "binary" }), /不等价/);
+});

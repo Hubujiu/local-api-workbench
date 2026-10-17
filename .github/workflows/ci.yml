@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
@@ -52,19 +52,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm install --ignore-scripts
-      - run: npm install --prefix desktop
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix desktop
       - run: npm audit --prefix desktop --audit-level=high
       - run: npx --no install-electron
         working-directory: desktop
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - name: Install only production dependencies for the package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force production | Out-Null
+          Copy-Item package.json,package-lock.json production
+          npm ci --omit=dev --ignore-scripts --prefix production
       - name: Assemble portable Windows application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/LocalAPI | Out-Null
           Copy-Item desktop/node_modules/electron/dist/* dist/LocalAPI -Recurse
           New-Item -ItemType Directory -Force dist/LocalAPI/resources/app | Out-Null
-          Copy-Item src,public,scripts,node_modules,LICENSE dist/LocalAPI/resources/app -Recurse
+          Copy-Item src,public,scripts,LICENSE dist/LocalAPI/resources/app -Recurse
+          Copy-Item production/node_modules dist/LocalAPI/resources/app -Recurse
           New-Item -ItemType Directory -Force dist/LocalAPI/resources/app/desktop | Out-Null
           Copy-Item desktop/*.mjs,desktop/*.cjs dist/LocalAPI/resources/app/desktop
           '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
@@ -95,17 +102,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run format:check
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: runtime-dependencies
-          retention-days: 1
-          path: |
-            node_modules
-            package-lock.json
+
   database-integration:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -140,5 +140,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: node tests/remote-database.mjs

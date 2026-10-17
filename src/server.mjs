@@ -33,6 +33,7 @@ export async function createApp({
   await store.init();
   const protocolSessions = new ProtocolSessions();
   const oauth = new OAuthManager();
+  const debugEnvironments = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpToken = "",
     mcpLastActivity = null;
@@ -217,6 +218,11 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "clear-session" && req.method === "POST") {
+            for (const key of debugEnvironments.keys())
+              if (key.startsWith(p.id + ":")) debugEnvironments.delete(key);
+            return json(res, 200, { ok: true });
+          }
           if (action === "location" && req.method === "GET")
             return json(res, 200, { path: store.file(p.id) });
           if (!action && req.method === "GET") return json(res, 200, p);
@@ -229,6 +235,28 @@ export async function createApp({
               !Array.isArray(b.plans)
             )
               throw Error("无效项目结构");
+            if (
+              b.environments.some(
+                (environment) =>
+                  !environment ||
+                  typeof environment.id !== "string" ||
+                  !environment.variables ||
+                  typeof environment.variables !== "object" ||
+                  Array.isArray(environment.variables),
+              )
+            )
+              throw Error("环境变量必须是对象");
+            if (!Array.isArray(b.documents) || !Array.isArray(b.dictionary))
+              throw Error("文档或数据字典格式无效");
+            if (
+              b.documents.some(
+                (document) =>
+                  !document ||
+                  typeof document.title !== "string" ||
+                  typeof document.content !== "string",
+              )
+            )
+              throw Error("文档格式无效");
             b.requests = b.requests.map(normalizeRequest);
             if (b.archived)
               mcp.projects = mcp.projects.filter((id) => id !== b.id);
@@ -282,17 +310,41 @@ export async function createApp({
             const b = await body(req);
             return json(res, 200, { sample: sampleFromSchema(b.schema || {}) });
           }
-          if (action === "curl" && req.method === "POST")
-            return json(res, 200, { curl: toCurl((await body(req)).request) });
+          if (action === "curl" && req.method === "POST") {
+            const data = await body(req),
+              environment =
+                p.environments.find((item) => item.id === data.environmentId) ||
+                p.environments[0];
+            const key = p.id + ":" + (environment?.id || "default"),
+              fingerprint = JSON.stringify(environment?.variables || {}),
+              cached = debugEnvironments.get(key);
+            const variables =
+              cached?.fingerprint === fingerprint
+                ? cached.variables
+                : environment?.variables || {};
+            return json(res, 200, {
+              curl: toCurl(interpolate(data.request, variables)),
+            });
+          }
           if (action === "execute" && req.method === "POST") {
             const b = await body(req),
               controller = new AbortController(),
               runId = b.runId || id();
             controllers.set(runId, controller);
             try {
+              const selectedEnvironment =
+                p.environments.find((e) => e.id === b.environmentId) ||
+                p.environments[0];
+              const environmentKey =
+                p.id + ":" + (selectedEnvironment?.id || "default");
+              const fingerprint = JSON.stringify(
+                selectedEnvironment?.variables || {},
+              );
+              const cached = debugEnvironments.get(environmentKey);
               const env =
-                p.environments.find((e) => e.id === b.environmentId)
-                  ?.variables || {};
+                cached?.fingerprint === fingerprint
+                  ? cached.variables
+                  : selectedEnvironment?.variables || {};
               const request = normalizeRequest(b.request);
               const single = await runPlan(
                 snapshotPlan({ name: request.name, steps: [{ request }] }),
@@ -301,6 +353,11 @@ export async function createApp({
                 { signal: controller.signal },
               );
               const result = single.results[0];
+              if (result?.response)
+                debugEnvironments.set(environmentKey, {
+                  fingerprint,
+                  variables: structuredClone(single.variables),
+                });
               if (!result) throw Error("请求已取消");
               await store.append(p.id, "history", {
                 id: id(),
@@ -311,7 +368,7 @@ export async function createApp({
               return json(res, 200, {
                 ...result.response,
                 assertions: result.assertions,
-                extracted: result.extracted,
+                extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
                 error: result.error,
               });

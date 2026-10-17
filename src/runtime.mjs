@@ -1,3 +1,4 @@
+import { acquireFileLock } from "./file-lock.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
@@ -90,18 +91,7 @@ export class Store {
       await this.init();
       await mkdir(directory, { recursive: true });
       const registryLock = path.join(this.root, ".registry.lock");
-      let locked = false;
-      for (let retry = 0; retry < 100; retry++) {
-        try {
-          await mkdir(registryLock);
-          locked = true;
-          break;
-        } catch (error) {
-          if (error.code !== "EEXIST") throw error;
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-      }
-      if (!locked) throw Error("项目注册表正忙，请稍后重试");
+      const releaseRegistry = await acquireFileLock(registryLock);
       try {
         await this.init();
         this.locations[p.id] = path.resolve(directory);
@@ -111,7 +101,7 @@ export class Store {
         });
         await rename(temporary, path.join(this.root, ".locations.json"));
       } finally {
-        await rm(registryLock, { recursive: true, force: true });
+        await releaseRegistry();
       }
     }
     await this.save(p);
@@ -124,18 +114,7 @@ export class Store {
         await this.init();
         const file = this.file(p.id),
           lock = file + ".lock";
-        let locked = false;
-        for (let n = 0; n < 100; n++) {
-          try {
-            await mkdir(lock);
-            locked = true;
-            break;
-          } catch (e) {
-            if (e.code !== "EEXIST") throw e;
-            await new Promise((r) => setTimeout(r, 20));
-          }
-        }
-        if (!locked) throw Error("项目正在由其他进程写入，请稍后重试");
+        const release = await acquireFileLock(lock);
         try {
           let previous;
           try {
@@ -171,7 +150,7 @@ export class Store {
           Object.assign(p, next);
           return p;
         } finally {
-          await rm(lock, { recursive: true, force: true });
+          await release();
         }
       });
     this.pending = task;
@@ -200,7 +179,7 @@ export async function executeRequest(input, signal) {
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
   for (const p of r.query.filter((p) => p.enabled !== false && p.key))
     u.searchParams.append(p.key, String(p.value ?? ""));
-  const headers = {};
+  const headers = Object.create(null);
   for (const h of r.headers.filter((h) => h.enabled !== false && h.key)) {
     if (/[\r\n]/.test(h.key + String(h.value))) throw Error("非法请求头");
     headers[h.key.toLowerCase()] = String(h.value ?? "");

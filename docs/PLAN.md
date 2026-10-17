@@ -25,7 +25,7 @@ Sources:
 9. Git-friendly local files, explicit backups/import; never auto-push credentials or runtime private data.
 10. Security: bind loopback, reject cross-origin/invalid Host, require UI session token on mutation, static path confinement, no shell execution of imports, bounded requests/responses, no automatic external requests on startup.
 
-Tests are committed before implementing relevant behavior. Local deterministic fixture server only; never load test public services. CI repeats same commands. No paid SDK, telemetry, CDN, or cloud account needed at runtime.
+Acceptance behaviors are specified before implementation; regression tests accompany fixes. Local deterministic fixture server only; never load test public services. CI repeats same commands. No paid SDK, telemetry, CDN, or cloud account needed at runtime.
 
 ## Delivery constraints
-Work only in own environment, no delegation. All product updates by PR using one persistent development branch. No main merge without approval. GitHub connector has no repository-creation action; cloud browser currently logged out and gh unauthenticated. Continue local implementation; remote creation remains a delivery blocker, not a reason to stop coding.
+Work only in own environment, no delegation. All product updates by PR using one persistent development branch. No main merge without approval. Repository creation was completed by the owner. All iterations are in Hubujiu/local-api-workbench PR #1, using persistent develop → main.
