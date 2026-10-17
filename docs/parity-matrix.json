@@ -1,0 +1,926 @@
+{
+  "asOf": "2026-10-17",
+  "implementationCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
+  "counts": {
+    "F": {
+      "已实现": 15,
+      "部分实现": 21,
+      "缺失": 12,
+      "行为不同": 2,
+      "待核实": 1
+    },
+    "M": {
+      "已实现": 10,
+      "缺失": 18,
+      "部分实现": 2
+    },
+    "U": {
+      "部分实现": 11,
+      "缺失": 3
+    },
+    "X": {
+      "明确排除": 3
+    }
+  },
+  "sources": {
+    "S1": "https://offline.apipost.net/",
+    "S2": "https://offline.apipost.net/help/",
+    "S3": "https://offline.apipost.net/help/basics/",
+    "S4": "https://offline.apipost.net/help/projects/",
+    "S5": "https://offline.apipost.net/help/git/",
+    "S6": "https://offline.apipost.net/help/changelog/",
+    "S7": "https://offline.apipost.net/mcp/",
+    "S8": "https://offline.apipost.net/help/mcp/",
+    "S9": "https://offline.apipost.net/help/executions/",
+    "S10": "https://offline.apipost.net/pricing/",
+    "I1": "https://offline.apipost.net/images/apipost-desktop-light.png",
+    "I2": "https://offline.apipost.net/images/apipost-desktop.png",
+    "I3": "https://offline.apipost.net/images/mcp-connection.png",
+    "I4": "https://offline.apipost.net/images/help/executions/ai-created-flow.png",
+    "I5": "https://offline.apipost.net/images/help/executions/ai-execution-record.png"
+  },
+  "items": [
+    {
+      "id": "F01",
+      "name": "本地运行、无云账号",
+      "status": "已实现",
+      "original": "接口、记录和文档留在本机；断公网可运行",
+      "current": "桌面包内置运行时，源码安装依赖时需联网",
+      "source": "S1",
+      "evidence": "src/server.mjs; desktop/main.mjs; desktop-smoke"
+    },
+    {
+      "id": "F02",
+      "name": "项目创建及自选目录",
+      "status": "已实现",
+      "original": "默认目录或用户自选位置",
+      "current": "可创建项目、自选目录并注册位置",
+      "source": "S4",
+      "evidence": "Store.create; desktop choose-directory; runtime.test"
+    },
+    {
+      "id": "F03",
+      "name": "打开项目位置",
+      "status": "已实现",
+      "original": "顶栏打开当前目录",
+      "current": "桌面打开文件所在目录；浏览器提供路径",
+      "source": "S4",
+      "evidence": "desktop/main.mjs open-project-location"
+    },
+    {
+      "id": "F04",
+      "name": "项目文件组织",
+      "status": "部分实现",
+      "original": "项目 ID 文件夹；apis 每接口一 JSON；envs/settings 分开",
+      "current": "当前每项目一个 JSON，历史/定义混存；不是原版结构",
+      "source": "S5",
+      "evidence": "Store.file/create"
+    },
+    {
+      "id": "F05",
+      "name": "Git 入口",
+      "status": "已实现",
+      "original": "打开项目终端，手动执行 Git 命令",
+      "current": "打开终端/目录，不内置推送合并",
+      "source": "S5",
+      "evidence": "desktop/terminal.mjs; terminal.test"
+    },
+    {
+      "id": "F06",
+      "name": "关键词/URL 搜索",
+      "status": "部分实现",
+      "original": "截图有关键词/URL 与类型筛选",
+      "current": "关键词/URL 搜索存在，类型筛选及树定位工具未对齐",
+      "source": "I1",
+      "evidence": "public/app.js renderTree"
+    },
+    {
+      "id": "F07",
+      "name": "目录、接口和文档树",
+      "status": "部分实现",
+      "original": "同一树展示目录、HTTP/SSE、Markdown 文档",
+      "current": "当前树主要为 HTTP 接口；文档和协议在独立页面",
+      "source": "I1",
+      "evidence": "public/app.js renderTree/pageContent"
+    },
+    {
+      "id": "F08",
+      "name": "最近请求",
+      "status": "已实现",
+      "original": "截图有最近入口",
+      "current": "本地最近 50 条历史，可查看证据",
+      "source": "I1",
+      "evidence": "Store.append; public/app.js history"
+    },
+    {
+      "id": "F09",
+      "name": "回收站",
+      "status": "已实现",
+      "original": "截图有回收站入口",
+      "current": "软删除和恢复接口",
+      "source": "I1",
+      "evidence": "public/app.js trash; src/mcp.mjs delete"
+    },
+    {
+      "id": "F10",
+      "name": "API 设计",
+      "status": "部分实现",
+      "original": "有独立设计页、接口定义及参数/响应信息",
+      "current": "描述、请求 Schema、示例已做；缺完整响应 Schema/参数属性设计器",
+      "source": "S3",
+      "evidence": "normalizeRequest; exportOpenAPI; modePanel"
+    },
+    {
+      "id": "F11",
+      "name": "HTTP 调试",
+      "status": "已实现",
+      "original": "请求方法、URL、发送、保存",
+      "current": "真实 HTTP(S)，超时、取消、响应证据",
+      "source": "I1",
+      "evidence": "executeRequest; runtime.test"
+    },
+    {
+      "id": "F12",
+      "name": "Header/Query/Path/Cookie",
+      "status": "已实现",
+      "original": "截图有对应参数标签",
+      "current": "可编辑键值行、开关、变量替换",
+      "source": "I1",
+      "evidence": "public/app.js parameter editors; runtime"
+    },
+    {
+      "id": "F13",
+      "name": "请求体类型",
+      "status": "已实现",
+      "original": "none/form-data/urlencoded/binary/msgpack/raw",
+      "current": "实现相应模式；原版选项布局尚不同",
+      "source": "I1",
+      "evidence": "runtime.test; MessagePack byte vectors"
+    },
+    {
+      "id": "F14",
+      "name": "认证",
+      "status": "部分实现",
+      "original": "截图有认证入口，MCP详情包含鉴权",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2存在；官方未完整列出类型，不能称完全覆盖",
+      "source": "S7",
+      "evidence": "digest/oauth/runtime tests"
+    },
+    {
+      "id": "F15",
+      "name": "请求协议版本选择",
+      "status": "缺失",
+      "original": "截图有 http/1.1 下拉",
+      "current": "无协议版本选择，无 HTTP/2 实现",
+      "source": "I1",
+      "evidence": "request row; src/connection.mjs"
+    },
+    {
+      "id": "F16",
+      "name": "基于 Schema 生成请求数据",
+      "status": "部分实现",
+      "original": "截图有生成按钮",
+      "current": "基础 schema 样例生成存在；复杂约束覆盖未完整验证",
+      "source": "I1",
+      "evidence": "sampleFromSchema; core.test"
+    },
+    {
+      "id": "F17",
+      "name": "参数助手",
+      "status": "缺失",
+      "original": "编辑区右侧有参数助手",
+      "current": "没有对应抽屉/帮助工作流",
+      "source": "I1",
+      "evidence": "public/app.js"
+    },
+    {
+      "id": "F18",
+      "name": "响应展示与日志",
+      "status": "部分实现",
+      "original": "实时响应、响应头、Cookie、响应示例、实际请求、控制台",
+      "current": "响应/头/Cookie/请求/日志存在；响应示例放在 Mock 页，未对齐标签",
+      "source": "I1",
+      "evidence": "responseContent"
+    },
+    {
+      "id": "F19",
+      "name": "接口用例",
+      "status": "部分实现",
+      "original": "独立接口用例页",
+      "current": "当前仅引导转为执行计划，没有独立接口用例管理",
+      "source": "S3",
+      "evidence": "modePanel cases"
+    },
+    {
+      "id": "F20",
+      "name": "一键压测",
+      "status": "部分实现",
+      "original": "保留压测入口，官方未公开所有参数",
+      "current": "可运行有界 100 次/10并发、P50/P95、取消；高级配置与报告等同未证实",
+      "source": "S3",
+      "evidence": "server load; bounded-load test"
+    },
+    {
+      "id": "F21",
+      "name": "Mock 基础",
+      "status": "部分实现",
+      "original": "Mock 页及 Mock 服务配置",
+      "current": "当前固定响应示例+索引选择，固定 JSON Content-Type",
+      "source": "I3",
+      "evidence": "server mock route"
+    },
+    {
+      "id": "F22",
+      "name": "智能 Mock 匹配",
+      "status": "缺失",
+      "original": "配置截图有智能 Mock 匹配菜单",
+      "current": "无条件匹配/规则优先级等工作流；具体原版规则还需补证",
+      "source": "I3",
+      "evidence": "server mock route"
+    },
+    {
+      "id": "F23",
+      "name": "文档与分享",
+      "status": "部分实现",
+      "original": "文档入口和单接口分享按钮",
+      "current": "可维护文档并导出 HTML/Markdown；缺原版单接口分享流程的等价验证",
+      "source": "S1",
+      "evidence": "document-export.js; docs page"
+    },
+    {
+      "id": "F24",
+      "name": "数据字典",
+      "status": "部分实现",
+      "original": "文档/导航列出数据字典",
+      "current": "可编辑 JSON Schema 并复制应用；缺完整可视化模型编辑和引用更新机制",
+      "source": "S2",
+      "evidence": "dictionary page; data-use-dictionary"
+    },
+    {
+      "id": "F25",
+      "name": "数据库连接",
+      "status": "部分实现",
+      "original": "公开文档说明保留数据库连接",
+      "current": "SQLite/PG/MySQL只读查询已测；原版支持库种类、写入及脚本联动未公开完整",
+      "source": "S3",
+      "evidence": "database/remote-database tests"
+    },
+    {
+      "id": "F26",
+      "name": "可视化断言与变量提取",
+      "status": "已实现",
+      "original": "公开说明保留两项能力",
+      "current": "有编辑器、断言结果、提取和步骤传递；不等于所有操作符兼容",
+      "source": "S2",
+      "evidence": "evaluateAssertions; runPlan; public editors"
+    },
+    {
+      "id": "F27",
+      "name": "接口前后置操作",
+      "status": "部分实现",
+      "original": "公开说明及截图有前后置操作",
+      "current": "声明式操作+隔离同步脚本；原版 SDK、异步API、自定义函数不完整",
+      "source": "S3",
+      "evidence": "scripts.mjs; script-worker.mjs"
+    },
+    {
+      "id": "F28",
+      "name": "项目环境管理",
+      "status": "部分实现",
+      "original": "环境可查询/切换/增删改",
+      "current": "UI可创建/编辑变量/删除/选择，缺原版统一当前环境与服务模型",
+      "source": "S7",
+      "evidence": "project.environments; env UI"
+    },
+    {
+      "id": "F29",
+      "name": "多服务与环境地址矩阵",
+      "status": "缺失",
+      "original": "共享服务定义，不同环境对应不同地址",
+      "current": "仅 baseUrl 普通变量，无 serviceId 或共享服务实体",
+      "source": "S7",
+      "evidence": "Store.create; normalizeRequest"
+    },
+    {
+      "id": "F30",
+      "name": "项目全局变量",
+      "status": "缺失",
+      "original": "与环境变量独立的全局变量",
+      "current": "只有环境变量及临时调试值，没有独立全局变量层",
+      "source": "S7",
+      "evidence": "Store.create; execute route"
+    },
+    {
+      "id": "F31",
+      "name": "运行时变量查看/维护",
+      "status": "部分实现",
+      "original": "可读取环境变量当前运行时值",
+      "current": "临时调试变量能传递/清空；缺独立查看编辑及 MCP 查询",
+      "source": "S7",
+      "evidence": "server debugSessions"
+    },
+    {
+      "id": "F32",
+      "name": "自定义函数公共资源",
+      "status": "缺失",
+      "original": "配置截图有自定义函数菜单",
+      "current": "无项目共享函数库",
+      "source": "I3",
+      "evidence": "project schema; scripts"
+    },
+    {
+      "id": "F33",
+      "name": "状态码字典",
+      "status": "缺失",
+      "original": "配置截图有状态码字典",
+      "current": "无对应维护界面/数据模型",
+      "source": "I3",
+      "evidence": "project schema"
+    },
+    {
+      "id": "F34",
+      "name": "接口属性",
+      "status": "缺失",
+      "original": "配置截图有接口属性",
+      "current": "无可配置接口属性模型",
+      "source": "I3",
+      "evidence": "normalizeRequest"
+    },
+    {
+      "id": "F35",
+      "name": "接口生命周期状态",
+      "status": "缺失",
+      "original": "截图有开发中选择及接口状态配置",
+      "current": "无接口状态字段和配置",
+      "source": "I1",
+      "evidence": "normalizeRequest; request toolbar"
+    },
+    {
+      "id": "F36",
+      "name": "导入/导出",
+      "status": "部分实现",
+      "original": "配置截图有手动导入与导出",
+      "current": "支持OpenAPI/Postman/cURL/本工具备份；原版原生迁移不兼容",
+      "source": "I3",
+      "evidence": "core import/export/restore"
+    },
+    {
+      "id": "F37",
+      "name": "快照、重复步骤、顺序执行",
+      "status": "已实现",
+      "original": "计划独立快照；同接口重复；失败后继续",
+      "current": "对应执行语义已实现并测试",
+      "source": "S9",
+      "evidence": "snapshotPlan; runPlan; plan-snapshots.test"
+    },
+    {
+      "id": "F38",
+      "name": "步骤参数、Cookie和脚本覆盖",
+      "status": "部分实现",
+      "original": "每步骤独立覆盖、可视编辑",
+      "current": "JSON弹窗可覆盖；缺与原版一致的细粒度步骤编辑器",
+      "source": "S9",
+      "evidence": "edit-step handler; snapshotPlan"
+    },
+    {
+      "id": "F39",
+      "name": "步骤间变量传递",
+      "status": "已实现",
+      "original": "提取Token/订单号供下一步使用",
+      "current": "提取/脚本变量经vars传递",
+      "source": "S9",
+      "evidence": "runPlan; core.test"
+    },
+    {
+      "id": "F40",
+      "name": "接口脚本与计划脚本隔离",
+      "status": "已实现",
+      "original": "计划不隐式执行接口页原有脚本",
+      "current": "复制步骤清除接口脚本；只执行计划明确配置的脚本",
+      "source": "S9",
+      "evidence": "plan-snapshots.js/test"
+    },
+    {
+      "id": "F41",
+      "name": "执行结果状态规则",
+      "status": "行为不同",
+      "original": "原版非200即失败，包括预期4xx",
+      "current": "当前默认2xx通过，可配置预期状态；不是原版规则",
+      "source": "S9",
+      "evidence": "runPlan statusOK"
+    },
+    {
+      "id": "F42",
+      "name": "计划说明及最近修改时间",
+      "status": "缺失",
+      "original": "官方计划图显示说明和最近修改",
+      "current": "模型只有name/environment/createdAt/steps，无说明/updatedAt",
+      "source": "I4",
+      "evidence": "snapshotPlan"
+    },
+    {
+      "id": "F43",
+      "name": "删除执行计划",
+      "status": "缺失",
+      "original": "官方图有删除计划按钮",
+      "current": "UI/MCP均没有删除计划入口",
+      "source": "I4",
+      "evidence": "plans page; mcp tools"
+    },
+    {
+      "id": "F44",
+      "name": "AI修改来源及橙色高亮",
+      "status": "缺失",
+      "original": "AI创建/更新字段和步骤标橙",
+      "current": "没有字段级变更来源/高亮记录",
+      "source": "S9",
+      "evidence": "snapshotPlan; mcp save_plan; plans UI"
+    },
+    {
+      "id": "F45",
+      "name": "AI执行中的即时状态",
+      "status": "部分实现",
+      "original": "顶栏和计划编辑器都显示AI执行状态",
+      "current": "本机点击执行有busy；MCP执行缺逐步推送、统一状态反馈",
+      "source": "S9",
+      "evidence": "mcpLastActivity; UI polling"
+    },
+    {
+      "id": "F46",
+      "name": "逐步运行证据/最近50次",
+      "status": "已实现",
+      "original": "请求、响应、断言、日志、提取值；最近50条",
+      "current": "本地保存及MCP读取；另有CLI和计划hash",
+      "source": "S9",
+      "evidence": "runPlan; Store.append; cli.test"
+    },
+    {
+      "id": "F47",
+      "name": "计划/记录分栏与步骤拖拽",
+      "status": "部分实现",
+      "original": "计划/记录标签、左计划列表、可拖拽步骤外观",
+      "current": "当前按钮列表+结果同屏，只有上移按钮，无拖拽",
+      "source": "I4",
+      "evidence": "plans page"
+    },
+    {
+      "id": "F48",
+      "name": "MCP本机服务与授权",
+      "status": "已实现",
+      "original": "服务开关、项目授权、写入授权",
+      "current": "stdio/HTTP、allowlist、写入/执行授权；默认关",
+      "source": "S8",
+      "evidence": "createMCP; server MCP; tests"
+    },
+    {
+      "id": "F49",
+      "name": "MCP各客户端配置",
+      "status": "部分实现",
+      "original": "Cursor/Codex/Claude/VSCode/WorkBuddy/Trae分页复制，重新生成密钥",
+      "current": "只给通用HTTP JSON及源码stdio命令；无六客户端适配页",
+      "source": "I3",
+      "evidence": "mcp-config handler"
+    },
+    {
+      "id": "F50",
+      "name": "MCP重启与密钥生命周期",
+      "status": "行为不同",
+      "original": "截图说明客户端配置长期有效，可主动重置密钥",
+      "current": "当前重启关闭HTTP MCP并撤销临时令牌；需重新配置",
+      "source": "I3",
+      "evidence": "createApp MCP state"
+    },
+    {
+      "id": "F51",
+      "name": "跨平台桌面包",
+      "status": "待核实",
+      "original": "官网截图展示macOS；公开平台清单未找到",
+      "current": "仅Windows成品包验收；三平台core不是三平台桌面验收",
+      "source": "I1",
+      "evidence": "ci.yml; desktop-smoke"
+    },
+    {
+      "id": "M01",
+      "name": "apipost_list_projects",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_list_projects",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M02",
+      "name": "apipost_create_project",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无创建并授权项目工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M03",
+      "name": "apipost_list_apis",
+      "status": "部分实现",
+      "original": "官网2.0公开工具能力",
+      "current": "只列接口与关键词；未含文档/目录实体和目录筛选",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M04",
+      "name": "apipost_get_api_detail",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_get_api_detail",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M05",
+      "name": "apipost_sync_openapi",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_sync_openapi；具体字段兼容范围另测",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M06",
+      "name": "apipost_delete_apis",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_delete_apis，软删除",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M07",
+      "name": "apipost_execute_api",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无单接口MCP执行工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M08",
+      "name": "apipost_list_environments",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M09",
+      "name": "apipost_switch_environment",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M10",
+      "name": "apipost_create_environment",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M11",
+      "name": "apipost_update_environment",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M12",
+      "name": "apipost_delete_environment",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M13",
+      "name": "apipost_list_environment_servers",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无共享服务模型/工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M14",
+      "name": "apipost_create_environment_server",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M15",
+      "name": "apipost_update_environment_server",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M16",
+      "name": "apipost_delete_environment_server",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M17",
+      "name": "apipost_get_environment_variables",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无变量/运行时值查询工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M18",
+      "name": "apipost_upsert_environment_variable",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M19",
+      "name": "apipost_delete_environment_variable",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M20",
+      "name": "apipost_get_global_variables",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无全局变量模型/工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M21",
+      "name": "apipost_upsert_global_variable",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M22",
+      "name": "apipost_delete_global_variable",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M23",
+      "name": "apipost_create_execution_flow",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_save_plan 新建",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M24",
+      "name": "apipost_update_execution_flow",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_save_plan 按ID更新",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M25",
+      "name": "apipost_list_execution_flows",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_list_plans",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M26",
+      "name": "apipost_get_execution_flow",
+      "status": "部分实现",
+      "original": "官网2.0公开工具能力",
+      "current": "list_plans会返回完整计划，但无按ID详情工具",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M27",
+      "name": "apipost_delete_execution_flow",
+      "status": "缺失",
+      "original": "官网2.0公开工具能力",
+      "current": "无",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M28",
+      "name": "apipost_execute_flow",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_run_plan；额外execute权限",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M29",
+      "name": "apipost_list_execution_runs",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_list_plans附带运行摘要",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "M30",
+      "name": "apipost_get_execution_result",
+      "status": "已实现",
+      "original": "官网2.0公开工具能力",
+      "current": "localapi_get_run",
+      "source": "S7",
+      "evidence": "src/mcp.mjs createMCP/tools/switch"
+    },
+    {
+      "id": "U01",
+      "name": "整体配色",
+      "status": "部分实现",
+      "original": "浅米白/暖棕金；深色仍为暖黑棕金",
+      "current": "浅色接近；当前深色是冷灰紫 #202125/#28282c，应调整",
+      "source": "I1/I2",
+      "evidence": "public/style.css"
+    },
+    {
+      "id": "U02",
+      "name": "主布局与密度",
+      "status": "部分实现",
+      "original": "约50px图标栏+297px树栏（1328px官方图），紧凑工具区",
+      "current": "当前58px+256px（1440px既有CI图），按钮间距/编辑器高度不同；需同视口再测",
+      "source": "I1",
+      "evidence": "style.css; prior CI image仅作辅助，不是本次新视觉验收"
+    },
+    {
+      "id": "U03",
+      "name": "顶栏布局",
+      "status": "部分实现",
+      "original": "项目居中，打开位置/刷新；右MCP状态开关",
+      "current": "项目与保存按钮靠右，缺同位MCP状态开关",
+      "source": "I1",
+      "evidence": "public/app.js render"
+    },
+    {
+      "id": "U04",
+      "name": "二级配置导航",
+      "status": "缺失",
+      "original": "配置页左侧还有基础/Mock/公共资源/导入导出/MCP树",
+      "current": "当前配置是单页卡片，没有二级导航",
+      "source": "I3",
+      "evidence": "pageContent settings"
+    },
+    {
+      "id": "U05",
+      "name": "功能入口位置",
+      "status": "部分实现",
+      "original": "执行计划在顶栏入口；SSE是接口树项",
+      "current": "当前执行计划/协议/数据库追加到左图标栏",
+      "source": "I1/I4",
+      "evidence": "public/app.js navigation"
+    },
+    {
+      "id": "U06",
+      "name": "接口工作区标签",
+      "status": "部分实现",
+      "original": "设计/调试/用例/压测/Mock一组；旁边状态/名称/分享",
+      "current": "主标签存在；状态/分享区域和布局不同",
+      "source": "I1",
+      "evidence": "modePanel/request toolbar"
+    },
+    {
+      "id": "U07",
+      "name": "Body类型选择",
+      "status": "部分实现",
+      "original": "横排radio，raw后有格式下拉",
+      "current": "当前为单一下拉，交互不同",
+      "source": "I1",
+      "evidence": "parameter editor"
+    },
+    {
+      "id": "U08",
+      "name": "编辑器与参数助手",
+      "status": "部分实现",
+      "original": "行号、当前行、展开按钮、右侧参数助手",
+      "current": "有行号/JSON高亮；缺助手、展开控制和成熟编辑交互",
+      "source": "I1",
+      "evidence": "code-format.js; app.js"
+    },
+    {
+      "id": "U09",
+      "name": "发送/保存分裂按钮",
+      "status": "缺失",
+      "original": "按钮旁有下拉操作",
+      "current": "当前普通按钮",
+      "source": "I1",
+      "evidence": "request toolbar"
+    },
+    {
+      "id": "U10",
+      "name": "空状态与底栏",
+      "status": "部分实现",
+      "original": "火箭插画、布局切换、精简模式、设置；授权信息",
+      "current": "当前♧占位、无布局/精简切换；授权信息按范围排除",
+      "source": "I1",
+      "evidence": "responseContent; footer"
+    },
+    {
+      "id": "U11",
+      "name": "计划编辑页面",
+      "status": "部分实现",
+      "original": "左计划列表+右名称/说明/环境/步骤编辑器",
+      "current": "当前横向计划按钮+JSON弹窗编辑",
+      "source": "I4",
+      "evidence": "plans page"
+    },
+    {
+      "id": "U12",
+      "name": "AI变更视觉语言",
+      "status": "缺失",
+      "original": "橙色字段/步骤编号/提示条",
+      "current": "无AI来源字段与视觉映射",
+      "source": "I4",
+      "evidence": "plans page"
+    },
+    {
+      "id": "U13",
+      "name": "MCP配置页面",
+      "status": "部分实现",
+      "original": "服务状态卡片、授权区、六客户端标签、密钥操作",
+      "current": "当前弹窗+通用配置展示",
+      "source": "I3",
+      "evidence": "mcp-config handler"
+    },
+    {
+      "id": "U14",
+      "name": "计划执行记录页面",
+      "status": "部分实现",
+      "original": "计划/执行记录独立标签，失败步骤展开",
+      "current": "当前同屏原生details；信息存在但布局和交互不同",
+      "source": "I5",
+      "evidence": "run details markup"
+    },
+    {
+      "id": "X01",
+      "name": "付款/订阅/许可证/序列号/续费",
+      "status": "明确排除",
+      "original": "收费与设备绑定",
+      "current": "按用户要求不实现",
+      "source": "S10",
+      "evidence": "用户范围"
+    },
+    {
+      "id": "X02",
+      "name": "在线账号与云协作",
+      "status": "明确排除",
+      "original": "单机版已明确舍弃在线协同",
+      "current": "不添加在线团队/账号",
+      "source": "S2",
+      "evidence": "用户范围与原版定义"
+    },
+    {
+      "id": "X03",
+      "name": "传统测试角色自动化模块",
+      "status": "明确排除",
+      "original": "原版明确舍弃；AI执行计划仍保留",
+      "current": "不把这一模块与AI计划混为一谈",
+      "source": "S2",
+      "evidence": "原版公开范围"
+    }
+  ]
+}
