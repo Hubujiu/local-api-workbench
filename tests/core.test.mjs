@@ -173,7 +173,9 @@ test("OpenAPI references resolve locally and never fetch remote documents", asyn
       resolveLocalReferences({ x: { $ref: "https://example.test/schema" } }),
     /外部/,
   );
-  assert.throws(() => resolveLocalReferences({ a: { $ref: "#/a" } }), /循环/);
+  assert.deepEqual(resolveLocalReferences({ a: { $ref: "#/a" } }).a, {
+    $ref: "#/a",
+  });
 });
 test("schema sample generation respects examples and falsy defaults", async () => {
   const { sampleFromSchema } = await import("../src/core.mjs");
@@ -246,4 +248,52 @@ test("malformed imports cannot persist fields that crash the workbench", () => {
   assert.throws(() => normalizeRequest({ query: [null] }), /数组/);
   assert.throws(() => normalizeRequest({ auth: [] }), /对象/);
   assert.equal(normalizeRequest({ body: { ok: true } }).body, '{"ok":true}');
+});
+test("OpenAPI sync is idempotent and retains recursive schema components", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { name: "Sync", requests: [], environments: [] };
+  const document = {
+    openapi: "3.0.3",
+    info: { title: "Sync" },
+    components: {
+      schemas: {
+        Node: {
+          type: "object",
+          properties: { next: { $ref: "#/components/schemas/Node" } },
+        },
+      },
+    },
+    paths: {
+      "/nodes": {
+        post: {
+          operationId: "createNode",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Node" },
+              },
+            },
+          },
+          responses: { 200: { description: "OK" } },
+        },
+      },
+    },
+  };
+  const first = importIntoProject(project, document, { sync: true })[0].id;
+  document.paths["/nodes"].post.summary = "Changed";
+  importIntoProject(project, document, { sync: true });
+  assert.equal(project.requests.length, 1);
+  assert.equal(project.requests[0].id, first);
+  assert.equal(project.requests[0].name, "Changed");
+  assert(exportOpenAPI(project).components.schemas.Node);
+});
+test("Postman collection variables are retained as a separate environment", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { requests: [], environments: [] };
+  importIntoProject(project, {
+    info: { name: "Collection" },
+    variable: [{ key: "baseUrl", value: "http://localhost" }],
+    item: [],
+  });
+  assert.equal(project.environments[0].variables.baseUrl, "http://localhost");
 });

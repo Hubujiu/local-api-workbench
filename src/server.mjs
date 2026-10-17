@@ -16,6 +16,7 @@ import {
   interpolate,
   evaluateAssertions,
   importDocument,
+  importIntoProject,
   exportOpenAPI,
   snapshotPlan,
   runPlan,
@@ -236,9 +237,8 @@ export async function createApp({
             return json(res, 200, await store.save(b));
           }
           if (action === "import" && req.method === "POST") {
-            const b = await body(req),
-              requests = importDocument(b.document);
-            p.requests.push(...requests.map((r) => ({ ...r, id: id() })));
+            const b = await body(req);
+            importIntoProject(p, b.document);
             await store.save(p);
             return json(res, 200, p);
           }

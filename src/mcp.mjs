@@ -2,7 +2,7 @@ import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store, executeRequest } from "./runtime.mjs";
-import { importDocument, id, snapshotPlan, runPlan } from "./core.mjs";
+import { importIntoProject, snapshotPlan, runPlan } from "./core.mjs";
 export function createMCP({
   store,
   projects = [],
@@ -152,11 +152,7 @@ export function createMCP({
             if (!output) throw Error("记录不存在");
             break;
           case "localapi_sync_openapi":
-            output = importDocument(args.document).map((r) => ({
-              ...r,
-              id: id(),
-            }));
-            p.requests.push(...output);
+            output = importIntoProject(p, args.document, { sync: true });
             await store.save(p);
             break;
           case "localapi_save_plan":

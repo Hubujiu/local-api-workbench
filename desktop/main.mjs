@@ -75,6 +75,17 @@ else
       win.webContents.on("will-navigate", (event, url) => {
         if (new URL(url).origin !== service.url) event.preventDefault();
       });
+      win.webContents.on("will-prevent-unload", (event) => {
+        const choice = dialog.showMessageBoxSync(win, {
+          type: "question",
+          title: "未保存的修改",
+          message: "当前有未保存的修改，是否放弃并退出？",
+          buttons: ["留在应用", "放弃并退出"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (choice === 1) event.preventDefault();
+      });
       win.setMenuBarVisibility(false);
       await win.loadURL(service.launchUrl);
       console.error("DESKTOP_READY", service.url);

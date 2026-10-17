@@ -2,6 +2,9 @@ name: Validate Local API
 on:
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: local-api-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -9,6 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +23,7 @@ jobs:
       - run: npm run check
       - run: npm test
   browser:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +45,7 @@ jobs:
             /tmp/local-api-trace.zip
             /tmp/local-api-video/
   desktop:
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,18 +74,21 @@ jobs:
           BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: node tests/desktop-smoke.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: desktop-build-metadata
           retention-days: 7
           path: |
             desktop/package-lock.json
             dist/LocalAPI/build-manifest.json
+            dist/desktop-failure.png
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 7
           name: LocalAPI-Windows-portable
           path: dist/LocalAPI
   source-format:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,6 +99,7 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run format:check
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: runtime-dependencies
           retention-days: 1
@@ -97,6 +107,7 @@ jobs:
             node_modules
             package-lock.json
   database-integration:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     services:
       postgres:

@@ -11,7 +11,13 @@ database.exec(
   "CREATE TABLE fixture(id INTEGER); INSERT INTO fixture VALUES(42)",
 );
 database.close();
-let application;
+let application,
+  phase = "launch";
+const watchdog = setTimeout(() => {
+  console.error("DESKTOP_WATCHDOG_TIMEOUT", phase);
+  application?.process().kill();
+  process.exitCode = 1;
+}, 90000);
 try {
   application = await electron.launch({
     executablePath: path.resolve("dist/LocalAPI/LocalAPI.exe"),
@@ -19,6 +25,8 @@ try {
     timeout: 30000,
   });
   const window = await application.firstWindow();
+  phase = "request";
+  console.log("DESKTOP_PHASE", phase);
   await window.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await window.getByRole("button", { name: "发 送", exact: true }).click();
   await window
@@ -26,6 +34,8 @@ try {
     .last()
     .waitFor();
   assert(await window.getByText("200", { exact: true }).isVisible());
+  phase = "script";
+  console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
   await window
     .locator("#script-code")
@@ -36,6 +46,18 @@ try {
     .locator(".response-body")
     .getByText("packaged-script-ok", { exact: false })
     .waitFor();
+  phase = "save";
+  console.log("DESKTOP_PHASE", phase);
+  await Promise.all([
+    window.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" && response.status() === 200,
+    ),
+    window.locator("#save-project").click(),
+  ]);
+  await window.getByText("✓ 已保存", { exact: true }).waitFor();
+  phase = "database";
+  console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-page="database"]').click();
   await window.locator("#db-path").fill(databaseFile);
   await window.locator("#db-sql").fill("SELECT id FROM fixture");
@@ -57,7 +79,35 @@ try {
   assert.equal(settings.contextIsolation, true);
   assert.equal(settings.sandbox, true);
   console.log("PACKAGED_DESKTOP_SMOKE_PASS");
+} catch (error) {
+  console.error("DESKTOP_FAILURE_PHASE", phase);
+  if (application) {
+    const window = application.windows()[0];
+    await window
+      ?.screenshot({ path: "dist/desktop-failure.png" })
+      .catch(() => {});
+    if (window)
+      console.error(
+        "DESKTOP_FAILURE_STATE",
+        await window
+          .locator("body")
+          .innerText()
+          .catch(() => "unavailable"),
+      );
+  }
+  throw error;
 } finally {
-  await application?.close();
-  await rm(root, { recursive: true, force: true });
+  phase = "shutdown";
+  // Test-owned process only. Never let a failed test's unsaved dialog hang CI indefinitely.
+  if (application) {
+    application.process().kill();
+    await application.close().catch(() => {});
+  }
+  clearTimeout(watchdog);
+  await rm(root, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  });
 }

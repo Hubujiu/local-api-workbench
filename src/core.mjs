@@ -77,7 +77,8 @@ export function normalizeRequest(r = {}) {
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
     id: r.id || id(),
-    name: r.name || "未命名接口",
+    name: String(r.name || "未命名接口"),
+    sourceOperationId: String(r.sourceOperationId || ""),
     folder: r.folder || "",
     description: r.description || "",
     method,
@@ -333,6 +334,7 @@ export function importDocument(doc) {
           const params = [...(item.parameters || []), ...(op.parameters || [])];
           return normalizeRequest({
             name: op.summary || op.operationId || path,
+            sourceOperationId: op.operationId || "",
             method,
             url: base + path,
             description: op.description || "",
@@ -581,6 +583,9 @@ export function exportOpenAPI(project) {
     openapi: "3.0.3",
     info: { title: project.name, version: "1.0.0" },
     paths,
+    ...(project.openapiComponents
+      ? { components: project.openapiComponents }
+      : {}),
   };
 }
 export function toCurl(r) {
@@ -638,7 +643,7 @@ export function resolveLocalReferences(document) {
       const ref = value.$ref;
       if (!ref.startsWith("#/"))
         throw Error("不自动下载外部 OpenAPI 引用，请先打包为单文件");
-      if (seen.has(ref)) throw Error("循环 OpenAPI 引用需要手动展开后导入");
+      if (seen.has(ref)) return { $ref: ref };
       let target = root;
       for (const part of ref
         .slice(2)
@@ -669,6 +674,7 @@ export function resolveLocalReferences(document) {
   return visit(root);
 }
 export function sampleFromSchema(schema, depth = 0) {
+  if (schema.$ref) return null;
   if (depth > 12) throw Error("Schema 嵌套过深");
   if (schema.example !== undefined) return structuredClone(schema.example);
   if (schema.default !== undefined) return structuredClone(schema.default);
@@ -703,4 +709,73 @@ function replaceVariables(target, source) {
   }
   for (const key of Object.keys(target)) delete target[key];
   for (const [key, value] of Object.entries(source)) target[key] = value;
+}
+
+/** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
+export function importIntoProject(project, document, { sync = false } = {}) {
+  const requests = importDocument(document);
+  let original = document;
+  if (typeof original === "string") {
+    if (original.trim().startsWith("curl ")) original = {};
+    else {
+      try {
+        original = JSON.parse(original);
+      } catch {
+        original = parseYAML(original, {
+          maxAliasCount: 100,
+          uniqueKeys: true,
+        });
+      }
+    }
+  }
+  const components = original.components || original.openapiComponents;
+  const mergedComponents = structuredClone(project.openapiComponents || {});
+  if (components) {
+    for (const [category, items] of Object.entries(components)) {
+      mergedComponents[category] ??= {};
+      for (const [name, value] of Object.entries(items)) {
+        const old = mergedComponents[category][name];
+        if (
+          !sync &&
+          old !== undefined &&
+          JSON.stringify(old) !== JSON.stringify(value)
+        )
+          throw Error("OpenAPI 组件同名冲突，请导入新项目: " + name);
+        mergedComponents[category][name] = structuredClone(value);
+      }
+    }
+  }
+  const output = [];
+  for (const request of requests) {
+    const index = sync
+      ? project.requests.findIndex(
+          (old) =>
+            !old.deletedAt &&
+            (request.sourceOperationId
+              ? old.sourceOperationId === request.sourceOperationId
+              : old.method === request.method && old.url === request.url),
+        )
+      : -1;
+    const value = {
+      ...request,
+      id: index >= 0 ? project.requests[index].id : id(),
+    };
+    if (index >= 0) project.requests[index] = value;
+    else project.requests.push(value);
+    output.push(value);
+  }
+  if (components) project.openapiComponents = mergedComponents;
+  if (Array.isArray(original.variable) && original.variable.length && !sync) {
+    const variables = Object.fromEntries(
+      original.variable
+        .filter((item) => item && !item.disabled && item.key)
+        .map((item) => [item.key, item.value]),
+    );
+    project.environments.push({
+      id: id(),
+      name: (original.info?.name || "导入") + " 变量",
+      variables,
+    });
+  }
+  return output;
 }

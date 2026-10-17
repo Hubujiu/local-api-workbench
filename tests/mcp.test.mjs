@@ -61,3 +61,39 @@ test("MCP initialization and notification lifecycle", async () => {
   assert.equal(await d({ method: "notifications/initialized" }), null);
   assert.equal((await d({ id: 3, method: "nope" })).error.code, -32601);
 });
+test("authorized MCP sync updates existing interfaces rather than duplicating them", async () => {
+  let value = {
+    id: "allowed",
+    requests: [],
+    environments: [],
+    plans: [],
+    runs: [],
+  };
+  const store = {
+    list: async () => [{ id: "allowed" }],
+    get: async () => structuredClone(value),
+    save: async (project) => {
+      value = structuredClone(project);
+    },
+  };
+  const dispatch = createMCP({ store, projects: ["allowed"], write: true });
+  const document = {
+    openapi: "3.0.3",
+    paths: {
+      "/ping": {
+        get: { operationId: "ping", responses: { 200: { description: "OK" } } },
+      },
+    },
+  };
+  const first = await dispatch(
+    call("localapi_sync_openapi", { projectId: "allowed", document }),
+  );
+  assert.equal(first.result.isError, undefined);
+  const id = value.requests[0].id;
+  const second = await dispatch(
+    call("localapi_sync_openapi", { projectId: "allowed", document }),
+  );
+  assert.equal(second.result.isError, undefined);
+  assert.equal(value.requests.length, 1);
+  assert.equal(value.requests[0].id, id);
+});
