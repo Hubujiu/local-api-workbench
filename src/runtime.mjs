@@ -16,31 +16,33 @@ export class Store {
   constructor(root) {
     this.root = root;
     this.pending = Promise.resolve();
+    this.locations = {};
   }
   async init() {
     await mkdir(this.root, { recursive: true });
+    try { this.locations = JSON.parse(await readFile(path.join(this.root, ".locations.json"), "utf8")); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   file(key) {
     if (!/^[a-zA-Z0-9-]+$/.test(key)) throw Error("无效项目 ID");
-    return path.join(this.root, key + ".json");
+    return path.join(this.locations[key] || this.root, key + ".json");
   }
   async list() {
     await this.init();
+    const names = (await readdir(this.root)).filter(name => name.endsWith(".json") && !name.startsWith("."));
+    const keys = new Set([...names.map(name => name.slice(0, -5)), ...Object.keys(this.locations)]);
     const out = [];
-    for (const f of (await readdir(this.root)).filter((f) =>
-      f.endsWith(".json"),
-    )) {
-      try {
-        let p = JSON.parse(await readFile(path.join(this.root, f), "utf8"));
-        out.push({ id: p.id, name: p.name, updatedAt: p.updatedAt });
-      } catch {}
+    for (const key of keys) {
+      try { const p = await this.get(key); out.push({ id: p.id, name: p.name, updatedAt: p.updatedAt, archived: !!p.archived }); }
+      catch (error) { out.push({id:key, name:key + "（文件无法读取）", error:error.message}); }
     }
     return out;
   }
   async get(key) {
+    await this.init();
     return JSON.parse(await readFile(this.file(key), "utf8"));
   }
-  async create(name) {
+  async create(name, directory) {
     const p = {
       version: 1,
       id: id(),
@@ -60,6 +62,25 @@ export class Store {
       documents: [],
       settings: {},
     };
+    if (directory) {
+      if (!path.isAbsolute(directory)) throw Error("存储位置必须是绝对路径");
+      await this.init();
+      await mkdir(directory, {recursive:true});
+      const registryLock = path.join(this.root, ".registry.lock");
+      let locked = false;
+      for (let retry = 0; retry < 100; retry++) {
+        try { await mkdir(registryLock); locked = true; break; }
+        catch (error) { if (error.code !== "EEXIST") throw error; await new Promise(resolve => setTimeout(resolve, 20)); }
+      }
+      if (!locked) throw Error("项目注册表正忙，请稍后重试");
+      try {
+        await this.init();
+        this.locations[p.id] = path.resolve(directory);
+        const temporary = path.join(this.root, ".locations." + id() + ".tmp");
+        await writeFile(temporary, JSON.stringify(this.locations, null, 2), {mode:0o600});
+        await rename(temporary, path.join(this.root, ".locations.json"));
+      } finally { await rm(registryLock, {recursive:true,force:true}); }
+    }
     await this.save(p);
     return p;
   }

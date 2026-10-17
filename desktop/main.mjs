@@ -1,5 +1,6 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, session, ipcMain, shell, dialog } from "electron";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createApp } from "../src/server.mjs";
 let service;
 console.error("DESKTOP_STARTING", process.versions.electron);
@@ -19,7 +20,20 @@ else
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       );
-      const win = new BrowserWindow({
+      function validateSender(event) {
+    if (!event.senderFrame || new URL(event.senderFrame.url).origin !== service.url) throw Error("Untrusted renderer");
+  }
+  ipcMain.handle("choose-directory", async (event) => {
+    validateSender(event);
+    const result = await dialog.showOpenDialog({properties:["openDirectory", "createDirectory"]});
+    return result.canceled ? null : result.filePaths[0];
+  });
+  ipcMain.handle("open-project-location", async (event, id) => {
+    validateSender(event);
+    await service.store.get(id);
+    shell.showItemInFolder(service.store.file(id));
+  });
+  const win = new BrowserWindow({
         width: 1440,
         height: 960,
         minWidth: 950,
@@ -27,7 +41,8 @@ else
         title: "Local API",
         backgroundColor: "#faf6eb",
         webPreferences: {
-          nodeIntegration: false,
+          preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+      nodeIntegration: false,
           contextIsolation: true,
           sandbox: true,
         },

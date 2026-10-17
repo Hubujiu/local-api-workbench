@@ -793,3 +793,4 @@ button:focus-visible {
 summary {
   cursor: pointer;
 }
+.folder-edit{font-size:12px;padding:2px 0!important;text-align:left;max-width:185px;overflow:hidden;text-overflow:ellipsis}.folder{display:flex;align-items:center;gap:5px}

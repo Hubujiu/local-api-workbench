@@ -79,6 +79,19 @@ try {
   await page.setViewportSize({ width: 1000, height: 760 });
   assert(await page.locator('#send').isVisible());
   await page.screenshot({ path: '/tmp/local-api-compact.png' });
+  await page.locator('[data-page="docs"]').click();
+  await page.locator('#new-document').click();
+  await page.locator('#document-title').fill('本地文档测试');
+  await page.locator('#document-content').fill('# 文档\n\n保存在本地。');
+  await page.locator('#dialog-save').click();
+  await page.getByText('本地文档测试', {exact:true}).waitFor();
+  await page.locator('#save-project').click();
+  await page.locator('#new-folder').click();
+  await page.locator('#folder-name').fill('账户服务');
+  await page.locator('#dialog-save').click();
+  await page.locator('#save-project').click();
+  await page.reload();
+  assert(await page.locator('[data-edit-folder="账户服务"]').isVisible());
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } finally {

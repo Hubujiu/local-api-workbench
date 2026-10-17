@@ -89,7 +89,7 @@ export async function createApp({
           return json(res, 200, await store.list());
         if (u.pathname === "/api/projects" && req.method === "POST") {
           const b = await body(req);
-          return json(res, 201, await store.create(b.name));
+          return json(res, 201, await store.create(b.name, b.directory));
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
           const b = await body(req);
@@ -105,6 +105,7 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "location" && req.method === "GET") return json(res, 200, {path: store.file(p.id)});
           if (!action && req.method === "GET") return json(res, 200, p);
           if (!action && req.method === "PUT") {
             const b = await body(req);

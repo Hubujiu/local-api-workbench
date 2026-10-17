@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm install --prefix desktop
       - run: npx --no install-electron
         working-directory: desktop
@@ -69,14 +69,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-dependencies
           path: |
             node_modules
             package-lock.json
-      - run: npx --yes prettier@3.6.2 --write 'src/**/*.mjs' 'scripts/**/*.mjs' 'tests/**/*.mjs' 'public/*' 'desktop/*.mjs' '*.json' 'desktop/*.json' '.github/workflows/*.yml'
+      - run: npx --yes prettier@3.6.2 --write 'src/**/*.mjs' 'scripts/**/*.mjs' 'tests/**/*.mjs' 'public/*' 'desktop/*.{mjs,cjs}' '*.json' 'desktop/*.json' '.github/workflows/*.yml'
       - uses: actions/upload-artifact@v4
         with:
           name: formatted-source
@@ -86,6 +86,7 @@ jobs:
             tests
             public
             desktop/main.mjs
+            desktop/preload.cjs
             desktop/package.json
             package.json
           include-hidden-files: true
@@ -122,5 +123,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: npm install --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: node tests/remote-database.mjs

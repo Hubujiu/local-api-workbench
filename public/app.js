@@ -91,6 +91,7 @@ function defaultRequest(name = "新建接口") {
 function mark() {
   dirty = true;
   $("#save")?.classList.add("primary");
+  $("#save-project")?.classList.add("primary");
   const s = $("#saved-state");
   if (s) s.textContent = "● 未保存";
 }
@@ -140,6 +141,11 @@ function modal(title, html, onSave, label = "确定") {
     }
   };
   d.showModal();
+  if ($("#pick-directory")) $("#pick-directory").onclick = async () => {
+    if (!window.desktop?.chooseDirectory) { toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹"); return; }
+    const directory = await window.desktop.chooseDirectory();
+    if (directory) $("#new-directory").value = directory;
+  };
   $("#dialog-content input")?.focus();
 }
 const jsonEditor = (value, id = "modal-json") =>
@@ -171,12 +177,12 @@ function tree() {
           .toLowerCase()
           .includes(search.toLowerCase()),
     ) || [];
-  const folders = [...new Set(requests.map((r) => r.folder || "未分组"))];
+  const folders = [...new Set([...(project?.folders || []), ...requests.map((r) => r.folder || "未分组")])];
   return (
     folders
       .map(
         (folder) =>
-          `<div class="folder">⌄ &nbsp;▱ ${esc(folder)} <span>(${requests.filter((r) => (r.folder || "未分组") === folder).length})</span></div>${requests
+          `<div class="folder"><button class="ghost folder-edit" data-edit-folder="${esc(folder)}">⌄ &nbsp;▱ ${esc(folder)}</button> <span>(${requests.filter((r) => (r.folder || "未分组") === folder).length})</span></div>${requests
             .filter((r) => (r.folder || "未分组") === folder)
             .map(
               (r) =>
@@ -191,7 +197,7 @@ function tree() {
 function render() {
   const r = request();
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><button id="save-project" class="${dirty?'primary':'ghost'}">保存项目</button><button id="open-location" class="ghost">打开位置</button><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -352,7 +358,8 @@ function renderPage() {
     return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL · 只读事务 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名</label><input id="db-name"><label>TLS</label><input id="db-tls" type="checkbox"><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">本应用不会自动执行 Git 命令、提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
-  return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><button id="export-docs" class="primary">导出 Markdown</button></div>${
+  return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出 Markdown</button></div></div>${
+    project.documents.map((document, index) => `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`).join("") +
     project.requests
       .filter((r) => !r.deletedAt)
       .map(
@@ -448,6 +455,11 @@ function bind() {
     if (current === e.dataset.closeTab) current = opened.at(-1);
     render();
   });
+  on("#open-location", "click", async () => {
+    if (window.desktop?.openProjectLocation) return window.desktop.openProjectLocation(project.id);
+    const location = await api("/projects/" + project.id + "/location");
+    modal("本地项目位置", `<pre>${esc(location.path)}</pre><p>浏览器模式请在文件管理器中打开此路径。</p>`, () => navigator.clipboard.writeText(location.path), "复制路径");
+  });
   on("#theme", "click", () => {
     document.body.classList.toggle("dark");
     localStorage.setItem(
@@ -463,13 +475,34 @@ function bind() {
     bindTree();
   });
   bindTree();
+  on("#new-folder", "click", () => modal("新建目录", '<label>目录名称</label><input id="folder-name">', () => {
+    const name = $("#folder-name").value.trim(); if (!name) throw Error("名称不能为空");
+    project.folders = [...new Set([...(project.folders || []), name])]; mark(); render();
+  }));
+  on("[data-edit-folder]", "click", (_, element) => {
+    const old = element.dataset.editFolder;
+    modal("编辑目录", `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`, () => {
+      const remove = $("#folder-remove").checked, name = $("#folder-name").value.trim();
+      if (!remove && !name) throw Error("名称不能为空");
+      for (const item of project.requests) if ((item.folder || "未分组") === old) item.folder = remove ? "" : name;
+      project.folders = (project.folders || []).filter(folder => folder !== old);
+      if (!remove) project.folders.push(name);
+      mark(); render();
+    });
+  });
+  on("#new-document", "click", () => editDocument());
+  on("[data-edit-document]", "click", (_, element) => editDocument(Number(element.dataset.editDocument)));
+  on("[data-delete-document]", "click", (_, element) => {
+    if (!confirm("删除此项目文档？")) return;
+    project.documents.splice(Number(element.dataset.deleteDocument), 1); mark(); render();
+  });
   on("#new-project", "click", () =>
     modal(
       "新建本地项目",
-      '<label>项目名称</label><input id="new-name" placeholder="例如：商城服务">',
+      '<label>项目名称</label><input id="new-name" placeholder="例如：商城服务"><label>存储目录（留空使用默认目录）</label><input id="new-directory" placeholder="绝对路径"><button id="pick-directory" type="button">选择本地文件夹</button>',
       async () => {
         const p = await api("/projects", "POST", {
-          name: $("#new-name").value,
+          name: $("#new-name").value, directory: $("#new-directory").value || undefined,
         });
         projects = await api("/projects");
         await openProject(p.id);
@@ -477,7 +510,7 @@ function bind() {
     ),
   );
   on("#add-request,#new-request,#tab-add,#welcome-add", "click", addRequest);
-  on("#save", "click", save);
+  on("#save,#save-project", "click", save);
   on("#request-name,#url,#body-code,#description", "input", () => {
     collect();
     mark();
@@ -919,7 +952,7 @@ function bind() {
       project.name + ".md",
       "# " +
         project.name +
-        "\n\n" +
+        "\n\n" + project.documents.map(doc => "## " + doc.title + "\n\n" + doc.content).join("\n\n") + "\n\n" +
         project.requests
           .filter((r) => !r.deletedAt)
           .map(
@@ -1072,3 +1105,12 @@ init().catch((e) => {
     esc(e.message) +
     "</pre><p>请确认本地服务正在运行，然后刷新页面。</p></div>";
 });
+
+function editDocument(index) {
+  const existing = project.documents[index] || {title:"新文档", content:"# 使用说明\n\n"};
+  modal("项目文档", `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`, () => {
+    const document = {title:$("#document-title").value, content:$("#document-content").value};
+    if (index === undefined) project.documents.push(document); else project.documents[index] = document;
+    mark(); render();
+  });
+}
