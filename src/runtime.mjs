@@ -1,3 +1,4 @@
+import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import http from "node:http";
 import https from "node:https";
@@ -20,8 +21,13 @@ export class Store {
   }
   async init() {
     await mkdir(this.root, { recursive: true });
-    try { this.locations = JSON.parse(await readFile(path.join(this.root, ".locations.json"), "utf8")); }
-    catch (error) { if (error.code !== "ENOENT") throw error; }
+    try {
+      this.locations = JSON.parse(
+        await readFile(path.join(this.root, ".locations.json"), "utf8"),
+      );
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
   }
   file(key) {
     if (!/^[a-zA-Z0-9-]+$/.test(key)) throw Error("无效项目 ID");
@@ -29,12 +35,30 @@ export class Store {
   }
   async list() {
     await this.init();
-    const names = (await readdir(this.root)).filter(name => name.endsWith(".json") && !name.startsWith("."));
-    const keys = new Set([...names.map(name => name.slice(0, -5)), ...Object.keys(this.locations)]);
+    const names = (await readdir(this.root)).filter(
+      (name) => name.endsWith(".json") && !name.startsWith("."),
+    );
+    const keys = new Set([
+      ...names.map((name) => name.slice(0, -5)),
+      ...Object.keys(this.locations),
+    ]);
     const out = [];
     for (const key of keys) {
-      try { const p = await this.get(key); out.push({ id: p.id, name: p.name, updatedAt: p.updatedAt, archived: !!p.archived }); }
-      catch (error) { out.push({id:key, name:key + "（文件无法读取）", error:error.message}); }
+      try {
+        const p = await this.get(key);
+        out.push({
+          id: p.id,
+          name: p.name,
+          updatedAt: p.updatedAt,
+          archived: !!p.archived,
+        });
+      } catch (error) {
+        out.push({
+          id: key,
+          name: key + "（文件无法读取）",
+          error: error.message,
+        });
+      }
     }
     return out;
   }
@@ -65,21 +89,31 @@ export class Store {
     if (directory) {
       if (!path.isAbsolute(directory)) throw Error("存储位置必须是绝对路径");
       await this.init();
-      await mkdir(directory, {recursive:true});
+      await mkdir(directory, { recursive: true });
       const registryLock = path.join(this.root, ".registry.lock");
       let locked = false;
       for (let retry = 0; retry < 100; retry++) {
-        try { await mkdir(registryLock); locked = true; break; }
-        catch (error) { if (error.code !== "EEXIST") throw error; await new Promise(resolve => setTimeout(resolve, 20)); }
+        try {
+          await mkdir(registryLock);
+          locked = true;
+          break;
+        } catch (error) {
+          if (error.code !== "EEXIST") throw error;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
       }
       if (!locked) throw Error("项目注册表正忙，请稍后重试");
       try {
         await this.init();
         this.locations[p.id] = path.resolve(directory);
         const temporary = path.join(this.root, ".locations." + id() + ".tmp");
-        await writeFile(temporary, JSON.stringify(this.locations, null, 2), {mode:0o600});
+        await writeFile(temporary, JSON.stringify(this.locations, null, 2), {
+          mode: 0o600,
+        });
         await rename(temporary, path.join(this.root, ".locations.json"));
-      } finally { await rm(registryLock, {recursive:true,force:true}); }
+      } finally {
+        await rm(registryLock, { recursive: true, force: true });
+      }
     }
     await this.save(p);
     return p;
@@ -188,7 +222,8 @@ export async function executeRequest(input, signal) {
     const boundary = "----localapi" + id(),
       chunks = [];
     for (const field of r.form.filter((f) => f.enabled !== false)) {
-      if (field.requiresFile) throw Error("请重新选择导入的文件: " + field.filename);
+      if (field.requiresFile)
+        throw Error("请重新选择导入的文件: " + field.filename);
       const name = String(field.key).replace(/["\r\n]/g, "");
       const filename =
         field.type === "file"
@@ -216,7 +251,7 @@ export async function executeRequest(input, signal) {
     throw Error("请求体超过 8 MiB");
   if (body) headers["Content-Length"] = Buffer.byteLength(body);
   const start = performance.now();
-  return new Promise((resolve, reject) => {
+  const response = await new Promise((resolve, reject) => {
     const req = (u.protocol === "https:" ? https : http).request(
       u,
       { method: r.method, headers, signal },
@@ -277,4 +312,39 @@ export async function executeRequest(input, signal) {
     if (body) req.write(body);
     req.end();
   });
+  if (
+    r.auth.type === "digest" &&
+    response.status === 401 &&
+    /^Digest\s/i.test(response.headers["www-authenticate"] || "")
+  ) {
+    const remaining = r.timeout - (performance.now() - start);
+    if (remaining <= 0) throw Error("Digest 认证超时");
+    const authorization = digestAuthorization(
+      response.headers["www-authenticate"],
+      r.auth,
+      r.method,
+      u.pathname + u.search,
+      body || "",
+    );
+    const authenticated = await executeRequest(
+      {
+        ...r,
+        auth: { type: "none" },
+        timeout: remaining,
+        headers: [
+          ...r.headers.filter(
+            (header) => header.key.toLowerCase() !== "authorization",
+          ),
+          { key: "Authorization", value: authorization, enabled: true },
+        ],
+      },
+      signal,
+    );
+    authenticated.authHandshake = {
+      status: response.status,
+      duration: response.duration,
+    };
+    return authenticated;
+  }
+  return response;
 }

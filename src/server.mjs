@@ -105,7 +105,8 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
-          if (action === "location" && req.method === "GET") return json(res, 200, {path: store.file(p.id)});
+          if (action === "location" && req.method === "GET")
+            return json(res, 200, { path: store.file(p.id) });
           if (!action && req.method === "GET") return json(res, 200, p);
           if (!action && req.method === "PUT") {
             const b = await body(req);
@@ -155,7 +156,13 @@ export async function createApp({
             return json(
               res,
               200,
-              b.type && b.type !== "sqlite" ? await queryRemoteDatabase(b) : await querySQLiteBounded(b.filename, b.sql, b.parameters || []),
+              b.type && b.type !== "sqlite"
+                ? await queryRemoteDatabase(b)
+                : await querySQLiteBounded(
+                    b.filename,
+                    b.sql,
+                    b.parameters || [],
+                  ),
             );
           }
           if (action === "sample" && req.method === "POST") {

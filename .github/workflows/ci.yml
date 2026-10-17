@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - run: npm install --ignore-scripts
+          node-version: "24"
+      - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
@@ -24,12 +24,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
       - run: npx playwright install --with-deps chromium
       - run: node tests/ui-smoke.mjs
         env:
-          PLAYWRIGHT_BUNDLED: '1'
+          PLAYWRIGHT_BUNDLED: "1"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -41,8 +41,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - run: npm install --ignore-scripts
+          node-version: "24"
+      - run: npm ci --ignore-scripts
       - run: npm install --prefix desktop
       - run: npx --no install-electron
         working-directory: desktop
@@ -68,15 +68,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - run: npm install --ignore-scripts
+          node-version: "24"
+      - run: npm ci --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-dependencies
           path: |
             node_modules
             package-lock.json
-      - run: npx --yes prettier@3.6.2 --write 'src/**/*.mjs' 'scripts/**/*.mjs' 'tests/**/*.mjs' 'public/*' 'desktop/*.{mjs,cjs}' '*.json' 'desktop/*.json' '.github/workflows/*.yml'
+      - run: npm run format:check
       - uses: actions/upload-artifact@v4
         with:
           name: formatted-source
@@ -99,7 +99,7 @@ jobs:
           POSTGRES_USER: tester
           POSTGRES_PASSWORD: local-fixture-only
           POSTGRES_DB: fixture
-        ports: ['5432:5432']
+        ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
           --health-interval 5s
@@ -112,7 +112,7 @@ jobs:
           MYSQL_USER: tester
           MYSQL_PASSWORD: local-fixture-only
           MYSQL_DATABASE: fixture
-        ports: ['3306:3306']
+        ports: ["3306:3306"]
         options: >-
           --health-cmd "mysqladmin ping -h localhost"
           --health-interval 5s
@@ -122,6 +122,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - run: npm install --ignore-scripts
+          node-version: "24"
+      - run: npm ci --ignore-scripts
       - run: node tests/remote-database.mjs

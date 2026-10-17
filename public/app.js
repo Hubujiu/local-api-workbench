@@ -25,6 +25,8 @@ let opened = [],
   responseTab = "body",
   response = null,
   dirty = false,
+  saving = false,
+  editVersion = 0,
   busy = false,
   runId = "",
   search = "",
@@ -89,6 +91,7 @@ function defaultRequest(name = "新建接口") {
   };
 }
 function mark() {
+  editVersion++;
   dirty = true;
   $("#save")?.classList.add("primary");
   $("#save-project")?.classList.add("primary");
@@ -96,13 +99,32 @@ function mark() {
   if (s) s.textContent = "● 未保存";
 }
 async function save() {
-  if (!project) return;
+  if (!project || saving) return;
   collect();
-  project = await api("/projects/" + project.id, "PUT", project);
-  dirty = false;
-  render();
-  toast("已保存到本地");
+  const snapshot = structuredClone(project),
+    version = editVersion;
+  saving = true;
+  for (const button of document.querySelectorAll("#save,#save-project"))
+    button.disabled = true;
+  try {
+    const saved = await api("/projects/" + snapshot.id, "PUT", snapshot);
+    if (project.id === snapshot.id) {
+      if (editVersion === version) {
+        project = saved;
+        dirty = false;
+      } else {
+        project.revision = saved.revision;
+        project.history = saved.history;
+        project.runs = saved.runs;
+      }
+    }
+    toast(dirty ? "已保存本次快照，后续修改仍未保存" : "已保存到本地");
+  } finally {
+    saving = false;
+    render();
+  }
 }
+
 function collect() {
   const r = request();
   if (!r || page !== "apis") return;
@@ -141,11 +163,15 @@ function modal(title, html, onSave, label = "确定") {
     }
   };
   d.showModal();
-  if ($("#pick-directory")) $("#pick-directory").onclick = async () => {
-    if (!window.desktop?.chooseDirectory) { toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹"); return; }
-    const directory = await window.desktop.chooseDirectory();
-    if (directory) $("#new-directory").value = directory;
-  };
+  if ($("#pick-directory"))
+    $("#pick-directory").onclick = async () => {
+      if (!window.desktop?.chooseDirectory) {
+        toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
+        return;
+      }
+      const directory = await window.desktop.chooseDirectory();
+      if (directory) $("#new-directory").value = directory;
+    };
   $("#dialog-content input")?.focus();
 }
 const jsonEditor = (value, id = "modal-json") =>
@@ -177,7 +203,12 @@ function tree() {
           .toLowerCase()
           .includes(search.toLowerCase()),
     ) || [];
-  const folders = [...new Set([...(project?.folders || []), ...requests.map((r) => r.folder || "未分组")])];
+  const folders = [
+    ...new Set([
+      ...(project?.folders || []),
+      ...requests.map((r) => r.folder || "未分组"),
+    ]),
+  ];
   return (
     folders
       .map(
@@ -197,7 +228,7 @@ function tree() {
 function render() {
   const r = request();
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><button id="save-project" class="${dirty?'primary':'ghost'}">保存项目</button><button id="open-location" class="ghost">打开位置</button><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -276,12 +307,13 @@ function paramPanel(r) {
   if (param === "body")
     return `<div class="body-types"><select id="body-type" aria-label="请求体类型">${["none", "json", "raw", "urlencoded", "form-data", "binary"].map((t) => `<option ${r.bodyType === t ? "selected" : ""}>${t}</option>`).join("")}</select><span>${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="generate-body" class="ghost">基于数据结构生成</button></div>${["form-data", "urlencoded"].includes(r.bodyType) ? pairs(r.form, "form") : r.bodyType === "none" ? '<div class="empty"><p>此请求没有 Body</p></div>' : `<textarea id="body-code" class="code" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea>`}`;
   if (param === "auth")
-    return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "apiKey"].map((t) => `<option ${r.auth.type === t ? "selected" : ""}>${t}</option>`).join("")}</select>${(r.auth.type === "bearer" ? ["token"] : r.auth.type === "basic" ? ["username", "password"] : r.auth.type === "apiKey" ? ["key", "value", "in"] : []).map((k) => `<label>${k}</label><input data-auth="${k}" value="${esc(r.auth[k])}" placeholder="${k === "in" ? "header 或 query" : "支持 {{变量}}"}" type="${k === "password" || k === "token" ? "password" : "text"}">`).join("")}</div>`;
+    return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "digest", "apiKey"].map((t) => `<option ${r.auth.type === t ? "selected" : ""}>${t}</option>`).join("")}</select>${(r.auth.type === "bearer" ? ["token"] : r.auth.type === "basic" || r.auth.type === "digest" ? ["username", "password"] : r.auth.type === "apiKey" ? ["key", "value", "in"] : []).map((k) => `<label>${k}</label><input data-auth="${k}" value="${esc(r.auth[k])}" placeholder="${k === "in" ? "header 或 query" : "支持 {{变量}}"}" type="${k === "password" || k === "token" ? "password" : "text"}">`).join("")}</div>`;
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
     return `<table><thead><tr><th>变量名</th><th>响应 JSON 路径</th><th></th></tr></thead><tbody>${r.extract.map((a, i) => `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><input data-extract="${i}:path" value="${esc(a.path)}" placeholder="$.data.token"></td><td><button data-remove-extract="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">在计划内传递给后续步骤；单次调试返回提取结果，不自动覆盖持久化环境。</div>`;
-  if (param === "before" || param === "after") return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、pm.environment、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
+  if (param === "before" || param === "after")
+    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、pm.environment、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -300,7 +332,9 @@ function responseContent() {
       : responseTab === "cookies"
         ? response.headers?.["set-cookie"] || []
         : response[responseTab];
-  const failure = response.error ? `<div class="notice failed">${esc(response.error)}</div>` : "";
+  const failure = response.error
+    ? `<div class="notice failed">${esc(response.error)}</div>`
+    : "";
   if (responseTab === "body") {
     try {
       v = JSON.stringify(JSON.parse(v), null, 2);
@@ -359,14 +393,19 @@ function renderPage() {
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">本应用不会自动执行 Git 命令、提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出 Markdown</button></div></div>${
-    project.documents.map((document, index) => `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`).join("") +
-    project.requests
-      .filter((r) => !r.deletedAt)
+    project.documents
       .map(
-        (r) =>
-          `<article class="card markdown"><div class="row"><span class="method ${r.method}">${r.method}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><p>${esc(r.description || "暂无描述")}</p>${r.query.length ? `<h4>Query 参数</h4><table>${r.query.map((p) => `<tr><td>${esc(p.key)}</td><td>${esc(p.value)}</td></tr>`).join("")}</table>` : ""}${r.bodyType !== "none" ? `<h4>请求体 · ${esc(r.bodyType)}</h4><pre>${esc(r.body)}</pre>` : ""}${r.examples.map((e) => `<h4>${esc(e.name)} · ${e.status}</h4><pre>${esc(e.body)}</pre>`).join("")}</article>`,
+        (document, index) =>
+          `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
       )
-      .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
+      .join("") +
+      project.requests
+        .filter((r) => !r.deletedAt)
+        .map(
+          (r) =>
+            `<article class="card markdown"><div class="row"><span class="method ${r.method}">${r.method}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><p>${esc(r.description || "暂无描述")}</p>${r.query.length ? `<h4>Query 参数</h4><table>${r.query.map((p) => `<tr><td>${esc(p.key)}</td><td>${esc(p.value)}</td></tr>`).join("")}</table>` : ""}${r.bodyType !== "none" ? `<h4>请求体 · ${esc(r.bodyType)}</h4><pre>${esc(r.body)}</pre>` : ""}${r.examples.map((e) => `<h4>${esc(e.name)} · ${e.status}</h4><pre>${esc(e.body)}</pre>`).join("")}</article>`,
+        )
+        .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
   }</div>`;
 }
 function on(selector, event, fn) {
@@ -456,9 +495,15 @@ function bind() {
     render();
   });
   on("#open-location", "click", async () => {
-    if (window.desktop?.openProjectLocation) return window.desktop.openProjectLocation(project.id);
+    if (window.desktop?.openProjectLocation)
+      return window.desktop.openProjectLocation(project.id);
     const location = await api("/projects/" + project.id + "/location");
-    modal("本地项目位置", `<pre>${esc(location.path)}</pre><p>浏览器模式请在文件管理器中打开此路径。</p>`, () => navigator.clipboard.writeText(location.path), "复制路径");
+    modal(
+      "本地项目位置",
+      `<pre>${esc(location.path)}</pre><p>浏览器模式请在文件管理器中打开此路径。</p>`,
+      () => navigator.clipboard.writeText(location.path),
+      "复制路径",
+    );
   });
   on("#theme", "click", () => {
     document.body.classList.toggle("dark");
@@ -475,26 +520,45 @@ function bind() {
     bindTree();
   });
   bindTree();
-  on("#new-folder", "click", () => modal("新建目录", '<label>目录名称</label><input id="folder-name">', () => {
-    const name = $("#folder-name").value.trim(); if (!name) throw Error("名称不能为空");
-    project.folders = [...new Set([...(project.folders || []), name])]; mark(); render();
-  }));
+  on("#new-folder", "click", () =>
+    modal("新建目录", '<label>目录名称</label><input id="folder-name">', () => {
+      const name = $("#folder-name").value.trim();
+      if (!name) throw Error("名称不能为空");
+      project.folders = [...new Set([...(project.folders || []), name])];
+      mark();
+      render();
+    }),
+  );
   on("[data-edit-folder]", "click", (_, element) => {
     const old = element.dataset.editFolder;
-    modal("编辑目录", `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`, () => {
-      const remove = $("#folder-remove").checked, name = $("#folder-name").value.trim();
-      if (!remove && !name) throw Error("名称不能为空");
-      for (const item of project.requests) if ((item.folder || "未分组") === old) item.folder = remove ? "" : name;
-      project.folders = (project.folders || []).filter(folder => folder !== old);
-      if (!remove) project.folders.push(name);
-      mark(); render();
-    });
+    modal(
+      "编辑目录",
+      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`,
+      () => {
+        const remove = $("#folder-remove").checked,
+          name = $("#folder-name").value.trim();
+        if (!remove && !name) throw Error("名称不能为空");
+        for (const item of project.requests)
+          if ((item.folder || "未分组") === old)
+            item.folder = remove ? "" : name;
+        project.folders = (project.folders || []).filter(
+          (folder) => folder !== old,
+        );
+        if (!remove) project.folders.push(name);
+        mark();
+        render();
+      },
+    );
   });
   on("#new-document", "click", () => editDocument());
-  on("[data-edit-document]", "click", (_, element) => editDocument(Number(element.dataset.editDocument)));
+  on("[data-edit-document]", "click", (_, element) =>
+    editDocument(Number(element.dataset.editDocument)),
+  );
   on("[data-delete-document]", "click", (_, element) => {
     if (!confirm("删除此项目文档？")) return;
-    project.documents.splice(Number(element.dataset.deleteDocument), 1); mark(); render();
+    project.documents.splice(Number(element.dataset.deleteDocument), 1);
+    mark();
+    render();
   });
   on("#new-project", "click", () =>
     modal(
@@ -502,7 +566,8 @@ function bind() {
       '<label>项目名称</label><input id="new-name" placeholder="例如：商城服务"><label>存储目录（留空使用默认目录）</label><input id="new-directory" placeholder="绝对路径"><button id="pick-directory" type="button">选择本地文件夹</button>',
       async () => {
         const p = await api("/projects", "POST", {
-          name: $("#new-name").value, directory: $("#new-directory").value || undefined,
+          name: $("#new-name").value,
+          directory: $("#new-directory").value || undefined,
         });
         projects = await api("/projects");
         await openProject(p.id);
@@ -619,7 +684,10 @@ function bind() {
     request().auth[e.dataset.auth] = e.value;
     mark();
   });
-  on("#script-code", "input", (_, element) => { request()[param + "Script"] = element.value; mark(); });
+  on("#script-code", "input", (_, element) => {
+    request()[param + "Script"] = element.value;
+    mark();
+  });
   on("#edit-operations", "click", editRules);
   on("#add-assertion", "click", () => {
     request().assertions.push({ target: "status", op: "eq", value: 200 });
@@ -759,7 +827,14 @@ function bind() {
   });
   on("#db-query", "click", async () => {
     const result = await api("/projects/" + project.id + "/database", "POST", {
-      type: $("#db-type").value, host: $("#db-host").value, port: Number($("#db-port").value), user: $("#db-user").value, password: $("#db-password").value, database: $("#db-name").value, ssl: $("#db-tls").checked, filename: $("#db-path").value,
+      type: $("#db-type").value,
+      host: $("#db-host").value,
+      port: Number($("#db-port").value),
+      user: $("#db-user").value,
+      password: $("#db-password").value,
+      database: $("#db-name").value,
+      ssl: $("#db-tls").checked,
+      filename: $("#db-path").value,
       sql: $("#db-sql").value,
       parameters: JSON.parse($("#db-params").value),
     });
@@ -953,7 +1028,11 @@ function bind() {
       project.name + ".md",
       "# " +
         project.name +
-        "\n\n" + project.documents.map(doc => "## " + doc.title + "\n\n" + doc.content).join("\n\n") + "\n\n" +
+        "\n\n" +
+        project.documents
+          .map((doc) => "## " + doc.title + "\n\n" + doc.content)
+          .join("\n\n") +
+        "\n\n" +
         project.requests
           .filter((r) => !r.deletedAt)
           .map(
@@ -1108,10 +1187,22 @@ init().catch((e) => {
 });
 
 function editDocument(index) {
-  const existing = project.documents[index] || {title:"新文档", content:"# 使用说明\n\n"};
-  modal("项目文档", `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`, () => {
-    const document = {title:$("#document-title").value, content:$("#document-content").value};
-    if (index === undefined) project.documents.push(document); else project.documents[index] = document;
-    mark(); render();
-  });
+  const existing = project.documents[index] || {
+    title: "新文档",
+    content: "# 使用说明\n\n",
+  };
+  modal(
+    "项目文档",
+    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
+    () => {
+      const document = {
+        title: $("#document-title").value,
+        content: $("#document-content").value,
+      };
+      if (index === undefined) project.documents.push(document);
+      else project.documents[index] = document;
+      mark();
+      render();
+    },
+  );
 }

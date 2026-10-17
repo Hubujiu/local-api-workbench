@@ -145,20 +145,28 @@ test("slow drip cannot evade the total timeout", async (t) => {
     /时限|超时/,
   );
 });
-test('custom project directory remains registered across restarts', async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'api-registry-'));
-  const custom = await mkdtemp(path.join(os.tmpdir(), 'api-custom-'));
-  t.after(async () => { await rm(root, {recursive:true,force:true}); await rm(custom, {recursive:true,force:true}); });
-  const store = new Store(root), project = await store.create('Custom', custom);
+test("custom project directory remains registered across restarts", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-registry-"));
+  const custom = await mkdtemp(path.join(os.tmpdir(), "api-custom-"));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(custom, { recursive: true, force: true });
+  });
+  const store = new Store(root),
+    project = await store.create("Custom", custom);
   const reopened = new Store(root);
-  assert.equal((await reopened.get(project.id)).name, 'Custom');
+  assert.equal((await reopened.get(project.id)).name, "Custom");
   assert.equal((await reopened.list()).length, 1);
   assert.equal(path.dirname(reopened.file(project.id)), custom);
 });
-test('parallel custom-directory registrations cannot lose projects', async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'api-register-race-'));
-  t.after(() => rm(root, {recursive:true,force:true}));
-  const a = new Store(root), b = new Store(root);
-  await Promise.all([a.create('A', path.join(root,'a')), b.create('B', path.join(root,'b'))]);
+test("parallel custom-directory registrations cannot lose projects", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-register-race-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const a = new Store(root),
+    b = new Store(root);
+  await Promise.all([
+    a.create("A", path.join(root, "a")),
+    b.create("B", path.join(root, "b")),
+  ]);
   assert.equal((await new Store(root).list()).length, 2);
 });

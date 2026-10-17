@@ -1,13 +1,44 @@
-import assert from 'node:assert/strict';
-import { queryRemoteDatabase } from '../src/remote-database.mjs';
-const common = { host: '127.0.0.1', user: 'tester', password: 'local-fixture-only', database: 'fixture' };
-const pg = await queryRemoteDatabase({ ...common, type: 'postgres', port: 5432, sql: 'SELECT $1::int AS answer', parameters: [42] });
+import assert from "node:assert/strict";
+import { queryRemoteDatabase } from "../src/remote-database.mjs";
+const common = {
+  host: "127.0.0.1",
+  user: "tester",
+  password: "local-fixture-only",
+  database: "fixture",
+};
+const pg = await queryRemoteDatabase({
+  ...common,
+  type: "postgres",
+  port: 5432,
+  sql: "SELECT $1::int AS answer",
+  parameters: [42],
+});
 assert.equal(pg.rows[0].answer, 42);
-const mysql = await queryRemoteDatabase({ ...common, type: 'mysql', port: 3306, sql: 'SELECT ? AS answer', parameters: [42] });
+const mysql = await queryRemoteDatabase({
+  ...common,
+  type: "mysql",
+  port: 3306,
+  sql: "SELECT ? AS answer",
+  parameters: [42],
+});
 assert.equal(mysql.rows[0].answer, 42);
-await assert.rejects(queryRemoteDatabase({ ...common, type: 'postgres', sql: 'DELETE FROM anything' }), /SELECT/);
-await assert.rejects(queryRemoteDatabase({ ...common, type: 'mysql', sql: 'DROP TABLE anything' }), /SELECT/);
-const limited = await queryRemoteDatabase({ ...common, type: 'postgres', sql: 'SELECT generate_series(1,2000) AS number' });
+await assert.rejects(
+  queryRemoteDatabase({
+    ...common,
+    type: "postgres",
+    sql: "DELETE FROM anything",
+  }),
+  /SELECT/,
+);
+await assert.rejects(
+  queryRemoteDatabase({ ...common, type: "mysql", sql: "DROP TABLE anything" }),
+  /SELECT/,
+);
+const limited = await queryRemoteDatabase({
+  ...common,
+  type: "postgres",
+  sql: "SELECT generate_series(1,2000) AS number",
+});
 assert.equal(limited.rows.length, 1000);
 assert.equal(limited.truncated, true);
-console.log('REAL_DATABASE_FIXTURES_PASS');
+console.log("REAL_DATABASE_FIXTURES_PASS");
