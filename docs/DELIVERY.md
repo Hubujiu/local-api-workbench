@@ -49,4 +49,4 @@ CI 七项：Linux/macOS/Windows 核心测试、真实 Chromium 测试、真实 P
 
 ## 验收状态
 
-本地当前 66 个固定测试通过（无跳过），检查与格式通过。最终候选必须以 PR 最新提交自己的七项 CI、该次截图/视频及 Windows 包的 build-manifest.json 为准，不能借用旧提交的绿色状态。未合并 main，未部署。
+本地当前 67 个固定测试通过（无跳过），检查与格式通过。最终候选必须以 PR 最新提交自己的七项 CI、该次截图/视频及 Windows 包的 build-manifest.json 为准，不能借用旧提交的绿色状态。未合并 main，未部署。

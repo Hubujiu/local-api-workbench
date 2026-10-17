@@ -20,7 +20,7 @@ Main unchanged: 5af2f63913e097efd6fb3325103bd5fd2ee0f6a1. No deployment.
 - Bash cURL auth/body/quoting and environment resolution, explicit unsupported binary/certificate errors.
 - Clean delivery matrix and known limitations.
 
-Current local suite: 66 passed, zero failed/skipped; syntax and strict formatting pass. This candidate still requires its own exact-head CI and artifact verification.
+Current local suite: 67 passed, zero failed/skipped; syntax and strict formatting pass. This candidate still requires its own exact-head CI and artifact verification.
 
 ## Historical issue
 Old run 39036358462 has a hung Windows test and failed an earlier dependency audit. The owner was asked once to cancel it because the connector cannot cancel runs. This old run is not green. Updated mysql2/yaml and bounded desktop cleanup passed later run 39036849008. New jobs have ten-minute timeout and concurrency cancellation.

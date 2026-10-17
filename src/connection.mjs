@@ -48,11 +48,12 @@ export async function prepareConnection(target, request, headers, signal) {
       },
       cleanup: () => {},
     };
+  const authority = target.hostname + ":" + (target.port || "443");
   const socket = await new Promise((resolve, reject) => {
     const connection = transport.request(proxy, {
       method: "CONNECT",
-      path: target.host,
-      headers: { Host: target.host, ...proxyHeaders },
+      path: authority,
+      headers: { Host: authority, ...proxyHeaders },
       signal,
     });
     const timeout = setTimeout(

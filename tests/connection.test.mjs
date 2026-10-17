@@ -78,3 +78,24 @@ test("HTTPS proxy CONNECT keeps target TLS validation and does not forward proxy
   assert.equal(result.body, "tunneled");
   assert.equal(originHeaders["proxy-authorization"], undefined);
 });
+
+test("HTTPS proxy CONNECT includes port 443 when target URL uses its default", async (t) => {
+  const proxy = http.createServer();
+  let authority;
+  proxy.on("connect", (request, socket) => {
+    authority = request.url;
+    socket.end(
+      "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+    );
+  });
+  await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  t.after(() => proxy.close());
+  await assert.rejects(
+    executeRequest({
+      url: "https://example.invalid/path",
+      proxy: "http://127.0.0.1:" + proxy.address().port,
+    }),
+    /407/,
+  );
+  assert.equal(authority, "example.invalid:443");
+});
