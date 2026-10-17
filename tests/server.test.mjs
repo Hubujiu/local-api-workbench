@@ -175,3 +175,57 @@ test("manual debug variables remain project scoped and can be cleared", async (t
   const missing = await call("execute", { request: next });
   assert.match(missing.error, /token/);
 });
+
+test("bounded load execution reports actual requests and assertion failures", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-load-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const project = await app.store.create("Load fixture");
+  project.requests = [
+    {
+      id: "echo",
+      name: "fixture",
+      method: "GET",
+      url: app.url + "/mock/" + project.id + "/echo",
+      examples: [{ status: 200, body: '{"ok":true}' }],
+    },
+  ];
+  await app.store.save(project);
+  const load = async (count, concurrency, assertions = []) => {
+    const response = await fetch(
+      app.url + "/api/projects/" + project.id + "/load",
+      {
+        method: "POST",
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          request: { ...project.requests[0], assertions },
+          count,
+          concurrency,
+          runId: "load-fixture",
+        }),
+      },
+    );
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const capped = await load(1000, 1000);
+  assert.equal(capped.count, 100);
+  assert.equal(capped.concurrency, 10);
+  assert.equal(capped.passed, 100);
+  assert.deepEqual(
+    capped.results.map((result) => result.index),
+    Array.from({ length: 100 }, (_, i) => i),
+  );
+  const failed = await load(2, 1, [{ target: "status", op: "eq", value: 201 }]);
+  assert.equal(failed.count, 2);
+  assert.equal(failed.passed, 0);
+  const fractional = await load(2.9, 1.9);
+  assert.equal(fractional.count, 2);
+  assert.equal(fractional.concurrency, 1);
+});

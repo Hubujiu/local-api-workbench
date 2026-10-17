@@ -352,3 +352,26 @@ test("cURL export and import preserve JSON headers, auth, query and quoted apost
   );
   assert.throws(() => toCurl({ ...original, bodyType: "binary" }), /不等价/);
 });
+
+test("cURL preserves explicit GET bodies and rejects unimplemented file/redirect semantics", async () => {
+  const { importCurl } = await import("../src/core.mjs");
+  assert.equal(
+    importCurl("curl -X GET http://localhost -d hello").method,
+    "GET",
+  );
+  assert.equal(importCurl("curl http://localhost -d hello").method, "POST");
+  assert.throws(
+    () => importCurl("curl http://localhost -F file=@private.txt"),
+    /文件/,
+  );
+  assert.throws(
+    () => importCurl("curl http://localhost -d @private.txt"),
+    /文件/,
+  );
+  assert.equal(
+    importCurl("curl http://localhost --data-raw @literal").body,
+    "@literal",
+  );
+  assert.throws(() => importCurl("curl -L http://localhost"), /不支持/);
+  assert.throws(() => importCurl("curl http://localhost -H broken"), /Header/);
+});

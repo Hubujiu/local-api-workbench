@@ -515,12 +515,18 @@ export function importDocument(doc) {
 export function importCurl(source) {
   const tokens = shellTokens(source);
   const clean = (value) => value;
+  if (tokens[0] !== "curl") throw Error("命令必须以 curl 开始");
   let r = { headers: [], method: "GET" };
+  let explicitMethod = false;
   for (let i = 1; i < tokens.length; i++) {
     const t = clean(tokens[i]);
-    if (t === "-X" || t === "--request") r.method = clean(tokens[++i]);
-    else if (t === "-H" || t === "--header") {
+    if (t === "-X" || t === "--request") {
+      r.method = clean(tokens[++i]);
+      explicitMethod = true;
+      if (!r.method) throw Error("缺少 HTTP 方法");
+    } else if (t === "-H" || t === "--header") {
       const h = clean(tokens[++i]);
+      if (!h || !h.includes(":")) throw Error("无效 Header");
       const n = h.indexOf(":");
       r.headers.push({
         key: h.slice(0, n),
@@ -529,8 +535,10 @@ export function importCurl(source) {
       });
     } else if (["-d", "--data", "--data-raw"].includes(t)) {
       r.body = clean(tokens[++i]);
+      if (t !== "--data-raw" && r.body?.startsWith("@"))
+        throw Error("不自动读取 cURL 文件，请使用文件选择器");
       r.bodyType = "raw";
-      if (r.method === "GET") r.method = "POST";
+      if (!explicitMethod) r.method = "POST";
     } else if (t === "--url") r.url = clean(tokens[++i]);
     else if (t === "--digest") r.auth = { ...(r.auth || {}), type: "digest" };
     else if (t === "-u" || t === "--user") {
@@ -548,6 +556,8 @@ export function importCurl(source) {
       const value = tokens[++i] || "",
         equal = value.indexOf("=");
       if (equal < 0) throw Error("无效表单参数");
+      if (t !== "--form-string" && /^[<@]/.test(value.slice(equal + 1)))
+        throw Error("不自动读取 cURL 文件，请使用文件选择器");
       r.bodyType = "form-data";
       r.form ??= [];
       r.form.push({
@@ -555,11 +565,9 @@ export function importCurl(source) {
         value: value.slice(equal + 1),
         enabled: true,
       });
-      if (r.method === "GET") r.method = "POST";
+      if (!explicitMethod) r.method = "POST";
     } else if (/^https?:/.test(t)) r.url = t;
-    else if (
-      !["-L", "--location", "--compressed", "-s", "--silent"].includes(t)
-    )
+    else if (!["--compressed", "-s", "--silent"].includes(t))
       throw Error(`不支持的 cURL 参数: ${t}`);
   }
   if (!r.url) throw Error("cURL 缺少 URL");

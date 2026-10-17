@@ -14,10 +14,10 @@
 | HTTP/HTTPS | Query/Path/Header/Cookie，JSON/raw/form/file/binary/MessagePack，Basic/Bearer/API Key/Digest/OAuth2 | runtime.test.mjs、connection.test.mjs、digest.test.mjs、oauth.test.mjs |
 | 网络边界 | 超时/取消、8 MiB 请求响应上限、压缩响应、自定义 CA、客户端 PEM、HTTP(S) CONNECT 代理 | runtime.test.mjs、connection.test.mjs |
 | 导入/导出 | OpenAPI JSON/YAML、本地递归引用、Postman、cURL Bash、备份恢复、独立 HTML/Markdown 文档 | core.test.mjs、document-export.test.mjs、ui-smoke.mjs |
-| API 设计 | 描述、请求/响应 Schema、示例、数据字典、loopback Mock | core.test.mjs、server.test.mjs、ui-smoke.mjs |
+| API 设计 | 描述、请求 Schema、响应示例、数据字典、loopback Mock | core.test.mjs、server.test.mjs、ui-smoke.mjs |
 | 断言/提取/脚本 | 可视化规则、环境/临时变量、隔离 QuickJS 同步脚本、日志 | scripts.test.mjs、server.test.mjs、core.test.mjs、ui-smoke.mjs |
-| 执行计划 | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次 | core.test.mjs、plan-snapshots.test.mjs、server.test.mjs、ui-smoke.mjs |
-| 用例与压测 | 接口用例、最多 100 请求/10 并发的有界压测 | core.test.mjs、server.test.mjs |
+| 执行计划 | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次 | core.test.mjs、plan-snapshots.test.mjs、cli.test.mjs、server.test.mjs、ui-smoke.mjs |
+| 用例与压测 | 通过执行计划组织接口用例、最多 100 请求/10 并发的有界压测 | core.test.mjs、server.test.mjs |
 | 协议 | WebSocket/TCP 交互、SSE 接收；最长 15 分钟、8 MiB、最近 200 消息 | protocols.test.mjs、protocol-sessions.test.mjs、ui-smoke.mjs |
 | 数据库 | SQLite/PostgreSQL/MySQL 只读查询、参数化、行数/时间限制 | database.test.mjs、remote-database.mjs、desktop-smoke.mjs |
 | MCP | stdio 与可选 HTTP、显式项目 allowlist、独立读写/执行权限、同步 OpenAPI 稳定 ID | mcp.test.mjs、server.test.mjs、ui-smoke.mjs |
@@ -38,6 +38,7 @@ CI 七项：Linux/macOS/Windows 核心测试、真实 Chromium 测试、真实 P
 
 - 不解析或声称兼容 Apipost 专有原生目录格式；使用通用 OpenAPI/Postman/cURL 或本工具备份迁移。
 - 原站脚本 SDK 的完整兼容未实现。支持范围见 README：同步 apt/pm 变量、response、test/expect、console；无任意 npm、文件或额外网络请求。
+- cURL 导入不执行 shell、不自动读取 @file，也不支持 -L 自动重定向；不支持的选项显式报错。
 - cURL 导出是 Bash 语法，非 cmd.exe/PowerShell 语法；会包含解析后的变量与凭据，不执行前后置脚本。二进制、MessagePack、文件上传或内联证书需单独组织文件，界面会明确拒绝不完整导出。
 - 外部 OpenAPI 引用不自动联网下载；本地引用保留。远程文档分享采用用户自行分发 HTML/Markdown，不提供公共托管服务。
 - 执行计划默认以 2xx 为成功，可指定预期状态/断言；这比原版文档的默认 200 判断更宽松，是显式差异。
@@ -48,4 +49,4 @@ CI 七项：Linux/macOS/Windows 核心测试、真实 Chromium 测试、真实 P
 
 ## 验收状态
 
-本地当前 63 个固定测试通过（无跳过），检查与格式通过。最终候选必须以 PR 最新提交自己的七项 CI、该次截图/视频及 Windows 包的 build-manifest.json 为准，不能借用旧提交的绿色状态。未合并 main，未部署。
+本地当前 66 个固定测试通过（无跳过），检查与格式通过。最终候选必须以 PR 最新提交自己的七项 CI、该次截图/视频及 Windows 包的 build-manifest.json 为准，不能借用旧提交的绿色状态。未合并 main，未部署。

@@ -417,18 +417,21 @@ export async function createApp({
           }
           if (action === "load" && req.method === "POST") {
             const b = await body(req),
-              count = Math.min(100, Math.max(1, Number(b.count) || 10)),
+              count = Math.min(
+                100,
+                Math.max(1, Math.floor(Number(b.count)) || 10),
+              ),
               concurrency = Math.min(
                 10,
-                Math.max(1, Number(b.concurrency) || 1),
+                Math.max(1, Math.floor(Number(b.concurrency)) || 1),
               ),
               controller = new AbortController();
-            controllers.set(b.runId, controller);
             const request = interpolate(
               normalizeRequest(b.request),
               p.environments.find((e) => e.id === b.environmentId)?.variables ||
                 {},
             );
+            controllers.set(b.runId, controller);
             const results = [];
             let cursor = 0;
             const started = Date.now();
