@@ -32,7 +32,9 @@ let opened = [],
   search = "",
   planId = "",
   lastRun = null,
-  loadResult = null;
+  loadResult = null,
+  activeSession = null,
+  sessionTimer = null;
 const methodOptions = [
   "GET",
   "POST",
@@ -306,8 +308,10 @@ function paramPanel(r) {
     return pairs(r[param], param);
   if (param === "body")
     return `<div class="body-types"><select id="body-type" aria-label="请求体类型">${["none", "json", "raw", "urlencoded", "form-data", "binary"].map((t) => `<option ${r.bodyType === t ? "selected" : ""}>${t}</option>`).join("")}</select><span>${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="generate-body" class="ghost">基于数据结构生成</button></div>${["form-data", "urlencoded"].includes(r.bodyType) ? pairs(r.form, "form") : r.bodyType === "none" ? '<div class="empty"><p>此请求没有 Body</p></div>' : `<textarea id="body-code" class="code" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea>`}`;
+  if (param === "auth" && r.auth.type === "oauth2")
+    return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "digest", "oauth2", "apiKey"].map((type) => `<option ${type === "oauth2" ? "selected" : ""}>${type}</option>`).join("")}</select><label>授权方式</label><select data-auth="grantType">${["client_credentials", "authorization_code", "refresh_token"].map((type) => `<option ${r.auth.grantType === type ? "selected" : ""}>${type}</option>`).join("")}</select>${["authorizationEndpoint", "tokenEndpoint", "clientId", "clientSecret", "clientAuthentication", "scope", "refreshToken", "token"].map((key) => `<label>${key}</label><input data-auth="${key}" value="${esc(r.auth[key])}" type="${["clientSecret", "refreshToken", "token"].includes(key) ? "password" : "text"}" placeholder="${key === "clientAuthentication" ? "body 或 basic" : ""}">`).join("")}</div><p><button id="oauth-get" class="primary">获取令牌</button></p><div class="notice">授权码模式启用 PKCE S256。凭据只发到你配置的 endpoint；请优先使用 HTTPS。令牌获取后仅在当前编辑状态中，点击保存才写入本地项目。</div>`;
   if (param === "auth")
-    return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "digest", "apiKey"].map((t) => `<option ${r.auth.type === t ? "selected" : ""}>${t}</option>`).join("")}</select>${(r.auth.type === "bearer" ? ["token"] : r.auth.type === "basic" || r.auth.type === "digest" ? ["username", "password"] : r.auth.type === "apiKey" ? ["key", "value", "in"] : []).map((k) => `<label>${k}</label><input data-auth="${k}" value="${esc(r.auth[k])}" placeholder="${k === "in" ? "header 或 query" : "支持 {{变量}}"}" type="${k === "password" || k === "token" ? "password" : "text"}">`).join("")}</div>`;
+    return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "digest", "oauth2", "apiKey"].map((t) => `<option ${r.auth.type === t ? "selected" : ""}>${t}</option>`).join("")}</select>${(r.auth.type === "bearer" ? ["token"] : r.auth.type === "basic" || r.auth.type === "digest" ? ["username", "password"] : r.auth.type === "apiKey" ? ["key", "value", "in"] : []).map((k) => `<label>${k}</label><input data-auth="${k}" value="${esc(r.auth[k])}" placeholder="${k === "in" ? "header 或 query" : "支持 {{变量}}"}" type="${k === "password" || k === "token" ? "password" : "text"}">`).join("")}</div>`;
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
@@ -387,7 +391,7 @@ function renderPage() {
   if (page === "dictionary")
     return `<div class="page"><div class="page-head"><div><h1>数据字典</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${project.dictionary.map((d, i) => `<div class="card"><div class="row"><strong class="grow">${esc(d.name)}</strong><button data-edit-dictionary="${i}">编辑</button><button data-use-dictionary="${i}">应用到当前接口</button></div><pre>${esc(JSON.stringify(d.schema, null, 2))}</pre></div>`).join("") || '<div class="empty"><p>暂无数据模型</p></div>'}</div>`;
   if (page === "protocols")
-    return `<div class="page"><h1>实时协议调试</h1><p class="muted">有界采集 SSE / WebSocket / TCP 响应，不在后台持续连接。</p><div class="form-grid"><label>协议</label><select id="protocol-type"><option value="sse">SSE</option><option value="websocket">WebSocket</option><option value="tcp">TCP</option></select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events"><label>TCP 端口</label><input id="protocol-port" type="number" value="8080"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre></div>`;
+    return `<div class="page"><h1>实时协议调试</h1><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type"><option value="sse">SSE</option><option value="websocket">WebSocket</option><option value="tcp">TCP</option></select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events"><label>TCP 端口</label><input id="protocol-port" type="number" value="8080"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
     return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL · 只读事务 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名</label><input id="db-name"><label>TLS</label><input id="db-tls" type="checkbox"><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
@@ -688,6 +692,36 @@ function bind() {
     request()[param + "Script"] = element.value;
     mark();
   });
+  on("#oauth-get", "click", async () => {
+    const requestId = current,
+      projectId = project.id;
+    const config = structuredClone(request().auth);
+    const applyToken = (result) => {
+      if (project.id !== projectId)
+        throw Error("项目已切换，令牌未写入其他项目");
+      const target = project.requests.find((item) => item.id === requestId);
+      if (!target) throw Error("原请求已不存在");
+      target.auth.token = result.accessToken;
+      if (result.refreshToken) target.auth.refreshToken = result.refreshToken;
+      mark();
+      render();
+      toast("OAuth 令牌已获取，尚未保存到磁盘");
+    };
+    if (config.grantType === "authorization_code") {
+      const flow = await api("/oauth/start", "POST", config);
+      modal(
+        "OAuth 授权",
+        `<p>请先在身份提供方登记此回调地址：</p><pre>${esc(flow.redirectUri)}</pre><p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开授权页面</a></p><p>授权结束后返回这里检查结果。流程 5 分钟后过期。</p>`,
+        async () => {
+          const status = await api("/oauth/status/" + flow.id);
+          if (status.status === "error") throw Error(status.error);
+          if (status.status !== "completed") throw Error("授权尚未完成");
+          applyToken(status.result);
+        },
+        "检查授权结果",
+      );
+    } else applyToken(await api("/oauth/token", "POST", config));
+  });
   on("#edit-operations", "click", editRules);
   on("#add-assertion", "click", () => {
     request().assertions.push({ target: "status", op: "eq", value: 200 });
@@ -800,6 +834,41 @@ function bind() {
       "导出",
     ),
   );
+  on("#session-connect", "click", async () => {
+    if (activeSession && ["open", "connecting"].includes(activeSession.state))
+      throw Error("请先断开当前会话");
+    activeSession = await api("/protocol-sessions", "POST", {
+      type: $("#protocol-type").value,
+      url: $("#protocol-url").value,
+      host: $("#protocol-url").value,
+      port: Number($("#protocol-port").value),
+    });
+    clearTimeout(sessionTimer);
+    pollSession();
+  });
+  on("#session-send", "click", async () => {
+    if (!activeSession) throw Error("尚未连接");
+    activeSession = await api(
+      "/protocol-sessions/" + activeSession.id + "/send",
+      "POST",
+      { message: $("#protocol-message").value },
+    );
+    showSession();
+  });
+  on("#session-stop", "click", async () => {
+    if (!activeSession) return;
+    activeSession = await api(
+      "/protocol-sessions/" + activeSession.id + "/stop",
+      "POST",
+      {},
+    );
+    clearTimeout(sessionTimer);
+    showSession();
+  });
+  on("#session-export", "click", () => {
+    if (!activeSession) throw Error("没有会话消息");
+    download("protocol-session.json", activeSession);
+  });
   on("#protocol-run", "click", async () => {
     runId = uid();
     busy = true;
@@ -1205,4 +1274,25 @@ function editDocument(index) {
       render();
     },
   );
+}
+
+function showSession() {
+  if ($("#session-status"))
+    $("#session-status").textContent = activeSession.state;
+  if ($("#session-events"))
+    $("#session-events").textContent = activeSession.events
+      .map((event) => `${event.at} ${event.direction} ${event.data}`)
+      .join("\n");
+}
+async function pollSession() {
+  if (!activeSession) return;
+  try {
+    activeSession = await api("/protocol-sessions/" + activeSession.id);
+    showSession();
+    if (["open", "connecting"].includes(activeSession.state))
+      sessionTimer = setTimeout(pollSession, 1000);
+  } catch (error) {
+    toast(error.message);
+    clearTimeout(sessionTimer);
+  }
 }

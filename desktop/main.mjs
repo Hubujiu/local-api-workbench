@@ -53,7 +53,10 @@ else
           sandbox: true,
         },
       });
-      win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      win.webContents.setWindowOpenHandler(({ url }) => {
+        if (service.oauthAllowed(url)) shell.openExternal(url);
+        return { action: "deny" };
+      });
       win.webContents.on("will-navigate", (event, url) => {
         if (new URL(url).origin !== service.url) event.preventDefault();
       });

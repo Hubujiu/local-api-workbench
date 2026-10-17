@@ -1,3 +1,5 @@
+import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
+import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 import { captureSSE, exchangeTCP, exchangeWebSocket } from "./protocols.mjs";
 import { querySQLiteBounded } from "./database.mjs";
@@ -27,6 +29,8 @@ export async function createApp({
 } = {}) {
   const store = new Store(path.resolve(root));
   await store.init();
+  const protocolSessions = new ProtocolSessions();
+  const oauth = new OAuthManager();
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   let server;
@@ -70,6 +74,16 @@ export async function createApp({
       res.setHeader("Referrer-Policy", "no-referrer");
       if (u.pathname === "/api/session" && req.method === "GET")
         return json(res, 200, { token, version: "0.1.0" });
+      if (u.pathname === "/oauth/callback" && req.method === "GET") {
+        await oauth.complete(Object.fromEntries(u.searchParams));
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'none'",
+        });
+        return res.end(
+          "<!doctype html><meta charset=utf-8><title>授权完成</title><p>授权完成。请回到 Local API 工作台；可以关闭此页。</p>",
+        );
+      }
       if (parts[0] === "mock") {
         const p = await store.get(parts[1]),
           r = p.requests.find((r) => r.id === parts[2] && !r.deletedAt);
@@ -85,6 +99,42 @@ export async function createApp({
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)
           return json(res, 403, { error: "Session token required" });
+        if (u.pathname === "/api/protocol-sessions" && req.method === "POST")
+          return json(res, 200, protocolSessions.start(await body(req)));
+        if (parts[1] === "protocol-sessions" && parts[2]) {
+          if (req.method === "GET")
+            return json(res, 200, protocolSessions.snapshot(parts[2]));
+          const data = await body(req);
+          if (parts[3] === "send")
+            return json(
+              res,
+              200,
+              protocolSessions.send(parts[2], data.message),
+            );
+          if (parts[3] === "stop") {
+            protocolSessions.stop(parts[2]);
+            return json(res, 200, protocolSessions.snapshot(parts[2]));
+          }
+        }
+        if (u.pathname === "/api/oauth/start" && req.method === "POST")
+          return json(res, 200, oauth.start(await body(req), base));
+        if (
+          parts[1] === "oauth" &&
+          parts[2] === "status" &&
+          req.method === "GET"
+        )
+          return json(res, 200, oauth.status(parts[3]));
+        if (u.pathname === "/api/oauth/token" && req.method === "POST") {
+          const config = await body(req);
+          const grant =
+            config.grantType === "refresh_token"
+              ? {
+                  grant_type: "refresh_token",
+                  refresh_token: config.refreshToken,
+                }
+              : { grant_type: "client_credentials" };
+          return json(res, 200, await exchangeOAuthToken(config, grant));
+        }
         if (u.pathname === "/api/projects" && req.method === "GET")
           return json(res, 200, await store.list());
         if (u.pathname === "/api/projects" && req.method === "POST") {
@@ -335,10 +385,15 @@ export async function createApp({
       json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
     }
   });
+  server.on("close", () => {
+    protocolSessions.close();
+    oauth.close();
+  });
   await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
   return {
     server,
     store,
+    oauthAllowed: (url) => oauth.allowed(url),
     token,
     url: `http://127.0.0.1:${server.address().port}`,
   };

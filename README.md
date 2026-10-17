@@ -51,8 +51,8 @@ node tests/ui-smoke.mjs
 - 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
 - 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；更多功能与异常交互仍在持续验证
 - 已创建 PR #1，早期版本六项 CI 全绿；最新迭代以对应提交的 CI 结果为准
-- OAuth2/Digest、证书/代理设置、持续交互式 SSE/WebSocket/TCP、完整 OpenAPI 引用/YAML、文档分享服务、Git 内置冲突处理尚未完成
-- SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集，尚非完整持续会话界面
+- 证书/代理设置、完整 OpenAPI 引用/YAML、文档分享服务、Git 内置冲突处理尚未完成
+- SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
 
 源文件和文档将通过一个固定开发分支的 PR 迭代；未经批准不合入 main、不部署。
@@ -60,3 +60,7 @@ node tests/ui-smoke.mjs
 ## 脚本
 
 前后置脚本运行在独立 QuickJS/WASM 工作线程中，无 Node、网络或文件 API。支持 apt.setVar/getVar、pm.environment.set/get/unset、pm.response.json/text/code、pm.test 与 pm.expect(...).to.equal(...)，以及 console.log。同步脚本 CPU 截止 250ms、VM 内存限额 16MiB、工作线程总超时 2 秒；不支持任意 npm 包或脚本内额外网络请求。
+
+## OAuth2 与 Digest
+
+支持 Digest MD5/SHA-256/SHA-512-256 与 auth/auth-int challenge；OAuth2 提供 client_credentials、refresh_token、授权码 PKCE S256。授权码回调地址在界面显示，需要在提供方登记。凭据只发往用户输入的 endpoint，优先使用 HTTPS；本地保存令牌前仍需用户点击保存。

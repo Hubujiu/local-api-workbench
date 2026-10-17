@@ -352,6 +352,14 @@ export function importDocument(doc) {
       );
       if (config.type === "bearer")
         return { type: "bearer", token: values.token || "" };
+      if (config.type === "digest")
+        return {
+          type: "digest",
+          username: values.username || "",
+          password: values.password || "",
+        };
+      if (config.type === "oauth2")
+        return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
         return {
           type: "basic",

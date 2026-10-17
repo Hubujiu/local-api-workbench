@@ -191,8 +191,10 @@ export async function executeRequest(input, signal) {
     if (/[\r\n]/.test(h.key + String(h.value))) throw Error("非法请求头");
     headers[h.key] = String(h.value ?? "");
   }
-  if (r.auth.type === "bearer")
+  if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
+    if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.Authorization = "Bearer " + r.auth.token;
+  }
   if (r.auth.type === "basic")
     headers.Authorization =
       "Basic " +

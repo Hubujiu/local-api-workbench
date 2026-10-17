@@ -170,3 +170,30 @@ test("parallel custom-directory registrations cannot lose projects", async (t) =
   ]);
   assert.equal((await new Store(root).list()).length, 2);
 });
+test("Digest performs one challenge round trip and returns authenticated evidence", async (t) => {
+  let count = 0,
+    authorization;
+  const server = http.createServer((req, res) => {
+    count++;
+    if (!req.headers.authorization) {
+      res.writeHead(401, {
+        "WWW-Authenticate":
+          'Digest realm="fixture", nonce="abc", qop="auth", algorithm=SHA-256',
+      });
+      return res.end("challenge");
+    }
+    authorization = req.headers.authorization;
+    res.end("authenticated");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const result = await executeRequest({
+    url: `http://127.0.0.1:${server.address().port}/resource`,
+    auth: { type: "digest", username: "tester", password: "fixture" },
+  });
+  assert.equal(count, 2);
+  assert.equal(result.status, 200);
+  assert.equal(result.body, "authenticated");
+  assert.equal(result.authHandshake.status, 401);
+  assert.match(authorization, /algorithm=SHA-256/);
+});
