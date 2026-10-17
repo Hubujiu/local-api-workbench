@@ -56,3 +56,23 @@ jobs:
         with:
           name: LocalAPI-Windows-portable
           path: dist/LocalAPI
+  source-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npx --yes prettier@3.6.2 --write 'src/**/*.mjs' 'scripts/**/*.mjs' 'tests/**/*.mjs' 'public/*' 'desktop/*.mjs' '*.json' 'desktop/*.json' '.github/workflows/*.yml'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formatted-source
+          path: |
+            src
+            scripts
+            tests
+            public
+            desktop/main.mjs
+            desktop/package.json
+            package.json
+          include-hidden-files: true
