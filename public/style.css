@@ -806,3 +806,86 @@ summary {
   align-items: center;
   gap: 5px;
 }
+.code-editor {
+  position: relative;
+  height: calc(100% - 44px);
+  min-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.code-editor #code-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 42px;
+  text-align: right;
+  padding: 12px 9px;
+  color: #82a8af;
+  background: var(--panel);
+  overflow: hidden;
+  user-select: none;
+}
+.code-editor #code-highlight {
+  position: absolute;
+  left: 42px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre;
+  padding: 12px;
+  font:
+    13px/1.6 Consolas,
+    monospace;
+}
+.code-editor .code {
+  position: absolute;
+  left: 42px;
+  top: 0;
+  width: calc(100% - 42px);
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 12px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  font:
+    13px/1.6 Consolas,
+    monospace;
+  white-space: pre;
+}
+.code-editor #code-gutter {
+  font:
+    13px/1.6 Consolas,
+    monospace;
+}
+.syntax-key {
+  color: #9b5965;
+}
+.syntax-string {
+  color: #4b8275;
+}
+.syntax-number {
+  color: #9b6cad;
+}
+.syntax-literal {
+  color: #3d87ab;
+}
+.dark .syntax-key {
+  color: #de9caa;
+}
+.dark .syntax-string {
+  color: #a3c99a;
+}
+.dark .syntax-number {
+  color: #c6a1df;
+}
+.dark .syntax-literal {
+  color: #7bbbd8;
+}

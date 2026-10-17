@@ -68,7 +68,10 @@ try {
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
-  await page.getByText("欢迎使用 Local API", { exact: false }).last().waitFor();
+  await page
+    .locator(".response-body")
+    .getByText("欢迎使用 Local API", { exact: false })
+    .waitFor();
   assert(await page.getByText("200", { exact: true }).isVisible());
   await page.getByRole("button", { name: "新建接口", exact: true }).click();
   await page
@@ -105,7 +108,10 @@ try {
     );
   await page.locator("#send").click();
   await page.locator('[data-response="logs"]').click();
-  await page.getByText("script-done", { exact: false }).last().waitFor();
+  await page
+    .locator(".response-body")
+    .getByText("script-done", { exact: false })
+    .waitFor();
   await saveAndWait("#save");
   await page.locator("#import").click();
   await page.locator("#dialog").waitFor({ state: "visible" });

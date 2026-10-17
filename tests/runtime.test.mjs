@@ -197,3 +197,44 @@ test("Digest performs one challenge round trip and returns authenticated evidenc
   assert.equal(result.authHandshake.status, 401);
   assert.match(authorization, /algorithm=SHA-256/);
 });
+test("background history does not conflict with configuration saves or disappear", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-config-activity-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = new Store(root),
+    project = await store.create("Before");
+  const editing = structuredClone(project);
+  await store.append(project.id, "history", { id: "request-evidence" });
+  editing.name = "After";
+  await store.save(editing);
+  const result = await store.get(project.id);
+  assert.equal(result.name, "After");
+  assert.equal(result.history[0].id, "request-evidence");
+  assert.equal(result.configRevision, 2);
+  assert.equal(result.revision, 3);
+});
+test("MessagePack request and response match standard byte vectors", async (t) => {
+  let received, contentType;
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    received = Buffer.concat(chunks);
+    contentType = req.headers["content-type"];
+    res.setHeader("content-type", "application/msgpack");
+    res.end(Buffer.from("82a16101a162a178", "hex"));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const response = await executeRequest({
+    url: `http://127.0.0.1:${server.address().port}`,
+    method: "POST",
+    bodyType: "msgpack",
+    body: '{"a":1,"b":"x"}',
+  });
+  assert.equal(received.toString("hex"), "82a16101a162a178");
+  assert.equal(contentType, "application/msgpack");
+  assert.deepEqual(JSON.parse(response.body), { a: 1, b: "x" });
+  assert.equal(
+    Buffer.from(response.rawBodyBase64, "base64").toString("hex"),
+    "82a16101a162a178",
+  );
+});

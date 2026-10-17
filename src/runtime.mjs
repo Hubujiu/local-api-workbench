@@ -117,7 +117,7 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async save(p) {
+  async save(p, { activity = false } = {}) {
     const task = this.pending
       .catch(() => {})
       .then(async () => {
@@ -143,10 +143,25 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
-          if (previous && (p.revision || 0) !== (previous.revision || 0))
+          const previousConfiguration =
+            previous?.configRevision ?? previous?.revision ?? 0;
+          const expectedConfiguration = p.configRevision ?? p.revision ?? 0;
+          if (
+            previous &&
+            (activity
+              ? (p.revision || 0) !== (previous.revision || 0)
+              : expectedConfiguration !== previousConfiguration)
+          )
             throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
           const next = structuredClone(p);
           next.revision = (previous?.revision || 0) + 1;
+          next.configRevision = activity
+            ? previousConfiguration
+            : previousConfiguration + 1;
+          if (!activity && previous) {
+            next.history = previous.history;
+            next.runs = previous.runs;
+          }
           next.updatedAt = new Date().toISOString();
           const tmp = file + "." + id() + ".tmp";
           await writeFile(tmp, JSON.stringify(next, null, 2) + "\n", {
@@ -167,7 +182,7 @@ export class Store {
       const p = await this.get(key);
       p[field] = [value, ...(p[field] || [])].slice(0, limit);
       try {
-        return await this.save(p);
+        return await this.save(p, { activity: true });
       } catch (e) {
         if (!e.message.includes("其他窗口") || attempt === 4) throw e;
       }
@@ -188,14 +203,14 @@ export async function executeRequest(input, signal) {
   const headers = {};
   for (const h of r.headers.filter((h) => h.enabled !== false && h.key)) {
     if (/[\r\n]/.test(h.key + String(h.value))) throw Error("非法请求头");
-    headers[h.key] = String(h.value ?? "");
+    headers[h.key.toLowerCase()] = String(h.value ?? "");
   }
   if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
-    headers.Authorization = "Bearer " + r.auth.token;
+    headers.authorization = "Bearer " + r.auth.token;
   }
   if (r.auth.type === "basic")
-    headers.Authorization =
+    headers.authorization =
       "Basic " +
       Buffer.from(`${r.auth.username || ""}:${r.auth.password || ""}`).toString(
         "base64",
@@ -205,20 +220,24 @@ export async function executeRequest(input, signal) {
     else headers[r.auth.key] = r.auth.value;
   }
   if (r.cookies.length)
-    headers.Cookie = r.cookies
+    headers.cookie = r.cookies
       .filter((c) => c.enabled !== false)
       .map((c) => `${c.key}=${c.value}`)
       .join("; ");
   let body;
-  if (r.bodyType === "json") {
+  if (r.bodyType === "msgpack") {
+    const { encode } = await import("@msgpack/msgpack");
+    body = Buffer.from(encode(JSON.parse(r.body || "{}"), { maxDepth: 64 }));
+    headers["content-type"] ??= "application/msgpack";
+  } else if (r.bodyType === "json") {
     JSON.parse(r.body || "{}");
     body = r.body || "{}";
-    headers["Content-Type"] ??= "application/json";
+    headers["content-type"] ??= "application/json";
   } else if (r.bodyType === "urlencoded") {
     body = new URLSearchParams(
       r.form.filter((f) => f.enabled !== false).map((f) => [f.key, f.value]),
     ).toString();
-    headers["Content-Type"] ??= "application/x-www-form-urlencoded";
+    headers["content-type"] ??= "application/x-www-form-urlencoded";
   } else if (r.bodyType === "form-data") {
     const boundary = "----localapi" + id(),
       chunks = [];
@@ -244,13 +263,13 @@ export async function executeRequest(input, signal) {
     }
     chunks.push(Buffer.from(`--${boundary}--\r\n`));
     body = Buffer.concat(chunks);
-    headers["Content-Type"] = "multipart/form-data; boundary=" + boundary;
+    headers["content-type"] = "multipart/form-data; boundary=" + boundary;
   } else if (r.bodyType === "binary") {
     body = Buffer.from(r.body, "base64");
   } else if (r.bodyType !== "none") body = r.body;
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
-  if (body) headers["Content-Length"] = Buffer.byteLength(body);
+  if (body) headers["content-length"] = Buffer.byteLength(body);
   const start = performance.now();
   const connection = await prepareConnection(u, r, headers, signal);
   const remainingTimeout = r.timeout - (performance.now() - start);
@@ -288,13 +307,49 @@ export async function executeRequest(input, signal) {
           clearTimeout(totalTimer);
           reject(error);
         });
-        stream.on("end", () => {
+        stream.on("end", async () => {
           clearTimeout(totalTimer);
+          const raw = Buffer.concat(chunks);
+          let displayBody = raw.toString("utf8"),
+            rawBodyBase64,
+            codecError;
+          if (/msgpack/i.test(res.headers["content-type"] || "")) {
+            rawBodyBase64 = raw.toString("base64");
+            try {
+              const { decode } = await import("@msgpack/msgpack");
+              displayBody = JSON.stringify(
+                decode(raw, {
+                  useBigInt64: true,
+                  maxStrLength: 8388608,
+                  maxBinLength: 8388608,
+                  maxArrayLength: 100000,
+                  maxMapLength: 100000,
+                  maxExtLength: 8388608,
+                }),
+                (_key, value) =>
+                  typeof value === "bigint"
+                    ? value.toString()
+                    : value instanceof Uint8Array
+                      ? {
+                          type: "binary",
+                          base64: Buffer.from(value).toString("base64"),
+                        }
+                      : value,
+                null,
+                2,
+              );
+            } catch (error) {
+              codecError = error.message;
+              displayBody = rawBodyBase64;
+            }
+          }
           resolve({
             status: res.statusCode,
             statusText: res.statusMessage,
             headers: res.headers,
-            body: Buffer.concat(chunks).toString("utf8"),
+            body: displayBody,
+            rawBodyBase64,
+            codecError,
             size,
             duration: Math.round((performance.now() - start) * 100) / 100,
             request: {

@@ -1,3 +1,4 @@
+import { highlightJSON } from "./code-format.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
 import { exportDocumentation } from "./document-export.js";
 import { icon as lineIcon } from "./icons.js";
@@ -118,6 +119,7 @@ async function save() {
         dirty = false;
       } else {
         project.revision = saved.revision;
+        project.configRevision = saved.configRevision;
         project.history = saved.history;
         project.runs = saved.runs;
       }
@@ -144,12 +146,16 @@ function collect() {
   if ($("#body-type")) r.bodyType = $("#body-type").value;
 }
 async function openProject(id) {
+  if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
   if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
   project = await api("/projects/" + id);
   current = project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
   dirty = false;
   response = null;
+  lastRun = null;
+  loadResult = null;
+  planId = "";
   sessionStorage.setItem("project", id);
   render();
 }
@@ -232,7 +238,7 @@ function tree() {
 function render() {
   const r = request();
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
       .filter((p) => !p.archived && !p.error)
       .map(
         (p) =>
@@ -317,7 +323,18 @@ function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return pairs(r[param], param);
   if (param === "body")
-    return `<div class="body-types"><select id="body-type" aria-label="请求体类型">${["none", "json", "raw", "urlencoded", "form-data", "binary"].map((t) => `<option ${r.bodyType === t ? "selected" : ""}>${t}</option>`).join("")}</select><span>${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="generate-body" class="ghost">基于数据结构生成</button></div>${["form-data", "urlencoded"].includes(r.bodyType) ? pairs(r.form, "form") : r.bodyType === "none" ? '<div class="empty"><p>此请求没有 Body</p></div>' : `<textarea id="body-code" class="code" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea>`}`;
+    return `<div class="body-types"><select id="body-type" aria-label="请求体类型">${["none", "json", "raw", "urlencoded", "form-data", "msgpack", "binary"].map((t) => `<option ${r.bodyType === t ? "selected" : ""}>${t}</option>`).join("")}</select><span>${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="generate-body" class="ghost">基于数据结构生成</button></div>${
+      ["form-data", "urlencoded"].includes(r.bodyType)
+        ? pairs(r.form, "form")
+        : r.bodyType === "none"
+          ? '<div class="empty"><p>此请求没有 Body</p></div>'
+          : `<div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
+              .split("\n")
+              .map((_, i) => i + 1)
+              .join(
+                "\n",
+              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div>`
+    }`;
   if (param === "auth" && r.auth.type === "oauth2")
     return `<div class="form-grid"><label>认证类型</label><select id="auth-type">${["none", "bearer", "basic", "digest", "oauth2", "apiKey"].map((type) => `<option ${type === "oauth2" ? "selected" : ""}>${type}</option>`).join("")}</select><label>授权方式</label><select data-auth="grantType">${["client_credentials", "authorization_code", "refresh_token"].map((type) => `<option ${r.auth.grantType === type ? "selected" : ""}>${type}</option>`).join("")}</select>${["authorizationEndpoint", "tokenEndpoint", "clientId", "clientSecret", "clientAuthentication", "scope", "refreshToken", "token"].map((key) => `<label>${key}</label><input data-auth="${key}" value="${esc(r.auth[key])}" type="${["clientSecret", "refreshToken", "token"].includes(key) ? "password" : "text"}" placeholder="${key === "clientAuthentication" ? "body 或 basic" : ""}">`).join("")}</div><p><button id="oauth-get" class="primary">获取令牌</button></p><div class="notice">授权码模式启用 PKCE S256。凭据只发到你配置的 endpoint；请优先使用 HTTPS。令牌获取后仅在当前编辑状态中，点击保存才写入本地项目。</div>`;
   if (param === "auth")
@@ -354,7 +371,7 @@ function responseContent() {
       v = JSON.stringify(JSON.parse(v), null, 2);
     } catch {}
   }
-  return `${failure}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
 }
 function modePanel(r) {
   if (mode === "design")
@@ -465,17 +482,22 @@ function addRequest() {
   render();
 }
 async function savePlan(plan) {
-  const saved = await api("/projects/" + project.id + "/plans", "POST", {
+  const projectId = project.id;
+  const result = await api("/projects/" + projectId + "/plans", "POST", {
     ...plan,
-    projectRevision: project.revision,
+    projectConfigRevision: project.configRevision ?? project.revision,
   });
-  const i = project.plans.findIndex((p) => p.id === saved.id);
-  if (i < 0) project.plans.push(saved);
-  else project.plans[i] = saved;
+  if (project.id !== projectId) return;
+  const { projectRevision, projectConfigRevision, ...saved } = result;
+  const index = project.plans.findIndex((item) => item.id === saved.id);
+  if (index < 0) project.plans.push(saved);
+  else project.plans[index] = saved;
   planId = saved.id;
-  project.revision = (await api("/projects/" + project.id)).revision;
+  project.revision = projectRevision;
+  project.configRevision = projectConfigRevision;
   render();
 }
+
 function editRules() {
   const r = request();
   const sample = {
@@ -693,6 +715,22 @@ function bind() {
     responseTab = e.dataset.response;
     render();
   });
+  on("#body-code", "input", (_, element) => {
+    if ($("#code-highlight"))
+      $("#code-highlight").innerHTML = highlightJSON(element.value) + "\n";
+    if ($("#code-gutter"))
+      $("#code-gutter").textContent = element.value
+        .split("\n")
+        .map((_, index) => index + 1)
+        .join("\n");
+  });
+  on("#body-code", "scroll", (_, element) => {
+    if ($("#code-highlight")) {
+      $("#code-highlight").scrollTop = element.scrollTop;
+      $("#code-highlight").scrollLeft = element.scrollLeft;
+    }
+    if ($("#code-gutter")) $("#code-gutter").scrollTop = element.scrollTop;
+  });
   on("#body-type", "change", (_, e) => {
     collect();
     request().bodyType = e.value;
@@ -862,6 +900,19 @@ function bind() {
   });
   on("#send", "click", send);
   on("#cancel", "click", () => api("/cancel", "POST", { id: runId }));
+  on("#download-response-binary", "click", () => {
+    const bytes = Uint8Array.from(atob(response.rawBodyBase64), (character) =>
+      character.charCodeAt(0),
+    );
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: "application/octet-stream" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "response.bin";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
   on("#curl", "click", async () => {
     collect();
     const r = await api("/projects/" + project.id + "/curl", "POST", {
@@ -1331,7 +1382,24 @@ async function init() {
   if (!projects.some((item) => !item.archived && !item.error)) {
     const p = await api("/projects", "POST", { name: "默认项目" });
     p.environments[0].variables.baseUrl = location.origin;
-    const r = defaultRequest("示例 · 本地响应");
+    const r = defaultRequest("示例 · 创建用户");
+    r.method = "POST";
+    r.bodyType = "json";
+    r.body = JSON.stringify(
+      {
+        id: 0,
+        username: "username",
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        phone: "",
+        userStatus: 0,
+      },
+      null,
+      2,
+    );
+    r.description = "本地 Mock 响应示例，不是真实用户账户服务。";
     r.folder = "示例接口";
     r.url = location.origin + "/mock/" + p.id + "/" + r.id;
     r.examples = [

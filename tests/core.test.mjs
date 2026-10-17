@@ -241,3 +241,9 @@ test("OpenAPI YAML imports without code execution or duplicate keys", () => {
     /unique|duplicate/i,
   );
 });
+test("malformed imports cannot persist fields that crash the workbench", () => {
+  assert.throws(() => normalizeRequest({ headers: { bad: true } }), /数组/);
+  assert.throws(() => normalizeRequest({ query: [null] }), /数组/);
+  assert.throws(() => normalizeRequest({ auth: [] }), /对象/);
+  assert.equal(normalizeRequest({ body: { ok: true } }).body, '{"ok":true}');
+});

@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
@@ -46,8 +46,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: npm install --prefix desktop
+      - run: npm audit --prefix desktop --audit-level=high
       - run: npx --no install-electron
         working-directory: desktop
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
@@ -62,7 +63,17 @@ jobs:
           Copy-Item desktop/*.mjs,desktop/*.cjs dist/LocalAPI/resources/app/desktop
           '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
           Rename-Item dist/LocalAPI/electron.exe LocalAPI.exe
+      - run: node scripts/build-manifest.mjs
+        env:
+          BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: node tests/desktop-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-build-metadata
+          retention-days: 7
+          path: |
+            desktop/package-lock.json
+            dist/LocalAPI/build-manifest.json
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 7
@@ -75,8 +86,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run format:check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-dependencies
+          retention-days: 1
+          path: |
+            node_modules
+            package-lock.json
   database-integration:
     runs-on: ubuntu-latest
     services:
@@ -110,5 +129,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts
       - run: node tests/remote-database.mjs

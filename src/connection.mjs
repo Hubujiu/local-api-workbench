@@ -40,7 +40,11 @@ export async function prepareConnection(target, request, headers, signal) {
       url: proxy,
       options: {
         path: target.href,
-        headers: { ...headers, Host: target.host, ...proxyHeaders },
+        headers: {
+          ...headers,
+          host: headers.host || target.host,
+          ...proxyHeaders,
+        },
       },
       cleanup: () => {},
     };

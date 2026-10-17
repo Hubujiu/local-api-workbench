@@ -322,8 +322,9 @@ export async function createApp({
           if (action === "plans" && req.method === "POST") {
             const b = await body(req);
             if (
-              b.projectRevision !== undefined &&
-              b.projectRevision !== p.revision
+              (b.projectConfigRevision ?? b.projectRevision) !== undefined &&
+              (b.projectConfigRevision ?? b.projectRevision) !==
+                (p.configRevision ?? p.revision)
             )
               throw Error("项目已有其他修改，请重新加载");
             const plan = snapshotPlan(b);
@@ -331,7 +332,11 @@ export async function createApp({
             if (index < 0) p.plans.push(plan);
             else p.plans[index] = plan;
             await store.save(p);
-            return json(res, 200, plan);
+            return json(res, 200, {
+              ...plan,
+              projectRevision: p.revision,
+              projectConfigRevision: p.configRevision,
+            });
           }
           if (action === "run" && req.method === "POST") {
             const b = await body(req),

@@ -31,6 +31,40 @@ export function jsonPath(obj, path) {
   return obj;
 }
 export function normalizeRequest(r = {}) {
+  if (!r || typeof r !== "object" || Array.isArray(r))
+    throw Error("接口定义必须是对象");
+  for (const key of [
+    "query",
+    "headers",
+    "path",
+    "cookies",
+    "form",
+    "assertions",
+    "extract",
+    "before",
+    "after",
+    "examples",
+  ]) {
+    if (
+      r[key] !== undefined &&
+      (!Array.isArray(r[key]) ||
+        r[key].some(
+          (item) => !item || typeof item !== "object" || Array.isArray(item),
+        ))
+    )
+      throw Error(key + " 必须是对象数组");
+  }
+  for (const key of ["auth", "tls"])
+    if (
+      r[key] !== undefined &&
+      (!r[key] || typeof r[key] !== "object" || Array.isArray(r[key]))
+    )
+      throw Error(key + " 必须是对象");
+  if (
+    r.id !== undefined &&
+    (typeof r.id !== "string" || !/^[a-zA-Z0-9_.-]{1,200}$/.test(r.id))
+  )
+    throw Error("接口 ID 无效");
   const method = String(r.method || "GET").toUpperCase();
   if (
     !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(
@@ -54,7 +88,12 @@ export function normalizeRequest(r = {}) {
     cookies: r.cookies || [],
     auth: r.auth || { type: "none" },
     bodyType: r.bodyType || "none",
-    body: r.body || "",
+    body:
+      typeof r.body === "string"
+        ? r.body
+        : r.body == null
+          ? ""
+          : JSON.stringify(r.body),
     form: r.form || [],
     assertions: r.assertions || [],
     extract: r.extract || [],
