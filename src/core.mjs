@@ -1,3 +1,4 @@
+import { parse as parseYAML } from "yaml";
 import { runScript } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
 export const id = () => randomUUID();
@@ -269,9 +270,10 @@ export function importDocument(doc) {
       doc = JSON.parse(doc);
     } catch {
       if (doc.trim().startsWith("curl ")) return [importCurl(doc)];
-      throw Error("请导入 JSON 或 cURL");
+      doc = parseYAML(doc, {maxAliasCount:100, uniqueKeys:true});
     }
   }
+  if (!doc || typeof doc !== "object") throw Error("无法识别导入格式");
   if (doc.openapi || doc.swagger) {
     doc = resolveLocalReferences(doc);
     const base =
@@ -338,29 +340,38 @@ export function importDocument(doc) {
     );
   }
   if (doc.info && doc.item) {
-    const walk = (items, folder = "") =>
-      items.flatMap((i) =>
-        i.item
-          ? walk(i.item, i.name)
-          : [
-              normalizeRequest({
-                name: i.name,
-                folder,
-                method: i.request?.method,
-                url:
-                  typeof i.request?.url === "string"
-                    ? i.request.url
-                    : i.request?.url?.raw,
-                headers: (i.request?.header || []).map((h) => ({
-                  key: h.key,
-                  value: h.value,
-                  enabled: !h.disabled,
-                })),
-                bodyType: i.request?.body?.mode === "raw" ? "json" : "none",
-                body: i.request?.body?.raw || "",
-              }),
-            ],
-      );
+    const events = (list, phase) => (list || []).filter(event => event.listen === phase)
+      .flatMap(event => event.script?.exec || []).join("\n");
+    const auth = config => {
+      if (!config || config.type === "noauth") return {type:"none"};
+      const values = Object.fromEntries((config[config.type] || []).map(item => [item.key,item.value]));
+      if (config.type === "bearer") return {type:"bearer",token:values.token || ""};
+      if (config.type === "basic") return {type:"basic",username:values.username || "",password:values.password || ""};
+      if (config.type === "apikey") return {type:"apiKey",key:values.key,value:values.value,in:values.in || "header"};
+      throw Error("尚不支持导入 Postman 认证类型: " + config.type);
+    };
+    const walk = (items, folder = "", inheritedAuth = doc.auth, inheritedEvents = doc.event || []) =>
+      items.flatMap(item => {
+        const currentEvents = [...inheritedEvents, ...(item.event || [])];
+        if (item.item) return walk(item.item, folder ? folder + "/" + item.name : item.name, item.auth || inheritedAuth, currentEvents);
+        const req = item.request || {}, body = req.body || {};
+        const rawURL = typeof req.url === "string" ? req.url : req.url?.raw || "";
+        const queries = typeof req.url === "object" ? req.url.query || [] : [];
+        const mode = body.mode === "raw" ? (body.options?.raw?.language === "json" ? "json" : "raw") : body.mode === "urlencoded" ? "urlencoded" : body.mode === "formdata" ? "form-data" : "none";
+        return [normalizeRequest({
+          name:item.name, folder, method:req.method,
+          url:(queries.length ? rawURL.split("?")[0] : rawURL).replace(/\/:([A-Za-z0-9_]+)/g,"/{$1}"),
+          description:typeof req.description === "string" ? req.description : req.description?.content || "",
+          auth:auth(req.auth || inheritedAuth),
+          headers:(req.header || []).map(h => ({key:h.key,value:h.value,enabled:!h.disabled})),
+          query:queries.map(q => ({key:q.key,value:q.value,enabled:!q.disabled})),
+          path:(req.url?.variable || []).map(v => ({key:v.key,value:v.value,enabled:true})),
+          bodyType:mode, body:body.raw || "",
+          form:(body.urlencoded || body.formdata || []).map(f => ({key:f.key,value:f.type === "file" ? "" : f.value,enabled:!f.disabled,type:f.type === "file" ? "file" : "text",requiresFile:f.type === "file",filename:f.type === "file" ? String(f.src || "").split(/[\\/]/).at(-1) : undefined})),
+          beforeScript:events(currentEvents,"prerequest"), afterScript:events(currentEvents,"test"),
+          examples:(item.response || []).map(example => ({name:example.name,status:example.code || 200,body:example.body || ""}))
+        })];
+      });
     return walk(doc.item);
   }
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);

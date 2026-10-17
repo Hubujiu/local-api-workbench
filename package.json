@@ -9,12 +9,18 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js"
+    "check": "node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js",
+    "format": "prettier --write \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\""
   },
   "license": "MIT",
   "dependencies": {
     "quickjs-emscripten": "0.31.0",
     "pg": "8.16.3",
-    "mysql2": "3.15.3"
+    "mysql2": "3.15.3",
+    "yaml": "2.8.1"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
   }
 }

@@ -300,13 +300,13 @@ function responseContent() {
       : responseTab === "cookies"
         ? response.headers?.["set-cookie"] || []
         : response[responseTab];
-  if (response.error) v = response.error;
+  const failure = response.error ? `<div class="notice failed">${esc(response.error)}</div>` : "";
   if (responseTab === "body") {
     try {
       v = JSON.stringify(JSON.parse(v), null, 2);
     } catch {}
   }
-  return `<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  return `${failure}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
 }
 function modePanel(r) {
   if (mode === "design")
@@ -583,6 +583,7 @@ function bind() {
     Object.assign(request().form[e.dataset.fieldFile], {
       type: "file",
       filename: file.name,
+      requiresFile: false,
       value: btoa(binary),
     });
     mark();
@@ -696,7 +697,7 @@ function bind() {
   on("#import", "click", () =>
     modal(
       "导入接口",
-      `<p class="muted">支持项目 JSON、OpenAPI JSON、Postman Collection 与 cURL。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
+      `<p class="muted">支持项目 JSON、OpenAPI JSON/YAML、Postman Collection 与 cURL。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
       async () => {
         const f = $("#import-file").files[0],
           document = f ? await f.text() : $("#import-text").value;

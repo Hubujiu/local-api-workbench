@@ -188,6 +188,7 @@ export async function executeRequest(input, signal) {
     const boundary = "----localapi" + id(),
       chunks = [];
     for (const field of r.form.filter((f) => f.enabled !== false)) {
+      if (field.requiresFile) throw Error("请重新选择导入的文件: " + field.filename);
       const name = String(field.key).replace(/["\r\n]/g, "");
       const filename =
         field.type === "file"

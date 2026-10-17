@@ -33,3 +33,5 @@ Loopback-only HTTP, Host/Origin checks and per-process UI session token; origina
 The product site's pricing has no functional tiers: all licenses are paid. Independent implementation excludes licensing/payment and paid cloud services; it does not bypass activation or copy proprietary assets.
 
 Root works alone. No Codex delegation or cloud coding tasks. User requested no routine updates until the full product is ready; report only unavoidable blockers. The earlier repository-creation blocker is resolved.
+
+12:48 UTC update: commit 529058cdea6f7f1e90cccd10e082ebe9ff61f49f passed all seven CI jobs in run 39033830721, including real PostgreSQL/MySQL fixture connections and expanded UI checks. Native project directory selection, folder/document editing and persistence passed browser/desktop CI. Current work adds richer Postman import and YAML parsing; dependencies/lockfile will be verified before final freeze.

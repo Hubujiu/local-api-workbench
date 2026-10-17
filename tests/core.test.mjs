@@ -189,3 +189,17 @@ test("schema sample generation respects examples and falsy defaults", async () =
     { count: 0, active: false, name: "test" },
   );
 });
+test('Postman import preserves auth, params, forms and script hierarchy', () => {
+  const requests = importDocument({info:{name:'Collection'},auth:{type:'bearer',bearer:[{key:'token',value:'{{token}}'}]},event:[{listen:'prerequest',script:{exec:['console.log("collection")']}}],item:[{name:'Folder',item:[{name:'Update',event:[{listen:'test',script:{exec:['console.log("test")']}}],request:{method:'POST',url:{raw:'http://localhost/users/:id?a=1',query:[{key:'a',value:'1'}],variable:[{key:'id',value:'7'}]},body:{mode:'formdata',formdata:[{key:'file',type:'file',src:'/private/never-read.txt'}]}}}]}]});
+  assert.equal(requests[0].auth.type,'bearer');
+  assert.equal(requests[0].url,'http://localhost/users/{id}');
+  assert.equal(requests[0].query.length,1);
+  assert.equal(requests[0].form[0].requiresFile,true);
+  assert.match(requests[0].beforeScript,/collection/);
+  assert.match(requests[0].afterScript,/test/);
+});
+test('OpenAPI YAML imports without code execution or duplicate keys', () => {
+  const result = importDocument('openapi: 3.0.3\ninfo:\n  title: YAML\npaths:\n  /ping:\n    get:\n      summary: Ping\n      responses:\n        "200":\n          description: OK\n');
+  assert.equal(result[0].name,'Ping');
+  assert.throws(() => importDocument('openapi: 3.0.3\nopenapi: 3.1.0\npaths: {}'), /unique|duplicate/i);
+});
