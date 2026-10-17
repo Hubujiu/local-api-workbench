@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install --ignore-scripts
       - run: npm run check
       - run: npm test
   browser:
@@ -41,6 +42,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install --ignore-scripts
       - run: npm install --prefix desktop
       - run: npx --no install-electron
         working-directory: desktop
@@ -51,7 +53,7 @@ jobs:
           New-Item -ItemType Directory -Force dist/LocalAPI | Out-Null
           Copy-Item desktop/node_modules/electron/dist/* dist/LocalAPI -Recurse
           New-Item -ItemType Directory -Force dist/LocalAPI/resources/app | Out-Null
-          Copy-Item src,public,desktop,scripts,LICENSE dist/LocalAPI/resources/app -Recurse
+          Copy-Item src,public,desktop,scripts,node_modules,LICENSE dist/LocalAPI/resources/app -Recurse
           Remove-Item dist/LocalAPI/resources/app/desktop/node_modules -Recurse -Force
           '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
           Rename-Item dist/LocalAPI/electron.exe LocalAPI.exe
@@ -67,6 +69,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-dependencies
+          path: |
+            node_modules
+            package-lock.json
       - run: npx --yes prettier@3.6.2 --write 'src/**/*.mjs' 'scripts/**/*.mjs' 'tests/**/*.mjs' 'public/*' 'desktop/*.mjs' '*.json' 'desktop/*.json' '.github/workflows/*.yml'
       - uses: actions/upload-artifact@v4
         with:

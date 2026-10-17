@@ -1,3 +1,4 @@
+import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
     String(v ?? "").replace(
@@ -157,7 +158,7 @@ function nav() {
   ]
     .map(
       ([key, icon, title]) =>
-        `<button data-page="${key}" class="${page === key ? "active" : ""}" title="${title}"><span class="icon">${icon}</span>${title}</button>`,
+        `<button data-page="${key}" class="${page === key ? "active" : ""}" title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`,
     )
     .join("");
 }
@@ -190,7 +191,7 @@ function tree() {
 function render() {
   const r = request();
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">♲</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" class="ghost">＋ 新建/导入项目</button></div><div class="top-group"><select id="project-select" aria-label="项目">${projects.map((p) => `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select><span class="offline">● 纯本地 · 无云端同步</span><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -274,6 +275,7 @@ function paramPanel(r) {
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
     return `<table><thead><tr><th>变量名</th><th>响应 JSON 路径</th><th></th></tr></thead><tbody>${r.extract.map((a, i) => `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><input data-extract="${i}:path" value="${esc(a.path)}" placeholder="$.data.token"></td><td><button data-remove-extract="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">在计划内传递给后续步骤；单次调试返回提取结果，不自动覆盖持久化环境。</div>`;
+  if (param === "before" || param === "after") return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、pm.environment、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -583,6 +585,7 @@ function bind() {
     request().auth[e.dataset.auth] = e.value;
     mark();
   });
+  on("#script-code", "input", (_, element) => { request()[param + "Script"] = element.value; mark(); });
   on("#edit-operations", "click", editRules);
   on("#add-assertion", "click", () => {
     request().assertions.push({ target: "status", op: "eq", value: 200 });

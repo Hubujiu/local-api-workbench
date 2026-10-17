@@ -1,3 +1,4 @@
+import { runScript } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
 export const id = () => randomUUID();
 export function interpolate(value, vars = {}) {
@@ -57,6 +58,8 @@ export function normalizeRequest(r = {}) {
     assertions: r.assertions || [],
     extract: r.extract || [],
     before: r.before || [],
+    beforeScript: r.beforeScript || "",
+    afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
     schema: r.schema || {},
@@ -155,7 +158,15 @@ export async function runPlan(
           name: operation.name,
         });
       }
-      record.request = interpolate(step.request, vars);
+      let configuredRequest = structuredClone(step.request);
+      if (configuredRequest.beforeScript) {
+        const scripted = await runScript(configuredRequest.beforeScript, { variables: vars, request: configuredRequest });
+        replaceVariables(vars, scripted.variables);
+        configuredRequest = normalizeRequest(scripted.request);
+        record.logs.push(...scripted.logs.map(message => ({ phase: "before", message })));
+        if (scripted.tests.some(test => !test.passed)) throw Error("前置脚本断言失败");
+      }
+      record.request = interpolate(configuredRequest, vars);
       record.response = await execute(record.request, signal);
       record.assertions = evaluateAssertions(
         record.response,
@@ -177,6 +188,12 @@ export async function runPlan(
           type: operation.type,
           name: operation.name,
         });
+      }
+      if (record.request.afterScript) {
+        const scripted = await runScript(record.request.afterScript, { variables: vars, request: record.request, response: record.response });
+        replaceVariables(vars, scripted.variables);
+        record.logs.push(...scripted.logs.map(message => ({ phase: "after", message })));
+        record.assertions.push(...scripted.tests);
       }
       const hasStatusAssertion = record.assertions.some(
         (a) => a.target === "status",
@@ -526,4 +543,12 @@ export function sampleFromSchema(schema, depth = 0) {
       : schema.format === "date-time"
         ? "2026-01-01T00:00:00Z"
         : "";
+}
+
+function replaceVariables(target, source) {
+  for (const key of Object.keys(source)) {
+    if (["__proto__", "prototype", "constructor"].includes(key)) throw Error("脚本变量名无效");
+  }
+  for (const key of Object.keys(target)) delete target[key];
+  for (const [key, value] of Object.entries(source)) target[key] = value;
 }

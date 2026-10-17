@@ -11,5 +11,8 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "quickjs-emscripten": "0.31.0"
+  }
 }
