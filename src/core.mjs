@@ -1,25 +1,139 @@
-import {randomUUID,createHash} from 'node:crypto';
-export const id=()=>randomUUID();
-export function interpolate(value,vars={}) {
- if(typeof value==='string')return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,key)=>{if(!Object.hasOwn(vars,key))throw Error(`未定义变量: ${key}`);return String(vars[key]);});
- if(Array.isArray(value))return value.map(v=>interpolate(v,vars));
- if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,interpolate(v,vars)]));
- return value;
+import { randomUUID, createHash } from "node:crypto";
+export const id = () => randomUUID();
+export function interpolate(value, vars = {}) {
+  if (typeof value === "string")
+    return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
+      if (!Object.hasOwn(vars, key)) throw Error(`未定义变量: ${key}`);
+      return String(vars[key]);
+    });
+  if (Array.isArray(value)) return value.map((v) => interpolate(v, vars));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, interpolate(v, vars)]),
+    );
+  return value;
 }
-export function jsonPath(obj,path){const parts=String(path).replace(/^\$\.?/,'').replace(/\[(\d+)\]/g,'.$1').split('.').filter(Boolean);for(const p of parts){if(['__proto__','prototype','constructor'].includes(p))throw Error('禁止的 JSON 路径');if(obj===null||obj===undefined||!Object.hasOwn(Object(obj),p))return undefined;obj=obj[p];}return obj;}
-export function normalizeRequest(r={}){
- const method=String(r.method||'GET').toUpperCase();if(!['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].includes(method))throw Error('不支持的 HTTP 方法');
- const url=String(r.url||'');if(url&&!/^https?:\/\//.test(url)&&!url.includes('{{'))throw Error('仅支持 HTTP/HTTPS URL');
- return {id:r.id||id(),name:r.name||'未命名接口',folder:r.folder||'',description:r.description||'',method,url,query:r.query||[],headers:r.headers||[],path:r.path||[],cookies:r.cookies||[],auth:r.auth||{type:'none'},bodyType:r.bodyType||'none',body:r.body||'',form:r.form||[],assertions:r.assertions||[],extract:r.extract||[],before:r.before||[],after:r.after||[],examples:r.examples||[],schema:r.schema||{},timeout:Math.min(60000,Math.max(100,Number(r.timeout)||15000)),...('deletedAt'in r?{deletedAt:r.deletedAt}:{})};
+export function jsonPath(obj, path) {
+  const parts = String(path)
+    .replace(/^\$\.?/, "")
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .filter(Boolean);
+  for (const p of parts) {
+    if (["__proto__", "prototype", "constructor"].includes(p))
+      throw Error("禁止的 JSON 路径");
+    if (obj === null || obj === undefined || !Object.hasOwn(Object(obj), p))
+      return undefined;
+    obj = obj[p];
+  }
+  return obj;
 }
-export function evaluateAssertions(response, assertions=[]){let data;try{data=JSON.parse(response.body);}catch{}return assertions.map(a=>{let actual=a.target==='status'?response.status:a.target==='duration'?response.duration:a.target==='body'?response.body:a.target?.startsWith('header:')?response.headers[a.target.slice(7).toLowerCase()]:jsonPath(data,a.target);let passed=false;switch(a.op){case 'eq':passed=JSON.stringify(actual)===JSON.stringify(a.value);break;case 'neq':passed=JSON.stringify(actual)!==JSON.stringify(a.value);break;case 'contains':passed=String(actual??'').includes(String(a.value));break;case 'exists':passed=actual!==undefined&&actual!==null;break;case 'lt':passed=Number(actual)<Number(a.value);break;case 'gt':passed=Number(actual)>Number(a.value);break;default:throw Error('未知断言操作');}return {...a,actual,passed};});}
-export function snapshotPlan(plan){if(!Array.isArray(plan.steps)||plan.steps.length>200)throw Error('执行计划必须包含至多 200 步');return {id:plan.id||id(),name:plan.name||'新执行计划',environmentId:plan.environmentId||'',createdAt:plan.createdAt||new Date().toISOString(),steps:plan.steps.map(s=>({id:s.id||id(),name:s.name||s.request?.name||'步骤',enabled:s.enabled!==false,request:normalizeRequest(structuredClone(s.request)),expectedStatus:s.expectedStatus}))};}
-export async function runPlan(plan, variables, execute, {signal, onStep} = {}) {
+export function normalizeRequest(r = {}) {
+  const method = String(r.method || "GET").toUpperCase();
+  if (
+    !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(
+      method,
+    )
+  )
+    throw Error("不支持的 HTTP 方法");
+  const url = String(r.url || "");
+  if (url && !/^https?:\/\//.test(url) && !url.includes("{{"))
+    throw Error("仅支持 HTTP/HTTPS URL");
+  return {
+    id: r.id || id(),
+    name: r.name || "未命名接口",
+    folder: r.folder || "",
+    description: r.description || "",
+    method,
+    url,
+    query: r.query || [],
+    headers: r.headers || [],
+    path: r.path || [],
+    cookies: r.cookies || [],
+    auth: r.auth || { type: "none" },
+    bodyType: r.bodyType || "none",
+    body: r.body || "",
+    form: r.form || [],
+    assertions: r.assertions || [],
+    extract: r.extract || [],
+    before: r.before || [],
+    after: r.after || [],
+    examples: r.examples || [],
+    schema: r.schema || {},
+    timeout: Math.min(60000, Math.max(100, Number(r.timeout) || 15000)),
+    ...("deletedAt" in r ? { deletedAt: r.deletedAt } : {}),
+  };
+}
+export function evaluateAssertions(response, assertions = []) {
+  let data;
+  try {
+    data = JSON.parse(response.body);
+  } catch {}
+  return assertions.map((a) => {
+    let actual =
+      a.target === "status"
+        ? response.status
+        : a.target === "duration"
+          ? response.duration
+          : a.target === "body"
+            ? response.body
+            : a.target?.startsWith("header:")
+              ? response.headers[a.target.slice(7).toLowerCase()]
+              : jsonPath(data, a.target);
+    let passed = false;
+    switch (a.op) {
+      case "eq":
+        passed = JSON.stringify(actual) === JSON.stringify(a.value);
+        break;
+      case "neq":
+        passed = JSON.stringify(actual) !== JSON.stringify(a.value);
+        break;
+      case "contains":
+        passed = String(actual ?? "").includes(String(a.value));
+        break;
+      case "exists":
+        passed = actual !== undefined && actual !== null;
+        break;
+      case "lt":
+        passed = Number(actual) < Number(a.value);
+        break;
+      case "gt":
+        passed = Number(actual) > Number(a.value);
+        break;
+      default:
+        throw Error("未知断言操作");
+    }
+    return { ...a, actual, passed };
+  });
+}
+export function snapshotPlan(plan) {
+  if (!Array.isArray(plan.steps) || plan.steps.length > 200)
+    throw Error("执行计划必须包含至多 200 步");
+  return {
+    id: plan.id || id(),
+    name: plan.name || "新执行计划",
+    environmentId: plan.environmentId || "",
+    createdAt: plan.createdAt || new Date().toISOString(),
+    steps: plan.steps.map((s) => ({
+      id: s.id || id(),
+      name: s.name || s.request?.name || "步骤",
+      enabled: s.enabled !== false,
+      request: normalizeRequest(structuredClone(s.request)),
+      expectedStatus: s.expectedStatus,
+    })),
+  };
+}
+export async function runPlan(
+  plan,
+  variables,
+  execute,
+  { signal, onStep } = {},
+) {
   const snapshot = structuredClone(plan);
-  const vars = {...variables};
+  const vars = { ...variables };
   const results = [];
-  if (!snapshot.steps.some(step => step.enabled !== false)) {
-    throw Error('计划没有可执行步骤');
+  if (!snapshot.steps.some((step) => step.enabled !== false)) {
+    throw Error("计划没有可执行步骤");
   }
   for (const step of snapshot.steps) {
     if (signal?.aborted) break;
@@ -28,33 +142,54 @@ export async function runPlan(plan, variables, execute, {signal, onStep} = {}) {
       stepId: step.id,
       name: step.name,
       startedAt: new Date().toISOString(),
-      status: 'failed',
+      status: "failed",
       logs: [],
-      extracted: {}
+      extracted: {},
     };
     try {
       for (const operation of step.request.before || []) {
         applyOperation(operation, vars);
-        record.logs.push({phase: 'before', type: operation.type, name: operation.name});
+        record.logs.push({
+          phase: "before",
+          type: operation.type,
+          name: operation.name,
+        });
       }
       record.request = interpolate(step.request, vars);
       record.response = await execute(record.request, signal);
-      record.assertions = evaluateAssertions(record.response, record.request.assertions);
+      record.assertions = evaluateAssertions(
+        record.response,
+        record.request.assertions,
+      );
       for (const extraction of record.request.extract) {
-        const value = jsonPath(JSON.parse(record.response.body), extraction.path);
+        const value = jsonPath(
+          JSON.parse(record.response.body),
+          extraction.path,
+        );
         if (value === undefined) throw Error(`无法提取 ${extraction.path}`);
         vars[extraction.name] = value;
         record.extracted[extraction.name] = value;
       }
       for (const operation of record.request.after || []) {
         applyOperation(operation, vars);
-        record.logs.push({phase: 'after', type: operation.type, name: operation.name});
+        record.logs.push({
+          phase: "after",
+          type: operation.type,
+          name: operation.name,
+        });
       }
-      const hasStatusAssertion = record.assertions.some(a => a.target === 'status');
-      const statusOK = step.expectedStatus !== undefined
-        ? record.response.status === step.expectedStatus
-        : hasStatusAssertion || (record.response.status >= 200 && record.response.status < 300);
-      record.status = statusOK && record.assertions.every(a => a.passed) ? 'passed' : 'failed';
+      const hasStatusAssertion = record.assertions.some(
+        (a) => a.target === "status",
+      );
+      const statusOK =
+        step.expectedStatus !== undefined
+          ? record.response.status === step.expectedStatus
+          : hasStatusAssertion ||
+            (record.response.status >= 200 && record.response.status < 300);
+      record.status =
+        statusOK && record.assertions.every((a) => a.passed)
+          ? "passed"
+          : "failed";
     } catch (error) {
       record.error = error.message;
     }
@@ -62,65 +197,333 @@ export async function runPlan(plan, variables, execute, {signal, onStep} = {}) {
     await onStep?.(record);
   }
   return {
-    id: id(), planId: plan.id, planName: plan.name,
-    planHash: createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'),
-    snapshot, createdAt: new Date().toISOString(),
-    status: signal?.aborted ? 'cancelled' : results.every(r => r.status === 'passed') ? 'passed' : 'failed',
-    results, variables: vars
+    id: id(),
+    planId: plan.id,
+    planName: plan.name,
+    planHash: createHash("sha256")
+      .update(JSON.stringify(snapshot))
+      .digest("hex"),
+    snapshot,
+    createdAt: new Date().toISOString(),
+    status: signal?.aborted
+      ? "cancelled"
+      : results.every((r) => r.status === "passed")
+        ? "passed"
+        : "failed",
+    results,
+    variables: vars,
   };
 }
-export function applyOperation(op,vars){if(!op.name||['__proto__','constructor','prototype'].includes(op.name))throw Error('变量名无效');switch(op.type){case 'set':vars[op.name]=interpolate(op.value,vars);break;case 'uuid':vars[op.name]=id();break;case 'timestamp':vars[op.name]=Date.now();break;case 'delete':delete vars[op.name];break;default:throw Error('仅支持声明式 set/uuid/timestamp/delete 前后置操作');}}
-export function importDocument(doc){if(typeof doc==='string'){try{doc=JSON.parse(doc);}catch{if(doc.trim().startsWith('curl '))return [importCurl(doc)];throw Error('请导入 JSON 或 cURL');}}
- if(doc.openapi||doc.swagger){doc=resolveLocalReferences(doc);const base=doc.servers?.[0]?.url||(doc.host?`${doc.schemes?.[0]||'https'}://${doc.host}${doc.basePath||''}`:'{{baseUrl}}');return Object.entries(doc.paths||{}).flatMap(([path,item])=>Object.entries(item).filter(([m])=>['get','post','put','patch','delete','head','options'].includes(m)).map(([method,op])=>{const params=[...(item.parameters||[]),...(op.parameters||[])];return normalizeRequest({name:op.summary||op.operationId||path,method,url:base+path,description:op.description||'',folder:op.tags?.[0]||'',query:params.filter(p=>p.in==='query').map(p=>({key:p.name,value:p.example??p.schema?.default??'',enabled:true})),path:params.filter(p=>p.in==='path').map(p=>({key:p.name,value:p.example??'',enabled:true})),headers:params.filter(p=>p.in==='header').map(p=>({key:p.name,value:p.example??'',enabled:true})),bodyType:op.requestBody?'json':'none',body:op.requestBody?JSON.stringify(op.requestBody.content?.['application/json']?.example||{},null,2):'',schema:op.requestBody?.content?.['application/json']?.schema||{},examples:Object.entries(op.responses||{}).map(([status,r])=>({name:r.description||status,status:Number(status)||200,body:JSON.stringify(r.content?.['application/json']?.example||{},null,2)}))});}));}
- if(doc.info&&doc.item){const walk=(items,folder='')=>items.flatMap(i=>i.item?walk(i.item,i.name):[normalizeRequest({name:i.name,folder,method:i.request?.method,url:typeof i.request?.url==='string'?i.request.url:i.request?.url?.raw,headers:(i.request?.header||[]).map(h=>({key:h.key,value:h.value,enabled:!h.disabled})),bodyType:i.request?.body?.mode==='raw'?'json':'none',body:i.request?.body?.raw||''})]);return walk(doc.item);}
- if(Array.isArray(doc.requests))return doc.requests.map(normalizeRequest);throw Error('无法识别导入格式');}
-export function importCurl(source){const tokens=source.match(/'(?:[^']*)'|"(?:\\.|[^"\\])*"|[^\s]+/g)||[];const clean=s=>s?.replace(/^['"]|['"]$/g,'');let r={headers:[],method:'GET'};for(let i=1;i<tokens.length;i++){const t=clean(tokens[i]);if(t==='-X'||t==='--request')r.method=clean(tokens[++i]);else if(t==='-H'||t==='--header'){const h=clean(tokens[++i]);const n=h.indexOf(':');r.headers.push({key:h.slice(0,n),value:h.slice(n+1).trim(),enabled:true});}else if(['-d','--data','--data-raw'].includes(t)){r.body=clean(tokens[++i]);r.bodyType='raw';if(r.method==='GET')r.method='POST';}else if(t==='--url')r.url=clean(tokens[++i]);else if(/^https?:/.test(t))r.url=t;else if(!['-L','--location','--compressed','-s','--silent'].includes(t))throw Error(`不支持的 cURL 参数: ${t}`);}if(!r.url)throw Error('cURL 缺少 URL');return normalizeRequest(r);}
-export function exportOpenAPI(project){const paths={};for(const r of project.requests.filter(r=>!r.deletedAt)){let path;try{path=new URL(r.url.replace(/\{\{[^}]+\}\}/g,'localhost')).pathname.replaceAll('%7B','{').replaceAll('%7D','}');}catch{path=r.url.replace(/^\{\{[^}]+\}\}/,'')||'/';}paths[path]??={};paths[path][r.method.toLowerCase()]={summary:r.name,description:r.description,tags:r.folder?[r.folder]:[],parameters:[...r.query.map(p=>({name:p.key,in:'query',schema:{type:'string'},example:p.value})),...r.path.map(p=>({name:p.key,in:'path',required:true,schema:{type:'string'},example:p.value}))],responses:{200:{description:'Successful response'}},...(r.bodyType==='json'?{requestBody:{content:{'application/json':{schema:r.schema||{type:'object'}}}}}:{})};}return {openapi:'3.0.3',info:{title:project.name,version:'1.0.0'},paths};}
-export function toCurl(r){const quote=s=>"'"+String(s).replaceAll("'","'\\''")+"'";return ['curl','-X',r.method,quote(r.url),...r.headers.filter(h=>h.enabled!==false&&h.key).flatMap(h=>['-H',quote(`${h.key}: ${h.value}`)]),...(r.bodyType!=='none'?['--data-raw',quote(r.body)]:[])].join(' ');}
-export function restoreProject(document){
-  if(typeof document==='string')document=JSON.parse(document);
-  if(!document||document.version!==1||!Array.isArray(document.requests)||!Array.isArray(document.environments))throw Error('不是有效的本地项目备份');
-  if(document.requests.length>5000)throw Error('项目接口超过 5000 个');
-  for(const environment of document.environments){if(!environment.id||!environment.variables||Array.isArray(environment.variables)||typeof environment.variables!=='object')throw Error('环境数据无效');}
-  const copy=structuredClone(document);
-  copy.id=id();copy.name=(document.name||'项目')+' · 恢复副本';delete copy.revision;
-  copy.requests=copy.requests.map(normalizeRequest);
-  copy.plans=(copy.plans||[]).map(snapshotPlan);
-  copy.runs=(copy.runs||[]).slice(0,50);copy.history=(copy.history||[]).slice(0,50);
-  copy.documents=copy.documents||[];copy.dictionary=copy.dictionary||[];
+export function applyOperation(op, vars) {
+  if (!op.name || ["__proto__", "constructor", "prototype"].includes(op.name))
+    throw Error("变量名无效");
+  switch (op.type) {
+    case "set":
+      vars[op.name] = interpolate(op.value, vars);
+      break;
+    case "uuid":
+      vars[op.name] = id();
+      break;
+    case "timestamp":
+      vars[op.name] = Date.now();
+      break;
+    case "delete":
+      delete vars[op.name];
+      break;
+    default:
+      throw Error("仅支持声明式 set/uuid/timestamp/delete 前后置操作");
+  }
+}
+export function importDocument(doc) {
+  if (typeof doc === "string") {
+    try {
+      doc = JSON.parse(doc);
+    } catch {
+      if (doc.trim().startsWith("curl ")) return [importCurl(doc)];
+      throw Error("请导入 JSON 或 cURL");
+    }
+  }
+  if (doc.openapi || doc.swagger) {
+    doc = resolveLocalReferences(doc);
+    const base =
+      doc.servers?.[0]?.url ||
+      (doc.host
+        ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
+        : "{{baseUrl}}");
+    return Object.entries(doc.paths || {}).flatMap(([path, item]) =>
+      Object.entries(item)
+        .filter(([m]) =>
+          ["get", "post", "put", "patch", "delete", "head", "options"].includes(
+            m,
+          ),
+        )
+        .map(([method, op]) => {
+          const params = [...(item.parameters || []), ...(op.parameters || [])];
+          return normalizeRequest({
+            name: op.summary || op.operationId || path,
+            method,
+            url: base + path,
+            description: op.description || "",
+            folder: op.tags?.[0] || "",
+            query: params
+              .filter((p) => p.in === "query")
+              .map((p) => ({
+                key: p.name,
+                value: p.example ?? p.schema?.default ?? "",
+                enabled: true,
+              })),
+            path: params
+              .filter((p) => p.in === "path")
+              .map((p) => ({
+                key: p.name,
+                value: p.example ?? "",
+                enabled: true,
+              })),
+            headers: params
+              .filter((p) => p.in === "header")
+              .map((p) => ({
+                key: p.name,
+                value: p.example ?? "",
+                enabled: true,
+              })),
+            bodyType: op.requestBody ? "json" : "none",
+            body: op.requestBody
+              ? JSON.stringify(
+                  op.requestBody.content?.["application/json"]?.example || {},
+                  null,
+                  2,
+                )
+              : "",
+            schema: op.requestBody?.content?.["application/json"]?.schema || {},
+            examples: Object.entries(op.responses || {}).map(([status, r]) => ({
+              name: r.description || status,
+              status: Number(status) || 200,
+              body: JSON.stringify(
+                r.content?.["application/json"]?.example || {},
+                null,
+                2,
+              ),
+            })),
+          });
+        }),
+    );
+  }
+  if (doc.info && doc.item) {
+    const walk = (items, folder = "") =>
+      items.flatMap((i) =>
+        i.item
+          ? walk(i.item, i.name)
+          : [
+              normalizeRequest({
+                name: i.name,
+                folder,
+                method: i.request?.method,
+                url:
+                  typeof i.request?.url === "string"
+                    ? i.request.url
+                    : i.request?.url?.raw,
+                headers: (i.request?.header || []).map((h) => ({
+                  key: h.key,
+                  value: h.value,
+                  enabled: !h.disabled,
+                })),
+                bodyType: i.request?.body?.mode === "raw" ? "json" : "none",
+                body: i.request?.body?.raw || "",
+              }),
+            ],
+      );
+    return walk(doc.item);
+  }
+  if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
+  throw Error("无法识别导入格式");
+}
+export function importCurl(source) {
+  const tokens = source.match(/'(?:[^']*)'|"(?:\\.|[^"\\])*"|[^\s]+/g) || [];
+  const clean = (s) => s?.replace(/^['"]|['"]$/g, "");
+  let r = { headers: [], method: "GET" };
+  for (let i = 1; i < tokens.length; i++) {
+    const t = clean(tokens[i]);
+    if (t === "-X" || t === "--request") r.method = clean(tokens[++i]);
+    else if (t === "-H" || t === "--header") {
+      const h = clean(tokens[++i]);
+      const n = h.indexOf(":");
+      r.headers.push({
+        key: h.slice(0, n),
+        value: h.slice(n + 1).trim(),
+        enabled: true,
+      });
+    } else if (["-d", "--data", "--data-raw"].includes(t)) {
+      r.body = clean(tokens[++i]);
+      r.bodyType = "raw";
+      if (r.method === "GET") r.method = "POST";
+    } else if (t === "--url") r.url = clean(tokens[++i]);
+    else if (/^https?:/.test(t)) r.url = t;
+    else if (
+      !["-L", "--location", "--compressed", "-s", "--silent"].includes(t)
+    )
+      throw Error(`不支持的 cURL 参数: ${t}`);
+  }
+  if (!r.url) throw Error("cURL 缺少 URL");
+  return normalizeRequest(r);
+}
+export function exportOpenAPI(project) {
+  const paths = {};
+  for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    let path;
+    try {
+      path = new URL(r.url.replace(/\{\{[^}]+\}\}/g, "localhost")).pathname
+        .replaceAll("%7B", "{")
+        .replaceAll("%7D", "}");
+    } catch {
+      path = r.url.replace(/^\{\{[^}]+\}\}/, "") || "/";
+    }
+    paths[path] ??= {};
+    paths[path][r.method.toLowerCase()] = {
+      summary: r.name,
+      description: r.description,
+      tags: r.folder ? [r.folder] : [],
+      parameters: [
+        ...r.query.map((p) => ({
+          name: p.key,
+          in: "query",
+          schema: { type: "string" },
+          example: p.value,
+        })),
+        ...r.path.map((p) => ({
+          name: p.key,
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          example: p.value,
+        })),
+      ],
+      responses: { 200: { description: "Successful response" } },
+      ...(r.bodyType === "json"
+        ? {
+            requestBody: {
+              content: {
+                "application/json": { schema: r.schema || { type: "object" } },
+              },
+            },
+          }
+        : {}),
+    };
+  }
+  return {
+    openapi: "3.0.3",
+    info: { title: project.name, version: "1.0.0" },
+    paths,
+  };
+}
+export function toCurl(r) {
+  const quote = (s) => "'" + String(s).replaceAll("'", "'\\''") + "'";
+  return [
+    "curl",
+    "-X",
+    r.method,
+    quote(r.url),
+    ...r.headers
+      .filter((h) => h.enabled !== false && h.key)
+      .flatMap((h) => ["-H", quote(`${h.key}: ${h.value}`)]),
+    ...(r.bodyType !== "none" ? ["--data-raw", quote(r.body)] : []),
+  ].join(" ");
+}
+export function restoreProject(document) {
+  if (typeof document === "string") document = JSON.parse(document);
+  if (
+    !document ||
+    document.version !== 1 ||
+    !Array.isArray(document.requests) ||
+    !Array.isArray(document.environments)
+  )
+    throw Error("不是有效的本地项目备份");
+  if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  for (const environment of document.environments) {
+    if (
+      !environment.id ||
+      !environment.variables ||
+      Array.isArray(environment.variables) ||
+      typeof environment.variables !== "object"
+    )
+      throw Error("环境数据无效");
+  }
+  const copy = structuredClone(document);
+  copy.id = id();
+  copy.name = (document.name || "项目") + " · 恢复副本";
+  delete copy.revision;
+  copy.requests = copy.requests.map(normalizeRequest);
+  copy.plans = (copy.plans || []).map(snapshotPlan);
+  copy.runs = (copy.runs || []).slice(0, 50);
+  copy.history = (copy.history || []).slice(0, 50);
+  copy.documents = copy.documents || [];
+  copy.dictionary = copy.dictionary || [];
   return copy;
 }
-export function resolveLocalReferences(document){
-  const root=structuredClone(document);
-  function visit(value,seen=new Set(),depth=0){
-    if(depth>50)throw Error('OpenAPI 引用层级过深');
-    if(!value||typeof value!=='object')return value;
-    if(Array.isArray(value))return value.map(v=>visit(v,seen,depth+1));
-    if(value.$ref){
-      const ref=value.$ref;
-      if(!ref.startsWith('#/'))throw Error('不自动下载外部 OpenAPI 引用，请先打包为单文件');
-      if(seen.has(ref))throw Error('循环 OpenAPI 引用需要手动展开后导入');
-      let target=root;
-      for(const part of ref.slice(2).split('/').map(p=>p.replaceAll('~1','/').replaceAll('~0','~'))){
-        if(['__proto__','prototype','constructor'].includes(part)||!Object.hasOwn(target||{},part))throw Error('无效 OpenAPI 引用 '+ref);
-        target=target[part];
+export function resolveLocalReferences(document) {
+  const root = structuredClone(document);
+  function visit(value, seen = new Set(), depth = 0) {
+    if (depth > 50) throw Error("OpenAPI 引用层级过深");
+    if (!value || typeof value !== "object") return value;
+    if (Array.isArray(value))
+      return value.map((v) => visit(v, seen, depth + 1));
+    if (value.$ref) {
+      const ref = value.$ref;
+      if (!ref.startsWith("#/"))
+        throw Error("不自动下载外部 OpenAPI 引用，请先打包为单文件");
+      if (seen.has(ref)) throw Error("循环 OpenAPI 引用需要手动展开后导入");
+      let target = root;
+      for (const part of ref
+        .slice(2)
+        .split("/")
+        .map((p) => p.replaceAll("~1", "/").replaceAll("~0", "~"))) {
+        if (
+          ["__proto__", "prototype", "constructor"].includes(part) ||
+          !Object.hasOwn(target || {}, part)
+        )
+          throw Error("无效 OpenAPI 引用 " + ref);
+        target = target[part];
       }
-      return visit({...target,...Object.fromEntries(Object.entries(value).filter(([k])=>k!=='$ref'))},new Set([...seen,ref]),depth+1);
+      return visit(
+        {
+          ...target,
+          ...Object.fromEntries(
+            Object.entries(value).filter(([k]) => k !== "$ref"),
+          ),
+        },
+        new Set([...seen, ref]),
+        depth + 1,
+      );
     }
-    return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,visit(v,seen,depth+1)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, visit(v, seen, depth + 1)]),
+    );
   }
   return visit(root);
 }
-export function sampleFromSchema(schema,depth=0){
-  if(depth>12)throw Error('Schema 嵌套过深');
-  if(schema.example!==undefined)return structuredClone(schema.example);
-  if(schema.default!==undefined)return structuredClone(schema.default);
-  if(schema.enum?.length)return schema.enum[0];
-  if(schema.oneOf?.length)return sampleFromSchema(schema.oneOf[0],depth+1);
-  if(schema.type==='object'||schema.properties)return Object.fromEntries(Object.entries(schema.properties||{}).map(([key,value])=>[key,sampleFromSchema(value,depth+1)]));
-  if(schema.type==='array')return [sampleFromSchema(schema.items||{},depth+1)];
-  if(schema.type==='integer'||schema.type==='number')return schema.minimum??0;
-  if(schema.type==='boolean')return false;
-  if(schema.type==='null')return null;
-  return schema.format==='email'?'user@example.test':schema.format==='date'?'2026-01-01':schema.format==='date-time'?'2026-01-01T00:00:00Z':'';
+export function sampleFromSchema(schema, depth = 0) {
+  if (depth > 12) throw Error("Schema 嵌套过深");
+  if (schema.example !== undefined) return structuredClone(schema.example);
+  if (schema.default !== undefined) return structuredClone(schema.default);
+  if (schema.enum?.length) return schema.enum[0];
+  if (schema.oneOf?.length) return sampleFromSchema(schema.oneOf[0], depth + 1);
+  if (schema.type === "object" || schema.properties)
+    return Object.fromEntries(
+      Object.entries(schema.properties || {}).map(([key, value]) => [
+        key,
+        sampleFromSchema(value, depth + 1),
+      ]),
+    );
+  if (schema.type === "array")
+    return [sampleFromSchema(schema.items || {}, depth + 1)];
+  if (schema.type === "integer" || schema.type === "number")
+    return schema.minimum ?? 0;
+  if (schema.type === "boolean") return false;
+  if (schema.type === "null") return null;
+  return schema.format === "email"
+    ? "user@example.test"
+    : schema.format === "date"
+      ? "2026-01-01"
+      : schema.format === "date-time"
+        ? "2026-01-01T00:00:00Z"
+        : "";
 }
