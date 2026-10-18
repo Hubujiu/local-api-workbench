@@ -163,14 +163,26 @@ export function normalizeRequest(r = {}) {
     )
   )
     throw Error("不支持的 HTTP 方法");
+  if (r.folder !== undefined && typeof r.folder !== "string")
+    throw Error("目录名称必须为字符串");
   const url = String(r.url || "");
-  if (url && !/^https?:\/\//.test(url) && !url.includes("{{") && !r.serviceId)
+  if (
+    url &&
+    !/^https?:\/\//.test(url) &&
+    !url.includes("{{") &&
+    !(
+      (r.serviceId || r.folder) &&
+      !/^[a-z][a-z0-9+.-]*:/i.test(url) &&
+      !url.startsWith("//")
+    )
+  )
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
     serviceId: String(r.serviceId || ""),
+    serviceSnapshot: r.serviceSnapshot === true,
     httpVersion: r.httpVersion === "2" ? "2" : "1.1",
     folder: r.folder || "",
     description: r.description || "",
@@ -273,7 +285,10 @@ export function snapshotPlan(plan) {
       id: s.id || id(),
       name: s.name || s.request?.name || "步骤",
       enabled: s.enabled !== false,
-      request: normalizeRequest(structuredClone(s.request)),
+      request: {
+        ...normalizeRequest(structuredClone(s.request)),
+        serviceSnapshot: true,
+      },
       expectedStatus: s.expectedStatus,
     })),
   };
@@ -285,6 +300,7 @@ export async function runPlan(
   { signal, onStep, prepareRequest, variableScopes, onScopeChanges } = {},
 ) {
   const snapshot = structuredClone(plan);
+  for (const step of snapshot.steps) step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];

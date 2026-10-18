@@ -1,5 +1,23 @@
+import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
-export function versionPlan(previous, input, source = "manual") {
+export function versionPlan(previous, input, source = "manual", project) {
+  if (project && Array.isArray(input.steps))
+    input = {
+      ...input,
+      steps: input.steps.map((step) => {
+        const oldStep = previous?.steps?.find(
+          (item) => item.id && item.id === step.id,
+        );
+        const request =
+          oldStep && !Object.hasOwn(step.request || {}, "serviceSnapshot")
+            ? { ...step.request, serviceSnapshot: true }
+            : step.request;
+        return {
+          ...step,
+          request: freezeServiceBinding(project, request || {}),
+        };
+      }),
+    };
   const next = snapshotPlan({
     ...input,
     statusPolicy:
@@ -9,7 +27,7 @@ export function versionPlan(previous, input, source = "manual") {
     source,
     updatedAt: new Date().toISOString(),
   });
-  const old = previous || {};
+  const old = previous ? snapshotPlan(previous) : {};
   if (
     previous &&
     [

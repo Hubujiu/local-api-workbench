@@ -316,6 +316,7 @@ export function createMCP({
                   functions: args.plan.functions || p.settings?.functions || [],
                 },
                 "ai",
+                p,
               );
               const index = p.plans.findIndex((r) => r.id === output.id);
               if (index < 0) p.plans.push(output);

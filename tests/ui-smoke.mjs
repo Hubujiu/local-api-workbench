@@ -404,7 +404,18 @@ try {
   await page.locator("[data-service-url]").first().fill(fixtureURL);
   await page.locator("#dialog-save").click();
   await saveAndWait();
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-edit-folder="示例接口"]').click();
+  await page.locator("#folder-service").selectOption({ label: "UI Backend" });
+  await page.locator("#dialog-save").click();
+  await saveAndWait();
   await page.reload();
+  await page.locator('[data-edit-folder="示例接口"]').click();
+  assert.equal(
+    await page.locator("#folder-service option:checked").innerText(),
+    "UI Backend",
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-edit-service]").waitFor();

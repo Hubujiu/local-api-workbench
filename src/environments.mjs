@@ -42,12 +42,29 @@ export function environmentVariables(project, environmentId) {
   const env = selectedEnvironment(project, environmentId);
   return { ...(project.globalVariables || {}), ...(env.variables || {}) };
 }
+export function effectiveServiceId(project, request) {
+  if (request.serviceId) return request.serviceId;
+  if (
+    request.serviceSnapshot ||
+    /^(?:https?:\/\/|\{\{)/i.test(String(request.url || ""))
+  )
+    return "";
+  return project.settings?.folderServices?.[request.folder] || "";
+}
+export function freezeServiceBinding(project, request) {
+  if (!request || typeof request !== "object" || Array.isArray(request))
+    throw Error("接口定义必须是对象");
+  return {
+    ...request,
+    serviceId: effectiveServiceId(project, request),
+    serviceSnapshot: true,
+  };
+}
 export function resolveServiceRequest(project, request, environmentId) {
-  if (!request.serviceId) return request;
+  const serviceId = effectiveServiceId(project, request);
+  if (!serviceId) return request;
   const env = selectedEnvironment(project, environmentId);
-  const server = (project.servers || []).find(
-    (s) => s.id === request.serviceId,
-  );
+  const server = (project.servers || []).find((s) => s.id === serviceId);
   if (!server) throw Error("服务不存在");
   const base = env.serverUrls?.[server.id];
   if (!base) throw Error("当前环境未配置服务地址");
@@ -57,6 +74,7 @@ export function resolveServiceRequest(project, request, environmentId) {
     throw Error("接口路径不能覆盖服务主机");
   return {
     ...request,
+    serviceId,
     url:
       base.replace(/\/$/, "") +
       "/" +
@@ -202,6 +220,19 @@ export function debugEnvironment(project, environmentId, cache) {
 }
 
 export function validateEnvironmentModel(project) {
+  const bindings = project.settings?.folderServices || {};
+  if (
+    typeof bindings !== "object" ||
+    Array.isArray(bindings) ||
+    Object.keys(bindings).length > 1000
+  )
+    throw Error("目录服务绑定必须为最多1000项的映射");
+  for (const [folder, service] of Object.entries(bindings)) {
+    key(folder);
+    if (typeof service !== "string" || !service || service.length > 200)
+      throw Error("目录服务标识无效");
+  }
+
   function variables(map) {
     if (!map || typeof map !== "object" || Array.isArray(map))
       throw Error("变量必须是JSON对象");

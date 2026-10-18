@@ -95,22 +95,40 @@ test("independent processes serialize read-modify-write through the disk lock", 
     import {readFile,writeFile} from 'node:fs/promises';
     import path from 'node:path';
     import {acquireFileLock} from ${JSON.stringify(new URL("../src/file-lock.mjs", import.meta.url).href)};
-    const root=process.argv[1];
+    const root=process.argv[1], started=Date.now();
     for(let i=0;i<20;i++){
-      const release=await acquireFileLock(path.join(root,'counter.lock'));
+      let release;
+      try { release=await acquireFileLock(path.join(root,'counter.lock')); }
+      catch(error) {
+        let owner;
+        try { owner=JSON.parse(await readFile(path.join(root,'counter.lock','owner.json'),'utf8')).pid; }
+        catch(readError) { owner=readError.code || readError.message; }
+        throw Error(JSON.stringify({pid:process.pid,iteration:i,elapsed:Date.now()-started,owner,counter:await readFile(path.join(root,'counter'),'utf8'),error:error.message}));
+      }
       try{
         const value=Number(await readFile(path.join(root,'counter'),'utf8'));
         await new Promise(resolve=>setTimeout(resolve,2));
         await writeFile(path.join(root,'counter'),String(value+1));
       } finally {await release();}
     }
+    console.log(JSON.stringify({pid:process.pid,completed:20,elapsed:Date.now()-started}));
   `;
-  await Promise.all(
+  const processes = await Promise.allSettled(
     Array.from({ length: 2 }, () =>
       promisify(execFile)(
         process.execPath,
         ["--input-type=module", "-e", source, root],
         { timeout: 15000, maxBuffer: 65536 },
+      ),
+    ),
+  );
+  assert(
+    processes.every((result) => result.status === "fulfilled"),
+    JSON.stringify(
+      processes.map((result) =>
+        result.status === "fulfilled"
+          ? result.value
+          : { error: result.reason.message, stderr: result.reason.stderr },
       ),
     ),
   );

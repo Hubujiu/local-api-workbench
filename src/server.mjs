@@ -11,6 +11,7 @@ import {
   environmentVariables,
   selectedEnvironment,
   resolveServiceRequest,
+  freezeServiceBinding,
   debugEnvironment,
   manageEnvironment,
 } from "./environments.mjs";
@@ -408,6 +409,7 @@ export async function createApp({
                 p.plans.find((old) => old.id === plan.id),
                 plan,
                 "manual",
+                b,
               ),
             );
             if (b.archived)
@@ -544,7 +546,9 @@ export async function createApp({
               );
               const environmentKey = context.cacheKey,
                 env = context.variables;
-              const request = normalizeRequest(b.request);
+              const request = normalizeRequest(
+                freezeServiceBinding(p, b.request),
+              );
               const scoped = scopedExecution(
                 store,
                 p,
@@ -605,6 +609,7 @@ export async function createApp({
               throw Error("来源接口不存在");
             const item = snapshotCase({
               ...data,
+              request: freezeServiceBinding(p, data.request),
               functions: data.functions || p.settings?.functions || [],
             });
             p.cases ??= [];
@@ -630,6 +635,7 @@ export async function createApp({
               p.plans.find((item) => item.id === b.id),
               { ...b, functions: b.functions || p.settings?.functions || [] },
               "manual",
+              p,
             );
             const index = p.plans.findIndex((x) => x.id === plan.id);
             if (index < 0) p.plans.push(plan);

@@ -191,3 +191,14 @@ Twenty-seventh pass:
 - Node/depth/array/string/output budgets prevent nested generation from expanding without bounds. Complex unsupported constraints such as pattern/allOf require an explicit example; this is an illustrative generator, not a general schema solver or validator.
 - Tests began with failures for ignored lengths and unresolved references; fixed regressions and a real UI generation check were added.
 - Constraint references: https://json-schema.org/understanding-json-schema/reference/numeric ; https://json-schema.org/understanding-json-schema/reference/string .
+
+Twenty-eighth pass:
+- Added flat-directory shared-service bindings for relative request paths. Explicit service IDs win; full URLs and leading {{baseUrl}} addresses remain direct to avoid silently changing a configured host.
+- Plan steps and interface cases freeze the effective service ID at creation; changing a folder later does not rebind prior snapshots. Legacy snapshots do not acquire new implicit bindings.
+- Folder rename transfers its binding, deletion removes it, and conflicting rename targets are rejected. Missing/deleted service references stay explicit and fail execution rather than falling back silently.
+- Pure and real HTTP regressions prove direct requests follow changed folder binding while old plan/case snapshots still use the original service. Browser checks binding save/reload.
+- Flat-directory and safe direct-URL boundaries are documented in ADR-FOLDER-SERVICES.md; recursive hierarchy is not claimed.
+
+Cross-process diagnostic checkpoint:
+- Sample-generation run 39091120791 passed browser/desktop/database/audit but Ubuntu core hit the existing two-second cross-process lock acquisition limit in the independent-process counter test; matrix siblings were cancelled by fail-fast. It is not a green run.
+- Added per-child elapsed/progress/owner-PID diagnostics and waits for both child outcomes before test cleanup. The 40-update assertion and acquisition deadline remain unchanged pending evidence; no root cause is inferred yet.

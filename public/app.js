@@ -537,7 +537,7 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">直接使用完整 URL</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑智能匹配规则</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
@@ -1142,6 +1142,7 @@ function bind() {
   });
   on("#request-service", "change", (_, e) => {
     request().serviceId = e.value;
+    request().serviceSnapshot = false;
     mark();
   });
   on("#schema", "input", () => mark());
@@ -1818,7 +1819,7 @@ function bind() {
     render();
     try {
       const result = await api("/projects/" + project.id + "/execute", "POST", {
-        request: { ...item.request, name: item.name },
+        request: { ...item.request, name: item.name, serviceSnapshot: true },
         functions: item.functions,
         environmentId,
         runId,
@@ -2120,11 +2121,32 @@ function bindTree() {
     const old = element.dataset.editFolder;
     modal(
       "编辑目录",
-      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组</label>`,
+      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label>目录默认服务</label><select id="folder-service"><option value="">不绑定服务</option>${project.settings?.folderServices?.[old] && !(project.servers || []).some((service) => service.id === project.settings.folderServices[old]) ? `<option selected value="${esc(project.settings.folderServices[old])}">已删除服务（保留引用）</option>` : ""}${(project.servers || []).map((service) => `<option value="${esc(service.id)}" ${project.settings?.folderServices?.[old] === service.id ? "selected" : ""}>${esc(service.name)}</option>`).join("")}</select><p class="muted">只影响本目录未显式绑定服务的相对路径接口；完整 URL 保持直连。已有计划和用例快照不变。</p><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组（目录服务继承会失效）</label>`,
       () => {
         const remove = $("#folder-remove").checked,
           name = $("#folder-name").value.trim();
         if (!remove && !name) throw Error("名称不能为空");
+        if (
+          !remove &&
+          name !== old &&
+          [
+            ...(project.folders || []),
+            ...project.requests.map((item) => item.folder),
+          ].includes(name)
+        )
+          throw Error("目标目录已存在，请使用其他名称");
+        const serviceId = $("#folder-service").value;
+        const bindings = { ...(project.settings?.folderServices || {}) };
+        delete bindings[old];
+        if (!remove && serviceId)
+          Object.defineProperty(bindings, name, {
+            value: serviceId,
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          });
+        project.settings ??= {};
+        project.settings.folderServices = bindings;
         for (const item of [
           ...project.requests,
           ...(project.protocols || []),

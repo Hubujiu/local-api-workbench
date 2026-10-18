@@ -9,7 +9,10 @@ export function snapshotCase(input) {
     id: input.id || randomUUID(),
     name: input.name.trim().slice(0, 200),
     sourceRequestId: input.sourceRequestId,
-    request: normalizeRequest(structuredClone(input.request)),
+    request: {
+      ...normalizeRequest(structuredClone(input.request)),
+      serviceSnapshot: true,
+    },
     functions: structuredClone(input.functions || []),
     createdAt: input.createdAt || new Date().toISOString(),
   };
