@@ -331,3 +331,10 @@ Actions39100628839 on e03d08c had two failures: the added browser test attempted
 ## Forty-eighth pass: screenshot-caught function-preview clipping
 
 Visual inspection of ad4587's actual function screenshot showed that the earlier compact textarea rule was overridden by the generic dialog textarea selector. Its higher specificity forced both textareas to170px and clipped the test result below the fold. Scope the compact rules under #dialog-content, and add a real browser bounding-box assertion for the preview result at the existing1000×760viewport. Do not count a mere DOM visibility assertion as proof the result is on-screen.
+
+## Forty-ninth pass: CI recovery and precise evidence selectors
+
+- With explicit user approval, closed/reopened the samePR #1 once at08:59UTC; latest3eabe40 received Actions39113570716. No branch replacement, main merge or deployment.
+- Eight jobs passed, including Windows CLI/core and all three native packages. The earlier Windows CLI failure did not recur; root cause remains unproven and stdout diagnostics stay enabled.
+- Browser reached the intended failed-precondition record and rendered the error, assertion and logs correctly. Its text-based pre locator matched the earlier hidden request-configuration JSON because that JSON also contains the log text in the script source. Give evidence sections explicit labels and scope the regression to the opened log section; preserve the same visible-log assertion.
+- New reference spacing assertions passed before this failure. Function-preview clipping fix was not reached, so its verification remains pending.

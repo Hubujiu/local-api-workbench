@@ -187,7 +187,9 @@ function renderRuns(runs, lastRun) {
 
 function evidenceBlock(label, value, open = false) {
   return (
-    '<details class="step-evidence" ' +
+    '<details class="step-evidence" data-evidence="' +
+    esc(label) +
+    '" ' +
     (open ? "open" : "") +
     "><summary>" +
     esc(label) +

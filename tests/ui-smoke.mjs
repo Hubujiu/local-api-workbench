@@ -341,9 +341,8 @@ try {
   await failedRunStep.getByText("脚本与操作日志", { exact: true }).click();
   assert.equal(
     await failedRunStep
-      .locator("pre")
+      .locator('[data-evidence="脚本与操作日志"] pre')
       .filter({ hasText: "precondition evidence" })
-      .first()
       .isVisible(),
     true,
   );
