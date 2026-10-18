@@ -158,6 +158,10 @@ try {
   await page.locator("#new-plan").click();
   await page.locator("#plan-name").fill("可重复验证");
   await page.locator("#dialog-save").click();
+  assert.equal(
+    await page.locator("#plan-status-policy").inputValue(),
+    "strict200",
+  );
   await page.locator('[data-step-edit="0"]').click();
   await page.locator('[data-step-field="name"]').fill("独立快照步骤");
   await page
@@ -333,6 +337,8 @@ try {
   await page.locator("#session-stop").click();
   await page.getByText("closed", { exact: true }).waitFor();
   await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-settings-anchor="settings-mcp"]').click();
+  await page.screenshot({ path: "/tmp/local-api-mcp-settings.png" });
   await page.locator("#mcp-config").click();
   await page.locator("#mcp-enabled").check();
   await page.locator("[data-mcp-project]").first().check();
@@ -358,6 +364,7 @@ try {
   await page.locator("#mcp-enabled").uncheck();
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-settings-anchor="resource-functions"]').click();
   await page.locator('[data-edit-resource="functions"]').click();
   await page
     .locator("#modal-json")
@@ -373,6 +380,22 @@ try {
   assert(
     (await page.locator("#resource-functions").innerText()).includes("double"),
   );
+  await page.locator('[data-settings-anchor="settings-environments"]').click();
+  await page.locator("[data-debug-env]").first().click();
+  const debugValues = JSON.parse(
+    await page.locator("#modal-json").inputValue(),
+  );
+  await page
+    .locator("#modal-json")
+    .fill(JSON.stringify({ ...debugValues, uiRuntime: "temporary" }));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("[data-debug-env]").first().click();
+  assert.equal(
+    JSON.parse(await page.locator("#modal-json").inputValue()).uiRuntime,
+    "temporary",
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator("#edit-globals").click();
   await page.locator("#modal-json").fill('{"tenant":"ui-global"}');
   await page.locator("#dialog-save").click();
@@ -383,6 +406,7 @@ try {
   await saveAndWait();
   await page.reload();
   await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-edit-service]").waitFor();
   assert((await page.locator("body").innerText()).includes("ui-global"));
   await page.screenshot({ path: "/tmp/local-api-settings.png" });
@@ -407,14 +431,14 @@ try {
         r.url().endsWith("/plans") &&
         r.status() === 200,
     ),
-    page.locator("#plan-status-policy").selectOption("strict200"),
+    page.locator("#plan-status-policy").selectOption("assertions"),
   ]);
   await page.reload();
   await page.locator('[data-page="plans"]').click();
   await page.locator("[data-plan]").first().click();
   assert.equal(
     await page.locator("#plan-status-policy").inputValue(),
-    "strict200",
+    "assertions",
   );
   assert.equal(
     await page.locator("#plan-description").inputValue(),

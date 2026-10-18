@@ -1271,3 +1271,9 @@ body.compact-ui .sidebar {
 .split-layout .metrics {
   padding: 6px 0;
 }
+
+.settings-nav button.active {
+  background: var(--hover);
+  color: var(--accent);
+  font-weight: 600;
+}

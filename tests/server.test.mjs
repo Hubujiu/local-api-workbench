@@ -171,6 +171,40 @@ test("manual debug variables remain project scoped and can be cleared", async (t
   };
   const result = await call("execute", { request: next });
   assert(result.request.url.endsWith("?token=abc"));
+  const debugURL = app.url + "/api/projects/" + project.id + "/debug-variables";
+  const runtime = await (
+    await fetch(debugURL, { headers: { "x-local-token": app.token } })
+  ).json();
+  assert.equal(runtime.variables.token, "abc");
+  const edited = await fetch(debugURL, {
+    method: "PUT",
+    headers: { "x-local-token": app.token, "content-type": "application/json" },
+    body: JSON.stringify({
+      environmentId: runtime.environmentId,
+      fingerprint: runtime.fingerprint,
+      runtimeFingerprint: runtime.runtimeFingerprint,
+      variables: { ...runtime.variables, token: false },
+    }),
+  });
+  assert.equal(edited.status, 200);
+  assert(
+    (await call("execute", { request: next })).request.url.endsWith(
+      "?token=false",
+    ),
+  );
+  assert.equal(
+    Object.hasOwn(
+      (await app.store.get(project.id)).environments[0].variables,
+      "token",
+    ),
+    false,
+  );
+  const stale = await fetch(debugURL, {
+    method: "PUT",
+    headers: { "x-local-token": app.token, "content-type": "application/json" },
+    body: JSON.stringify({ fingerprint: "stale", variables: {} }),
+  });
+  assert.equal(stale.status, 400);
   await call("clear-session", {});
   const missing = await call("execute", { request: next });
   assert.match(missing.error, /token/);

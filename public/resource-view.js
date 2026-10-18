@@ -34,8 +34,9 @@ export const resources = {
     help: "在接口工具栏选择项目维护的生命周期状态。",
   },
 };
-export function resourcePanels(project) {
+export function resourcePanels(project, only) {
   return Object.entries(resources)
+    .filter(([key]) => !only || key === only)
     .map(
       ([key, spec]) =>
         '<section class="card" id="resource-' +
@@ -54,7 +55,7 @@ export function resourcePanels(project) {
     )
     .join("");
 }
-export function settingsSidebar() {
+export function settingsSidebar(active = "settings-basic") {
   return (
     '<div class="settings-nav"><strong>项目配置</strong>' +
     [
@@ -69,7 +70,15 @@ export function settingsSidebar() {
     ]
       .map(
         ([id, title]) =>
-          '<button data-settings-anchor="' + id + '">' + title + "</button>",
+          '<button data-settings-anchor="' +
+          id +
+          '" class="' +
+          (active === id ? "active" : "") +
+          '" ' +
+          (active === id ? 'aria-current="page"' : "") +
+          ">" +
+          title +
+          "</button>",
       )
       .join("") +
     '<hr><strong>连接</strong><button data-page="database">数据库连接</button><hr><strong>导入 / 导出</strong><button id="import">导入项目（手动）</button><button id="export">导出项目</button></div>'

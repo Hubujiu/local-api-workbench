@@ -180,3 +180,8 @@ Twenty-fifth pass: persistent variable scopes
 - Concurrent same-variable edits reject without overwrite. Unrelated edits survive. Persistence failures mark the step failed and retain request/response evidence while reverting uncommitted persistent layers.
 - Extraction destination selector exposes runtime/local/environment/global. UI adopts only a revision-checked, field-checked write receipt, preserving unsaved request fields and rejecting ambiguous concurrent drafts instead of silently overwriting them.
 - Real local HTTP/MCP, CLI persistence and browser save-after-script acceptance are included. Full original SDK compatibility is still not claimed.
+
+Twenty-sixth pass:
+- New plans created through UI/MCP now default to original-compatible strict200. Existing saved plans retain their explicit/legacy policy; interface debugging remains assertion-aware. Regression distinguishes new creation from old-plan updates.
+- Settings secondary navigation now switches dedicated panes instead of scrolling one long page. Top MCP/environment shortcuts select their intended pane; selected navigation is marked.
+- Added per-environment runtime-value read/edit UI. Edits remain process-local; persistent and runtime fingerprints reject stale editors. Clearing restores persisted baseline values. Server and browser regressions cover read/edit/reopen without changing stored environment values.

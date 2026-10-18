@@ -2,6 +2,10 @@ import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual") {
   const next = snapshotPlan({
     ...input,
+    statusPolicy:
+      input.statusPolicy ??
+      previous?.statusPolicy ??
+      (previous ? "assertions" : "strict200"),
     source,
     updatedAt: new Date().toISOString(),
   });

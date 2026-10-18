@@ -1,3 +1,4 @@
+import { settingsPanel } from "./settings-view.js";
 import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
 import {
@@ -8,8 +9,7 @@ import {
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans } from "./plan-view.js";
-import { resources, resourcePanels, settingsSidebar } from "./resource-view.js";
-import { environmentExtras } from "./environment-view.js";
+import { resources, settingsSidebar } from "./resource-view.js";
 import { highlightJSON } from "./code-format.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
 import { exportDocumentation } from "./document-export.js";
@@ -59,7 +59,8 @@ let opened = [],
   helperOpen = false,
   bodyExpanded = false,
   responseLayout = "stacked",
-  compactUI = false;
+  compactUI = false,
+  settingsSection = "settings-basic";
 const methodOptions = [
   "GET",
   "POST",
@@ -324,9 +325,9 @@ function render() {
       )
       .join(
         "",
-      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost ${page === "plans" ? "active" : ""}">执行计划</button><button id="mcp-status" data-page="settings" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
+      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost ${page === "plans" ? "active" : ""}">执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
       page === "settings"
-        ? settingsSidebar()
+        ? settingsSidebar(settingsSection)
         : `<div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="tree-filter"><select id="tree-type" aria-label="内容类型">${[
             ["all", "全部类型"],
             ["http", "HTTP"],
@@ -354,7 +355,7 @@ function render() {
             })
             .join(
               "",
-            )}<button id="tab-add" class="ghost">＋</button><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" class="ghost" title="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}<button id="tab-add" class="ghost">＋</button><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" data-settings-target="settings-environments" class="ghost" title="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
@@ -567,8 +568,7 @@ function modePanel(r) {
 }
 function renderPage() {
   if (!project) return "";
-  if (page === "settings")
-    return `<div class="page"><div class="page-head"><div><h1 id="settings-basic">项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2 id="settings-environments">环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}${resourcePanels(project)}<section id="settings-mock" class="card"><h3>Mock 服务</h3><label><input id="mock-enabled" type="checkbox" ${project.settings?.mockEnabled !== false ? "checked" : ""}>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与智能匹配规则。规则从上到下匹配，一条规则内所有条件必须满足。</p></section><div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card" id="settings-mcp"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；仅在勾选保留授权后跨重启生效。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
+  if (page === "settings") return settingsPanel(project, settingsSection);
   if (page === "plans")
     return renderPlans({ project, planId, lastRun, busy, tab: planTab });
   if (page === "history")
@@ -747,6 +747,7 @@ function bind() {
     collect();
     bodyExpanded = false;
     page = e.dataset.page;
+    if (e.dataset.settingsTarget) settingsSection = e.dataset.settingsTarget;
     if (page === "plans") planTab = "plans";
     render();
   });
@@ -1110,11 +1111,11 @@ function bind() {
           : element.value;
     mark();
   });
-  on("[data-settings-anchor]", "click", (_, element) =>
-    document
-      .getElementById(element.dataset.settingsAnchor)
-      ?.scrollIntoView({ block: "start" }),
-  );
+  on("[data-settings-anchor]", "click", (_, element) => {
+    collect();
+    settingsSection = element.dataset.settingsAnchor;
+    render();
+  });
   on("[data-edit-resource]", "click", (_, element) => {
     const key = element.dataset.editResource,
       spec = resources[key];
@@ -1597,6 +1598,27 @@ function bind() {
     projects = await api("/projects");
     render();
     toast("项目已恢复");
+  });
+  on("[data-debug-env]", "click", async (_, element) => {
+    const projectId = project.id;
+    const context = await api(
+      "/projects/" +
+        projectId +
+        "/debug-variables?environmentId=" +
+        encodeURIComponent(element.dataset.debugEnv),
+    );
+    modal(
+      "调试运行时变量",
+      "<p>这是当前有效值，包含全局/环境基础值。修改仅影响本进程内此环境的调试；不写入项目文件。删除基础值会临时隐藏它，清空调试变量后恢复。持久化变量变化后，旧运行值也会失效。</p>" +
+        jsonEditor(context.variables),
+      async () => {
+        await api("/projects/" + projectId + "/debug-variables", "PUT", {
+          ...context,
+          variables: JSON.parse($("#modal-json").value),
+        });
+        toast("运行时变量已更新");
+      },
+    );
   });
   on("#clear-session", "click", async () => {
     await api("/projects/" + project.id + "/clear-session", "POST", {});

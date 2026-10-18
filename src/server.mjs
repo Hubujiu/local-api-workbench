@@ -1,4 +1,4 @@
-import { scopedExecution } from "./variable-scopes.mjs";
+import { scopedExecution, scopeMap } from "./variable-scopes.mjs";
 import {
   parseParameterImport,
   previewParameterImport,
@@ -24,7 +24,7 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { Store, executeRequest } from "./runtime.mjs";
 import {
   id,
@@ -329,6 +329,40 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (
+            action === "debug-variables" &&
+            ["GET", "PUT"].includes(req.method)
+          ) {
+            const data = req.method === "PUT" ? await body(req) : {};
+            const context = debugEnvironment(
+              p,
+              data.environmentId || u.searchParams.get("environmentId"),
+              debugEnvironments,
+            );
+            const runtimeFingerprint = createHash("sha256")
+              .update(JSON.stringify(context.variables))
+              .digest("hex");
+            if (req.method === "PUT") {
+              if (data.runtimeFingerprint !== runtimeFingerprint)
+                throw Error("运行时变量已变化，请重新读取");
+              if (data.fingerprint !== context.fingerprint)
+                throw Error("环境变量已变化，请重新读取运行时变量");
+              if (!data.variables || Object.keys(data.variables).length > 10000)
+                throw Error("运行时变量最多10000项");
+              const variables = scopeMap(data.variables);
+              debugEnvironments.set(context.cacheKey, {
+                fingerprint: context.fingerprint,
+                variables,
+              });
+              return json(res, 200, { ok: true });
+            }
+            return json(res, 200, {
+              environmentId: context.environment.id,
+              fingerprint: context.fingerprint,
+              runtimeFingerprint,
+              variables: context.variables,
+            });
+          }
           if (action === "clear-session" && req.method === "POST") {
             for (const key of debugEnvironments.keys())
               if (key.startsWith(p.id + ":")) debugEnvironments.delete(key);
