@@ -74,6 +74,39 @@ export function extractResponseValue(response, extraction) {
     throw Error("无法提取 " + (extraction.path || source));
   return value;
 }
+export async function extractResponse(response, extraction) {
+  if (extraction.source !== "regex")
+    return extractResponseValue(response, extraction);
+  extractResponseValue(response, { ...extraction, source: "text" });
+  const source = String(extraction.path || "");
+  const end = source.lastIndexOf("/");
+  if (!source.startsWith("/") || end < 1 || source.length > 2000)
+    throw Error("正则需要 /表达式/flags 格式，最多 2000 字符");
+  const group =
+    extraction.group === undefined || extraction.group === ""
+      ? 0
+      : Number(extraction.group);
+  if (!Number.isInteger(group) || group < 0 || group > 99)
+    throw Error("正则捕获组必须为 0–99");
+  if (Buffer.byteLength(response.body || "") > 256 * 1024)
+    throw Error("正则提取响应文本最多 256 KiB");
+  const result = await runScript(
+    "const match = new RegExp(" +
+      JSON.stringify(source.slice(1, end)) +
+      "," +
+      JSON.stringify(source.slice(end + 1)) +
+      ").exec(pm.response.text()); apt.setVar('matched', match && match[" +
+      group +
+      "] !== undefined); if (match && match[" +
+      group +
+      "] !== undefined) apt.setVar('value', match[" +
+      group +
+      "]);",
+    { variables: {}, response: { body: response.body } },
+  );
+  if (!result.variables.matched) throw Error("正则未匹配或捕获组不存在");
+  return result.variables.value;
+}
 export function normalizeRequest(r = {}) {
   if (!r || typeof r !== "object" || Array.isArray(r))
     throw Error("接口定义必须是对象");
@@ -289,7 +322,7 @@ export async function runPlan(
         record.request.assertions,
       );
       for (const extraction of record.request.extract) {
-        const value = extractResponseValue(record.response, extraction);
+        const value = await extractResponse(record.response, extraction);
         vars[extraction.name] = value;
         record.extracted[extraction.name] = value;
       }

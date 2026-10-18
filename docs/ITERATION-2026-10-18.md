@@ -126,3 +126,8 @@ Desktop diagnostic checkpoint:
 Eighteenth pass:
 - Matched the reference's six primary rail entries: recent, APIs, documents, dictionary, settings and Git (plus bottom trash). Protocol creation now lives in the project tree's New menu; database connections live under settings. Saved protocol items remain directly openable from the tree.
 - Browser and packaged-desktop acceptance paths follow these real navigation changes; capabilities are not removed.
+
+Nineteenth pass:
+- Text regex extraction now executes inside the existing isolated QuickJS worker, with a 256 KiB response limit, 2000-character expression limit, VM interruption and a two-second outer worker deadline. No regex is evaluated on the HTTP server's main thread.
+- UI exposes expression and capture group (0 is full match). Missing groups, invalid expressions and limits fail explicitly with response evidence retained. XML/XPath and persisted variable destination scopes remain open.
+- Regression includes a catastrophic-backtracking expression to verify bounded termination; empty matches are distinct from missing matches.

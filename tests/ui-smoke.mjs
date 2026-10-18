@@ -485,12 +485,25 @@ try {
   await page.locator("#add-extract").click();
   await page.locator('[data-extract="0:name"]').fill("elapsed");
   await page.locator('[data-extract="0:source"]').selectOption("duration");
+  await page.locator("#add-extract").click();
+  await page.locator('[data-extract="1:name"]').fill("wholeText");
+  await page.locator('[data-extract="1:source"]').selectOption("regex");
+  await page.locator('[data-extract="1:path"]').fill("/(.+)/");
+  await page.locator('[data-extract="1:group"]').fill("1");
   await saveAndWait();
   await page.reload();
   await page.locator('[data-param="extract"]').click();
   assert.equal(
     await page.locator('[data-extract="0:source"]').inputValue(),
     "duration",
+  );
+  assert.equal(
+    await page.locator('[data-extract="1:source"]').inputValue(),
+    "regex",
+  );
+  assert.equal(
+    await page.locator('[data-extract="1:group"]').inputValue(),
+    "1",
   );
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
