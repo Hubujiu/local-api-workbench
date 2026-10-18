@@ -520,6 +520,36 @@ try {
     .getByText("ui-fixture-token", { exact: false })
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-script-http.png" });
+  const preLoadRevision = (await app.store.get(scopeSavedProject.id))
+    .configRevision;
+  await page.locator('[data-mode="load"]').click();
+  await page.locator("#load-count").fill("2");
+  await page.locator("#load-concurrency").fill("2");
+  page.once("dialog", (dialog) => {
+    assert.match(dialog.message(), /有权/);
+    dialog.accept();
+  });
+  const loadResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/load"),
+  );
+  await page.locator("#load-run").click();
+  const loadPayload = await (await loadResponse).json();
+  assert.equal(loadPayload.passed, 2, JSON.stringify(loadPayload));
+  assert.equal(loadPayload.scriptRequests, 2);
+  assert.equal(loadPayload.mainRequests, 2);
+  assert.equal(loadPayload.variableIsolation, "per-request");
+  assert.equal(
+    (await app.store.get(scopeSavedProject.id)).configRevision,
+    preLoadRevision,
+  );
+  await page
+    .locator(".grid-stats")
+    .getByText("脚本子请求", { exact: false })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-load-pipeline.png" });
+  await page.locator('[data-mode="debug"]').click();
 
   await page.locator("#import").click();
   await page.locator("#dialog").waitFor({ state: "visible" });

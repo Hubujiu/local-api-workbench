@@ -574,13 +574,23 @@ function modePanel(r) {
         .join("") ||
       '<div class="notice">尚无用例。可分别验证成功、参数缺失和认证失败等场景。</div>'
     }</div>`;
-  return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。上限 100 次、并发 10，支持取消。</p><div class="row"><label>请求数 <input id="load-count" type="number" value="10" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="1" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div>${
+  return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><div class="row"><label>请求数 <input id="load-count" type="number" value="10" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="1" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div>${
     loadResult
       ? `<div class="grid-stats">${[
           ["完成", loadResult.count],
           ["通过", loadResult.passed],
-          ["P50", loadResult.p50 + " ms"],
-          ["P95", loadResult.p95 + " ms"],
+          ["失败", loadResult.count - loadResult.passed],
+          ["总耗时", loadResult.elapsed + " ms"],
+          ["主请求调用", loadResult.mainRequests ?? loadResult.count],
+          ["脚本子请求", loadResult.scriptRequests ?? 0],
+          [
+            "P50",
+            loadResult.timingSamples === 0 ? "—" : loadResult.p50 + " ms",
+          ],
+          [
+            "P95",
+            loadResult.timingSamples === 0 ? "—" : loadResult.p95 + " ms",
+          ],
         ]
           .map(([l, v]) => `<div class="stat">${l}<strong>${v}</strong></div>`)
           .join(
@@ -2102,7 +2112,10 @@ function bind() {
   });
   on("#load-run", "click", async () => {
     collect();
-    if (!confirm("确认你有权对该地址执行压测？")) return;
+    if (
+      !confirm("确认你有权执行此次压测，以及其中脚本和子请求可能产生的副作用？")
+    )
+      return;
     const count = Number($("#load-count").value),
       concurrency = Number($("#load-concurrency").value);
     busy = true;

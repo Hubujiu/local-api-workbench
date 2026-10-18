@@ -1,3 +1,4 @@
+import { runLoad } from "./load-runner.mjs";
 import { readMCPActivities } from "./mcp-activity.mjs";
 import {
   resolveDynamicValue,
@@ -39,7 +40,6 @@ import {
   id,
   normalizeRequest,
   interpolate,
-  evaluateAssertions,
   importDocument,
   importIntoProject,
   exportOpenAPI,
@@ -712,82 +712,25 @@ export async function createApp({
           }
           if (action === "load" && req.method === "POST") {
             const b = await body(req),
-              count = Math.min(
-                100,
-                Math.max(1, Math.floor(Number(b.count)) || 10),
-              ),
-              concurrency = Math.min(
-                10,
-                Math.max(1, Math.floor(Number(b.concurrency)) || 1),
-              ),
               controller = new AbortController();
-            const request = resolveServiceRequest(
+            const context = debugEnvironment(
               p,
-              interpolate(
-                normalizeRequest(b.request),
-                environmentVariables(p, b.environmentId),
-              ),
               b.environmentId,
+              debugEnvironments,
             );
             controllers.set(b.runId, controller);
-            const results = [];
-            let cursor = 0;
-            const started = Date.now();
             try {
-              await Promise.all(
-                Array.from({ length: concurrency }, async () => {
-                  while (cursor < count && !controller.signal.aborted) {
-                    const index = cursor++;
-                    try {
-                      const response = await executeRequest(
-                        request,
-                        controller.signal,
-                      );
-                      results.push({
-                        index,
-                        status: response.status,
-                        duration: response.duration,
-                        ...(response.status < 200 || response.status >= 300
-                          ? {
-                              responsePreview: String(
-                                response.body || "",
-                              ).slice(0, 1024),
-                            }
-                          : {}),
-                        passed:
-                          response.status >= 200 &&
-                          response.status < 300 &&
-                          evaluateAssertions(
-                            response,
-                            request.assertions,
-                          ).every((a) => a.passed),
-                      });
-                    } catch (e) {
-                      results.push({ index, error: e.message, passed: false });
-                    }
-                  }
+              return json(
+                res,
+                200,
+                await runLoad(p, b.request, {
+                  count: b.count,
+                  concurrency: b.concurrency,
+                  environmentId: context.environment.id,
+                  variables: context.variables,
+                  signal: controller.signal,
                 }),
               );
-              const timings = results
-                .filter((r) => r.duration !== undefined)
-                .map((r) => r.duration)
-                .sort((a, b) => a - b);
-              return json(res, 200, {
-                count: results.length,
-                requested: count,
-                concurrency,
-                elapsed: Date.now() - started,
-                passed: results.filter((r) => r.passed).length,
-                p50: timings[Math.floor(timings.length * 0.5)] || 0,
-                p95:
-                  timings[
-                    Math.min(
-                      timings.length - 1,
-                      Math.floor(timings.length * 0.95),
-                    )
-                  ] || 0,
-                results: results.sort((a, b) => a.index - b.index),
-              });
             } finally {
               controllers.delete(b.runId);
             }

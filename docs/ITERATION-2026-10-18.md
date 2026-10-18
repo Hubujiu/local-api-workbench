@@ -397,3 +397,10 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 - Tests cover atomic metadata preservation first, then browser creation of a201JSON response with typed boolean example, retention of the original200text/header definition, disk persistence and OpenAPI export of the actual saved result.
 
 Response retry review additionally keeps pending schema edits transactional when outer status/media validation fails: reading the draft no longer clears its pending editor. The browser rejects a duplicate200response, changes the pending false example to true, retries as201and checks the saved/exported true value. URI-encoded local references and deletion of anchored schema subtrees also take the safe advanced-edit route.
+
+## Fifty-eighth pass: truthful load execution
+
+- Found that the load route bypassed pre/post scripts and dynamic values. A new fixed test first proved a post-script failure was wrongly counted as2passes. Route samples through the existing request pipeline instead.
+- Keep100primary executions/concurrency10, count script child calls separately, and preserve cancellation. Per-sample variable scopes are isolated and do not persist to disk or leak across concurrent samples; UI and confirmation text describe script side effects.
+- Summaries retain failed assertion names/phases, bounded child evidence, HTTP duration and full-sample elapsed. No-response runs show no latency sample instead of implying a0msrequest.
+- Tests exercise parallel token callbacks, dynamic JSON body, post-script failure, isolated variable counters, unchanged saved project variables and cancellation after the first observed request. The existing ten100-request probe remains unchanged. Browser checks execute2authorized local mock samples and confirm script counts and unchanged config revision.
