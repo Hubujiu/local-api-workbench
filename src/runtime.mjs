@@ -1,3 +1,4 @@
+import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
@@ -108,6 +109,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validateEnvironmentModel(p);
     const task = this.pending
       .catch(() => {})
       .then(async () => {

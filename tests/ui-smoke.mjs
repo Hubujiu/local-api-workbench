@@ -226,7 +226,40 @@ try {
   await page.locator("#mcp-enabled").uncheck();
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#edit-globals").click();
+  await page.locator("#modal-json").fill('{"tenant":"ui-global"}');
+  await page.locator("#dialog-save").click();
+  await page.locator("#add-service").click();
+  await page.locator("#service-name").fill("UI Backend");
+  await page.locator("[data-service-url]").first().fill(fixtureURL);
+  await page.locator("#dialog-save").click();
+  await saveAndWait();
+  await page.reload();
+  await page.locator('[data-page="settings"]').click();
+  await page.locator("[data-edit-service]").waitFor();
+  assert((await page.locator("body").innerText()).includes("ui-global"));
   await page.screenshot({ path: "/tmp/local-api-settings.png" });
+  await page.locator('[data-page="plans"]').click();
+  await page.locator("[data-plan]").first().click();
+  await page
+    .locator("#plan-description")
+    .fill("Visible deterministic verification plan");
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/plans") &&
+        r.status() === 200,
+    ),
+    page.locator("#save-plan-details").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="plans"]').click();
+  await page.locator("[data-plan]").first().click();
+  assert.equal(
+    await page.locator("#plan-description").inputValue(),
+    "Visible deterministic verification plan",
+  );
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

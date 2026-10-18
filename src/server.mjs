@@ -1,3 +1,10 @@
+import {
+  environmentVariables,
+  selectedEnvironment,
+  resolveServiceRequest,
+  debugEnvironment,
+  manageEnvironment,
+} from "./environments.mjs";
 import { createMCP } from "./mcp.mjs";
 import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
@@ -105,7 +112,7 @@ export async function createApp({
         const message = await body(req);
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
-        const dispatch = createMCP({ store, ...mcp });
+        const dispatch = createMCP({ store, ...mcp, debugEnvironments });
         const result = await dispatch(message);
         if (message.method === "tools/call")
           mcpLastActivity = {
@@ -310,20 +317,50 @@ export async function createApp({
             const b = await body(req);
             return json(res, 200, { sample: sampleFromSchema(b.schema || {}) });
           }
+          if (action === "environments" && req.method === "POST") {
+            const b = await body(req);
+            const allowedOperations = [
+              "list_environments",
+              "switch_environment",
+              "create_environment",
+              "update_environment",
+              "delete_environment",
+              "list_environment_servers",
+              "create_environment_server",
+              "update_environment_server",
+              "delete_environment_server",
+              "get_environment_variables",
+              "upsert_environment_variable",
+              "delete_environment_variable",
+              "get_global_variables",
+              "upsert_global_variable",
+              "delete_global_variable",
+            ];
+            if (!allowedOperations.includes(b.operation))
+              throw Error("环境操作不存在");
+            const result = manageEnvironment(p, b.operation, b.arguments || {});
+            if (
+              !b.operation.startsWith("list_") &&
+              !b.operation.startsWith("get_")
+            )
+              await store.save(p);
+            return json(res, 200, { result, project: p });
+          }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req),
-              environment =
-                p.environments.find((item) => item.id === data.environmentId) ||
-                p.environments[0];
-            const key = p.id + ":" + (environment?.id || "default"),
-              fingerprint = JSON.stringify(environment?.variables || {}),
-              cached = debugEnvironments.get(key);
-            const variables =
-              cached?.fingerprint === fingerprint
-                ? cached.variables
-                : environment?.variables || {};
+              context = debugEnvironment(
+                p,
+                data.environmentId,
+                debugEnvironments,
+              );
             return json(res, 200, {
-              curl: toCurl(interpolate(data.request, variables)),
+              curl: toCurl(
+                resolveServiceRequest(
+                  p,
+                  interpolate(data.request, context.variables),
+                  context.environment.id,
+                ),
+              ),
             });
           }
           if (action === "execute" && req.method === "POST") {
@@ -332,25 +369,24 @@ export async function createApp({
               runId = b.runId || id();
             controllers.set(runId, controller);
             try {
-              const selectedEnvironment =
-                p.environments.find((e) => e.id === b.environmentId) ||
-                p.environments[0];
-              const environmentKey =
-                p.id + ":" + (selectedEnvironment?.id || "default");
-              const fingerprint = JSON.stringify(
-                selectedEnvironment?.variables || {},
+              const context = debugEnvironment(
+                p,
+                b.environmentId,
+                debugEnvironments,
               );
-              const cached = debugEnvironments.get(environmentKey);
-              const env =
-                cached?.fingerprint === fingerprint
-                  ? cached.variables
-                  : selectedEnvironment?.variables || {};
+              const environmentKey = context.cacheKey,
+                fingerprint = context.fingerprint,
+                env = context.variables;
               const request = normalizeRequest(b.request);
               const single = await runPlan(
                 snapshotPlan({ name: request.name, steps: [{ request }] }),
                 env,
                 executeRequest,
-                { signal: controller.signal },
+                {
+                  signal: controller.signal,
+                  prepareRequest: (request) =>
+                    resolveServiceRequest(p, request, context.environment.id),
+                },
               );
               const result = single.results[0];
               if (result?.response)
@@ -384,7 +420,11 @@ export async function createApp({
                 (p.configRevision ?? p.revision)
             )
               throw Error("项目已有其他修改，请重新加载");
-            const plan = snapshotPlan(b);
+            const plan = snapshotPlan({
+              ...b,
+              updatedAt: new Date().toISOString(),
+              source: "manual",
+            });
             const index = p.plans.findIndex((x) => x.id === plan.id);
             if (index < 0) p.plans.push(plan);
             else p.plans[index] = plan;
@@ -402,12 +442,12 @@ export async function createApp({
             const controller = new AbortController();
             controllers.set(b.runId, controller);
             try {
-              const env =
-                p.environments.find(
-                  (e) => e.id === (b.environmentId || plan.environmentId),
-                )?.variables || {};
+              const environmentId = b.environmentId || plan.environmentId;
+              const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 signal: controller.signal,
+                prepareRequest: (request) =>
+                  resolveServiceRequest(p, request, environmentId),
               });
               await store.append(p.id, "runs", run);
               return json(res, 200, run);
@@ -426,10 +466,13 @@ export async function createApp({
                 Math.max(1, Math.floor(Number(b.concurrency)) || 1),
               ),
               controller = new AbortController();
-            const request = interpolate(
-              normalizeRequest(b.request),
-              p.environments.find((e) => e.id === b.environmentId)?.variables ||
-                {},
+            const request = resolveServiceRequest(
+              p,
+              interpolate(
+                normalizeRequest(b.request),
+                environmentVariables(p, b.environmentId),
+              ),
+              b.environmentId,
             );
             controllers.set(b.runId, controller);
             const results = [];

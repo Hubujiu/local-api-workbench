@@ -1,3 +1,7 @@
+import {
+  environmentVariables,
+  resolveServiceRequest,
+} from "../src/environments.mjs";
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { Store, executeRequest } from "../src/runtime.mjs";
@@ -24,10 +28,12 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       : plan.environmentId;
     const run = await runPlan(
       plan,
-      project.environments.find((e) => e.id === environmentId)?.variables || {},
+      environmentVariables(project, environmentId),
       executeRequest,
       {
         signal: controller.signal,
+        prepareRequest: (request) =>
+          resolveServiceRequest(project, request, environmentId),
         onStep: (step) =>
           process.stderr.write(`${step.status.toUpperCase()} ${step.name}\n`),
       },

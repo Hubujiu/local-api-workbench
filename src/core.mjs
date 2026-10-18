@@ -73,12 +73,13 @@ export function normalizeRequest(r = {}) {
   )
     throw Error("不支持的 HTTP 方法");
   const url = String(r.url || "");
-  if (url && !/^https?:\/\//.test(url) && !url.includes("{{"))
+  if (url && !/^https?:\/\//.test(url) && !url.includes("{{") && !r.serviceId)
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
+    serviceId: String(r.serviceId || ""),
     folder: r.folder || "",
     description: r.description || "",
     method,
@@ -158,6 +159,9 @@ export function snapshotPlan(plan) {
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
+    description: String(plan.description || ""),
+    updatedAt: plan.updatedAt || new Date().toISOString(),
+    source: plan.source === "ai" ? "ai" : "manual",
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
     steps: plan.steps.map((s) => ({
@@ -173,7 +177,7 @@ export async function runPlan(
   plan,
   variables,
   execute,
-  { signal, onStep } = {},
+  { signal, onStep, prepareRequest } = {},
 ) {
   const snapshot = structuredClone(plan);
   const vars = { ...variables };
@@ -216,6 +220,7 @@ export async function runPlan(
           throw Error("前置脚本断言失败");
       }
       record.request = interpolate(configuredRequest, vars);
+      if (prepareRequest) record.request = prepareRequest(record.request);
       record.response = await execute(record.request, signal);
       record.assertions = evaluateAssertions(
         record.response,
