@@ -119,6 +119,34 @@ try {
   await page.locator("#new-plan").click();
   await page.locator("#plan-name").fill("可重复验证");
   await page.locator("#dialog-save").click();
+  await page.locator('[data-step-edit="0"]').click();
+  await page.locator('[data-step-field="name"]').fill("独立快照步骤");
+  await page
+    .locator(".step-editor summary")
+    .getByText("Header", { exact: true })
+    .click();
+  await page.locator('[data-step-add="headers"]').click();
+  const newHeader = page
+    .locator('[data-step-pairs="headers"] [data-step-pair-row]')
+    .last();
+  await newHeader.locator("[data-step-key]").fill("x-step-proof");
+  await newHeader.locator("[data-step-value]").fill("snapshot");
+  await page.screenshot({ path: "/tmp/local-api-step-editor.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-step-edit="0"]').click();
+  assert.equal(
+    await page.locator('[data-step-field="name"]').inputValue(),
+    "独立快照步骤",
+  );
+  assert.equal(
+    await page
+      .locator('[data-step-pairs="headers"] [data-step-value]')
+      .last()
+      .inputValue(),
+    "snapshot",
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page
     .getByRole("button", { name: "执行计划", exact: true })
     .last()

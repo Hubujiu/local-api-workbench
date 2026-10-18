@@ -1094,3 +1094,24 @@ body.dark button.primary {
     flex-wrap: wrap;
   }
 }
+
+.step-editor details {
+  margin: 14px 0;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.step-editor summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.step-editor textarea {
+  min-height: 120px;
+}
+.step-editor .row {
+  margin: 6px 0;
+}
+.step-editor input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}

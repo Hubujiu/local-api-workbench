@@ -96,3 +96,8 @@ Thirteenth pass:
 - Source scope: https://wiki.apipost.cn/docs/http_debug/set-valuable/ is supplementary online documentation, not proof of identical offline semantics.
 - 93 local tests pass; browser adds extraction-source save/reload.
 - Visual regression a07aa54 correctly failed: this Linux font's vertical glyph metrics still overlap with writing-mode. Replaced vertical shaping with four ordinary horizontal glyph rows rather than weakening the height check.
+
+Fourteenth pass:
+- Replaced the JSON-only step-edit modal with a snapshot form: name, method, URL, enabled Header/Query/Path/Cookie rows, body mode/content and step scripts.
+- Editing retains IDs, parameter metadata, authentication, form-file data, assertions and other untouched advanced fields. The source API is not mutated. Advanced plan JSON remains available.
+- 94 local tests pass; browser checks add/save/reopen and actual execution with a step header, and captures the editor screenshot.

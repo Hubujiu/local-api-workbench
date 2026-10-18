@@ -1,3 +1,4 @@
+import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
 import {
   dictionaryPanel,
   insertDictionaryField,
@@ -1915,10 +1916,46 @@ function bind() {
   on("[data-step-edit]", "click", (_, e) => {
     const p = project.plans.find((p) => p.id === planId),
       i = Number(e.dataset.stepEdit);
-    modal("编辑步骤快照", jsonEditor(p.steps[i]), () => {
-      p.steps[i] = JSON.parse($("#modal-json").value);
+    modal("编辑步骤快照", stepEditor(p.steps[i]), () => {
+      const fields = Object.fromEntries(
+        [...$("#dialog-content").querySelectorAll("[data-step-field]")].map(
+          (el) => [el.dataset.stepField, el.value],
+        ),
+      );
+      const groups = {};
+      for (const key of ["headers", "query", "path", "cookies"])
+        groups[key] = [
+          ...$("#dialog-content").querySelectorAll(
+            '[data-step-pairs="' + key + '"] [data-step-pair-row]',
+          ),
+        ].map((row) => ({
+          index: Number(row.dataset.stepPairRow.split(":")[1]),
+          key: row.querySelector("[data-step-key]").value,
+          value: row.querySelector("[data-step-value]").value,
+          enabled: row.querySelector("[data-step-enabled]").checked,
+        }));
+      p.steps[i] = applyStepEdits(p.steps[i], fields, groups);
       return savePlan(p);
     });
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-step-add]",
+    ))
+      button.onclick = () => {
+        const key = button.dataset.stepAdd;
+        const holder = $("#dialog-content").querySelector(
+          '[data-step-pairs="' + key + '"]',
+        );
+        holder.insertAdjacentHTML("beforeend", pairRow(key, -1));
+        for (const remove of holder.querySelectorAll("[data-step-remove]")) {
+          remove.type = "button";
+          remove.onclick = () =>
+            remove.closest("[data-step-pair-row]").remove();
+        }
+      };
+    for (const remove of $("#dialog-content").querySelectorAll(
+      "[data-step-remove]",
+    ))
+      remove.onclick = () => remove.closest("[data-step-pair-row]").remove();
   });
   on("#run-plan", "click", async () => {
     if (dirty) {
