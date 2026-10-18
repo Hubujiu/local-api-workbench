@@ -239,6 +239,21 @@ try {
   await page.locator("#mcp-enabled").uncheck();
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-edit-resource="functions"]').click();
+  await page
+    .locator("#modal-json")
+    .fill('[{"name":"double","body":"return args[0]*2;"}]');
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-settings-anchor="resource-functions"]').click();
+  assert(
+    (await page.locator("#resource-functions").innerText()).includes("double"),
+  );
   await page.locator("#edit-globals").click();
   await page.locator("#modal-json").fill('{"tenant":"ui-global"}');
   await page.locator("#dialog-save").click();
@@ -273,6 +288,29 @@ try {
     await page.locator("#plan-description").inputValue(),
     "Visible deterministic verification plan",
   );
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-mode="cases"]').click();
+  await page.locator("#new-interface-case").click();
+  await page.locator("#case-name").fill("Independent persisted case");
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/cases") &&
+        r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.reload();
+  await page.locator('[data-mode="cases"]').click();
+  await page.getByText("Independent persisted case", { exact: true }).waitFor();
+  await page.locator("[data-run-case]").click();
+  await page
+    .locator(".page pre")
+    .getByText('"outcome": "passed"', { exact: false })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-cases.png" });
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

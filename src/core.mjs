@@ -54,7 +54,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
-  for (const key of ["auth", "tls"])
+  for (const key of ["auth", "tls", "attributes"])
     if (
       r[key] !== undefined &&
       (!r[key] || typeof r[key] !== "object" || Array.isArray(r[key]))
@@ -82,6 +82,8 @@ export function normalizeRequest(r = {}) {
     serviceId: String(r.serviceId || ""),
     folder: r.folder || "",
     description: r.description || "",
+    statusId: String(r.statusId || ""),
+    attributes: r.attributes || {},
     method,
     url,
     query: r.query || [],
@@ -160,6 +162,7 @@ export function snapshotPlan(plan) {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
+    functions: structuredClone(plan.functions || []),
     updatedAt: plan.updatedAt || new Date().toISOString(),
     source: plan.source === "ai" ? "ai" : "manual",
     provenance: plan.provenance || { fields: {}, steps: {} },
@@ -210,6 +213,7 @@ export async function runPlan(
       if (configuredRequest.beforeScript) {
         const scripted = await runScript(configuredRequest.beforeScript, {
           variables: vars,
+          functions: snapshot.functions || [],
           request: configuredRequest,
         });
         replaceVariables(vars, scripted.variables);
@@ -247,6 +251,7 @@ export async function runPlan(
       if (record.request.afterScript) {
         const scripted = await runScript(record.request.afterScript, {
           variables: vars,
+          functions: snapshot.functions || [],
           request: record.request,
           response: record.response,
         });
@@ -722,7 +727,7 @@ export function restoreProject(document) {
     )
       throw Error("环境数据无效");
   }
-  for (const key of ["history", "runs", "dictionary", "documents"]) {
+  for (const key of ["history", "runs", "dictionary", "documents", "cases"]) {
     if (
       document[key] !== undefined &&
       (!Array.isArray(document[key]) ||

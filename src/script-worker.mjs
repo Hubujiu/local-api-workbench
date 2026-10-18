@@ -30,7 +30,19 @@ try {
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
     };
   `;
-  for (const code of [setup, workerData.code]) {
+  const library =
+    "const utils=Object.create(null);\n" +
+    (workerData.input.functions || [])
+      .map(
+        (fn) =>
+          "utils[" +
+          JSON.stringify(fn.name) +
+          "]=(...args)=>{\n" +
+          fn.body +
+          "\n};",
+      )
+      .join("\n");
+  for (const code of [setup, library, workerData.code]) {
     const result = context.evalCode(code);
     if (result.error) {
       const error = context.dump(result.error);

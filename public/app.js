@@ -1,3 +1,4 @@
+import { resources, resourcePanels, settingsSidebar } from "./resource-view.js";
 import { environmentExtras } from "./environment-view.js";
 import { highlightJSON } from "./code-format.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
@@ -18,6 +19,7 @@ const $ = (s) => document.querySelector(s),
     );
 const uid = () => crypto.randomUUID();
 const responses = new Map();
+const caseResults = new Map();
 let opened = [],
   token = "",
   projects = [],
@@ -270,7 +272,7 @@ function render() {
       )
       .join(
         "",
-      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><button id="mcp-status" data-page="settings" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar"><div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button></aside><main class="workspace">${
+      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><button id="mcp-status" data-page="settings" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${page === "settings" ? settingsSidebar() : `<div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button>`}</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -301,7 +303,7 @@ function editor(r) {
     )
     .join(
       "",
-    )}<input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><button id="curl" title="生成 cURL">⌘</button></div>${
+    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><button id="curl" title="生成 cURL">⌘</button></div>${
     mode === "debug"
       ? `<div class="param-tabs">${[
           ["headers", "Header"],
@@ -336,7 +338,7 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.code === response.status)?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
   }</section>`;
 }
@@ -399,11 +401,20 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">直接使用完整 URL</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select><label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">直接使用完整 URL</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
-    return `<div class="page"><h2>接口用例</h2><p class="muted">将当前接口保存为独立快照；每个场景可覆盖参数、断言和变量提取。</p><button id="create-case" class="primary">＋ 从当前接口创建执行计划</button><div class="notice">在「执行计划」中添加同一接口的多个步骤，验证正常与异常输入。预期 4xx 可以用状态码断言明确验证，不误判为请求异常。</div></div>`;
+    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="create-case">从当前接口创建执行计划</button>${
+      (project.cases || [])
+        .filter((item) => item.sourceRequestId === r.id)
+        .map(
+          (item) =>
+            `<div class="card"><div class="row"><strong class="grow">${esc(item.name)}</strong><button data-run-case="${item.id}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${item.id}">编辑快照</button><button data-delete-case="${item.id}" class="danger">删除</button></div><p class="subtle">${esc(item.request.method)} ${esc(item.request.url)}</p>${caseResults.has(item.id) ? `<pre>${esc(JSON.stringify(caseResults.get(item.id), null, 2))}</pre>` : ""}</div>`,
+        )
+        .join("") ||
+      '<div class="notice">尚无用例。可分别验证成功、参数缺失和认证失败等场景。</div>'
+    }</div>`;
   return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。上限 100 次、并发 10，支持取消。</p><div class="row"><label>请求数 <input id="load-count" type="number" value="10" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="1" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div>${
     loadResult
       ? `<div class="grid-stats">${[
@@ -422,7 +433,7 @@ function modePanel(r) {
 function renderPage() {
   if (!project) return "";
   if (page === "settings")
-    return `<div class="page"><div class="page-head"><div><h1>项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2>环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}<div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
+    return `<div class="page"><div class="page-head"><div><h1 id="settings-basic">项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2 id="settings-environments">环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}${resourcePanels(project)}<div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card" id="settings-mcp"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
   if (page === "plans") {
     const plan = project.plans.find((p) => p.id === planId);
     return `<div class="page"><div class="page-head"><div><h1>AI 执行计划</h1><p id="mcp-plan-status" class="subtle"></p><span class="muted">固定步骤 · 独立快照 · 完整证据 · 可重复运行</span></div><button id="new-plan" class="primary">＋ 新建计划</button></div><div class="toolbar">${project.plans.map((p) => `<button data-plan="${p.id}" class="${planId === p.id ? "primary" : ""}">${esc(p.name)}</button>`).join("") || '<p class="muted">尚无计划。先创建接口，再组合成可重复的业务流程。</p>'}</div>${plan ? `<div class="card"><div class="row"><h3 class="grow">${esc(plan.name)}</h3><button id="edit-plan">编辑 JSON</button><button id="delete-plan" class="danger">删除计划</button><button id="add-step">＋ 添加步骤</button><button id="run-plan" class="primary" ${busy ? "disabled" : ""}>${busy ? "执行中…" : "执行计划"}</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><p class="subtle">最近修改：${esc(plan.updatedAt || plan.createdAt)} ${plan.source === "ai" ? "· AI 创建或修改，请检查后执行" : ""}</p><label>计划名称</label><input id="plan-name" class="${plan.provenance?.fields?.name === "ai" ? "ai-value" : ""}" value="${esc(plan.name)}"><label>计划说明</label><textarea id="plan-description" class="${plan.provenance?.fields?.description === "ai" ? "ai-value" : ""}">${esc(plan.description || "")}</textarea><button id="save-plan-details">保存计划说明</button><div class="row"><label>执行环境</label><select id="plan-env" class="${plan.provenance?.fields?.environmentId === "ai" ? "ai-value" : ""}">${project.environments.map((e) => `<option value="${e.id}" ${e.id === plan.environmentId ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></div>${plan.steps.map((s, i) => `<div class="plan-step ${plan.provenance?.steps?.[s.id] === "ai" ? "ai-value" : ""}"><span class="step-number">${i + 1}</span><input type="checkbox" data-step-enable="${i}" ${s.enabled ? "checked" : ""} aria-label="启用步骤"><span class="method ${s.request.method}">${s.request.method}</span><div class="grow"><strong>${esc(s.name)}</strong><div class="subtle">${esc(s.request.url)}</div></div><button data-step-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-step-edit="${i}">编辑</button><button data-step-delete="${i}" class="danger">×</button></div>`).join("") || '<div class="notice">添加步骤后执行。每一步保存接口的独立快照。</div>'}</div>` : ""}<h2>执行记录 <span class="subtle">最近 50 条</span></h2>${(lastRun ? [lastRun, ...project.runs.filter((r) => r.id !== lastRun.id)] : project.runs).map((r) => `<details class="card" ${r.id === lastRun?.id ? "open" : ""}><summary><span class="${r.status === "passed" ? "success" : "failed"}">${r.status === "passed" ? "✓ 通过" : r.status === "cancelled" ? "■ 已取消" : "× 失败"}</span> &nbsp; ${esc(r.planName)} &nbsp; <span class="subtle">${esc(r.createdAt)} · ${r.results.length} 步</span></summary><p class="subtle">快照 SHA256: ${esc(r.planHash)}</p>${r.results.map((s, i) => `<details class="card"><summary>${i + 1}. <span class="${s.status === "passed" ? "success" : "failed"}">${s.status}</span> ${esc(s.name)} · ${s.response?.status || ""} ${s.response?.duration || 0}ms</summary><pre>${esc(JSON.stringify(s, null, 2))}</pre></details>`).join("")}<button data-export-run="${r.id}">导出证据 JSON</button></details>`).join("") || '<div class="empty"><span class="empty-symbol">☷</span><p>计划运行后，逐步结果将显示在这里</p></div>'}</div>`;
@@ -705,6 +716,51 @@ function bind() {
     request().tls ??= {};
     request().tls[element.dataset.tls] = element.value;
     mark();
+  });
+  on("#request-status", "change", (_, element) => {
+    request().statusId = element.value;
+    mark();
+  });
+  on("[data-attribute]", "change", (_, element) => {
+    const field = project.settings.attributes.find(
+      (item) => item.key === element.dataset.attribute,
+    );
+    (request().attributes ??= {})[field.key] =
+      field.type === "boolean"
+        ? element.checked
+        : field.type === "number"
+          ? Number(element.value)
+          : element.value;
+    mark();
+  });
+  on("[data-settings-anchor]", "click", (_, element) =>
+    document
+      .getElementById(element.dataset.settingsAnchor)
+      ?.scrollIntoView({ block: "start" }),
+  );
+  on("[data-edit-resource]", "click", (_, element) => {
+    const key = element.dataset.editResource,
+      spec = resources[key];
+    modal(
+      "编辑" + spec.name,
+      `<p>${esc(spec.help)}</p><details><summary>示例格式</summary><pre>${esc(JSON.stringify(spec.sample, null, 2))}</pre></details>${jsonEditor(project.settings?.[key] || [])}`,
+      async () => {
+        const value = JSON.parse($("#modal-json").value);
+        if (!Array.isArray(value)) throw Error("资源必须是数组");
+        const previous = project.settings?.[key];
+        project.settings ??= {};
+        project.settings[key] = value;
+        mark();
+        try {
+          await save();
+        } catch (error) {
+          project.settings[key] = previous;
+          mark();
+          throw error;
+        }
+        render();
+      },
+    );
   });
   on("#request-service", "change", (_, e) => {
     request().serviceId = e.value;
@@ -1218,6 +1274,66 @@ function bind() {
     mode = "debug";
     mark();
     render();
+  });
+  async function editInterfaceCase(id) {
+    collect();
+    const item = (project.cases || []).find((candidate) => candidate.id === id);
+    const source = item?.sourceRequestId || current;
+    modal(
+      item ? "编辑接口用例" : "新建接口用例",
+      `<label>用例名称</label><input id="case-name" value="${esc(item?.name || "新用例")}"><label>独立请求快照</label>${jsonEditor(item?.request || request())}`,
+      async () => {
+        if (dirty) await save();
+        const result = await api("/projects/" + project.id + "/cases", "POST", {
+          id: item?.id,
+          name: $("#case-name").value,
+          sourceRequestId: source,
+          request: JSON.parse($("#modal-json").value),
+          functions: item?.functions,
+          createdAt: item?.createdAt,
+        });
+        project = result.project;
+        render();
+      },
+    );
+  }
+  on("#new-interface-case", "click", () => editInterfaceCase());
+  on("[data-edit-case]", "click", (_, e) =>
+    editInterfaceCase(e.dataset.editCase),
+  );
+  on("[data-delete-case]", "click", async (_, e) => {
+    if (!confirm("删除此接口用例？历史执行记录仍保留。")) return;
+    project.cases = (project.cases || []).filter(
+      (item) => item.id !== e.dataset.deleteCase,
+    );
+    mark();
+    await save();
+    render();
+  });
+  on("[data-run-case]", "click", async (_, e) => {
+    const item = project.cases.find(
+      (candidate) => candidate.id === e.dataset.runCase,
+    );
+    if (dirty) await save();
+    const environmentId = env();
+    busy = true;
+    runId = uid();
+    render();
+    try {
+      const result = await api("/projects/" + project.id + "/execute", "POST", {
+        request: { ...item.request, name: item.name },
+        functions: item.functions,
+        environmentId,
+        runId,
+      });
+      caseResults.set(item.id, result);
+      const latest = await api("/projects/" + project.id);
+      project.history = latest.history;
+      project.revision = latest.revision;
+    } finally {
+      busy = false;
+      render();
+    }
   });
   on("#load-run", "click", async () => {
     collect();

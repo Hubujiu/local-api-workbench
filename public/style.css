@@ -913,3 +913,23 @@ body.dark button.primary {
   width: auto;
   accent-color: var(--accent);
 }
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+.settings-nav button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+}
+.settings-nav button:hover {
+  background: var(--hover);
+}
+.settings-nav strong {
+  color: var(--muted);
+  padding: 8px;
+}

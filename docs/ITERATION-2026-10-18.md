@@ -24,3 +24,10 @@ Second pass:
 - HTTP MCP exposes bounded running/recent activity and step progress; UI shows running tasks without replacing unsaved content. Standalone stdio progress is not yet bridged to another desktop process.
 - Browser run 39084101925 failed because the new navigation test used an ambiguous settings selector (both rail and environment shortcut). Selector is now scoped to the rail; no assertion removed.
 - Current local suite: 73 passing tests. Exact new-head browser/desktop CI still required.
+
+Third pass:
+- Independent interface-case snapshots now have create/edit/delete/run UI and persisted request/assertion/function snapshots. This replaces the earlier plan-only shortcut.
+- Added project custom functions, status-code dictionary, typed custom API properties and lifecycle statuses. Shared functions run inside QuickJS as utils.name(...args), with a total source-size limit; they do not acquire host filesystem/network APIs.
+- Shared functions are copied into plans/cases so future project edits do not silently mutate saved tests.
+- Settings gets a secondary navigation tied to real resource sections. Workbench body types use radio selectors; warm dark palette and reference viewport dimensions have passed run 39084413706 on e0d6bcf, prior to these resource/case changes.
+- Latest local suite: 76 passing tests. Expanded browser case/resource checks must pass on this next exact head; not claimed complete.

@@ -1,3 +1,5 @@
+import { validateResources } from "./resources.mjs";
+import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
 import { prepareConnection } from "./connection.mjs";
@@ -81,6 +83,7 @@ export class Store {
         },
       ],
       plans: [],
+      cases: [],
       runs: [],
       history: [],
       dictionary: [],
@@ -110,6 +113,14 @@ export class Store {
   }
   async save(p, { activity = false } = {}) {
     validateEnvironmentModel(p);
+    validateResources(p.settings || {});
+    if (p.cases !== undefined) {
+      if (!Array.isArray(p.cases) || p.cases.length > 1000)
+        throw Error("用例最多1000个");
+      p.cases = p.cases.map(snapshotCase);
+      if (new Set(p.cases.map((item) => item.id)).size !== p.cases.length)
+        throw Error("用例ID重复");
+    }
     const task = this.pending
       .catch(() => {})
       .then(async () => {

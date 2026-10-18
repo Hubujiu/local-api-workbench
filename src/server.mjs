@@ -1,3 +1,4 @@
+import { snapshotCase } from "./cases.mjs";
 import { versionPlan } from "./plan-version.mjs";
 import {
   environmentVariables,
@@ -418,7 +419,11 @@ export async function createApp({
                 env = context.variables;
               const request = normalizeRequest(b.request);
               const single = await runPlan(
-                snapshotPlan({ name: request.name, steps: [{ request }] }),
+                snapshotPlan({
+                  name: request.name,
+                  functions: b.functions || p.settings?.functions || [],
+                  steps: [{ request }],
+                }),
                 env,
                 executeRequest,
                 {
@@ -442,6 +447,7 @@ export async function createApp({
               });
               return json(res, 200, {
                 ...result.response,
+                outcome: result.status,
                 assertions: result.assertions,
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
@@ -450,6 +456,30 @@ export async function createApp({
             } finally {
               controllers.delete(runId);
             }
+          }
+          if (action === "cases" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              !p.requests.some(
+                (request) =>
+                  request.id === data.sourceRequestId && !request.deletedAt,
+              )
+            )
+              throw Error("来源接口不存在");
+            const item = snapshotCase({
+              ...data,
+              functions: data.functions || p.settings?.functions || [],
+            });
+            p.cases ??= [];
+            const index = p.cases.findIndex(
+              (existing) => existing.id === item.id,
+            );
+            if (index < 0) {
+              if (p.cases.length >= 1000) throw Error("用例最多1000个");
+              p.cases.push(item);
+            } else p.cases[index] = item;
+            await store.save(p);
+            return json(res, 200, { item, project: p });
           }
           if (action === "plans" && req.method === "POST") {
             const b = await body(req);
@@ -461,7 +491,7 @@ export async function createApp({
               throw Error("项目已有其他修改，请重新加载");
             const plan = versionPlan(
               p.plans.find((item) => item.id === b.id),
-              b,
+              { ...b, functions: b.functions || p.settings?.functions || [] },
               "manual",
             );
             const index = p.plans.findIndex((x) => x.id === plan.id);

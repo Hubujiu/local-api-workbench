@@ -303,7 +303,10 @@ export function createMCP({
                 throw Error("计划不存在");
               output = versionPlan(
                 p.plans.find((item) => item.id === args.plan.id),
-                args.plan,
+                {
+                  ...args.plan,
+                  functions: args.plan.functions || p.settings?.functions || [],
+                },
                 "ai",
               );
               const index = p.plans.findIndex((r) => r.id === output.id);
@@ -372,6 +375,7 @@ export function createMCP({
               if (!request) throw Error("接口不存在");
               const plan = snapshotPlan({
                 name: request.name,
+                functions: p.settings?.functions || [],
                 steps: [
                   {
                     request: resolveServiceRequest(

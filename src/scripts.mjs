@@ -1,7 +1,9 @@
+import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
 
 /** JS executes in a separate QuickJS/WASM VM with no Node, network or filesystem bindings. */
 export function runScript(code, input) {
+  validateResources({ functions: input.functions || [] });
   if (typeof code !== "string" || code.length > 100000)
     throw Error("脚本不能超过 100 KB");
   return new Promise((resolve, reject) => {
