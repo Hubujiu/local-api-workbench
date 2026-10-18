@@ -114,3 +114,11 @@ Sixteenth pass:
 Seventeenth pass:
 - Added an explicit original-compatible plan status policy: strict200 makes all non-200 responses fail even when status assertions expect them. The existing assertions/default-2xx policy remains the default for backward compatibility, so no old plan silently changes behavior.
 - Plan UI exposes the selector; snapshots, provenance and modification times track policy edits. Core regression exercises 200/201/404 and legacy expected-error handling.
+
+Desktop diagnostic checkpoint:
+- 3bf2b17 passed all seven jobs in run 39087712430.
+- 1c8b74f passed browser, core on all three OSes, database and audit, but packaged Windows showed a blank body and timed out before the send button. This is not yet attributed to code or runner; the existing test did not collect renderer/network/process diagnostics.
+- Added failure diagnostics without increasing timeouts, adding retries or removing assertions. Latest-head desktop must pass before claiming it verified.
+- Review found explicit null dictionary defaults were lost by nullish fallback. Shared dictionary value selection now preserves null (including first enum values) in display, parameter reuse and JSON insertion. Regression added.
+
+- 657c2ce passed all seven jobs in run 39087912350, including packaged Windows. The earlier blank startup did not recur in this run; its root cause remains unproven, so diagnostics are retained.

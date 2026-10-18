@@ -23,7 +23,7 @@ export function dictionaryPanel(project, temporary = []) {
           "</td><td>" +
           esc(entry.description) +
           "</td><td>" +
-          esc(JSON.stringify(entry.default ?? entry.example ?? "")) +
+          esc(JSON.stringify(dictionaryValue(entry))) +
           '</td><td><button data-edit-parameter-entry="' +
           esc(entry.id) +
           '">编辑</button><button data-delete-parameter-entry="' +
@@ -123,20 +123,7 @@ export function insertDictionaryField(body, entry) {
     throw Error("字典字段只能插入 JSON 对象");
   if (Object.hasOwn(object, entry.key))
     throw Error("请求体已有同名字段，未覆盖现有值");
-  const fallback = {
-    string: "",
-    integer: 0,
-    number: 0,
-    boolean: false,
-    object: {},
-    array: [],
-  };
-  const value =
-    entry.default ??
-    entry.example ??
-    entry.enum?.[0] ??
-    fallback[entry.type] ??
-    null;
+  const value = dictionaryValue(entry);
   Object.defineProperty(object, entry.key, {
     value,
     enumerable: true,
@@ -144,4 +131,20 @@ export function insertDictionaryField(body, entry) {
     writable: true,
   });
   return JSON.stringify(object, null, 2);
+}
+
+export function dictionaryValue(entry) {
+  if (entry.default !== undefined) return entry.default;
+  if (entry.example !== undefined) return entry.example;
+  if (entry.enum?.length) return entry.enum[0];
+  return (
+    {
+      string: "",
+      integer: 0,
+      number: 0,
+      boolean: false,
+      object: {},
+      array: [],
+    }[entry.type] ?? null
+  );
 }

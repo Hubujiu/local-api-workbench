@@ -24,7 +24,35 @@ try {
     env: { ...process.env, LOCAL_API_DESKTOP_DATA: root },
     timeout: 30000,
   });
+  application.process().stderr?.on("data", (chunk) => {
+    const text = String(chunk).replace(
+      /([?&#](?:token|key|code|state)=)[^\s&#]+/gi,
+      "$1[redacted]",
+    );
+    console.error("DESKTOP_STDERR", text.slice(0, 4000));
+  });
   const window = await application.firstWindow();
+  window.on("pageerror", (error) =>
+    console.error("DESKTOP_PAGE_ERROR", error.message),
+  );
+  window.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    console.error(
+      "DESKTOP_REQUEST_FAILED",
+      url.origin + url.pathname,
+      request.failure()?.errorText,
+    );
+  });
+  window.on("response", (response) => {
+    if (response.status() >= 400) {
+      const url = new URL(response.url());
+      console.error(
+        "DESKTOP_HTTP_ERROR",
+        response.status(),
+        url.origin + url.pathname,
+      );
+    }
+  });
   phase = "request";
   console.log("DESKTOP_PHASE", phase);
   await window.getByRole("button", { name: "发 送", exact: true }).waitFor();
@@ -83,6 +111,20 @@ try {
   console.error("DESKTOP_FAILURE_PHASE", phase);
   if (application) {
     const window = application.windows()[0];
+    console.error(
+      "DESKTOP_WINDOWS",
+      await application
+        .evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows().map((win) => ({
+            id: win.id,
+            destroyed: win.isDestroyed(),
+            loading: win.webContents.isLoading(),
+            crashed: win.webContents.isCrashed(),
+            url: win.webContents.getURL().split(/[?#]/)[0],
+          })),
+        )
+        .catch(() => "unavailable"),
+    );
     await window
       ?.screenshot({ path: "dist/desktop-failure.png" })
       .catch(() => {});

@@ -1,6 +1,7 @@
 import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
 import {
   dictionaryPanel,
+  dictionaryValue,
   insertDictionaryField,
   effectiveParameterDictionary,
 } from "./dictionary-view.js";
@@ -970,12 +971,11 @@ function bind() {
           (item) => item.id === $("#parameter-choice").value,
         );
         if (!entry) throw Error("请先添加字典参数");
+        const value = dictionaryValue(entry);
         Object.assign(request()[kind][Number(index)], {
           key: entry.key,
           value:
-            typeof (entry.default ?? entry.example) === "object"
-              ? JSON.stringify(entry.default ?? entry.example)
-              : (entry.default ?? entry.example ?? ""),
+            typeof value === "object" ? JSON.stringify(value) : String(value),
           description: entry.description,
           required: entry.required === true,
           schema: {

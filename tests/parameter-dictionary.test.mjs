@@ -81,3 +81,27 @@ test("body helper inserts typed dictionary fields without overwriting or prototy
   assert.equal(Object.hasOwn(special, "__proto__"), true);
   assert.equal({}.polluted, undefined);
 });
+
+test("explicit null dictionary defaults and enums are preserved rather than replaced by examples", async () => {
+  const { dictionaryValue, insertDictionaryField } = await import(
+    "../public/dictionary-view.js"
+  );
+  assert.equal(
+    dictionaryValue({ type: "string", default: null, example: "wrong" }),
+    null,
+  );
+  assert.equal(
+    dictionaryValue({ type: "string", enum: [null, "value"] }),
+    null,
+  );
+  assert.deepEqual(
+    JSON.parse(
+      insertDictionaryField("{}", {
+        key: "nullable",
+        type: "string",
+        default: null,
+      }),
+    ),
+    { nullable: null },
+  );
+});
