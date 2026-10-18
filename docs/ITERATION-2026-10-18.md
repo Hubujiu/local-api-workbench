@@ -327,3 +327,7 @@ Limited-import predecessora86fb985 passed all9jobs with168coretests; current loc
 ### Failure diagnostics before the spacing iteration
 
 Actions39100628839 on e03d08c had two failures: the added browser test attempted to fill a textarea inside the collapsed “本步骤脚本” section, so the test now explicitly opens that section before editing and restoration. Windows core reported a CLI plan failure but the assertion only printed generic stderr; include the actual machine-readable stdout evidence in failure diagnostics. The Windows CLI cause is not yet proven; no deadline or expected exit code was relaxed. Other platforms passed the new runner evidence tests.
+
+## Forty-eighth pass: screenshot-caught function-preview clipping
+
+Visual inspection of ad4587's actual function screenshot showed that the earlier compact textarea rule was overridden by the generic dialog textarea selector. Its higher specificity forced both textareas to170px and clipped the test result below the fold. Scope the compact rules under #dialog-content, and add a real browser bounding-box assertion for the preview result at the existing1000×760viewport. Do not count a mere DOM visibility assertion as proof the result is on-screen.

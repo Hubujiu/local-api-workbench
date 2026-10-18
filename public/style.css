@@ -1302,12 +1302,12 @@ body.compact-ui .sidebar {
   opacity: 0.8;
 }
 
-#function-input,
-#dynamic-value {
+#dialog-content #function-input,
+#dialog-content #dynamic-value {
   min-height: 64px;
   height: 80px;
 }
-#function-body {
+#dialog-content #function-body {
   min-height: 140px;
   height: 160px;
 }

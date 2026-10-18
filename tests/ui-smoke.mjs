@@ -616,6 +616,19 @@ try {
     .locator("#function-result")
     .getByText("6", { exact: true })
     .waitFor();
+  const functionResultBox = await page
+    .locator("#function-result")
+    .boundingBox();
+  const functionDialogBox = await page.locator("#dialog-content").boundingBox();
+  assert(
+    functionResultBox.y + functionResultBox.height <=
+      functionDialogBox.y + functionDialogBox.height,
+    "function preview result must be visible without scrolling",
+  );
+  assert(
+    (await page.locator("#function-input").boundingBox()).height <= 90,
+    "test input must override generic modal textarea minimum",
+  );
   await page.screenshot({ path: "/tmp/local-api-function-validation.png" });
   await Promise.all([
     page.waitForResponse(
