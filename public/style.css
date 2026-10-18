@@ -1444,3 +1444,55 @@ body.dark .response-tabs button {
 .tree-item .method {
   font-size: 11px;
 }
+
+.schema-tree {
+  overflow: auto;
+  max-height: 280px;
+}
+.schema-tree table {
+  width: 100%;
+}
+.schema-tree td {
+  padding: 6px;
+  vertical-align: top;
+}
+.schema-tree td:last-child {
+  white-space: nowrap;
+}
+.schema-tree button {
+  padding: 3px 6px;
+  margin: 2px;
+  font-size: 12px;
+}
+#dialog-content .schema-fields textarea {
+  min-height: 70px;
+  height: 80px;
+}
+.schema-fields > button {
+  margin-top: 10px;
+  margin-right: 6px;
+}
+
+dialog:has(#schema-editor) {
+  width: 1000px;
+}
+.schema-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 1fr);
+  gap: 16px;
+}
+#dialog-content .schema-fields h4 {
+  margin: 4px 0;
+}
+#dialog-content .schema-fields label {
+  margin: 6px 0 3px;
+}
+#dialog-content .schema-fields textarea {
+  min-height: 64px;
+  height: 64px;
+}
+@media (max-width: 700px) {
+  .schema-layout {
+    grid-template-columns: 1fr;
+  }
+}

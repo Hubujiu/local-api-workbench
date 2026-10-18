@@ -382,3 +382,10 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 
 - Inspected the post-fix946f5d95 screenshot archive12132740651 (SHA25618e5d6b76438af205a5f620afeb03ebd987bc34e7bac3b813f4cb6777500175e), including the same-width side-by-side reference. Native folder markers and restored request labels are now visible; all9jobs passed in Actions39115885319.
 - Reference parameter/response tabs and tree item names have stronger text hierarchy than the previous muted13pxlabels. Align those controls to14px, use a warmer higher-contrast inactive tab color, and reduce tree-row vertical padding to retain compact density. Code remains13px/18px. Exact font rendering across operating systems is not claimed.
+
+## Fifty-sixth pass: visual request-schema structure editor
+
+- Added fixed tests before implementation for nested object/array nodes, required membership, typed0/false/null examples, untouched constraints, duplicate names, reference-safe rename/delete, invalid paths and XSS-safe bounded rendering.
+- Design mode now opens an independent draft tree editor for common object/array fields. Add/edit/remove fields, descriptions, required flags and JSON examples without writing schema JSON manually. Existing minimum/maximum, definitions and unmodeled constraints remain intact.
+- Local references to a renamed/deleted property block the operation instead of silently dangling. Boolean/ref/union/conditional edge cases retain the JSON advanced route; this is not a complete JSON Schema authoring/validation engine. Tree limits:500nodes/16levels.
+- Cancel discards visual changes; outer save applies pending field input atomically or leaves the dialog open with an error. Browser coverage checks cancellation, invalid example refusal, false example persistence, retained numeric constraints, and generated request-body values.

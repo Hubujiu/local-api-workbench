@@ -1105,6 +1105,54 @@ try {
       },
     }),
   );
+  const schemaBeforeVisual = await page.locator("#schema").inputValue();
+  await page.locator("#visual-schema").click();
+  await page.locator('[data-schema-add="0"]').click();
+  await page.locator("[data-schema-name]").fill("discarded");
+  await page.locator("[data-schema-apply]").click();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
+  await page.locator("#visual-schema").click();
+  assert(
+    !(await page.locator(".schema-tree").innerText()).includes("discarded"),
+  );
+  await page.locator('[data-schema-edit="1"]').click();
+  await page.locator("[data-schema-description]").fill("数量范围保留");
+  await page.locator("[data-schema-required]").check();
+  await page.locator("[data-schema-example]").fill("2");
+  await page.locator("[data-schema-apply]").click();
+  await page.locator('[data-schema-add="0"]').click();
+  await page.locator("[data-schema-name]").fill("flag");
+  await page.locator("[data-schema-apply]").click();
+  await page.locator('[data-schema-edit="4"]').click();
+  await page.locator("[data-schema-type]").selectOption("boolean");
+  await page.locator("[data-schema-example]").fill("{");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("示例必须为有效JSON，字符串请加双引号", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.locator("[data-schema-example]").fill("false");
+  await page.screenshot({ path: "/tmp/local-api-schema-editor.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const visualSchema = JSON.parse(await page.locator("#schema").inputValue());
+  assert.equal(visualSchema.properties.n.minimum, 2);
+  assert.equal(visualSchema.properties.n.maximum, 4);
+  assert(visualSchema.required.includes("n"));
+  assert.equal(visualSchema.properties.flag.example, false);
+  await saveAndWait("#save");
+  const schemaProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const schemaRequestId = await page
+    .locator(".tree-item.active")
+    .getAttribute("data-request");
+  assert.equal(
+    schemaProject.requests.find((item) => item.id === schemaRequestId).schema
+      .properties.flag.example,
+    false,
+  );
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
   await page.locator("#generate-body").click();
@@ -1121,6 +1169,7 @@ try {
     await page.locator("#body-code").inputValue(),
   );
   assert.equal(generatedBody.n, 2);
+  assert.equal(generatedBody.flag, false);
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator("#body-code").fill("");
