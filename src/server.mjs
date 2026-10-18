@@ -1,3 +1,4 @@
+import { loadMCPConfig, saveMCPConfig } from "./mcp-config-store.mjs";
 import { selectMockResponse } from "./mock.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { versionPlan } from "./plan-version.mjs";
@@ -39,6 +40,7 @@ export async function createApp({
   root = process.env.LOCAL_API_DATA || ".local-api",
   port = Number(process.env.PORT) || 4318,
 } = {}) {
+  const requestedPort = port;
   const store = new Store(path.resolve(root));
   await store.init();
   const protocolSessions = new ProtocolSessions();
@@ -48,6 +50,18 @@ export async function createApp({
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpToken = "",
     mcpLastActivity = null;
+  const persistedMCP = await loadMCPConfig(path.resolve(root));
+  let mcpWarning = persistedMCP?.warning || "";
+  if (persistedMCP && !mcpWarning) {
+    const {
+      token: savedToken,
+      port: savedPort,
+      ...configuration
+    } = persistedMCP;
+    mcp = configuration;
+    mcpToken = savedToken;
+    if (port === 0) port = savedPort;
+  }
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   let server;
@@ -151,6 +165,16 @@ export async function createApp({
             finishedAt: new Date().toISOString(),
           });
           mcpLastActivity = activity;
+          if (
+            mcp.remember &&
+            message.params?.name === "localapi_create_project" &&
+            !result?.result?.isError
+          )
+            await saveMCPConfig(path.resolve(root), {
+              ...mcp,
+              token: mcpToken,
+              port: server.address().port,
+            });
           const completed = [...mcpActivities.values()].filter(
             (a) => a.status !== "running",
           );
@@ -249,20 +273,32 @@ export async function createApp({
             );
             if (config.projects.some((id) => !existing.has(id)))
               throw Error("不能授权不存在的项目");
-            mcp = {
+            const next = {
               enabled: config.enabled === true,
+              remember: config.remember === true,
               projects: config.projects,
               write: config.write === true,
               execute: config.write === true && config.execute === true,
             };
-            if (mcp.enabled && !mcpToken)
-              mcpToken = randomBytes(32).toString("hex");
-            if (!mcp.enabled) mcpToken = "";
+            const nextToken = next.enabled
+              ? !mcpToken || config.rotate === true
+                ? randomBytes(32).toString("hex")
+                : mcpToken
+              : "";
+            await saveMCPConfig(path.resolve(root), {
+              ...next,
+              token: nextToken,
+              port: server.address().port,
+            });
+            mcp = next;
+            mcpToken = nextToken;
+            mcpWarning = "";
           } else if (req.method !== "GET")
             return json(res, 405, { error: "Method not allowed" });
           return json(res, 200, {
             ...mcp,
             endpoint: base + "/mcp",
+            warning: mcpWarning,
             token: mcpToken,
             lastActivity: mcpLastActivity,
             activities: [...mcpActivities.values()],
@@ -339,7 +375,14 @@ export async function createApp({
               mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
             b.history = p.history;
-            return json(res, 200, await store.save(b));
+            const saved = await store.save(b);
+            if (b.archived && mcp.remember)
+              await saveMCPConfig(path.resolve(root), {
+                ...mcp,
+                token: mcpToken,
+                port: server.address().port,
+              });
+            return json(res, 200, saved);
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
@@ -660,7 +703,35 @@ export async function createApp({
     protocolSessions.close();
     oauth.close();
   });
-  await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
+  const listen = (listenPort) =>
+    new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(listenPort, "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+  try {
+    await listen(port);
+  } catch (error) {
+    if (
+      error.code !== "EADDRINUSE" ||
+      requestedPort !== 0 ||
+      !persistedMCP?.remember
+    )
+      throw error;
+    mcp.enabled = false;
+    mcpToken = "";
+    mcpWarning =
+      "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
+    await listen(0);
+    await saveMCPConfig(path.resolve(root), {
+      ...mcp,
+      token: "",
+      port: server.address().port,
+    });
+  }
+
   return {
     server,
     store,

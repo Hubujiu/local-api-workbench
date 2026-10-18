@@ -1,3 +1,4 @@
+import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans } from "./plan-view.js";
 import { resources, resourcePanels, settingsSidebar } from "./resource-view.js";
 import { environmentExtras } from "./environment-view.js";
@@ -117,6 +118,8 @@ async function save() {
   collect();
   const snapshot = structuredClone(project),
     version = editVersion;
+  snapshot.history = [];
+  snapshot.runs = [];
   saving = true;
   for (const button of document.querySelectorAll("#save,#save-project"))
     button.disabled = true;
@@ -471,7 +474,7 @@ function modePanel(r) {
 function renderPage() {
   if (!project) return "";
   if (page === "settings")
-    return `<div class="page"><div class="page-head"><div><h1 id="settings-basic">项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2 id="settings-environments">环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}${resourcePanels(project)}<section id="settings-mock" class="card"><h3>Mock 服务</h3><label><input id="mock-enabled" type="checkbox" ${project.settings?.mockEnabled !== false ? "checked" : ""}>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与智能匹配规则。规则从上到下匹配，一条规则内所有条件必须满足。</p></section><div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card" id="settings-mcp"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
+    return `<div class="page"><div class="page-head"><div><h1 id="settings-basic">项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2 id="settings-environments">环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}${resourcePanels(project)}<section id="settings-mock" class="card"><h3>Mock 服务</h3><label><input id="mock-enabled" type="checkbox" ${project.settings?.mockEnabled !== false ? "checked" : ""}>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与智能匹配规则。规则从上到下匹配，一条规则内所有条件必须满足。</p></section><div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card" id="settings-mcp"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；仅在勾选保留授权后跨重启生效。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
   if (page === "plans")
     return renderPlans({ project, planId, lastRun, busy, tab: planTab });
   if (page === "history")
@@ -600,6 +603,28 @@ function editRules() {
     },
   );
 }
+function showMCPClientConfiguration(configuration) {
+  let selected = "Cursor";
+  modal(
+    "MCP 连接配置",
+    `<div class="toolbar">${mcpClients.map((client) => `<button data-mcp-client="${esc(client)}">${esc(client)}</button>`).join("")}</div><pre id="mcp-client-code">${esc(clientConfiguration(selected, configuration))}</pre><p class="muted">配置只在本机显示/复制，不会自动联系任何 Agent。模板按客户端格式生成；仍需在客户端允许此连接。Trae 为通用 HTTP 模板，尚未逐客户端实机验证。</p>`,
+    () =>
+      navigator.clipboard.writeText(
+        clientConfiguration(selected, configuration),
+      ),
+    "复制配置",
+  );
+  for (const button of document.querySelectorAll("[data-mcp-client]"))
+    button.onclick = () => {
+      selected = button.dataset.mcpClient;
+      $("#mcp-client-code").textContent = clientConfiguration(
+        selected,
+        configuration,
+      );
+      for (const item of document.querySelectorAll("[data-mcp-client]"))
+        item.classList.toggle("primary", item === button);
+    };
+}
 function bind() {
   on("[data-page]", "click", (_, e) => {
     collect();
@@ -648,39 +673,20 @@ function bind() {
     const config = await api("/mcp/config");
     modal(
       "MCP 项目授权",
-      `<label><input id="mcp-enabled" type="checkbox" ${config.enabled ? "checked" : ""}> 开启本次运行的 MCP 服务</label><label><input id="mcp-write" type="checkbox" ${config.write ? "checked" : ""}> 允许写入项目</label><label><input id="mcp-execute" type="checkbox" ${config.execute ? "checked" : ""}> 允许执行已有计划（会向计划 URL 发送请求）</label><h4>授权项目</h4>${projects.map((p) => `<label><input data-mcp-project="${p.id}" type="checkbox" ${config.projects.includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("")}<div class="notice">凭据只用于本机 MCP 接入。不要分享给不信任的 Agent。关闭服务会立即撤销当前令牌。</div>`,
+      `${config.warning ? `<p class="notice">${esc(config.warning)}</p>` : ""}<label><input id="mcp-enabled" type="checkbox" ${config.enabled ? "checked" : ""}> 开启本地 MCP 服务</label><label><input id="mcp-write" type="checkbox" ${config.write ? "checked" : ""}> 允许写入项目</label><label><input id="mcp-execute" type="checkbox" ${config.execute ? "checked" : ""}> 允许执行已有计划（会向计划 URL 发送请求）</label><label><input id="mcp-remember" type="checkbox" ${config.remember ? "checked" : ""}>下次启动保留本机授权、端口和连接密钥</label><label><input id="mcp-rotate" type="checkbox">重新生成连接密钥（使旧配置失效）</label><p class="notice">持久授权会将连接密钥写入本机应用数据目录；仅对可信客户端开启，不要分享配置。</p><h4>授权项目</h4>${projects.map((p) => `<label><input data-mcp-project="${p.id}" type="checkbox" ${config.projects.includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("")}<div class="notice">凭据只用于本机 MCP 接入。不要分享给不信任的 Agent。关闭服务会立即撤销当前令牌。</div>`,
       async () => {
         const result = await api("/mcp/config", "POST", {
           enabled: $("#mcp-enabled").checked,
           write: $("#mcp-write").checked,
           execute: $("#mcp-execute").checked,
+          remember: $("#mcp-remember").checked,
+          rotate: $("#mcp-rotate").checked,
           projects: [
             ...document.querySelectorAll("[data-mcp-project]:checked"),
           ].map((e) => e.dataset.mcpProject),
         });
         if (result.enabled) {
-          const configuration = {
-            mcpServers: {
-              localapi: {
-                type: "http",
-                url: result.endpoint,
-                headers: { Authorization: "Bearer " + result.token },
-              },
-            },
-          };
-          setTimeout(
-            () =>
-              modal(
-                "MCP 连接配置",
-                `<pre>${esc(JSON.stringify(configuration, null, 2))}</pre><p>把此配置添加到你选择的 MCP 客户端。不会自动配置或联系任何 Agent。</p>`,
-                () =>
-                  navigator.clipboard.writeText(
-                    JSON.stringify(configuration, null, 2),
-                  ),
-                "复制配置",
-              ),
-            0,
-          );
+          setTimeout(() => showMCPClientConfiguration(result), 0);
         } else toast("MCP 已关闭，令牌已撤销");
       },
       "应用授权",

@@ -242,6 +242,17 @@ try {
     .locator("#dialog-title")
     .getByText("MCP 连接配置", { exact: true })
     .waitFor();
+  await page.locator('[data-mcp-client="Codex"]').click();
+  assert(
+    (await page.locator("#mcp-client-code").innerText()).includes(
+      "[mcp_servers.localapi]",
+    ),
+  );
+  await page.locator('[data-mcp-client="VS Code"]').click();
+  assert(
+    JSON.parse(await page.locator("#mcp-client-code").innerText()).servers
+      .localapi,
+  );
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator("#mcp-config").click();
   assert(await page.locator("#mcp-enabled").isChecked());

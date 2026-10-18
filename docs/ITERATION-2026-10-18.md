@@ -63,3 +63,11 @@ Eighth pass:
 - Added response-definition editor, parameter-definition controls, response-example tab and single-interface offline HTML sharing. Export includes typed parameter and schema details with escaping/CSP.
 - Running a plan first saves pending edits, so execution does not silently validate an older plan.
 - Latest 3b3f512 passed all seven CI jobs in run 39085713221, including new direct HTTP/2 tests. Current local suite has 84 tests; latest documentation/share browser regression still requires CI.
+
+Ninth pass:
+- MCP authorization remains off by default; explicit opt-in can persist the project grants, local port and connection key. Rotation immediately revokes the old key. Archive revocations are persisted.
+- If the remembered port is occupied, the workbench remains usable on a new port but MCP fails closed, requiring fresh authorization/configuration. Credential files receive Git ignore entries; this does not untrack files a user already tracked manually.
+- Client configuration views cover Cursor, Codex TOML, Claude Code, VS Code, WorkBuddy and a generic Trae HTTP template. No actual Codex/other Agent task is started; per-client live integration is not claimed.
+- Format references: https://developers.openai.com/learn/docs-mcp ; https://developers.openai.com/ja-JP/docs/config-file/config-reference ; https://code.visualstudio.com/docs/agents/reference/mcp-configuration ; https://cloud.tencent.com/document/product/1831/137039 . Trae remains explicitly labeled generic/unverified.
+- UI project saves no longer resend potentially huge history/run bodies; server preserves authoritative history.
+- 87 local tests pass. 9bbf29c passed all seven jobs in run 39085954384 before the persistence/config-view changes.
