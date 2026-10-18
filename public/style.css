@@ -1201,3 +1201,16 @@ body.dark button.primary {
   height: 64px;
   stroke-width: 0.6;
 }
+
+.workspace {
+  position: relative;
+}
+.request-panel.body-panel.body-expanded {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  z-index: 15;
+  background: var(--bg);
+  padding: 16px;
+}

@@ -75,6 +75,19 @@ try {
     "helper label must have non-overlapping vertical text",
   );
   const originalBody = await page.locator("#body-code").inputValue();
+  const normalEditorHeight = (await page.locator("#body-code").boundingBox())
+    .height;
+  await page.locator("#expand-body").click();
+  assert(
+    (await page.locator("#body-code").boundingBox()).height >
+      normalEditorHeight,
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await page.locator("#expand-body").getAttribute("aria-pressed"),
+    "false",
+  );
+  assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await page.locator("#toggle-parameter-helper").click();
   await page.getByText("插入环境变量", { exact: true }).waitFor();
   await page.locator("#toggle-parameter-helper").click();

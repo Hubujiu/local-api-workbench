@@ -136,3 +136,7 @@ Twentieth pass:
 - Verified 6e2094e all seven CI jobs; inspected its downloaded light/dark reference PNGs after checking artifact SHA256.
 - Body action buttons now occupy a separate bordered editor toolbar, matching the reference's two-row structure without an accidental lone wrapped button. The body editor uses flex height rather than overflowing a fixed subtraction.
 - Replaced the clover placeholder with an original lightweight line rocket SVG; no proprietary illustration asset is copied.
+
+Twenty-first pass:
+- Body editor can expand into the workspace and collapse by button/Escape while preserving unsaved text. It does not create a second editor state or hide the close control.
+- Browser regression measures expanded height and verifies content survives the round trip.
