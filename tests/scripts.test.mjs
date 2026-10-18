@@ -10,7 +10,7 @@ test("script can set variables and record deterministic assertions", async () =>
   assert.equal(result.tests[0].passed, true);
   assert.equal(result.logs[0], "done");
 });
-test("script VM does not expose process, filesystem or network", async () => {
+test("script VM does not expose process, filesystem or unrestricted network APIs", async () => {
   const result = await runScript(
     'apt.setVar("types", [typeof process,typeof require,typeof fetch]); apt.setVar("blocked", ["fs","node:fs","http","node:http","child_process","worker_threads","crypto"].map(name=>{try{require(name);return false;}catch(error){return error.message.includes("不允许");}}));',
     { variables: {} },

@@ -632,6 +632,7 @@ export async function createApp({
                 assertions: result.assertions,
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
+                subrequests: result.subrequests,
                 error: result.error,
               });
             } finally {

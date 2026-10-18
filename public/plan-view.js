@@ -246,6 +246,9 @@ function renderStepEvidence(step) {
       step.status === "failed" && !!step.response,
     ) +
     evidenceBlock("脚本与操作日志", step.logs || []) +
+    (step.subrequests?.length
+      ? evidenceBlock("脚本HTTP子请求", step.subrequests)
+      : "") +
     evidenceBlock("提取变量", step.extracted || {}) +
     evidenceBlock("完整步骤证据 JSON", step)
   );

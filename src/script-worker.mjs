@@ -5,6 +5,18 @@ import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { getQuickJS } from "quickjs-emscripten";
 let runtime, context;
+const callbacks = new Map(),
+  replies = [];
+let wake,
+  requestCount = 0;
+const receive = (message) => {
+  if (message.kind === "http") {
+    replies.push(message);
+    wake?.();
+    wake = null;
+  }
+};
+parentPort.on("message", receive);
 try {
   const trustedLibraries = await readFile(
     new URL("./vendor/script-libraries.js", import.meta.url),
@@ -25,6 +37,27 @@ try {
   });
   context.setProp(context.global, "__randomBytes", randomFunction);
   randomFunction.dispose();
+  const sendFunction = context.newFunction(
+    "__sendRequest",
+    (payload, callback) => {
+      if (!workerData.input.allowNetwork)
+        return { error: context.newError("此脚本未启用HTTP网络能力") };
+      if (context.typeof(callback) !== "function")
+        return { error: context.newError("脚本HTTP需要回调函数") };
+      if (requestCount >= 10 || callbacks.size >= 4)
+        return { error: context.newError("脚本HTTP最多10次、同时4次") };
+      const json = context.getString(payload);
+      if (json.length > 65536)
+        return { error: context.newError("脚本HTTP请求超过64KiB") };
+      const id = ++requestCount;
+      callbacks.set(id, callback.dup());
+      parentPort.postMessage({ kind: "http", id, payload: json });
+      return context.undefined;
+    },
+  );
+  context.setProp(context.global, "__sendRequest", sendFunction);
+  sendFunction.dispose();
+
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
     globalThis.Event = class {
@@ -198,8 +231,31 @@ try {
       scriptCompatibilitySource +
       ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair});",
   );
+
+  run(`pm.sendRequest=(config,callback)=>{
+    if(typeof callback !== 'function')throw Error('pm.sendRequest目前需要回调函数，不支持Promise返回');
+    const captured={...variables,...localVariables};
+    __sendRequest(JSON.stringify({request:config,variables:captured}),(errorJSON,responseJSON)=>{
+      const error=errorJSON?new Error(errorJSON):null, data=responseJSON?JSON.parse(responseJSON):null;
+      const headers=data?.headers||{};
+      const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
+      const result=callback(error,response);
+      if(result && typeof result.then==='function')throw Error('HTTP回调暂不支持Promise返回');
+    });
+  };apt.sendRequest=pm.sendRequest;`);
+  let remaining = deadline - Date.now();
+  const bounded = (fn) => {
+    if (remaining <= 0) throw Error("脚本执行超时");
+    const start = Date.now();
+    deadline = start + remaining;
+    try {
+      return fn();
+    } finally {
+      remaining -= Date.now() - start;
+    }
+  };
   for (const code of [library, workerData.code]) {
-    const result = context.evalCode(code);
+    const result = bounded(() => context.evalCode(code));
     if (result.error) {
       const error = context.dump(result.error);
       result.error.dispose();
@@ -207,6 +263,38 @@ try {
     }
     result.value.dispose();
   }
+
+  while (callbacks.size) {
+    if (!replies.length)
+      await new Promise((resolve) => {
+        wake = resolve;
+      });
+    for (const message of replies.splice(0)) {
+      const callback = callbacks.get(message.id);
+      if (!callback) continue;
+      callbacks.delete(message.id);
+      const error = context.newString(message.error || ""),
+        response = context.newString(
+          message.response ? JSON.stringify(message.response) : "",
+        );
+      try {
+        const result = bounded(() =>
+          context.callFunction(callback, context.undefined, error, response),
+        );
+        if (result.error) {
+          const value = context.dump(result.error);
+          result.error.dispose();
+          throw Error(value.message || JSON.stringify(value));
+        }
+        result.value.dispose();
+      } finally {
+        callback.dispose();
+        error.dispose();
+        response.dispose();
+      }
+    }
+  }
+  deadline = Date.now() + Math.max(0, remaining);
   const output = context.evalCode(
     "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests})",
   );
@@ -221,6 +309,8 @@ try {
 } catch (error) {
   parentPort.postMessage({ error: error.message });
 } finally {
+  parentPort.off("message", receive);
+  for (const callback of callbacks.values()) callback.dispose();
   context?.dispose();
   runtime?.dispose();
 }

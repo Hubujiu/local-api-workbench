@@ -325,8 +325,10 @@ export async function runPlan(
       status: "failed",
       logs: [],
       assertions: [],
+      subrequests: [],
       extracted: {},
     };
+    let scriptPhase;
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -365,13 +367,25 @@ export async function runPlan(
       const localVariables = {};
       let configuredRequest = structuredClone(step.request);
       if (configuredRequest.beforeScript) {
-        const scripted = await runScript(configuredRequest.beforeScript, {
-          variables: vars,
-          scopes,
-          localVariables,
-          functions: snapshot.functions || [],
-          request: configuredRequest,
-        });
+        scriptPhase = "before";
+        const scripted = await runScript(
+          configuredRequest.beforeScript,
+          {
+            allowNetwork: true,
+            variables: vars,
+            scopes,
+            localVariables,
+            functions: snapshot.functions || [],
+            request: configuredRequest,
+          },
+          { signal },
+        );
+        record.subrequests.push(
+          ...scripted.networkRequests.map((item) => ({
+            ...item,
+            phase: "before",
+          })),
+        );
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "before", message })),
         );
@@ -430,14 +444,26 @@ export async function runPlan(
       }
       applyLegacyVariables(scopes, beforeAfterOperations, vars);
       if (record.request.afterScript) {
-        const scripted = await runScript(record.request.afterScript, {
-          variables: vars,
-          scopes,
-          localVariables,
-          functions: snapshot.functions || [],
-          request: record.request,
-          response: record.response,
-        });
+        scriptPhase = "after";
+        const scripted = await runScript(
+          record.request.afterScript,
+          {
+            allowNetwork: true,
+            variables: vars,
+            scopes,
+            localVariables,
+            functions: snapshot.functions || [],
+            request: record.request,
+            response: record.response,
+          },
+          { signal },
+        );
+        record.subrequests.push(
+          ...scripted.networkRequests.map((item) => ({
+            ...item,
+            phase: "after",
+          })),
+        );
         scopes = createScopes(scripted.variables, scripted.scopes);
         replaceVariables(vars, effectiveScopes(scopes));
         record.logs.push(
@@ -463,6 +489,13 @@ export async function runPlan(
           ? "passed"
           : "failed";
     } catch (error) {
+      if (error.networkRequests)
+        record.subrequests.push(
+          ...error.networkRequests.map((item) => ({
+            ...item,
+            phase: scriptPhase,
+          })),
+        );
       scopes.environment = committedScopes.environment;
       scopes.globals = committedScopes.globals;
       record.error = error.message;

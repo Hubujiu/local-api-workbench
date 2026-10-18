@@ -9,7 +9,7 @@ Additional supported surfaces:
 
 No actual wire response is rewritten by modifying a script view. Request methods are serialized only from the canonical data model, not from the helper objects. The legacy response.status field remains this application's numeric field; response.raw.status/code are the compatible numeric accessors.
 
-Promise-returning or callback-style asynchronous pm.test callbacks are explicitly failed as unsupported rather than falsely marked passed. At most1000script assertions may be recorded. This does not implement async networking or promise scheduling.
+Promise-returning or callback-style asynchronous pm.test callbacks are explicitly failed as unsupported rather than falsely marked passed. At most1000script assertions may be recorded. Promise scheduling remains unsupported. The later bounded callback-only HTTP bridge is documented separately in ADR-SCRIPT-HTTP.md.
 
 Primary references:
 - https://v7-wiki.apipost.cn/docs/21/

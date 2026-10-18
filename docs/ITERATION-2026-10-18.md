@@ -356,3 +356,11 @@ Visual inspection of ad4587's actual function screenshot showed that the earlier
 ### Relocated creation regression
 
 Actions39114560592 passed the new sidebar alignment/cancel checks but a later pre-existing folder-persistence scenario still clicked the now-collapsed folder button directly. Update all three folder-entry scenarios to open the creation menu when necessary, while preserving their persistence and concurrent-save assertions. No force-click or visibility bypass is used.
+
+## Fifty-second pass: bounded callback HTTP script bridge
+
+- Fixed acceptance first demonstrated missing pm.sendRequest. Added only the callback API through a parent-owned HTTP broker; no Node/file/module APIs are exposed and pure function/dynamic/regex workers remain network-disabled.
+- Original two-second worker deadline, 16MiB memory and cumulative250ms active script execution budget remain. At most10calls/four outstanding; child request64KiB, response256KiB, per-request1500ms maximum. No unsupported Promise API silently succeeds.
+- Await callbacks before applying variable scope changes. Exceptions fail the script, completed/interrupted child evidence is preserved, cancellation aborts child HTTP, and callback infinite loops remain interrupted.
+- UI and packaged-desktop scenarios execute a real local callback request, inspect child evidence and persist the returned token. Unit coverage verifies pre-token request feeding the main Authorization header, capability denial, failure/cancellation and limits.
+- Source: official Postman callback examples; this does not claim full Postman/Apipost SDK or unrestricted async compatibility. TLS checks stay enabled and request definitions cannot read arbitrary files or inherit ambient credentials.

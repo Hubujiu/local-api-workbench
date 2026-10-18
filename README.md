@@ -61,7 +61,7 @@ node tests/ui-smoke.mjs
 
 ## 脚本
 
-前后置脚本运行在独立 QuickJS/WASM 工作线程中，无 Node、网络或文件 API。支持 apt.setVar/getVar、pm.environment.set/get/unset、pm.response.json/text/code、pm.test 与 pm.expect(...).to.equal(...)，以及 console.log。同步脚本 CPU 截止 250ms、VM 内存限额 16MiB、工作线程总超时 2 秒；不支持任意 npm 包或脚本内额外网络请求。
+前后置脚本运行在独立 QuickJS/WASM 工作线程中，不暴露 Node、文件或任意模块。支持变量作用域、pm.request/response、pm.test/Chai、CryptoJS、apt.assert与console.log。新增有界pm.sendRequest(config, callback)：最多10次、同时4次，仅HTTP(S)，单请求1500ms、请求64KiB、响应256KiB；须提供同步回调，暂不支持Promise返回。只有真实接口前后置脚本启用网络，纯函数预览/动态值/正则提取不启用。累计脚本运行预算250ms（墙钟时间，不含网络等待）、VM内存16MiB、整个工作线程仍限2秒。子请求及失败证据保留在计划记录中。
 
 ## OAuth2 与 Digest
 

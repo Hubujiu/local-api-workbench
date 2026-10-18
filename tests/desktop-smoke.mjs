@@ -65,11 +65,13 @@ try {
   assert(await window.getByText("200", { exact: true }).isVisible());
   phase = "script";
   console.log("DESKTOP_PHASE", phase);
+  const packagedRequestURL = await window.locator("#url").inputValue();
   await window.locator('[data-param="after"]').click();
   await window
     .locator("#script-code")
     .fill(
-      'console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));',
+      'console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
+        `pm.sendRequest(${JSON.stringify(packagedRequestURL)},(error,reply)=>{pm.test('packaged-http',()=>{pm.expect(error).to.equal(null);pm.expect(reply.code).to.equal(200);});});`,
     );
   const scriptResponse = window.waitForResponse(
     (response) =>
@@ -77,7 +79,9 @@ try {
       response.url().endsWith("/execute"),
   );
   await window.locator("#send").click();
-  assert.equal((await (await scriptResponse).json()).outcome, "passed");
+  const scriptPayload = await (await scriptResponse).json();
+  assert.equal(scriptPayload.outcome, "passed", JSON.stringify(scriptPayload));
+  assert.equal(scriptPayload.subrequests[0].response.status, 200);
   await window.locator('[data-response="logs"]').click();
   await window
     .locator(".response-body")

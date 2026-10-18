@@ -8,7 +8,7 @@ Pinned CryptoJS4.2.0 and Chai6.3.0 are bundled as pure JavaScript inside each in
 - require is an allowlist for these two in-VM libraries. fs, network, worker_threads, child_process and Node crypto modules remain inaccessible.
 - A single host primitive supplies at most65536secure random bytes per call. Integer typed arrays can consume it; the host function does not expose Node objects.
 - Chai's plugin event API receives a minimal in-VM Event/EventTarget implementation, not a DOM or browser.
-- Trusted bundle initialization has a1second interrupt budget. User-defined functions and user code share the original250ms wall-clock budget, with16MiB VM memory and the existing2second outer worker deadline.
+- Trusted bundle initialization has a1second interrupt budget. User-defined functions and user code share the original 250ms active wall-clock budget, with 16MiB VM memory and the existing 2second outer worker deadline. The later callback-only HTTP bridge excludes network wait from that active budget, but does not extend the outer deadline; see ADR-SCRIPT-HTTP.md.
 - Expensive crypto operations can hit these limits; no unlimited work or host process execution is added.
 - CryptoJS is discontinued upstream. It is included for compatibility with existing API scripts, not recommended for new cryptographic application design. Legacy MD5/SHA1/DES APIs do not make those algorithms suitable for modern password storage or signatures.
 
