@@ -247,8 +247,6 @@ function nav() {
     ["docs", "▧", "文档"],
     ["dictionary", "♧", "字典"],
     ["settings", "⚙", "配置"],
-    ["protocols", "⇄", "实时协议"],
-    ["database", "▥", "数据库"],
     ["git", "⑂", "Git"],
   ]
     .map(
@@ -338,7 +336,7 @@ function render() {
             )
             .join(
               "",
-            )}</select></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button>`
+            )}</select></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button></div></details><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened

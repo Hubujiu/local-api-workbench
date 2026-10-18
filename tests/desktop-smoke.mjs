@@ -86,6 +86,7 @@ try {
   await window.getByText("✓ 已保存", { exact: true }).waitFor();
   phase = "database";
   console.log("DESKTOP_PHASE", phase);
+  await window.locator('.rail [data-page="settings"]').click();
   await window.locator('[data-page="database"]').click();
   await window.locator("#db-path").fill(databaseFile);
   await window.locator("#db-sql").fill("SELECT id FROM fixture");

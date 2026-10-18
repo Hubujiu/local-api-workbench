@@ -98,6 +98,7 @@ try {
     "project controls should be centered at reference width",
   );
   assert.equal(await page.locator('.rail [data-page="plans"]').count(), 0);
+  assert.equal(await page.locator(".rail button").count(), 7);
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
@@ -267,6 +268,7 @@ try {
       "ui-fixture-token",
   );
   await saveAndWait();
+  await page.locator(".tree-create summary").click();
   await page.locator('[data-page="protocols"]').click();
   await page.locator("#protocol-url").fill(fixtureURL + "/sse");
   await page.locator("#protocol-name").fill("Saved SSE fixture");

@@ -72,6 +72,6 @@ export function settingsSidebar() {
           '<button data-settings-anchor="' + id + '">' + title + "</button>",
       )
       .join("") +
-    '<hr><strong>导入 / 导出</strong><button id="import">导入项目（手动）</button><button id="export">导出项目</button></div>'
+    '<hr><strong>连接</strong><button data-page="database">数据库连接</button><hr><strong>导入 / 导出</strong><button id="import">导入项目（手动）</button><button id="export">导出项目</button></div>'
   );
 }

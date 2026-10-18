@@ -122,3 +122,7 @@ Desktop diagnostic checkpoint:
 - Review found explicit null dictionary defaults were lost by nullish fallback. Shared dictionary value selection now preserves null (including first enum values) in display, parameter reuse and JSON insertion. Regression added.
 
 - 657c2ce passed all seven jobs in run 39087912350, including packaged Windows. The earlier blank startup did not recur in this run; its root cause remains unproven, so diagnostics are retained.
+
+Eighteenth pass:
+- Matched the reference's six primary rail entries: recent, APIs, documents, dictionary, settings and Git (plus bottom trash). Protocol creation now lives in the project tree's New menu; database connections live under settings. Saved protocol items remain directly openable from the tree.
+- Browser and packaged-desktop acceptance paths follow these real navigation changes; capabilities are not removed.

@@ -1,3 +1,5 @@
+> 历史检查点。当前开发与 CI 状态请看 [CURRENT-PARITY.md](CURRENT-PARITY.md)。下文不代表最新提交。
+
 # Delivery candidate checkpoint — 2026-10-17 13:48 UTC
 
 Private repository: https://github.com/Hubujiu/local-api-workbench  

@@ -1145,3 +1145,18 @@ body.dark button.primary {
     padding: 6px;
   }
 }
+
+.tree-create summary {
+  cursor: pointer;
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  padding: 8px;
+  text-align: center;
+  list-style: none;
+}
+.tree-create > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 0;
+}
