@@ -13,7 +13,7 @@ npm ci
 npm start
 ```
 
-浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。所有项目使用格式化 JSON，写入时采用临时文件原子替换和冲突检测。不要把包含密钥、历史或响应的运行目录提交到 Git。
+浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。每个项目使用独立 ID 目录，apis/envs/settings/plans/cases 分文件保存；history 默认不纳入新建项目的 Git 跟踪。写入使用事务日志恢复、项目锁与冲突检测。旧版单个 JSON 在第一次保存时迁移，原文件保留为备份。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 便携包在 PR 的最新成功 Actions 运行中下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 

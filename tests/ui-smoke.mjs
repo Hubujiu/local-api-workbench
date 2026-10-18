@@ -322,21 +322,19 @@ try {
   await page.screenshot({ path: "/tmp/local-api-cases.png" });
   await page.locator('[data-mode="mock"]').click();
   await page.locator("#edit-mock-rules").click();
-  await page
-    .locator("#modal-json")
-    .fill(
-      JSON.stringify([
-        {
-          name: "UI smart rule",
-          conditions: [{ target: "query.scenario", op: "eq", value: "smart" }],
-          response: {
-            status: 201,
-            body: '{"smart":true}',
-            headers: { "content-type": "application/json" },
-          },
+  await page.locator("#modal-json").fill(
+    JSON.stringify([
+      {
+        name: "UI smart rule",
+        conditions: [{ target: "query.scenario", op: "eq", value: "smart" }],
+        response: {
+          status: 201,
+          body: '{"smart":true}',
+          headers: { "content-type": "application/json" },
         },
-      ]),
-    );
+      },
+    ]),
+  );
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,

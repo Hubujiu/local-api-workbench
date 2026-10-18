@@ -525,6 +525,7 @@ export async function createApp({
               ...plan,
               projectRevision: p.revision,
               projectConfigRevision: p.configRevision,
+              projectFingerprint: p._diskFingerprint,
             });
           }
           if (action === "run" && req.method === "POST") {

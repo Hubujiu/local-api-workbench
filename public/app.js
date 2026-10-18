@@ -134,6 +134,7 @@ async function save() {
       } else {
         project.revision = saved.revision;
         project.configRevision = saved.configRevision;
+        project._diskFingerprint = saved._diskFingerprint;
         project.history = saved.history;
         project.runs = saved.runs;
       }
@@ -539,13 +540,19 @@ async function savePlan(plan) {
     projectConfigRevision: project.configRevision ?? project.revision,
   });
   if (project.id !== projectId) return;
-  const { projectRevision, projectConfigRevision, ...saved } = result;
+  const {
+    projectRevision,
+    projectConfigRevision,
+    projectFingerprint,
+    ...saved
+  } = result;
   const index = project.plans.findIndex((item) => item.id === saved.id);
   if (index < 0) project.plans.push(saved);
   else project.plans[index] = saved;
   planId = saved.id;
   project.revision = projectRevision;
   project.configRevision = projectConfigRevision;
+  project._diskFingerprint = projectFingerprint;
   render();
 }
 

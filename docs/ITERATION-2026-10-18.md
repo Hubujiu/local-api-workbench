@@ -37,3 +37,12 @@ Fourth pass:
 - Project Mock switch is editable in settings. Rule semantics are an explicit independent implementation because the public screenshot names the feature but does not expose all original matching rules.
 - Added usable parameter-helper drawer (variable insertion, function names, request schema), and send/save dropdown actions.
 - Local fixture verification now 78 tests; browser adds repeated helper open/close, cURL menu and real smart Mock response coverage. Exact-head CI remains required.
+
+Fifth pass: Git-readable storage
+- New saves use project-ID directories with separate apis, envs, settings, plans, cases and history files. Filenames derive safely from stable record IDs; this is not Apipost's proprietary format.
+- Legacy single JSON projects remain readable. First save writes the split format and leaves the original single file untouched as a migration backup.
+- A complete transaction journal allows roll-forward after process interruption. Readers and writers take the same project lock; no power-loss durability guarantee is claimed.
+- Configuration fingerprints detect external Git/file edits even if a version counter was not updated, rejecting stale UI saves.
+- history is excluded in newly generated .gitignore; a Git checkout lacking history can open with empty history. User-supplied .gitignore files are not overwritten.
+- 81 local tests pass, including legacy preservation, interrupted-write recovery and external-file conflict detection.
+- Previous 02d27bb browser/desktop/core/database all passed; strict formatting failed on a non-idempotent first formatting pass of a chained test expression. The second formatting pass was checked locally; gate remains unchanged.

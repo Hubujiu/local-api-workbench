@@ -157,7 +157,10 @@ test("custom project directory remains registered across restarts", async (t) =>
   const reopened = new Store(root);
   assert.equal((await reopened.get(project.id)).name, "Custom");
   assert.equal((await reopened.list()).length, 1);
-  assert.equal(path.dirname(reopened.file(project.id)), custom);
+  assert.equal(
+    path.dirname(reopened.file(project.id)),
+    path.join(custom, project.id),
+  );
 });
 test("parallel custom-directory registrations cannot lose projects", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "api-register-race-"));

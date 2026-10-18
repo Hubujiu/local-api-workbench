@@ -1,3 +1,9 @@
+import { existsSync } from "node:fs";
+import {
+  readProject,
+  writeProject,
+  projectFingerprint,
+} from "./project-files.mjs";
 import { validateMockRules } from "./mock.mjs";
 import { validateResources } from "./resources.mjs";
 import { snapshotCase } from "./cases.mjs";
@@ -33,17 +39,46 @@ export class Store {
       if (error.code !== "ENOENT") throw error;
     }
   }
-  file(key) {
+  base(key) {
     if (!/^[a-zA-Z0-9-]+$/.test(key)) throw Error("无效项目 ID");
-    return path.join(this.locations[key] || this.root, key + ".json");
+    return this.locations[key] || this.root;
+  }
+  directory(key) {
+    return path.join(this.base(key), key);
+  }
+  legacyFile(key) {
+    return path.join(this.base(key), key + ".json");
+  }
+  lockFile(key) {
+    return this.legacyFile(key) + ".lock";
+  }
+  file(key) {
+    const metadata = path.join(this.directory(key), "project.json");
+    return existsSync(metadata) ? metadata : this.legacyFile(key);
   }
   async list() {
     await this.init();
-    const names = (await readdir(this.root)).filter(
-      (name) => name.endsWith(".json") && !name.startsWith("."),
-    );
+    const entries = await readdir(this.root, { withFileTypes: true });
     const keys = new Set([
-      ...names.map((name) => name.slice(0, -5)),
+      ...entries
+        .filter(
+          (entry) =>
+            entry.isFile() &&
+            entry.name.endsWith(".json") &&
+            !entry.name.startsWith("."),
+        )
+        .map((entry) => entry.name.slice(0, -5)),
+      ...entries
+        .filter(
+          (entry) =>
+            entry.isDirectory() &&
+            /^[a-zA-Z0-9-]+$/.test(entry.name) &&
+            (existsSync(path.join(this.root, entry.name, "project.json")) ||
+              existsSync(
+                path.join(this.root, entry.name, ".transaction.json"),
+              )),
+        )
+        .map((entry) => entry.name),
       ...Object.keys(this.locations),
     ]);
     const out = [];
@@ -66,9 +101,25 @@ export class Store {
     }
     return out;
   }
+  async readUnlocked(key) {
+    const directory = this.directory(key);
+    if (
+      existsSync(path.join(directory, "project.json")) ||
+      existsSync(path.join(directory, ".transaction.json"))
+    )
+      return readProject(directory, key);
+    const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    project._diskFingerprint = projectFingerprint(project);
+    return project;
+  }
   async get(key) {
     await this.init();
-    return JSON.parse(await readFile(this.file(key), "utf8"));
+    const release = await acquireFileLock(this.lockFile(key));
+    try {
+      return await this.readUnlocked(key);
+    } finally {
+      await release();
+    }
   }
   async create(name, directory) {
     const p = {
@@ -128,16 +179,21 @@ export class Store {
       .catch(() => {})
       .then(async () => {
         await this.init();
-        const file = this.file(p.id),
-          lock = file + ".lock";
+        const lock = this.lockFile(p.id);
         const release = await acquireFileLock(lock);
         try {
           let previous;
           try {
-            previous = await this.get(p.id);
+            previous = await this.readUnlocked(p.id);
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
+          if (
+            previous &&
+            p._diskFingerprint &&
+            p._diskFingerprint !== previous._diskFingerprint
+          )
+            throw Error("项目文件已被其他窗口或 Git 修改，请重新加载后再保存");
           const previousConfiguration =
             previous?.configRevision ?? previous?.revision ?? 0;
           const expectedConfiguration = p.configRevision ?? p.revision ?? 0;
@@ -158,12 +214,8 @@ export class Store {
             next.runs = previous.runs;
           }
           next.updatedAt = new Date().toISOString();
-          const tmp = file + "." + id() + ".tmp";
-          await writeFile(tmp, JSON.stringify(next, null, 2) + "\n", {
-            mode: 0o600,
-          });
-          await rename(tmp, file);
-          Object.assign(p, next);
+          await writeProject(this.directory(p.id), next);
+          Object.assign(p, await readProject(this.directory(p.id), p.id));
           return p;
         } finally {
           await release();
