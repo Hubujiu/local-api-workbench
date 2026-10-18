@@ -105,6 +105,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run format:check
+      - run: node scripts/build-markdown.mjs
+      - run: git diff --exit-code -- public/vendor
 
   database-integration:
     timeout-minutes: 10

@@ -1277,3 +1277,26 @@ body.compact-ui .sidebar {
   color: var(--accent);
   font-weight: 600;
 }
+
+.markdown-content {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  margin: 1em 0 0.5em;
+}
+.markdown-content pre {
+  overflow-x: auto;
+  white-space: pre;
+}
+.markdown-content code {
+  font-family: ui-monospace, monospace;
+}
+.markdown-content blockquote {
+  margin-left: 0;
+  padding-left: 1em;
+  border-left: 3px solid currentColor;
+  opacity: 0.8;
+}

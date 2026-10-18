@@ -108,3 +108,40 @@ test("disabled dynamic rows skip evaluation and files cannot transform", async (
     ),
   );
 });
+
+test("dynamic values reject invalid JSON and excessive aggregate work before evaluation", async () => {
+  for (const value of [NaN, Infinity, undefined, { nested: undefined }])
+    await assert.rejects(
+      resolveDynamicValue({ source: "fixed", value }, {}, []),
+    );
+  await assert.rejects(
+    resolveDynamicRequest(
+      {
+        query: Array.from({ length: 21 }, () => ({
+          key: "x",
+          value: "",
+          dynamic: { source: "fixed", value: 1, functions: ["double"] },
+        })),
+      },
+      {},
+      functions,
+      interpolate,
+    ),
+    /最多20/,
+  );
+  const result = await resolveDynamicRequest(
+    {
+      query: [
+        {
+          key: "x",
+          value: "{{unused}}",
+          dynamic: { source: "fixed", value: 0 },
+        },
+      ],
+    },
+    {},
+    [],
+    interpolate,
+  );
+  assert.equal(result.query[0].value, "0");
+});

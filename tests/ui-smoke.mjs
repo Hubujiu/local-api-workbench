@@ -484,10 +484,22 @@ try {
   await saveAndWait();
   await page.locator('[data-page="docs"]').click();
   await page.locator("[data-edit-document]").first().click();
+  await page
+    .locator("#document-content")
+    .fill(
+      "# 文档\n\n**保存在本地。**\n\n| 字段 | 类型 |\n| --- | --- |\n| id | number |",
+    );
+  await page.locator("#document-preview table").waitFor();
+  assert.equal(
+    await page.locator("#document-preview strong").innerText(),
+    "保存在本地。",
+  );
   await page.locator("#document-status").selectOption("ready");
   await page.locator('[data-doc-attribute="mail"]').fill("doc@example.test");
   await page.locator("#dialog-save").click();
   await page.locator("#app").getByText("已完成", { exact: true }).waitFor();
+  await page.locator(".markdown-content table").waitFor();
+  await page.screenshot({ path: "/tmp/local-api-markdown-document.png" });
   await saveAndWait();
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-environments"]').click();

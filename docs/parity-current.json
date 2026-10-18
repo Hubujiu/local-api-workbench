@@ -1,10 +1,10 @@
 {
-  "asOf": "2026-10-18T03:37:00Z",
-  "implementationCommit": "ee76b3142083ea50d3bb19aa3891b424c4d4ab4d",
+  "asOf": "2026-10-18T03:48:00Z",
+  "implementationCommit": "75da8201104a48122f66a62b6fda44e015888b43",
   "counts": {
     "F": {
-      "已实现": 30,
-      "部分实现": 20,
+      "已实现": 32,
+      "部分实现": 18,
       "待核实": 1
     },
     "M": {
@@ -356,9 +356,9 @@
       "name": "自定义函数公共资源",
       "status": "部分实现",
       "original": "配置截图有自定义函数菜单",
-      "current": "共享函数在隔离 VM 中以 utils.name 调用，快照保留；官方自定义函数还包含验证编辑器与动态参数值处理，目前尚未实现。",
+      "current": "共享脚本函数、参数函数验证编辑器、固定/变量动态参数链及实际发送证据已实现；Raw Body动态插入及Faker/Mock源未实现。",
       "source": "I3",
-      "evidence": "src/script-worker.mjs; src/resources.mjs",
+      "evidence": "src/custom-functions.mjs; src/dynamic-values.mjs; tests/dynamic-values.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -374,9 +374,9 @@
     {
       "id": "F34",
       "name": "接口属性",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "配置截图有接口属性",
-      "current": "已核验版本支持基础属性；七种类型、文档属性与默认不分享/选择导出已在66e9fbc实现，本地131测试通过，远端CI尚待核验。",
+      "current": "支持文本、数字、单选、多选、日期、URL、邮箱，兼容布尔；API与Markdown文档可编辑，默认不分享，导出时显式选择。",
       "source": "I3",
       "evidence": "public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs",
       "baselineStatus": "缺失"
@@ -384,9 +384,9 @@
     {
       "id": "F35",
       "name": "接口生命周期状态",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "截图有开发中选择及接口状态配置",
-      "current": "接口生命周期状态已核验；Markdown文档状态在66e9fbc新增，远端CI尚待核验。",
+      "current": "接口与Markdown文档均支持生命周期状态，项目维护状态名/颜色。",
       "source": "I1",
       "evidence": "public/app.js; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
@@ -1026,10 +1026,8 @@
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
   "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容。Windows 早先99/100负载失败未复现、原因未定；后续十批竞争验证尚在进行。分类重叠，不计算总体百分比。",
   "verification": {
-    "runId": 39093226267,
+    "runId": 39094783439,
     "conclusion": "success",
-    "coreTests": 129,
-    "pendingCommit": "66e9fbc5dfaea19d84d725971940d9ba741fde7e",
-    "pendingScope": "typed API/document attributes and opt-in export; 131 local tests, CI pending"
+    "coreTests": 136
   }
 }

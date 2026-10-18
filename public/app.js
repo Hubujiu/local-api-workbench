@@ -1,3 +1,4 @@
+import { renderMarkdown } from "./vendor/markdown-renderer.js";
 import { attributeFields, attributeChooser } from "./attribute-view.js";
 import {
   attributeInputValue,
@@ -621,7 +622,7 @@ function renderPage() {
       project.documents
         .map(
           (document, index) =>
-            `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><span class="subtle">${esc((project.settings?.statuses || []).find((status) => status.id === document.statusId)?.name || "")}</span><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
+            `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><span class="subtle">${esc((project.settings?.statuses || []).find((status) => status.id === document.statusId)?.name || "")}</span><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><div class="markdown-content">${renderMarkdown(document.content)}</div></article>`,
         )
         .join("") +
       project.requests
@@ -2634,7 +2635,7 @@ function editDocument(index) {
   const statuses = project.settings?.statuses || [];
   modal(
     "项目文档",
-    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
+    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea><label>实时预览</label><div id="document-preview" class="markdown-content"></div>`,
     () => {
       const fields = project.settings?.attributes || [];
       validateAttributeDefinitions(fields);
@@ -2665,6 +2666,16 @@ function editDocument(index) {
       render();
     },
   );
+  const input = $("#document-content"),
+    preview = $("#document-preview");
+  let timer;
+  input.oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      preview.innerHTML = renderMarkdown(input.value);
+    }, 120);
+  };
+  preview.innerHTML = renderMarkdown(input.value);
 }
 
 function showSession() {

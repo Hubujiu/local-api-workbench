@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：ee76b3142083ea50d3bb19aa3891b424c4d4ab4d
+已核验提交：75da8201104a48122f66a62b6fda44e015888b43
 
-7项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39093226267)，129项核心测试。
-新增属性与文档状态提交66e9fbc：131项本地测试通过，远端CI待核验；不借用前版绿灯。
+7项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39094783439)，136项核心测试。
+后续Markdown预览与动态值额外边界校验：139项本地测试通过，远端CI仍须独立核验。
 
 保留原始98项编号；分类有重叠，不计算总体百分比。在线版补充文档不能自动证明离线版完整支持范围。
 
@@ -42,10 +42,10 @@
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
 | F31 运行时变量查看/维护 | 已实现 | 按当前环境查看/编辑/清空运行值；配置指纹防止用过期编辑器覆盖值；运行值不写入项目文件。 | public/app.js; src/environments.mjs; tests/ui-smoke.mjs |
-| F32 自定义函数公共资源 | 部分实现 | 共享函数在隔离 VM 中以 utils.name 调用，快照保留；官方自定义函数还包含验证编辑器与动态参数值处理，目前尚未实现。 | src/script-worker.mjs; src/resources.mjs |
+| F32 自定义函数公共资源 | 部分实现 | 共享脚本函数、参数函数验证编辑器、固定/变量动态参数链及实际发送证据已实现；Raw Body动态插入及Faker/Mock源未实现。 | src/custom-functions.mjs; src/dynamic-values.mjs; tests/dynamic-values.test.mjs; tests/ui-smoke.mjs |
 | F33 状态码字典 | 已实现 | 纠正为业务错误码字典：支持0、负数、字符串、批量编辑，导出 API 文档；仅明确选择时用于HTTP状态提示。 | src/error-codes.mjs; public/error-code-view.js; tests/error-codes.test.mjs |
-| F34 接口属性 | 部分实现 | 已核验版本支持基础属性；七种类型、文档属性与默认不分享/选择导出已在66e9fbc实现，本地131测试通过，远端CI尚待核验。 | public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs |
-| F35 接口生命周期状态 | 部分实现 | 接口生命周期状态已核验；Markdown文档状态在66e9fbc新增，远端CI尚待核验。 | public/app.js; tests/ui-smoke.mjs |
+| F34 接口属性 | 已实现 | 支持文本、数字、单选、多选、日期、URL、邮箱，兼容布尔；API与Markdown文档可编辑，默认不分享，导出时显式选择。 | public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs |
+| F35 接口生命周期状态 | 已实现 | 接口与Markdown文档均支持生命周期状态，项目维护状态名/颜色。 | public/app.js; tests/ui-smoke.mjs |
 | F36 导入/导出 | 部分实现 | 支持OpenAPI/Postman/cURL/本工具备份；原版原生迁移不兼容 | core import/export/restore |
 | F37 快照、重复步骤、顺序执行 | 已实现 | 对应执行语义已实现并测试 | snapshotPlan; runPlan; plan-snapshots.test |
 | F38 步骤参数、Cookie和脚本覆盖 | 部分实现 | 可视化步骤快照编辑名称/方法/URL/Header/Query/Path/Cookie/Body/脚本；高级认证/断言等仍用计划 JSON。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
@@ -125,4 +125,4 @@
 | X02 在线账号与云协作 | 明确排除 | 不添加在线团队/账号 | 用户范围与原版定义 |
 | X03 传统测试角色自动化模块 | 明确排除 | 不把这一模块与AI计划混为一谈 | 原版公开范围 |
 
-原始基线：[PARITY-AUDIT.md](PARITY-AUDIT.md)。来源索引与逐项结构：[parity-current.json](parity-current.json)。
+来源索引：[parity-current.json](parity-current.json)。原始基线：[PARITY-AUDIT.md](PARITY-AUDIT.md)。

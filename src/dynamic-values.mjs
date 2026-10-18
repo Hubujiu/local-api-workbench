@@ -20,7 +20,14 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
     value = variables[spec.value];
   } else value = spec.value;
   const bounded = (value) => {
-    const serialized = JSON.stringify(value);
+    const serialized = JSON.stringify(value, (_key, item) => {
+      if (
+        ["undefined", "function", "symbol", "bigint"].includes(typeof item) ||
+        (typeof item === "number" && !Number.isFinite(item))
+      )
+        throw Error("动态值必须是有限JSON值");
+      return item;
+    });
     if (serialized === undefined || serialized.length > 65536)
       throw Error("动态值须为不超过64KiB的JSON值");
     return value;
