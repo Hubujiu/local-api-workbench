@@ -1,3 +1,10 @@
+import { attributeFields, attributeChooser } from "./attribute-view.js";
+import {
+  attributeInputValue,
+  validateAttributeDefinitions,
+  validateAttributeValues,
+  attributeTypes,
+} from "./attribute-model.js";
 import { errorCodeHTML } from "./error-code-view.js";
 import { settingsPanel } from "./settings-view.js";
 import { adoptVariableWrites } from "./variable-write-receipt.js";
@@ -538,7 +545,7 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例；没有示例时，按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
@@ -614,7 +621,7 @@ function renderPage() {
       project.documents
         .map(
           (document, index) =>
-            `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
+            `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><span class="subtle">${esc((project.settings?.statuses || []).find((status) => status.id === document.statusId)?.name || "")}</span><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
         )
         .join("") +
       project.requests
@@ -910,13 +917,15 @@ function bind() {
     collect();
     modal(
       "分享当前接口",
-      "<p>生成单接口离线HTML文件。请检查参数和示例中的密钥/业务数据后再分享。</p>",
+      "<p>生成单接口离线HTML文件。请检查参数和示例中的密钥/业务数据后再分享。</p>" +
+        attributeChooser(project),
       () => {
         download(
           request().name + ".html",
           exportDocumentation(
             { ...project, documents: [], requests: [request()] },
             "html",
+            { attributeKeys: selectedSharedAttributes() },
           ),
           "text/html",
         );
@@ -1110,17 +1119,34 @@ function bind() {
     request().statusId = element.value;
     mark();
   });
-  on("[data-attribute]", "change", (_, element) => {
+  on("[data-attribute]", "input", (_, element) => {
+    validateAttributeDefinitions(project.settings.attributes);
     const field = project.settings.attributes.find(
       (item) => item.key === element.dataset.attribute,
     );
-    (request().attributes ??= {})[field.key] =
-      field.type === "boolean"
-        ? element.checked
-        : field.type === "number"
-          ? Number(element.value)
-          : element.value;
+    const value = attributeInputValue(element, field);
+    request().attributes ??= {};
+    if (value === undefined) delete request().attributes[field.key];
+    else request().attributes[field.key] = value;
     mark();
+  });
+  on("#new-attribute", "click", () => editAttributeDefinition());
+  on("[data-edit-attribute-def]", "click", (_, element) =>
+    editAttributeDefinition(Number(element.dataset.editAttributeDef)),
+  );
+  on("[data-delete-attribute-def]", "click", async (_, element) => {
+    if (
+      !confirm(
+        "删除此属性定义？已有原始值会保留，但不会出现在界面或分享文档中。",
+      )
+    )
+      return;
+    project.settings.attributes.splice(
+      Number(element.dataset.deleteAttributeDef),
+      1,
+    );
+    mark();
+    await save();
   });
   on("#new-error-code", "click", () => editErrorCode());
   on("[data-edit-error-code]", "click", (_, element) =>
@@ -1157,7 +1183,13 @@ function bind() {
               ?.httpHint === true,
         }));
         mark();
-        await save();
+        try {
+          await save();
+        } catch (error) {
+          project.settings.statusCodes = previous;
+          mark();
+          throw error;
+        }
       },
     );
     $("#error-codes-source").value = source;
@@ -1204,6 +1236,11 @@ function bind() {
       async () => {
         const value = JSON.parse($("#modal-json").value);
         if (!Array.isArray(value)) throw Error("资源必须是数组");
+        if (key === "attributes") {
+          validateAttributeDefinitions(value);
+          for (const record of [...project.requests, ...project.documents])
+            validateAttributeValues(record.attributes, value);
+        }
         const previous = project.settings?.[key];
         project.settings ??= {};
         project.settings[key] = value;
@@ -2158,12 +2195,15 @@ function bind() {
   on("#export-docs", "click", () =>
     modal(
       "导出离线文档",
-      '<label>格式</label><select id="document-format"><option value="html">独立 HTML（浏览器直接打开）</option><option value="markdown">Markdown</option></select><div class="notice">文档包含请求和响应示例，可能含敏感字段。请检查后再分享。</div>',
+      '<label>格式</label><select id="document-format"><option value="html">独立 HTML（浏览器直接打开）</option><option value="markdown">Markdown</option></select><div class="notice">文档包含请求和响应示例，可能含敏感字段。请检查后再分享。</div>' +
+        attributeChooser(project),
       () => {
         const format = $("#document-format").value;
         download(
           project.name + (format === "html" ? ".html" : ".md"),
-          exportDocumentation(project, format),
+          exportDocumentation(project, format, {
+            attributeKeys: selectedSharedAttributes(),
+          }),
           format === "html" ? "text/html" : "text/markdown",
         );
       },
@@ -2427,6 +2467,65 @@ init().catch((e) => {
     "</pre><p>请确认本地服务正在运行，然后刷新页面。</p></div>";
 });
 
+function selectedSharedAttributes() {
+  return [
+    ...$("#dialog-content").querySelectorAll("[data-share-attribute]:checked"),
+  ].map((element) => element.value);
+}
+function editAttributeDefinition(index) {
+  const existing = project.settings?.attributes?.[index];
+  const labels = {
+    string: "文本",
+    number: "数字",
+    select: "单选",
+    multiselect: "多选",
+    date: "日期",
+    url: "链接",
+    email: "邮箱",
+    boolean: "布尔（兼容）",
+  };
+  modal(
+    existing ? "编辑接口属性" : "新增接口属性",
+    `<label>稳定标识</label><input id="attribute-key" value="${esc(existing?.key || "")}" ${existing ? "disabled" : ""}><label>显示名称</label><input id="attribute-label" value="${esc(existing?.label || "")}"><label>类型</label><select id="attribute-type">${attributeTypes.map((type) => `<option value="${type}" ${(existing?.type || "string") === type ? "selected" : ""}>${labels[type]}</option>`).join("")}</select><label>单选/多选选项（每行一个值，或 JSON 数组；其他类型忽略）</label><textarea id="attribute-options">${esc(JSON.stringify(existing?.options || [], null, 2))}</textarea><p class="muted">更改类型或删除选项时，会检查现有值，避免静默丢失数据。</p>`,
+    async () => {
+      const type = $("#attribute-type").value;
+      const field = {
+        ...existing,
+        key: $("#attribute-key").value.trim(),
+        label: $("#attribute-label").value.trim(),
+        type,
+      };
+      if (["select", "multiselect"].includes(type)) {
+        const source = $("#attribute-options").value.trim();
+        field.options = source.startsWith("[")
+          ? JSON.parse(source)
+          : source
+              .split(/\r?\n/)
+              .map((value) => value.trim())
+              .filter(Boolean);
+      }
+      const fields = [...(project.settings?.attributes || [])];
+      if (index === undefined) fields.push(field);
+      else fields[index] = field;
+      validateAttributeDefinitions(fields);
+      for (const record of [...project.requests, ...project.documents])
+        validateAttributeValues(record.attributes, fields);
+      project.settings ??= {};
+      const previous = project.settings.attributes;
+      project.settings.attributes = fields;
+      mark();
+      try {
+        await save();
+      } catch (error) {
+        project.settings.attributes = previous;
+        mark();
+        throw error;
+      }
+      if (index === undefined) index = fields.length - 1;
+    },
+  );
+}
+
 function editErrorCode(index) {
   const existing = project.settings?.statusCodes?.[index];
   modal(
@@ -2443,12 +2542,18 @@ function editErrorCode(index) {
       };
       project.settings ??= {};
       project.settings.statusCodes ??= [];
-      if (index === undefined) {
-        project.settings.statusCodes.push(item);
-        index = project.settings.statusCodes.length - 1;
-      } else project.settings.statusCodes[index] = item;
+      const previous = [...project.settings.statusCodes];
+      if (index === undefined) project.settings.statusCodes.push(item);
+      else project.settings.statusCodes[index] = item;
       mark();
-      await save();
+      try {
+        await save();
+      } catch (error) {
+        project.settings.statusCodes = previous;
+        mark();
+        throw error;
+      }
+      if (index === undefined) index = project.settings.statusCodes.length - 1;
     },
   );
 }
@@ -2476,10 +2581,17 @@ function editMockField(id) {
       const index = project.settings.mockFieldRules.findIndex(
         (item) => item.id === ruleId,
       );
+      const previous = [...project.settings.mockFieldRules];
       if (index < 0) project.settings.mockFieldRules.push(rule);
       else project.settings.mockFieldRules[index] = rule;
       mark();
-      await save();
+      try {
+        await save();
+      } catch (error) {
+        project.settings.mockFieldRules = previous;
+        mark();
+        throw error;
+      }
     },
   );
 }
@@ -2489,18 +2601,36 @@ function editDocument(index) {
     title: "新文档",
     content: "# 使用说明\n\n",
   };
+  const statuses = project.settings?.statuses || [];
   modal(
     "项目文档",
-    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
+    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
     () => {
-      const document = {
+      const fields = project.settings?.attributes || [];
+      validateAttributeDefinitions(fields);
+      const attributes = { ...(existing.attributes || {}) };
+      for (const element of $("#dialog-content").querySelectorAll(
+        "[data-doc-attribute]",
+      )) {
+        const field = fields.find(
+          (item) => item.key === element.dataset.docAttribute,
+        );
+        const value = attributeInputValue(element, field);
+        if (value === undefined) delete attributes[field.key];
+        else attributes[field.key] = value;
+      }
+      validateAttributeValues(attributes, fields);
+      const record = {
+        ...existing,
         id: existing.id || uid(),
         title: $("#document-title").value,
         folder: $("#document-folder").value,
+        statusId: $("#document-status").value,
+        attributes,
         content: $("#document-content").value,
       };
-      if (index === undefined) project.documents.push(document);
-      else project.documents[index] = document;
+      if (index === undefined) project.documents.push(record);
+      else project.documents[index] = record;
       mark();
       render();
     },

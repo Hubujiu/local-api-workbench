@@ -215,3 +215,9 @@ Thirtieth pass — error-code dictionary semantics:
 - Added string/business codes (including 0, negative integers and preserved leading-zero identifiers), single-entry CRUD, code:description bulk editing and documentation rendering/export. HTTP metric hints are now an explicit opt-in rather than confusing business codes with transport status.
 - Shared dictionary changes immediately affect the in-app documentation and subsequent HTML/Markdown exports; already exported static files require re-export. No paid/cloud AI extraction is added.
 - Tests cover canonical duplicate detection, multiline descriptions, HTML/Markdown escaping, UI bulk save, live docs and exported document contents.
+
+Thirty-first pass — documented attribute types and sharing:
+- https://wiki.apipost.cn/docs/project_set/api_attributes/ specifies text, number, single/multi-select, date, URL and email, and opt-in attribute inclusion when sharing. Added these types while preserving legacy boolean fields.
+- Definitions have single-entry CRUD plus advanced JSON; option values and existing values are validated before incompatible schema edits. API and Markdown-document editors share typed controls; documents can also carry lifecycle status as described in https://wiki.apipost.cn/docs/project_set/api_status/ .
+- HTML/Markdown exports omit custom attributes by default. The share/export dialog explicitly selects fields; tests verify selected email/priority appear and unselected internal notes/URLs do not.
+- Existing attribute values survive definition removal as hidden/orphan metadata, rather than being silently deleted. They are not exported without a matching selected definition.

@@ -1,3 +1,4 @@
+import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
 import { normalizeParameterEntry } from "./parameter-dictionary.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
@@ -183,6 +184,14 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
+    for (const record of [...(p.requests || []), ...p.documents]) {
+      validateAttributeValues(record.attributes, p.settings?.attributes || []);
+      if (
+        record.statusId !== undefined &&
+        (typeof record.statusId !== "string" || record.statusId.length > 200)
+      )
+        throw Error("状态标识无效");
+    }
     const fieldRules = validateMockFieldSettings(p.settings || {});
     if (p.settings?.mockFieldRules !== undefined)
       p.settings.mockFieldRules = fieldRules;

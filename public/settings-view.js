@@ -1,3 +1,4 @@
+import { attributePanel } from "./attribute-view.js";
 import { errorCodePanel } from "./error-code-view.js";
 import { mockFieldPanel } from "./mock-field-view.js";
 import { environmentExtras } from "./environment-view.js";
@@ -34,6 +35,9 @@ export function settingsPanel(project, active = "settings-basic") {
         )
         .join("") +
       environmentExtras(project);
+  } else if (active === "resource-attributes") {
+    title = "接口属性";
+    content = attributePanel(project);
   } else if (active === "resource-statusCodes") {
     title = "状态码字典";
     content = errorCodePanel(project);

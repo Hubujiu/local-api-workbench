@@ -23,7 +23,7 @@ export const resources = {
   attributes: {
     name: "接口属性",
     sample: [{ key: "owner", label: "负责人", type: "string" }],
-    help: "支持 string / number / boolean，在接口设计页填写。",
+    help: "支持 string / number / select / multiselect / date / url / email，兼容 boolean；选择类型使用 options 数组。属性默认不导出，分享时选择。",
   },
   statuses: {
     name: "接口状态",

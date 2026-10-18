@@ -414,6 +414,68 @@ try {
     .getByText("余额不足", { exact: true })
     .waitFor();
   await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-settings-anchor="resource-attributes"]').click();
+  await page.locator("#new-attribute").click();
+  await page.locator("#attribute-key").fill("priority");
+  await page.locator("#attribute-label").fill("优先级");
+  await page.locator("#attribute-type").selectOption("select");
+  await page.locator("#attribute-options").fill("low\nhigh");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-edit-resource="attributes"]').click();
+  await page.locator("#modal-json").fill(
+    JSON.stringify([
+      {
+        key: "priority",
+        label: "优先级",
+        type: "select",
+        options: ["low", "high"],
+      },
+      {
+        key: "many",
+        label: "模块",
+        type: "multiselect",
+        options: ["api", "ui"],
+      },
+      { key: "due", label: "日期", type: "date" },
+      { key: "home", label: "链接", type: "url" },
+      { key: "mail", label: "邮箱", type: "email" },
+      { key: "privateNote", label: "内部备注", type: "string" },
+      { key: "count", label: "数量", type: "number" },
+      { key: "enabled", label: "启用", type: "boolean" },
+    ]),
+  );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-settings-anchor="resource-statuses"]').click();
+  await page.locator('[data-edit-resource="statuses"]').click();
+  await page
+    .locator("#modal-json")
+    .fill('[{"id":"ready","name":"已完成","color":"#0f766e"}]');
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-mode="design"]').click();
+  await page.locator('[data-attribute="priority"]').selectOption("high");
+  await page.locator('[data-attribute="many"]').selectOption(["api", "ui"]);
+  await page.locator('[data-attribute="due"]').fill("2026-10-18");
+  await page
+    .locator('[data-attribute="home"]')
+    .fill("https://example.test/private");
+  await page.locator('[data-attribute="mail"]').fill("api@example.test");
+  await page.locator('[data-attribute="privateNote"]').fill("internal-only");
+  await page.locator('[data-attribute="count"]').fill("0");
+  await page.locator('[data-attribute="enabled"]').check();
+  await page.locator('[data-attribute="enabled"]').uncheck();
+  await saveAndWait();
+  await page.locator('[data-page="docs"]').click();
+  await page.locator("[data-edit-document]").first().click();
+  await page.locator("#document-status").selectOption("ready");
+  await page.locator('[data-doc-attribute="mail"]').fill("doc@example.test");
+  await page.locator("#dialog-save").click();
+  await page.getByText("已完成", { exact: true }).waitFor();
+  await saveAndWait();
+  await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-debug-env]").first().click();
   const debugValues = JSON.parse(
@@ -545,6 +607,9 @@ try {
   await saveAndWait();
 
   await page.locator("#share-api").click();
+  assert.equal(await page.locator("[data-share-attribute]:checked").count(), 0);
+  await page.locator('[data-share-attribute][value="mail"]').check();
+  await page.locator('[data-share-attribute][value="priority"]').check();
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#dialog-save").click();
   const documentDownload = await downloadPromise;
@@ -552,6 +617,9 @@ try {
   assert(documentText.includes("Content-Security-Policy"));
   assert(documentText.includes("响应定义"));
   assert(documentText.includes("AUTH_EXPIRED"));
+  assert(documentText.includes("api@example.test"));
+  assert(!documentText.includes("internal-only"));
+  assert(!documentText.includes("https://example.test/private"));
   await page.locator('[data-page="dictionary"]').click();
   await page.locator("#import-parameter-dictionary").click();
   await page.locator("#dictionary-source").fill("customerId: 客户编号");

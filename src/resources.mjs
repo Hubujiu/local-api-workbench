@@ -1,3 +1,4 @@
+import { validateAttributeDefinitions } from "../public/attribute-model.js";
 import { validateErrorCodes } from "./error-codes.mjs";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
 export function validateResources(settings = {}) {
@@ -25,14 +26,7 @@ export function validateResources(settings = {}) {
       !/^#[0-9a-f]{6}$/i.test(status.color)
     )
       throw Error("状态名称或颜色无效");
-  const attributes = list("attributes");
-  unique(attributes, "key");
-  for (const field of attributes)
-    if (
-      typeof field.label !== "string" ||
-      !["string", "number", "boolean"].includes(field.type)
-    )
-      throw Error("属性类型无效");
+  validateAttributeDefinitions(settings.attributes || []);
   validateErrorCodes(settings.statusCodes || []);
   const functions = list("functions");
   unique(functions, "name");
