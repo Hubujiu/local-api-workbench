@@ -628,6 +628,27 @@ export function importDocument(doc) {
           username: values.username || "",
           password: values.password || "",
         };
+      if (config.type === "oauth1")
+        return {
+          type: "oauth1",
+          ...Object.fromEntries(
+            [
+              "consumerKey",
+              "consumerSecret",
+              "accessToken",
+              "tokenSecret",
+              "signatureMethod",
+              "nonce",
+              "timestamp",
+              "realm",
+              "version",
+              "callback",
+              "verifier",
+            ]
+              .filter((key) => values[key] !== undefined)
+              .map((key) => [key, values[key]]),
+          ),
+        };
       if (config.type === "oauth2")
         return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
@@ -897,6 +918,10 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "oauth1")
+    throw Error(
+      "OAuth1需要每次生成签名，请使用原始请求/项目导出；不生成缺失签名的cURL。",
+    );
   const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   if (
     r.httpVersion === "2" ||

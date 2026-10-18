@@ -20,6 +20,11 @@ const fixture = http.createServer(async (request, response) => {
   if (request.url === "/sse") {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.write("data: ui-stream-fixture\n\n");
+  } else if (request.url === "/auth") {
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({ authorization: request.headers.authorization }),
+    );
   } else if (request.url === "/token") {
     for await (const _chunk of request) {
     }
@@ -364,6 +369,25 @@ try {
   await page.locator("#mcp-enabled").uncheck();
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-page="apis"]').click();
+  const oauthPreviousURL = await page.locator("#url").inputValue();
+  await page.locator("#url").fill(fixtureURL + "/auth");
+  await page.locator('[data-param="auth"]').click();
+  await page.locator("#auth-type").selectOption("oauth1");
+  await page.locator('[data-auth="consumerKey"]').fill("fixture-consumer");
+  await page.locator('[data-auth="consumerSecret"]').fill("fixture-secret");
+  const oauth1Response = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const oauth1Result = await (await oauth1Response).json();
+  assert.match(JSON.parse(oauth1Result.body).authorization, /^OAuth /);
+  assert(
+    !JSON.parse(oauth1Result.body).authorization.includes("fixture-secret"),
+  );
+  await page.locator("#auth-type").selectOption("none");
+  await page.locator("#url").fill(oauthPreviousURL);
+  await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="resource-functions"]').click();
   await page.locator("#new-function").click();
   await page.locator("#function-name").fill("double");

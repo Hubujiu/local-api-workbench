@@ -1,3 +1,4 @@
+import { oauth1Authorization } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
 import { normalizeParameterEntry } from "./parameter-dictionary.mjs";
@@ -356,6 +357,14 @@ export async function executeRequest(input, signal) {
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
   if (body) headers["content-length"] = Buffer.byteLength(body);
+  if (r.auth.type === "oauth1")
+    headers.authorization = oauth1Authorization(
+      u.href,
+      r.method,
+      headers,
+      body,
+      r.auth,
+    ).header;
   const start = performance.now();
   const connection = await prepareConnection(u, r, headers, signal);
   const remainingTimeout = r.timeout - (performance.now() - start);

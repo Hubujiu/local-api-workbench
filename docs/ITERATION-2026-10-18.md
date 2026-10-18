@@ -260,3 +260,8 @@ Previous4270822 passed all7jobs with141coretests. New matrix expands the expecte
 ## Native matrix first result
 
 9b9f60c / Actions39095503517 successfully launched and exercised all three native desktop packages (Windows/macOS/Linux); browser/database/format and Linux/Mac core passed. Windows core failed only the new layout unit assertion because it compared a Windows-normalized path to a literal forward-slash suffix. Replaced that expected suffix with path.join, preserving the expected components. Full9-job green still requires a new exact-commit run.
+
+## Thirty-eighth pass: OAuth1 signing
+
+Added explicit OAuth1 authentication UI and HMAC-SHA1/HMAC-SHA256 signing of the final wire parameters. Preserves duplicated form/query fields, supports optional realm/callback/verifier/version, and automatically generates nonce/timestamp. Postman import retains credentials. Unsupported grant/signature variants and cURL export are documented instead of silently downgraded.
+Independent RFC5849 section1.2 signature and parameter-normalization fixtures, a real local HTTP fixture and browser authorization-header evidence cover the implementation. Other advanced auth types from the historical official documentation remain unfinished.
