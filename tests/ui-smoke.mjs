@@ -943,6 +943,26 @@ try {
     await page.locator('[data-extract="1:group"]').inputValue(),
     "1",
   );
+  await page.locator("#import").click();
+  await page
+    .locator("#import-file")
+    .setInputFiles(
+      fileURLToPath(
+        new URL("./fixtures/apipost-converter-0.1.89.json", import.meta.url),
+      ),
+    );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page
+    .locator(".import-notes")
+    .getByText("原URL未声明协议，已采用HTTPS；发送前请确认。", { exact: false })
+    .waitFor();
+  assert.equal(
+    await page.locator("#url").inputValue(),
+    "https://fixture.example.test/v1/users/{id}",
+  );
+  assert.equal(await page.locator("#folder").inputValue(), "Users");
+  await page.screenshot({ path: "/tmp/local-api-apipost-import.png" });
   const observedProject = await app.store.create("stdio UI evidence");
   observedProject.plans = [
     snapshotPlan({

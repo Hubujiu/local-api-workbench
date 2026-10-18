@@ -297,3 +297,9 @@ Read the official open-source runtime package as a capability reference; did not
 A bounded random-byte primitive supports CryptoJS salt/IV creation without exposing Node modules. Chai assertion APIs replace the minimal equality-only implementation. The former require-undefined assertion now verifies the actual capability boundary: only the two allowed libraries load, while seven host module names are rejected.
 User-code250ms/16MiB and total2second worker limits remain; trusted-library initialization has its own bounded1second phase. CryptoJS maintenance status and compatibility limits are documented.
 Advanced-step predecessor2fce1c5 passed all9jobs with162coretests. This library batch requires fresh local/full CI evidence.
+
+## Forty-fourth pass: public Apipost JSON importer
+
+Added a bounded adapter for the official public converter's JSON tree, independently tested against actual swagger2apipost0.1.89 output generated from our synthetic Swagger fixture. Preserves API parameters, folders (including empty folders), basic credentials, bodies and examples/schemas. Imported file paths require reselection; unsupported dependency/script/inheritance cases fail before project mutation.
+Scheme-less URLs receive a visible persisted HTTPS-assumption note; no import executes requests. This is explicitly limited compatibility, not a claim that the current Offline2.0 native directory can be loaded unchanged.
+CryptoJS/Chai predecessor03d642b passed all9jobs with164coretests. This importer batch needs separate CI.

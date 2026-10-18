@@ -1,3 +1,4 @@
+import { apipostDocument, importApipost } from "./apipost-import.mjs";
 import { validateAuth } from "../public/auth-model.js";
 import { resolveDynamicRequest } from "./dynamic-values.mjs";
 import { extractXML } from "./xml-extraction.mjs";
@@ -189,6 +190,9 @@ export function normalizeRequest(r = {}) {
     httpVersion: r.httpVersion === "2" ? "2" : "1.1",
     folder: r.folder || "",
     description: r.description || "",
+    importNotes: Array.isArray(r.importNotes)
+      ? r.importNotes.slice(0, 20).map((note) => String(note).slice(0, 2000))
+      : [],
     statusId: String(r.statusId || ""),
     attributes: r.attributes || {},
     method,
@@ -800,6 +804,8 @@ export function importDocument(doc) {
       });
     return walk(doc.item);
   }
+  if (apipostDocument(doc))
+    return importApipost(doc).requests.map(normalizeRequest);
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
   throw Error("无法识别导入格式");
 }
@@ -1166,7 +1172,6 @@ function replaceVariables(target, source) {
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
 export function importIntoProject(project, document, { sync = false } = {}) {
-  const requests = importDocument(document);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -1181,6 +1186,10 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
+  const legacy = apipostDocument(original) ? importApipost(original) : null;
+  const requests = legacy
+    ? legacy.requests.map(normalizeRequest)
+    : importDocument(document);
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
   if (components) {
@@ -1222,6 +1231,10 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     output.push(value);
   }
   if (components) project.openapiComponents = mergedComponents;
+  if (legacy)
+    project.folders = [
+      ...new Set([...(project.folders || []), ...legacy.folders]),
+    ];
   if (Array.isArray(original.variable) && original.variable.length && !sync) {
     const variables = Object.fromEntries(
       original.variable
