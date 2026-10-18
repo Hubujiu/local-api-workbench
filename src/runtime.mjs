@@ -1,3 +1,4 @@
+import { awsSignatureHeaders } from "./aws-signature.mjs";
 import { oauth1Authorization } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
@@ -365,6 +366,11 @@ export async function executeRequest(input, signal) {
       body,
       r.auth,
     ).header;
+  if (r.auth.type === "aws")
+    Object.assign(
+      headers,
+      await awsSignatureHeaders(u.href, r.method, headers, body, r.auth),
+    );
   const start = performance.now();
   const connection = await prepareConnection(u, r, headers, signal);
   const remainingTimeout = r.timeout - (performance.now() - start);

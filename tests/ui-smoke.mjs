@@ -385,6 +385,23 @@ try {
   assert(
     !JSON.parse(oauth1Result.body).authorization.includes("fixture-secret"),
   );
+  await page.locator("#auth-type").selectOption("aws");
+  for (const [key, value] of Object.entries({
+    accessKey: "fixture-access",
+    secretKey: "fixture-aws-secret",
+    region: "us-east-1",
+    service: "execute-api",
+  }))
+    await page.locator('[data-auth="' + key + '"]').fill(value);
+  const awsResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const awsResult = await (await awsResponse).json();
+  assert.match(JSON.parse(awsResult.body).authorization, /^AWS4-HMAC-SHA256 /);
+  assert(
+    !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
+  );
   await page.locator("#auth-type").selectOption("none");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();

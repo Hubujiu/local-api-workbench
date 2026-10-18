@@ -1,3 +1,4 @@
+import { validateAuth } from "../public/auth-model.js";
 import { resolveDynamicRequest } from "./dynamic-values.mjs";
 import { extractXML } from "./xml-extraction.mjs";
 import {
@@ -120,6 +121,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validateAuth(r.auth);
   if (!r || typeof r !== "object" || Array.isArray(r))
     throw Error("接口定义必须是对象");
   for (const key of [
@@ -195,7 +197,7 @@ export function normalizeRequest(r = {}) {
     headers: r.headers || [],
     path: r.path || [],
     cookies: r.cookies || [],
-    auth: r.auth || { type: "none" },
+    auth: { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
     body:
       typeof r.body === "string"
@@ -628,6 +630,15 @@ export function importDocument(doc) {
           username: values.username || "",
           password: values.password || "",
         };
+      if (config.type === "awsv4")
+        return {
+          type: "aws",
+          ...Object.fromEntries(
+            ["accessKey", "secretKey", "sessionToken", "region", "service"]
+              .filter((key) => values[key] !== undefined)
+              .map((key) => [key, values[key]]),
+          ),
+        };
       if (config.type === "oauth1")
         return {
           type: "oauth1",
@@ -918,6 +929,10 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "aws")
+    throw Error(
+      "AWS签名需要每次计算；请使用原始请求/项目导出，不生成缺失签名的cURL。",
+    );
   if (r.auth.type === "oauth1")
     throw Error(
       "OAuth1需要每次生成签名，请使用原始请求/项目导出；不生成缺失签名的cURL。",

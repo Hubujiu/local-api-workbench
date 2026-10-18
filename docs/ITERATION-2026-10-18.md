@@ -265,3 +265,9 @@ Previous4270822 passed all7jobs with141coretests. New matrix expands the expecte
 
 Added explicit OAuth1 authentication UI and HMAC-SHA1/HMAC-SHA256 signing of the final wire parameters. Preserves duplicated form/query fields, supports optional realm/callback/verifier/version, and automatically generates nonce/timestamp. Postman import retains credentials. Unsupported grant/signature variants and cURL export are documented instead of silently downgraded.
 Independent RFC5849 section1.2 signature and parameter-normalization fixtures, a real local HTTP fixture and browser authorization-header evidence cover the implementation. Other advanced auth types from the historical official documentation remain unfinished.
+
+## Thirty-ninth pass: explicit-credential AWS Signature V4
+
+Added the official Smithy signer with pinned dependency, final-payload hashing, duplicate query handling, S3 path rules and optional session tokens. No credential-provider discovery or AWS network login. Added Postman import and explicit cURL rejection.
+Extracted authentication rendering/model into dedicated modules, retained existing OAuth2 controls, masked secret inputs, and made unknown auth types fail closed.
+Published Smithy vectors and local HTTP/browser tests cover signing. OAuth1 predecessor3fad1b7 passed all9CI jobs (146coretests); this AWS batch must be independently verified.
