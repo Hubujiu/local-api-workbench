@@ -1,3 +1,4 @@
+import { previewFunction } from "./custom-functions.mjs";
 import { parseErrorCodeList } from "./error-codes.mjs";
 import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
 import { scopedExecution, scopeMap } from "./variable-scopes.mjs";
@@ -521,6 +522,10 @@ export async function createApp({
             )
               await store.save(p);
             return json(res, 200, { result, project: p });
+          }
+          if (action === "function-preview" && req.method === "POST") {
+            const b = await body(req);
+            return json(res, 200, await previewFunction(b.function, b.value));
           }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req),

@@ -1148,6 +1148,31 @@ function bind() {
     mark();
     await save();
   });
+  on("#new-function", "click", () => editFunction());
+  on("[data-edit-function]", "click", (_, element) =>
+    editFunction(Number(element.dataset.editFunction)),
+  );
+  on("[data-delete-function]", "click", async (_, element) => {
+    if (
+      !confirm(
+        "删除函数后，引用它的请求将无法执行。已保存快照不受影响。继续删除？",
+      )
+    )
+      return;
+    const previous = [...(project.settings.functions || [])];
+    project.settings.functions.splice(
+      Number(element.dataset.deleteFunction),
+      1,
+    );
+    mark();
+    try {
+      await save();
+    } catch (error) {
+      project.settings.functions = previous;
+      mark();
+      throw error;
+    }
+  });
   on("#new-error-code", "click", () => editErrorCode());
   on("[data-edit-error-code]", "click", (_, element) =>
     editErrorCode(Number(element.dataset.editErrorCode)),
@@ -2692,3 +2717,68 @@ async function refreshMCPActivity() {
   }
 }
 setInterval(refreshMCPActivity, 1000);
+
+function editFunction(index) {
+  const existing = project.settings?.functions?.[index];
+  let tested = "";
+  const read = () => ({
+    name: $("#function-name").value.trim(),
+    kind: existing?.kind || (existing ? "script" : "transform"),
+    body: $("#function-body").value,
+  });
+  const fingerprint = () =>
+    JSON.stringify([read(), $("#function-input").value]);
+  modal(
+    existing ? "编辑自定义函数" : "新建自定义函数",
+    `<label>函数名称</label><input id="function-name" value="${esc(existing?.name || "")}" ${existing ? "disabled" : ""}><label>函数主体（${existing && existing.kind !== "transform" ? "args 数组" : "text 输入值"}）</label><textarea id="function-body"></textarea><label>测试输入（JSON）</label><textarea id="function-input">"示例"</textarea><button id="test-function" type="button">测试函数</button><pre id="function-result">尚未测试</pre>`,
+    async () => {
+      const fn = read();
+      if (!tested || tested !== fingerprint())
+        throw Error("请先测试当前函数代码和输入");
+      const previous = [...(project.settings?.functions || [])];
+      if (previous.some((item, i) => i !== index && item.name === fn.name))
+        throw Error("函数名称已存在");
+      project.settings ??= {};
+      project.settings.functions = [...previous];
+      if (index === undefined) project.settings.functions.push(fn);
+      else project.settings.functions[index] = fn;
+      mark();
+      try {
+        await save();
+      } catch (error) {
+        project.settings.functions = previous;
+        mark();
+        throw error;
+      }
+      if (index === undefined) index = project.settings.functions.length - 1;
+    },
+  );
+  $("#function-body").value = existing?.body || "return text;";
+  $("#test-function").onclick = async () => {
+    const stamp = fingerprint();
+    tested = "";
+    const button = $("#test-function");
+    const output = $("#function-result");
+    button.disabled = true;
+    try {
+      const result = await api(
+        "/projects/" + project.id + "/function-preview",
+        "POST",
+        {
+          function: read(),
+          value: JSON.parse($("#function-input").value),
+        },
+      );
+      if (stamp !== fingerprint())
+        throw Error("测试期间内容已更改，请重新测试");
+      tested = stamp;
+      output.textContent =
+        JSON.stringify(result.value, null, 2) +
+        (result.logs.length ? "\n日志：\n" + result.logs.join("\n") : "");
+    } catch (error) {
+      output.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+}

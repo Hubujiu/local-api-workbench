@@ -32,7 +32,13 @@ export function validateResources(settings = {}) {
   unique(functions, "name");
   let bytes = 0;
   for (const fn of functions) {
-    if (!/^[A-Za-z_$][\w$]*$/.test(fn.name) || typeof fn.body !== "string")
+    if (
+      !(
+        fn.kind === "transform" ? /^[A-Za-z0-9_]+$/ : /^[A-Za-z_$][\w$]*$/
+      ).test(fn.name) ||
+      typeof fn.body !== "string" ||
+      (fn.kind !== undefined && !["transform", "script"].includes(fn.kind))
+    )
       throw Error("函数定义无效");
     bytes += Buffer.byteLength(fn.body);
   }

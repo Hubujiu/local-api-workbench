@@ -1,3 +1,4 @@
+import { functionPanel } from "./function-view.js";
 import { attributePanel } from "./attribute-view.js";
 import { errorCodePanel } from "./error-code-view.js";
 import { mockFieldPanel } from "./mock-field-view.js";
@@ -35,6 +36,9 @@ export function settingsPanel(project, active = "settings-basic") {
         )
         .join("") +
       environmentExtras(project);
+  } else if (active === "resource-functions") {
+    title = "自定义函数";
+    content = functionPanel(project);
   } else if (active === "resource-attributes") {
     title = "接口属性";
     content = attributePanel(project);

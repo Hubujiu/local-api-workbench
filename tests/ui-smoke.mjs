@@ -365,10 +365,21 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-settings-anchor="resource-functions"]').click();
-  await page.locator('[data-edit-resource="functions"]').click();
+  await page.locator("#new-function").click();
+  await page.locator("#function-name").fill("double");
+  await page.locator("#function-body").fill("return text * 2;");
+  await page.locator("#function-input").fill("3");
+  await page.locator("#dialog-save").click();
+  assert(
+    await page.locator("#dialog").isVisible(),
+    "untested function cannot be saved",
+  );
+  await page.locator("#test-function").click();
   await page
-    .locator("#modal-json")
-    .fill('[{"name":"double","body":"return args[0]*2;"}]');
+    .locator("#function-result")
+    .getByText("6", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-function-validation.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -380,6 +391,9 @@ try {
   assert(
     (await page.locator("#resource-functions").innerText()).includes("double"),
   );
+  await page.locator("[data-edit-function]").first().click();
+  assert(await page.locator("#function-name").isDisabled());
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   await page.locator('[data-settings-anchor="settings-mock-fields"]').click();
   await page.locator("#new-mock-field").click();
   await page.locator("#mock-field-name").fill("姓名字段");

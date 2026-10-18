@@ -122,7 +122,9 @@ try {
         (fn) =>
           "utils[" +
           JSON.stringify(fn.name) +
-          "]=(...args)=>{\n" +
+          (fn.kind === "transform"
+            ? "]=(text,...rest)=>{const args=[text,...rest];\n"
+            : "]=(...args)=>{\n") +
           fn.body +
           "\n};",
       )

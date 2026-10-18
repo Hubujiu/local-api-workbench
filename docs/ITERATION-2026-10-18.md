@@ -221,3 +221,10 @@ Thirty-first pass — documented attribute types and sharing:
 - Definitions have single-entry CRUD plus advanced JSON; option values and existing values are validated before incompatible schema edits. API and Markdown-document editors share typed controls; documents can also carry lifecycle status as described in https://wiki.apipost.cn/docs/project_set/api_status/ .
 - HTML/Markdown exports omit custom attributes by default. The share/export dialog explicitly selects fields; tests verify selected email/priority appear and unselected internal notes/URLs do not.
 - Existing attribute values survive definition removal as hidden/orphan metadata, rather than being silently deleted. They are not exported without a matching selected definition.
+
+## Thirty-second pass: function validation editor
+
+Official references: https://wiki.apipost.cn/docs/project_set/function/ and https://wiki.apipost.cn/docs/value/dynamicvalue/ distinguish parameter transforms from ordinary script libraries.
+Added a dedicated create/edit/test/delete panel with immutable names, typed JSON preview, current-code/input test gate before save, and rollback on rejected persistence. New transform functions receive text; legacy args-based functions retain their original semantics. Execution uses the existing bounded QuickJS VM, rejects non-JSON and oversized results, and never gives the function host/network/filesystem access.
+This pass does not yet claim dynamic parameter insertion or full Faker/Mock.js support. A preview only proves the tested input, not every possible input. API/import remains schema-validated; the interactive test gate is an editor workflow, not a universal proof certificate.
+Tests cover typed output, legacy functions, invalid outputs, blocked host access and unbounded loops; UI verifies a real preview before persistence and locked names on edit.
