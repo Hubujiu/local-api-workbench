@@ -209,3 +209,9 @@ Twenty-ninth pass — corrected Smart Mock semantics:
 - Field rules apply to Body schema samples and automatic JSON response-schema Mock when no explicit response example exists. Manual examples retain priority. No arbitrary script eval or remote data/image service is used.
 - Fixed tests cover glob syntax, deterministic values, type rejection, explicit examples, real Mock/sample API equivalence and UI-generated Chinese-name fields. Scope and limits are in ADR-FIELD-MOCK.md.
 - Review also found the extraction help mentioned advanced JSON without a button in that pane. Added the missing entry and made the packaged XML smoke configure a real namespace mapping through it before extracting the response.
+
+Thirtieth pass — error-code dictionary semantics:
+- https://wiki.apipost.cn/docs/project_set/errorcodes/ defines the dictionary as shared API documentation error codes, not only HTTP 100–599 labels. The previous numeric HTTP-only restriction was incomplete.
+- Added string/business codes (including 0, negative integers and preserved leading-zero identifiers), single-entry CRUD, code:description bulk editing and documentation rendering/export. HTTP metric hints are now an explicit opt-in rather than confusing business codes with transport status.
+- Shared dictionary changes immediately affect the in-app documentation and subsequent HTML/Markdown exports; already exported static files require re-export. No paid/cloud AI extraction is added.
+- Tests cover canonical duplicate detection, multiline descriptions, HTML/Markdown escaping, UI bulk save, live docs and exported document contents.

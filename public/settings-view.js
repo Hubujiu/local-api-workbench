@@ -1,3 +1,4 @@
+import { errorCodePanel } from "./error-code-view.js";
 import { mockFieldPanel } from "./mock-field-view.js";
 import { environmentExtras } from "./environment-view.js";
 import { resourcePanels, resources } from "./resource-view.js";
@@ -33,6 +34,9 @@ export function settingsPanel(project, active = "settings-basic") {
         )
         .join("") +
       environmentExtras(project);
+  } else if (active === "resource-statusCodes") {
+    title = "状态码字典";
+    content = errorCodePanel(project);
   } else if (active.startsWith("resource-") && resources[active.slice(9)]) {
     const key = active.slice(9);
     title = resources[key].name;

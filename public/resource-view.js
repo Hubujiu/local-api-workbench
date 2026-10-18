@@ -15,10 +15,10 @@ export const resources = {
   statusCodes: {
     name: "状态码字典",
     sample: [
-      { code: 200, label: "成功" },
-      { code: 401, label: "未授权" },
+      { code: 0, label: "业务成功" },
+      { code: "AUTH_EXPIRED", label: "登录过期" },
     ],
-    help: "为100至599状态码维护项目内解释。",
+    help: "维护业务错误码与描述；字符串、0、负数和普通整数均可。httpHint:true 可选用于100至599的HTTP状态提示。",
   },
   attributes: {
     name: "接口属性",

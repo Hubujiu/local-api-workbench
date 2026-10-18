@@ -1,3 +1,4 @@
+import { validateErrorCodes } from "./error-codes.mjs";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
 export function validateResources(settings = {}) {
   const list = (key, max = 100) => {
@@ -32,19 +33,7 @@ export function validateResources(settings = {}) {
       !["string", "number", "boolean"].includes(field.type)
     )
       throw Error("属性类型无效");
-  const codes = list("statusCodes", 600);
-  const seenCodes = new Set();
-  for (const item of codes) {
-    if (
-      !Number.isInteger(item.code) ||
-      item.code < 100 ||
-      item.code > 599 ||
-      typeof item.label !== "string" ||
-      seenCodes.has(item.code)
-    )
-      throw Error("状态码字典无效或重复");
-    seenCodes.add(item.code);
-  }
+  validateErrorCodes(settings.statusCodes || []);
   const functions = list("functions");
   unique(functions, "name");
   let bytes = 0;

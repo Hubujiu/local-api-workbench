@@ -1,3 +1,4 @@
+import { errorCodeHTML, errorCodeMarkdown } from "./error-code-view.js";
 const escape = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -12,6 +13,7 @@ export function exportDocumentation(project, format = "markdown") {
     return (
       "# " +
       project.name +
+      errorCodeMarkdown(project.settings?.statusCodes || []) +
       "\n\n" +
       (project.documents || [])
         .map((document) => "## " + document.title + "\n\n" + document.content)
@@ -25,6 +27,7 @@ export function exportDocumentation(project, format = "markdown") {
         .join("\n\n")
     );
   const content =
+    errorCodeHTML(project.settings?.statusCodes || []) +
     (project.documents || [])
       .map(
         (document) =>

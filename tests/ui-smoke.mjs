@@ -391,6 +391,29 @@ try {
   await page.locator("#mock-seed").fill("42");
   await saveAndWait();
   await page.screenshot({ path: "/tmp/local-api-mock-fields.png" });
+  await page.locator('[data-settings-anchor="resource-statusCodes"]').click();
+  await page.locator("#new-error-code").click();
+  await page.locator("#error-code-value").fill("AUTH_EXPIRED");
+  await page.locator("#error-code-label").fill("登录过期");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#bulk-error-codes").click();
+  await page
+    .locator("#error-codes-source")
+    .fill("AUTH_EXPIRED: 登录过期\n0: 业务成功\n10001: 余额不足");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-error-codes.png" });
+  await page.locator('[data-page="docs"]').click();
+  await page
+    .locator(".error-code-document")
+    .getByText("AUTH_EXPIRED", { exact: true })
+    .waitFor();
+  await page
+    .locator(".error-code-document")
+    .getByText("余额不足", { exact: true })
+    .waitFor();
+  await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-debug-env]").first().click();
   const debugValues = JSON.parse(
@@ -528,6 +551,7 @@ try {
   const documentText = await readFile(await documentDownload.path(), "utf8");
   assert(documentText.includes("Content-Security-Policy"));
   assert(documentText.includes("响应定义"));
+  assert(documentText.includes("AUTH_EXPIRED"));
   await page.locator('[data-page="dictionary"]').click();
   await page.locator("#import-parameter-dictionary").click();
   await page.locator("#dictionary-source").fill("customerId: 客户编号");

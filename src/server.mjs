@@ -1,3 +1,4 @@
+import { parseErrorCodeList } from "./error-codes.mjs";
 import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
 import { scopedExecution, scopeMap } from "./variable-scopes.mjs";
 import {
@@ -334,6 +335,10 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "error-codes-preview" && req.method === "POST") {
+            const data = await body(req);
+            return json(res, 200, { codes: parseErrorCodeList(data.source) });
+          }
           if (
             action === "debug-variables" &&
             ["GET", "PUT"].includes(req.method)

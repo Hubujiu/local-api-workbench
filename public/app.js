@@ -1,3 +1,4 @@
+import { errorCodeHTML } from "./error-code-view.js";
 import { settingsPanel } from "./settings-view.js";
 import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
@@ -411,7 +412,7 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.code === response.status)?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
   }</section>`;
 }
@@ -609,12 +610,13 @@ function renderPage() {
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
-    project.documents
-      .map(
-        (document, index) =>
-          `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
-      )
-      .join("") +
+    errorCodeHTML(project.settings?.statusCodes || []) +
+      project.documents
+        .map(
+          (document, index) =>
+            `<article class="card markdown"><div class="row"><h3 class="grow">${esc(document.title)}</h3><button data-edit-document="${index}">编辑</button><button data-delete-document="${index}" class="danger">删除</button></div><pre>${esc(document.content)}</pre></article>`,
+        )
+        .join("") +
       project.requests
         .filter((r) => !r.deletedAt)
         .map(
@@ -1119,6 +1121,46 @@ function bind() {
           ? Number(element.value)
           : element.value;
     mark();
+  });
+  on("#new-error-code", "click", () => editErrorCode());
+  on("[data-edit-error-code]", "click", (_, element) =>
+    editErrorCode(Number(element.dataset.editErrorCode)),
+  );
+  on("[data-delete-error-code]", "click", async (_, element) => {
+    if (!confirm("删除此错误码？当前接口文档会同步移除。")) return;
+    project.settings.statusCodes.splice(
+      Number(element.dataset.deleteErrorCode),
+      1,
+    );
+    mark();
+    await save();
+  });
+  on("#bulk-error-codes", "click", () => {
+    const source = (project.settings?.statusCodes || [])
+      .map((item) => String(item.code) + ": " + JSON.stringify(item.label))
+      .join("\n");
+    modal(
+      "批量编辑错误码",
+      '<p>每行 错误码:描述。提交后整体替换字典，未列出的代码会移除。多行说明可使用带引号的 JSON 字符串。</p><textarea id="error-codes-source"></textarea>',
+      async () => {
+        const result = await api(
+          "/projects/" + project.id + "/error-codes-preview",
+          "POST",
+          { source: $("#error-codes-source").value },
+        );
+        const previous = project.settings?.statusCodes || [];
+        project.settings ??= {};
+        project.settings.statusCodes = result.codes.map((item) => ({
+          ...item,
+          httpHint:
+            previous.find((old) => String(old.code) === String(item.code))
+              ?.httpHint === true,
+        }));
+        mark();
+        await save();
+      },
+    );
+    $("#error-codes-source").value = source;
   });
   on("#mock-builtins", "change", (_, element) => {
     project.settings ??= {};
@@ -2384,6 +2426,32 @@ init().catch((e) => {
     esc(e.message) +
     "</pre><p>请确认本地服务正在运行，然后刷新页面。</p></div>";
 });
+
+function editErrorCode(index) {
+  const existing = project.settings?.statusCodes?.[index];
+  modal(
+    existing ? "编辑错误码" : "新增错误码",
+    `<label>错误码</label><input id="error-code-value" value="${esc(existing?.code ?? "")}" placeholder="0、10001、AUTH_EXPIRED"><label>说明</label><textarea id="error-code-label">${esc(existing?.label || "")}</textarea><label><input id="error-code-http" type="checkbox" ${existing?.httpHint ? "checked" : ""}>同时用于 HTTP 状态提示（仅100至599）</label>`,
+    async () => {
+      const raw = $("#error-code-value").value.trim();
+      const number = Number(raw);
+      const item = {
+        code:
+          Number.isSafeInteger(number) && String(number) === raw ? number : raw,
+        label: $("#error-code-label").value,
+        httpHint: $("#error-code-http").checked,
+      };
+      project.settings ??= {};
+      project.settings.statusCodes ??= [];
+      if (index === undefined) {
+        project.settings.statusCodes.push(item);
+        index = project.settings.statusCodes.length - 1;
+      } else project.settings.statusCodes[index] = item;
+      mark();
+      await save();
+    },
+  );
+}
 
 function editMockField(id) {
   const existing = project.settings?.mockFieldRules?.find(
