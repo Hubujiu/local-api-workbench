@@ -67,6 +67,17 @@ try {
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
+  const originalBody = await page.locator("#body-code").inputValue();
+  await page.locator('input[name="body-type"][value="none"]').check();
+  await page.getByText("此请求没有 Body", { exact: true }).waitFor();
+  await page.locator('input[name="body-type"][value="raw"]').check();
+  assert.equal(await page.locator("#body-code").inputValue(), originalBody);
+  await page.locator("#raw-format").selectOption("raw");
+  await page.locator("#raw-format").selectOption("json");
+
+  await page.setViewportSize({ width: 1328, height: 876 });
+  await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
+  await page.setViewportSize({ width: 1440, height: 950 });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
   await page
     .locator(".response-body")
@@ -135,6 +146,8 @@ try {
       .evaluate((element) => element.classList.contains("dark")),
   );
   await page.screenshot({ path: "/tmp/local-api-dark.png" });
+  await page.setViewportSize({ width: 1328, height: 876 });
+  await page.screenshot({ path: "/tmp/local-api-reference-dark.png" });
   await page.setViewportSize({ width: 1000, height: 760 });
   assert(await page.locator("#send").isVisible());
   await page.screenshot({ path: "/tmp/local-api-compact.png" });

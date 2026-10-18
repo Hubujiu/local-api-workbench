@@ -21,13 +21,13 @@ body {
   margin: 0;
 }
 body.dark {
-  --bg: #202125;
-  --panel: #28282c;
-  --top: #303034;
-  --line: #3c3c43;
-  --muted: #99979f;
-  --text: #e3e1dc;
-  --hover: #3b362d;
+  --bg: #1e1a12;
+  --panel: #15120d;
+  --top: #17130d;
+  --line: #342c1e;
+  --muted: #a69b83;
+  --text: #d8cfb5;
+  --hover: #30291c;
   color: var(--text);
   background: var(--bg);
 }
@@ -86,7 +86,7 @@ textarea {
   font-family: Consolas, monospace;
 }
 header.top {
-  height: 47px;
+  height: 44px;
   background: var(--top);
   display: flex;
   align-items: center;
@@ -128,10 +128,10 @@ header.top {
 }
 .shell {
   display: flex;
-  height: calc(100vh - 73px);
+  height: calc(100vh - 70px);
 }
 nav.rail {
-  width: 58px;
+  width: 50px;
   background: var(--top);
   border-right: 1px solid var(--line);
   display: flex;
@@ -150,7 +150,7 @@ nav.rail {
   background: none;
   font-size: 11px;
   padding: 8px 4px;
-  width: 48px;
+  width: 44px;
 }
 .rail button.active {
   background: var(--hover);
@@ -163,7 +163,7 @@ nav.rail {
   margin-top: auto;
 }
 .sidebar {
-  width: 256px;
+  width: 297px;
   flex-shrink: 0;
   background: var(--panel);
   padding: 12px;
@@ -895,4 +895,21 @@ summary {
 }
 .plan-step.ai-value {
   border-color: #e9c99f;
+}
+
+body.dark {
+  --accent: #e8cd94;
+}
+body.dark button.primary {
+  color: #201a10;
+}
+.body-types label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.body-types input[type="radio"] {
+  width: auto;
+  accent-color: var(--accent);
 }
