@@ -12,14 +12,15 @@ test("script can set variables and record deterministic assertions", async () =>
 });
 test("script VM does not expose process, filesystem or network", async () => {
   const result = await runScript(
-    'apt.setVar("types", [typeof process,typeof require,typeof fetch]);',
+    'apt.setVar("types", [typeof process,typeof require,typeof fetch]); apt.setVar("blocked", ["fs","node:fs","http","node:http","child_process","worker_threads","crypto"].map(name=>{try{require(name);return false;}catch(error){return error.message.includes("不允许");}}));',
     { variables: {} },
   );
   assert.deepEqual(result.variables.types, [
     "undefined",
-    "undefined",
+    "function",
     "undefined",
   ]);
+  assert.deepEqual(result.variables.blocked, Array(7).fill(true));
 });
 test("infinite scripts are interrupted without hanging the runner", async () => {
   await assert.rejects(

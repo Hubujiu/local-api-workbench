@@ -68,8 +68,16 @@ try {
   await window.locator('[data-param="after"]').click();
   await window
     .locator("#script-code")
-    .fill('console.log("packaged-script-ok");');
+    .fill(
+      'console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));',
+    );
+  const scriptResponse = window.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
   await window.locator("#send").click();
+  assert.equal((await (await scriptResponse).json()).outcome, "passed");
   await window.locator('[data-response="logs"]').click();
   await window
     .locator(".response-body")

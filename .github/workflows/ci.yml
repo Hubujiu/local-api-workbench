@@ -102,10 +102,11 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci --ignore-scripts
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
       - run: npm run format:check
       - run: node scripts/build-markdown.mjs
-      - run: git diff --exit-code -- public/vendor
+      - run: node scripts/build-sandbox-libraries.mjs
+      - run: git diff --exit-code -- public/vendor src/vendor
 
   database-integration:
     timeout-minutes: 10

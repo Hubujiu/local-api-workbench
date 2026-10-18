@@ -290,3 +290,10 @@ Execution-step snapshots now expose the shared authentication editor (without tr
 Moved modal bindings into the step-editor module. Saving a candidate no longer mutates the live plan before the server accepts it, and a preceding project save no longer replaces an independently edited plan candidate. Browser validation injects a rejected plan save, cancels, reopens and confirms the prior token remains; accepted edits persist and the plan actually runs.
 Corrected the script UI wording from CPU time to the actual250ms wall-clock execution budget plus2second worker deadline. No safety limit was changed.
 stdio predecessor482c156 passed all9CI jobs with161coretests; this batch has162localtests and requires fresh CI.
+
+## Forty-third pass: isolated CryptoJS and Chai compatibility
+
+Read the official open-source runtime package as a capability reference; did not run its VM or pull in its host-access stack. Added pinned pure-JS CryptoJS/Chai bundles inside QuickJS with retained licenses, reproducible build checks and full dependency auditing.
+A bounded random-byte primitive supports CryptoJS salt/IV creation without exposing Node modules. Chai assertion APIs replace the minimal equality-only implementation. The former require-undefined assertion now verifies the actual capability boundary: only the two allowed libraries load, while seven host module names are rejected.
+User-code250ms/16MiB and total2second worker limits remain; trusted-library initialization has its own bounded1second phase. CryptoJS maintenance status and compatibility limits are documented.
+Advanced-step predecessor2fce1c5 passed all9jobs with162coretests. This library batch requires fresh local/full CI evidence.
