@@ -361,6 +361,14 @@ try {
     .locator('[data-dynamic-field="source"]')
     .selectOption("variable");
   await newHeader.locator('[data-dynamic-field="value"]').fill("stepHeader");
+  assert.equal(
+    await newHeader.locator("[data-dynamic-mock]").isVisible(),
+    false,
+  );
+  assert(
+    (await newHeader.locator('[data-dynamic-field="value"]').boundingBox())
+      .height <= 100,
+  );
   await newHeader.locator(".step-dynamic").scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-step-dynamic.png" });
   await page
@@ -510,6 +518,60 @@ try {
     "Bearer step-fixture-token",
   );
   await page.screenshot({ path: "/tmp/local-api-plan.png" });
+  await page.locator('[data-plan-tab="plans"]').click();
+  await page.locator('[data-step-edit="0"]').click();
+  await page.locator('[data-step-field="bodyType"]').selectOption("json");
+  const stepBodyText = page.locator('[data-step-field="body"]');
+  await stepBodyText.fill('{"value":}');
+  await page
+    .locator("#dialog-content summary")
+    .getByText("Raw Body动态值", { exact: true })
+    .click();
+  await page.locator("[data-step-body-add]").click();
+  let bodyDynamicRow = page.locator("[data-step-body-dynamic]").last();
+  await stepBodyText.evaluate((element) => element.setSelectionRange(9, 9));
+  await bodyDynamicRow.locator("[data-step-body-insert]").click();
+  assert.match(await stepBodyText.inputValue(), /\{\{@value:/);
+  await bodyDynamicRow.locator("[data-step-body-remove]").click();
+  assert.equal(await stepBodyText.inputValue(), '{"value":}');
+  await page.locator("[data-step-body-add]").click();
+  bodyDynamicRow = page.locator("[data-step-body-dynamic]").last();
+  const rawDynamicValue = { line: 'a"b', zero: 0 };
+  await bodyDynamicRow
+    .locator('[data-dynamic-field="value"]')
+    .fill(JSON.stringify(rawDynamicValue));
+  await stepBodyText.evaluate((element) => element.setSelectionRange(9, 9));
+  await bodyDynamicRow.locator("[data-step-body-insert]").click();
+  await bodyDynamicRow.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-step-body-dynamic.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-step-edit="0"]').click();
+  await page
+    .locator("#dialog-content summary")
+    .getByText("Raw Body动态值", { exact: true })
+    .click();
+  bodyDynamicRow = page.locator("[data-step-body-dynamic]").last();
+  await bodyDynamicRow.locator(".step-dynamic summary").click();
+  assert.equal(
+    await bodyDynamicRow.locator('[data-dynamic-field="value"]').inputValue(),
+    JSON.stringify(rawDynamicValue),
+  );
+  await bodyDynamicRow.locator("[data-dynamic-enabled]").uncheck();
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("正文仍引用已关闭或移除的Body动态值", { exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  const bodyDynamicRun = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/run"),
+  );
+  await page.locator("#run-plan").click();
+  assert.equal((await (await bodyDynamicRun).json()).status, "passed");
+  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  assert.deepEqual(JSON.parse(uploadedMultipart.body.toString()), {
+    value: rawDynamicValue,
+  });
   // An intentionally failing pre-script must expose its assertion without sending.
   await page.locator('[data-plan-tab="plans"]').click();
   await page.locator('[data-step-edit="0"]').click();

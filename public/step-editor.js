@@ -1,4 +1,8 @@
-import { dynamicEditor, parseDynamicEdits } from "./dynamic-editor.js";
+import {
+  dynamicEditor,
+  parseDynamicEdits,
+  bindDynamicEditors,
+} from "./dynamic-editor.js";
 import { authPanel } from "./auth-view.js";
 import { validateAuth } from "./auth-model.js";
 const esc = (v) =>
@@ -77,9 +81,14 @@ export function stepEditor(step) {
       .join("") +
     "</select>" +
     textarea("body", "JSON / 文本 / Base64 内容", r.body) +
+    '<details><summary>Raw Body动态值</summary><p class="muted">JSON输出自动转义，不要再给占位符加引号。移除会删除当前正文中的同名占位符，保存前可取消。</p><div data-step-body-dynamics>' +
+    Object.entries(r.bodyDynamic || {})
+      .map(([id, spec]) => bodyDynamicRow(id, spec))
+      .join("") +
+    '</div><button type="button" data-step-body-add>添加Body动态值</button></details>' +
     '<details><summary>表单字段（form-data / urlencoded）</summary><div data-step-pairs="form">' +
     (r.form || []).map((row, index) => pairRow("form", index, row)).join("") +
-    '</div><button data-step-add="form">添加表单字段</button></details><p class="muted">文件由你选择后保存在步骤快照，最多6MiB；参数动态值可在各行配置；Raw Body动态定义仍可用计划JSON编辑。</p></details>' +
+    '</div><button data-step-add="form">添加表单字段</button></details><p class="muted">文件由你选择后保存在步骤快照，最多6MiB；参数动态值可在各行配置，Raw Body占位符在上方独立编辑。</p></details>' +
     '<details><summary>连接与证书</summary><label>超时（100–60000ms）</label><input type="number" min="100" max="60000" data-step-field="timeout" value="' +
     esc(r.timeout ?? 15000) +
     '"><label>协议版本</label><select data-step-field="httpVersion"><option value="1.1" ' +
@@ -134,6 +143,9 @@ export function stepEditor(step) {
     textarea("afterScript", "后置脚本（隔离 VM）", r.afterScript) +
     "</details></div>"
   );
+}
+function bodyDynamicRow(id, spec) {
+  return `<div data-step-body-dynamic="${esc(id)}"><code>{{@value:${esc(id)}}}</code><label>输出格式<select data-step-body-format><option value="json" ${spec.format !== "text" ? "selected" : ""}>JSON值</option><option value="text" ${spec.format === "text" ? "selected" : ""}>原始文本</option></select></label><button type="button" data-step-body-insert>插入正文光标处</button><button type="button" data-step-body-remove>移除定义和占位符</button>${dynamicEditor(spec)}</div>`;
 }
 export function pairRow(key, index, row = {}) {
   if (key === "form")
@@ -236,6 +248,31 @@ export function applyStepEdits(step, fields, pairGroups, rules = {}) {
       }
       return result;
     });
+  }
+  if (Object.hasOwn(fields, "bodyDynamic")) {
+    const definitions = fields.bodyDynamic;
+    if (
+      !definitions ||
+      typeof definitions !== "object" ||
+      Array.isArray(definitions) ||
+      Object.keys(definitions).length > 100
+    )
+      throw Error("Body动态定义最多100项");
+    for (const [id, spec] of Object.entries(definitions)) {
+      if (
+        !/^[A-Za-z0-9_-]{1,100}$/.test(id) ||
+        ["__proto__", "prototype", "constructor"].includes(id)
+      )
+        throw Error("Body动态标识无效");
+      if (!spec || !["json", "text"].includes(spec.format))
+        throw Error("Body动态值输出格式无效");
+    }
+    for (const match of String(next.request.body || "").matchAll(
+      /\{\{@value:([A-Za-z0-9_-]{1,100})\}\}/g,
+    ))
+      if (!Object.hasOwn(definitions, match[1]))
+        throw Error("正文仍引用已关闭或移除的Body动态值");
+    next.request.bodyDynamic = structuredClone(definitions);
   }
   if (fields.auth) {
     validateAuth(fields.auth);
@@ -349,8 +386,49 @@ export function bindStepEditor(container, step) {
     };
   };
   bindAuth();
+  const bodyDefinitions = structuredClone(step.request.bodyDynamic || {});
+  const bodyHolder = container.querySelector("[data-step-body-dynamics]");
+  const bodyText = container.querySelector('[data-step-field="body"]');
+  const bindBodyDynamics = () => {
+    bindDynamicEditors(container);
+    for (const row of bodyHolder.querySelectorAll("[data-step-body-dynamic]")) {
+      const id = row.dataset.stepBodyDynamic,
+        token = "{{@value:" + id + "}}";
+      row.querySelector("[data-step-body-insert]").onclick = () => {
+        const start = bodyText.selectionStart,
+          end = bodyText.selectionEnd;
+        bodyText.value =
+          bodyText.value.slice(0, start) + token + bodyText.value.slice(end);
+        bodyText.focus();
+        bodyText.setSelectionRange(start + token.length, start + token.length);
+      };
+      row.querySelector("[data-step-body-remove]").onclick = () => {
+        bodyText.value = bodyText.value.split(token).join("");
+        row.remove();
+        container.querySelector("[data-step-body-add]").disabled =
+          bodyHolder.children.length >= 100;
+      };
+    }
+  };
+  container.querySelector("[data-step-body-add]").onclick = () => {
+    if (bodyHolder.children.length >= 100) return;
+    const id = crypto.randomUUID(),
+      spec = { source: "fixed", value: null, format: "json", functions: [] };
+    bodyDefinitions[id] = spec;
+    bodyHolder.insertAdjacentHTML("beforeend", bodyDynamicRow(id, spec));
+    bindBodyDynamics();
+    bodyHolder.lastElementChild.querySelector(".step-dynamic").open = true;
+    container.querySelector("[data-step-body-add]").disabled =
+      bodyHolder.children.length >= 100;
+  };
+  bindBodyDynamics();
+  container.querySelector("[data-step-body-add]").disabled =
+    bodyHolder.children.length >= 100;
+  container.querySelector("[data-step-body-add]").title =
+    "最多100个Body动态定义";
   const formRows = new WeakMap();
   const bindFormRows = () => {
+    bindDynamicEditors(container);
     for (const row of container.querySelectorAll(
       '[data-step-pairs="form"] [data-step-pair-row]',
     )) {
@@ -447,6 +525,35 @@ export function bindStepEditor(container, step) {
         element.dataset.stepField,
         element.value,
       ]),
+    );
+    fields.bodyDynamic = Object.fromEntries(
+      [...bodyHolder.querySelectorAll("[data-step-body-dynamic]")].flatMap(
+        (row) => {
+          const id = row.dataset.stepBodyDynamic;
+          const spec = parseDynamicEdits(
+            {
+              enabled: row.querySelector("[data-dynamic-enabled]").checked,
+              ...Object.fromEntries(
+                [...row.querySelectorAll("[data-dynamic-field]")].map(
+                  (element) => [element.dataset.dynamicField, element.value],
+                ),
+              ),
+            },
+            bodyDefinitions[id],
+          );
+          return spec
+            ? [
+                [
+                  id,
+                  {
+                    ...spec,
+                    format: row.querySelector("[data-step-body-format]").value,
+                  },
+                ],
+              ]
+            : [];
+        },
+      ),
     );
     fields.auth = collectAuth();
     fields.tls = Object.fromEntries(

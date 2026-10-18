@@ -1546,3 +1546,19 @@ dialog:has(#schema-editor) {
 .step-dynamic select {
   width: 100%;
 }
+
+[data-step-body-dynamic] {
+  border: 1px solid var(--line);
+  padding: 12px;
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+[data-step-body-dynamic] > label {
+  display: block;
+  margin: 8px 0;
+}
+
+#dialog .step-dynamic textarea {
+  min-height: 64px;
+  height: 80px;
+}

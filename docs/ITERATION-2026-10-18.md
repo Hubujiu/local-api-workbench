@@ -450,3 +450,9 @@ Response retry review additionally keeps pending schema edits transactional when
 - e93d816 Actions39120873680 completed successfully; encoded-reference fix has202core tests.
 - Step Header/Query/Path/Cookie/text-form rows now configure typed fixed JSON, variable and bounded Mock values plus ordered transforms, with explicit disable/removal, metadata preservation and file/dynamic rejection. The first model tests failed before wiring and pass after it. Raw Body dynamic token editing remains advancedJSON; no preview/network side effects are introduced.
 - Browser regression adds invalid-JSON correction, reopen persistence and real multipart header resolution after the step pre-script. Pending exact-head CI and screenshot inspection.
+
+## Pass 67 — step Raw Body dynamic UI
+
+- 86ae996 Actions39121144508 completed successfully with205core tests. UI artifact12133977587 SHA2569d21ebddfa50a776719f1953a21997ff9a7012b760ce49ba93a1e4a7fa9881cc verified and dynamic parameter screenshot inspected.
+- Added Raw Body definition/source/format editing, cursor insertion and explicit remove-token behavior. Disabled referenced definitions reject save; draft cancellation preserves the stored definition.206local core tests pass; actual JSON body/cancel regression and screenshot await exact-head CI.
+- Screenshot inspection also found the generic modal minimum height overriding the intended compact dynamic textarea. Added an ID-specific80px control rule and hide Mock-only fields for fixed/variable sources; browser checks control height and conditional visibility.

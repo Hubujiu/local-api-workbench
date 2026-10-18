@@ -125,3 +125,41 @@ test("dynamic Mock seed follows the runtime unsigned32-bit contract", () => {
       /种子/,
     );
 });
+test("step body dynamic definitions preserve typed formats and reject dangling tokens atomically", () => {
+  const step = {
+    name: "s",
+    request: {
+      body: '{"n":{{@value:n}}}',
+      bodyDynamic: {
+        n: { source: "fixed", value: 0, format: "json", note: "keep" },
+      },
+    },
+  };
+  const definition = { ...step.request.bodyDynamic.n, value: false };
+  const next = applyStepEdits(
+    step,
+    { name: "s", bodyDynamic: { n: definition } },
+    {},
+  );
+  assert.equal(next.request.bodyDynamic.n.value, false);
+  assert.equal(step.request.bodyDynamic.n.value, 0);
+  assert.throws(
+    () => applyStepEdits(step, { name: "s", bodyDynamic: {} }, {}),
+    /动态/,
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "s", bodyDynamic: { n: { ...definition, format: "unsafe" } } },
+        {},
+      ),
+    /格式/,
+  );
+  const removed = applyStepEdits(
+    step,
+    { name: "s", body: "{}", bodyDynamic: {} },
+    {},
+  );
+  assert.deepEqual(removed.request.bodyDynamic, {});
+});
