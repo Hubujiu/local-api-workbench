@@ -10,7 +10,7 @@ import {
 import { errorCodeHTML } from "./error-code-view.js";
 import { settingsPanel } from "./settings-view.js";
 import { adoptVariableWrites } from "./variable-write-receipt.js";
-import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
+import { stepEditor, bindStepEditor } from "./step-editor.js";
 import {
   dictionaryPanel,
   dictionaryValue,
@@ -511,7 +511,7 @@ function paramPanel(r) {
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
-    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
+    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test 和 console.log；250ms执行预算（墙钟时间）、2秒worker总截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -676,10 +676,10 @@ function addRequest() {
   render();
 }
 async function savePlan(plan) {
+  plan = structuredClone(plan);
   if (dirty) {
     await save();
     if (dirty) throw Error("保存期间出现新的修改，请检查后再次保存");
-    plan = project.plans.find((item) => item.id === plan.id) || plan;
   }
   const projectId = project.id;
   const result = await api("/projects/" + projectId + "/plans", "POST", {
@@ -2142,46 +2142,13 @@ function bind() {
   on("[data-step-edit]", "click", (_, e) => {
     const p = project.plans.find((p) => p.id === planId),
       i = Number(e.dataset.stepEdit);
+    let collectEdits;
     modal("编辑步骤快照", stepEditor(p.steps[i]), () => {
-      const fields = Object.fromEntries(
-        [...$("#dialog-content").querySelectorAll("[data-step-field]")].map(
-          (el) => [el.dataset.stepField, el.value],
-        ),
-      );
-      const groups = {};
-      for (const key of ["headers", "query", "path", "cookies"])
-        groups[key] = [
-          ...$("#dialog-content").querySelectorAll(
-            '[data-step-pairs="' + key + '"] [data-step-pair-row]',
-          ),
-        ].map((row) => ({
-          index: Number(row.dataset.stepPairRow.split(":")[1]),
-          key: row.querySelector("[data-step-key]").value,
-          value: row.querySelector("[data-step-value]").value,
-          enabled: row.querySelector("[data-step-enabled]").checked,
-        }));
-      p.steps[i] = applyStepEdits(p.steps[i], fields, groups);
-      return savePlan(p);
+      const candidate = structuredClone(p);
+      candidate.steps[i] = collectEdits();
+      return savePlan(candidate);
     });
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-step-add]",
-    ))
-      button.onclick = () => {
-        const key = button.dataset.stepAdd;
-        const holder = $("#dialog-content").querySelector(
-          '[data-step-pairs="' + key + '"]',
-        );
-        holder.insertAdjacentHTML("beforeend", pairRow(key, -1));
-        for (const remove of holder.querySelectorAll("[data-step-remove]")) {
-          remove.type = "button";
-          remove.onclick = () =>
-            remove.closest("[data-step-pair-row]").remove();
-        }
-      };
-    for (const remove of $("#dialog-content").querySelectorAll(
-      "[data-step-remove]",
-    ))
-      remove.onclick = () => remove.closest("[data-step-pair-row]").remove();
+    collectEdits = bindStepEditor($("#dialog-content"), p.steps[i]);
   });
   on("#run-plan", "click", async () => {
     if (dirty) {

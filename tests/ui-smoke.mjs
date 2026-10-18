@@ -190,6 +190,42 @@ try {
     .last();
   await newHeader.locator("[data-step-key]").fill("x-step-proof");
   await newHeader.locator("[data-step-value]").fill("snapshot");
+  await page
+    .locator("#dialog-content summary")
+    .getByText("认证", { exact: true })
+    .click();
+  await page.locator("#step-auth #auth-type").selectOption("bearer");
+  await page
+    .locator('#step-auth [data-auth="token"]')
+    .fill("step-fixture-token");
+  await page
+    .locator("#dialog-content summary")
+    .getByText("断言", { exact: true })
+    .click();
+  await page.locator('[data-step-rule-add="assertions"]').click();
+  const stepAssertion = page
+    .locator('[data-step-rules="assertions"] [data-step-rule-row]')
+    .last();
+  await stepAssertion.locator('[data-step-rule-field="target"]').fill("status");
+  await stepAssertion.locator('[data-step-rule-field="value"]').fill("200");
+  await page
+    .locator("#dialog-content summary")
+    .getByText("变量提取", { exact: true })
+    .click();
+  await page.locator('[data-step-rule-add="extract"]').click();
+  const stepExtract = page
+    .locator('[data-step-rules="extract"] [data-step-rule-row]')
+    .last();
+  await stepExtract
+    .locator('[data-step-rule-field="name"]')
+    .fill("stepContentType");
+  await stepExtract
+    .locator('[data-step-rule-field="source"]')
+    .selectOption("header");
+  await stepExtract
+    .locator('[data-step-rule-field="path"]')
+    .fill("content-type");
+
   await page.screenshot({ path: "/tmp/local-api-step-editor.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -199,11 +235,55 @@ try {
     "独立快照步骤",
   );
   assert.equal(
+    await page.locator('#step-auth [data-auth="token"]').inputValue(),
+    "step-fixture-token",
+  );
+  assert.equal(
+    await page
+      .locator('[data-step-rules="assertions"] [data-step-rule-field="value"]')
+      .last()
+      .inputValue(),
+    "200",
+  );
+  assert.equal(
+    await page
+      .locator('[data-step-rules="extract"] [data-step-rule-field="name"]')
+      .last()
+      .inputValue(),
+    "stepContentType",
+  );
+
+  assert.equal(
     await page
       .locator('[data-step-pairs="headers"] [data-step-value]')
       .last()
       .inputValue(),
     "snapshot",
+  );
+  await page
+    .locator("#dialog-content summary")
+    .getByText("认证", { exact: true })
+    .click();
+  await page
+    .locator('#step-auth [data-auth="token"]')
+    .fill("must-not-survive-failed-save");
+  await page.route("**/api/projects/*/plans", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "fixture plan conflict" }),
+        })
+      : route.continue(),
+  );
+  await page.locator("#dialog-save").click();
+  await page.getByText("fixture plan conflict", { exact: true }).waitFor();
+  await page.unroute("**/api/projects/*/plans");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator('[data-step-edit="0"]').click();
+  assert.equal(
+    await page.locator('#step-auth [data-auth="token"]').inputValue(),
+    "step-fixture-token",
   );
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page

@@ -51,3 +51,70 @@ test("visual step edits preserve snapshot identity, metadata and untouched advan
     ),
   );
 });
+test("advanced step edits preserve source metadata while editing auth assertions and extraction", () => {
+  const step = {
+    name: "step",
+    request: {
+      auth: { type: "basic", username: "source" },
+      assertions: [{ target: "$.x", op: "eq", value: null, note: "retained" }],
+      extract: [
+        {
+          name: "x",
+          source: "xml",
+          path: "/n:root",
+          namespaces: { n: "urn:test" },
+        },
+      ],
+    },
+  };
+  const next = applyStepEdits(
+    step,
+    { name: "step", auth: { type: "bearer", token: "step-token" } },
+    {},
+    {
+      assertions: [{ index: 0, target: "status", op: "eq", value: "200" }],
+      extract: [
+        {
+          index: 0,
+          name: "value",
+          source: "xml",
+          scope: "runtime",
+          path: "/n:root/text()",
+          group: "0",
+        },
+      ],
+    },
+  );
+  assert.equal(step.request.auth.type, "basic");
+  assert.equal(next.request.auth.type, "bearer");
+  assert.equal(next.request.assertions[0].value, 200);
+  assert.equal(next.request.assertions[0].note, "retained");
+  assert.deepEqual(next.request.extract[0].namespaces, { n: "urn:test" });
+  assert(stepEditor(step).includes('value="null"'));
+  assert(
+    !stepEditor({
+      name: "oauth",
+      request: { auth: { type: "oauth2" } },
+    }).includes('id="oauth-get"'),
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "step" },
+        {},
+        {
+          extract: [
+            {
+              index: -1,
+              name: "__proto__",
+              source: "json",
+              scope: "runtime",
+              group: 0,
+            },
+          ],
+        },
+      ),
+    /名称/,
+  );
+});

@@ -283,3 +283,10 @@ AWS predecessor716d1f3 passed all9jobs (152coretests). Current local suite159pas
 Added safe runtime activity records and a heartbeat bridge so the existing UI progress view sees a separately running stdio MCP process, even with HTTP MCP disabled. Exposes the data-root configuration needed to share evidence, without implicitly granting project/write/execute permission.
 Tests use the actual local stdio server, a gated two-step HTTP fixture and browser-visible running/finished status while preserving a dirty editor. No Codex or external AI agent is invoked.
 Hawk/EdgeGrid predecessor2bb52ac passed all9jobs (159coretests); new local suite161tests passes before browser verification.
+
+## Forty-second pass: visual advanced step editing
+
+Execution-step snapshots now expose the shared authentication editor (without triggering OAuth grants), structured assertion rows and extraction source/scope/path/group controls. Existing XML namespace maps and other metadata survive row edits. Form-file/TLS/dynamic-definition advanced details remain preserved rather than silently rewritten.
+Moved modal bindings into the step-editor module. Saving a candidate no longer mutates the live plan before the server accepts it, and a preceding project save no longer replaces an independently edited plan candidate. Browser validation injects a rejected plan save, cancels, reopens and confirms the prior token remains; accepted edits persist and the plan actually runs.
+Corrected the script UI wording from CPU time to the actual250ms wall-clock execution budget plus2second worker deadline. No safety limit was changed.
+stdio predecessor482c156 passed all9CI jobs with161coretests; this batch has162localtests and requires fresh CI.

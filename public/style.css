@@ -1318,3 +1318,12 @@ body.compact-ui .sidebar {
   padding: 10px;
   margin: 8px 0;
 }
+
+.step-rule-row {
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.step-rule-row[data-step-rule-row^="assertions:"] {
+  grid-template-columns: minmax(90px, 1fr) 90px minmax(90px, 1fr) 30px;
+}

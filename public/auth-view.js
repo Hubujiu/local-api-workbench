@@ -83,7 +83,7 @@ const options = (list, selected) =>
         `<option ${value === selected ? "selected" : ""}>${esc(value)}</option>`,
     )
     .join("");
-export function authPanel(auth = {}) {
+export function authPanel(auth = {}, { acquire = true } = {}) {
   const type = auth.type || "none";
   let html =
     '<div class="form-grid"><label>认证类型</label><select id="auth-type">' +
@@ -119,9 +119,13 @@ export function authPanel(auth = {}) {
           `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
-  if (type === "oauth2")
-    html +=
-      '<p><button id="oauth-get" class="primary">获取令牌</button></p><div class="notice">授权码模式启用PKCE S256。凭据只发送到配置的endpoint；优先使用HTTPS。获取的令牌仅在当前编辑状态，保存时才写入项目。</div>';
+  if (type === "oauth2") {
+    if (acquire)
+      html += '<p><button id="oauth-get" class="primary">获取令牌</button></p>';
+    html += acquire
+      ? '<div class="notice">授权码模式启用PKCE S256。凭据只发送到配置的endpoint；优先使用HTTPS。获取的令牌仅在当前编辑状态，保存时才写入项目。</div>'
+      : '<div class="notice">步骤快照使用明确填写的令牌，不自动启动授权跳转。</div>';
+  }
   if (type === "oauth1")
     html +=
       '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；此处使用已有凭据，不自动运行OAuth1授权跳转。RSA/PLAINTEXT尚不支持。</p>';
