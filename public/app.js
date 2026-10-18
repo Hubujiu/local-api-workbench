@@ -1,5 +1,6 @@
 import {
   dictionaryPanel,
+  insertDictionaryField,
   effectiveParameterDictionary,
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
@@ -439,6 +440,13 @@ function paramPanel(r) {
                           `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
                       )
                       .join("") || "<p>暂无变量</p>"
+                  }<h4>参数字典 · 插入 JSON 字段</h4>${
+                    effectiveParameterDictionary(project)
+                      .map(
+                        (entry) =>
+                          `<button data-insert-dictionary="${esc(entry.id)}" title="${esc(entry.description)}">${esc(entry.key)} · ${esc(entry.type)}</button>`,
+                      )
+                      .join("") || "<p>暂无字典参数</p>"
                   }<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre></aside>`
                 : ""
             }</div>`
@@ -1145,6 +1153,17 @@ function bind() {
       element.dataset.insertVariable +
       "}}" +
       editor.value.slice(end);
+    mark();
+    render();
+  });
+  on("[data-insert-dictionary]", "click", (_, element) => {
+    collect();
+    const entry = effectiveParameterDictionary(project).find(
+      (item) => item.id === element.dataset.insertDictionary,
+    );
+    if (!entry) throw Error("字典参数已不存在");
+    request().body = insertDictionaryField(request().body, entry);
+    request().bodyType = "json";
     mark();
     render();
   });

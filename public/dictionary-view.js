@@ -110,3 +110,38 @@ export function effectiveParameterDictionary(project) {
       : []),
   ];
 }
+
+// Refuse ambiguous edits: only insert a new own property in a JSON object.
+export function insertDictionaryField(body, entry) {
+  let object;
+  try {
+    object = JSON.parse(body.trim() || "{}");
+  } catch {
+    throw Error("请先修正请求体 JSON，再插入字典字段");
+  }
+  if (!object || typeof object !== "object" || Array.isArray(object))
+    throw Error("字典字段只能插入 JSON 对象");
+  if (Object.hasOwn(object, entry.key))
+    throw Error("请求体已有同名字段，未覆盖现有值");
+  const fallback = {
+    string: "",
+    integer: 0,
+    number: 0,
+    boolean: false,
+    object: {},
+    array: [],
+  };
+  const value =
+    entry.default ??
+    entry.example ??
+    entry.enum?.[0] ??
+    fallback[entry.type] ??
+    null;
+  Object.defineProperty(object, entry.key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  return JSON.stringify(object, null, 2);
+}

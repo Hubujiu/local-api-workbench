@@ -414,6 +414,17 @@ try {
     await page.locator('[data-pair="query:0:key"]').inputValue(),
     "customerId",
   );
+  await page.locator('[data-param="body"]').click();
+  await page.locator("#body-code").fill('{"existing":true}');
+  await page.locator("#toggle-parameter-helper").click();
+  await page
+    .locator("[data-insert-dictionary]")
+    .filter({ hasText: "customerId" })
+    .click();
+  assert.deepEqual(JSON.parse(await page.locator("#body-code").inputValue()), {
+    existing: true,
+    customerId: "",
+  });
   await saveAndWait();
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

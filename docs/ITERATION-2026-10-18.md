@@ -83,3 +83,8 @@ Eleventh pass: parameter dictionary semantics
 - Parameter dictionary supports persistent entries, optional built-in common fields, explicit reuse in parameter rows, temporary captured descriptions, and KV/JSON/common MySQL CREATE TABLE preview import. Source duplicates select the more complete definition; existing key/type conflicts are unselected until the user chooses them.
 - MySQL DDL is parsed as data only, never executed, and unsupported syntax/types fail explicitly. This does not claim a full SQL grammar or paid AI fill.
 - 90 local tests pass. Browser adds dictionary import/reload/reuse. The prior tree run failed only because a document heading now also exists in the tree; the test locator is scoped to the heading, not weakened.
+
+Twelfth pass:
+- a5d5853483f143efa9e5376630dbb594ff745e0d passed all seven jobs in run 39086847229, including dictionary import/reload/reuse and packaged Windows startup.
+- The JSON body helper now shows reusable dictionary parameters and inserts typed default/example values, refusing duplicate keys or non-object/invalid JSON without overwriting existing data.
+- 91 local tests pass. A browser regression checks insertion preserves existing body fields; this new change still requires its own exact-head CI.

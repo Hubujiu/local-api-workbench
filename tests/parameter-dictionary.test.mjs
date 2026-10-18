@@ -40,3 +40,44 @@ test("dictionary preview chooses complete source duplicates and flags existing k
   assert.equal(preview[0].duplicate, true);
   assert.equal(preview[1].duplicate, false);
 });
+
+test("body helper inserts typed dictionary fields without overwriting or prototype mutation", async () => {
+  const { insertDictionaryField } = await import(
+    "../public/dictionary-view.js"
+  );
+  assert.deepEqual(
+    JSON.parse(
+      insertDictionaryField('{"kept":true}', {
+        key: "page",
+        type: "integer",
+        default: 2,
+      }),
+    ),
+    { kept: true, page: 2 },
+  );
+  assert.equal(
+    JSON.parse(
+      insertDictionaryField("", {
+        key: "enabled",
+        type: "boolean",
+        default: false,
+      }),
+    ).enabled,
+    false,
+  );
+  assert.throws(
+    () => insertDictionaryField('{"page":4}', { key: "page" }),
+    /未覆盖/,
+  );
+  assert.throws(() => insertDictionaryField("[]", { key: "x" }), /JSON 对象/);
+  assert.throws(() => insertDictionaryField("{", { key: "x" }), /修正/);
+  const special = JSON.parse(
+    insertDictionaryField("{}", {
+      key: "__proto__",
+      type: "object",
+      example: { polluted: true },
+    }),
+  );
+  assert.equal(Object.hasOwn(special, "__proto__"), true);
+  assert.equal({}.polluted, undefined);
+});
