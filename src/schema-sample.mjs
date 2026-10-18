@@ -1,7 +1,12 @@
 // Deterministic illustrative samples, not a general JSON Schema solver.
-export function sampleFromSchema(schema, depth = 0, root = schema) {
+export function sampleFromSchema(
+  schema,
+  depth = 0,
+  root = schema,
+  options = {},
+) {
   const budget = { nodes: 0 };
-  function sample(schema, level, seen) {
+  function sample(schema, level, seen, fieldName = "") {
     if (++budget.nodes > 10000 || level > 12)
       throw Error("Schema 生成超过节点/深度上限");
     if (schema === false) throw Error("Schema 禁止任何值");
@@ -36,7 +41,7 @@ export function sampleFromSchema(schema, depth = 0, root = schema) {
         target === false
           ? false
           : { ...(target === true ? {} : target), ...overrides };
-      return sample(next, level + 1, new Set([...seen, ref]));
+      return sample(next, level + 1, new Set([...seen, ref]), fieldName);
     }
     for (const key of [
       "allOf",
@@ -51,8 +56,15 @@ export function sampleFromSchema(schema, depth = 0, root = schema) {
     ])
       if (schema[key] !== undefined)
         throw Error("复杂约束 " + key + " 请提供 example");
+    const mocked = options.valueForField?.(fieldName, schema);
+    if (mocked !== undefined) return structuredClone(mocked);
     if (schema.oneOf?.length || schema.anyOf?.length)
-      return sample((schema.oneOf || schema.anyOf)[0], level + 1, seen);
+      return sample(
+        (schema.oneOf || schema.anyOf)[0],
+        level + 1,
+        seen,
+        fieldName,
+      );
     const type = Array.isArray(schema.type)
       ? schema.type.find((x) => x !== "null") || "null"
       : schema.type;
@@ -77,7 +89,7 @@ export function sampleFromSchema(schema, depth = 0, root = schema) {
         throw Error("required 必须是数组");
       const entries = Object.entries(properties).map(([key, value]) => [
         key,
-        sample(value, level + 1, seen),
+        sample(value, level + 1, seen, key),
       ]);
       for (const name of schema.required || []) {
         if (typeof name !== "string") throw Error("required 字段名无效");
@@ -92,6 +104,7 @@ export function sampleFromSchema(schema, depth = 0, root = schema) {
                 : {},
               level + 1,
               seen,
+              name,
             ),
           ]);
         }
@@ -125,7 +138,7 @@ export function sampleFromSchema(schema, depth = 0, root = schema) {
       if (Array.isArray(schema.items) || schema.prefixItems)
         throw Error("元组 Schema 请提供 example");
       return Array.from({ length: count }, () =>
-        sample(schema.items ?? {}, level + 1, seen),
+        sample(schema.items ?? {}, level + 1, seen, fieldName),
       );
     }
     if (type === "integer" || type === "number")

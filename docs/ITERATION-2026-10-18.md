@@ -202,3 +202,10 @@ Twenty-eighth pass:
 Cross-process diagnostic checkpoint:
 - Sample-generation run 39091120791 passed browser/desktop/database/audit but Ubuntu core hit the existing two-second cross-process lock acquisition limit in the independent-process counter test; matrix siblings were cancelled by fail-fast. It is not a green run.
 - Added per-child elapsed/progress/owner-PID diagnostics and waits for both child outcomes before test cleanup. The 40-update assertion and acquisition deadline remain unchanged pending evidence; no root cause is inferred yet.
+
+Twenty-ninth pass — corrected Smart Mock semantics:
+- Official supplementary docs distinguish field-name/type generation from request-condition response selection. The prior implementation covered the latter; it must not be counted as the former.
+- Added separate project field rules with bounded wildcard matching, seeded data expressions, optional builtins and a dedicated settings pane. Existing conditional response controls are relabeled accordingly.
+- Field rules apply to Body schema samples and automatic JSON response-schema Mock when no explicit response example exists. Manual examples retain priority. No arbitrary script eval or remote data/image service is used.
+- Fixed tests cover glob syntax, deterministic values, type rejection, explicit examples, real Mock/sample API equivalence and UI-generated Chinese-name fields. Scope and limits are in ADR-FIELD-MOCK.md.
+- Review also found the extraction help mentioned advanced JSON without a button in that pane. Added the missing entry and made the packaged XML smoke configure a real namespace mapping through it before extracting the response.

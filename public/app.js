@@ -495,7 +495,7 @@ function paramPanel(r) {
       )
       .join(
         "",
-      )}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
+      )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
     return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
@@ -539,7 +539,7 @@ function modePanel(r) {
   if (mode === "design")
     return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
-    return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑智能匹配规则</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
+    return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例；没有示例时，按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
     return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="create-case">从当前接口创建执行计划</button>${
       (project.cases || [])
@@ -692,7 +692,16 @@ function editRules() {
   const r = request();
   const sample = {
     assertions: [{ target: "status", op: "eq", value: 200 }],
-    extract: [{ name: "token", path: "$.token" }],
+    extract: [
+      { name: "token", source: "json", path: "$.token" },
+      {
+        name: "xmlName",
+        source: "xml",
+        path: "/x:root/x:name/text()",
+        namespaces: { x: "urn:example" },
+        scope: "runtime",
+      },
+    ],
     before: [{ type: "uuid", name: "requestId" }],
     after: [{ type: "set", name: "completed", value: "true" }],
   };
@@ -1110,6 +1119,34 @@ function bind() {
           ? Number(element.value)
           : element.value;
     mark();
+  });
+  on("#mock-builtins", "change", (_, element) => {
+    project.settings ??= {};
+    project.settings.smartMockBuiltins = element.checked;
+    mark();
+  });
+  on("#mock-seed", "input", (_, element) => {
+    project.settings ??= {};
+    project.settings.mockSeed = Number(element.value);
+    mark();
+  });
+  on("#new-mock-field", "click", () => editMockField());
+  on("[data-edit-mock-field]", "click", (_, element) =>
+    editMockField(element.dataset.editMockField),
+  );
+  on("[data-mock-field-enabled]", "change", (_, element) => {
+    project.settings.mockFieldRules.find(
+      (rule) => rule.id === element.dataset.mockFieldEnabled,
+    ).enabled = element.checked;
+    mark();
+  });
+  on("[data-delete-mock-field]", "click", async (_, element) => {
+    if (!confirm("删除这条字段生成规则？已有请求体不会改变。")) return;
+    project.settings.mockFieldRules = project.settings.mockFieldRules.filter(
+      (rule) => rule.id !== element.dataset.deleteMockField,
+    );
+    mark();
+    await save();
   });
   on("[data-settings-anchor]", "click", (_, element) => {
     collect();
@@ -1754,7 +1791,7 @@ function bind() {
   });
   on("#edit-mock-rules", "click", () => {
     modal(
-      "智能 Mock 匹配",
+      "条件响应期望",
       `<p>target 支持 method、query.key、headers.name、body.path。操作 eq / neq / contains / exists；最多100条规则，延迟最多5000ms。</p>${jsonEditor(request().mockRules?.length ? request().mockRules : [{ name: "示例规则", enabled: false, conditions: [{ target: "query.role", op: "eq", value: "admin" }], response: { status: 200, headers: { "content-type": "application/json" }, body: '{"role":"admin"}', delayMs: 0 } }])}`,
       async () => {
         request().mockRules = JSON.parse($("#modal-json").value);
@@ -2347,6 +2384,37 @@ init().catch((e) => {
     esc(e.message) +
     "</pre><p>请确认本地服务正在运行，然后刷新页面。</p></div>";
 });
+
+function editMockField(id) {
+  const existing = project.settings?.mockFieldRules?.find(
+    (rule) => rule.id === id,
+  );
+  const ruleId = id || uid();
+  modal(
+    existing ? "编辑字段 Mock 规则" : "新建字段 Mock 规则",
+    `<label>规则名称</label><input id="mock-field-name" value="${esc(existing?.name || "")}"><label>字段通配符</label><input id="mock-field-pattern" value="${esc(existing?.pattern || "{name,*_name}")}"><label>字段类型</label><select id="mock-field-type">${["any", "string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${(existing?.type || "string") === type ? "selected" : ""}>${type}</option>`).join("")}</select><label>Mock 表达式 / JSON 常量</label><input id="mock-field-value" value="${esc(existing?.mock ?? "@cname()")}"><label><input id="mock-field-ignore-case" type="checkbox" ${existing?.ignoreCase ? "checked" : ""}>忽略字段名大小写</label>`,
+    async () => {
+      project.settings ??= {};
+      project.settings.mockFieldRules ??= [];
+      const rule = {
+        id: ruleId,
+        name: $("#mock-field-name").value,
+        pattern: $("#mock-field-pattern").value,
+        type: $("#mock-field-type").value,
+        mock: $("#mock-field-value").value,
+        ignoreCase: $("#mock-field-ignore-case").checked,
+        enabled: existing?.enabled !== false,
+      };
+      const index = project.settings.mockFieldRules.findIndex(
+        (item) => item.id === ruleId,
+      );
+      if (index < 0) project.settings.mockFieldRules.push(rule);
+      else project.settings.mockFieldRules[index] = rule;
+      mark();
+      await save();
+    },
+  );
+}
 
 function editDocument(index) {
   const existing = project.documents[index] || {

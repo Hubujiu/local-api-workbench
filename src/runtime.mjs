@@ -1,3 +1,4 @@
+import { validateMockFieldSettings } from "./mock-fields.mjs";
 import { normalizeParameterEntry } from "./parameter-dictionary.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { existsSync } from "node:fs";
@@ -182,6 +183,9 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
+    const fieldRules = validateMockFieldSettings(p.settings || {});
+    if (p.settings?.mockFieldRules !== undefined)
+      p.settings.mockFieldRules = fieldRules;
     if (p.parameterDictionary !== undefined) {
       if (
         !Array.isArray(p.parameterDictionary) ||

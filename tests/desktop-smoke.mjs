@@ -86,7 +86,7 @@ try {
         response: {
           status: 200,
           headers: { "content-type": "application/xml" },
-          body: "<root><value>packaged-xml</value></root>",
+          body: '<root xmlns="urn:fixture"><value>packaged-xml</value></root>',
         },
       },
     ]),
@@ -98,7 +98,16 @@ try {
   await window.locator("#add-extract").click();
   await window.locator('[data-extract="0:name"]').fill("xmlValue");
   await window.locator('[data-extract="0:source"]').selectOption("xml");
-  await window.locator('[data-extract="0:path"]').fill("/root/value/text()");
+  await window
+    .locator('[data-extract="0:path"]')
+    .fill("/x:root/x:value/text()");
+  await window.locator("#edit-operations").click();
+  const extractionRules = JSON.parse(
+    await window.locator("#modal-json").inputValue(),
+  );
+  extractionRules[0].namespaces = { x: "urn:fixture" };
+  await window.locator("#modal-json").fill(JSON.stringify(extractionRules));
+  await window.locator("#dialog-save").click();
   await window.locator("#send").click();
   await window.locator('[data-response="extracted"]').click();
   await window

@@ -1,3 +1,4 @@
+import { mockFieldPanel } from "./mock-field-view.js";
 import { environmentExtras } from "./environment-view.js";
 import { resourcePanels, resources } from "./resource-view.js";
 const esc = (value) =>
@@ -41,7 +42,10 @@ export function settingsPanel(project, active = "settings-basic") {
     content =
       '<section id="settings-mock" class="card"><label><input id="mock-enabled" type="checkbox" ' +
       (project.settings?.mockEnabled !== false ? "checked" : "") +
-      '>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与智能匹配规则。规则从上到下匹配，一条规则内所有条件必须满足。</p></section>';
+      '>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与条件响应期望。规则从上到下匹配，一条规则内所有条件必须满足。</p></section>';
+  } else if (active === "settings-mock-fields") {
+    title = "智能 Mock 匹配";
+    content = mockFieldPanel(project);
   } else if (active === "settings-mcp") {
     title = "MCP 连接";
     content =

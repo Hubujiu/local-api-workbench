@@ -380,6 +380,17 @@ try {
   assert(
     (await page.locator("#resource-functions").innerText()).includes("double"),
   );
+  await page.locator('[data-settings-anchor="settings-mock-fields"]').click();
+  await page.locator("#new-mock-field").click();
+  await page.locator("#mock-field-name").fill("姓名字段");
+  await page.locator("#mock-field-pattern").fill("{name,*_name}");
+  await page.locator("#mock-field-value").fill("@cname()");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#mock-builtins").check();
+  await page.locator("#mock-seed").fill("42");
+  await saveAndWait();
+  await page.screenshot({ path: "/tmp/local-api-mock-fields.png" });
   await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-debug-env]").first().click();
   const debugValues = JSON.parse(
@@ -561,6 +572,7 @@ try {
       properties: {
         n: { type: "integer", minimum: 2, maximum: 4 },
         label: { type: "string", minLength: 3 },
+        user_name: { type: "string" },
       },
     }),
   );
@@ -576,10 +588,12 @@ try {
       return false;
     }
   });
-  assert.deepEqual(JSON.parse(await page.locator("#body-code").inputValue()), {
-    n: 2,
-    label: "xxx",
-  });
+  const generatedBody = JSON.parse(
+    await page.locator("#body-code").inputValue(),
+  );
+  assert.equal(generatedBody.n, 2);
+  assert.equal(generatedBody.label, "xxx");
+  assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator('[data-param="extract"]').click();
   await page.locator("#add-extract").click();
   await page.locator('[data-extract="0:name"]').fill("elapsed");

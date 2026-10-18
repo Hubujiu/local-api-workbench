@@ -50,7 +50,7 @@ export function validateMockRules(rules = []) {
   }
   return rules;
 }
-export function selectMockResponse(request, input) {
+export function selectMockResponse(request, input, fallback) {
   validateMockRules(request.mockRules || []);
   const source = {
     method: input.method,
@@ -75,6 +75,7 @@ export function selectMockResponse(request, input) {
     });
     if (matches) return { ...rule.response, ruleName: rule.name || "" };
   }
+  if (!request.examples?.length && fallback) return fallback();
   const index = Number(input.query?.example) || 0;
   const example = request.examples?.[index] || { status: 200, body: "{}" };
   return {

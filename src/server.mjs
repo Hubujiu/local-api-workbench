@@ -1,3 +1,4 @@
+import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
 import { scopedExecution, scopeMap } from "./variable-scopes.mjs";
 import {
   parseParameterImport,
@@ -39,7 +40,6 @@ import {
   runPlan,
   toCurl,
   restoreProject,
-  sampleFromSchema,
 } from "./core.mjs";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 export async function createApp({
@@ -214,12 +214,16 @@ export async function createApp({
         try {
           incoming = JSON.parse(raw);
         } catch {}
-        const selected = selectMockResponse(r, {
-          method: req.method,
-          query: Object.fromEntries(u.searchParams),
-          headers: req.headers,
-          body: incoming,
-        });
+        const selected = selectMockResponse(
+          r,
+          {
+            method: req.method,
+            query: Object.fromEntries(u.searchParams),
+            headers: req.headers,
+            body: incoming,
+          },
+          () => schemaMockResponse(p, r),
+        );
         if (selected.delayMs)
           await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
         res.writeHead(selected.status, {
@@ -481,10 +485,7 @@ export async function createApp({
           if (action === "sample" && req.method === "POST") {
             const b = await body(req);
             return json(res, 200, {
-              sample: sampleFromSchema(b.schema ?? {}, 0, {
-                ...(b.schema || {}),
-                components: p.openapiComponents || b.schema?.components || {},
-              }),
+              sample: sampleProjectSchema(p, b.schema ?? {}),
             });
           }
           if (action === "environments" && req.method === "POST") {

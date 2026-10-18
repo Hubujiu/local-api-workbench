@@ -62,6 +62,7 @@ export function settingsSidebar(active = "settings-basic") {
       ["settings-basic", "基本设置"],
       ["settings-environments", "环境与服务"],
       ["settings-mock", "Mock 服务"],
+      ["settings-mock-fields", "智能 Mock 匹配"],
       ["resource-functions", "自定义函数"],
       ["resource-statusCodes", "状态码字典"],
       ["resource-attributes", "接口属性"],
