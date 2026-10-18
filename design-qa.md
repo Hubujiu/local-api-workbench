@@ -44,3 +44,8 @@ Wait for the latest exact-head CI and inspect its screenshots. At05:37UTC GitHub
 - Latest verified commit946f5d95ed36cd52568fc57c7ce5b7bf708d21a8, Actions39115885319, all9jobs success and181core tests. Actual UI artifact12132740651, SHA25618e5d6b76438af205a5f620afeb03ebd987bc34e7bac3b813f4cb6777500175e.
 - Comparison /tmp/api-comparison-946.png pairs the official1328×875reference with the browser1328×876capture without scaling. Search/type selector now share a row; extra sidebar actions are consolidated; native folder markers and immediate tab/tree renaming are visible. These earlierP2issues are resolved.
 - The remaining typography hierarchy adjustment is pending its own capture. Original branding, demo content and license omission remain explicit scope differences. Full exact-equivalence result remains blocked; no hidden behavior or pixel-perfect claim is made.
+
+## Post-fix inspection — 10:34 UTC
+
+- b131877c / Actions39119424829 passed all9jobs. UI artifact12133252896 SHA2565efcd639d8ac43515a935f65bc174e2e0c3e95f0bd723742f19388c55374bd36 verified; HTTP/2 proxy screenshot visibly shows the actual h2 POST response and sent JSON.
+- Previous4cee3 capture independently confirmed response-schema actions above the modal footer and load inputs2/2 matching results. These control issues are resolved. Exact visual-equivalence status remains blocked; no whole-product completion claim.

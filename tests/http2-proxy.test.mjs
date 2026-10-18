@@ -190,7 +190,12 @@ test("cURL protocol export uses strict HTTP2 and retains tunnel semantics on imp
     body: '{"ok":true}',
   });
   assert.match(command, /--http2-prior-knowledge/);
+  assert.match(command, /^curl --disable /);
   assert.match(command, /--globoff/);
+  assert.throws(
+    () => importCurl("curl --http1.1 --disable http://one.invalid"),
+    /首位/,
+  );
   assert.match(command, /--proxytunnel/);
   const restored = importCurl(command);
   assert.equal(restored.httpVersion, "2");

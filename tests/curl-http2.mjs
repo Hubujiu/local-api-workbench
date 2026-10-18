@@ -2,6 +2,9 @@
 import http from "node:http";
 import http2 from "node:http2";
 import net from "node:net";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,6 +12,11 @@ import { toCurl } from "../src/core.mjs";
 const exec = promisify(execFile),
   sessions = new Set(),
   sockets = new Set();
+const configHome = await mkdtemp(join(tmpdir(), "curl-config-fixture-"));
+await writeFile(
+  join(configHome, ".curlrc"),
+  'header = "X-Unrelated-Config: must-not-send"\n',
+);
 let connections = 0,
   requests = 0;
 const target = http2.createServer();
@@ -29,6 +37,7 @@ target.on("stream", (stream, headers) => {
         body,
         authorization: headers.authorization,
         proxyAuthorization: headers["proxy-authorization"],
+        unrelatedConfig: headers["x-unrelated-config"],
       }),
     );
   });
@@ -76,6 +85,7 @@ try {
       maxBuffer: 65536,
       env: {
         ...process.env,
+        CURL_HOME: configHome,
         HTTP_PROXY: "http://127.0.0.1:1",
         http_proxy: "http://127.0.0.1:1",
         HTTPS_PROXY: "http://127.0.0.1:1",
@@ -90,11 +100,13 @@ try {
     assert.equal(response.body, body);
     assert.equal(response.authorization, "Bearer origin-token");
     assert.equal(response.proxyAuthorization, undefined);
+    assert.equal(response.unrelatedConfig, undefined);
   }
   assert.equal(connections, 1);
   assert.equal(requests, 2);
   console.log("CURL_HTTP2_DIRECT_AND_PROXY_PASSED");
 } finally {
+  await rm(configHome, { recursive: true, force: true });
   for (const session of sessions) session.destroy();
   for (const socket of sockets) socket.destroy();
   await Promise.all([

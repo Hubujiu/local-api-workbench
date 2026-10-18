@@ -863,7 +863,9 @@ export function importCurl(source) {
   };
   for (let i = 1; i < tokens.length; i++) {
     const t = clean(tokens[i]);
-    if (t === "-X" || t === "--request") {
+    if (t === "--disable" || t === "-q") {
+      if (i !== 1) throw Error("禁用cURL默认配置的参数必须位于首位");
+    } else if (t === "-X" || t === "--request") {
       r.method = clean(tokens[++i]);
       explicitMethod = true;
       if (!r.method) throw Error("缺少 HTTP 方法");
@@ -1076,6 +1078,7 @@ export function toCurl(input) {
   );
   const args = [
     "curl",
+    "--disable",
     "--globoff",
     "--noproxy",
     quote(r.proxy ? "" : "*"),

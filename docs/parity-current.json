@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-18T10:05:55Z",
-  "implementationCommit": "0e9430e78c42feaca2625efe0eaaee12c5532ab0",
+  "asOf": "2026-10-18T10:33:43Z",
+  "implementationCommit": "b131877c20487b89812102b9125e3cf7e2bad66d",
   "counts": {
     "F": {
       "已实现": 37,
@@ -187,9 +187,9 @@
       "name": "请求协议版本选择",
       "status": "部分实现",
       "original": "截图有 http/1.1 下拉",
-      "current": "可选 HTTP/1.1 和真实 HTTP/2，含 h2c/TLS/custom CA；HTTP/2 代理和 cURL 导出不支持。",
+      "current": "可选 HTTP/1.1 和真实 HTTP/2，含 h2c/TLS/custom CA/mTLS；HTTP/HTTPS CONNECT代理、独立代理CA与严格协议cURL导出已验证。内联证书/文件/动态签名cURL仍须手工配置，未声称所有原版协议选项等价。",
       "source": "I1",
-      "evidence": "src/http2-connection.mjs; tests/http2.test.mjs",
+      "evidence": "src/http2-connection.mjs; src/proxy-tunnel.mjs; tests/http2-proxy.test.mjs; tests/curl-http2.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39117781360",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39119424829",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。分类重叠，不计算总体百分比。后续控件状态/弹窗可见性修正须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
+  "note": "本对照针对上述全绿版本。分类重叠，不计算总体百分比。后续cURL默认配置隔离修正须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
   "verification": {
-    "runId": 39117781360,
+    "runId": 39119424829,
     "conclusion": "success",
-    "coreTests": 186,
+    "coreTests": 195,
     "jobs": 9
   }
 }

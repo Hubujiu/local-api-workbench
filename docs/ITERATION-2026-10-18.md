@@ -418,3 +418,8 @@ Response retry review additionally keeps pending schema edits transactional when
 - Export chooses strict protocol flags, disables curl URL globbing and fixes ambient proxy behavior explicitly. Import round-trips supported flags and rejects multi-URL commands instead of silently dropping requests.
 - The fixed Linux cURL integration executes generated commands against local direct/tunneled HTTP/2 servers and verifies exact path/body/auth behavior. Local curl8.14.1passed; CI's browser job also runs this script. HTTPS strict HTTP/2 requires curl8.10+per the official man page.
 - Browser acceptance selects HTTP/2 and a proxy in a fresh project, executes an actual tunneled request and checks generated cURL flags. API and step editors expose a separate HTTPS proxy CA.
+
+## Pass 61 — default cURL configuration isolation
+
+- b131877c / Actions39119424829 passed all9jobs and195core tests; real curl and browser HTTP/2 CONNECT passed. UI archive12133252896 SHA2565efcd639d8ac43515a935f65bc174e2e0c3e95f0bd723742f19388c55374bd36 verified and HTTP/2 response screenshot inspected.
+- Added a synthetic curlrc header fixture first: actual exported command sent the unrelated header, failing the assertion. Generated commands now put --disable first; same fixture passes without reading user configuration. First-position import validation added. This change awaits its own CI, not the previous checkpoint.
