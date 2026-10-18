@@ -65,6 +65,8 @@ export function normalizeRequest(r = {}) {
     (typeof r.id !== "string" || !/^[a-zA-Z0-9_.-]{1,200}$/.test(r.id))
   )
     throw Error("接口 ID 无效");
+  if (r.httpVersion !== undefined && !["1.1", "2"].includes(r.httpVersion))
+    throw Error("不支持的HTTP协议版本");
   const method = String(r.method || "GET").toUpperCase();
   if (
     !["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].includes(
@@ -80,6 +82,7 @@ export function normalizeRequest(r = {}) {
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
     serviceId: String(r.serviceId || ""),
+    httpVersion: r.httpVersion === "2" ? "2" : "1.1",
     folder: r.folder || "",
     description: r.description || "",
     statusId: String(r.statusId || ""),
@@ -641,12 +644,13 @@ export function toCurl(input) {
   const r = normalizeRequest(input);
   const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   if (
+    r.httpVersion === "2" ||
     ["binary", "msgpack"].includes(r.bodyType) ||
     r.form.some((field) => field.type === "file") ||
     Object.values(r.tls).some(Boolean)
   )
     throw Error(
-      "二进制、文件或内联证书请求需手工准备文件；不会生成不等价的 cURL。请使用原始请求/项目导出。",
+      "HTTP/2、二进制、文件或内联证书请求需手工配置；不会生成不等价的 cURL。请使用原始请求/项目导出。",
     );
   let raw = r.url;
   for (const parameter of r.path.filter((item) => item.enabled !== false))

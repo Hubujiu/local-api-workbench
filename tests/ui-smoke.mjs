@@ -109,7 +109,7 @@ try {
       .isVisible(),
   );
   await page.getByRole("button", { name: "执行计划", exact: false }).click();
-  await page.getByRole("button", { name: "＋ 新建计划", exact: true }).click();
+  await page.locator("#new-plan").click();
   await page.locator("#plan-name").fill("可重复验证");
   await page.locator("#dialog-save").click();
   await page

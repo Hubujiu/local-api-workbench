@@ -1,3 +1,4 @@
+import { http2Connection } from "./http2-connection.mjs";
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
@@ -12,6 +13,8 @@ export async function prepareConnection(target, request, headers, signal) {
     ...(certificates.key ? { key: certificates.key } : {}),
     ...(certificates.passphrase ? { passphrase: certificates.passphrase } : {}),
   };
+  if (request.httpVersion === "2")
+    return http2Connection(target, request, tlsOptions);
   if (!request.proxy)
     return {
       client: target.protocol === "https:" ? https : http,

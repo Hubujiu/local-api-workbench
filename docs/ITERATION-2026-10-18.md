@@ -51,3 +51,8 @@ Sixth pass:
 - Plan page is split into plan/record tabs with a left plan list and right editor; step drag/drop reordering complements keyboard-accessible up buttons.
 - Plan name/description edits participate in unsaved-change handling and project save, rather than disappearing on navigation. Manual saves recompute provenance only for changed fields; untouched plans keep their timestamp.
 - Split-file migration candidate da390221 passed all seven jobs in run 39085352021. Current plan-layout edits require their own CI.
+
+Seventh pass:
+- Real HTTP/2 direct transport (cleartext prior knowledge and verified TLS/custom CA) is selectable beside the URL. It reuses the existing body/response size limits, decode and request deadline. HTTP/2 proxy and cURL export are explicitly rejected rather than silently downgraded.
+- Transport API basis: https://nodejs.org/api/http2.html (clienthttp2session.request, endStream and AbortSignal). Local real HTTP/2 fixture and certificate tests added; 83 local tests pass.
+- Plan-layout run 39085547166 passed all jobs except browser: the test still expected the old “＋ 新建计划” label. It now targets the stable new-plan control; functionality assertion remains.

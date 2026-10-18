@@ -395,6 +395,7 @@ export async function executeRequest(input, signal) {
           }
           resolve({
             status: res.statusCode,
+            protocol: res.httpVersion || "1.1",
             statusText: res.statusMessage,
             headers: res.headers,
             body: displayBody,
