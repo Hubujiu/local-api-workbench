@@ -1,6 +1,6 @@
 import http from "node:http";
 import { createRequire } from "node:module";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -352,6 +352,13 @@ try {
     .waitFor();
   await saveAndWait();
 
+  await page.locator("#share-api").click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#dialog-save").click();
+  const documentDownload = await downloadPromise;
+  const documentText = await readFile(await documentDownload.path(), "utf8");
+  assert(documentText.includes("Content-Security-Policy"));
+  assert(documentText.includes("响应定义"));
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

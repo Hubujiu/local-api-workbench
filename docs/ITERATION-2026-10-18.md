@@ -56,3 +56,10 @@ Seventh pass:
 - Real HTTP/2 direct transport (cleartext prior knowledge and verified TLS/custom CA) is selectable beside the URL. It reuses the existing body/response size limits, decode and request deadline. HTTP/2 proxy and cURL export are explicitly rejected rather than silently downgraded.
 - Transport API basis: https://nodejs.org/api/http2.html (clienthttp2session.request, endStream and AbortSignal). Local real HTTP/2 fixture and certificate tests added; 83 local tests pass.
 - Plan-layout run 39085547166 passed all jobs except browser: the test still expected the old “＋ 新建计划” label. It now targets the stable new-plan control; functionality assertion remains.
+
+Eighth pass:
+- API parameter definitions retain schema/type, required flags and descriptions; response definitions retain status/content/schema/example metadata through OpenAPI import/export.
+- Export keeps operation IDs and concrete server origins; exported response metadata is cloned rather than mutating the live project.
+- Added response-definition editor, parameter-definition controls, response-example tab and single-interface offline HTML sharing. Export includes typed parameter and schema details with escaping/CSP.
+- Running a plan first saves pending edits, so execution does not silently validate an older plan.
+- Latest 3b3f512 passed all seven CI jobs in run 39085713221, including new direct HTTP/2 tests. Current local suite has 84 tests; latest documentation/share browser regression still requires CI.

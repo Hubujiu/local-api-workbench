@@ -44,6 +44,7 @@ export function normalizeRequest(r = {}) {
     "before",
     "after",
     "examples",
+    "responses",
   ]) {
     if (
       r[key] !== undefined &&
@@ -111,6 +112,8 @@ export function normalizeRequest(r = {}) {
     examples: r.examples || [],
     mockRules: r.mockRules || [],
     schema: r.schema || {},
+    responses: r.responses || [],
+    openapiOperation: r.openapiOperation || {},
     proxy: r.proxy || "",
     tls: r.tls || {},
     timeout: Math.min(60000, Math.max(100, Number(r.timeout) || 15000)),
@@ -351,18 +354,34 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
-          const params = [...(item.parameters || []), ...(op.parameters || [])];
+          const params = [
+            ...new Map(
+              [...(item.parameters || []), ...(op.parameters || [])].map(
+                (parameter) => [parameter.in + ":" + parameter.name, parameter],
+              ),
+            ).values(),
+          ];
           return normalizeRequest({
             name: op.summary || op.operationId || path,
             sourceOperationId: op.operationId || "",
             method,
-            url: base + path,
+            url:
+              (op.servers?.[0]?.url || item.servers?.[0]?.url || base) + path,
+            openapiOperation: structuredClone({
+              ...op,
+              ...((op.security ?? doc.security)
+                ? { security: op.security ?? doc.security }
+                : {}),
+            }),
             description: op.description || "",
             folder: op.tags?.[0] || "",
             query: params
               .filter((p) => p.in === "query")
               .map((p) => ({
                 key: p.name,
+                schema: p.schema || { type: p.type || "string" },
+                required: p.required === true,
+                description: p.description || "",
                 value: p.example ?? p.schema?.default ?? "",
                 enabled: true,
               })),
@@ -370,6 +389,9 @@ export function importDocument(doc) {
               .filter((p) => p.in === "path")
               .map((p) => ({
                 key: p.name,
+                schema: p.schema || { type: p.type || "string" },
+                required: p.required === true,
+                description: p.description || "",
                 value: p.example ?? "",
                 enabled: true,
               })),
@@ -377,6 +399,9 @@ export function importDocument(doc) {
               .filter((p) => p.in === "header")
               .map((p) => ({
                 key: p.name,
+                schema: p.schema || { type: p.type || "string" },
+                required: p.required === true,
+                description: p.description || "",
                 value: p.example ?? "",
                 enabled: true,
               })),
@@ -389,6 +414,16 @@ export function importDocument(doc) {
                 )
               : "",
             schema: op.requestBody?.content?.["application/json"]?.schema || {},
+            responses: Object.entries(op.responses || {}).map(
+              ([status, response]) => ({
+                status,
+                description: response.description || "",
+                content: response.content || {
+                  "application/json": { schema: response.schema || {} },
+                },
+                headers: response.headers || {},
+              }),
+            ),
             examples: Object.entries(op.responses || {}).map(([status, r]) => ({
               name: r.description || status,
               status: Number(status) || 200,
@@ -600,35 +635,83 @@ export function exportOpenAPI(project) {
       path = r.url.replace(/^\{\{[^}]+\}\}/, "") || "/";
     }
     paths[path] ??= {};
+    const responses = Object.create(null);
+    for (const response of r.responses || []) {
+      if (!/^(default|[1-5][0-9X]{2})$/.test(String(response.status)))
+        throw Error("响应状态定义无效");
+      responses[String(response.status)] = {
+        description: response.description || "",
+        content: structuredClone(response.content || {}),
+        ...(response.headers
+          ? { headers: structuredClone(response.headers) }
+          : {}),
+      };
+    }
+    for (const example of r.examples || []) {
+      const status = String(example.status || 200);
+      responses[status] ??= {
+        description: example.name || "Response",
+        content: { "application/json": {} },
+      };
+      responses[status].content ??= {};
+      responses[status].content["application/json"] ??= {};
+      let value;
+      try {
+        value = JSON.parse(example.body);
+      } catch {
+        value = example.body;
+      }
+      if (responses[status].content["application/json"].example === undefined)
+        responses[status].content["application/json"].example = value;
+    }
+    if (!Object.keys(responses).length)
+      responses["200"] = { description: "Successful response" };
+    let requestBody;
+    if (r.bodyType === "json") {
+      let example;
+      try {
+        example = JSON.parse(r.body || "{}");
+      } catch {}
+      requestBody = {
+        content: {
+          "application/json": {
+            schema: r.schema || { type: "object" },
+            ...(example === undefined ? {} : { example }),
+          },
+        },
+      };
+    }
+    const original = structuredClone(r.openapiOperation || {});
+    delete original.requestBody;
+    try {
+      if (!r.url.includes("{{"))
+        original.servers = [{ url: new URL(r.url).origin }];
+    } catch {}
     paths[path][r.method.toLowerCase()] = {
+      ...original,
+      ...(r.sourceOperationId ? { operationId: r.sourceOperationId } : {}),
       summary: r.name,
       description: r.description,
       tags: r.folder ? [r.folder] : [],
       parameters: [
-        ...r.query.map((p) => ({
-          name: p.key,
-          in: "query",
-          schema: { type: "string" },
-          example: p.value,
-        })),
-        ...r.path.map((p) => ({
-          name: p.key,
-          in: "path",
-          required: true,
-          schema: { type: "string" },
-          example: p.value,
-        })),
-      ],
-      responses: { 200: { description: "Successful response" } },
-      ...(r.bodyType === "json"
-        ? {
-            requestBody: {
-              content: {
-                "application/json": { schema: r.schema || { type: "object" } },
-              },
-            },
-          }
-        : {}),
+        ["query", r.query],
+        ["path", r.path],
+        ["header", r.headers],
+        ["cookie", r.cookies],
+      ].flatMap(([location, parameters]) =>
+        parameters
+          .filter((parameter) => parameter.enabled !== false && parameter.key)
+          .map((parameter) => ({
+            name: parameter.key,
+            in: location,
+            required: location === "path" || parameter.required === true,
+            description: parameter.description || "",
+            schema: parameter.schema || { type: "string" },
+            example: parameter.value,
+          })),
+      ),
+      responses,
+      ...(requestBody ? { requestBody } : {}),
     };
   }
   return {

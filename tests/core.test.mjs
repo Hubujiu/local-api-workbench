@@ -375,3 +375,71 @@ test("cURL preserves explicit GET bodies and rejects unimplemented file/redirect
   assert.throws(() => importCurl("curl -L http://localhost"), /不支持/);
   assert.throws(() => importCurl("curl http://localhost -H broken"), /Header/);
 });
+
+test("OpenAPI round trip preserves typed parameters, response schemas and examples", () => {
+  const responseSchema = {
+    type: "object",
+    properties: { id: { type: "integer" } },
+  };
+  const operation = {
+    operationId: "readUser",
+    parameters: [
+      {
+        in: "path",
+        name: "id",
+        required: true,
+        description: "User ID",
+        schema: { type: "integer" },
+        example: 7,
+      },
+    ],
+    responses: {
+      200: {
+        description: "User",
+        content: {
+          "application/json": { schema: responseSchema, example: { id: 7 } },
+        },
+      },
+    },
+  };
+  const source = {
+    openapi: "3.0.3",
+    info: { title: "Typed", version: "1" },
+    servers: [{ url: "https://api.example" }],
+    paths: {
+      "/users/{id}": {
+        parameters: [
+          {
+            in: "query",
+            name: "limit",
+            schema: { type: "integer" },
+            example: 10,
+          },
+        ],
+        get: operation,
+      },
+    },
+  };
+  const requests = importDocument(source);
+  const exported = exportOpenAPI({ name: "Typed", requests }).paths[
+    "/users/{id}"
+  ].get;
+  assert.equal(exported.operationId, "readUser");
+  assert.equal(exported.servers[0].url, "https://api.example");
+  assert.equal(
+    exported.parameters.find((p) => p.name === "id").schema.type,
+    "integer",
+  );
+  assert.equal(
+    exported.parameters.find((p) => p.name === "id").description,
+    "User ID",
+  );
+  assert.deepEqual(
+    exported.responses["200"].content["application/json"].schema,
+    responseSchema,
+  );
+  assert.deepEqual(
+    exported.responses["200"].content["application/json"].example,
+    { id: 7 },
+  );
+});

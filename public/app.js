@@ -167,6 +167,14 @@ function collect() {
         ? $("#raw-format")?.value || "raw"
         : bodySelection.value;
   if ($("#request-service")) r.serviceId = $("#request-service").value;
+  if ($("#response-definitions")) {
+    try {
+      r.responses = JSON.parse($("#response-definitions").value);
+      if (!Array.isArray(r.responses)) throw Error("必须为数组");
+    } catch {
+      throw Error("响应定义必须是有效JSON数组");
+    }
+  }
   if ($("#schema")) {
     try {
       r.schema = JSON.parse($("#schema").value);
@@ -307,7 +315,7 @@ function editor(r) {
     )
     .join(
       "",
-    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button></div>${
+    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button></div>${
     mode === "debug"
       ? `<div class="param-tabs">${[
           ["headers", "Header"],
@@ -316,6 +324,7 @@ function editor(r) {
           ["body", "Body"],
           ["auth", "认证"],
           ["cookies", "Cookie"],
+          ["examples", "响应示例"],
           ["before", "前执行操作"],
           ["after", "后执行操作"],
           ["assertions", "断言"],
@@ -331,6 +340,7 @@ function editor(r) {
           ["body", "实时响应"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
+          ["examples", "响应示例"],
           ["request", "实际请求"],
           ["assertions", "断言结果"],
           ["extracted", "提取变量"],
@@ -347,7 +357,7 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
 }
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
@@ -400,6 +410,15 @@ function paramPanel(r) {
   return `<div class="notice">${descriptions[param]}</div><pre>${esc(JSON.stringify(r[param], null, 2))}</pre><button id="edit-operations">编辑${param === "assertions" ? "断言" : param === "extract" ? "提取规则" : "操作"}</button>`;
 }
 function responseContent() {
+  if (responseTab === "examples")
+    return (
+      request()
+        .examples.map(
+          (example) =>
+            `<h4>${esc(example.name)} · ${example.status}</h4><pre>${esc(example.body)}</pre>`,
+        )
+        .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
+    );
   if (!response)
     return '<div class="empty"><div class="empty-symbol">♧</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>';
   let v =
@@ -420,7 +439,7 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">直接使用完整 URL</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+    return `<div class="page"><div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">直接使用完整 URL</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${(project.settings?.attributes || []).map((field) => `<label>${esc(field.label)}</label><input data-attribute="${esc(field.key)}" type="${field.type === "boolean" ? "checkbox" : field.type === "number" ? "number" : "text"}" ${field.type === "boolean" && r.attributes?.[field.key] ? "checked" : ""} value="${esc(r.attributes?.[field.key] ?? "")}">`).join("")}<label>请求 JSON Schema</label><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑智能匹配规则</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
@@ -749,6 +768,40 @@ function bind() {
   on("#http-version", "change", (_, element) => {
     request().httpVersion = element.value;
     mark();
+  });
+  on("#response-definitions", "input", () => mark());
+  on("#share-api", "click", () => {
+    collect();
+    modal(
+      "分享当前接口",
+      "<p>生成单接口离线HTML文件。请检查参数和示例中的密钥/业务数据后再分享。</p>",
+      () => {
+        download(
+          request().name + ".html",
+          exportDocumentation(
+            { ...project, documents: [], requests: [request()] },
+            "html",
+          ),
+          "text/html",
+        );
+      },
+      "生成离线文档",
+    );
+  });
+  on("[data-define-pair]", "click", (_, element) => {
+    const [kind, index] = element.dataset.definePair.split(":"),
+      parameter = request()[kind][Number(index)];
+    modal(
+      "参数定义",
+      `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}"><label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema || { type: "string" })}`,
+      () => {
+        parameter.description = $("#parameter-description").value;
+        parameter.required = $("#parameter-required").checked;
+        parameter.schema = JSON.parse($("#modal-json").value);
+        mark();
+        render();
+      },
+    );
   });
   on("#request-status", "change", (_, element) => {
     request().statusId = element.value;
@@ -1561,6 +1614,10 @@ function bind() {
     });
   });
   on("#run-plan", "click", async () => {
+    if (dirty) {
+      await save();
+      if (dirty) throw Error("还有新的修改，请先保存");
+    }
     busy = true;
     runId = uid();
     render();
