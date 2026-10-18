@@ -1,3 +1,8 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import readline from "node:readline";
+import { fileURLToPath } from "node:url";
+import { snapshotPlan } from "../src/core.mjs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -16,10 +21,16 @@ try {
 }
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
 const app = await createApp({ root, port: 0 });
+let stdioChild,
+  releaseMCP = () => {},
+  mcpGate = Promise.resolve();
 const fixture = http.createServer(async (request, response) => {
   if (request.url === "/sse") {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.write("data: ui-stream-fixture\n\n");
+  } else if (request.url === "/slow-mcp") {
+    await mcpGate;
+    response.end("{}");
   } else if (request.url === "/auth") {
     response.setHeader("content-type", "application/json");
     response.end(
@@ -852,6 +863,78 @@ try {
     await page.locator('[data-extract="1:group"]').inputValue(),
     "1",
   );
+  const observedProject = await app.store.create("stdio UI evidence");
+  observedProject.plans = [
+    snapshotPlan({
+      name: "observable stdio",
+      steps: [
+        { request: { url: fixtureURL + "/auth" } },
+        { request: { url: fixtureURL + "/slow-mcp" } },
+      ],
+    }),
+  ];
+  await app.store.save(observedProject);
+  mcpGate = new Promise((resolve) => {
+    releaseMCP = resolve;
+  });
+  await page.locator("#request-name").fill("未保存草稿在MCP进度轮询后保留");
+  stdioChild = spawn(
+    process.execPath,
+    [
+      fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+      "--project",
+      observedProject.id,
+      "--write",
+      "--execute",
+    ],
+    {
+      env: { ...process.env, LOCAL_API_DATA: root },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  stdioChild.stderr.on("data", () => {});
+  const stdioLines = readline.createInterface({ input: stdioChild.stdout }),
+    stdioAnswer = once(stdioLines, "line");
+  stdioChild.stdin.write(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: {
+        name: "localapi_run_plan",
+        arguments: {
+          projectId: observedProject.id,
+          planId: observedProject.plans[0].id,
+        },
+      },
+    }) + "\n",
+  );
+  await page
+    .locator("#mcp-status")
+    .getByText("MCP · 1 个任务运行中", { exact: true })
+    .waitFor();
+  assert.equal(
+    await page.locator("#request-name").inputValue(),
+    "未保存草稿在MCP进度轮询后保留",
+  );
+  await page.screenshot({ path: "/tmp/local-api-stdio-progress.png" });
+  releaseMCP();
+  const [stdioLine] = await stdioAnswer;
+  assert.equal(
+    JSON.parse(JSON.parse(stdioLine).result.content[0].text).status,
+    "passed",
+  );
+  await page.waitForFunction(
+    () => !document.querySelector("#mcp-status").textContent.includes("运行中"),
+  );
+  assert.equal(
+    await page.locator("#request-name").inputValue(),
+    "未保存草稿在MCP进度轮询后保留",
+  );
+  const stdioClosed = once(stdioChild, "close");
+  stdioChild.stdin.end();
+  await stdioClosed;
+  stdioLines.close();
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
@@ -865,6 +948,8 @@ try {
   );
   throw error;
 } finally {
+  releaseMCP();
+  stdioChild?.kill();
   await page.context().tracing.stop({ path: "/tmp/local-api-trace.zip" });
   await browser.close();
   fixture.closeAllConnections();

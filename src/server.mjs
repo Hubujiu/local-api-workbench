@@ -1,3 +1,4 @@
+import { readMCPActivities } from "./mcp-activity.mjs";
 import {
   resolveDynamicValue,
   resolveDynamicRequest,
@@ -314,10 +315,14 @@ export async function createApp({
           return json(res, 200, {
             ...mcp,
             endpoint: base + "/mcp",
+            dataRoot: store.root,
             warning: mcpWarning,
             token: mcpToken,
             lastActivity: mcpLastActivity,
-            activities: [...mcpActivities.values()],
+            activities: [
+              ...mcpActivities.values(),
+              ...(await readMCPActivities(store.root)),
+            ],
           });
         }
         if (u.pathname === "/api/projects" && req.method === "GET")

@@ -277,3 +277,9 @@ Published Smithy vectors and local HTTP/browser tests cover signing. OAuth1 pred
 Added Mozilla Hawk request MAC/payload signing and an independently tested EdgeGrid canonical HMAC implementation. Both expose explicit credentials/options, retain supported Postman fields, and reject unsupported cURL generation. No .edgerc/profile discovery, account login or automatic remote requests occur during setup.
 Hawk uses published Mozilla GET/POST vectors and an actual local verifier; EdgeGrid uses Akamai's published Python JSON signature, byte truncation/header ordering checks and real outgoing evidence. Browser acceptance exercises all four newly added signing types.
 AWS predecessor716d1f3 passed all9jobs (152coretests). Current local suite159passes, with dependency audit0 vulnerabilities; full CI still required for this batch.
+
+## Forty-first pass: cross-process stdio execution visibility
+
+Added safe runtime activity records and a heartbeat bridge so the existing UI progress view sees a separately running stdio MCP process, even with HTTP MCP disabled. Exposes the data-root configuration needed to share evidence, without implicitly granting project/write/execute permission.
+Tests use the actual local stdio server, a gated two-step HTTP fixture and browser-visible running/finished status while preserving a dirty editor. No Codex or external AI agent is invoked.
+Hawk/EdgeGrid predecessor2bb52ac passed all9jobs (159coretests); new local suite161tests passes before browser verification.
