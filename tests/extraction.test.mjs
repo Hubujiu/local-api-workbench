@@ -114,7 +114,17 @@ test("regex extraction is awaited before subsequent plan variable interpolation"
       return { status: 200, body: "id=42", headers: {}, duration: 1 };
     },
   );
-  assert.equal(result.status, "passed");
+  assert.equal(
+    result.status,
+    "passed",
+    JSON.stringify(
+      result.results.map(({ status, error, extracted }) => ({
+        status,
+        error,
+        extracted,
+      })),
+    ),
+  );
   assert.equal(seen[1], "http://fixture.test/42");
   assert.equal(result.results[0].extracted.id, "42");
 });

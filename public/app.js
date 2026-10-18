@@ -424,7 +424,7 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
 }
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
@@ -1080,6 +1080,11 @@ function bind() {
       "预览",
     ),
   );
+  on("[data-dynamic-pair]", "click", (_, element) => {
+    collect();
+    const [group, index] = element.dataset.dynamicPair.split(":");
+    editDynamicValue(group, Number(index));
+  });
   on("[data-define-pair]", "click", (_, element) => {
     const [kind, index] = element.dataset.definePair.split(":"),
       parameter = request()[kind][Number(index)];
@@ -2780,5 +2785,64 @@ function editFunction(index) {
     } finally {
       button.disabled = false;
     }
+  };
+}
+
+function editDynamicValue(group, index) {
+  const row = request()[group][index];
+  if (row.type === "file") {
+    toast("文件参数不能配置动态文本值");
+    return;
+  }
+  const initial = row.dynamic || {
+    source: "fixed",
+    value: row.value || "",
+    functions: [],
+  };
+  const read = () => ({
+    source: $("#dynamic-source").value,
+    value:
+      $("#dynamic-source").value === "fixed"
+        ? JSON.parse($("#dynamic-value").value)
+        : $("#dynamic-value").value,
+    functions: $("#dynamic-functions")
+      .value.split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
+  });
+  modal(
+    "动态参数值",
+    `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option></select><label>输入值 / 变量名</label><textarea id="dynamic-value"></textarea><label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
+    () => {
+      row.dynamic = read();
+      mark();
+      render();
+    },
+  );
+  $("#dynamic-source").value = initial.source;
+  $("#dynamic-value").value =
+    initial.source === "fixed" ? JSON.stringify(initial.value) : initial.value;
+  $("#dynamic-functions").value = (initial.functions || []).join(", ");
+  $("#dynamic-preview").onclick = async () => {
+    const output = $("#dynamic-result");
+    try {
+      const result = await api(
+        "/projects/" + project.id + "/dynamic-preview",
+        "POST",
+        {
+          spec: read(),
+          functions: project.settings?.functions || [],
+        },
+      );
+      output.textContent = JSON.stringify(result.value, null, 2);
+    } catch (error) {
+      output.textContent = error.message;
+    }
+  };
+  $("#dynamic-remove").onclick = () => {
+    delete row.dynamic;
+    mark();
+    $("#dialog").close();
+    render();
   };
 }

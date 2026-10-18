@@ -1,3 +1,4 @@
+import { resolveDynamicRequest } from "./dynamic-values.mjs";
 import { extractXML } from "./xml-extraction.mjs";
 import {
   createScopes,
@@ -374,10 +375,15 @@ export async function runPlan(
         configuredRequest = normalizeRequest(scripted.request);
       }
       await commitScopes();
-      record.request = interpolate(configuredRequest, {
-        ...vars,
-        ...localVariables,
-      });
+      record.request = await resolveDynamicRequest(
+        configuredRequest,
+        {
+          ...vars,
+          ...localVariables,
+        },
+        snapshot.functions || [],
+        interpolate,
+      );
       if (prepareRequest) record.request = prepareRequest(record.request);
       record.response = await execute(record.request, signal);
       record.assertions = evaluateAssertions(

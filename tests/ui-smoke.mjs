@@ -660,6 +660,23 @@ try {
     await page.locator('[data-pair="query:0:key"]').inputValue(),
     "customerId",
   );
+  await page.locator('[data-dynamic-pair="query:0"]').click();
+  await page.locator("#dynamic-value").fill("7");
+  await page.locator("#dynamic-functions").fill("double");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () => document.querySelector("#dynamic-result").textContent === "14",
+  );
+  await page.locator("#dialog-save").click();
+  const dynamicResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const dynamicResult = await (await dynamicResponse).json();
+  assert.equal(
+    new URL(dynamicResult.request.url).searchParams.get("customerId"),
+    "14",
+  );
   await page.locator('[data-param="body"]').click();
   await page.locator("#body-code").fill('{"existing":true}');
   await page.locator("#toggle-parameter-helper").click();

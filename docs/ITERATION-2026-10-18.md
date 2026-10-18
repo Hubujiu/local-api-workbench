@@ -228,3 +228,9 @@ Official references: https://wiki.apipost.cn/docs/project_set/function/ and http
 Added a dedicated create/edit/test/delete panel with immutable names, typed JSON preview, current-code/input test gate before save, and rollback on rejected persistence. New transform functions receive text; legacy args-based functions retain their original semantics. Execution uses the existing bounded QuickJS VM, rejects non-JSON and oversized results, and never gives the function host/network/filesystem access.
 This pass does not yet claim dynamic parameter insertion or full Faker/Mock.js support. A preview only proves the tested input, not every possible input. API/import remains schema-validated; the interactive test gate is an editor workflow, not a universal proof certificate.
 Tests cover typed output, legacy functions, invalid outputs, blocked host access and unbounded loops; UI verifies a real preview before persistence and locked names on edit.
+
+## Thirty-third pass: dynamic parameter values
+
+Implemented fixed/variable dynamic values for Query/Header/Path/Cookie/Form fields with ordered snapshotted transforms, current-value preview, and resolution after pre-request scripts. Returned literal braces are not interpolated a second time; unknown references fail before HTTP. Per-request count/transform/time budgets bound work. cURL resolves the current values without executing pre-request scripts, consistent with its existing behavior.
+Raw-body dynamic insertion and Faker/Mock-based dynamic sources are still unfinished; see ADR-DYNAMIC-VALUES.md.
+The previous function-editor commit passed browser/desktop/database/format and Linux/Mac core but Windows reported one failed regex chaining result. Existing log lacked the step error, so the assertion now includes the actual status/error/extraction evidence. No timeout or passing criteria was relaxed and the root cause is not yet established.

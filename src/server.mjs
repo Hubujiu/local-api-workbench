@@ -1,3 +1,7 @@
+import {
+  resolveDynamicValue,
+  resolveDynamicRequest,
+} from "./dynamic-values.mjs";
 import { previewFunction } from "./custom-functions.mjs";
 import { parseErrorCodeList } from "./error-codes.mjs";
 import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
@@ -523,6 +527,21 @@ export async function createApp({
               await store.save(p);
             return json(res, 200, { result, project: p });
           }
+          if (action === "dynamic-preview" && req.method === "POST") {
+            const b = await body(req);
+            const context = debugEnvironment(
+              p,
+              b.environmentId,
+              debugEnvironments,
+            );
+            return json(res, 200, {
+              value: await resolveDynamicValue(
+                b.spec,
+                context.variables,
+                b.functions || p.settings?.functions || [],
+              ),
+            });
+          }
           if (action === "function-preview" && req.method === "POST") {
             const b = await body(req);
             return json(res, 200, await previewFunction(b.function, b.value));
@@ -538,7 +557,12 @@ export async function createApp({
               curl: toCurl(
                 resolveServiceRequest(
                   p,
-                  interpolate(data.request, context.variables),
+                  await resolveDynamicRequest(
+                    data.request,
+                    context.variables,
+                    p.settings?.functions || [],
+                    interpolate,
+                  ),
                   context.environment.id,
                 ),
               ),
