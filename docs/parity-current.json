@@ -1,10 +1,10 @@
 {
-  "asOf": "2026-10-18T04:03:00Z",
-  "implementationCommit": "1b820ca78b906363e4c4a3abae8cfa667a60133f",
+  "asOf": "2026-10-18T05:24:00Z",
+  "implementationCommit": "a86fb985c1e37943518138137a597fd6f2f62c35",
   "counts": {
     "F": {
-      "已实现": 34,
-      "部分实现": 17
+      "已实现": 35,
+      "部分实现": 16
     },
     "M": {
       "能力已实现": 30
@@ -177,9 +177,9 @@
       "name": "认证",
       "status": "部分实现",
       "original": "截图有认证入口，MCP详情包含鉴权",
-      "current": "已核验Basic/Bearer/API Key/Digest/OAuth2。官方历史文档另列OAuth1/Hawk/AWS/NTLM/EdgeGrid；当前OAuth1新增实现待独立CI，其余未完成。",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权/RSA及完整高级变体未实现。",
       "source": "S7",
-      "evidence": "src/digest.mjs; src/oauth.mjs; src/oauth1.mjs; tests/oauth1.test.mjs",
+      "evidence": "src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离同步脚本、六项 apt 请求变更助手及请求级 pm.variables；环境/全局写入真实持久化。完整 SDK、异步 API、宿主操作不等价。",
+      "current": "隔离同步脚本、CryptoJS/Chai、六项apt变更助手、变量持久化已验证；完整SDK、异步网络/数据库/宿主操作不等价。后续兼容助手与异步断言拒绝规则尚待独立CI。",
       "source": "S3",
-      "evidence": "src/script-worker.mjs; src/variable-scopes.mjs; tests/variable-scopes.test.mjs",
+      "evidence": "src/script-worker.mjs; src/vendor/script-libraries.js; tests/script-libraries.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -397,9 +397,9 @@
       "name": "导入/导出",
       "status": "部分实现",
       "original": "配置截图有手动导入与导出",
-      "current": "支持OpenAPI/Postman/cURL/本工具备份；原版原生迁移不兼容",
+      "current": "支持OpenAPI/Postman/cURL/本工具备份及官方公开转换器的有限Apipost JSON；遇到未支持资源明确拒绝。当前Offline2.0原生目录尚不兼容。",
       "source": "I3",
-      "evidence": "core import/export/restore",
+      "evidence": "src/apipost-import.mjs; tests/apipost-import.test.mjs; tests/fixtures/APIPOST-FIXTURE.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -417,7 +417,7 @@
       "name": "步骤参数、Cookie和脚本覆盖",
       "status": "部分实现",
       "original": "每步骤独立覆盖、可视编辑",
-      "current": "可视化步骤快照编辑名称/方法/URL/Header/Query/Path/Cookie/Body/脚本；高级认证/断言等仍用计划 JSON。",
+      "current": "步骤可视化编辑基础参数、脚本、认证、结构化断言、提取来源/作用域/正则分组；TLS、文件及动态值高级细节仍未完全可视化。失败保存与取消保留原快照。",
       "source": "S9",
       "evidence": "public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -485,11 +485,11 @@
     {
       "id": "F45",
       "name": "AI执行中的即时状态",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "顶栏和计划编辑器都显示AI执行状态",
-      "current": "HTTP MCP 逐步骤状态与顶栏/计划区轮询显示；独立 stdio 进程未桥接实时 UI 状态。",
+      "current": "HTTP与独立stdio进程执行状态均桥接UI，含逐步骤进度、心跳、中断识别；真实子进程验证，不启动外部AI客户端。",
       "source": "S9",
-      "evidence": "src/mcp.mjs onProgress; public/app.js refreshMCPActivity",
+      "evidence": "src/mcp-activity.mjs; tests/mcp-activity.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39095670945; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39099321090; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -957,9 +957,9 @@
       "name": "计划编辑页面",
       "status": "部分实现",
       "original": "左计划列表+右名称/说明/环境/步骤编辑器",
-      "current": "左右计划布局、名称/说明/环境/步骤、可视快照编辑；高级字段仍用 JSON。",
+      "current": "左右计划布局及基础参数、认证、断言、变量提取可视化快照编辑已验证；TLS、文件、动态值等高级字段仍未全面可视化。",
       "source": "I4",
-      "evidence": "public/plan-view.js; public/step-editor.js",
+      "evidence": "public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39089099845",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39099321090",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容。Windows 早先99/100负载失败未复现、原因未定；后续十批竞争验证尚在进行。分类重叠，不计算总体百分比。",
+  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容；历史偶发失败与诊断保留于CURRENT-PARITY.md。分类重叠，不计算总体百分比。后续脚本兼容层173项本地测试通过，但须独立CI。",
   "verification": {
-    "runId": 39095670945,
+    "runId": 39099321090,
     "conclusion": "success",
-    "coreTests": 142,
+    "coreTests": 168,
     "jobs": 9
   }
 }

@@ -298,7 +298,7 @@ try {
   await page
     .locator("#script-code")
     .fill(
-      'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); console.log("script-done");',
+      'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); apt.assert("response.raw.status === 200"); postman.setEnvironmentVariable("legacyFromUI",response.json.message); console.log("script-done");',
     );
   await page.locator("#send").click();
   await page.locator('[data-response="logs"]').click();
@@ -312,6 +312,10 @@ try {
   );
   const scopeSaved = await app.store.get(scopeSavedProject.id);
   assert.equal(scopeSaved.environments[0].variables.uiSaved, "persisted");
+  assert.equal(
+    scopeSaved.environments[0].variables.legacyFromUI,
+    "欢迎使用 Local API",
+  );
   assert.equal(scopeSaved.globalVariables.uiGlobal, 0);
   await page.locator("#import").click();
   await page.locator("#dialog").waitFor({ state: "visible" });

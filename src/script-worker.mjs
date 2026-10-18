@@ -1,3 +1,4 @@
+import { scriptCompatibilitySource } from "./script-compatibility.mjs";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
@@ -161,7 +162,7 @@ try {
       environment: environmentAPI,
       globals: globalsAPI,
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
-      test: (name, fn) => { try { fn(); tests.push({ name, passed: true }); } catch (e) { tests.push({ name, passed: false, error: String(e.message) }); } },
+      test: (name, fn) => { try { if(fn.length>0)throw Error('回调式异步断言尚不支持'); const result=fn(); if(result && typeof result.then==='function')throw Error('Promise异步断言尚不支持'); tests.push({ name, passed: true }); } catch (e) { tests.push({ name, passed: false, error: String(e.message).slice(0,4000) }); } },
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
     };
   `;
@@ -192,6 +193,11 @@ try {
   run(trustedLibraries);
   deadline = Date.now() + 250;
   run("pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;");
+  run(
+    "(" +
+      scriptCompatibilitySource +
+      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair});",
+  );
   for (const code of [library, workerData.code]) {
     const result = context.evalCode(code);
     if (result.error) {

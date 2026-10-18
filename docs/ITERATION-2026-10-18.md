@@ -303,3 +303,9 @@ Advanced-step predecessor2fce1c5 passed all9jobs with162coretests. This library 
 Added a bounded adapter for the official public converter's JSON tree, independently tested against actual swagger2apipost0.1.89 output generated from our synthetic Swagger fixture. Preserves API parameters, folders (including empty folders), basic credentials, bodies and examples/schemas. Imported file paths require reselection; unsupported dependency/script/inheritance cases fail before project mutation.
 Scheme-less URLs receive a visible persisted HTTPS-assumption note; no import executes requests. This is explicitly limited compatibility, not a claim that the current Offline2.0 native directory can be loaded unchanged.
 CryptoJS/Chai predecessor03d642b passed all9jobs with164coretests. This importer batch needs separate CI.
+
+## Forty-fifth pass: observable legacy script objects
+
+Added bounded Postman header/raw-body helpers, request-local variable reads with scope fallback, legacy response/raw/json/header/cookie access and apt.assert plus environment/global aliases. All run inside QuickJS; real HTTP tests confirm header/body changes and assertion outcomes, and browser validation confirms a legacy response extraction persists through the same guarded environment writes.
+Async test callbacks now explicitly fail as unsupported instead of being incorrectly counted as passed. Script assertions are capped at1000. No async host/network access or persistent cookie jar is implied.
+Limited-import predecessora86fb985 passed all9jobs with168coretests; current local script additions require fresh CI.
