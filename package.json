@@ -15,11 +15,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "quickjs-emscripten": "0.31.0",
-    "pg": "8.16.3",
+    "@msgpack/msgpack": "3.1.2",
+    "@xmldom/xmldom": "0.9.12",
     "mysql2": "3.24.6",
-    "yaml": "2.9.1",
-    "@msgpack/msgpack": "3.1.2"
+    "pg": "8.16.3",
+    "quickjs-emscripten": "0.31.0",
+    "xpath": "0.0.35",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "prettier": "3.6.2"

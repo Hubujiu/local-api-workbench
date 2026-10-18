@@ -74,6 +74,39 @@ try {
     .locator(".response-body")
     .getByText("packaged-script-ok", { exact: false })
     .waitFor();
+  phase = "xml";
+  console.log("DESKTOP_PHASE", phase);
+  await window.locator('[data-mode="mock"]').click();
+  await window.locator("#edit-mock-rules").click();
+  await window
+    .locator("#modal-json")
+    .fill(
+      JSON.stringify([
+        {
+          name: "XML fixture",
+          conditions: [],
+          response: {
+            status: 200,
+            headers: { "content-type": "application/xml" },
+            body: "<root><value>packaged-xml</value></root>",
+          },
+        },
+      ]),
+    );
+  await window.locator("#dialog-save").click();
+  await window.locator("#dialog").waitFor({ state: "hidden" });
+  await window.locator('[data-mode="debug"]').click();
+  await window.locator('[data-param="extract"]').click();
+  await window.locator("#add-extract").click();
+  await window.locator('[data-extract="0:name"]').fill("xmlValue");
+  await window.locator('[data-extract="0:source"]').selectOption("xml");
+  await window.locator('[data-extract="0:path"]').fill("/root/value/text()");
+  await window.locator("#send").click();
+  await window.locator('[data-response="extracted"]').click();
+  await window
+    .locator(".response-body")
+    .getByText('"xmlValue": "packaged-xml"', { exact: false })
+    .waitFor();
   phase = "save";
   console.log("DESKTOP_PHASE", phase);
   await Promise.all([

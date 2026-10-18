@@ -1,3 +1,4 @@
+import { extractXML } from "./xml-extraction.mjs";
 import { parse as parseYAML } from "yaml";
 import { runScript } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
@@ -75,6 +76,10 @@ export function extractResponseValue(response, extraction) {
   return value;
 }
 export async function extractResponse(response, extraction) {
+  if (extraction.source === "xml") {
+    extractResponseValue(response, { ...extraction, source: "text" });
+    return extractXML(response.body, extraction.path, extraction.namespaces);
+  }
   if (extraction.source !== "regex")
     return extractResponseValue(response, extraction);
   extractResponseValue(response, { ...extraction, source: "text" });

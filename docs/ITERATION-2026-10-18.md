@@ -140,3 +140,9 @@ Twentieth pass:
 Twenty-first pass:
 - Body editor can expand into the workspace and collapse by button/Escape while preserving unsaved text. It does not create a second editor state or hide the close control.
 - Browser regression measures expanded height and verifies content survives the round trip.
+
+Twenty-second pass:
+- XML/XPath extraction uses pinned @xmldom/xmldom 0.9.12 and xpath 0.0.35 from npm, selected after checking official release/security documentation; npm audit reports zero vulnerabilities at installation.
+- XML parsing/XPath run in a 64 MiB worker with a two-second deadline, 1 MiB input, 2000-character expression and 256 KiB output limits. DTD/entity declarations and malformed XML are rejected; no user functions, document loaders or network bindings are supplied.
+- Supports XPath 1.0 text/attributes/scalars and namespace mappings; multiple matched nodes use the first. Namespaces remain an advanced-JSON field. Tests cover actual plan transfer, invalid XML, entities and bounds.
+- References: https://github.com/xmldom/xmldom/releases/tag/0.9.12 ; https://github.com/goto100/xpath .
