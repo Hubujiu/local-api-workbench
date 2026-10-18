@@ -478,7 +478,12 @@ export async function createApp({
           }
           if (action === "sample" && req.method === "POST") {
             const b = await body(req);
-            return json(res, 200, { sample: sampleFromSchema(b.schema || {}) });
+            return json(res, 200, {
+              sample: sampleFromSchema(b.schema ?? {}, 0, {
+                ...(b.schema || {}),
+                components: p.openapiComponents || b.schema?.components || {},
+              }),
+            });
           }
           if (action === "environments" && req.method === "POST") {
             const b = await body(req);

@@ -543,6 +543,32 @@ try {
     existing: true,
     customerId: "",
   });
+  await page.locator('[data-mode="design"]').click();
+  await page.locator("#schema").fill(
+    JSON.stringify({
+      type: "object",
+      properties: {
+        n: { type: "integer", minimum: 2, maximum: 4 },
+        label: { type: "string", minLength: 3 },
+      },
+    }),
+  );
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="body"]').click();
+  await page.locator("#generate-body").click();
+  await page.waitForFunction(() => {
+    try {
+      return (
+        JSON.parse(document.querySelector("#body-code").value).label === "xxx"
+      );
+    } catch {
+      return false;
+    }
+  });
+  assert.deepEqual(JSON.parse(await page.locator("#body-code").inputValue()), {
+    n: 2,
+    label: "xxx",
+  });
   await page.locator('[data-param="extract"]').click();
   await page.locator("#add-extract").click();
   await page.locator('[data-extract="0:name"]').fill("elapsed");

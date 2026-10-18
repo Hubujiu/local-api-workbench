@@ -185,3 +185,9 @@ Twenty-sixth pass:
 - New plans created through UI/MCP now default to original-compatible strict200. Existing saved plans retain their explicit/legacy policy; interface debugging remains assertion-aware. Regression distinguishes new creation from old-plan updates.
 - Settings secondary navigation now switches dedicated panes instead of scrolling one long page. Top MCP/environment shortcuts select their intended pane; selected navigation is marked.
 - Added per-environment runtime-value read/edit UI. Edits remain process-local; persistent and runtime fingerprints reject stale editors. Clearing restores persisted baseline values. Server and browser regressions cover read/edit/reopen without changing stored environment values.
+
+Twenty-seventh pass:
+- Schema sample generation now honors common string/array bounds, numeric inclusive/exclusive ranges and multiples, constants, enum cloning and local JSON references. External references are never fetched; cycles fail explicitly instead of silently producing null.
+- Node/depth/array/string/output budgets prevent nested generation from expanding without bounds. Complex unsupported constraints such as pattern/allOf require an explicit example; this is an illustrative generator, not a general schema solver or validator.
+- Tests began with failures for ignored lengths and unresolved references; fixed regressions and a real UI generation check were added.
+- Constraint references: https://json-schema.org/understanding-json-schema/reference/numeric ; https://json-schema.org/understanding-json-schema/reference/string .

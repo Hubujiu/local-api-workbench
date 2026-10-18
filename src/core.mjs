@@ -1045,34 +1045,7 @@ export function resolveLocalReferences(document) {
   }
   return visit(root);
 }
-export function sampleFromSchema(schema, depth = 0) {
-  if (schema.$ref) return null;
-  if (depth > 12) throw Error("Schema 嵌套过深");
-  if (schema.example !== undefined) return structuredClone(schema.example);
-  if (schema.default !== undefined) return structuredClone(schema.default);
-  if (schema.enum?.length) return schema.enum[0];
-  if (schema.oneOf?.length) return sampleFromSchema(schema.oneOf[0], depth + 1);
-  if (schema.type === "object" || schema.properties)
-    return Object.fromEntries(
-      Object.entries(schema.properties || {}).map(([key, value]) => [
-        key,
-        sampleFromSchema(value, depth + 1),
-      ]),
-    );
-  if (schema.type === "array")
-    return [sampleFromSchema(schema.items || {}, depth + 1)];
-  if (schema.type === "integer" || schema.type === "number")
-    return schema.minimum ?? 0;
-  if (schema.type === "boolean") return false;
-  if (schema.type === "null") return null;
-  return schema.format === "email"
-    ? "user@example.test"
-    : schema.format === "date"
-      ? "2026-01-01"
-      : schema.format === "date-time"
-        ? "2026-01-01T00:00:00Z"
-        : "";
-}
+export { sampleFromSchema } from "./schema-sample.mjs";
 
 function replaceVariables(target, source) {
   for (const key of Object.keys(source)) {
