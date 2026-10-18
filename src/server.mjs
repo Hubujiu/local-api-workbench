@@ -1,3 +1,7 @@
+import {
+  parseParameterImport,
+  previewParameterImport,
+} from "./parameter-dictionary.mjs";
 import { loadMCPConfig, saveMCPConfig } from "./mcp-config-store.mjs";
 import { selectMockResponse } from "./mock.mjs";
 import { snapshotCase } from "./cases.mjs";
@@ -424,6 +428,17 @@ export async function createApp({
                     b.sql,
                     b.parameters || [],
                   ),
+            );
+          }
+          if (action === "dictionary-preview" && req.method === "POST") {
+            const data = await body(req);
+            return json(
+              res,
+              200,
+              previewParameterImport(
+                parseParameterImport(data.source, data.format),
+                p.parameterDictionary || [],
+              ),
             );
           }
           if (action === "sample" && req.method === "POST") {

@@ -68,6 +68,7 @@ async function apply(directory, project) {
     runs: "history/runs.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
+    parameterDictionary: "settings/parameter-dictionary.json",
     folders: "settings/folders.json",
   })) {
     await writeJSON(
@@ -139,6 +140,7 @@ export async function readProject(directory, expectedId) {
     runs: "history/runs.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
+    parameterDictionary: "settings/parameter-dictionary.json",
     folders: "settings/folders.json",
   })) {
     try {
@@ -146,7 +148,10 @@ export async function readProject(directory, expectedId) {
         await readFile(path.join(directory, file), "utf8"),
       );
     } catch (error) {
-      if (error.code === "ENOENT" && ["history", "runs"].includes(key))
+      if (
+        error.code === "ENOENT" &&
+        ["history", "runs", "parameterDictionary"].includes(key)
+      )
         project[key] = [];
       else throw error;
     }

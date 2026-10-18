@@ -1,3 +1,4 @@
+import { normalizeParameterEntry } from "./parameter-dictionary.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { existsSync } from "node:fs";
 import {
@@ -141,6 +142,7 @@ export class Store {
       runs: [],
       history: [],
       dictionary: [],
+      parameterDictionary: [],
       documents: [],
       settings: {},
     };
@@ -180,6 +182,16 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
+    if (p.parameterDictionary !== undefined) {
+      if (
+        !Array.isArray(p.parameterDictionary) ||
+        p.parameterDictionary.length > 5000
+      )
+        throw Error("参数字典最多5000条");
+      p.parameterDictionary = p.parameterDictionary.map(
+        normalizeParameterEntry,
+      );
+    }
     for (const request of p.requests || [])
       validateMockRules(request.mockRules || []);
     if (p.cases !== undefined) {

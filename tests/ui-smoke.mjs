@@ -165,7 +165,9 @@ try {
   await page.locator("#document-title").fill("本地文档测试");
   await page.locator("#document-content").fill("# 文档\n\n保存在本地。");
   await page.locator("#dialog-save").click();
-  await page.getByText("本地文档测试", { exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: "本地文档测试", exact: true })
+    .waitFor();
   await saveAndWait();
   await page.locator("#new-folder").click();
   await page.locator("#folder-name").fill("账户服务");
@@ -386,6 +388,33 @@ try {
   const documentText = await readFile(await documentDownload.path(), "utf8");
   assert(documentText.includes("Content-Security-Policy"));
   assert(documentText.includes("响应定义"));
+  await page.locator('[data-page="dictionary"]').click();
+  await page.locator("#import-parameter-dictionary").click();
+  await page.locator("#dictionary-source").fill("customerId: 客户编号");
+  await page.locator("#dialog-save").click();
+  await page
+    .locator("#dialog-title")
+    .getByText("确认字典导入", { exact: true })
+    .waitFor();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page.getByText("customerId", { exact: true }).waitFor();
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-add-pair="query"]').click();
+  await page.locator('[data-dictionary-pair="query:0"]').click();
+  await page.locator("#dialog-save").click();
+  assert.equal(
+    await page.locator('[data-pair="query:0:key"]').inputValue(),
+    "customerId",
+  );
+  await saveAndWait();
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

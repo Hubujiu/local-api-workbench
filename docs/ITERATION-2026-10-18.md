@@ -77,3 +77,9 @@ Tenth pass:
 - Protocol definitions are persisted separately and use validated stable IDs. Session registry is capped at 50 retained sessions, in addition to the existing five active connections.
 - Browser regression exposed a genuine modal bug: client-tab buttons inside a dialog form submitted/closed it. All content action buttons are now explicitly type=button; the repeated client-tab test is retained.
 - 88 local tests pass. This tree and modal fix must pass exact-head browser/desktop CI.
+
+Eleventh pass: parameter dictionary semantics
+- Rechecked https://wiki.apipost.cn/docs/project_set/key_description/ as supplementary SaaS documentation because offline help says common usage is retained. It distinguishes reusable parameter descriptions/defaults/types/examples/enums from schema models; the two are now separate in this app.
+- Parameter dictionary supports persistent entries, optional built-in common fields, explicit reuse in parameter rows, temporary captured descriptions, and KV/JSON/common MySQL CREATE TABLE preview import. Source duplicates select the more complete definition; existing key/type conflicts are unselected until the user chooses them.
+- MySQL DDL is parsed as data only, never executed, and unsupported syntax/types fail explicitly. This does not claim a full SQL grammar or paid AI fill.
+- 90 local tests pass. Browser adds dictionary import/reload/reuse. The prior tree run failed only because a document heading now also exists in the tree; the test locator is scoped to the heading, not weakened.

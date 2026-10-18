@@ -1,3 +1,7 @@
+import {
+  dictionaryPanel,
+  effectiveParameterDictionary,
+} from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans } from "./plan-view.js";
 import { resources, resourcePanels, settingsSidebar } from "./resource-view.js";
@@ -22,6 +26,7 @@ const $ = (s) => document.querySelector(s),
 const uid = () => crypto.randomUUID();
 const responses = new Map();
 const caseResults = new Map();
+const temporaryParameters = new Map();
 let opened = [],
   token = "",
   projects = [],
@@ -405,7 +410,7 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
 }
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
@@ -541,7 +546,7 @@ function renderPage() {
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
   if (page === "dictionary")
-    return `<div class="page"><div class="page-head"><div><h1>数据字典</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${project.dictionary.map((d, i) => `<div class="card"><div class="row"><strong class="grow">${esc(d.name)}</strong><button data-edit-dictionary="${i}">编辑</button><button data-use-dictionary="${i}">应用到当前接口</button></div><pre>${esc(JSON.stringify(d.schema, null, 2))}</pre></div>`).join("") || '<div class="empty"><p>暂无数据模型</p></div>'}</div>`;
+    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${project.dictionary.map((d, i) => `<div class="card"><div class="row"><strong class="grow">${esc(d.name)}</strong><button data-edit-dictionary="${i}">编辑</button><button data-use-dictionary="${i}">应用到当前接口</button></div><pre>${esc(JSON.stringify(d.schema, null, 2))}</pre></div>`).join("") || '<div class="empty"><p>暂无数据模型</p></div>'}</div>`;
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],
@@ -850,6 +855,154 @@ function bind() {
       "生成离线文档",
     );
   });
+  function editParameterEntry(id, initial) {
+    const entry = (project.parameterDictionary || []).find(
+      (item) => item.id === id,
+    ) ||
+      initial || { key: "", type: "string", description: "", note: "" };
+    modal(
+      "字典参数",
+      `<label>参数名</label><input id="dict-key" value="${esc(entry.key)}"><label>类型</label><select id="dict-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${type === entry.type ? "selected" : ""}>${type}</option>`).join("")}</select><label>说明</label><input id="dict-description" value="${esc(entry.description)}"><label>备注</label><input id="dict-note" value="${esc(entry.note)}"><label>默认值 / 示例 / 枚举（JSON对象）</label>${jsonEditor(Object.fromEntries(["default", "example", "enum"].filter((key) => entry[key] !== undefined).map((key) => [key, entry[key]])))}`,
+      async () => {
+        const extras = JSON.parse($("#modal-json").value);
+        if (!extras || typeof extras !== "object" || Array.isArray(extras))
+          throw Error("扩展定义必须是JSON对象");
+        const key = $("#dict-key").value.trim();
+        if (
+          !key ||
+          key.length > 200 ||
+          ["__proto__", "prototype", "constructor"].includes(key)
+        )
+          throw Error("参数名无效");
+        if (extras.enum !== undefined && !Array.isArray(extras.enum))
+          throw Error("枚举值必须是数组");
+        const previous = structuredClone(project.parameterDictionary || []);
+        const value = {
+          ...extras,
+          id: entry.id || uid(),
+          key: $("#dict-key").value,
+          type: $("#dict-type").value,
+          description: $("#dict-description").value,
+          note: $("#dict-note").value,
+        };
+        project.parameterDictionary ??= [];
+        const index = project.parameterDictionary.findIndex(
+          (item) => item.id === id,
+        );
+        if (index < 0) project.parameterDictionary.push(value);
+        else project.parameterDictionary[index] = value;
+        mark();
+        try {
+          await save();
+        } catch (error) {
+          project.parameterDictionary = previous;
+          mark();
+          throw error;
+        }
+      },
+    );
+  }
+  on("#builtin-dictionary", "change", (_, element) => {
+    project.settings ??= {};
+    project.settings.builtinDictionary = element.checked;
+    mark();
+  });
+  on("#new-parameter-entry", "click", () => editParameterEntry());
+  on("[data-edit-parameter-entry]", "click", (_, element) =>
+    editParameterEntry(element.dataset.editParameterEntry),
+  );
+  on("[data-delete-parameter-entry]", "click", async (_, element) => {
+    if (!confirm("删除字典参数？已应用到接口的参数不变。")) return;
+    project.parameterDictionary = project.parameterDictionary.filter(
+      (item) => item.id !== element.dataset.deleteParameterEntry,
+    );
+    mark();
+    await save();
+  });
+  on("[data-save-temporary-parameter]", "click", (_, element) =>
+    editParameterEntry(
+      undefined,
+      (temporaryParameters.get(project.id) || [])[
+        Number(element.dataset.saveTemporaryParameter)
+      ],
+    ),
+  );
+  on("[data-dictionary-pair]", "click", (_, element) => {
+    const [kind, index] = element.dataset.dictionaryPair.split(":");
+    modal(
+      "选择字典参数",
+      `<select id="parameter-choice">${effectiveParameterDictionary(project)
+        .map(
+          (entry) =>
+            `<option value="${esc(entry.id)}">${esc(entry.key)} · ${esc(entry.type)} · ${esc(entry.note || entry.description)}</option>`,
+        )
+        .join("")}</select>`,
+      () => {
+        const entry = effectiveParameterDictionary(project).find(
+          (item) => item.id === $("#parameter-choice").value,
+        );
+        if (!entry) throw Error("请先添加字典参数");
+        Object.assign(request()[kind][Number(index)], {
+          key: entry.key,
+          value:
+            typeof (entry.default ?? entry.example) === "object"
+              ? JSON.stringify(entry.default ?? entry.example)
+              : (entry.default ?? entry.example ?? ""),
+          description: entry.description,
+          required: entry.required === true,
+          schema: {
+            type: entry.type,
+            ...(entry.enum ? { enum: entry.enum } : {}),
+          },
+        });
+        mark();
+        render();
+      },
+    );
+  });
+  on("#import-parameter-dictionary", "click", () =>
+    modal(
+      "导入参数字典",
+      '<select id="dictionary-format"><option value="kv">key-value</option><option value="json">JSON</option><option value="mysql">MySQL CREATE TABLE</option></select><textarea id="dictionary-source" placeholder="name: 姓名"></textarea>',
+      async () => {
+        const preview = await api(
+          "/projects/" + project.id + "/dictionary-preview",
+          "POST",
+          {
+            format: $("#dictionary-format").value,
+            source: $("#dictionary-source").value,
+          },
+        );
+        setTimeout(
+          () =>
+            modal(
+              "确认字典导入",
+              "<p>同名同类型的已有项默认不选；源内重复项取信息更完整者。</p>" +
+                preview
+                  .map(
+                    (item, index) =>
+                      `<label><input data-import-parameter="${index}" type="checkbox" ${item.duplicate ? "" : "checked"}>${esc(item.entry.key)} · ${esc(item.entry.type)} · ${item.duplicate ? "已有重复" : "新增"}</label>`,
+                  )
+                  .join(""),
+              async () => {
+                project.parameterDictionary ??= [];
+                for (const input of document.querySelectorAll(
+                  "[data-import-parameter]:checked",
+                ))
+                  project.parameterDictionary.push(
+                    preview[Number(input.dataset.importParameter)].entry,
+                  );
+                mark();
+                await save();
+              },
+              "导入选中项",
+            ),
+          0,
+        );
+      },
+      "预览",
+    ),
+  );
   on("[data-define-pair]", "click", (_, element) => {
     const [kind, index] = element.dataset.definePair.split(":"),
       parameter = request()[kind][Number(index)];
@@ -860,6 +1013,26 @@ function bind() {
         parameter.description = $("#parameter-description").value;
         parameter.required = $("#parameter-required").checked;
         parameter.schema = JSON.parse($("#modal-json").value);
+        if (parameter.key && parameter.description) {
+          const entry = {
+            key: parameter.key,
+            type: parameter.schema.type || "string",
+            description: parameter.description,
+            example: parameter.value,
+          };
+          const values = temporaryParameters.get(project.id) || [];
+          if (
+            !values.some(
+              (item) => item.key === entry.key && item.type === entry.type,
+            ) &&
+            !(project.parameterDictionary || []).some(
+              (item) => item.key === entry.key && item.type === entry.type,
+            )
+          ) {
+            values.push(entry);
+            temporaryParameters.set(project.id, values);
+          }
+        }
         mark();
         render();
       },
