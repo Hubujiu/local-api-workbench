@@ -468,3 +468,9 @@ Response retry review additionally keeps pending schema edits transactional when
 - User changed repository visibility to public; connector verified it. Commit f287e7287ddb2e510f243809b80a61838c9bd6b5 passed all nine jobs in Actions39138963665, including the complete browser suite and206core tests. This closes Pass68's locator regression without weakening assertions.
 - UI archive12139859472 SHA256bd80a041532e5442f222c3fe8f84b38b3d8ff5361b396c39fc8fc803ab79e44c verified. Actual Raw Body dynamic editor screenshot inspected: compact input, relevant fields, visible footer. The conflict toast is from the intentional negative-save scenario.
 - Follow-on audit found runtime dynamic-value limits counted UTF-16 characters while the editor and error message specify64KiB. Added exact65536-byte Chinese text boundary and oversized Chinese/emoji fixed/variable cases; the regression failed before correction. Runtime now measures serialized UTF-8 bytes, preserving the same limit. This change awaits its own exact-head CI.
+
+## Pass 70 — Cookie parameter precedence
+
+- Pass69 UTF-8 correction aa28ee4c6e4cedee8469604943650fe875808c6e passed all nine CI jobs (Actions39139381051),207core tests.
+- Official Cookie documentation (https://wiki.apipost.cn/docs/http/cookies/) describes explicit Cookie parameters overriding the header when configured, with the header used otherwise. Current implementation incorrectly blanked an explicit Cookie header when the parameter list contained only disabled entries; blank UI placeholder keys were also serialized.
+- A new real loopback HTTP regression first reproduced the missing header. Runtime and cURL export now filter enabled, named parameters before deciding to override. The same fixture verifies exported/imported request behavior and does not change source objects. This is explicit request-parameter precedence only; automatic persistent Cookie management remains unimplemented.

@@ -309,11 +309,9 @@ export async function executeRequest(input, signal) {
     if (r.auth.in === "query") u.searchParams.set(r.auth.key, r.auth.value);
     else headers[r.auth.key] = r.auth.value;
   }
-  if (r.cookies.length)
-    headers.cookie = r.cookies
-      .filter((c) => c.enabled !== false)
-      .map((c) => `${c.key}=${c.value}`)
-      .join("; ");
+  const activeCookies = r.cookies.filter((c) => c.enabled !== false && c.key);
+  if (activeCookies.length)
+    headers.cookie = activeCookies.map((c) => `${c.key}=${c.value}`).join("; ");
   let body;
   if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");

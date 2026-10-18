@@ -1103,9 +1103,11 @@ export function toCurl(input) {
     if (r.auth.in === "query") url.searchParams.set(r.auth.key, r.auth.value);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
-  if (r.cookies.length)
-    headers.cookie = r.cookies
-      .filter((item) => item.enabled !== false)
+  const activeCookies = r.cookies.filter(
+    (item) => item.enabled !== false && item.key,
+  );
+  if (activeCookies.length)
+    headers.cookie = activeCookies
       .map((item) => item.key + "=" + item.value)
       .join("; ");
   if (r.bodyType === "json") headers["content-type"] ??= "application/json";
