@@ -12,6 +12,7 @@ try {
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
     const variables = Object.assign(Object.create(null), input.variables || {});
+    const localVariables = Object.assign(Object.create(null), input.localVariables || {});
     const request = input.request || {};
     const response = input.response || null;
     const logs = [], tests = [];
@@ -80,6 +81,13 @@ try {
       removeRequestBody: name => modifyBody(name, null, true)
     };
     const pm = {
+      variables: {
+        set: (name, value) => { parameterName(name); localVariables[name] = value; },
+        get: name => localVariables[name],
+        has: name => Object.prototype.hasOwnProperty.call(localVariables, name),
+        unset: name => delete localVariables[name],
+        clear: () => { for (const name of Object.keys(localVariables)) delete localVariables[name]; }
+      },
       environment: { set, get: name => variables[name], unset: name => delete variables[name] },
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
       test: (name, fn) => { try { fn(); tests.push({ name, passed: true }); } catch (e) { tests.push({ name, passed: false, error: String(e.message) }); } },
@@ -108,7 +116,7 @@ try {
     result.value.dispose();
   }
   const output = context.evalCode(
-    "JSON.stringify({variables, request, logs, tests})",
+    "JSON.stringify({variables, localVariables, request, logs, tests})",
   );
   if (output.error) {
     output.error.dispose();

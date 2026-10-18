@@ -304,14 +304,17 @@ export async function runPlan(
           name: operation.name,
         });
       }
+      const localVariables = {};
       let configuredRequest = structuredClone(step.request);
       if (configuredRequest.beforeScript) {
         const scripted = await runScript(configuredRequest.beforeScript, {
           variables: vars,
+          localVariables,
           functions: snapshot.functions || [],
           request: configuredRequest,
         });
         replaceVariables(vars, scripted.variables);
+        replaceVariables(localVariables, scripted.localVariables || {});
         configuredRequest = normalizeRequest(scripted.request);
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "before", message })),
@@ -319,7 +322,10 @@ export async function runPlan(
         if (scripted.tests.some((test) => !test.passed))
           throw Error("前置脚本断言失败");
       }
-      record.request = interpolate(configuredRequest, vars);
+      record.request = interpolate(configuredRequest, {
+        ...vars,
+        ...localVariables,
+      });
       if (prepareRequest) record.request = prepareRequest(record.request);
       record.response = await execute(record.request, signal);
       record.assertions = evaluateAssertions(
@@ -342,6 +348,7 @@ export async function runPlan(
       if (record.request.afterScript) {
         const scripted = await runScript(record.request.afterScript, {
           variables: vars,
+          localVariables,
           functions: snapshot.functions || [],
           request: record.request,
           response: record.response,

@@ -124,3 +124,51 @@ test("pre-script mutations reach a real HTTP fixture without modifying the saved
     /File fields/,
   );
 });
+
+test("request-local pm.variables shadow interpolation only for the current step and survive pre-to-post", async () => {
+  const { runPlan, snapshotPlan } = await import("../src/core.mjs");
+  const urls = [];
+  const result = await runPlan(
+    snapshotPlan({
+      steps: [
+        {
+          request: {
+            url: "http://fixture.test/{{id}}",
+            beforeScript:
+              'pm.variables.set("id","local"); pm.variables.set("temp",42);',
+            afterScript:
+              'pm.test("same request",()=>pm.expect(pm.variables.get("temp")).to.equal(42));',
+          },
+        },
+        {
+          request: {
+            url: "http://fixture.test/{{id}}",
+            beforeScript:
+              'pm.test("no leak",()=>pm.expect(pm.variables.has("temp")).to.equal(false));',
+          },
+        },
+      ],
+    }),
+    { id: "environment" },
+    async (request) => {
+      urls.push(request.url);
+      return { status: 200, body: "{}", headers: {}, duration: 1 };
+    },
+  );
+  assert.equal(result.status, "passed");
+  assert.deepEqual(urls, [
+    "http://fixture.test/local",
+    "http://fixture.test/environment",
+  ]);
+  assert.equal(result.variables.id, "environment");
+  assert.equal(Object.hasOwn(result.variables, "temp"), false);
+  const standalone = await runScript(
+    'pm.variables.set("x",1); pm.variables.unset("x"); pm.variables.set("y",2); pm.variables.clear();',
+    { variables: {} },
+  );
+  assert.deepEqual(standalone.localVariables, {});
+  await assert.rejects(
+    runScript('pm.variables.set("__proto__",1);', { variables: {} }),
+    /Invalid/,
+  );
+});

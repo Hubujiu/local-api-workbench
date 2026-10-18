@@ -146,3 +146,8 @@ Twenty-second pass:
 - XML parsing/XPath run in a 64 MiB worker with a two-second deadline, 1 MiB input, 2000-character expression and 256 KiB output limits. DTD/entity declarations and malformed XML are rejected; no user functions, document loaders or network bindings are supplied.
 - Supports XPath 1.0 text/attributes/scalars and namespace mappings; multiple matched nodes use the first. Namespaces remain an advanced-JSON field. Tests cover actual plan transfer, invalid XML, entities and bounds.
 - References: https://github.com/xmldom/xmldom/releases/tag/0.9.12 ; https://github.com/goto100/xpath .
+
+Twenty-third pass:
+- Added pm.variables as a genuine request-local scope, following https://wiki.apipost.cn/docs/http/temp-variables/ . It survives pre-to-post scripts, shadows shared values during current-request interpolation, and is discarded before the next request.
+- set/get/has/unset/clear operate only on this local map; existing apt.setVar and environment runtime behavior are unchanged. Regression verifies local values neither leak into the next step nor overwrite shared plan variables.
+- Full persisted environment/global script scopes remain a separate unresolved parity area; local scope is not mislabeled as them.
