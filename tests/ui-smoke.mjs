@@ -201,6 +201,22 @@ try {
     "定位保留未保存内容",
   );
   await page.locator("#request-name").fill(activeName);
+  assert.equal(
+    await page.locator(".tree-item.active span").last().innerText(),
+    activeName,
+  );
+  assert.equal(
+    await page.locator(".tab.selected [data-tab-name]").innerText(),
+    activeName,
+  );
+  assert.equal(
+    await page
+      .locator('[data-tree-folder="示例接口"] > summary')
+      .evaluate((el) => getComputedStyle(el).display),
+    "list-item",
+  );
+  await page.locator('[data-param="body"]').click();
+
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);

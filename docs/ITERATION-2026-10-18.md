@@ -371,3 +371,9 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 - Added “定位当前接口”: clears keyword/type filters, expands its folder, scrolls/focuses the active request and preserves unsaved editor contents. Search reveals matching content in collapsed folders.
 - Browser acceptance collapses the active folder, hides it behind conflicting filters, invokes location and verifies visibility/filter reset/unsaved-name retention before restoring the reference state.
 - The callback HTTP bridge in2a615882 passed181tests and all9jobs in Actions39115212829, including browser and real packaged execution on all three platforms.
+
+## Fifty-fourth pass: post-capture disclosure and label corrections
+
+- Inspected947b7a8b's actual reference and script-HTTP screenshots (artifact12132039072; SHA256987e4f8d512e34ce75f7cf28dc1c8283ffdab5ba39d13d77eabe0787a4cab68a). All9jobs passed in Actions39115573594.
+- The folder disclosure worked, but the old .folder flex rule suppressed the browser's native marker. Restore list-item rendering for summaries instead of drawing a fake arrow.
+- The unsaved-name preservation test restored the input but tab/tree labels still showed the interim name until a later render. Update those labels immediately using escaped tree rendering/textContent without replacing the focused editor, and assert both label values before the reference capture.

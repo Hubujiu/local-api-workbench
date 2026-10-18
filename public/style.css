@@ -1409,6 +1409,8 @@ body.compact-ui .sidebar {
 }
 
 .tree-folder > summary {
+  display: list-item;
+  list-style-position: inside;
   cursor: pointer;
 }
 .tree-folder .folder-edit {

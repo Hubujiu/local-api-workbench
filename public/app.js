@@ -362,7 +362,7 @@ function render() {
             )
             .map((id) => {
               const item = project.requests.find((r) => r.id === id);
-              return `<div class="tab ${current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> ${esc(item.name)}</button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
+              return `<div class="tab ${current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
             })
             .join(
               "",
@@ -892,9 +892,24 @@ function bind() {
   );
   on("#add-request,#new-request,#tab-add,#welcome-add", "click", addRequest);
   on("#save,#save-project", "click", save);
-  on("#request-name,#url,#body-code,#description", "input", () => {
+  on("#request-name,#url,#body-code,#description", "input", (_, element) => {
     collect();
     mark();
+    if (element.id === "request-name") {
+      const id = CSS.escape(current);
+      document
+        .querySelectorAll('[data-tab-name="' + id + '"]')
+        .forEach((label) => {
+          label.textContent = request().name;
+        });
+      document
+        .querySelector('[data-close-tab="' + id + '"]')
+        ?.setAttribute("aria-label", "关闭 " + request().name);
+      if ($("#tree")) {
+        $("#tree").innerHTML = tree();
+        bindTree();
+      }
+    }
   });
   on("#method", "change", () => {
     collect();
