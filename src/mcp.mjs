@@ -1,3 +1,4 @@
+import { scopedExecution } from "./variable-scopes.mjs";
 import { versionPlan } from "./plan-version.mjs";
 import readline from "node:readline";
 import path from "node:path";
@@ -399,6 +400,13 @@ export function createMCP({
                   .variables,
                 executeRequest,
                 {
+                  ...scopedExecution(
+                    store,
+                    p,
+                    args.environmentId,
+                    debugEnvironment(p, args.environmentId, debugEnvironments)
+                      .variables,
+                  ),
                   onStep: (step) =>
                     onProgress({
                       completed: 1,
@@ -436,6 +444,7 @@ export function createMCP({
                 environmentVariables(p, plan.environmentId),
                 executeRequest,
                 {
+                  ...scopedExecution(store, p, plan.environmentId),
                   onStep: (step) =>
                     onProgress({
                       completed: ++completed,

@@ -24,7 +24,18 @@ test("plan CLI returns machine-readable evidence and truthful pass/fail exit cod
   };
   project.requests = [request];
   project.plans = [
-    snapshotPlan({ id: "pass", name: "Pass", steps: [{ request }] }),
+    snapshotPlan({
+      id: "pass",
+      name: "Pass",
+      steps: [
+        {
+          request: {
+            ...request,
+            beforeScript: 'pm.environment.set("cliScope","persisted");',
+          },
+        },
+      ],
+    }),
     snapshotPlan({
       id: "fail",
       name: "Fail",
@@ -74,6 +85,10 @@ test("plan CLI returns machine-readable evidence and truthful pass/fail exit cod
   ]);
   assert.equal(passed.code, 0, passed.stderr);
   assert.equal(JSON.parse(passed.stdout).status, "passed");
+  assert.equal(
+    (await app.store.get(project.id)).environments[0].variables.cliScope,
+    "persisted",
+  );
   assert.deepEqual(
     JSON.parse(await readFile(output, "utf8")),
     JSON.parse(passed.stdout),

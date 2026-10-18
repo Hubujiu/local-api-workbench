@@ -1,4 +1,10 @@
 import { extractXML } from "./xml-extraction.mjs";
+import {
+  createScopes,
+  effectiveScopes,
+  applyLegacyVariables,
+  scopeChanges,
+} from "./variable-scopes.mjs";
 import { parse as parseYAML } from "yaml";
 import { runScript } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
@@ -276,10 +282,11 @@ export async function runPlan(
   plan,
   variables,
   execute,
-  { signal, onStep, prepareRequest } = {},
+  { signal, onStep, prepareRequest, variableScopes, onScopeChanges } = {},
 ) {
   const snapshot = structuredClone(plan);
-  const vars = { ...variables };
+  let scopes = createScopes(variables, variableScopes);
+  const vars = { ...effectiveScopes(scopes) };
   const results = [];
   if (!snapshot.steps.some((step) => step.enabled !== false)) {
     throw Error("计划没有可执行步骤");
@@ -295,7 +302,32 @@ export async function runPlan(
       logs: [],
       extracted: {},
     };
+    let committedScopes = structuredClone(scopes);
+    const commitScopes = async () => {
+      const changes = scopeChanges(committedScopes, scopes);
+      if (changes.length && onScopeChanges) {
+        try {
+          const accepted = await onScopeChanges(changes);
+          if (accepted?.globals && accepted?.environment) {
+            scopes.globals = accepted.globals;
+            scopes.environment = accepted.environment;
+          }
+        } catch (error) {
+          throw Error("变量持久化失败：" + error.message);
+        }
+      }
+      for (const change of changes)
+        record.logs.push({
+          phase: "variables",
+          scope: change.scope,
+          name: change.name,
+          operation: change.after.exists ? "set" : "unset",
+        });
+      committedScopes = structuredClone(scopes);
+      replaceVariables(vars, effectiveScopes(scopes));
+    };
     try {
+      const beforeOperations = { ...vars };
       for (const operation of step.request.before || []) {
         applyOperation(operation, vars);
         record.logs.push({
@@ -304,24 +336,28 @@ export async function runPlan(
           name: operation.name,
         });
       }
+      applyLegacyVariables(scopes, beforeOperations, vars);
       const localVariables = {};
       let configuredRequest = structuredClone(step.request);
       if (configuredRequest.beforeScript) {
         const scripted = await runScript(configuredRequest.beforeScript, {
           variables: vars,
+          scopes,
           localVariables,
           functions: snapshot.functions || [],
           request: configuredRequest,
         });
-        replaceVariables(vars, scripted.variables);
-        replaceVariables(localVariables, scripted.localVariables || {});
-        configuredRequest = normalizeRequest(scripted.request);
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "before", message })),
         );
         if (scripted.tests.some((test) => !test.passed))
           throw Error("前置脚本断言失败");
+        scopes = createScopes(scripted.variables, scripted.scopes);
+        replaceVariables(vars, effectiveScopes(scopes));
+        replaceVariables(localVariables, scripted.localVariables || {});
+        configuredRequest = normalizeRequest(scripted.request);
       }
+      await commitScopes();
       record.request = interpolate(configuredRequest, {
         ...vars,
         ...localVariables,
@@ -334,9 +370,22 @@ export async function runPlan(
       );
       for (const extraction of record.request.extract) {
         const value = await extractResponse(record.response, extraction);
-        vars[extraction.name] = value;
+        const destination = extraction.scope || "runtime";
+        if (destination === "local") localVariables[extraction.name] = value;
+        else if (destination === "environment")
+          scopes.environment[extraction.name] = value;
+        else if (destination === "global")
+          scopes.globals[extraction.name] = value;
+        else if (destination === "runtime") {
+          scopes.runtime[extraction.name] = value;
+          scopes.hidden = scopes.hidden.filter(
+            (name) => name !== extraction.name,
+          );
+        } else throw Error("未知提取变量作用域");
+        replaceVariables(vars, effectiveScopes(scopes));
         record.extracted[extraction.name] = value;
       }
+      const beforeAfterOperations = { ...vars };
       for (const operation of record.request.after || []) {
         applyOperation(operation, vars);
         record.logs.push({
@@ -345,20 +394,24 @@ export async function runPlan(
           name: operation.name,
         });
       }
+      applyLegacyVariables(scopes, beforeAfterOperations, vars);
       if (record.request.afterScript) {
         const scripted = await runScript(record.request.afterScript, {
           variables: vars,
+          scopes,
           localVariables,
           functions: snapshot.functions || [],
           request: record.request,
           response: record.response,
         });
-        replaceVariables(vars, scripted.variables);
+        scopes = createScopes(scripted.variables, scripted.scopes);
+        replaceVariables(vars, effectiveScopes(scopes));
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "after", message })),
         );
         record.assertions.push(...scripted.tests);
       }
+      await commitScopes();
       const hasStatusAssertion = record.assertions.some(
         (a) => a.target === "status",
       );
@@ -374,12 +427,15 @@ export async function runPlan(
           ? "passed"
           : "failed";
     } catch (error) {
+      scopes.environment = committedScopes.environment;
+      scopes.globals = committedScopes.globals;
       record.error = error.message;
       if (!record.request) {
         record.request = structuredClone(step.request);
         record.requestUnresolved = true;
       }
     }
+    replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
   }

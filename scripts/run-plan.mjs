@@ -1,3 +1,4 @@
+import { scopedExecution } from "../src/variable-scopes.mjs";
 import {
   environmentVariables,
   resolveServiceRequest,
@@ -31,6 +32,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       environmentVariables(project, environmentId),
       executeRequest,
       {
+        ...scopedExecution(store, project, environmentId),
         signal: controller.signal,
         prepareRequest: (request) =>
           resolveServiceRequest(project, request, environmentId),

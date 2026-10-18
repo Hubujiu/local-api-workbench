@@ -1,3 +1,4 @@
+import { scopedExecution } from "./variable-scopes.mjs";
 import {
   parseParameterImport,
   previewParameterImport,
@@ -503,9 +504,14 @@ export async function createApp({
                 debugEnvironments,
               );
               const environmentKey = context.cacheKey,
-                fingerprint = context.fingerprint,
                 env = context.variables;
               const request = normalizeRequest(b.request);
+              const scoped = scopedExecution(
+                store,
+                p,
+                context.environment.id,
+                env,
+              );
               const single = await runPlan(
                 snapshotPlan({
                   name: request.name,
@@ -515,6 +521,7 @@ export async function createApp({
                 env,
                 executeRequest,
                 {
+                  ...scoped,
                   signal: controller.signal,
                   prepareRequest: (request) =>
                     resolveServiceRequest(p, request, context.environment.id),
@@ -523,7 +530,9 @@ export async function createApp({
               const result = single.results[0];
               if (result?.response)
                 debugEnvironments.set(environmentKey, {
-                  fingerprint,
+                  fingerprint: JSON.stringify(
+                    environmentVariables(p, context.environment.id),
+                  ),
                   variables: structuredClone(single.variables),
                 });
               if (!result) throw Error("请求已取消");
@@ -536,6 +545,7 @@ export async function createApp({
               return json(res, 200, {
                 ...result.response,
                 outcome: result.status,
+                variableWrites: scoped.receipt(),
                 assertions: result.assertions,
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
@@ -603,6 +613,7 @@ export async function createApp({
               const environmentId = b.environmentId || plan.environmentId;
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
+                ...scopedExecution(store, p, environmentId),
                 signal: controller.signal,
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),

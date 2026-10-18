@@ -172,3 +172,11 @@ Confirmed Windows lock handoff defect:
 - Added regressions for queue recovery after failure, idempotent release, and restricted retry classification. Ten 100-request batches remain mandatory.
 
 - Lock fix 2943f19684059fa78ba4eb7feaa975a3f2d87035 passed all seven jobs in run 39089481325, including Windows with ten separate 100/100 load batches. An additional independent-process counter regression passes locally and is included in the next CI.
+
+Twenty-fifth pass: persistent variable scopes
+- Defined the scope contract before implementation in ADR-VARIABLE-SCOPES.md; new tests first failed for the missing module/APIs and absent commit callbacks, then passed after implementation.
+- Added independent project-global, selected-environment, workflow/debug runtime and request-local maps. Scoped getters read their own layer; resolution is local > runtime > environment > globals. Legacy apt.setVar remains runtime-only.
+- pm.environment / apt.environment / apt.variables and pm.globals / apt.globals now persist through a shared field-level compare-and-save hook in UI execution, MCP and CLI. Pre-script writes commit before HTTP; post extraction/script writes commit as one stage. Script throws discard that call's partial changes.
+- Concurrent same-variable edits reject without overwrite. Unrelated edits survive. Persistence failures mark the step failed and retain request/response evidence while reverting uncommitted persistent layers.
+- Extraction destination selector exposes runtime/local/environment/global. UI adopts only a revision-checked, field-checked write receipt, preserving unsaved request fields and rejecting ambiguous concurrent drafts instead of silently overwriting them.
+- Real local HTTP/MCP, CLI persistence and browser save-after-script acceptance are included. Full original SDK compatibility is still not claimed.

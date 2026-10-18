@@ -1,3 +1,4 @@
+import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { getQuickJS } from "quickjs-emscripten";
 let runtime, context;
@@ -11,7 +12,23 @@ try {
   context = runtime.newContext();
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
-    const variables = Object.assign(Object.create(null), input.variables || {});
+    ${scopeRuntimeSource}
+    const scopeState = createScopes(input.variables || {}, input.scopes);
+    const variables = effectiveScopes(scopeState);
+    const refreshVariables = () => {
+      for (const name of Object.keys(variables)) delete variables[name];
+      Object.assign(variables, effectiveScopes(scopeState));
+    };
+    const scopedAPI = map => ({
+      set: (name, value) => { variableName(name); map[name] = value; refreshVariables(); },
+      get: name => map[name],
+      has: name => Object.prototype.hasOwnProperty.call(map, name),
+      unset: name => { variableName(name); delete map[name]; refreshVariables(); },
+      clear: () => { for (const name of Object.keys(map)) delete map[name]; refreshVariables(); },
+      toObject: () => copyVariableValue(map)
+    });
+    const environmentAPI = scopedAPI(scopeState.environment);
+    const globalsAPI = scopedAPI(scopeState.globals);
     const localVariables = Object.assign(Object.create(null), input.localVariables || {});
     const request = input.request || {};
     const response = input.response || null;
@@ -21,7 +38,9 @@ try {
     }};
     const set = (name, value) => {
       if (['__proto__','prototype','constructor'].includes(name)) throw Error('Invalid variable name');
-      variables[name] = value;
+      scopeState.runtime[name] = value;
+      scopeState.hidden = scopeState.hidden.filter(item => item !== name);
+      refreshVariables();
     };
     const parameterName = name => {
       if (typeof name !== 'string' || !name || ['__proto__','prototype','constructor'].includes(name))
@@ -67,6 +86,7 @@ try {
     };
     const apt = {
       setVar: set, getVar: name => variables[name],
+      environment: environmentAPI, variables: environmentAPI, globals: globalsAPI,
       setRequestHeader: (name, value) => modifyPair('headers', name, value),
       removeRequestHeader: name => modifyPair('headers', name, null, true),
       setRequestQuery: (name, value) => { parameterName(name); removeURLQuery(name); modifyPair('query', name, value); },
@@ -88,7 +108,8 @@ try {
         unset: name => delete localVariables[name],
         clear: () => { for (const name of Object.keys(localVariables)) delete localVariables[name]; }
       },
-      environment: { set, get: name => variables[name], unset: name => delete variables[name] },
+      environment: environmentAPI,
+      globals: globalsAPI,
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
       test: (name, fn) => { try { fn(); tests.push({ name, passed: true }); } catch (e) { tests.push({ name, passed: false, error: String(e.message) }); } },
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
@@ -116,7 +137,7 @@ try {
     result.value.dispose();
   }
   const output = context.evalCode(
-    "JSON.stringify({variables, localVariables, request, logs, tests})",
+    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests})",
   );
   if (output.error) {
     output.error.dispose();

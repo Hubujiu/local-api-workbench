@@ -198,7 +198,7 @@ try {
   await page
     .locator("#script-code")
     .fill(
-      'pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); console.log("script-done");',
+      'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); console.log("script-done");',
     );
   await page.locator("#send").click();
   await page.locator('[data-response="logs"]').click();
@@ -207,6 +207,12 @@ try {
     .getByText("script-done", { exact: false })
     .waitFor();
   await saveAndWait("#save");
+  const scopeSavedProject = (await app.store.list()).find(
+    (item) => !item.archived,
+  );
+  const scopeSaved = await app.store.get(scopeSavedProject.id);
+  assert.equal(scopeSaved.environments[0].variables.uiSaved, "persisted");
+  assert.equal(scopeSaved.globalVariables.uiGlobal, 0);
   await page.locator("#import").click();
   await page.locator("#dialog").waitFor({ state: "visible" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();

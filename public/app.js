@@ -1,3 +1,4 @@
+import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, pairRow, applyStepEdits } from "./step-editor.js";
 import {
   dictionaryPanel,
@@ -461,10 +462,20 @@ function paramPanel(r) {
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
-    return `<table><thead><tr><th>变量名</th><th>来源</th><th>路径 / 头名 / Cookie / 正则</th><th>捕获组</th><th></th></tr></thead><tbody>${r.extract
+    return `<table><thead><tr><th>变量名</th><th>保存至</th><th>来源</th><th>路径 / 头名 / Cookie / 正则</th><th>捕获组</th><th></th></tr></thead><tbody>${r.extract
       .map(
         (a, i) =>
-          `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><select data-extract="${i}:source">${[
+          `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><select data-extract="${i}:scope">${[
+            ["runtime", "运行时"],
+            ["local", "本请求"],
+            ["environment", "环境（保存）"],
+            ["global", "全局（保存）"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${(a.scope || "runtime") === value ? "selected" : ""}>${label}</option>`,
+            )
+            .join("")}</select></td><td><select data-extract="${i}:source">${[
             ["json", "Response JSON"],
             ["header", "Response Header"],
             ["cookie", "Response Cookie"],
@@ -483,9 +494,9 @@ function paramPanel(r) {
       )
       .join(
         "",
-      )}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">在计划内传递给后续步骤；单次调试保留为调试变量，不覆盖持久化环境。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
+      )}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
-    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment、pm.variables（仅当前请求）、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
+    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -1793,7 +1804,14 @@ function bind() {
       caseResults.set(item.id, result);
       const latest = await api("/projects/" + project.id);
       project.history = latest.history;
-      project.revision = latest.revision;
+      const adoption = adoptVariableWrites(
+        project,
+        latest,
+        result.variableWrites,
+      );
+      if (adoption === "none") project.revision = latest.revision;
+      if (adoption === "conflict")
+        toast("变量已保存，但项目还有其他变更；请重新加载并检查后再保存");
     } finally {
       busy = false;
       render();
@@ -2174,8 +2192,15 @@ async function send() {
     });
     const updated = await api("/projects/" + projectId);
     if (project.id === projectId) {
-      if (updated.revision === revision + 1)
+      const adoption = adoptVariableWrites(
+        project,
+        updated,
+        result.variableWrites,
+      );
+      if (adoption === "none" && updated.revision === revision + 1)
         project.revision = updated.revision;
+      if (adoption === "conflict")
+        toast("变量已保存，但项目还有其他变更；请重新加载并检查后再保存");
       project.history = updated.history;
     }
   } catch (error) {
