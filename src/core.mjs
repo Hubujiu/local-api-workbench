@@ -730,6 +730,8 @@ export function importDocument(doc) {
               "accessToken",
               "tokenSecret",
               "signatureMethod",
+              "privateKey",
+              "privateKeyPassphrase",
               "nonce",
               "timestamp",
               "realm",

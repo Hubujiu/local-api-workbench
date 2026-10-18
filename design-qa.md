@@ -49,3 +49,7 @@ Wait for the latest exact-head CI and inspect its screenshots. At05:37UTC GitHub
 
 - b131877c / Actions39119424829 passed all9jobs. UI artifact12133252896 SHA2565efcd639d8ac43515a935f65bc174e2e0c3e95f0bd723742f19388c55374bd36 verified; HTTP/2 proxy screenshot visibly shows the actual h2 POST response and sent JSON.
 - Previous4cee3 capture independently confirmed response-schema actions above the modal footer and load inputs2/2 matching results. These control issues are resolved. Exact visual-equivalence status remains blocked; no whole-product completion claim.
+
+## Post-fix inspection — 10:45 UTC
+
+- c222710 Actions39120343402 passed9/9; archive12133464973 SHA256030a3bd5a9ec283a54c32705d936b4831a1b06f8d3de7c8b4d74eef104710fef verified. The1000px HTTP/2 response capture now shows the complete200status, duration and size, with independent horizontal tab scrolling. Geometry/hit-test and last-tab navigation checks passed. Narrow metrics clipping is resolved; full fidelity remains blocked.

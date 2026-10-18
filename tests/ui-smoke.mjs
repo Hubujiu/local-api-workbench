@@ -763,6 +763,27 @@ try {
   assert(
     !JSON.parse(oauth1Result.body).authorization.includes("fixture-secret"),
   );
+  await page.locator('[data-auth="signatureMethod"]').selectOption("RSA-SHA1");
+  await page
+    .locator('[data-auth="privateKey"]')
+    .fill(
+      await readFile(
+        new URL("./fixtures/localhost.key", import.meta.url),
+        "utf8",
+      ),
+    );
+  const rsaResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const rsaResult = await (await rsaResponse).json();
+  assert.equal(rsaResult.status, 200, JSON.stringify(rsaResult));
+  assert.match(
+    JSON.parse(rsaResult.body).authorization,
+    /oauth_signature_method="RSA-SHA1"/,
+  );
+  assert(!rsaResult.body.includes("PRIVATE KEY"));
+  await page.locator('[data-auth="privateKey"]').fill("");
   await page.locator("#auth-type").selectOption("aws");
   for (const [key, value] of Object.entries({
     accessKey: "fixture-access",

@@ -21,6 +21,15 @@ test("authentication editor exposes each supported type and safely renders sensi
     /data-auth="tokenSecret"[^>]*type="password"/,
   );
   assert(authPanel({ type: "oauth2" }).includes('id="oauth-get"'));
+  const rsa = authPanel({
+    type: "oauth1",
+    signatureMethod: "RSA-SHA1",
+    privateKey: "</textarea><script>",
+  });
+  assert(rsa.includes("<option selected>RSA-SHA1</option>"));
+  assert(rsa.includes('textarea data-auth="privateKey"'));
+  assert(!rsa.includes("<script>"));
+  assert.match(rsa, /data-auth="privateKeyPassphrase"[^>]*type="password"/);
 });
 
 test("unsupported auth fails closed rather than sending an unauthenticated request", async () => {

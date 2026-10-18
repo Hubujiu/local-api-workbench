@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：b131877c20487b89812102b9125e3cf7e2bad66d
+已核验提交：c222710a85200b9e08fcfae7bbc2c5b5bebe6571
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39119424829)，195项核心测试。
-控件状态、弹窗可见性与HTTP/2代理已在本版核验；后续cURL默认配置隔离须独立CI。
+9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39120343402)，197项核心测试。
+控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；后续OAuth1 RSA须独立CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
 
@@ -26,7 +26,7 @@
 | F13 请求体类型 | 已实现 | 实现相应模式；原版选项布局尚不同 | runtime.test; MessagePack byte vectors |
 | F14 认证 | 部分实现 | Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权/RSA及完整高级变体未实现。 | src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs |
 | F15 请求协议版本选择 | 部分实现 | 可选 HTTP/1.1 和真实 HTTP/2，含 h2c/TLS/custom CA/mTLS；HTTP/HTTPS CONNECT代理、独立代理CA与严格协议cURL导出已验证。内联证书/文件/动态签名cURL仍须手工配置，未声称所有原版协议选项等价。 | src/http2-connection.mjs; src/proxy-tunnel.mjs; tests/http2-proxy.test.mjs; tests/curl-http2.mjs; tests/ui-smoke.mjs |
-| F16 基于 Schema 生成请求数据 | 部分实现 | 基础 schema 样例生成存在；复杂约束覆盖未完整验证 | sampleFromSchema; core.test |
+| F16 基于 Schema 生成请求数据 | 部分实现 | 常见长度/数值范围、局部引用、新旧元组与有界尾项已验证；复杂组合约束与唯一元组冲突明确要求example，不是通用约束求解器。 | src/schema-sample.mjs; tests/schema-sample.test.mjs; tests/ui-smoke.mjs |
 | F17 参数助手 | 已实现 | 右侧参数助手含变量插入、共享函数/结构提示、参数字典字段插入。 | public/dictionary-view.js; tests/parameter-dictionary.test.mjs; tests/ui-smoke.mjs |
 | F18 响应展示与日志 | 已实现 | 实时响应、响应头、Cookie、响应示例、实际请求、断言/提取、控制台标签。 | public/app.js responseContent; tests/ui-smoke.mjs |
 | F19 接口用例 | 已实现 | 独立接口用例创建、编辑、删除、快照保存与执行，不再仅引导转计划。 | src/cases.mjs; tests/cases.test.mjs; tests/ui-smoke.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39119424829; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39120343402; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 

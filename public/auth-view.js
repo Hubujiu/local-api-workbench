@@ -30,6 +30,8 @@ const fields = {
     "consumerSecret",
     "accessToken",
     "tokenSecret",
+    "privateKey",
+    "privateKeyPassphrase",
     "realm",
     "nonce",
     "timestamp",
@@ -62,6 +64,7 @@ const secret = new Set([
   "token",
   "consumerSecret",
   "tokenSecret",
+  "privateKeyPassphrase",
   "clientSecret",
   "refreshToken",
   "secretKey",
@@ -100,7 +103,7 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
     html +=
       '<label>签名算法</label><select data-auth="signatureMethod">' +
       options(
-        ["HMAC-SHA1", "HMAC-SHA256"],
+        ["HMAC-SHA1", "HMAC-SHA256", "RSA-SHA1"],
         auth.signatureMethod || "HMAC-SHA1",
       ) +
       "</select>";
@@ -114,9 +117,10 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
       "</select>";
   html +=
     (fields[type] || [])
-      .map(
-        (key) =>
-          `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
+      .map((key) =>
+        key === "privateKey"
+          ? `<label>privateKey (RSA PEM)</label><textarea data-auth="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径">${esc(auth[key])}</textarea>`
+          : `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
   if (type === "oauth2") {
@@ -128,7 +132,7 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
   }
   if (type === "oauth1")
     html +=
-      '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；此处使用已有凭据，不自动运行OAuth1授权跳转。RSA/PLAINTEXT尚不支持。</p>';
+      '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；此处使用已有凭据，不自动运行OAuth1授权跳转。RSA-SHA1仅兼容旧服务，非新系统推荐算法；RSA私钥仅在本机签名，不发送私钥。保存接口/步骤会把填写的凭据写入本地项目文件，请勿提交真实密钥到Git。PLAINTEXT尚不支持。</p>';
   if (type === "aws")
     html +=
       '<p class="notice">AWS Signature V4使用明确填写的凭据与region/service，不读取系统AWS配置或自动登录。对最终请求体计算SHA256；S3使用对应路径规则。优先使用HTTPS。</p>';

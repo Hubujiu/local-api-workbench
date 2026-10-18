@@ -1,4 +1,10 @@
-import { createHmac, randomBytes } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  createPrivateKey,
+  sign,
+  constants,
+} from "node:crypto";
 export const oauthEncode = (value) =>
   encodeURIComponent(String(value)).replace(
     /[!'()*]/g,
@@ -10,7 +16,8 @@ export function oauth1Authorization(url, method, headers, body, auth = {}) {
   const algorithm = { "HMAC-SHA1": "sha1", "HMAC-SHA256": "sha256" }[
     signatureMethod
   ];
-  if (!algorithm) throw Error("OAuth1仅支持HMAC-SHA1/HMAC-SHA256");
+  if (!algorithm && signatureMethod !== "RSA-SHA1")
+    throw Error("OAuth1仅支持HMAC-SHA1/HMAC-SHA256/RSA-SHA1");
   if (!auth.consumerKey) throw Error("OAuth1 Consumer Key不能为空");
   const timestamp = String(auth.timestamp || Math.floor(Date.now() / 1000));
   if (!/^[1-9][0-9]*$/.test(timestamp))
@@ -72,9 +79,32 @@ export function oauth1Authorization(url, method, headers, body, auth = {}) {
     oauthEncode(auth.consumerSecret || "") +
     "&" +
     oauthEncode(auth.tokenSecret || "");
-  const signature = createHmac(algorithm, key)
-    .update(baseString)
-    .digest("base64");
+  let signature;
+  if (signatureMethod === "RSA-SHA1") {
+    if (
+      typeof auth.privateKey !== "string" ||
+      auth.privateKey.length > 32768 ||
+      !/^-----BEGIN (?:RSA |ENCRYPTED )?PRIVATE KEY-----/.test(
+        auth.privateKey.trim(),
+      )
+    )
+      throw Error("OAuth1 RSA需要不超过32KiB的内联PEM私钥，不读取文件路径");
+    try {
+      const privateKey = createPrivateKey({
+        key: auth.privateKey,
+        format: "pem",
+        passphrase: auth.privateKeyPassphrase || undefined,
+      });
+      if (privateKey.asymmetricKeyType !== "rsa") throw Error("Wrong key type");
+      signature = sign("RSA-SHA1", Buffer.from(baseString), {
+        key: privateKey,
+        padding: constants.RSA_PKCS1_PADDING,
+      }).toString("base64");
+    } catch {
+      throw Error("OAuth1 RSA私钥无效、密码错误或当前环境不支持RSA-SHA1");
+    }
+  } else
+    signature = createHmac(algorithm, key).update(baseString).digest("base64");
   const headerParams = auth.realm
     ? { realm: String(auth.realm), ...params, oauth_signature: signature }
     : { ...params, oauth_signature: signature };
