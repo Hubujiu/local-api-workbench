@@ -567,8 +567,13 @@ try {
     (r) => r.request().method() === "POST" && r.url().endsWith("/run"),
   );
   await page.locator("#run-plan").click();
-  assert.equal((await (await bodyDynamicRun).json()).status, "passed");
-  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  const stepBodyDynamicResult = await (await bodyDynamicRun).json();
+  assert.equal(stepBodyDynamicResult.status, "passed");
+  await page
+    .locator("details.card[open] > summary")
+    .filter({ hasText: stepBodyDynamicResult.createdAt })
+    .getByText("✓ 通过", { exact: true })
+    .waitFor();
   assert.deepEqual(JSON.parse(uploadedMultipart.body.toString()), {
     value: rawDynamicValue,
   });

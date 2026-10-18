@@ -456,3 +456,9 @@ Response retry review additionally keeps pending schema edits transactional when
 - 86ae996 Actions39121144508 completed successfully with205core tests. UI artifact12133977587 SHA2569d21ebddfa50a776719f1953a21997ff9a7012b760ce49ba93a1e4a7fa9881cc verified and dynamic parameter screenshot inspected.
 - Added Raw Body definition/source/format editing, cursor insertion and explicit remove-token behavior. Disabled referenced definitions reject save; draft cancellation preserves the stored definition.206local core tests pass; actual JSON body/cancel regression and screenshot await exact-head CI.
 - Screenshot inspection also found the generic modal minimum height overriding the intended compact dynamic textarea. Added an ID-specific80px control rule and hide Mock-only fields for fixed/variable sources; browser checks control height and conditional visibility.
+
+## Pass 68 — local pending browser selector correction
+
+- bd40db8 Actions39121422604 browser stopped after the second successful plan run because the generic success-text locator matched two history records. This is a strict-selector failure, not proof of a full passing browser suite.
+- Artifact12133439612 SHA2566a0248a6e95d59199077d993db941053c12d26ccb790d7f786813f36ecd76488 verified. Trace response resource0ee0a36702ce853be67906d19bc2f42ff01e0c7c.json confirms the latest run passed, and actual request body preserved the embedded quote and numeric zero. Screenshot confirms compact controls and hidden irrelevant Mock fields.
+- Local test now targets the open record with this response's unique createdAt, rather than either historical success label. No product or assertion relaxation. Syntax/format checks pass; not yet pushed or CI verified. Remote validation is paused while available CI capacity is confirmed.
