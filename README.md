@@ -1,6 +1,6 @@
 # Local API Workbench
 
-开发中，尚未通过完整复刻验收。当前差异与最新核验版本见 [CURRENT-PARITY](docs/CURRENT-PARITY.md)，逐轮实现与 CI 证据见 [迭代记录](docs/ITERATION-2026-10-18.md)。
+开发中，尚未通过完整复刻验收。当前完整逐项清单见 [PARITY-CURRENT](docs/PARITY-CURRENT.md)，差异与核验版本见 [CURRENT-PARITY](docs/CURRENT-PARITY.md)，逐轮实现与 CI 证据见 [迭代记录](docs/ITERATION-2026-10-18.md)。
 
 本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
 

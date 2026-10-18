@@ -214,18 +214,22 @@ test("bounded load execution reports actual requests and assertion failures", as
     assert.equal(response.status, 200);
     return response.json();
   };
-  const capped = await load(1000, 1000);
-  assert.equal(capped.count, 100);
-  assert.equal(capped.concurrency, 10);
-  assert.equal(
-    capped.passed,
-    100,
-    JSON.stringify(capped.results.filter((result) => !result.passed)),
-  );
-  assert.deepEqual(
-    capped.results.map((result) => result.index),
-    Array.from({ length: 100 }, (_, i) => i),
-  );
+  // Fixed repeated contention probe for the observed Windows 99/100 failure.
+  // Every batch still requires all 100 actual requests to pass; no retries of failures.
+  for (let batch = 0; batch < 10; batch++) {
+    const capped = await load(1000, 1000);
+    assert.equal(capped.count, 100);
+    assert.equal(capped.concurrency, 10);
+    assert.equal(
+      capped.passed,
+      100,
+      JSON.stringify(capped.results.filter((result) => !result.passed)),
+    );
+    assert.deepEqual(
+      capped.results.map((result) => result.index),
+      Array.from({ length: 100 }, (_, i) => i),
+    );
+  }
   const failed = await load(2, 1, [{ target: "status", op: "eq", value: 201 }]);
   assert.equal(failed.count, 2);
   assert.equal(failed.passed, 0);

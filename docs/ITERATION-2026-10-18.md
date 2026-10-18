@@ -155,3 +155,7 @@ Twenty-third pass:
 Load diagnostic checkpoint:
 - 8cf82f7 Windows core failed the existing 100-request local Mock load acceptance: 100 results returned but 99 passed. Other OSes/browser/database passed; no root cause is inferred from the count alone.
 - Failed HTTP load results now retain a bounded 1024-character response preview; the unchanged 100-success assertion prints failed result evidence. This adds actionable diagnostics rather than reducing counts or retrying away failures.
+
+Windows contention follow-through:
+- d02ec8d passed all seven jobs; the previous 99/100 failure did not recur, so its root cause is still unproven.
+- To investigate rather than label it fixed, the local Mock load fixture now runs ten fixed contention batches. Each batch independently requires 100/100 successful actual requests; a failed batch is not retried or ignored.
