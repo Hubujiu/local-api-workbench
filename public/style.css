@@ -889,3 +889,10 @@ summary {
 .dark .syntax-literal {
   color: #7bbbd8;
 }
+
+.ai-value {
+  color: #ce761d !important;
+}
+.plan-step.ai-value {
+  border-color: #e9c99f;
+}

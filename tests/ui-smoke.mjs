@@ -211,7 +211,7 @@ try {
     .waitFor();
   await page.locator("#session-stop").click();
   await page.getByText("closed", { exact: true }).waitFor();
-  await page.locator('[data-page="settings"]').click();
+  await page.locator('.rail [data-page="settings"]').click();
   await page.locator("#mcp-config").click();
   await page.locator("#mcp-enabled").check();
   await page.locator("[data-mcp-project]").first().check();
@@ -235,7 +235,7 @@ try {
   await page.locator("#dialog-save").click();
   await saveAndWait();
   await page.reload();
-  await page.locator('[data-page="settings"]').click();
+  await page.locator('.rail [data-page="settings"]').click();
   await page.locator("[data-edit-service]").waitFor();
   assert((await page.locator("body").innerText()).includes("ui-global"));
   await page.screenshot({ path: "/tmp/local-api-settings.png" });

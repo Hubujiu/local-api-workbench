@@ -1,3 +1,4 @@
+import { versionPlan } from "./plan-version.mjs";
 import {
   environmentVariables,
   selectedEnvironment,
@@ -41,6 +42,7 @@ export async function createApp({
   const protocolSessions = new ProtocolSessions();
   const oauth = new OAuthManager();
   const debugEnvironments = new Map();
+  const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpToken = "",
     mcpLastActivity = null;
@@ -112,14 +114,50 @@ export async function createApp({
         const message = await body(req);
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
-        const dispatch = createMCP({ store, ...mcp, debugEnvironments });
-        const result = await dispatch(message);
-        if (message.method === "tools/call")
-          mcpLastActivity = {
+        const activityId = id();
+        if (message.method === "tools/call") {
+          const active = [...mcpActivities.values()].filter(
+            (a) => a.status === "running",
+          );
+          if (active.length >= 10)
+            return json(res, 429, { error: "MCP并发任务达到上限" });
+          mcpActivities.set(activityId, {
+            id: activityId,
             tool: message.params?.name,
-            at: new Date().toISOString(),
-            failed: !!result?.result?.isError,
-          };
+            projectId: message.params?.arguments?.projectId,
+            planId: message.params?.arguments?.planId,
+            status: "running",
+            startedAt: new Date().toISOString(),
+            completed: 0,
+          });
+        }
+        const dispatch = createMCP({
+          store,
+          ...mcp,
+          debugEnvironments,
+          onProgress: (progress) => {
+            const activity = mcpActivities.get(activityId);
+            if (activity)
+              Object.assign(activity, { ...progress, status: "running" });
+          },
+        });
+        const result = await dispatch(message);
+        if (message.method === "tools/call") {
+          const activity = mcpActivities.get(activityId);
+          Object.assign(activity, {
+            status: result?.result?.isError ? "failed" : "completed",
+            finishedAt: new Date().toISOString(),
+          });
+          mcpLastActivity = activity;
+          const completed = [...mcpActivities.values()].filter(
+            (a) => a.status !== "running",
+          );
+          for (const old of completed.slice(
+            0,
+            Math.max(0, completed.length - 20),
+          ))
+            mcpActivities.delete(old.id);
+        }
         if (result === null) {
           res.writeHead(202);
           return res.end();
@@ -203,6 +241,7 @@ export async function createApp({
             endpoint: base + "/mcp",
             token: mcpToken,
             lastActivity: mcpLastActivity,
+            activities: [...mcpActivities.values()],
           });
         }
         if (u.pathname === "/api/projects" && req.method === "GET")
@@ -420,11 +459,11 @@ export async function createApp({
                 (p.configRevision ?? p.revision)
             )
               throw Error("项目已有其他修改，请重新加载");
-            const plan = snapshotPlan({
-              ...b,
-              updatedAt: new Date().toISOString(),
-              source: "manual",
-            });
+            const plan = versionPlan(
+              p.plans.find((item) => item.id === b.id),
+              b,
+              "manual",
+            );
             const index = p.plans.findIndex((x) => x.id === plan.id);
             if (index < 0) p.plans.push(plan);
             else p.plans[index] = plan;

@@ -162,6 +162,7 @@ export function snapshotPlan(plan) {
     description: String(plan.description || ""),
     updatedAt: plan.updatedAt || new Date().toISOString(),
     source: plan.source === "ai" ? "ai" : "manual",
+    provenance: plan.provenance || { fields: {}, steps: {} },
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
     steps: plan.steps.map((s) => ({

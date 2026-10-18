@@ -18,3 +18,9 @@ Design decisions:
 - Deleting a service removes its address mappings, but preserves bound request definitions so execution fails explicitly until reconfigured.
 - MCP-created projects are authorized only within the already write-enabled current service configuration.
 - No main merge, deployment, user-computer access or delegated coding task.
+
+Second pass:
+- Plan versioning now tracks AI/manual origin independently for name, description, environment and each changed step. Manual edits clear only their changed origin, leaving unchanged AI values marked.
+- HTTP MCP exposes bounded running/recent activity and step progress; UI shows running tasks without replacing unsaved content. Standalone stdio progress is not yet bridged to another desktop process.
+- Browser run 39084101925 failed because the new navigation test used an ambiguous settings selector (both rail and environment shortcut). Selector is now scoped to the rail; no assertion removed.
+- Current local suite: 73 passing tests. Exact new-head browser/desktop CI still required.

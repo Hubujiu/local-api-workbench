@@ -1,3 +1,4 @@
+import { versionPlan } from "./plan-version.mjs";
 import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,7 @@ export function createMCP({
   write = false,
   execute = false,
   debugEnvironments = new Map(),
+  onProgress = () => {},
 }) {
   const allowed = new Set(projects);
   const tools = [
@@ -299,11 +301,11 @@ export function createMCP({
                 !p.plans.some((item) => item.id === args.plan.id)
               )
                 throw Error("计划不存在");
-              output = snapshotPlan({
-                ...args.plan,
-                updatedAt: new Date().toISOString(),
-                source: "ai",
-              });
+              output = versionPlan(
+                p.plans.find((item) => item.id === args.plan.id),
+                args.plan,
+                "ai",
+              );
               const index = p.plans.findIndex((r) => r.id === output.id);
               if (index < 0) p.plans.push(output);
               else p.plans[index] = output;
@@ -385,6 +387,15 @@ export function createMCP({
                 debugEnvironment(p, args.environmentId, debugEnvironments)
                   .variables,
                 executeRequest,
+                {
+                  onStep: (step) =>
+                    onProgress({
+                      completed: 1,
+                      total: 1,
+                      stepId: step.stepId,
+                      status: step.status,
+                    }),
+                },
               );
               const context = debugEnvironment(
                 p,
@@ -408,11 +419,20 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              let completed = 0;
               output = await runPlan(
                 plan,
                 environmentVariables(p, plan.environmentId),
                 executeRequest,
                 {
+                  onStep: (step) =>
+                    onProgress({
+                      completed: ++completed,
+                      total: plan.steps.filter((s) => s.enabled !== false)
+                        .length,
+                      stepId: step.stepId,
+                      stepStatus: step.status,
+                    }),
                   prepareRequest: (request) =>
                     resolveServiceRequest(p, request, plan.environmentId),
                 },

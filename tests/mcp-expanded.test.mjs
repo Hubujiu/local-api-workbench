@@ -182,3 +182,53 @@ test("MCP HTTP execution uses selected service/global variables and exposes runt
       .length === 1,
   );
 });
+
+test("MCP plan execution reports ordered progress and preserves final evidence", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mcp-progress-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { createApp } = await import("../src/server.mjs");
+  const app = await createApp({ root, port: 0 });
+  t.after(() => new Promise((resolve) => app.server.close(resolve)));
+  const p = await app.store.create("Progress");
+  const req = {
+    id: "r",
+    name: "Mock",
+    method: "GET",
+    url: app.url + "/mock/" + p.id + "/r",
+    examples: [{ status: 200, body: "{}" }],
+  };
+  p.requests = [req];
+  await app.store.save(p);
+  const events = [],
+    d = createMCP({
+      store: app.store,
+      projects: [p.id],
+      write: true,
+      execute: true,
+      onProgress: (event) => events.push(event),
+    });
+  const call = async (name, args) => {
+    const r = await d({
+      id: 1,
+      method: "tools/call",
+      params: { name: "localapi_" + name, arguments: args },
+    });
+    assert(!r.result.isError, r.result.content[0].text);
+    return JSON.parse(r.result.content[0].text);
+  };
+  const plan = await call("create_execution_flow", {
+    projectId: p.id,
+    plan: { name: "Two steps", steps: [{ request: req }, { request: req }] },
+  });
+  assert.equal(plan.provenance.fields.name, "ai");
+  const result = await call("execute_flow", {
+    projectId: p.id,
+    planId: plan.id,
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(
+    events.map((event) => event.completed),
+    [1, 2],
+  );
+  assert(events.every((event) => event.total === 2));
+});
