@@ -325,6 +325,15 @@ try {
     .last();
   await textFormRow.locator("[data-step-key]").fill("label");
   await textFormRow.locator("[data-step-value]").fill("step-upload");
+  await textFormRow.locator(".step-dynamic summary").click();
+  await textFormRow.locator("[data-dynamic-enabled]").check();
+  await textFormRow.locator('[data-dynamic-field="value"]').fill("{");
+  await page.locator("#dialog-save").click();
+  await page.getByText("固定动态值必须是有效JSON", { exact: true }).waitFor();
+  await textFormRow
+    .locator('[data-dynamic-field="value"]')
+    .fill('"step-upload"');
+
   await page
     .locator("#dialog-content summary")
     .getByText("连接与证书", { exact: true })
@@ -346,6 +355,22 @@ try {
     .last();
   await newHeader.locator("[data-step-key]").fill("x-step-proof");
   await newHeader.locator("[data-step-value]").fill("snapshot");
+  await newHeader.locator(".step-dynamic summary").click();
+  await newHeader.locator("[data-dynamic-enabled]").check();
+  await newHeader
+    .locator('[data-dynamic-field="source"]')
+    .selectOption("variable");
+  await newHeader.locator('[data-dynamic-field="value"]').fill("stepHeader");
+  await newHeader.locator(".step-dynamic").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-step-dynamic.png" });
+  await page
+    .locator("#dialog-content summary")
+    .getByText("本步骤脚本", { exact: true })
+    .click();
+  await page
+    .locator('[data-step-field="beforeScript"]')
+    .fill('pm.variables.set("stepHeader","dynamic-wire");');
+
   await page
     .locator("#dialog-content summary")
     .getByText("认证", { exact: true })
@@ -402,6 +427,20 @@ try {
     await page.locator('[data-step-field="name"]').inputValue(),
     "独立快照步骤",
   );
+  assert.equal(
+    await page
+      .locator('[data-step-pairs="headers"] [data-dynamic-field="value"]')
+      .last()
+      .inputValue(),
+    "stepHeader",
+  );
+  assert(
+    await page
+      .locator('[data-step-pairs="headers"] [data-dynamic-enabled]')
+      .last()
+      .isChecked(),
+  );
+
   assert.equal(
     await page.locator('#step-auth [data-auth="token"]').inputValue(),
     "step-fixture-token",
@@ -465,6 +504,7 @@ try {
   );
   assert.match(uploadedMultipart.body.toString(), /filename="proof.bin"/);
   assert.match(uploadedMultipart.body.toString(), /step-upload/);
+  assert.equal(uploadedMultipart.headers["x-step-proof"], "dynamic-wire");
   assert.equal(
     uploadedMultipart.headers.authorization,
     "Bearer step-fixture-token",

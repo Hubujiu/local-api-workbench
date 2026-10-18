@@ -1,3 +1,4 @@
+import { dynamicEditor, parseDynamicEdits } from "./dynamic-editor.js";
 import { authPanel } from "./auth-view.js";
 import { validateAuth } from "./auth-model.js";
 const esc = (v) =>
@@ -78,7 +79,7 @@ export function stepEditor(step) {
     textarea("body", "JSON / 文本 / Base64 内容", r.body) +
     '<details><summary>表单字段（form-data / urlencoded）</summary><div data-step-pairs="form">' +
     (r.form || []).map((row, index) => pairRow("form", index, row)).join("") +
-    '</div><button data-step-add="form">添加表单字段</button></details><p class="muted">文件由你选择后保存在步骤快照，最多6MiB；动态值定义保留，可用计划JSON编辑。</p></details>' +
+    '</div><button data-step-add="form">添加表单字段</button></details><p class="muted">文件由你选择后保存在步骤快照，最多6MiB；参数动态值可在各行配置；Raw Body动态定义仍可用计划JSON编辑。</p></details>' +
     '<details><summary>连接与证书</summary><label>超时（100–60000ms）</label><input type="number" min="100" max="60000" data-step-field="timeout" value="' +
     esc(r.timeout ?? 15000) +
     '"><label>协议版本</label><select data-step-field="httpVersion"><option value="1.1" ' +
@@ -155,7 +156,9 @@ export function pairRow(key, index, row = {}) {
       (row.type === "file" ? "" : "hidden") +
       '><span class="step-file-status">' +
       esc(row.type === "file" ? row.filename || "未选择文件" : "") +
-      '</span><button data-step-remove aria-label="移除参数">×</button></div>'
+      '</span><button data-step-remove aria-label="移除参数">×</button>' +
+      dynamicEditor(row.dynamic) +
+      "</div>"
     );
   return (
     '<div class="row" data-step-pair-row="' +
@@ -168,7 +171,9 @@ export function pairRow(key, index, row = {}) {
     esc(row.key) +
     '" placeholder="参数名" aria-label="参数名"><input data-step-value value="' +
     esc(row.value) +
-    '" placeholder="参数值" aria-label="参数值"><button data-step-remove aria-label="移除参数">×</button></div>'
+    '" placeholder="参数值" aria-label="参数值"><button data-step-remove aria-label="移除参数">×</button>' +
+    dynamicEditor(row.dynamic) +
+    "</div>"
   );
 }
 export function applyStepEdits(step, fields, pairGroups, rules = {}) {
@@ -212,7 +217,13 @@ export function applyStepEdits(step, fields, pairGroups, rules = {}) {
         value: String(row.value),
         enabled: Boolean(row.enabled),
       };
+      if (Object.hasOwn(row, "dynamic")) {
+        if (row.dynamic === null) delete result.dynamic;
+        else result.dynamic = structuredClone(row.dynamic);
+      }
       if (key === "form") {
+        if (row.type === "file" && result.dynamic)
+          throw Error("文件参数不能配置动态文本，请关闭动态值");
         if (!["text", "file"].includes(row.type)) throw Error("表单类型无效");
         result.type = row.type;
         if (row.type === "file") {
@@ -460,6 +471,18 @@ export function bindStepEditor(container, step) {
           key: row.querySelector("[data-step-key]").value,
           value: row.querySelector("[data-step-value]").value,
           enabled: row.querySelector("[data-step-enabled]").checked,
+          dynamic: parseDynamicEdits(
+            {
+              enabled: row.querySelector("[data-dynamic-enabled]").checked,
+              ...Object.fromEntries(
+                [...row.querySelectorAll("[data-dynamic-field]")].map(
+                  (element) => [element.dataset.dynamicField, element.value],
+                ),
+              ),
+            },
+            step.request[kind]?.[Number(row.dataset.stepPairRow.split(":")[1])]
+              ?.dynamic,
+          ),
           ...(state
             ? {
                 type: state.type,

@@ -444,3 +444,9 @@ Response retry review additionally keeps pending schema edits transactional when
 
 - e6b0176 Actions39120629637 passed all9jobs and201core tests, including real browser RSA execution and three native packages. RSA uses a public synthetic test key only.
 - Sample generation now decodes a local URI fragment once before JSON Pointer token decoding, rejects malformed percent/tilde escapes and non-schema targets, and detects encoded reference cycles. A regression failed before the fix; unit and real Mock/sample-route integration now pass. Primary reference: https://www.rfc-editor.org/rfc/rfc6901#section-6. This pending change has202local core tests and requires its own CI.
+
+## Pass 66 — step dynamic parameter UI
+
+- e93d816 Actions39120873680 completed successfully; encoded-reference fix has202core tests.
+- Step Header/Query/Path/Cookie/text-form rows now configure typed fixed JSON, variable and bounded Mock values plus ordered transforms, with explicit disable/removal, metadata preservation and file/dynamic rejection. The first model tests failed before wiring and pass after it. Raw Body dynamic token editing remains advancedJSON; no preview/network side effects are introduced.
+- Browser regression adds invalid-JSON correction, reopen persistence and real multipart header resolution after the step pre-script. Pending exact-head CI and screenshot inspection.

@@ -1525,3 +1525,24 @@ dialog:has(#schema-editor) {
 #dialog:has(#schema-editor) #dialog-content {
   max-height: calc(94vh - 120px);
 }
+
+.step-editor [data-step-pair-row].row {
+  flex-wrap: wrap;
+}
+.step-editor .step-dynamic {
+  flex-basis: 100%;
+  width: 100%;
+  grid-column: 1 / -1;
+  margin: 4px 0;
+}
+.step-dynamic label {
+  display: block;
+  margin: 8px 0;
+}
+.step-editor .step-dynamic textarea {
+  min-height: 64px;
+}
+.step-dynamic input:not([type="checkbox"]),
+.step-dynamic select {
+  width: 100%;
+}
