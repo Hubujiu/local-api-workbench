@@ -105,3 +105,8 @@ Fourteenth pass:
 Fifteenth pass:
 - b75f80e passed all seven jobs in run 39087539435, including the new visual snapshot editor and persisted extraction-source UI.
 - Re-opened the official light screenshot in the own cloud browser. Moved project controls into the center header group and the execution-plan entry to the header, removing its extra rail icon. Remaining protocol/database rail placement is still different.
+
+Sixteenth pass:
+- Added six bounded apt request mutation helpers (set/remove Query, Header, Body), based on https://v7-wiki.apipost.cn/docs/1000/ as a versioned supplemental SDK reference. Query mutations remove matching inline URL keys as well as editor rows; headers match case-insensitively and retain metadata.
+- JSON/form body edits preserve other values. Whole-object replacement selects JSON; unsupported binary edits fail explicitly. These are synchronous VM-only operations with no host-network/process APIs, not a claim of full v7 or offline SDK compatibility.
+- Actual HTTP fixture proves the pre-script changes URL query/header/body on the wire and leaves the saved plan unchanged. Replacing a file upload with a text helper fails explicitly. 96 local tests pass.

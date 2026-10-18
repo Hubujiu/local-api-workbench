@@ -22,7 +22,63 @@ try {
       if (['__proto__','prototype','constructor'].includes(name)) throw Error('Invalid variable name');
       variables[name] = value;
     };
-    const apt = { setVar: set, getVar: name => variables[name] };
+    const parameterName = name => {
+      if (typeof name !== 'string' || !name || ['__proto__','prototype','constructor'].includes(name))
+        throw Error('Invalid parameter name');
+      return name;
+    };
+    const modifyPair = (group, name, value, remove = false) => {
+      parameterName(name);
+      const equal = key => group === 'headers' ? String(key).toLowerCase() === name.toLowerCase() : key === name;
+      const rows = request[group] || [];
+      const existing = rows.find(row => equal(row.key));
+      request[group] = rows.filter(row => !equal(row.key));
+      if (!remove) request[group].push({ ...existing, key: name, value: String(value ?? ''), enabled: true });
+    };
+    const removeURLQuery = name => {
+      const raw = String(request.url || '');
+      const hashAt = raw.indexOf('#');
+      const fragment = hashAt < 0 ? '' : raw.slice(hashAt);
+      const base = hashAt < 0 ? raw : raw.slice(0, hashAt);
+      const at = base.indexOf('?');
+      if (at < 0) return;
+      const query = base.slice(at + 1).split('&').filter(pair => {
+        const key = pair.split('=')[0].split('+').join(' ');
+        try { return decodeURIComponent(key) !== name; } catch { return true; }
+      }).join('&');
+      request.url = base.slice(0, at) + (query ? '?' + query : '') + fragment;
+    };
+    const modifyBody = (name, value, remove = false) => {
+      parameterName(name);
+      if (['form-data','urlencoded'].includes(request.bodyType)) {
+        if (!remove && (request.form || []).some(row => row.key === name && row.type === 'file'))
+          throw Error('File fields cannot be replaced with a text parameter');
+        modifyPair('form', name, value, remove);
+        return;
+      }
+      if (!['json','raw','msgpack',undefined].includes(request.bodyType))
+        throw Error('Body parameter edits require JSON or form body');
+      const object = JSON.parse(request.body || '{}');
+      if (!object || typeof object !== 'object' || Array.isArray(object)) throw Error('Body must be a JSON object');
+      if (remove) delete object[name]; else object[name] = value;
+      request.body = JSON.stringify(object);
+      if (!request.bodyType) request.bodyType = 'json';
+    };
+    const apt = {
+      setVar: set, getVar: name => variables[name],
+      setRequestHeader: (name, value) => modifyPair('headers', name, value),
+      removeRequestHeader: name => modifyPair('headers', name, null, true),
+      setRequestQuery: (name, value) => { parameterName(name); removeURLQuery(name); modifyPair('query', name, value); },
+      removeRequestQuery: name => { parameterName(name); removeURLQuery(name); modifyPair('query', name, null, true); },
+      setRequestBody: (...args) => {
+        if (args.length === 1) {
+          const value = args[0];
+          if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Replacement body must be an object');
+          request.body = JSON.stringify(value); request.bodyType = 'json';
+        } else modifyBody(args[0], args[1]);
+      },
+      removeRequestBody: name => modifyBody(name, null, true)
+    };
     const pm = {
       environment: { set, get: name => variables[name], unset: name => delete variables[name] },
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
