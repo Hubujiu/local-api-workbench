@@ -45,8 +45,12 @@ jobs:
             /tmp/local-api-trace.zip
             /tmp/local-api-video/
   desktop:
-    timeout-minutes: 10
-    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,31 +63,24 @@ jobs:
         working-directory: desktop
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
       - name: Install only production dependencies for the package
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force production | Out-Null
-          Copy-Item package.json,package-lock.json production
+          node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production
-      - name: Assemble portable Windows application
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist/LocalAPI | Out-Null
-          Copy-Item desktop/node_modules/electron/dist/* dist/LocalAPI -Recurse
-          New-Item -ItemType Directory -Force dist/LocalAPI/resources/app | Out-Null
-          Copy-Item src,public,scripts,LICENSE dist/LocalAPI/resources/app -Recurse
-          Copy-Item production/node_modules dist/LocalAPI/resources/app -Recurse
-          New-Item -ItemType Directory -Force dist/LocalAPI/resources/app/desktop | Out-Null
-          Copy-Item desktop/*.mjs,desktop/*.cjs dist/LocalAPI/resources/app/desktop
-          '{"name":"local-api-workbench","version":"0.1.0","type":"module","main":"desktop/main.mjs"}' | Set-Content dist/LocalAPI/resources/app/package.json
-          Rename-Item dist/LocalAPI/electron.exe LocalAPI.exe
+      - run: node scripts/build-desktop.mjs
       - run: node scripts/build-manifest.mjs
         env:
           BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: node tests/desktop-smoke.mjs
+        if: runner.os != 'Linux'
+      - run: xvfb-run --auto-servernum node tests/desktop-smoke.mjs
+        if: runner.os == 'Linux'
+      - name: Archive desktop executable permissions
+        if: runner.os != 'Windows'
+        run: tar -czf dist/LocalAPI-${{ runner.os }}.tar.gz -C dist LocalAPI
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: desktop-build-metadata
+          name: desktop-build-metadata-${{ runner.os }}
           retention-days: 7
           path: |
             desktop/package-lock.json
@@ -92,8 +89,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 7
-          name: LocalAPI-Windows-portable
-          path: dist/LocalAPI
+          name: LocalAPI-${{ runner.os }}-portable
+          path: |
+            dist/LocalAPI-${{ runner.os }}.tar.gz
+            ${{ runner.os == 'Windows' && 'dist/LocalAPI' || 'dist/LocalAPI/build-manifest.json' }}
   source-format:
     timeout-minutes: 10
     runs-on: ubuntu-latest

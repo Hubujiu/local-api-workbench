@@ -1,3 +1,4 @@
+import { desktopLayout } from "../desktop/build-layout.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { _electron as electron } from "playwright";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,7 +21,7 @@ const watchdog = setTimeout(() => {
 }, 90000);
 try {
   application = await electron.launch({
-    executablePath: path.resolve("dist/LocalAPI/LocalAPI.exe"),
+    executablePath: desktopLayout().executable,
     env: { ...process.env, LOCAL_API_DESKTOP_DATA: root },
     timeout: 30000,
   });

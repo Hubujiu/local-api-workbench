@@ -1,8 +1,10 @@
+import { desktopLayout } from "../desktop/build-layout.mjs";
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-const root = path.resolve("dist/LocalAPI");
-const files = ["LocalAPI.exe"];
+const layout = desktopLayout();
+const root = layout.root;
+const files = [path.relative(root, layout.executable)];
 async function visit(directory) {
   for (const entry of await readdir(path.join(root, directory), {
     withFileTypes: true,
@@ -12,7 +14,7 @@ async function visit(directory) {
     else files.push(relative);
   }
 }
-await visit("resources/app");
+await visit(path.relative(root, layout.app));
 const checksums = [];
 for (const relative of files.sort())
   checksums.push({
@@ -27,6 +29,8 @@ await writeFile(
     {
       product: "Local API Workbench",
       version: "0.1.0",
+      platform: process.platform,
+      arch: process.arch,
       head: process.env.BUILD_HEAD || process.env.GITHUB_SHA || "local",
       builtAt: new Date().toISOString(),
       files: checksums,
