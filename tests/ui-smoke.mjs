@@ -2,8 +2,10 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { snapshotPlan, exportOpenAPI } from "../src/core.mjs";
+import { snapshotPlan, exportOpenAPI, normalizeRequest } from "../src/core.mjs";
 import http from "node:http";
+import http2 from "node:http2";
+import net from "node:net";
 import { createRequire } from "node:module";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
@@ -58,6 +60,41 @@ const fixture = http.createServer(async (request, response) => {
 });
 await new Promise((resolve) => fixture.listen(0, "127.0.0.1", resolve));
 const fixtureURL = `http://127.0.0.1:${fixture.address().port}`;
+const h2Sessions = new Set(),
+  h2Sockets = new Set();
+let h2Connections = 0;
+const h2Fixture = http2.createServer();
+h2Fixture.on("session", (session) => {
+  h2Sessions.add(session);
+  session.on("close", () => h2Sessions.delete(session));
+});
+h2Fixture.on("stream", (stream, headers) => {
+  let body = "";
+  stream.on("data", (chunk) => (body += chunk));
+  stream.on("end", () => {
+    stream.respond({ ":status": 200, "content-type": "application/json" });
+    stream.end(
+      JSON.stringify({ protocol: "h2", method: headers[":method"], body }),
+    );
+  });
+});
+await new Promise((resolve) => h2Fixture.listen(0, "127.0.0.1", resolve));
+const h2Proxy = http.createServer();
+h2Proxy.on("connect", (_request, client) => {
+  h2Connections++;
+  const upstream = net.connect(h2Fixture.address().port, "127.0.0.1", () => {
+    client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+    client.pipe(upstream);
+    upstream.pipe(client);
+  });
+  for (const socket of [client, upstream]) {
+    h2Sockets.add(socket);
+    socket.on("close", () => h2Sockets.delete(socket));
+  }
+  client.on("error", () => upstream.destroy());
+  upstream.on("error", () => client.destroy());
+});
+await new Promise((resolve) => h2Proxy.listen(0, "127.0.0.1", resolve));
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_BUNDLED
     ? undefined
@@ -1344,6 +1381,56 @@ try {
   );
   assert.equal(await page.locator("#folder").inputValue(), "Users");
   await page.screenshot({ path: "/tmp/local-api-apipost-import.png" });
+  const h2Project = await app.store.create("HTTP2 browser fixture");
+  h2Project.requests = [
+    normalizeRequest({
+      name: "HTTP2 proxy UI",
+      url: "http://127.0.0.1:" + h2Fixture.address().port + "/h2",
+      method: "POST",
+      bodyType: "json",
+      body: '{"via":"h2-ui"}',
+    }),
+  ];
+  await app.store.save(h2Project);
+  await page.reload();
+  await page.locator("#project-select").selectOption(h2Project.id);
+  await page.waitForFunction(
+    () => document.querySelector("#request-name")?.value === "HTTP2 proxy UI",
+  );
+  await page.locator("#http-version").selectOption("2");
+  await page.locator('[data-mode="design"]').click();
+  await page
+    .locator("#request-proxy")
+    .fill("http://127.0.0.1:" + h2Proxy.address().port);
+  assert.equal(await page.locator('[data-tls="proxyCa"]').count(), 1);
+  await page.locator('[data-mode="debug"]').click();
+  const h2Response = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const h2Payload = await (await h2Response).json();
+  assert.equal(h2Payload.outcome, "passed", JSON.stringify(h2Payload));
+  assert.deepEqual(JSON.parse(h2Payload.body), {
+    protocol: "h2",
+    method: "POST",
+    body: '{"via":"h2-ui"}',
+  });
+  assert.equal(h2Connections, 1);
+  await page.screenshot({ path: "/tmp/local-api-http2-proxy.png" });
+  await saveAndWait("#save");
+  await page.locator("#curl").click();
+  await page.locator("#curl-output").waitFor();
+  assert.match(
+    await page.locator("#curl-output").inputValue(),
+    /--http2-prior-knowledge/,
+  );
+  assert.match(
+    await page.locator("#curl-output").inputValue(),
+    /--proxytunnel/,
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   const observedProject = await app.store.create("stdio UI evidence");
   observedProject.plans = [
     snapshotPlan({
@@ -1433,6 +1520,12 @@ try {
   stdioChild?.kill();
   await page.context().tracing.stop({ path: "/tmp/local-api-trace.zip" });
   await browser.close();
+  for (const session of h2Sessions) session.destroy();
+  for (const socket of h2Sockets) socket.destroy();
+  await Promise.all([
+    new Promise((resolve) => h2Proxy.close(resolve)),
+    new Promise((resolve) => h2Fixture.close(resolve)),
+  ]);
   fixture.closeAllConnections();
   await new Promise((resolve) => fixture.close(resolve));
   await new Promise((r) => app.server.close(r));

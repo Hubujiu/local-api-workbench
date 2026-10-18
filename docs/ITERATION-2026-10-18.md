@@ -410,3 +410,11 @@ Response retry review additionally keeps pending schema edits transactional when
 - 0e9430e78 passed186tests and all9CI jobs in Actions39117781360. Inspected its actual schema/response/load screenshots (artifact12132549613, SHA2566bede6d555de61c41a51b6e5e729daa199b5ac027eb256b419d76a22d7c2c1f9).
 - The load run correctly completed2samples/concurrency2, but rerendered inputs incorrectly reset to10/1. Keep per-request UI options, validate them before starting, and clear stale results at the next run. Browser assertions now check both retained inputs.
 - Response-schema field actions sat just below the dialog's visible content edge. Allow the schema dialog content to use the available viewport while retaining header/footer space, and assert that the pending field action is above the footer at1000×760.
+
+## Sixtieth pass: HTTP/2 proxy and cURL export
+
+- Tests first demonstrated that HTTP/2 proxies and protocol-preserving cURL export were missing. Added shared CONNECT setup for h2c/TLS through HTTP/HTTPS proxies, while keeping origin/client certificates separate from the new proxy CA setting.
+- Four transport combinations, independent CA trust, target hostname mismatch, mutual TLS, timeout and cancellation pass real local fixtures. Proxy credentials do not reach origin headers.
+- Export chooses strict protocol flags, disables curl URL globbing and fixes ambient proxy behavior explicitly. Import round-trips supported flags and rejects multi-URL commands instead of silently dropping requests.
+- The fixed Linux cURL integration executes generated commands against local direct/tunneled HTTP/2 servers and verifies exact path/body/auth behavior. Local curl8.14.1passed; CI's browser job also runs this script. HTTPS strict HTTP/2 requires curl8.10+per the official man page.
+- Browser acceptance selects HTTP/2 and a proxy in a fresh project, executes an actual tunneled request and checks generated cURL flags. API and step editors expose a separate HTTPS proxy CA.

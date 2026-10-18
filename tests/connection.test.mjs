@@ -99,3 +99,27 @@ test("HTTPS proxy CONNECT includes port 443 when target URL uses its default", a
   );
   assert.equal(authority, "example.invalid:443");
 });
+
+test("HTTP1 forward requests use the HTTPS proxy CA rather than the origin CA", async (t) => {
+  let received;
+  const proxy = https.createServer({ key, cert }, (request, response) => {
+    received = { url: request.url, host: request.headers.host };
+    response.end("secure-forward");
+  });
+  await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  t.after(() => proxy.close());
+  const input = {
+    url: "http://example.invalid/path",
+    proxy: "https://127.0.0.1:" + proxy.address().port,
+  };
+  await assert.rejects(
+    executeRequest({ ...input, tls: { ca: cert } }),
+    /certificate|self.signed/i,
+  );
+  assert.equal(
+    (await executeRequest({ ...input, tls: { proxyCa: cert } })).body,
+    "secure-forward",
+  );
+  assert.equal(received.url, input.url);
+  assert.equal(received.host, "example.invalid");
+});

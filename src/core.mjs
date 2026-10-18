@@ -854,7 +854,13 @@ export function importCurl(source) {
   const clean = (value) => value;
   if (tokens[0] !== "curl") throw Error("命令必须以 curl 开始");
   let r = { headers: [], method: "GET" };
-  let explicitMethod = false;
+  let explicitMethod = false,
+    proxyTunnel = false,
+    noProxy;
+  const setURL = (value) => {
+    if (r.url) throw Error("暂不支持一条cURL中的多个URL");
+    r.url = value;
+  };
   for (let i = 1; i < tokens.length; i++) {
     const t = clean(tokens[i]);
     if (t === "-X" || t === "--request") {
@@ -876,8 +882,16 @@ export function importCurl(source) {
         throw Error("不自动读取 cURL 文件，请使用文件选择器");
       r.bodyType = "raw";
       if (!explicitMethod) r.method = "POST";
-    } else if (t === "--url") r.url = clean(tokens[++i]);
-    else if (t === "--digest") r.auth = { ...(r.auth || {}), type: "digest" };
+    } else if (t === "--url") setURL(clean(tokens[++i]));
+    else if (t === "--http2-prior-knowledge") r.httpVersion = "2";
+    else if (t === "--http1.1") r.httpVersion = "1.1";
+    else if (t === "--proxytunnel" || t === "-p") proxyTunnel = true;
+    else if (t === "--globoff" || t === "-g" || t === "--tlsv1.2") {
+    } else if (t === "--noproxy") {
+      noProxy = tokens[++i];
+      if (!["", "*"].includes(noProxy))
+        throw Error("暂不支持选择性的cURL代理排除列表");
+    } else if (t === "--digest") r.auth = { ...(r.auth || {}), type: "digest" };
     else if (t === "-u" || t === "--user") {
       const value = tokens[++i] || "",
         colon = value.indexOf(":");
@@ -903,11 +917,18 @@ export function importCurl(source) {
         enabled: true,
       });
       if (!explicitMethod) r.method = "POST";
-    } else if (/^https?:/.test(t)) r.url = t;
+    } else if (/^https?:/.test(t)) setURL(t);
     else if (!["--compressed", "-s", "--silent"].includes(t))
       throw Error(`不支持的 cURL 参数: ${t}`);
   }
   if (!r.url) throw Error("cURL 缺少 URL");
+  if (noProxy === "*") r.proxy = "";
+  if (
+    proxyTunnel &&
+    (!r.proxy ||
+      (r.httpVersion !== "2" && new URL(r.url).protocol !== "https:"))
+  )
+    throw Error("此cURL代理隧道组合暂不支持");
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
@@ -1030,13 +1051,12 @@ export function toCurl(input) {
     );
   const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   if (
-    r.httpVersion === "2" ||
     ["binary", "msgpack"].includes(r.bodyType) ||
     r.form.some((field) => field.type === "file") ||
     Object.values(r.tls).some(Boolean)
   )
     throw Error(
-      "HTTP/2、二进制、文件或内联证书请求需手工配置；不会生成不等价的 cURL。请使用原始请求/项目导出。",
+      "二进制、文件或内联证书请求需手工配置；不会生成不等价的 cURL。请使用原始请求/项目导出。",
     );
   let raw = r.url;
   for (const parameter of r.path.filter((item) => item.enabled !== false))
@@ -1054,7 +1074,17 @@ export function toCurl(input) {
       .filter((item) => item.enabled !== false && item.key)
       .map((item) => [item.key.toLowerCase(), item.value]),
   );
-  const args = ["curl", "-X", r.method];
+  const args = [
+    "curl",
+    "--globoff",
+    "--noproxy",
+    quote(r.proxy ? "" : "*"),
+    r.httpVersion === "2" ? "--http2-prior-knowledge" : "--http1.1",
+    "-X",
+    r.method,
+  ];
+  if (url.protocol === "https:") args.push("--tlsv1.2");
+  if (r.httpVersion === "2" && r.proxy) args.push("--proxytunnel");
   if (r.auth.type === "basic" || r.auth.type === "digest") {
     if (r.auth.type === "digest") args.push("--digest");
     args.push(

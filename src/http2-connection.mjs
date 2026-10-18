@@ -1,13 +1,17 @@
 import http2 from "node:http2";
 import net from "node:net";
-export function http2Connection(target, request, tlsOptions) {
-  if (request.proxy)
-    throw Error("HTTP/2模式暂不支持代理，请改用直连或HTTP/1.1");
-  let session;
+import tls from "node:tls";
+import { unbracketHost } from "./proxy-tunnel.mjs";
+export function http2Connection(target, request, tlsOptions, tunnel) {
+  let session, transportSocket;
   return {
     url: target,
     options: {},
-    cleanup: () => session?.destroy(),
+    cleanup: () => {
+      session?.destroy();
+      transportSocket?.destroy();
+      tunnel?.destroy();
+    },
     client: {
       request(url, options, callback) {
         const headers = { ...options.headers };
@@ -16,9 +20,24 @@ export function http2Connection(target, request, tlsOptions) {
         for (const name of Object.keys(headers))
           if (name.startsWith(":"))
             throw Error("请使用URL和方法字段设置HTTP/2伪头");
+        const host = unbracketHost(target.hostname);
+        if (tunnel)
+          transportSocket =
+            target.protocol === "https:"
+              ? tls.connect({
+                  ...tlsOptions,
+                  socket: tunnel,
+                  host,
+                  servername: net.isIP(host) ? "" : host,
+                  ALPNProtocols: ["h2"],
+                })
+              : tunnel;
         session = http2.connect(target.origin, {
           ...tlsOptions,
-          servername: net.isIP(target.hostname) ? undefined : target.hostname,
+          servername: net.isIP(host) ? undefined : host,
+          ...(transportSocket
+            ? { createConnection: () => transportSocket }
+            : {}),
         });
         let stream,
           responded = false;

@@ -148,6 +148,7 @@ test("step form and transport edits preserve metadata and do not mutate the save
       proxy: "http://127.0.0.1:8080",
       tls: {
         ca: "fixture-ca",
+        proxyCa: "fixture-proxy-ca",
         cert: "fixture-cert",
         key: "fixture-key",
         passphrase: "fixture-pass",
@@ -179,6 +180,7 @@ test("step form and transport edits preserve metadata and do not mutate the save
   assert.equal(next.request.proxy, "http://127.0.0.1:8080");
   assert.equal(next.request.tls.note, "preserve");
   assert.equal(next.request.tls.key, "fixture-key");
+  assert.equal(next.request.tls.proxyCa, "fixture-proxy-ca");
   assert.equal(step.request.form[0].requiresFile, true);
   assert.equal(step.request.tls.ca, "old");
   assert.throws(

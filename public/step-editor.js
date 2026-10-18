@@ -87,12 +87,13 @@ export function stepEditor(step) {
     (r.httpVersion === "2" ? "selected" : "") +
     ">HTTP/2</option></select>" +
     input("proxy", "HTTP/HTTPS代理", r.proxy) +
-    ["ca", "cert", "key"]
+    ["ca", "proxyCa", "cert", "key"]
       .map(
         (key) =>
           "<label>" +
           {
             ca: "自定义CA（PEM）",
+            proxyCa: "HTTPS代理CA（PEM）",
             cert: "客户端证书（PEM）",
             key: "客户端私钥（PEM）",
           }[key] +
@@ -105,7 +106,7 @@ export function stepEditor(step) {
       .join("") +
     '<label>私钥口令</label><input type="password" data-step-tls="passphrase" value="' +
     esc(r.tls?.passphrase || "") +
-    '"><p class="notice">TLS验证始终开启。证书与私钥会保存到本地计划快照，导出前请清除敏感凭据。HTTP/2暂不支持代理。</p></details>' +
+    '"><p class="notice">TLS验证始终开启。证书与私钥会保存到本地计划快照，导出前请清除敏感凭据。HTTP/2代理使用CONNECT隧道。</p></details>' +
     '<details><summary>认证</summary><div id="step-auth">' +
     authPanel(r.auth, { acquire: false }) +
     "</div></details>" +
@@ -196,7 +197,7 @@ export function applyStepEdits(step, fields, pairGroups, rules = {}) {
   }
   if (fields.tls) {
     next.request.tls = { ...next.request.tls };
-    for (const key of ["ca", "cert", "key", "passphrase"])
+    for (const key of ["ca", "proxyCa", "cert", "key", "passphrase"])
       if (Object.hasOwn(fields.tls, key))
         next.request.tls[key] = String(fields.tls[key]);
   }
