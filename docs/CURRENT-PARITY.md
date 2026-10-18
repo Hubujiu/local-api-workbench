@@ -4,9 +4,9 @@
 
 ## 最近已核验
 
-eb2935b9e5031e44cbc7f91b416072a6a74b3a5e / Actions39113795792：9项全部通过，175项核心测试。包含三平台核心、真实浏览器、Windows x64/macOS arm64/Linux x64实际成品包启动、数据库集成与格式/依赖/资源重建校验。Mac仅CI临时签名，未公证。
+bab5c1702aa4bd757680d047eae7c2c282537b0b / Actions39114347822：9项全部通过，176项核心测试。包含三平台核心、真实浏览器、Windows x64/macOS arm64/Linux x64实际成品包启动、数据库集成与格式/依赖/资源重建校验。Mac仅CI临时签名，未公证。
 
-自定义函数验证、固定/变量/有界Mock动态参数、Raw Body插入、Markdown预览/导出、七类属性与文档状态均已核验。OAuth1/AWS/Hawk/EdgeGrid、stdio跨进程进度、步骤认证/断言/提取编辑、CryptoJS/Chai与有限Apipost JSON导入也已核验。脚本兼容助手、前置断言证据、失败步骤分组展示、函数预览可见性与参考垂直间距也已核验；后续步骤表单文件与连接编辑须独立CI。
+自定义函数验证、固定/变量/有界Mock动态参数、Raw Body插入、Markdown预览/导出、七类属性与文档状态均已核验。OAuth1/AWS/Hawk/EdgeGrid、stdio跨进程进度、步骤认证/断言/提取编辑、CryptoJS/Chai与有限Apipost JSON导入也已核验。脚本兼容助手、前置断言证据、失败步骤分组展示、函数预览可见性与参考垂直间距也已核验；步骤表单文件与连接编辑也已独立CI通过；后续侧栏视觉调整须独立验证。
 
 ## 已发现并处理的问题
 

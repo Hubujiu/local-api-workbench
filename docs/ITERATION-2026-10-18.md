@@ -346,3 +346,9 @@ Visual inspection of ad4587's actual function screenshot showed that the earlier
 - Added per-step timeout, HTTP version, proxy and CA/client certificate/private-key/passphrase controls. TLS verification remains enabled; secrets are explicitly described as stored in the local snapshot. Existing unknown metadata remains preserved.
 - Browser regression selects fixed binary bytes, saves/reopens the snapshot, and verifies actual multipart bytes/name/text plus bearer auth at a local HTTP fixture. Transport field persistence is checked; existing transport tests cover real TLS behavior.
 - eb2935b9 passed175tests and all9CI jobs in Actions39113795792. Actual function-preview and failed-step screenshots inspected; previous clipping and evidence display fixes are confirmed. New form/transport controls require their own CI.
+
+## Fifty-first pass: sidebar reference composition
+
+- The compared official screenshot places type filtering inside the search row and has one compact creation entry. Move the existing type selector into that row; keep new-folder under the creation menu and move project import/export into the section toolbar, preserving their original handlers.
+- Remove extra native control borders on lifecycle/project/environment selectors and restore the white method segment and normal UI-font URL field. No decorative control replaces a real function.
+- Added browser checks for search/filter alignment and opening/cancelling the relocated new-folder action without creating data. Updated screenshots remain the verification gate, not CSS alone.

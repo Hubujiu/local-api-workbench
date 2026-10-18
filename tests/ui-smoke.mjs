@@ -162,6 +162,28 @@ try {
     "18px",
   );
   assert(await page.locator(".empty-symbol svg").isVisible());
+  const searchFieldBox = await page.locator("#search").boundingBox();
+  const typeFilterBox = await page.locator("#tree-type").boundingBox();
+  assert(
+    Math.abs(searchFieldBox.y - typeFilterBox.y) < 3,
+    "type filter must share the search row",
+  );
+  assert(
+    typeFilterBox.x > searchFieldBox.x,
+    "type filter follows the search input",
+  );
+  assert.equal(await page.locator("#new-folder").isVisible(), false);
+  await page.locator(".tree-create summary").click();
+  await page.locator("#new-folder").click();
+  await page.locator("#folder-name").fill("must-not-create-on-cancel");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert(
+    !(await page.locator("#tree").innerText()).includes(
+      "must-not-create-on-cancel",
+    ),
+  );
+  await page.locator(".tree-create summary").click();
+  assert.equal(await page.locator("#new-folder").isVisible(), false);
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);

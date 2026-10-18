@@ -51,4 +51,4 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-最近已全绿检查点eb2935b9e5031e44cbc7f91b416072a6a74b3a5e：175项核心测试、9项CI通过，Actions39113795792。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
+最近已全绿检查点bab5c1702aa4bd757680d047eae7c2c282537b0b：176项核心测试、9项CI通过，Actions39114347822。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。

@@ -174,7 +174,7 @@ nav.rail {
 .search {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }
 .search input {
   width: 100%;
@@ -1357,4 +1357,53 @@ body.compact-ui .sidebar {
 .step-file-status {
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.search-filter {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+.search-filter input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+}
+.search-filter #tree-type {
+  width: 72px;
+  min-width: 72px;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--muted);
+}
+.section-label > div {
+  display: flex;
+  gap: 2px;
+}
+.section-label button {
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.subnav #request-status,
+.tools #env,
+.top #project-select {
+  border-color: transparent;
+  background: transparent;
+}
+.subnav #request-status {
+  max-width: 120px;
+}
+.url-input #method {
+  margin: 3px;
+  background: var(--bg);
+  border-radius: 3px;
+}
+.url-input #url {
+  font-family: inherit;
 }

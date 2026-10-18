@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：eb2935b9e5031e44cbc7f91b416072a6a74b3a5e
+已核验提交：bab5c1702aa4bd757680d047eae7c2c282537b0b
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39113795792)，175项核心测试。
-后续步骤表单文件与连接编辑须独立CI；不借用本版绿灯。
+9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39114347822)，176项核心测试。
+后续侧栏视觉调整须独立CI；不借用本版绿灯。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
 
@@ -48,7 +48,7 @@
 | F35 接口生命周期状态 | 已实现 | 接口与Markdown文档均支持生命周期状态，项目维护状态名/颜色。 | public/app.js; tests/ui-smoke.mjs |
 | F36 导入/导出 | 部分实现 | 支持OpenAPI/Postman/cURL/本工具备份及官方公开转换器的有限Apipost JSON；遇到未支持资源明确拒绝。当前Offline2.0原生目录尚不兼容。 | src/apipost-import.mjs; tests/apipost-import.test.mjs; tests/fixtures/APIPOST-FIXTURE.md |
 | F37 快照、重复步骤、顺序执行 | 已实现 | 对应执行语义已实现并测试 | snapshotPlan; runPlan; plan-snapshots.test |
-| F38 步骤参数、Cookie和脚本覆盖 | 部分实现 | 步骤可视化编辑基础参数、脚本、认证、结构化断言、提取来源/作用域/正则分组；TLS、文件及动态值高级细节仍未完全可视化。失败保存与取消保留原快照。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
+| F38 步骤参数、Cookie和脚本覆盖 | 已实现 | 独立步骤快照可视化编辑基础参数、Cookie、脚本、认证、断言、提取、文本/文件表单、超时/协议/代理/TLS；动态值定义保留并提供JSON高级编辑。真实二进制上传、保存失败/取消隔离已验证。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
 | F39 步骤间变量传递 | 已实现 | 提取/脚本变量经vars传递 | runPlan; core.test |
 | F40 接口脚本与计划脚本隔离 | 已实现 | 复制步骤清除接口脚本；只执行计划明确配置的脚本 | plan-snapshots.js/test |
 | F41 执行结果状态规则 | 已实现 | 新建UI/MCP计划默认 strict200，与非200即失败一致；旧计划保留显式 assertions 策略以兼容既有预期错误测试。 | src/plan-version.mjs; src/core.mjs; tests/plan-version.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39113795792; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39114347822; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -112,7 +112,7 @@
 | U08 编辑器与参数助手 | 部分实现 | 行号/高亮、参数助手、展开/Escape收起且保留未保存内容；成熟 IDE 完整编辑交互不包含。 | public/app.js; public/code-format.js; tests/ui-smoke.mjs |
 | U09 发送/保存分裂按钮 | 已实现 | 发送/保存分裂按钮与真实下拉操作。 | public/app.js; tests/ui-smoke.mjs |
 | U10 空状态与底栏 | 部分实现 | 原创线条火箭、底栏、精简模式与上下/左右布局切换已验证；授权/付费激活信息按范围排除，视觉不宣称逐像素一致。 | public/app.js; public/style.css; tests/ui-smoke.mjs |
-| U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取可视化快照编辑已验证；TLS、文件、动态值等高级字段仍未全面可视化。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
+| U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值等高级配置仍可用JSON，具体原版界面仍未全部对齐。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
 | U12 AI变更视觉语言 | 已实现 | AI 变更字段/步骤编号橙色及说明提示。 | public/plan-view.js; src/plan-version.mjs |
 | U13 MCP配置页面 | 部分实现 | 状态/授权/客户端标签/密钥操作已实现；页面结构仍为配置区加弹窗。 | public/app.js; public/mcp-client-config.js |
 | U14 计划执行记录页面 | 部分实现 | 计划/记录独立标签，失败步骤默认展开，按断言、请求、响应、日志、提取变量及完整JSON分组；具体原版布局仍不同。 | public/plan-view.js; tests/plan-evidence.test.mjs; tests/ui-smoke.mjs |
