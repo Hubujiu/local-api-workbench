@@ -402,6 +402,39 @@ try {
   assert(
     !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
   );
+  await page.locator("#auth-type").selectOption("hawk");
+  await page.locator('[data-auth="id"]').fill("hawk-fixture");
+  await page.locator('[data-auth="key"]').fill("hawk-fixture-secret");
+  const hawkResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const hawkResult = await (await hawkResponse).json();
+  assert.match(JSON.parse(hawkResult.body).authorization, /^Hawk /);
+  assert(
+    !JSON.parse(hawkResult.body).authorization.includes("hawk-fixture-secret"),
+  );
+  await page.locator("#auth-type").selectOption("edgegrid");
+  for (const [key, value] of Object.entries({
+    clientToken: "fixture-client",
+    clientSecret: "fixture-edgegrid-secret",
+    accessToken: "fixture-access",
+  }))
+    await page.locator('[data-auth="' + key + '"]').fill(value);
+  const edgegridResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const edgegridResult = await (await edgegridResponse).json();
+  assert.match(
+    JSON.parse(edgegridResult.body).authorization,
+    /^EG1-HMAC-SHA256 /,
+  );
+  assert(
+    !JSON.parse(edgegridResult.body).authorization.includes(
+      "fixture-edgegrid-secret",
+    ),
+  );
   await page.locator("#auth-type").selectOption("none");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();

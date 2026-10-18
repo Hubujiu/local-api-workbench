@@ -630,6 +630,43 @@ export function importDocument(doc) {
           username: values.username || "",
           password: values.password || "",
         };
+      if (config.type === "edgegrid")
+        return {
+          type: "edgegrid",
+          ...Object.fromEntries(
+            [
+              "clientToken",
+              "clientSecret",
+              "accessToken",
+              "baseURL",
+              "headersToSign",
+              "maxBodySize",
+              "nonce",
+              "timestamp",
+            ]
+              .filter((key) => values[key] !== undefined)
+              .map((key) => [key, values[key]]),
+          ),
+        };
+      if (config.type === "hawk") {
+        if (values.user) throw Error("尚不支持Postman Hawk user扩展");
+        return {
+          type: "hawk",
+          id: values.authId,
+          key: values.authKey,
+          algorithm: values.algorithm || "sha256",
+          nonce: values.nonce,
+          timestamp: values.timestamp,
+          ext: values.extraData,
+          app: values.app,
+          dlg: values.delegation,
+          payloadHash:
+            values.includePayloadHash === true ||
+            values.includePayloadHash === "true"
+              ? "enabled"
+              : "disabled",
+        };
+      }
       if (config.type === "awsv4")
         return {
           type: "aws",
@@ -929,6 +966,14 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "edgegrid")
+    throw Error(
+      "EdgeGrid需要每次计算签名；请使用原始请求/项目导出，不生成缺失签名的cURL。",
+    );
+  if (r.auth.type === "hawk")
+    throw Error(
+      "Hawk需要每次计算MAC；请使用原始请求/项目导出，不生成缺失签名的cURL。",
+    );
   if (r.auth.type === "aws")
     throw Error(
       "AWS签名需要每次计算；请使用原始请求/项目导出，不生成缺失签名的cURL。",

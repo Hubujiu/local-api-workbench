@@ -11,6 +11,17 @@ const esc = (value) =>
 
 const fields = {
   none: [],
+  edgegrid: [
+    "clientToken",
+    "clientSecret",
+    "accessToken",
+    "baseURL",
+    "headersToSign",
+    "maxBodySize",
+    "nonce",
+    "timestamp",
+  ],
+  hawk: ["id", "key", "ext", "app", "dlg", "nonce", "timestamp"],
   bearer: ["token"],
   basic: ["username", "password"],
   digest: ["username", "password"],
@@ -78,6 +89,13 @@ export function authPanel(auth = {}) {
     '<div class="form-grid"><label>认证类型</label><select id="auth-type">' +
     options(authTypes, type) +
     "</select>";
+  if (type === "hawk")
+    html +=
+      '<label>Hawk算法</label><select data-auth="algorithm">' +
+      options(["sha256", "sha1"], auth.algorithm || "sha256") +
+      '</select><label>请求体Hash</label><select data-auth="payloadHash">' +
+      options(["enabled", "disabled"], auth.payloadHash || "enabled") +
+      "</select>";
   if (type === "oauth1")
     html +=
       '<label>签名算法</label><select data-auth="signatureMethod">' +
@@ -98,7 +116,7 @@ export function authPanel(auth = {}) {
     (fields[type] || [])
       .map(
         (key) =>
-          `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
+          `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
   if (type === "oauth2")
@@ -110,5 +128,11 @@ export function authPanel(auth = {}) {
   if (type === "aws")
     html +=
       '<p class="notice">AWS Signature V4使用明确填写的凭据与region/service，不读取系统AWS配置或自动登录。对最终请求体计算SHA256；S3使用对应路径规则。优先使用HTTPS。</p>';
+  if (type === "edgegrid")
+    html +=
+      '<p class="notice">EdgeGrid EG1-HMAC-SHA256；仅使用明确填写的凭据，不读取.edgerc。timestamp格式YYYYMMDDTHH:mm:ss+0000，留空自动生成。headersToSign为按顺序逗号分隔的Header名，POST默认对前131072字节计算Hash，不截断发送内容。</p>';
+  if (type === "hawk")
+    html +=
+      '<p class="notice">使用本地填写的Hawk凭据生成MAC；默认包含已有请求体Hash。nonce/时间戳留空自动生成。不执行远端登录或时钟同步，也不校验Server-Authorization响应。</p>';
   return html;
 }

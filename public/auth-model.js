@@ -6,6 +6,8 @@ export const authTypes = [
   "oauth1",
   "oauth2",
   "aws",
+  "hawk",
+  "edgegrid",
   "apiKey",
 ];
 export function validateAuth(auth = {}) {

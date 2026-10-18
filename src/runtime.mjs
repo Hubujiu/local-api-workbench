@@ -1,3 +1,5 @@
+import { edgegridAuthorization } from "./edgegrid-auth.mjs";
+import { hawkAuthorization } from "./hawk-auth.mjs";
 import { awsSignatureHeaders } from "./aws-signature.mjs";
 import { oauth1Authorization } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
@@ -370,6 +372,22 @@ export async function executeRequest(input, signal) {
     Object.assign(
       headers,
       await awsSignatureHeaders(u.href, r.method, headers, body, r.auth),
+    );
+  if (r.auth.type === "hawk")
+    headers.authorization = hawkAuthorization(
+      u.href,
+      r.method,
+      headers,
+      body,
+      r.auth,
+    ).header;
+  if (r.auth.type === "edgegrid")
+    headers.authorization = edgegridAuthorization(
+      u.href,
+      r.method,
+      headers,
+      body,
+      r.auth,
     );
   const start = performance.now();
   const connection = await prepareConnection(u, r, headers, signal);

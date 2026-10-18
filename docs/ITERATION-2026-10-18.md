@@ -271,3 +271,9 @@ Independent RFC5849 section1.2 signature and parameter-normalization fixtures, a
 Added the official Smithy signer with pinned dependency, final-payload hashing, duplicate query handling, S3 path rules and optional session tokens. No credential-provider discovery or AWS network login. Added Postman import and explicit cURL rejection.
 Extracted authentication rendering/model into dedicated modules, retained existing OAuth2 controls, masked secret inputs, and made unknown auth types fail closed.
 Published Smithy vectors and local HTTP/browser tests cover signing. OAuth1 predecessor3fad1b7 passed all9CI jobs (146coretests); this AWS batch must be independently verified.
+
+## Fortieth pass: Hawk and EdgeGrid authentication
+
+Added Mozilla Hawk request MAC/payload signing and an independently tested EdgeGrid canonical HMAC implementation. Both expose explicit credentials/options, retain supported Postman fields, and reject unsupported cURL generation. No .edgerc/profile discovery, account login or automatic remote requests occur during setup.
+Hawk uses published Mozilla GET/POST vectors and an actual local verifier; EdgeGrid uses Akamai's published Python JSON signature, byte truncation/header ordering checks and real outgoing evidence. Browser acceptance exercises all four newly added signing types.
+AWS predecessor716d1f3 passed all9jobs (152coretests). Current local suite159passes, with dependency audit0 vulnerabilities; full CI still required for this batch.
