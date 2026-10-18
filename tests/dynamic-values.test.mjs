@@ -176,3 +176,23 @@ test("raw Body dynamic tokens preserve typed JSON and do not interpolate generat
     /不存在/,
   );
 });
+
+test("Mock dynamic sources are seeded, typed and feed transforms without arbitrary evaluation", async () => {
+  const spec = {
+    source: "mock",
+    value: "@integer(7,7)",
+    type: "integer",
+    seed: 42,
+    functions: ["double"],
+  };
+  assert.equal(await resolveDynamicValue(spec, {}, functions), 14);
+  const name = { source: "mock", value: "@cname()", type: "string", seed: 42 };
+  assert.equal(
+    await resolveDynamicValue(name, {}, []),
+    await resolveDynamicValue(name, {}, []),
+  );
+  await assert.rejects(
+    resolveDynamicValue({ ...name, value: "@execute()" }, {}, []),
+  );
+  await assert.rejects(resolveDynamicValue({ ...name, seed: -1 }, {}, []));
+});

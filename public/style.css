@@ -1300,3 +1300,21 @@ body.compact-ui .sidebar {
   border-left: 3px solid currentColor;
   opacity: 0.8;
 }
+
+#function-input,
+#dynamic-value {
+  min-height: 64px;
+  height: 80px;
+}
+#function-body {
+  min-height: 140px;
+  height: 160px;
+}
+#function-result,
+#dynamic-result {
+  min-height: 36px;
+  max-height: 120px;
+  overflow: auto;
+  padding: 10px;
+  margin: 8px 0;
+}

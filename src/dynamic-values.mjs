@@ -1,6 +1,8 @@
+import { randomInt } from "node:crypto";
+import { sampleProjectSchema } from "./mock-fields.mjs";
 import { previewFunction } from "./custom-functions.mjs";
 export async function resolveDynamicValue(spec, variables, functions = []) {
-  if (!spec || !["fixed", "variable"].includes(spec.source))
+  if (!spec || !["fixed", "variable", "mock"].includes(spec.source))
     throw Error("动态值来源无效");
   const chain = spec.functions || [];
   if (
@@ -18,6 +20,18 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
     )
       throw Error("动态值引用未定义变量");
     value = variables[spec.value];
+  } else if (spec.source === "mock") {
+    if (
+      typeof spec.value !== "string" ||
+      !["string", "number", "integer", "boolean", "object", "array"].includes(
+        spec.type || "string",
+      )
+    )
+      throw Error("Mock动态值类型或表达式无效");
+    value = sampleProjectSchema(
+      { settings: { mockSeed: spec.seed ?? randomInt(0, 4294967296) } },
+      { type: spec.type || "string", mock: spec.value },
+    );
   } else value = spec.value;
   const bounded = (value) => {
     const serialized = JSON.stringify(value, (_key, item) => {

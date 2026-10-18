@@ -673,7 +673,11 @@ try {
     "customerId",
   );
   await page.locator('[data-dynamic-pair="query:0"]').click();
-  await page.locator("#dynamic-value").fill("7");
+  await page.locator("#dynamic-source").selectOption("mock");
+  await page.locator("#dynamic-value").fill("@integer(7,7)");
+  await page.getByText("Mock类型与种子", { exact: true }).click();
+  await page.locator("#dynamic-mock-type").selectOption("integer");
+  await page.locator("#dynamic-seed").fill("42");
   await page.locator("#dynamic-functions").fill("double");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(

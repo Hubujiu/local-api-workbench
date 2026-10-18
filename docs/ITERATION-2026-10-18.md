@@ -246,3 +246,8 @@ Also tightened dynamic-value JSON validation and aggregate-work limits. The earl
 
 Added named Body dynamic tokens with separate definitions preserved in snapshots. The helper inserts at the current selection, allows editing/removal, and chooses typed JSON escaping or literal text output. Resolution happens after pre-request variables, without re-interpolating generated braces. Missing definitions fail explicitly. Total field/transform/time bounds also cover Body occurrences.
 The Markdown browser failure in d2c5d8f was a strict locator matching both saved content and the retained hidden modal preview; scoped the assertion to the main document, preserving the table requirement. Source-format (including reproducible bundled output) passed.
+
+## Thirty-sixth pass: seeded Mock dynamic source
+
+Dynamic values now accept the existing bounded Mock expression set and typed outputs, feeding the same ordered transforms. Optional32-bit seeds make replay deterministic; omitted seeds generate a new sample on each evaluation. The UI explains that preview does not freeze random output. Does not claim the fullFaker/Mock.js catalog.
+Fixed tests verify seed repeatability, typed transformation, invalid seed and unsupported function rejection; the browser configures a Mock integer, previews14 and checks14 on the actual outgoing URL.
