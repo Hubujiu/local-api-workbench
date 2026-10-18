@@ -53,12 +53,20 @@ function checkReferences(schema, path) {
     path
       .map((key) => String(key).replace(/~/g, "~0").replace(/\//g, "~1"))
       .join("/");
+  let visited = 0;
   const visit = (node, depth = 0) => {
     if (depth > 64) throw Error("结构嵌套过深");
     if (!node || typeof node !== "object") return;
+    if (++visited > 5000) throw Error("引用检查最多5000节点，请用JSON编辑");
+    let reference = node.$ref;
+    if (typeof reference === "string") {
+      try {
+        reference = decodeURIComponent(reference);
+      } catch {}
+    }
     if (
-      typeof node.$ref === "string" &&
-      (node.$ref === prefix || node.$ref.startsWith(prefix + "/"))
+      typeof reference === "string" &&
+      (reference === prefix || reference.startsWith(prefix + "/"))
     )
       throw Error("此字段被本地引用使用，请先在JSON中更新引用");
     for (const value of Object.values(node)) visit(value, depth + 1);
@@ -168,6 +176,9 @@ export function removeSchemaProperty(schema, path) {
   if (path.length < 2 || path.at(-2) !== "properties")
     throw Error("只能删除对象属性");
   checkReferences(schema, path);
+  const serialized = JSON.stringify(nodeAt(schema, path));
+  if (/"\$(?:id|anchor|dynamicAnchor)"\s*:/.test(serialized))
+    throw Error("包含结构标识或锚点，请用JSON编辑删除");
   const next = structuredClone(schema),
     parent = nodeAt(next, path.slice(0, -2));
   editable(parent);
@@ -240,22 +251,25 @@ export function bindSchemaEditor(container, schema) {
       container.querySelector(".schema-error").textContent = error.message;
     }
   };
-  const commit = () => {
-    if (!editing) return;
+  const readPending = () => {
+    if (!editing) return draft;
     if (editing.add)
-      draft = addSchemaProperty(
+      return addSchemaProperty(
         draft,
         editing.path,
         container.querySelector("[data-schema-name]").value,
       );
     else
-      draft = editSchemaNode(draft, editing.path, {
+      return editSchemaNode(draft, editing.path, {
         name: container.querySelector("[data-schema-name]").value,
         type: container.querySelector("[data-schema-type]").value,
         description: container.querySelector("[data-schema-description]").value,
         example: container.querySelector("[data-schema-example]").value,
         required: container.querySelector("[data-schema-required]").checked,
       });
+  };
+  const commit = () => {
+    draft = readPending();
     editing = null;
   };
   const show = (row, add) => {
@@ -328,8 +342,53 @@ export function bindSchemaEditor(container, schema) {
   };
   render();
   return () => {
-    commit();
-    schemaRows(draft);
-    return structuredClone(draft);
+    const next = readPending();
+    schemaRows(next);
+    return structuredClone(next);
   };
+}
+
+export function editResponseDefinition(responses, index, fields) {
+  if (
+    !Array.isArray(responses) ||
+    !Number.isInteger(index) ||
+    index < -1 ||
+    index >= responses.length
+  )
+    throw Error("响应索引无效");
+  const status = String(fields.status).trim(),
+    mediaType = String(fields.mediaType).trim();
+  if (!/^(default|[1-5](?:[0-9]{2}|XX))$/.test(status))
+    throw Error("响应状态须为100至599、1XX至5XX或default");
+  if (!/^[a-zA-Z0-9!#$&^_.+*-]+\/[a-zA-Z0-9!#$&^_.+*-]+$/.test(mediaType))
+    throw Error("Content-Type须为不含参数的类型/子类型");
+  if (
+    responses.some((item, i) => i !== index && String(item.status) === status)
+  )
+    throw Error("此响应状态已存在，请编辑已有响应");
+  if (index === -1 && responses.length >= 100)
+    throw Error("可视响应定义最多100项");
+  schemaRows(fields.schema);
+  const description = String(fields.description || "");
+  if (description.length > 8192) throw Error("响应说明最多8192字符");
+  const next = structuredClone(responses),
+    item = index < 0 ? {} : next[index];
+  if (item.content !== undefined && !object(item.content))
+    throw Error("响应content格式无效，请先用JSON修正");
+  if (
+    item.content?.[mediaType] !== undefined &&
+    !object(item.content[mediaType])
+  )
+    throw Error("响应媒体定义格式无效，请先用JSON修正");
+  item.status = status;
+  item.description = description;
+  item.content = {
+    ...item.content,
+    [mediaType]: {
+      ...item.content?.[mediaType],
+      schema: structuredClone(fields.schema),
+    },
+  };
+  if (index < 0) next.push(item);
+  return next;
 }

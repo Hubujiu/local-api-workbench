@@ -1,4 +1,8 @@
-import { schemaEditor, bindSchemaEditor } from "./schema-editor.js";
+import {
+  schemaEditor,
+  bindSchemaEditor,
+  editResponseDefinition,
+} from "./schema-editor.js";
 import { authPanel } from "./auth-view.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
 import { attributeFields, attributeChooser } from "./attribute-view.js";
@@ -556,7 +560,7 @@ function responseContent() {
 }
 function modePanel(r) {
   if (mode === "design")
-    return `<div class="page">${r.importNotes?.length ? `<div class="notice import-notes">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}<div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><label>响应定义（状态、描述、Content 与 Schema）</label><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+    return `<div class="page">${r.importNotes?.length ? `<div class="notice import-notes">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}<div class="form-grid"><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><label>响应定义（状态、描述、Content 与 Schema）</label><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例；没有示例时，按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
@@ -917,6 +921,48 @@ function bind() {
     mark();
     render();
   });
+  const editResponseSchema = (index = -1, media = "application/json") => {
+    collect();
+    const responses = structuredClone(request().responses || []),
+      definition = responses[index] || {},
+      schema = definition.content?.[media]?.schema ?? {
+        type: "object",
+        properties: {},
+      };
+    let readSchema;
+    modal(
+      "编辑响应定义",
+      '<div class="response-schema-meta"><label>状态<input id="schema-response-status" value="' +
+        esc(
+          definition.status ||
+            (responses.some((item) => String(item.status) === "200")
+              ? ""
+              : "200"),
+        ) +
+        '" placeholder="201 / 4XX / default"></label><label>Content-Type<input id="schema-response-media" value="' +
+        esc(media) +
+        '"></label><label>说明<input id="schema-response-description" value="' +
+        esc(definition.description || "") +
+        '"></label></div><p class="muted">更换Content-Type会新增该类型，不删除原有类型及示例。</p><div id="schema-editor">' +
+        schemaEditor(schema) +
+        "</div>",
+      () => {
+        request().responses = editResponseDefinition(responses, index, {
+          status: $("#schema-response-status").value,
+          description: $("#schema-response-description").value,
+          mediaType: $("#schema-response-media").value,
+          schema: readSchema(),
+        });
+        mark();
+        render();
+      },
+    );
+    readSchema = bindSchemaEditor($("#schema-editor"), schema);
+  };
+  on("#new-response-schema", "click", () => editResponseSchema());
+  on("[data-response-schema]", "click", (_, element) =>
+    editResponseSchema(...JSON.parse(element.dataset.responseSchema)),
+  );
   on("#visual-schema", "click", () => {
     collect();
     const schema = request().schema;

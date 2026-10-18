@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { snapshotPlan } from "../src/core.mjs";
+import { snapshotPlan, exportOpenAPI } from "../src/core.mjs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -1153,6 +1153,64 @@ try {
       .properties.flag.example,
     false,
   );
+  const originalResponse = {
+    status: "200",
+    description: "retained",
+    headers: { "x-trace": { schema: { type: "string" } } },
+    content: { "text/plain": { schema: { type: "string" }, example: "keep" } },
+  };
+  await page
+    .locator("#response-definitions")
+    .fill(JSON.stringify([originalResponse]));
+  await page.locator("#new-response-schema").click();
+  await page.locator("#schema-response-status").fill("201");
+  await page.locator("#schema-response-description").fill("Created schema");
+  await page.locator('[data-schema-add="0"]').click();
+  await page.locator("[data-schema-name]").fill("ok");
+  await page.locator("[data-schema-apply]").click();
+  await page.locator('[data-schema-edit="1"]').click();
+  await page.locator("[data-schema-type]").selectOption("boolean");
+  await page.locator("[data-schema-example]").fill("false");
+  await page.locator("#schema-response-status").fill("200");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("此响应状态已存在，请编辑已有响应", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.locator("[data-schema-example]").fill("true");
+  await page.locator("#schema-response-status").fill("201");
+  await page.screenshot({ path: "/tmp/local-api-response-schema.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const responseDefinitions = JSON.parse(
+    await page.locator("#response-definitions").inputValue(),
+  );
+  assert.deepEqual(responseDefinitions[0], originalResponse);
+  assert.equal(
+    responseDefinitions[1].content["application/json"].schema.properties.ok
+      .example,
+    true,
+  );
+  await saveAndWait("#save");
+  const responseProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const responseRequest = responseProject.requests.find(
+    (item) => item.id === schemaRequestId,
+  );
+  const exportedResponse = exportOpenAPI({
+    name: "visual response",
+    requests: [responseRequest],
+  });
+  const exportedOperation = Object.values(exportedResponse.paths)[0][
+    responseRequest.method.toLowerCase()
+  ];
+  assert.equal(
+    exportedOperation.responses["201"].content["application/json"].schema
+      .properties.ok.example,
+    true,
+  );
+
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
   await page.locator("#generate-body").click();

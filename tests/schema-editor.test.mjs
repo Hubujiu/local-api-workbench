@@ -68,6 +68,23 @@ test("visual schema add remove are atomic and reject dangling local references a
     /引用/,
   );
   assert.throws(
+    () =>
+      removeSchemaProperty(
+        { ...source, $defs: { encoded: { $ref: "#%2Fproperties%2Fa" } } },
+        ["properties", "a"],
+      ),
+    /引用/,
+  );
+  assert.throws(
+    () =>
+      removeSchemaProperty(
+        { properties: { a: { type: "object", $anchor: "anchor" } } },
+        ["properties", "a"],
+      ),
+    /锚点/,
+  );
+
+  assert.throws(
     () => editSchemaNode(referenced, ["properties", "a"], { name: "b" }),
     /引用/,
   );
@@ -103,5 +120,80 @@ test("visual schema rendering escapes names and descriptions and bounds large tr
         ),
       }),
     /500/,
+  );
+});
+
+test("visual response definitions retain media examples headers and unrelated responses", async () => {
+  const { editResponseDefinition } = await import("../public/schema-editor.js");
+  const original = [
+    {
+      status: "200",
+      description: "old",
+      headers: { "x-id": { schema: { type: "string" } } },
+      content: {
+        "application/json": {
+          schema: { type: "object" },
+          example: { old: true },
+        },
+        "text/plain": { schema: { type: "string" } },
+      },
+    },
+    { status: "404", description: "missing" },
+  ];
+  const next = editResponseDefinition(original, 0, {
+    status: "200",
+    description: "updated",
+    mediaType: "application/json",
+    schema: {
+      type: "object",
+      properties: { flag: { type: "boolean", example: false } },
+    },
+  });
+  assert.deepEqual(next[0].headers, original[0].headers);
+  assert.deepEqual(
+    next[0].content["text/plain"],
+    original[0].content["text/plain"],
+  );
+  assert.deepEqual(next[0].content["application/json"].example, { old: true });
+  assert.equal(
+    next[0].content["application/json"].schema.properties.flag.example,
+    false,
+  );
+  assert.equal(original[0].description, "old");
+  assert.throws(
+    () =>
+      editResponseDefinition(original, -1, {
+        status: "200",
+        mediaType: "application/json",
+        schema: {},
+      }),
+    /已存在/,
+  );
+  assert.throws(
+    () =>
+      editResponseDefinition(original, -1, {
+        status: "20X",
+        mediaType: "application/json",
+        schema: {},
+      }),
+    /状态/,
+  );
+  assert.throws(
+    () =>
+      editResponseDefinition(original, -1, {
+        status: "201",
+        mediaType: "invalid",
+        schema: {},
+      }),
+    /Content-Type/,
+  );
+  assert.equal(
+    editResponseDefinition(original, -1, {
+      status: "201",
+      description: "created",
+      mediaType: "application/json",
+      schema: { type: "null" },
+    }).length,
+    3,
   );
 });

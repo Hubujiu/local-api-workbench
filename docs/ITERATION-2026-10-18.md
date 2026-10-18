@@ -389,3 +389,11 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 - Design mode now opens an independent draft tree editor for common object/array fields. Add/edit/remove fields, descriptions, required flags and JSON examples without writing schema JSON manually. Existing minimum/maximum, definitions and unmodeled constraints remain intact.
 - Local references to a renamed/deleted property block the operation instead of silently dangling. Boolean/ref/union/conditional edge cases retain the JSON advanced route; this is not a complete JSON Schema authoring/validation engine. Tree limits:500nodes/16levels.
 - Cancel discards visual changes; outer save applies pending field input atomically or leaves the dialog open with an error. Browser coverage checks cancellation, invalid example refusal, false example persistence, retained numeric constraints, and generated request-body values.
+
+## Fifty-seventh pass: visual response definitions
+
+- Reuse the bounded schema editor for response status/description/content type and structure. Existing media examples, response headers, other content types and unrelated statuses are preserved; duplicate status additions and malformed status/media values are rejected.
+- New media types are added explicitly without deleting old ones. Raw JSON remains available for response deletion, complex references and unsupported constraints.
+- Tests cover atomic metadata preservation first, then browser creation of a201JSON response with typed boolean example, retention of the original200text/header definition, disk persistence and OpenAPI export of the actual saved result.
+
+Response retry review additionally keeps pending schema edits transactional when outer status/media validation fails: reading the draft no longer clears its pending editor. The browser rejects a duplicate200response, changes the pending false example to true, retries as201and checks the saved/exported true value. URI-encoded local references and deletion of anchored schema subtrees also take the safe advanced-edit route.

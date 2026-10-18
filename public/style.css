@@ -1496,3 +1496,20 @@ dialog:has(#schema-editor) {
     grid-template-columns: 1fr;
   }
 }
+
+.response-schema-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.response-schema-meta {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 2fr;
+  gap: 10px;
+}
+@media (max-width: 700px) {
+  .response-schema-meta {
+    grid-template-columns: 1fr;
+  }
+}
