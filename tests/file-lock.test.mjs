@@ -47,3 +47,40 @@ test("concurrent lock handoffs keep exactly one owner across repeated acquisitio
   );
   assert.equal(completed, 100);
 });
+
+test("failed acquisition unblocks its local queue and duplicate release cannot remove a later owner", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-lock-queue-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const parent = path.join(root, "missing"),
+    lock = path.join(parent, "project.lock");
+  await assert.rejects(acquireFileLock(lock), { code: "ENOENT" });
+  await mkdir(parent);
+  const first = await acquireFileLock(lock);
+  await first();
+  const second = await acquireFileLock(lock);
+  await first();
+  assert.equal(
+    JSON.parse(await readFile(path.join(lock, "owner.json"), "utf8")).pid,
+    process.pid,
+  );
+  await second();
+});
+test("Windows delete-pending retry is restricted to mkdir EPERM, not general permission errors", async () => {
+  const { isTransientWindowsLockMkdir } = await import("../src/file-lock.mjs");
+  assert.equal(
+    isTransientWindowsLockMkdir({ code: "EPERM", syscall: "mkdir" }, "win32"),
+    true,
+  );
+  assert.equal(
+    isTransientWindowsLockMkdir({ code: "EPERM", syscall: "open" }, "win32"),
+    false,
+  );
+  assert.equal(
+    isTransientWindowsLockMkdir({ code: "EACCES", syscall: "mkdir" }, "win32"),
+    false,
+  );
+  assert.equal(
+    isTransientWindowsLockMkdir({ code: "EPERM", syscall: "mkdir" }, "linux"),
+    false,
+  );
+});
