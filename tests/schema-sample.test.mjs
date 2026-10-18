@@ -178,3 +178,42 @@ test("schema tuple failures do not silently ignore conflicting or unsupported co
     [1, 2],
   );
 });
+test("schema sample references decode URI fragments once before JSON Pointer tokens", () => {
+  const root = {
+    $defs: {
+      "a/b": { const: 7 },
+      "m~n": { const: false },
+      "百分号%": { const: null },
+      "": { const: "empty" },
+    },
+  };
+  assert.equal(sampleFromSchema({ $ref: "#%2F%24defs%2Fa~1b" }, 0, root), 7);
+  assert.equal(sampleFromSchema({ $ref: "#/$defs/m~0n" }, 0, root), false);
+  assert.equal(
+    sampleFromSchema(
+      { $ref: "#/$defs/%E7%99%BE%E5%88%86%E5%8F%B7%25" },
+      0,
+      root,
+    ),
+    null,
+  );
+  assert.equal(sampleFromSchema({ $ref: "#/$defs/" }, 0, root), "empty");
+  for (const ref of [
+    "#/$defs/%",
+    "#/$defs/m~2n",
+    "#/constructor",
+    "#/$defs/absent",
+  ])
+    assert.throws(() => sampleFromSchema({ $ref: ref }, 0, root));
+  assert.throws(
+    () => sampleFromSchema({ $ref: "#/$defs/Bad" }, 0, { $defs: { Bad: 42 } }),
+    /Schema/,
+  );
+  assert.throws(
+    () =>
+      sampleFromSchema({ $ref: "#/$defs/Loop" }, 0, {
+        $defs: { Loop: { $ref: "#/%24defs/Loop" } },
+      }),
+    /递归/,
+  );
+});

@@ -19,9 +19,18 @@ export function sampleFromSchema(
     if (schema.default !== undefined) return structuredClone(schema.default);
     if (schema.enum?.length) return structuredClone(schema.enum[0]);
     if (schema.$ref) {
-      const ref = schema.$ref;
-      if (typeof ref !== "string" || !ref.startsWith("#/"))
+      let ref = schema.$ref;
+      if (typeof ref !== "string" || !ref.startsWith("#"))
         throw Error("不支持外部 Schema 引用，请提供 example");
+      try {
+        ref = "#" + decodeURIComponent(ref.slice(1));
+      } catch {
+        throw Error("Schema 引用包含无效URI编码");
+      }
+      if (!ref.startsWith("#/"))
+        throw Error("仅支持本地JSON Pointer Schema引用，请提供 example");
+      if (/~(?:[^01]|$)/.test(ref))
+        throw Error("Schema 引用包含无效JSON Pointer转义");
       if (seen.has(ref)) throw Error("递归 Schema 请提供有限 example");
       let target = root;
       for (const part of ref
@@ -36,6 +45,11 @@ export function sampleFromSchema(
           throw Error("Schema 引用不存在");
         target = target[part];
       }
+      if (
+        typeof target !== "boolean" &&
+        (!target || typeof target !== "object" || Array.isArray(target))
+      )
+        throw Error("Schema 引用目标不是Schema");
       const overrides = { ...schema };
       delete overrides.$ref;
       const next =

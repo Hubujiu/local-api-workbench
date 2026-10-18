@@ -439,3 +439,8 @@ Response retry review additionally keeps pending schema edits transactional when
 
 - c222710 Actions39120343402 passed all9jobs and197core tests on first attempt. Narrow response status screenshot verified from artifact12133464973 SHA256030a3bd5a9ec283a54c32705d936b4831a1b06f8d3de7c8b4d74eef104710fef; status200 is no longer squeezed. Modern tuple generation also passed the real UI flow.
 - RSA-SHA1 added according to RFC5849 with explicit inline RSA PEM, encrypted-key password, bounded input and generic errors. Golden vector computed with independent OpenSSL CLI; preimplementation tests failed and implementation passes them. No external credential provisioning or automatic OAuth1 grants. Pending own CI.
+
+## Pass 65 — encoded local Schema references
+
+- e6b0176 Actions39120629637 passed all9jobs and201core tests, including real browser RSA execution and three native packages. RSA uses a public synthetic test key only.
+- Sample generation now decodes a local URI fragment once before JSON Pointer token decoding, rejects malformed percent/tilde escapes and non-schema targets, and detects encoded reference cycles. A regression failed before the fix; unit and real Mock/sample-route integration now pass. Primary reference: https://www.rfc-editor.org/rfc/rfc6901#section-6. This pending change has202local core tests and requires its own CI.

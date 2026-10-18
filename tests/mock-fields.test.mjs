@@ -131,7 +131,12 @@ test("schema-based Mock and request sample API share field rules while explicit 
   };
   const schema = {
     type: "object",
-    properties: { user_name: { type: "string" }, email: { type: "string" } },
+    $defs: { "编码/值": { const: 17 } },
+    properties: {
+      user_name: { type: "string" },
+      email: { type: "string" },
+      referenced: { $ref: "#/$defs/%E7%BC%96%E7%A0%81~1%E5%80%BC" },
+    },
   };
   project.requests = [
     {
@@ -144,6 +149,7 @@ test("schema-based Mock and request sample API share field rules while explicit 
   await app.store.save(project);
   const generated = await (await fetch(project.requests[0].url)).json();
   assert.match(generated.user_name, /^[\u4e00-\u9fff]{2,3}$/);
+  assert.equal(generated.referenced, 17);
   const preview = await (
     await fetch(app.url + "/api/projects/" + project.id + "/sample", {
       method: "POST",

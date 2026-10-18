@@ -13,7 +13,7 @@
 | 能力 | 实现 | 固定验证入口 |
 | --- | --- | --- |
 | 项目/接口/文件夹/搜索/标签/复制/回收站/归档/恢复 | JSON 本地持久化、自选目录、原子保存、配置版本冲突检查 | runtime.test.mjs、server.test.mjs、ui-smoke.mjs |
-| HTTP/HTTPS | Query/Path/Header/Cookie，JSON/raw/form/file/binary/MessagePack，Basic/Bearer/API Key/Digest/OAuth2/OAuth1 HMAC/AWS SigV4/Hawk/EdgeGrid | runtime.test.mjs、connection.test.mjs、digest.test.mjs、oauth.test.mjs |
+| HTTP/HTTPS | Query/Path/Header/Cookie，JSON/raw/form/file/binary/MessagePack，Basic/Bearer/API Key/Digest/OAuth2/OAuth1 HMAC/RSA-SHA1/AWS SigV4/Hawk/EdgeGrid | runtime.test.mjs、connection.test.mjs、digest.test.mjs、oauth.test.mjs |
 | 网络边界 | 超时/取消、8 MiB 请求响应上限、压缩响应、自定义 CA、客户端 PEM、HTTP(S) CONNECT 代理 | runtime.test.mjs、connection.test.mjs |
 | 导入/导出 | OpenAPI JSON/YAML、本地递归引用、Postman、cURL Bash、有限Apipost公开JSON、备份恢复、独立 HTML/Markdown 文档 | core.test.mjs、document-export.test.mjs、ui-smoke.mjs |
 | API 设计 | 描述、请求 Schema、响应示例、数据字典、loopback Mock | core.test.mjs、server.test.mjs、ui-smoke.mjs |
@@ -51,4 +51,4 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-最近已全绿检查点c222710a85200b9e08fcfae7bbc2c5b5bebe6571：197项核心测试、9项CI通过，Actions39120343402。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
+最近已全绿检查点e6b0176c88c10c801d882fc02d62139c8405387b：201项核心测试、9项CI通过，Actions39120629637。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。

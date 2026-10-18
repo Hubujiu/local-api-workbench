@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-18T10:44:39Z",
-  "implementationCommit": "c222710a85200b9e08fcfae7bbc2c5b5bebe6571",
+  "asOf": "2026-10-18T10:49:51Z",
+  "implementationCommit": "e6b0176c88c10c801d882fc02d62139c8405387b",
   "counts": {
     "F": {
       "已实现": 37,
@@ -177,9 +177,9 @@
       "name": "认证",
       "status": "部分实现",
       "original": "截图有认证入口，MCP详情包含鉴权",
-      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权/RSA及完整高级变体未实现。",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权及完整高级变体未实现。RSA仅旧服务兼容，明确输入内联PEM，不读取系统密钥。",
       "source": "S7",
-      "evidence": "src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs",
+      "evidence": "src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs; tests/oauth1-rsa.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39120343402",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39120629637",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。分类重叠，不计算总体百分比。后续OAuth1 RSA变更须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
+  "note": "本对照针对上述全绿版本。分类重叠，不计算总体百分比。后续编码Schema引用修正须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
   "verification": {
-    "runId": 39120343402,
+    "runId": 39120629637,
     "conclusion": "success",
-    "coreTests": 197,
+    "coreTests": 201,
     "jobs": 9
   }
 }
