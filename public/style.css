@@ -1002,3 +1002,78 @@ body.dark button.primary {
 #request-status {
   max-width: 125px;
 }
+
+.plan-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.plan-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  background: var(--panel);
+  border-radius: 10px;
+}
+.plan-list {
+  padding: 20px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-list > button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  white-space: normal;
+}
+.plan-list > button.active {
+  background: var(--hover);
+}
+.plan-main {
+  padding: 24px;
+  min-width: 0;
+}
+.plan-main > label {
+  display: block;
+  margin: 14px 0 8px;
+  font-weight: 600;
+}
+.plan-main > input,
+.plan-main > select,
+.plan-main > textarea {
+  width: 100%;
+}
+.plan-main > textarea {
+  min-height: 70px;
+  font-family: inherit;
+}
+.plan-step {
+  background: var(--hover);
+}
+.drag-handle {
+  cursor: grab;
+  color: var(--muted);
+}
+.plan-save {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+@media (max-width: 1100px) {
+  .plan-layout {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+  .plan-main {
+    padding: 14px;
+  }
+  .plan-list {
+    padding: 12px;
+  }
+  .plan-step {
+    flex-wrap: wrap;
+  }
+  .plan-list .row {
+    flex-wrap: wrap;
+  }
+}

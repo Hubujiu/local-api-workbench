@@ -46,3 +46,8 @@ Fifth pass: Git-readable storage
 - history is excluded in newly generated .gitignore; a Git checkout lacking history can open with empty history. User-supplied .gitignore files are not overwritten.
 - 81 local tests pass, including legacy preservation, interrupted-write recovery and external-file conflict detection.
 - Previous 02d27bb browser/desktop/core/database all passed; strict formatting failed on a non-idempotent first formatting pass of a chained test expression. The second formatting pass was checked locally; gate remains unchanged.
+
+Sixth pass:
+- Plan page is split into plan/record tabs with a left plan list and right editor; step drag/drop reordering complements keyboard-accessible up buttons.
+- Plan name/description edits participate in unsaved-change handling and project save, rather than disappearing on navigation. Manual saves recompute provenance only for changed fields; untouched plans keep their timestamp.
+- Split-file migration candidate da390221 passed all seven jobs in run 39085352021. Current plan-layout edits require their own CI.

@@ -1,3 +1,4 @@
+import { renderPlans } from "./plan-view.js";
 import { resources, resourcePanels, settingsSidebar } from "./resource-view.js";
 import { environmentExtras } from "./environment-view.js";
 import { highlightJSON } from "./code-format.js";
@@ -37,6 +38,7 @@ let opened = [],
   runId = "",
   search = "",
   planId = "",
+  planTab = "plans",
   lastRun = null,
   loadResult = null,
   activeSession = null,
@@ -451,10 +453,8 @@ function renderPage() {
   if (!project) return "";
   if (page === "settings")
     return `<div class="page"><div class="page-head"><div><h1 id="settings-basic">项目配置</h1><span class="muted">环境、变量与本地存储</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div><div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="${esc(project.name)}"></div></div><div class="page-head"><h2 id="settings-environments">环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>${project.environments.map((e) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)}</strong><button data-edit-env="${e.id}">编辑变量</button><button data-delete-env="${e.id}" class="danger">删除</button></div><pre>${esc(JSON.stringify(e.variables, null, 2))}</pre></div>`).join("")}${environmentExtras(project)}${resourcePanels(project)}<section id="settings-mock" class="card"><h3>Mock 服务</h3><label><input id="mock-enabled" type="checkbox" ${project.settings?.mockEnabled !== false ? "checked" : ""}>启用本项目本地 Mock</label><p class="muted">在接口的 Mock 页维护响应示例与智能匹配规则。规则从上到下匹配，一条规则内所有条件必须满足。</p></section><div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div><div class="card" id="settings-mcp"><h3>MCP 接入</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；本次启动有效，重启后自动关闭。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ${esc(project.id)}</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div></div>`;
-  if (page === "plans") {
-    const plan = project.plans.find((p) => p.id === planId);
-    return `<div class="page"><div class="page-head"><div><h1>AI 执行计划</h1><p id="mcp-plan-status" class="subtle"></p><span class="muted">固定步骤 · 独立快照 · 完整证据 · 可重复运行</span></div><button id="new-plan" class="primary">＋ 新建计划</button></div><div class="toolbar">${project.plans.map((p) => `<button data-plan="${p.id}" class="${planId === p.id ? "primary" : ""}">${esc(p.name)}</button>`).join("") || '<p class="muted">尚无计划。先创建接口，再组合成可重复的业务流程。</p>'}</div>${plan ? `<div class="card"><div class="row"><h3 class="grow">${esc(plan.name)}</h3><button id="edit-plan">编辑 JSON</button><button id="delete-plan" class="danger">删除计划</button><button id="add-step">＋ 添加步骤</button><button id="run-plan" class="primary" ${busy ? "disabled" : ""}>${busy ? "执行中…" : "执行计划"}</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><p class="subtle">最近修改：${esc(plan.updatedAt || plan.createdAt)} ${plan.source === "ai" ? "· AI 创建或修改，请检查后执行" : ""}</p><label>计划名称</label><input id="plan-name" class="${plan.provenance?.fields?.name === "ai" ? "ai-value" : ""}" value="${esc(plan.name)}"><label>计划说明</label><textarea id="plan-description" class="${plan.provenance?.fields?.description === "ai" ? "ai-value" : ""}">${esc(plan.description || "")}</textarea><button id="save-plan-details">保存计划说明</button><div class="row"><label>执行环境</label><select id="plan-env" class="${plan.provenance?.fields?.environmentId === "ai" ? "ai-value" : ""}">${project.environments.map((e) => `<option value="${e.id}" ${e.id === plan.environmentId ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></div>${plan.steps.map((s, i) => `<div class="plan-step ${plan.provenance?.steps?.[s.id] === "ai" ? "ai-value" : ""}"><span class="step-number">${i + 1}</span><input type="checkbox" data-step-enable="${i}" ${s.enabled ? "checked" : ""} aria-label="启用步骤"><span class="method ${s.request.method}">${s.request.method}</span><div class="grow"><strong>${esc(s.name)}</strong><div class="subtle">${esc(s.request.url)}</div></div><button data-step-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button><button data-step-edit="${i}">编辑</button><button data-step-delete="${i}" class="danger">×</button></div>`).join("") || '<div class="notice">添加步骤后执行。每一步保存接口的独立快照。</div>'}</div>` : ""}<h2>执行记录 <span class="subtle">最近 50 条</span></h2>${(lastRun ? [lastRun, ...project.runs.filter((r) => r.id !== lastRun.id)] : project.runs).map((r) => `<details class="card" ${r.id === lastRun?.id ? "open" : ""}><summary><span class="${r.status === "passed" ? "success" : "failed"}">${r.status === "passed" ? "✓ 通过" : r.status === "cancelled" ? "■ 已取消" : "× 失败"}</span> &nbsp; ${esc(r.planName)} &nbsp; <span class="subtle">${esc(r.createdAt)} · ${r.results.length} 步</span></summary><p class="subtle">快照 SHA256: ${esc(r.planHash)}</p>${r.results.map((s, i) => `<details class="card"><summary>${i + 1}. <span class="${s.status === "passed" ? "success" : "failed"}">${s.status}</span> ${esc(s.name)} · ${s.response?.status || ""} ${s.response?.duration || 0}ms</summary><pre>${esc(JSON.stringify(s, null, 2))}</pre></details>`).join("")}<button data-export-run="${r.id}">导出证据 JSON</button></details>`).join("") || '<div class="empty"><span class="empty-symbol">☷</span><p>计划运行后，逐步结果将显示在这里</p></div>'}</div>`;
-  }
+  if (page === "plans")
+    return renderPlans({ project, planId, lastRun, busy, tab: planTab });
   if (page === "history")
     return `<div class="page"><div class="page-head"><h1>最近请求</h1><span class="muted">本地保留最近 50 条</span></div>${project.history.map((h) => `<div class="card"><div class="row"><span class="method ${h.request?.method}">${h.request?.method}</span><strong class="grow">${esc(h.name)}</strong><span class="${h.response?.status < 400 ? "success" : "failed"}">${h.response?.status || "ERROR"}</span><button data-history="${h.id}">查看</button></div><p class="subtle">${esc(h.createdAt)} · ${esc(h.request?.url)}</p></div>`).join("") || '<div class="empty"><p>暂无请求历史</p></div>'}</div>`;
   if (page === "trash")
@@ -534,6 +534,11 @@ function addRequest() {
   render();
 }
 async function savePlan(plan) {
+  if (dirty) {
+    await save();
+    if (dirty) throw Error("保存期间出现新的修改，请检查后再次保存");
+    plan = project.plans.find((item) => item.id === plan.id) || plan;
+  }
   const projectId = project.id;
   const result = await api("/projects/" + projectId + "/plans", "POST", {
     ...plan,
@@ -580,6 +585,7 @@ function bind() {
   on("[data-page]", "click", (_, e) => {
     collect();
     page = e.dataset.page;
+    if (page === "plans") planTab = "plans";
     render();
   });
   on("[data-open-tab]", "click", (_, e) => {
@@ -1442,9 +1448,42 @@ function bind() {
       },
     );
   });
+  on("[data-plan-tab]", "click", (_, element) => {
+    planTab = element.dataset.planTab;
+    render();
+  });
+  on("[data-step-drag]", "dragstart", (event, element) => {
+    event.dataTransfer.setData("text/plain", element.dataset.stepDrag);
+    event.dataTransfer.effectAllowed = "move";
+  });
+  on("[data-step-drag]", "dragover", (event) => event.preventDefault());
+  on("[data-step-drag]", "drop", async (event, element) => {
+    event.preventDefault();
+    const from = Number(event.dataTransfer.getData("text/plain")),
+      to = Number(element.dataset.stepDrag);
+    const plan = project.plans.find((item) => item.id === planId);
+    if (
+      !Number.isInteger(from) ||
+      from < 0 ||
+      from >= plan.steps.length ||
+      from === to
+    )
+      return;
+    const [step] = plan.steps.splice(from, 1);
+    plan.steps.splice(to, 0, step);
+    await savePlan(plan);
+  });
   on("[data-plan]", "click", (_, e) => {
     planId = e.dataset.plan;
+    planTab = "plans";
     render();
+  });
+  on("#plan-name,#plan-description", "input", (_, element) => {
+    const plan = project.plans.find((item) => item.id === planId);
+    if (plan) {
+      plan[element.id === "plan-name" ? "name" : "description"] = element.value;
+      mark();
+    }
   });
   on("#save-plan-details", "click", async () => {
     const plan = structuredClone(project.plans.find((p) => p.id === planId));
@@ -1526,6 +1565,7 @@ function bind() {
         planId,
         runId,
       });
+      planTab = "runs";
       project = await api("/projects/" + project.id);
     } finally {
       busy = false;

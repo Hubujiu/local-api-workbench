@@ -22,7 +22,7 @@ import {
   rm,
 } from "node:fs/promises";
 import path from "node:path";
-import { id, normalizeRequest } from "./core.mjs";
+import { id, normalizeRequest, snapshotPlan } from "./core.mjs";
 export class Store {
   constructor(root) {
     this.root = root;
@@ -165,6 +165,9 @@ export class Store {
   }
   async save(p, { activity = false } = {}) {
     validateEnvironmentModel(p);
+    if (!Array.isArray(p.plans) || p.plans.length > 1000)
+      throw Error("计划最多1000个");
+    p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
     for (const request of p.requests || [])
       validateMockRules(request.mockRules || []);

@@ -6,6 +6,13 @@ export function versionPlan(previous, input, source = "manual") {
     updatedAt: new Date().toISOString(),
   });
   const old = previous || {};
+  if (
+    previous &&
+    ["name", "description", "environmentId", "functions", "steps"].every(
+      (field) => JSON.stringify(next[field]) === JSON.stringify(old[field]),
+    )
+  )
+    return structuredClone(previous);
   const provenance = {
     fields: { ...(old.provenance?.fields || {}) },
     steps: {},

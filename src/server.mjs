@@ -328,6 +328,13 @@ export async function createApp({
             )
               throw Error("文档格式无效");
             b.requests = b.requests.map(normalizeRequest);
+            b.plans = b.plans.map((plan) =>
+              versionPlan(
+                p.plans.find((old) => old.id === plan.id),
+                plan,
+                "manual",
+              ),
+            );
             if (b.archived)
               mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
