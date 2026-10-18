@@ -174,6 +174,8 @@ try {
   );
   assert.equal(await page.locator("#new-folder").isVisible(), false);
   await page.locator(".tree-create summary").click();
+  if (!(await page.locator("#new-folder").isVisible()))
+    await page.locator(".tree-create summary").click();
   await page.locator("#new-folder").click();
   await page.locator("#folder-name").fill("must-not-create-on-cancel");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
@@ -512,6 +514,8 @@ try {
     .getByRole("heading", { name: "本地文档测试", exact: true })
     .waitFor();
   await saveAndWait();
+  if (!(await page.locator("#new-folder").isVisible()))
+    await page.locator(".tree-create summary").click();
   await page.locator("#new-folder").click();
   await page.locator("#folder-name").fill("账户服务");
   await page.locator("#dialog-save").click();
@@ -542,6 +546,8 @@ try {
   );
   await page.locator("#save-project").click();
   await seen;
+  if (!(await page.locator("#new-folder").isVisible()))
+    await page.locator(".tree-create summary").click();
   await page.locator("#new-folder").click();
   await page.locator("#folder-name").fill("并发保存保护");
   await page.locator("#dialog-save").click();

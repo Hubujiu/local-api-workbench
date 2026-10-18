@@ -352,3 +352,7 @@ Visual inspection of ad4587's actual function screenshot showed that the earlier
 - The compared official screenshot places type filtering inside the search row and has one compact creation entry. Move the existing type selector into that row; keep new-folder under the creation menu and move project import/export into the section toolbar, preserving their original handlers.
 - Remove extra native control borders on lifecycle/project/environment selectors and restore the white method segment and normal UI-font URL field. No decorative control replaces a real function.
 - Added browser checks for search/filter alignment and opening/cancelling the relocated new-folder action without creating data. Updated screenshots remain the verification gate, not CSS alone.
+
+### Relocated creation regression
+
+Actions39114560592 passed the new sidebar alignment/cancel checks but a later pre-existing folder-persistence scenario still clicked the now-collapsed folder button directly. Update all three folder-entry scenarios to open the creation menu when necessary, while preserving their persistence and concurrent-save assertions. No force-click or visibility bypass is used.
