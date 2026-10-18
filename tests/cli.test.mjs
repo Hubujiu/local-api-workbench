@@ -83,7 +83,7 @@ test("plan CLI returns machine-readable evidence and truthful pass/fail exit cod
     "--output",
     output,
   ]);
-  assert.equal(passed.code, 0, passed.stderr);
+  assert.equal(passed.code, 0, passed.stderr + "\n" + passed.stdout);
   assert.equal(JSON.parse(passed.stdout).status, "passed");
   assert.equal(
     (await app.store.get(project.id)).environments[0].variables.cliScope,

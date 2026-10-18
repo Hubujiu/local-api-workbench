@@ -280,7 +280,7 @@ nav.rail {
   display: flex;
   align-items: center;
   gap: 3px;
-  padding: 10px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--line);
 }
 .subnav button {
@@ -303,7 +303,8 @@ nav.rail {
 .urlbar {
   display: flex;
   gap: 8px;
-  margin: 12px 0;
+  margin: 4px 0 8px;
+  min-height: 40px;
 }
 .url-input {
   display: flex;
@@ -353,7 +354,7 @@ nav.rail {
 }
 .request-panel {
   min-height: 220px;
-  height: 36vh;
+  height: 33vh;
   overflow: auto;
   padding: 14px 0;
 }
@@ -843,7 +844,7 @@ summary {
   white-space: pre;
   padding: 12px;
   font:
-    13px/1.6 Consolas,
+    13px/18px Consolas,
     monospace;
 }
 .code-editor .code {
@@ -861,13 +862,13 @@ summary {
   color: transparent;
   caret-color: var(--text);
   font:
-    13px/1.6 Consolas,
+    13px/18px Consolas,
     monospace;
   white-space: pre;
 }
 .code-editor #code-gutter {
   font:
-    13px/1.6 Consolas,
+    13px/18px Consolas,
     monospace;
 }
 .syntax-key {
@@ -1326,4 +1327,11 @@ body.compact-ui .sidebar {
 }
 .step-rule-row[data-step-rule-row^="assertions:"] {
   grid-template-columns: minmax(90px, 1fr) 90px minmax(90px, 1fr) 30px;
+}
+
+.body-panel #raw-format {
+  height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
 }

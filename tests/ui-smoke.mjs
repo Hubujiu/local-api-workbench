@@ -135,6 +135,22 @@ try {
       bodyPanelBox.y + bodyPanelBox.height,
     "body editor must fit its panel",
   );
+  const urlBarBox = await page.locator(".urlbar").boundingBox();
+  const responseTabsBox = await page.locator(".response-tabs").boundingBox();
+  assert(
+    Math.abs(urlBarBox.y - 138) <= 8,
+    "URL bar aligns with official reference vertical rhythm",
+  );
+  assert(
+    responseTabsBox.y >= 490 && responseTabsBox.y <= 525,
+    "response separator stays near official reference",
+  );
+  assert.equal(
+    await page
+      .locator("#body-code")
+      .evaluate((el) => getComputedStyle(el).lineHeight),
+    "18px",
+  );
   assert(await page.locator(".empty-symbol svg").isVisible());
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.locator("#compact-ui").click();
@@ -295,6 +311,10 @@ try {
   // An intentionally failing pre-script must expose its assertion without sending.
   await page.locator('[data-plan-tab="plans"]').click();
   await page.locator('[data-step-edit="0"]').click();
+  await page
+    .locator("#dialog-content summary")
+    .getByText("本步骤脚本", { exact: true })
+    .click();
   const originalBeforeScript = await page
     .locator('[data-step-field="beforeScript"]')
     .inputValue();
@@ -330,6 +350,10 @@ try {
   await page.screenshot({ path: "/tmp/local-api-plan-failure-evidence.png" });
   await page.locator('[data-plan-tab="plans"]').click();
   await page.locator('[data-step-edit="0"]').click();
+  await page
+    .locator("#dialog-content summary")
+    .getByText("本步骤脚本", { exact: true })
+    .click();
   await page
     .locator('[data-step-field="beforeScript"]')
     .fill(originalBeforeScript);

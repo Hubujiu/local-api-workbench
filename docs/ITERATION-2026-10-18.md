@@ -317,3 +317,13 @@ Limited-import predecessora86fb985 passed all9jobs with168coretests; current loc
 - Execution records now default-open failed steps and group assertions, request/unsent configuration, response, script/operation logs, extracted variables and full JSON evidence. Untrusted strings remain HTML escaped.
 - Added deterministic runner/render tests and a browser regression that deliberately fails a precondition, inspects visible failure/log evidence, then restores the prior script. Local175tests pass before the added browser scenario; browser validation requires this commit's CI.
 - Previous script-compatibility commit ad4587cab116987afe4df52f18d4e3ea6ae2efe8 passed all9jobs in Actions39100470579, with173core tests.
+
+## Forty-seventh pass: reference screenshot spacing
+
+- Downloaded official light screenshot and the exact ad4587 browser artifact (SHA25644ce12666578eb58a9681e7d1df390371bdd573a37bce4518c81f2e48b7f26e0), and visually compared both at1328px width.
+- The request block sat about20px too low, the response separator about40px too low, and code lines were too tall. Reduced excess mode/URL spacing, gave the URL line40px height, tightened the raw-format selector and aligned code/gutter line height to18px. Kept real functionality and independent original branding.
+- Added browser geometry assertions around the actual reference URL/separator positions, alongside screenshots. These are alignment checks, not a pixel-identical claim.
+
+### Failure diagnostics before the spacing iteration
+
+Actions39100628839 on e03d08c had two failures: the added browser test attempted to fill a textarea inside the collapsed “本步骤脚本” section, so the test now explicitly opens that section before editing and restoration. Windows core reported a CLI plan failure but the assertion only printed generic stderr; include the actual machine-readable stdout evidence in failure diagnostics. The Windows CLI cause is not yet proven; no deadline or expected exit code was relaxed. Other platforms passed the new runner evidence tests.
