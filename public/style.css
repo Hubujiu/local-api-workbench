@@ -1214,3 +1214,60 @@ body.dark button.primary {
   background: var(--bg);
   padding: 16px;
 }
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status-actions button {
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 0;
+  background: transparent;
+}
+body.compact-ui .sidebar {
+  display: none;
+}
+.editor.split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  column-gap: 12px;
+}
+.split-layout > .subnav,
+.split-layout > .urlbar {
+  grid-column: 1 / -1;
+}
+.split-layout > .param-tabs {
+  grid-column: 1;
+  grid-row: 3;
+  overflow-x: auto;
+  min-width: 0;
+}
+.split-layout > .request-panel {
+  grid-column: 1;
+  grid-row: 4;
+  height: 100%;
+  min-height: 0;
+}
+.split-layout > .response {
+  grid-column: 2;
+  grid-row: 3 / 5;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+.split-layout .response-top {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+.split-layout .response-tabs {
+  overflow-x: auto;
+  flex: none;
+}
+.split-layout .metrics {
+  padding: 6px 0;
+}

@@ -121,6 +121,17 @@ try {
   );
   assert(await page.locator(".empty-symbol svg").isVisible());
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
+  await page.locator("#compact-ui").click();
+  assert.equal(await page.locator(".sidebar").isVisible(), false);
+  await page.locator("#response-layout").click();
+  const requestSide = await page.locator(".request-panel").boundingBox();
+  const responseSide = await page.locator(".response").boundingBox();
+  assert(responseSide.x >= requestSide.x + requestSide.width);
+  assert.equal(await page.locator("#body-code").inputValue(), originalBody);
+  await page.screenshot({ path: "/tmp/local-api-split-layout.png" });
+  await page.locator("#response-layout").click();
+  await page.locator("#compact-ui").click();
+  assert.equal(await page.locator(".sidebar").isVisible(), true);
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
   await page

@@ -159,3 +159,16 @@ Load diagnostic checkpoint:
 Windows contention follow-through:
 - d02ec8d passed all seven jobs; the previous 99/100 failure did not recur, so its root cause is still unproven.
 - To investigate rather than label it fixed, the local Mock load fixture now runs ten fixed contention batches. Each batch independently requires 100/100 successful actual requests; a failed batch is not retried or ignored.
+
+Twenty-fourth pass:
+- Added user-controlled stacked/side-by-side request/response layout and a compact mode that hides the project tree while retaining the rail. Preferences persist locally; toggling collects pending input instead of discarding edits.
+- These are explicit independent semantics for the reference's layout/compact controls; the original's undocumented details are not claimed identical.
+- Browser acceptance checks side-by-side geometry, hidden/restored sidebar and unchanged request text, with a dedicated screenshot.
+
+Confirmed Windows lock handoff defect:
+- The fixed ten-batch probe reproduced a 400 response whose body identifies EPERM on mkdir of the project .json.lock directory (run 39089285510). This locates the failure in lock acquisition, not request assertions.
+- Same-process lock contenders now queue before filesystem acquisition. Cross-process ownership/nonce checks remain. Only Windows EPERM from mkdir receives a bounded same-operation retry; other permission errors propagate and no permissions/owners are overridden.
+- Windows deletion can remain pending until handles close (https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-removedirectorya). That mechanism is consistent with the observed handoff error; exact underlying OS handle ownership was not captured.
+- Added regressions for queue recovery after failure, idempotent release, and restricted retry classification. Ten 100-request batches remain mandatory.
+
+- Lock fix 2943f19684059fa78ba4eb7feaa975a3f2d87035 passed all seven jobs in run 39089481325, including Windows with ten separate 100/100 load batches. An additional independent-process counter regression passes locally and is included in the next CI.

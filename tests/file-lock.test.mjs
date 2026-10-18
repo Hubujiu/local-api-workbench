@@ -84,3 +84,35 @@ test("Windows delete-pending retry is restricted to mkdir EPERM, not general per
     false,
   );
 });
+
+test("independent processes serialize read-modify-write through the disk lock", async (t) => {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-lock-process-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, "counter"), "0");
+  const source = `
+    import {readFile,writeFile} from 'node:fs/promises';
+    import path from 'node:path';
+    import {acquireFileLock} from ${JSON.stringify(new URL("../src/file-lock.mjs", import.meta.url).href)};
+    const root=process.argv[1];
+    for(let i=0;i<20;i++){
+      const release=await acquireFileLock(path.join(root,'counter.lock'));
+      try{
+        const value=Number(await readFile(path.join(root,'counter'),'utf8'));
+        await new Promise(resolve=>setTimeout(resolve,2));
+        await writeFile(path.join(root,'counter'),String(value+1));
+      } finally {await release();}
+    }
+  `;
+  await Promise.all(
+    Array.from({ length: 2 }, () =>
+      promisify(execFile)(
+        process.execPath,
+        ["--input-type=module", "-e", source, root],
+        { timeout: 15000, maxBuffer: 65536 },
+      ),
+    ),
+  );
+  assert.equal(await readFile(path.join(root, "counter"), "utf8"), "40");
+});

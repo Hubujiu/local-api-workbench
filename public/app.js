@@ -56,7 +56,9 @@ let opened = [],
   sessionTimer = null,
   mcpState = { enabled: false, activities: [] },
   helperOpen = false,
-  bodyExpanded = false;
+  bodyExpanded = false,
+  responseLayout = "stacked",
+  compactUI = false;
 const methodOptions = [
   "GET",
   "POST",
@@ -311,6 +313,7 @@ function tree() {
 
 function render() {
   const r = request();
+  document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
     `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
       .filter((p) => !p.archived && !p.error)
@@ -352,11 +355,11 @@ function render() {
               "",
             )}<button id="tab-add" class="ghost">＋</button><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" class="ghost" title="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
-    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span>Local API 0.1.0 &nbsp; · &nbsp; 无订阅 / 无遥测</span></footer>`;
+    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
 }
 function editor(r) {
-  return `<section class="editor"><div class="subnav">${[
+  return `<section class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
     ["design", "设计"],
     ["debug", "调试"],
     ["cases", "接口用例"],
@@ -717,6 +720,18 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  on("#compact-ui", "click", () => {
+    collect();
+    compactUI = !compactUI;
+    localStorage.setItem("compact-ui", String(compactUI));
+    render();
+  });
+  on("#response-layout", "click", () => {
+    collect();
+    responseLayout = responseLayout === "split" ? "stacked" : "split";
+    localStorage.setItem("response-layout", responseLayout);
+    render();
+  });
   on("[data-page]", "click", (_, e) => {
     collect();
     bodyExpanded = false;
@@ -2201,6 +2216,9 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 async function init() {
+  compactUI = localStorage.getItem("compact-ui") === "true";
+  responseLayout =
+    localStorage.getItem("response-layout") === "split" ? "split" : "stacked";
   if (localStorage.getItem("theme") === "dark")
     document.body.classList.add("dark");
   token =
