@@ -78,21 +78,19 @@ try {
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-mode="mock"]').click();
   await window.locator("#edit-mock-rules").click();
-  await window
-    .locator("#modal-json")
-    .fill(
-      JSON.stringify([
-        {
-          name: "XML fixture",
-          conditions: [],
-          response: {
-            status: 200,
-            headers: { "content-type": "application/xml" },
-            body: "<root><value>packaged-xml</value></root>",
-          },
+  await window.locator("#modal-json").fill(
+    JSON.stringify([
+      {
+        name: "XML fixture",
+        conditions: [],
+        response: {
+          status: 200,
+          headers: { "content-type": "application/xml" },
+          body: "<root><value>packaged-xml</value></root>",
         },
-      ]),
-    );
+      },
+    ]),
+  );
   await window.locator("#dialog-save").click();
   await window.locator("#dialog").waitFor({ state: "hidden" });
   await window.locator('[data-mode="debug"]').click();
