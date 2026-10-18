@@ -131,3 +131,8 @@ Nineteenth pass:
 - Text regex extraction now executes inside the existing isolated QuickJS worker, with a 256 KiB response limit, 2000-character expression limit, VM interruption and a two-second outer worker deadline. No regex is evaluated on the HTTP server's main thread.
 - UI exposes expression and capture group (0 is full match). Missing groups, invalid expressions and limits fail explicitly with response evidence retained. XML/XPath and persisted variable destination scopes remain open.
 - Regression includes a catastrophic-backtracking expression to verify bounded termination; empty matches are distinct from missing matches.
+
+Twentieth pass:
+- Verified 6e2094e all seven CI jobs; inspected its downloaded light/dark reference PNGs after checking artifact SHA256.
+- Body action buttons now occupy a separate bordered editor toolbar, matching the reference's two-row structure without an accidental lone wrapped button. The body editor uses flex height rather than overflowing a fixed subtraction.
+- Replaced the clover placeholder with an original lightweight line rocket SVG; no proprietary illustration asset is copied.

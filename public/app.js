@@ -389,7 +389,7 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="request-panel">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
+          )}</div><div class="request-panel ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
@@ -416,7 +416,7 @@ function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return pairs(r[param], param);
   if (param === "body")
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}<span>${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="generate-body" class="ghost">基于数据结构生成</button></div>${
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button></div>${
       ["form-data", "urlencoded"].includes(r.bodyType)
         ? pairs(r.form, "form")
         : r.bodyType === "none"
@@ -501,7 +501,7 @@ function responseContent() {
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
   if (!response)
-    return '<div class="empty"><div class="empty-symbol">♧</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>';
+    return `<div class="empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
   let v =
     responseTab === "body"
       ? response.body

@@ -99,6 +99,14 @@ try {
   );
   assert.equal(await page.locator('.rail [data-page="plans"]').count(), 0);
   assert.equal(await page.locator(".rail button").count(), 7);
+  const bodyPanelBox = await page.locator(".request-panel").boundingBox();
+  const bodyEditorBox = await page.locator(".body-editor-shell").boundingBox();
+  assert(
+    bodyEditorBox.y + bodyEditorBox.height <=
+      bodyPanelBox.y + bodyPanelBox.height,
+    "body editor must fit its panel",
+  );
+  assert(await page.locator(".empty-symbol svg").isVisible());
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.getByRole("button", { name: "发 送", exact: true }).click();

@@ -1160,3 +1160,44 @@ body.dark button.primary {
   gap: 5px;
   padding: 8px 0;
 }
+
+.request-panel.body-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.body-panel .body-types {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+.body-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  padding: 3px 6px;
+  flex: 0 0 auto;
+}
+.body-actions span {
+  text-align: right;
+  font-size: 11px;
+}
+.body-actions button {
+  padding: 5px;
+  font-size: 12px;
+}
+.body-panel .body-editor-shell {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+.body-panel .code-editor {
+  min-height: 0;
+}
+.empty-symbol svg {
+  width: 64px;
+  height: 64px;
+  stroke-width: 0.6;
+}
