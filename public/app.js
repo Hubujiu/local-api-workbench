@@ -41,6 +41,7 @@ const uid = () => crypto.randomUUID();
 const responses = new Map();
 const caseResults = new Map();
 const temporaryParameters = new Map();
+const collapsedFolders = new Set();
 let opened = [],
   token = "",
   projects = [],
@@ -311,13 +312,13 @@ function tree() {
     folders
       .map(
         (folder) =>
-          `<div class="folder"><button class="ghost folder-edit" data-edit-folder="${esc(folder)}">⌄ &nbsp;▱ ${esc(folder)}</button> <span>(${items.filter((item) => (item.folder || "未分组") === folder).length})</span></div>${items
+          `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(folder)}</span> <span>(${items.filter((item) => (item.folder || "未分组") === folder).length})</span><button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button></summary>${items
             .filter((item) => (item.folder || "未分组") === folder)
             .map(
               (item) =>
                 `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`,
             )
-            .join("")}`,
+            .join("")}</details>`,
       )
       .join("") || '<div class="notice">没有匹配的项目内容。</div>'
   );
@@ -352,7 +353,7 @@ function render() {
             )
             .join(
               "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button id="new-folder">新建目录</button></div></details>`
+            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
@@ -1638,6 +1639,21 @@ function bind() {
       "导出",
     ),
   );
+  on("#locate-request", "click", () => {
+    collect();
+    const selected = request();
+    if (!selected || selected.deletedAt) throw Error("没有当前接口可定位");
+    search = "";
+    searchType = "all";
+    collapsedFolders.delete(project.id + ":" + (selected.folder || "未分组"));
+    page = "apis";
+    render();
+    const item = document.querySelector(
+      '[data-request="' + CSS.escape(current) + '"]',
+    );
+    item?.scrollIntoView({ block: "nearest" });
+    item?.focus({ preventScroll: true });
+  });
   on("#tree-type", "change", (_, element) => {
     searchType = element.value;
     $("#tree").innerHTML = tree();
@@ -2230,6 +2246,15 @@ function bind() {
   );
 }
 function bindTree() {
+  for (const folder of document.querySelectorAll("[data-tree-folder]")) {
+    const key = project.id + ":" + folder.dataset.treeFolder;
+    folder.ontoggle = () => {
+      if (!folder.isConnected || search) return;
+      if (folder.open) collapsedFolders.delete(key);
+      else collapsedFolders.add(key);
+    };
+  }
+
   on("[data-document-index]", "click", (_, element) => {
     collect();
     const index = Number(element.dataset.documentIndex);

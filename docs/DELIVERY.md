@@ -17,7 +17,7 @@
 | 网络边界 | 超时/取消、8 MiB 请求响应上限、压缩响应、自定义 CA、客户端 PEM、HTTP(S) CONNECT 代理 | runtime.test.mjs、connection.test.mjs |
 | 导入/导出 | OpenAPI JSON/YAML、本地递归引用、Postman、cURL Bash、有限Apipost公开JSON、备份恢复、独立 HTML/Markdown 文档 | core.test.mjs、document-export.test.mjs、ui-smoke.mjs |
 | API 设计 | 描述、请求 Schema、响应示例、数据字典、loopback Mock | core.test.mjs、server.test.mjs、ui-smoke.mjs |
-| 断言/提取/脚本 | 可视化规则、全局/环境/运行时/本请求变量、隔离 QuickJS 同步脚本与CryptoJS/Chai、日志 | scripts.test.mjs、server.test.mjs、core.test.mjs、ui-smoke.mjs |
+| 断言/提取/脚本 | 可视化规则、全局/环境/运行时/本请求变量、隔离QuickJS脚本、受限HTTP回调与CryptoJS/Chai、子请求/断言/日志证据 | scripts.test.mjs、server.test.mjs、core.test.mjs、ui-smoke.mjs |
 | 执行计划 | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次 | core.test.mjs、plan-snapshots.test.mjs、cli.test.mjs、server.test.mjs、ui-smoke.mjs |
 | 用例与压测 | 独立接口用例与执行计划、最多 100 请求/10 并发的有界压测 | core.test.mjs、server.test.mjs |
 | 协议 | WebSocket/TCP 交互、SSE 接收；最长 15 分钟、8 MiB、最近 200 消息 | protocols.test.mjs、protocol-sessions.test.mjs、ui-smoke.mjs |
@@ -51,4 +51,4 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-最近已全绿检查点bab5c1702aa4bd757680d047eae7c2c282537b0b：176项核心测试、9项CI通过，Actions39114347822。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
+最近已全绿检查点2a615882c72942ae8aaf2e238ceecc52e8e763a5：181项核心测试、9项CI通过，Actions39115212829。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。

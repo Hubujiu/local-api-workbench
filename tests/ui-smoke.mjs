@@ -186,6 +186,21 @@ try {
   );
   await page.locator(".tree-create summary").click();
   assert.equal(await page.locator("#new-folder").isVisible(), false);
+  const activeName = await page.locator("#request-name").inputValue();
+  await page.locator("#request-name").fill("定位保留未保存内容");
+  await page.locator('[data-tree-folder="示例接口"] > summary').click();
+  assert.equal(await page.locator(".tree-item.active").isVisible(), false);
+  await page.locator("#search").fill("不存在的过滤条件");
+  await page.locator("#tree-type").selectOption("document");
+  await page.locator("#locate-request").click();
+  assert.equal(await page.locator("#search").inputValue(), "");
+  assert.equal(await page.locator("#tree-type").inputValue(), "all");
+  assert.equal(await page.locator(".tree-item.active").isVisible(), true);
+  assert.equal(
+    await page.locator("#request-name").inputValue(),
+    "定位保留未保存内容",
+  );
+  await page.locator("#request-name").fill(activeName);
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);

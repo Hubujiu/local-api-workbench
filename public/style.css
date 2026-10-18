@@ -1407,3 +1407,16 @@ body.compact-ui .sidebar {
 .url-input #url {
   font-family: inherit;
 }
+
+.tree-folder > summary {
+  cursor: pointer;
+}
+.tree-folder .folder-edit {
+  float: right;
+  font-size: 11px;
+  padding: 0 4px;
+}
+.tree-folder > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -364,3 +364,10 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 - Await callbacks before applying variable scope changes. Exceptions fail the script, completed/interrupted child evidence is preserved, cancellation aborts child HTTP, and callback infinite loops remain interrupted.
 - UI and packaged-desktop scenarios execute a real local callback request, inspect child evidence and persist the returned token. Unit coverage verifies pre-token request feeding the main Authorization header, capability denial, failure/cancellation and limits.
 - Source: official Postman callback examples; this does not claim full Postman/Apipost SDK or unrestricted async compatibility. TLS checks stay enabled and request definitions cannot read arbitrary files or inherit ambient credentials.
+
+## Fifty-third pass: real folder disclosure and current-interface location
+
+- Folder carets now use native keyboard-accessible details/summary disclosure rather than a decorative caret that only opened settings. Directory settings remain an explicit control; collapse state is scoped per project in the current UI session.
+- Added “定位当前接口”: clears keyword/type filters, expands its folder, scrolls/focuses the active request and preserves unsaved editor contents. Search reveals matching content in collapsed folders.
+- Browser acceptance collapses the active folder, hides it behind conflicting filters, invokes location and verifies visibility/filter reset/unsaved-name retention before restoring the reference state.
+- The callback HTTP bridge in2a615882 passed181tests and all9jobs in Actions39115212829, including browser and real packaged execution on all three platforms.
