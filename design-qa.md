@@ -53,3 +53,9 @@ Wait for the latest exact-head CI and inspect its screenshots. At05:37UTC GitHub
 ## Post-fix inspection — 10:45 UTC
 
 - c222710 Actions39120343402 passed9/9; archive12133464973 SHA256030a3bd5a9ec283a54c32705d936b4831a1b06f8d3de7c8b4d74eef104710fef verified. The1000px HTTP/2 response capture now shows the complete200status, duration and size, with independent horizontal tab scrolling. Geometry/hit-test and last-tab navigation checks passed. Narrow metrics clipping is resolved; full fidelity remains blocked.
+
+## Post-fix inspection — 15:10 UTC
+
+- f287e7287ddb2e510f243809b80a61838c9bd6b5 / Actions39138963665 passed all nine jobs. UI archive12139859472 SHA256bd80a041532e5442f222c3fe8f84b38b3d8ff5361b396c39fc8fc803ab79e44c downloaded and verified.
+- Raw Body dynamic editor capture inspected: input stays compact, non-Mock fields are hidden, footer actions remain visible. The conflict toast comes from an intentionally rejected save in the regression flow. The full browser suite now passes after success-record scoping; screenshot inspection alone was not used as a substitute.
+- Original branding and advanced original layouts remain documented differences; exact equivalence is not declared.

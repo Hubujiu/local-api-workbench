@@ -462,3 +462,9 @@ Response retry review additionally keeps pending schema edits transactional when
 - bd40db8 Actions39121422604 browser stopped after the second successful plan run because the generic success-text locator matched two history records. This is a strict-selector failure, not proof of a full passing browser suite.
 - Artifact12133439612 SHA2566a0248a6e95d59199077d993db941053c12d26ccb790d7f786813f36ecd76488 verified. Trace response resource0ee0a36702ce853be67906d19bc2f42ff01e0c7c.json confirms the latest run passed, and actual request body preserved the embedded quote and numeric zero. Screenshot confirms compact controls and hidden irrelevant Mock fields.
 - Local test now targets the open record with this response's unique createdAt, rather than either historical success label. No product or assertion relaxation. Syntax/format checks pass; not yet pushed or CI verified. Remote validation is paused while available CI capacity is confirmed.
+
+## Pass 69 — resumed public-repository CI and UTF-8 value bounds
+
+- User changed repository visibility to public; connector verified it. Commit f287e7287ddb2e510f243809b80a61838c9bd6b5 passed all nine jobs in Actions39138963665, including the complete browser suite and206core tests. This closes Pass68's locator regression without weakening assertions.
+- UI archive12139859472 SHA256bd80a041532e5442f222c3fe8f84b38b3d8ff5361b396c39fc8fc803ab79e44c verified. Actual Raw Body dynamic editor screenshot inspected: compact input, relevant fields, visible footer. The conflict toast is from the intentional negative-save scenario.
+- Follow-on audit found runtime dynamic-value limits counted UTF-16 characters while the editor and error message specify64KiB. Added exact65536-byte Chinese text boundary and oversized Chinese/emoji fixed/variable cases; the regression failed before correction. Runtime now measures serialized UTF-8 bytes, preserving the same limit. This change awaits its own exact-head CI.

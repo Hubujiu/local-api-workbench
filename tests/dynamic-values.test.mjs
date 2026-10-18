@@ -196,3 +196,26 @@ test("Mock dynamic sources are seeded, typed and feed transforms without arbitra
   );
   await assert.rejects(resolveDynamicValue({ ...name, seed: -1 }, {}, []));
 });
+
+test("dynamic value budgets measure serialized UTF-8 bytes across fixed and variable sources", async () => {
+  const fits = "界".repeat(21844) + "ab";
+  assert.equal(Buffer.byteLength(JSON.stringify(fits), "utf8"), 65536);
+  assert.equal(
+    await resolveDynamicValue({ source: "fixed", value: fits }, {}),
+    fits,
+  );
+  assert.equal(
+    await resolveDynamicValue(
+      { source: "variable", value: "text" },
+      { text: fits },
+    ),
+    fits,
+  );
+  const exceeds = fits + "x";
+  for (const [spec, variables] of [
+    [{ source: "fixed", value: exceeds }, {}],
+    [{ source: "variable", value: "text" }, { text: exceeds }],
+    [{ source: "fixed", value: "🙂".repeat(16384) }, {}],
+  ])
+    await assert.rejects(resolveDynamicValue(spec, variables), /64KiB/);
+});
