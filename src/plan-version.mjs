@@ -8,7 +8,14 @@ export function versionPlan(previous, input, source = "manual") {
   const old = previous || {};
   if (
     previous &&
-    ["name", "description", "environmentId", "functions", "steps"].every(
+    [
+      "name",
+      "description",
+      "environmentId",
+      "statusPolicy",
+      "functions",
+      "steps",
+    ].every(
       (field) => JSON.stringify(next[field]) === JSON.stringify(old[field]),
     )
   )
@@ -17,7 +24,7 @@ export function versionPlan(previous, input, source = "manual") {
     fields: { ...(old.provenance?.fields || {}) },
     steps: {},
   };
-  for (const field of ["name", "description", "environmentId"])
+  for (const field of ["name", "description", "environmentId", "statusPolicy"])
     if (JSON.stringify(next[field]) !== JSON.stringify(old[field]))
       provenance.fields[field] = source;
   for (const step of next.steps) {

@@ -110,3 +110,7 @@ Sixteenth pass:
 - Added six bounded apt request mutation helpers (set/remove Query, Header, Body), based on https://v7-wiki.apipost.cn/docs/1000/ as a versioned supplemental SDK reference. Query mutations remove matching inline URL keys as well as editor rows; headers match case-insensitively and retain metadata.
 - JSON/form body edits preserve other values. Whole-object replacement selects JSON; unsupported binary edits fail explicitly. These are synchronous VM-only operations with no host-network/process APIs, not a claim of full v7 or offline SDK compatibility.
 - Actual HTTP fixture proves the pre-script changes URL query/header/body on the wire and leaves the saved plan unchanged. Replacing a file upload with a text helper fails explicitly. 96 local tests pass.
+
+Seventeenth pass:
+- Added an explicit original-compatible plan status policy: strict200 makes all non-200 responses fail even when status assertions expect them. The existing assertions/default-2xx policy remains the default for backward compatibility, so no old plan silently changes behavior.
+- Plan UI exposes the selector; snapshots, provenance and modification times track policy edits. Core regression exercises 200/201/404 and legacy expected-error handling.

@@ -82,6 +82,13 @@ function renderEditor(plan, busy, environments) {
       )
       .join("") +
     "</select>" +
+    '<label>成功状态规则</label><select id="plan-status-policy" class="' +
+    ai(plan, "statusPolicy") +
+    '"><option value="assertions" ' +
+    (plan.statusPolicy !== "strict200" ? "selected" : "") +
+    '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
+    (plan.statusPolicy === "strict200" ? "selected" : "") +
+    ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
     '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="add-step">＋ 添加步骤</button></div></div>' +
     plan.steps
       .map(

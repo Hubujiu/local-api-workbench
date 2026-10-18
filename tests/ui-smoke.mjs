@@ -360,9 +360,22 @@ try {
     ),
     page.locator("#save-plan-details").click(),
   ]);
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/plans") &&
+        r.status() === 200,
+    ),
+    page.locator("#plan-status-policy").selectOption("strict200"),
+  ]);
   await page.reload();
   await page.locator('[data-page="plans"]').click();
   await page.locator("[data-plan]").first().click();
+  assert.equal(
+    await page.locator("#plan-status-policy").inputValue(),
+    "strict200",
+  );
   assert.equal(
     await page.locator("#plan-description").inputValue(),
     "Visible deterministic verification plan",

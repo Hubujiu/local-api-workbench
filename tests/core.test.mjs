@@ -443,3 +443,53 @@ test("OpenAPI round trip preserves typed parameters, response schemas and exampl
     { id: 7 },
   );
 });
+
+test("explicit original-compatible plan status policy requires 200 even for expected error assertions", async () => {
+  for (const status of [200, 201, 404]) {
+    const plan = snapshotPlan({
+      statusPolicy: "strict200",
+      steps: [
+        {
+          expectedStatus: status,
+          request: {
+            url: "http://localhost",
+            assertions: [{ target: "status", op: "eq", value: status }],
+          },
+        },
+      ],
+    });
+    const result = await runPlan(plan, {}, async () => ({
+      status,
+      body: "{}",
+      headers: {},
+      duration: 1,
+    }));
+    assert.equal(result.status, status === 200 ? "passed" : "failed");
+    assert.equal(result.results[0].assertions[0].passed, true);
+  }
+  const legacy = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url: "http://localhost",
+          assertions: [{ target: "status", op: "eq", value: 404 }],
+        },
+      },
+    ],
+  });
+  assert.equal(
+    (
+      await runPlan(legacy, {}, async () => ({
+        status: 404,
+        body: "{}",
+        headers: {},
+        duration: 1,
+      }))
+    ).status,
+    "passed",
+  );
+  assert.throws(
+    () => snapshotPlan({ statusPolicy: "ignore", steps: [] }),
+    /未知/,
+  );
+});

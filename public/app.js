@@ -1891,6 +1891,11 @@ function bind() {
       },
     ),
   );
+  on("#plan-status-policy", "change", async (_, e) => {
+    const plan = project.plans.find((item) => item.id === planId);
+    plan.statusPolicy = e.value;
+    await savePlan(plan);
+  });
   on("#plan-env", "change", (_, e) => {
     const p = project.plans.find((p) => p.id === planId);
     p.environmentId = e.value;

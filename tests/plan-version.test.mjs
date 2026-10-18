@@ -26,3 +26,17 @@ test("plan provenance tracks changed fields and steps without recoloring unchang
   const changed = versionPlan(manual, edited, "manual");
   assert.equal(changed.provenance.steps[ai.steps[0].id], "manual");
 });
+
+test("status policy edits are versioned and no-op policy saves preserve the prior timestamp", () => {
+  const old = versionPlan(null, { name: "test", steps: [] }, "ai");
+  old.updatedAt = "2026-01-01T00:00:00Z";
+  const next = versionPlan(
+    old,
+    { ...old, statusPolicy: "strict200" },
+    "manual",
+  );
+  assert.equal(next.statusPolicy, "strict200");
+  assert.equal(next.provenance.fields.statusPolicy, "manual");
+  assert.notEqual(next.updatedAt, old.updatedAt);
+  assert.deepEqual(versionPlan(next, next, "manual"), next);
+});

@@ -207,12 +207,18 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  if (
+    plan.statusPolicy !== undefined &&
+    !["assertions", "strict200"].includes(plan.statusPolicy)
+  )
+    throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
+    statusPolicy: plan.statusPolicy || "assertions",
     functions: structuredClone(plan.functions || []),
     updatedAt: plan.updatedAt || new Date().toISOString(),
     source: plan.source === "ai" ? "ai" : "manual",
@@ -312,10 +318,12 @@ export async function runPlan(
         (a) => a.target === "status",
       );
       const statusOK =
-        step.expectedStatus !== undefined
-          ? record.response.status === step.expectedStatus
-          : hasStatusAssertion ||
-            (record.response.status >= 200 && record.response.status < 300);
+        snapshot.statusPolicy === "strict200"
+          ? record.response.status === 200
+          : step.expectedStatus !== undefined
+            ? record.response.status === step.expectedStatus
+            : hasStatusAssertion ||
+              (record.response.status >= 200 && record.response.status < 300);
       record.status =
         statusOK && record.assertions.every((a) => a.passed)
           ? "passed"
