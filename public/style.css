@@ -399,11 +399,19 @@ label {
   border-bottom: 1px solid var(--line);
 }
 .response-tabs {
+  min-width: 0;
   flex: 1;
   border: 0;
   gap: 20px;
 }
+.response-tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .metrics {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding-left: 12px;
   display: flex;
   gap: 13px;
   color: var(--muted);

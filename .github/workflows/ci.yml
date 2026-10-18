@@ -21,7 +21,13 @@ jobs:
           node-version: "24"
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - run: npm test
+      - run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=core-test-results.tap tests/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 7
+          name: core-test-diagnostics-${{ matrix.os }}
+          path: core-test-results.tap
   browser:
     timeout-minutes: 10
     runs-on: ubuntu-latest

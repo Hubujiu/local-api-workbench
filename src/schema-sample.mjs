@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 // Deterministic illustrative samples, not a general JSON Schema solver.
 export function sampleFromSchema(
   schema,
@@ -51,6 +52,8 @@ export function sampleFromSchema(
       "patternProperties",
       "dependentSchemas",
       "dependentRequired",
+      "unevaluatedItems",
+      "unevaluatedProperties",
       "minProperties",
       "maxProperties",
     ])
@@ -121,8 +124,48 @@ export function sampleFromSchema(
         max < min
       )
         throw Error("数组约束无效");
-      const count = Math.max(min, Math.min(1, max));
+      const legacyTuple = Array.isArray(schema.items);
+      if (
+        schema.prefixItems !== undefined &&
+        (!Array.isArray(schema.prefixItems) || legacyTuple)
+      )
+        throw Error("元组结构无效或混用新旧关键字");
+      const prefix = schema.prefixItems ?? (legacyTuple ? schema.items : null);
+      const tail = legacyTuple
+        ? (schema.additionalItems ?? {})
+        : (schema.items ?? {});
+      // A false slot forbids this and all later positions, not the shorter prefix.
+      const forbidden = prefix?.indexOf(false) ?? -1;
+      const allowed =
+        forbidden >= 0
+          ? forbidden
+          : tail === false
+            ? (prefix?.length ?? 0)
+            : max;
+      const limit = Math.min(max, allowed);
+      if (min > limit) throw Error("数组长度与禁止项约束冲突");
+      const count = Math.max(min, Math.min(prefix?.length ?? 1, limit));
       if (count > 100) throw Error("数组样例上限100项，请提供 example");
+      if (prefix) {
+        const values = Array.from({ length: count }, (_, index) =>
+          sample(
+            index < prefix.length ? prefix[index] : tail,
+            level + 1,
+            seen,
+            fieldName,
+          ),
+        );
+        if (
+          schema.uniqueItems &&
+          values.some((value, index) =>
+            values
+              .slice(0, index)
+              .some((previous) => isDeepStrictEqual(previous, value)),
+          )
+        )
+          throw Error("唯一元组无法生成不同样例，请提供 example");
+        return values;
+      }
       if (schema.uniqueItems && count > 1) {
         const values = schema.items?.enum;
         if (!Array.isArray(values))
@@ -135,8 +178,6 @@ export function sampleFromSchema(
         if (unique.length < count) throw Error("唯一数组约束无法满足");
         return structuredClone(unique.slice(0, count));
       }
-      if (Array.isArray(schema.items) || schema.prefixItems)
-        throw Error("元组 Schema 请提供 example");
       return Array.from({ length: count }, () =>
         sample(schema.items ?? {}, level + 1, seen, fieldName),
       );

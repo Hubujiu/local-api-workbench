@@ -423,3 +423,14 @@ Response retry review additionally keeps pending schema edits transactional when
 
 - b131877c / Actions39119424829 passed all9jobs and195core tests; real curl and browser HTTP/2 CONNECT passed. UI archive12133252896 SHA2565efcd639d8ac43515a935f65bc174e2e0c3e95f0bd723742f19388c55374bd36 verified and HTTP/2 response screenshot inspected.
 - Added a synthetic curlrc header fixture first: actual exported command sent the unrelated header, failing the assertion. Generated commands now put --disable first; same fixture passes without reading user configuration. First-position import validation added. This change awaits its own CI, not the previous checkpoint.
+
+## Pass 62 — narrow response navigation
+
+- The verified1000px HTTP/2 screenshot exposed a squeezed status label beside overflowing response tabs. Reserve metrics width and prevent tab labels shrinking; tabs scroll within their own width.
+- Browser regression checks nonoverlapping bounds, full metrics width, status hit-testing and scrolling to the last tab then back to the response. This change awaits exact-head CI and screenshot inspection.
+
+## Pass 63 — tuple samples and test process diagnostics
+
+- JSON Schema ordered tuples now cover modern prefixItems/items and legacy items/additionalItems, false-slot truncation, bounded tails and min/max bounds. Duplicate unique tuples and mixed/unevaluated constraints fail explicitly. Two regression cases failed before implementation and pass afterward. General constraint solving remains out of scope. Primary reference: https://json-schema.org/understanding-json-schema/reference/array
+- baafd44 Actions39119924894 passed8jobs, but Windows core reported script-compatibility.test.mjs as a file-level failure after four passing cases, with no cause or exit code in spec output. A targeted Windows retry was requested; structured TAP artifact added for future file-process failure diagnostics without changing test selection or assertions. No root-cause fix is claimed.
+- At10:41UTC the same baafd44 run reported success after the retry; latest job listing is9/9success. This establishes a passing retry, not an explained or fixed first-attempt process failure.197local core tests pass for the pending tuple/UI/diagnostic changes.

@@ -1297,6 +1297,13 @@ try {
     true,
   );
 
+  const tupleSchema = JSON.parse(await page.locator("#schema").inputValue());
+  tupleSchema.properties.ordered = {
+    type: "array",
+    prefixItems: [{ const: 42 }, { const: false }],
+    items: false,
+  };
+  await page.locator("#schema").fill(JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
   await page.locator("#generate-body").click();
@@ -1313,6 +1320,7 @@ try {
     await page.locator("#body-code").inputValue(),
   );
   assert.equal(generatedBody.n, 2);
+  assert.deepEqual(generatedBody.ordered, [42, false]);
   assert.equal(generatedBody.flag, false);
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
@@ -1418,6 +1426,43 @@ try {
     body: '{"via":"h2-ui"}',
   });
   assert.equal(h2Connections, 1);
+  await page.waitForFunction(() =>
+    document.querySelector(".response .metrics")?.textContent.includes("200"),
+  );
+  const responseGeometry = await page
+    .locator(".response-top")
+    .evaluate((top) => {
+      const tabs = top.querySelector(".response-tabs");
+      const metrics = top.querySelector(".metrics");
+      const status = metrics.querySelector("span");
+      const a = tabs.getBoundingClientRect(),
+        b = metrics.getBoundingClientRect();
+      const statusBox = status.getBoundingClientRect();
+      const center = document.elementFromPoint(
+        statusBox.left + statusBox.width / 2,
+        statusBox.top + statusBox.height / 2,
+      );
+      return {
+        separate: a.right <= b.left + 1,
+        inside: b.right <= top.getBoundingClientRect().right + 1,
+        complete: metrics.scrollWidth <= metrics.clientWidth + 1,
+        statusUncovered: center === status || status.contains(center),
+        scrollable: tabs.scrollWidth > tabs.clientWidth,
+      };
+    });
+  assert.deepEqual(responseGeometry, {
+    separate: true,
+    inside: true,
+    complete: true,
+    statusUncovered: true,
+    scrollable: true,
+  });
+  await page.locator('[data-response="logs"]').click();
+  assert.match(
+    await page.locator('[data-response="logs"]').getAttribute("class"),
+    /active/,
+  );
+  await page.locator('[data-response="body"]').click();
   await page.screenshot({ path: "/tmp/local-api-http2-proxy.png" });
   await saveAndWait("#save");
   await page.locator("#curl").click();

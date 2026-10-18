@@ -103,3 +103,78 @@ test("schema references stay local and cycles or unsupported complex constraints
   );
   assert.throws(() => sampleFromSchema(false), /禁止/);
 });
+test("schema tuple samples cover modern and legacy ordered items with bounded tails", () => {
+  const prefix = [
+    { const: 42 },
+    { type: "string", minLength: 2 },
+    { const: false },
+  ];
+  assert.deepEqual(
+    sampleFromSchema({ type: "array", prefixItems: prefix, items: false }),
+    [42, "xx", false],
+  );
+  assert.deepEqual(
+    sampleFromSchema({ type: "array", items: prefix, additionalItems: false }),
+    [42, "xx", false],
+  );
+  assert.deepEqual(
+    sampleFromSchema({ type: "array", prefixItems: prefix, maxItems: 2 }),
+    [42, "xx"],
+  );
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "array",
+      prefixItems: [{ const: 1 }],
+      minItems: 3,
+      items: { const: null },
+    }),
+    [1, null, null],
+  );
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "array",
+      items: [{ const: 1 }],
+      minItems: 2,
+      additionalItems: { const: true },
+    }),
+    [1, true],
+  );
+  assert.deepEqual(sampleFromSchema({ type: "array", items: false }), []);
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "array",
+      prefixItems: [{ const: 1 }, false, { const: 3 }],
+    }),
+    [1],
+  );
+});
+test("schema tuple failures do not silently ignore conflicting or unsupported constraints", () => {
+  for (const schema of [
+    { type: "array", prefixItems: [{ const: 1 }], items: false, minItems: 2 },
+    {
+      type: "array",
+      items: [{ const: 1 }],
+      additionalItems: false,
+      minItems: 2,
+    },
+    { type: "array", prefixItems: [false], minItems: 1 },
+    {
+      type: "array",
+      prefixItems: [{ const: 1 }, { const: 1 }],
+      minItems: 2,
+      uniqueItems: true,
+    },
+    { type: "array", prefixItems: {}, items: {} },
+    { type: "array", prefixItems: [], items: [] },
+    { type: "array", prefixItems: [{}], unevaluatedItems: false },
+  ])
+    assert.throws(() => sampleFromSchema(schema));
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "array",
+      prefixItems: [{ const: 1 }, { const: 2 }],
+      uniqueItems: true,
+    }),
+    [1, 2],
+  );
+});
