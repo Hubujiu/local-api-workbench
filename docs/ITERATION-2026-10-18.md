@@ -377,3 +377,8 @@ Actions39114560592 passed the new sidebar alignment/cancel checks but a later pr
 - Inspected947b7a8b's actual reference and script-HTTP screenshots (artifact12132039072; SHA256987e4f8d512e34ce75f7cf28dc1c8283ffdab5ba39d13d77eabe0787a4cab68a). All9jobs passed in Actions39115573594.
 - The folder disclosure worked, but the old .folder flex rule suppressed the browser's native marker. Restore list-item rendering for summaries instead of drawing a fake arrow.
 - The unsaved-name preservation test restored the input but tab/tree labels still showed the interim name until a later render. Update those labels immediately using escaped tree rendering/textContent without replacing the focused editor, and assert both label values before the reference capture.
+
+## Fifty-fifth pass: reference text hierarchy
+
+- Inspected the post-fix946f5d95 screenshot archive12132740651 (SHA25618e5d6b76438af205a5f620afeb03ebd987bc34e7bac3b813f4cb6777500175e), including the same-width side-by-side reference. Native folder markers and restored request labels are now visible; all9jobs passed in Actions39115885319.
+- Reference parameter/response tabs and tree item names have stronger text hierarchy than the previous muted13pxlabels. Align those controls to14px, use a warmer higher-contrast inactive tab color, and reduce tree-row vertical padding to retain compact density. Code remains13px/18px. Exact font rendering across operating systems is not claimed.

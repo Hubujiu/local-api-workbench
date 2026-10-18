@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：2a615882c72942ae8aaf2e238ceecc52e8e763a5
+已核验提交：946f5d95ed36cd52568fc57c7ce5b7bf708d21a8
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39115212829)，181项核心测试。
-后续目录折叠与定位须独立CI；不借用本版绿灯。
+9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39115885319)，181项核心测试。
+后续文字层级样式须独立CI；不借用本版绿灯。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
 
@@ -16,7 +16,7 @@
 | F03 打开项目位置 | 已实现 | 桌面打开文件所在目录；浏览器提供路径 | desktop/main.mjs open-project-location |
 | F04 项目文件组织 | 部分实现 | 每项目 ID 目录及独立 apis/envs/settings/plans/cases/history；迁移保留旧文件；原版原生格式不兼容。 | src/project-files.mjs; tests/project-files.test.mjs |
 | F05 Git 入口 | 已实现 | 打开终端/目录，不内置推送合并 | desktop/terminal.mjs; terminal.test |
-| F06 关键词/URL 搜索 | 部分实现 | 关键词/URL 与类型筛选已实现；原版树定位快捷工具未逐项验证。 | public/app.js; tests/ui-smoke.mjs |
+| F06 关键词/URL 搜索 | 已实现 | 关键词/URL与类型筛选、原生目录折叠、定位当前接口（清除筛选、展开目录、滚动聚焦并保留未保存内容）已验证。 | public/app.js; tests/ui-smoke.mjs |
 | F07 目录、接口和文档树 | 已实现 | 统一树包括 HTTP、Markdown 文档与保存的 SSE/WS/TCP 定义；协议点击不自动连接。 | src/protocol-definitions.mjs; tests/ui-smoke.mjs |
 | F08 最近请求 | 已实现 | 本地最近 50 条历史，可查看证据 | Store.append; public/app.js history |
 | F09 回收站 | 已实现 | 软删除和恢复接口 | public/app.js trash; src/mcp.mjs delete |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39115212829; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39115885319; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 

@@ -1,10 +1,10 @@
 {
-  "asOf": "2026-10-18T09:27:27Z",
-  "implementationCommit": "2a615882c72942ae8aaf2e238ceecc52e8e763a5",
+  "asOf": "2026-10-18T09:36:59Z",
+  "implementationCommit": "946f5d95ed36cd52568fc57c7ce5b7bf708d21a8",
   "counts": {
     "F": {
-      "已实现": 36,
-      "部分实现": 15
+      "已实现": 37,
+      "部分实现": 14
     },
     "M": {
       "能力已实现": 30
@@ -95,9 +95,9 @@
     {
       "id": "F06",
       "name": "关键词/URL 搜索",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "截图有关键词/URL 与类型筛选",
-      "current": "关键词/URL 与类型筛选已实现；原版树定位快捷工具未逐项验证。",
+      "current": "关键词/URL与类型筛选、原生目录折叠、定位当前接口（清除筛选、展开目录、滚动聚焦并保留未保存内容）已验证。",
       "source": "I1",
       "evidence": "public/app.js; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39115212829; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39115885319; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -1023,11 +1023,11 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39115212829",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39115885319",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本；分类重叠，不计算总体百分比。后续目录折叠和定位交互须独立CI。",
+  "note": "本对照针对上述全绿版本；分类重叠，不计算总体百分比。后续文字层级样式须独立CI。已实现表示明确范围内的能力，不是隐藏行为或所有历史版本兼容证明。",
   "verification": {
-    "runId": 39115212829,
+    "runId": 39115885319,
     "conclusion": "success",
     "coreTests": 181,
     "jobs": 9

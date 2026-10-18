@@ -38,3 +38,9 @@ Wait for the latest exact-head CI and inspect its screenshots. At05:37UTC GitHub
 - 3eabe40 screenshot archive12130943185 hash e48b516a16c13d2a5f89612c1cb056b1d904e66e11979989de5964d34f9fafc1 extracted and compared side-by-side with the official reference in /tmp/api-reference-comparison.png. URL/editor/response geometry corrected; P2 vertical-rhythm issue resolved.
 - eb2935b9 full CI39113795792 passed9/9. UI archive12130919825 hash b15b9f599d7bfe08f63a6520c97562b2b123476b90ea9793a109d1ef473524cc inspected. Function result6is now fully visible above the dialog footer; failed precondition shows explicit assertion and script log. These earlier P2issues are resolved.
 - Current remaining fidelity findings are the native selects, sidebar secondary actions and type density. Overall final result remains blocked for full visual equivalence; this does not contradict functional CI success.
+
+## Post-fix inspection — 09:37 UTC
+
+- Latest verified commit946f5d95ed36cd52568fc57c7ce5b7bf708d21a8, Actions39115885319, all9jobs success and181core tests. Actual UI artifact12132740651, SHA25618e5d6b76438af205a5f620afeb03ebd987bc34e7bac3b813f4cb6777500175e.
+- Comparison /tmp/api-comparison-946.png pairs the official1328×875reference with the browser1328×876capture without scaling. Search/type selector now share a row; extra sidebar actions are consolidated; native folder markers and immediate tab/tree renaming are visible. These earlierP2issues are resolved.
+- The remaining typography hierarchy adjustment is pending its own capture. Original branding, demo content and license omission remain explicit scope differences. Full exact-equivalence result remains blocked; no hidden behavior or pixel-perfect claim is made.
