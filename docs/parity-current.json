@@ -1,19 +1,18 @@
 {
-  "asOf": "2026-10-18T02:11:00Z",
-  "implementationCommit": "d02ec8d513adfd95cdb4dda67f351bb0fadf7905",
+  "asOf": "2026-10-18T03:37:00Z",
+  "implementationCommit": "ee76b3142083ea50d3bb19aa3891b424c4d4ab4d",
   "counts": {
     "F": {
-      "已实现": 29,
+      "已实现": 30,
       "部分实现": 20,
-      "行为不同": 1,
       "待核实": 1
     },
     "M": {
       "能力已实现": 30
     },
     "U": {
-      "部分实现": 10,
-      "已实现": 4
+      "部分实现": 9,
+      "已实现": 5
     },
     "X": {
       "明确排除": 3
@@ -34,7 +33,12 @@
     "I2": "https://offline.apipost.net/images/apipost-desktop.png",
     "I3": "https://offline.apipost.net/images/mcp-connection.png",
     "I4": "https://offline.apipost.net/images/help/executions/ai-created-flow.png",
-    "I5": "https://offline.apipost.net/images/help/executions/ai-execution-record.png"
+    "I5": "https://offline.apipost.net/images/help/executions/ai-execution-record.png",
+    "S11": "https://wiki.apipost.cn/docs/project_set/mock_rule/",
+    "S12": "https://wiki.apipost.cn/docs/project_set/errorcodes/",
+    "S13": "https://wiki.apipost.cn/docs/project_set/api_attributes/",
+    "S14": "https://wiki.apipost.cn/docs/project_set/function/",
+    "S15": "https://wiki.apipost.cn/docs/value/dynamicvalue/"
   },
   "items": [
     {
@@ -252,9 +256,9 @@
       "name": "智能 Mock 匹配",
       "status": "部分实现",
       "original": "配置截图有智能 Mock 匹配菜单",
-      "current": "启用规则按顺序匹配，支持 method/query/header/body 的 AND 条件；原版完整规则集仍未证明相同。",
+      "current": "按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。",
       "source": "I3",
-      "evidence": "src/mock.mjs; tests/mock.test.mjs; tests/ui-smoke.mjs",
+      "evidence": "src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -290,11 +294,11 @@
     {
       "id": "F26",
       "name": "可视化断言与变量提取",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "公开说明保留两项能力",
-      "current": "断言与 JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；环境/全局持久化提取目的作用域尚未实现，不能称全部语义等价。",
+      "current": "JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。",
       "source": "S2",
-      "evidence": "src/core.mjs; src/xml-extraction.mjs; tests/extraction.test.mjs; tests/xml-extraction.test.mjs; tests/desktop-smoke.mjs",
+      "evidence": "src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs",
       "baselineStatus": "已实现"
     },
     {
@@ -302,9 +306,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "声明式操作、隔离同步脚本、共享函数、六项 apt 请求变更助手及真实请求级 pm.variables；完整 SDK/异步 API/持久化环境与全局作用域未对齐。",
+      "current": "隔离同步脚本、六项 apt 请求变更助手及请求级 pm.variables；环境/全局写入真实持久化。完整 SDK、异步 API、宿主操作不等价。",
       "source": "S3",
-      "evidence": "src/script-worker.mjs; tests/scripts.test.mjs",
+      "evidence": "src/script-worker.mjs; src/variable-scopes.mjs; tests/variable-scopes.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -320,9 +324,9 @@
     {
       "id": "F29",
       "name": "多服务与环境地址矩阵",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "共享服务定义，不同环境对应不同地址",
-      "current": "共享服务、逐环境地址矩阵、请求 serviceId 绑定已实现；目录级继承尚未实现。",
+      "current": "共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。",
       "source": "S7",
       "evidence": "src/environments.mjs; tests/environments.test.mjs",
       "baselineStatus": "缺失"
@@ -340,21 +344,21 @@
     {
       "id": "F31",
       "name": "运行时变量查看/维护",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "可读取环境变量当前运行时值",
-      "current": "运行值传递/清空及 MCP 查询已实现；独立完整可视运行值编辑面板未对齐。",
+      "current": "按当前环境查看/编辑/清空运行值；配置指纹防止用过期编辑器覆盖值；运行值不写入项目文件。",
       "source": "S7",
-      "evidence": "src/environments.mjs debugEnvironment; src/mcp-environments.mjs",
+      "evidence": "public/app.js; src/environments.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
       "id": "F32",
       "name": "自定义函数公共资源",
-      "status": "已实现",
+      "status": "部分实现",
       "original": "配置截图有自定义函数菜单",
-      "current": "项目公共函数库可维护，隔离 VM 以 utils.name 调用，并复制到计划/用例快照。",
+      "current": "共享函数在隔离 VM 中以 utils.name 调用，快照保留；官方自定义函数还包含验证编辑器与动态参数值处理，目前尚未实现。",
       "source": "I3",
-      "evidence": "src/resources.mjs; src/script-worker.mjs; tests/resources.test.mjs",
+      "evidence": "src/script-worker.mjs; src/resources.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -362,29 +366,29 @@
       "name": "状态码字典",
       "status": "已实现",
       "original": "配置截图有状态码字典",
-      "current": "状态码字典可维护并在响应状态展示。",
+      "current": "纠正为业务错误码字典：支持0、负数、字符串、批量编辑，导出 API 文档；仅明确选择时用于HTTP状态提示。",
       "source": "I3",
-      "evidence": "src/resources.mjs; public/resource-view.js; tests/resources.test.mjs",
+      "evidence": "src/error-codes.mjs; public/error-code-view.js; tests/error-codes.test.mjs",
       "baselineStatus": "缺失"
     },
     {
       "id": "F34",
       "name": "接口属性",
-      "status": "已实现",
+      "status": "部分实现",
       "original": "配置截图有接口属性",
-      "current": "类型化自定义接口属性可维护并在接口设计编辑。",
+      "current": "已核验版本支持基础属性；七种类型、文档属性与默认不分享/选择导出已在66e9fbc实现，本地131测试通过，远端CI尚待核验。",
       "source": "I3",
-      "evidence": "src/resources.mjs; public/app.js; tests/resources.test.mjs",
+      "evidence": "public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs",
       "baselineStatus": "缺失"
     },
     {
       "id": "F35",
       "name": "接口生命周期状态",
-      "status": "已实现",
+      "status": "部分实现",
       "original": "截图有开发中选择及接口状态配置",
-      "current": "接口生命周期状态字段、颜色/名称维护及工作区选择。",
+      "current": "接口生命周期状态已核验；Markdown文档状态在66e9fbc新增，远端CI尚待核验。",
       "source": "I1",
-      "evidence": "src/resources.mjs; public/app.js",
+      "evidence": "public/app.js; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -440,11 +444,11 @@
     {
       "id": "F41",
       "name": "执行结果状态规则",
-      "status": "行为不同",
+      "status": "已实现",
       "original": "原版非200即失败，包括预期4xx",
-      "current": "新增可选 strict200 与原版非200失败一致；为兼容已有计划默认仍为 2xx/显式预期状态。",
+      "current": "新建UI/MCP计划默认 strict200，与非200即失败一致；旧计划保留显式 assertions 策略以兼容既有预期错误测试。",
       "source": "S9",
-      "evidence": "src/core.mjs; tests/core.test.mjs; public/plan-view.js",
+      "evidence": "src/plan-version.mjs; src/core.mjs; tests/plan-version.test.mjs",
       "baselineStatus": "行为不同"
     },
     {
@@ -880,11 +884,11 @@
     {
       "id": "U04",
       "name": "二级配置导航",
-      "status": "部分实现",
+      "status": "已实现",
       "original": "配置页左侧还有基础/Mock/公共资源/导入导出/MCP树",
-      "current": "有二级配置导航与真实资源区；当前导航滚动至区块，非完全相同的分页面板。",
+      "current": "设置按左侧导航切换独立功能面板，不再滚动长页面。",
       "source": "I3",
-      "evidence": "public/resource-view.js; public/app.js",
+      "evidence": "public/settings-view.js; tests/ui-smoke.mjs",
       "baselineStatus": "缺失"
     },
     {
@@ -1020,5 +1024,12 @@
   ],
   "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39089099845",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容。Windows 早先99/100负载失败未复现、原因未定；后续十批竞争验证尚在进行。分类重叠，不计算总体百分比。"
+  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容。Windows 早先99/100负载失败未复现、原因未定；后续十批竞争验证尚在进行。分类重叠，不计算总体百分比。",
+  "verification": {
+    "runId": 39093226267,
+    "conclusion": "success",
+    "coreTests": 129,
+    "pendingCommit": "66e9fbc5dfaea19d84d725971940d9ba741fde7e",
+    "pendingScope": "typed API/document attributes and opt-in export; 131 local tests, CI pending"
+  }
 }

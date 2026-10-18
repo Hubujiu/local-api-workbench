@@ -473,7 +473,7 @@ try {
   await page.locator("#document-status").selectOption("ready");
   await page.locator('[data-doc-attribute="mail"]').fill("doc@example.test");
   await page.locator("#dialog-save").click();
-  await page.getByText("已完成", { exact: true }).waitFor();
+  await page.locator("#app").getByText("已完成", { exact: true }).waitFor();
   await saveAndWait();
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-environments"]').click();

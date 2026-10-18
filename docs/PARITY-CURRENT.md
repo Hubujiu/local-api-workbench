@@ -1,10 +1,11 @@
 # 逐项复刻对照（2026-10-18）
 
-核验版本：d02ec8d513adfd95cdb4dda67f351bb0fadf7905
+已核验提交：ee76b3142083ea50d3bb19aa3891b424c4d4ab4d
 
-全部 7 项 CI 通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39089099845)。本文不是完整交付证明，部分实现/行为不同/待核实项仍需处理。后续提交不能借用本版本绿灯。
+7项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39093226267)，129项核心测试。
+新增属性与文档状态提交66e9fbc：131项本地测试通过，远端CI待核验；不借用前版绿灯。
 
-与 [原始基线](PARITY-AUDIT.md) 使用相同 98 个编号；不同分类重叠，不计算总体百分比。
+保留原始98项编号；分类有重叠，不计算总体百分比。在线版补充文档不能自动证明离线版完整支持范围。
 
 ## 产品功能
 
@@ -31,26 +32,26 @@
 | F19 接口用例 | 已实现 | 独立接口用例创建、编辑、删除、快照保存与执行，不再仅引导转计划。 | src/cases.mjs; tests/cases.test.mjs; tests/ui-smoke.mjs |
 | F20 一键压测 | 部分实现 | 可运行有界 100 次/10并发、P50/P95、取消；高级配置与报告等同未证实 | server load; bounded-load test |
 | F21 Mock 基础 | 已实现 | 项目 Mock 开关、基础响应示例、响应头和有界延迟。 | src/mock.mjs; tests/mock.test.mjs |
-| F22 智能 Mock 匹配 | 部分实现 | 启用规则按顺序匹配，支持 method/query/header/body 的 AND 条件；原版完整规则集仍未证明相同。 | src/mock.mjs; tests/mock.test.mjs; tests/ui-smoke.mjs |
+| F22 智能 Mock 匹配 | 部分实现 | 按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。 | src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs |
 | F23 文档与分享 | 部分实现 | 项目文档及单接口离线 HTML 分享下载已实现；未提供在线托管分享链接。 | public/document-export.js; tests/ui-smoke.mjs |
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
 | F25 数据库连接 | 部分实现 | SQLite/PG/MySQL只读查询已测；原版支持库种类、写入及脚本联动未公开完整 | database/remote-database tests |
-| F26 可视化断言与变量提取 | 部分实现 | 断言与 JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；环境/全局持久化提取目的作用域尚未实现，不能称全部语义等价。 | src/core.mjs; src/xml-extraction.mjs; tests/extraction.test.mjs; tests/xml-extraction.test.mjs; tests/desktop-smoke.mjs |
-| F27 接口前后置操作 | 部分实现 | 声明式操作、隔离同步脚本、共享函数、六项 apt 请求变更助手及请求级 pm.variables；完整 SDK/异步 API/持久化环境与全局作用域未对齐。 | src/script-worker.mjs; tests/scripts.test.mjs |
+| F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
+| F27 接口前后置操作 | 部分实现 | 隔离同步脚本、六项 apt 请求变更助手及请求级 pm.variables；环境/全局写入真实持久化。完整 SDK、异步 API、宿主操作不等价。 | src/script-worker.mjs; src/variable-scopes.mjs; tests/variable-scopes.test.mjs |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
-| F29 多服务与环境地址矩阵 | 部分实现 | 共享服务、逐环境地址矩阵、请求 serviceId 绑定已实现；目录级继承尚未实现。 | src/environments.mjs; tests/environments.test.mjs |
+| F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
-| F31 运行时变量查看/维护 | 部分实现 | 运行值传递/清空及 MCP 查询已实现；独立完整可视运行值编辑面板未对齐。 | src/environments.mjs debugEnvironment; src/mcp-environments.mjs |
-| F32 自定义函数公共资源 | 已实现 | 项目公共函数库可维护，隔离 VM 以 utils.name 调用，并复制到计划/用例快照。 | src/resources.mjs; src/script-worker.mjs; tests/resources.test.mjs |
-| F33 状态码字典 | 已实现 | 状态码字典可维护并在响应状态展示。 | src/resources.mjs; public/resource-view.js; tests/resources.test.mjs |
-| F34 接口属性 | 已实现 | 类型化自定义接口属性可维护并在接口设计编辑。 | src/resources.mjs; public/app.js; tests/resources.test.mjs |
-| F35 接口生命周期状态 | 已实现 | 接口生命周期状态字段、颜色/名称维护及工作区选择。 | src/resources.mjs; public/app.js |
+| F31 运行时变量查看/维护 | 已实现 | 按当前环境查看/编辑/清空运行值；配置指纹防止用过期编辑器覆盖值；运行值不写入项目文件。 | public/app.js; src/environments.mjs; tests/ui-smoke.mjs |
+| F32 自定义函数公共资源 | 部分实现 | 共享函数在隔离 VM 中以 utils.name 调用，快照保留；官方自定义函数还包含验证编辑器与动态参数值处理，目前尚未实现。 | src/script-worker.mjs; src/resources.mjs |
+| F33 状态码字典 | 已实现 | 纠正为业务错误码字典：支持0、负数、字符串、批量编辑，导出 API 文档；仅明确选择时用于HTTP状态提示。 | src/error-codes.mjs; public/error-code-view.js; tests/error-codes.test.mjs |
+| F34 接口属性 | 部分实现 | 已核验版本支持基础属性；七种类型、文档属性与默认不分享/选择导出已在66e9fbc实现，本地131测试通过，远端CI尚待核验。 | public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs |
+| F35 接口生命周期状态 | 部分实现 | 接口生命周期状态已核验；Markdown文档状态在66e9fbc新增，远端CI尚待核验。 | public/app.js; tests/ui-smoke.mjs |
 | F36 导入/导出 | 部分实现 | 支持OpenAPI/Postman/cURL/本工具备份；原版原生迁移不兼容 | core import/export/restore |
 | F37 快照、重复步骤、顺序执行 | 已实现 | 对应执行语义已实现并测试 | snapshotPlan; runPlan; plan-snapshots.test |
 | F38 步骤参数、Cookie和脚本覆盖 | 部分实现 | 可视化步骤快照编辑名称/方法/URL/Header/Query/Path/Cookie/Body/脚本；高级认证/断言等仍用计划 JSON。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
 | F39 步骤间变量传递 | 已实现 | 提取/脚本变量经vars传递 | runPlan; core.test |
 | F40 接口脚本与计划脚本隔离 | 已实现 | 复制步骤清除接口脚本；只执行计划明确配置的脚本 | plan-snapshots.js/test |
-| F41 执行结果状态规则 | 行为不同 | 新增可选 strict200 与原版非200失败一致；为兼容已有计划默认仍为 2xx/显式预期状态。 | src/core.mjs; tests/core.test.mjs; public/plan-view.js |
+| F41 执行结果状态规则 | 已实现 | 新建UI/MCP计划默认 strict200，与非200即失败一致；旧计划保留显式 assertions 策略以兼容既有预期错误测试。 | src/plan-version.mjs; src/core.mjs; tests/plan-version.test.mjs |
 | F42 计划说明及最近修改时间 | 已实现 | 计划说明、最近修改时间、未变更保存不更新时间。 | src/plan-version.mjs; tests/plan-version.test.mjs |
 | F43 删除执行计划 | 已实现 | UI/MCP 删除计划，历史记录保留。 | src/mcp.mjs; public/app.js |
 | F44 AI修改来源及橙色高亮 | 已实现 | 字段/步骤记录实际 AI 或手动变更来源，橙色高亮；未修改字段保留来源。 | src/plan-version.mjs; public/plan-view.js; tests/plan-version.test.mjs |
@@ -62,7 +63,7 @@
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
 | F51 跨平台桌面包 | 待核实 | 仅Windows成品包验收；三平台core不是三平台桌面验收 | ci.yml; desktop-smoke |
 
-## MCP 能力
+## MCP能力
 
 | 编号 / 项目 | 当前状态 | 当前能力与边界 | 验证入口 |
 |---|---|---|---|
@@ -104,7 +105,7 @@
 | U01 整体配色 | 部分实现 | 浅米白/暖金、暖黑棕金主题均已更新并检查真实 PNG；未宣称逐像素等同。 | public/style.css; run39088175891 ui-evidence |
 | U02 主布局与密度 | 部分实现 | 参考视口1328×876已验证50px rail +297px树栏；编辑区高度/细节持续对齐。 | public/style.css; tests/ui-smoke.mjs |
 | U03 顶栏布局 | 部分实现 | 项目控制组居中，右侧 MCP 状态/执行计划；仍保留额外保存项目按钮。 | public/app.js; tests/ui-smoke.mjs center assertion |
-| U04 二级配置导航 | 部分实现 | 有二级配置导航与真实资源区；当前导航滚动至区块，非完全相同的分页面板。 | public/resource-view.js; public/app.js |
+| U04 二级配置导航 | 已实现 | 设置按左侧导航切换独立功能面板，不再滚动长页面。 | public/settings-view.js; tests/ui-smoke.mjs |
 | U05 功能入口位置 | 已实现 | 六个主 rail 入口加回收站；计划进入顶栏，协议从树的新建菜单/保存项打开，数据库置于配置。 | public/app.js; tests/ui-smoke.mjs; tests/desktop-smoke.mjs |
 | U06 接口工作区标签 | 部分实现 | 主模式、状态、名称、分享与操作齐全；间距/个别工具不逐像素相同。 | public/app.js; ui-evidence |
 | U07 Body类型选择 | 已实现 | 横排 Body radio 与 raw 格式下拉，单独编辑器工具条。 | public/app.js; tests/ui-smoke.mjs |
@@ -116,7 +117,7 @@
 | U13 MCP配置页面 | 部分实现 | 状态/授权/客户端标签/密钥操作已实现；页面结构仍为配置区加弹窗。 | public/app.js; public/mcp-client-config.js |
 | U14 计划执行记录页面 | 部分实现 | 计划/记录独立标签与步骤证据可展开；细部布局与失败默认展开仍未完全对齐。 | public/plan-view.js; tests/ui-smoke.mjs |
 
-## 明确排除
+## 排除项
 
 | 编号 / 项目 | 当前状态 | 当前能力与边界 | 验证入口 |
 |---|---|---|---|
@@ -124,4 +125,4 @@
 | X02 在线账号与云协作 | 明确排除 | 不添加在线团队/账号 | 用户范围与原版定义 |
 | X03 传统测试角色自动化模块 | 明确排除 | 不把这一模块与AI计划混为一谈 | 原版公开范围 |
 
-公开来源编号及原版描述见 [机器可读清单](parity-current.json)。新增 XML/参数字典等补充依据在 [迭代记录](ITERATION-2026-10-18.md) 中标注，在线版补充材料不自动等同于单机版完整范围。
+原始基线：[PARITY-AUDIT.md](PARITY-AUDIT.md)。来源索引与逐项结构：[parity-current.json](parity-current.json)。
