@@ -156,7 +156,11 @@ function renderRuns(runs, lastRun) {
           run.results
             .map(
               (step, index) =>
-                '<details class="card"><summary>' +
+                '<details class="card run-step" data-run-step="' +
+                index +
+                '" ' +
+                (step.status === "failed" ? "open" : "") +
+                "><summary>" +
                 (index + 1) +
                 '. <span class="' +
                 (step.status === "passed" ? "success" : "failed") +
@@ -168,9 +172,9 @@ function renderRuns(runs, lastRun) {
                 (step.response?.status || "") +
                 " " +
                 (step.response?.duration || 0) +
-                "ms</summary><pre>" +
-                esc(JSON.stringify(step, null, 2)) +
-                "</pre></details>",
+                "ms</summary>" +
+                renderStepEvidence(step) +
+                "</details>",
             )
             .join("") +
           '<button data-export-run="' +
@@ -178,5 +182,69 @@ function renderRuns(runs, lastRun) {
           '">导出证据 JSON</button></details>',
       )
       .join("") || '<div class="empty"><p>计划运行后会保留逐步证据。</p></div>')
+  );
+}
+
+function evidenceBlock(label, value, open = false) {
+  return (
+    '<details class="step-evidence" ' +
+    (open ? "open" : "") +
+    "><summary>" +
+    esc(label) +
+    "</summary><pre>" +
+    esc(
+      typeof value === "string"
+        ? value
+        : JSON.stringify(value ?? null, null, 2),
+    ) +
+    "</pre></details>"
+  );
+}
+function renderStepEvidence(step) {
+  const assertions = step.assertions || [];
+  return (
+    (step.error ? '<p class="notice failed">' + esc(step.error) + "</p>" : "") +
+    '<section class="step-assertions"><h4>断言结果</h4>' +
+    (assertions.length
+      ? assertions
+          .map(
+            (assertion) =>
+              '<div class="' +
+              (assertion.passed ? "success" : "failed") +
+              '">' +
+              (assertion.passed ? "✓ " : "× ") +
+              esc(
+                assertion.phase === "before"
+                  ? "前置 · "
+                  : assertion.phase === "after"
+                    ? "后置 · "
+                    : "",
+              ) +
+              esc(
+                assertion.name ||
+                  [
+                    assertion.target,
+                    assertion.op,
+                    JSON.stringify(assertion.value),
+                  ].join(" "),
+              ) +
+              (assertion.error ? "：" + esc(assertion.error) : "") +
+              "</div>",
+          )
+          .join("")
+      : '<p class="subtle">无断言记录</p>') +
+    "</section>" +
+    evidenceBlock(
+      step.requestUnresolved ? "请求配置（未发送）" : "请求",
+      step.request,
+    ) +
+    evidenceBlock(
+      "响应",
+      step.response || "未收到响应",
+      step.status === "failed" && !!step.response,
+    ) +
+    evidenceBlock("脚本与操作日志", step.logs || []) +
+    evidenceBlock("提取变量", step.extracted || {}) +
+    evidenceBlock("完整步骤证据 JSON", step)
   );
 }

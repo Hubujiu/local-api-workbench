@@ -324,6 +324,7 @@ export async function runPlan(
       startedAt: new Date().toISOString(),
       status: "failed",
       logs: [],
+      assertions: [],
       extracted: {},
     };
     let committedScopes = structuredClone(scopes);
@@ -374,6 +375,9 @@ export async function runPlan(
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "before", message })),
         );
+        record.assertions.push(
+          ...scripted.tests.map((test) => ({ ...test, phase: "before" })),
+        );
         if (scripted.tests.some((test) => !test.passed))
           throw Error("前置脚本断言失败");
         scopes = createScopes(scripted.variables, scripted.scopes);
@@ -393,9 +397,10 @@ export async function runPlan(
       );
       if (prepareRequest) record.request = prepareRequest(record.request);
       record.response = await execute(record.request, signal);
-      record.assertions = evaluateAssertions(
-        record.response,
-        record.request.assertions,
+      record.assertions.push(
+        ...evaluateAssertions(record.response, record.request.assertions).map(
+          (assertion) => ({ ...assertion, phase: "response" }),
+        ),
       );
       for (const extraction of record.request.extract) {
         const value = await extractResponse(record.response, extraction);
@@ -438,7 +443,9 @@ export async function runPlan(
         record.logs.push(
           ...scripted.logs.map((message) => ({ phase: "after", message })),
         );
-        record.assertions.push(...scripted.tests);
+        record.assertions.push(
+          ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
+        );
       }
       await commitScopes();
       const hasStatusAssertion = record.assertions.some(

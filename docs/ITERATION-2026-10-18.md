@@ -309,3 +309,11 @@ CryptoJS/Chai predecessor03d642b passed all9jobs with164coretests. This importer
 Added bounded Postman header/raw-body helpers, request-local variable reads with scope fallback, legacy response/raw/json/header/cookie access and apt.assert plus environment/global aliases. All run inside QuickJS; real HTTP tests confirm header/body changes and assertion outcomes, and browser validation confirms a legacy response extraction persists through the same guarded environment writes.
 Async test callbacks now explicitly fail as unsupported instead of being incorrectly counted as passed. Script assertions are capped at1000. No async host/network access or persistent cookie jar is implied.
 Limited-import predecessora86fb985 passed all9jobs with168coretests; current local script additions require fresh CI.
+
+## Forty-sixth pass: observable failure evidence
+
+- Reviewed the official execution-plan guide again: failed steps must preserve requests, assertions, script logs and extracted variables, and subsequent steps still execute.
+- Found pre-script assertion results were discarded before throwing a generic failure. Preserve them with phase labels, including successful preconditions alongside response/post-script assertions. A failed precondition still prevents sending; later plan steps still execute.
+- Execution records now default-open failed steps and group assertions, request/unsent configuration, response, script/operation logs, extracted variables and full JSON evidence. Untrusted strings remain HTML escaped.
+- Added deterministic runner/render tests and a browser regression that deliberately fails a precondition, inspects visible failure/log evidence, then restores the prior script. Local175tests pass before the added browser scenario; browser validation requires this commit's CI.
+- Previous script-compatibility commit ad4587cab116987afe4df52f18d4e3ea6ae2efe8 passed all9jobs in Actions39100470579, with173core tests.

@@ -292,6 +292,50 @@ try {
     .click();
   await page.getByText("✓ 通过", { exact: false }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-plan.png" });
+  // An intentionally failing pre-script must expose its assertion without sending.
+  await page.locator('[data-plan-tab="plans"]').click();
+  await page.locator('[data-step-edit="0"]').click();
+  const originalBeforeScript = await page
+    .locator('[data-step-field="beforeScript"]')
+    .inputValue();
+  await page
+    .locator('[data-step-field="beforeScript"]')
+    .fill(
+      'pm.test("visible precondition failure",()=>pm.expect(false).to.equal(true));console.log("precondition evidence");',
+    );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#run-plan").click();
+  const failedRunStep = page.locator('[data-run-step="0"][open]').first();
+  await failedRunStep.getByText("前置脚本断言失败", { exact: true }).waitFor();
+  assert.match(
+    await failedRunStep.locator(".step-assertions").innerText(),
+    /visible precondition failure/,
+  );
+  assert.equal(
+    await failedRunStep
+      .getByText("请求配置（未发送）", { exact: true })
+      .isVisible(),
+    true,
+  );
+  await failedRunStep.getByText("脚本与操作日志", { exact: true }).click();
+  assert.equal(
+    await failedRunStep
+      .locator("pre")
+      .filter({ hasText: "precondition evidence" })
+      .first()
+      .isVisible(),
+    true,
+  );
+  await page.screenshot({ path: "/tmp/local-api-plan-failure-evidence.png" });
+  await page.locator('[data-plan-tab="plans"]').click();
+  await page.locator('[data-step-edit="0"]').click();
+  await page
+    .locator('[data-step-field="beforeScript"]')
+    .fill(originalBeforeScript);
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+
   // Exercise editable scripts, response evidence and repeated modal dismissal.
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
