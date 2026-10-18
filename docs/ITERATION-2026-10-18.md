@@ -101,3 +101,7 @@ Fourteenth pass:
 - Replaced the JSON-only step-edit modal with a snapshot form: name, method, URL, enabled Header/Query/Path/Cookie rows, body mode/content and step scripts.
 - Editing retains IDs, parameter metadata, authentication, form-file data, assertions and other untouched advanced fields. The source API is not mutated. Advanced plan JSON remains available.
 - 94 local tests pass; browser checks add/save/reopen and actual execution with a step header, and captures the editor screenshot.
+
+Fifteenth pass:
+- b75f80e passed all seven jobs in run 39087539435, including the new visual snapshot editor and persisted extraction-source UI.
+- Re-opened the official light screenshot in the own cloud browser. Moved project controls into the center header group and the execution-plan entry to the header, removing its extra rail icon. Remaining protocol/database rail placement is still different.

@@ -88,7 +88,8 @@ textarea {
 header.top {
   height: 44px;
   background: var(--top);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
@@ -1114,4 +1115,33 @@ body.dark button.primary {
 .step-editor input[type="checkbox"] {
   width: auto;
   flex: 0 0 auto;
+}
+
+.project-group {
+  justify-content: center;
+}
+.top-actions {
+  justify-content: flex-end;
+}
+.top-actions .active {
+  background: var(--hover);
+}
+@media (max-width: 1100px) {
+  header.top {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+  }
+  .top-group {
+    gap: 5px;
+  }
+  .top #new-project {
+    font-size: 11px;
+    padding: 6px;
+  }
+  .top .brand .subtle {
+    display: none;
+  }
+  .top #save-project {
+    padding: 6px;
+  }
 }

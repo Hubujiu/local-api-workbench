@@ -92,6 +92,12 @@ try {
   await page.locator("#raw-format").selectOption("json");
 
   await page.setViewportSize({ width: 1328, height: 876 });
+  const projectGroupBox = await page.locator(".project-group").boundingBox();
+  assert(
+    Math.abs(projectGroupBox.x + projectGroupBox.width / 2 - 664) < 5,
+    "project controls should be centered at reference width",
+  );
+  assert.equal(await page.locator('.rail [data-page="plans"]').count(), 0);
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.getByRole("button", { name: "发 送", exact: true }).click();
