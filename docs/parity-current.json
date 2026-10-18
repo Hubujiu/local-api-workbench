@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-18T05:24:00Z",
-  "implementationCommit": "a86fb985c1e37943518138137a597fd6f2f62c35",
+  "asOf": "2026-10-18T09:06:13Z",
+  "implementationCommit": "eb2935b9e5031e44cbc7f91b416072a6a74b3a5e",
   "counts": {
     "F": {
       "已实现": 35,
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离同步脚本、CryptoJS/Chai、六项apt变更助手、变量持久化已验证；完整SDK、异步网络/数据库/宿主操作不等价。后续兼容助手与异步断言拒绝规则尚待独立CI。",
+      "current": "隔离同步脚本、CryptoJS/Chai、pm请求/响应与作用域助手、apt.assert及旧变量别名已验证；前置断言保留证据，未支持的异步断言明确失败。异步网络/数据库/完整SDK仍不等价。",
       "source": "S3",
-      "evidence": "src/script-worker.mjs; src/vendor/script-libraries.js; tests/script-libraries.test.mjs",
+      "evidence": "src/script-compatibility.mjs; src/script-worker.mjs; tests/script-compatibility.test.mjs; tests/plan-evidence.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39099321090; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39113795792; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -987,9 +987,9 @@
       "name": "计划执行记录页面",
       "status": "部分实现",
       "original": "计划/执行记录独立标签，失败步骤展开",
-      "current": "计划/记录独立标签与步骤证据可展开；细部布局与失败默认展开仍未完全对齐。",
+      "current": "计划/记录独立标签，失败步骤默认展开，按断言、请求、响应、日志、提取变量及完整JSON分组；具体原版布局仍不同。",
       "source": "I5",
-      "evidence": "public/plan-view.js; tests/ui-smoke.mjs",
+      "evidence": "public/plan-view.js; tests/plan-evidence.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39099321090",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39113795792",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容；历史偶发失败与诊断保留于CURRENT-PARITY.md。分类重叠，不计算总体百分比。后续脚本兼容层173项本地测试通过，但须独立CI。",
+  "note": "本对照针对上述全绿版本。能力实现不等于原版参数逐字兼容；历史偶发失败与诊断保留于CURRENT-PARITY.md。分类重叠，不计算总体百分比。后续步骤表单文件与连接编辑须独立CI。",
   "verification": {
-    "runId": 39099321090,
+    "runId": 39113795792,
     "conclusion": "success",
-    "coreTests": 168,
+    "coreTests": 175,
     "jobs": 9
   }
 }

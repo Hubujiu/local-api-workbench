@@ -76,7 +76,36 @@ export function stepEditor(step) {
       .join("") +
     "</select>" +
     textarea("body", "JSON / 文本 / Base64 内容", r.body) +
-    '<p class="muted">表单文件、TLS与动态值定义保留；复杂配置可用计划JSON编辑。</p></details>' +
+    '<details><summary>表单字段（form-data / urlencoded）</summary><div data-step-pairs="form">' +
+    (r.form || []).map((row, index) => pairRow("form", index, row)).join("") +
+    '</div><button data-step-add="form">添加表单字段</button></details><p class="muted">文件由你选择后保存在步骤快照，最多6MiB；动态值定义保留，可用计划JSON编辑。</p></details>' +
+    '<details><summary>连接与证书</summary><label>超时（100–60000ms）</label><input type="number" min="100" max="60000" data-step-field="timeout" value="' +
+    esc(r.timeout ?? 15000) +
+    '"><label>协议版本</label><select data-step-field="httpVersion"><option value="1.1" ' +
+    (r.httpVersion !== "2" ? "selected" : "") +
+    '>HTTP/1.1</option><option value="2" ' +
+    (r.httpVersion === "2" ? "selected" : "") +
+    ">HTTP/2</option></select>" +
+    input("proxy", "HTTP/HTTPS代理", r.proxy) +
+    ["ca", "cert", "key"]
+      .map(
+        (key) =>
+          "<label>" +
+          {
+            ca: "自定义CA（PEM）",
+            cert: "客户端证书（PEM）",
+            key: "客户端私钥（PEM）",
+          }[key] +
+          '</label><textarea data-step-tls="' +
+          key +
+          '" spellcheck="false">' +
+          esc(r.tls?.[key] || "") +
+          "</textarea>",
+      )
+      .join("") +
+    '<label>私钥口令</label><input type="password" data-step-tls="passphrase" value="' +
+    esc(r.tls?.passphrase || "") +
+    '"><p class="notice">TLS验证始终开启。证书与私钥会保存到本地计划快照，导出前请清除敏感凭据。HTTP/2暂不支持代理。</p></details>' +
     '<details><summary>认证</summary><div id="step-auth">' +
     authPanel(r.auth, { acquire: false }) +
     "</div></details>" +
@@ -105,6 +134,28 @@ export function stepEditor(step) {
   );
 }
 export function pairRow(key, index, row = {}) {
+  if (key === "form")
+    return (
+      '<div class="step-form-row" data-step-pair-row="form:' +
+      index +
+      '"><input type="checkbox" data-step-enabled ' +
+      (row.enabled !== false ? "checked" : "") +
+      ' aria-label="启用参数"><input data-step-key aria-label="参数名" value="' +
+      esc(row.key) +
+      '"><select data-step-form-type aria-label="表单类型"><option value="text" ' +
+      (row.type !== "file" ? "selected" : "") +
+      '>文本</option><option value="file" ' +
+      (row.type === "file" ? "selected" : "") +
+      '>文件</option></select><input data-step-value aria-label="参数值" value="' +
+      esc(row.type === "file" ? "" : row.value) +
+      '" ' +
+      (row.type === "file" ? "hidden" : "") +
+      '><input type="file" data-step-file ' +
+      (row.type === "file" ? "" : "hidden") +
+      '><span class="step-file-status">' +
+      esc(row.type === "file" ? row.filename || "未选择文件" : "") +
+      '</span><button data-step-remove aria-label="移除参数">×</button></div>'
+    );
   return (
     '<div class="row" data-step-pair-row="' +
     key +
@@ -130,18 +181,49 @@ export function applyStepEdits(step, fields, pairGroups, rules = {}) {
     "body",
     "beforeScript",
     "afterScript",
+    "proxy",
   ])
     if (Object.hasOwn(fields, key)) next.request[key] = fields[key];
-  for (const key of ["headers", "query", "path", "cookies"]) {
+  if (Object.hasOwn(fields, "timeout")) {
+    const timeout = Number(fields.timeout);
+    if (!Number.isInteger(timeout) || timeout < 100 || timeout > 60000)
+      throw Error("超时须为100至60000毫秒");
+    next.request.timeout = timeout;
+  }
+  if (Object.hasOwn(fields, "httpVersion")) {
+    if (!["1.1", "2"].includes(fields.httpVersion)) throw Error("协议版本无效");
+    next.request.httpVersion = fields.httpVersion;
+  }
+  if (fields.tls) {
+    next.request.tls = { ...next.request.tls };
+    for (const key of ["ca", "cert", "key", "passphrase"])
+      if (Object.hasOwn(fields.tls, key))
+        next.request.tls[key] = String(fields.tls[key]);
+  }
+  for (const key of ["headers", "query", "path", "cookies", "form"]) {
     if (!pairGroups[key]) continue;
-    next.request[key] = pairGroups[key].map((row) => ({
-      ...(Number.isInteger(row.index)
-        ? structuredClone(step.request[key]?.[row.index] || {})
-        : {}),
-      key: String(row.key),
-      value: String(row.value),
-      enabled: Boolean(row.enabled),
-    }));
+    next.request[key] = pairGroups[key].map((row) => {
+      const result = {
+        ...(Number.isInteger(row.index)
+          ? structuredClone(step.request[key]?.[row.index] || {})
+          : {}),
+        key: String(row.key),
+        value: String(row.value),
+        enabled: Boolean(row.enabled),
+      };
+      if (key === "form") {
+        if (!["text", "file"].includes(row.type)) throw Error("表单类型无效");
+        result.type = row.type;
+        if (row.type === "file") {
+          result.filename = String(row.filename || "");
+          result.requiresFile = Boolean(row.requiresFile);
+        } else {
+          delete result.filename;
+          delete result.requiresFile;
+        }
+      }
+      return result;
+    });
   }
   if (fields.auth) {
     validateAuth(fields.auth);
@@ -255,6 +337,71 @@ export function bindStepEditor(container, step) {
     };
   };
   bindAuth();
+  const formRows = new WeakMap();
+  const bindFormRows = () => {
+    for (const row of container.querySelectorAll(
+      '[data-step-pairs="form"] [data-step-pair-row]',
+    )) {
+      if (formRows.has(row)) continue;
+      const index = Number(row.dataset.stepPairRow.split(":")[1]);
+      const original = step.request.form?.[index] || {};
+      const state = {
+        type: original.type || "text",
+        value: original.value || "",
+        filename: original.filename || "",
+        requiresFile:
+          original.requiresFile ??
+          (original.type === "file" && !original.filename),
+        generation: 0,
+        pending: false,
+        error: "",
+      };
+      formRows.set(row, state);
+      const status = row.querySelector(".step-file-status");
+      row.querySelector("[data-step-form-type]").onchange = (event) => {
+        state.type = event.target.value;
+        state.value = "";
+        state.filename = "";
+        state.requiresFile = state.type === "file";
+        state.generation++;
+        state.pending = false;
+        state.error = "";
+        row.querySelector("[data-step-value]").hidden = state.type === "file";
+        row.querySelector("[data-step-file]").hidden = state.type !== "file";
+        row.querySelector("[data-step-file]").value = "";
+        row.querySelector("[data-step-value]").value = "";
+        status.textContent = state.type === "file" ? "未选择文件" : "";
+      };
+      row.querySelector("[data-step-file]").onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const generation = ++state.generation;
+        state.pending = true;
+        state.error = "";
+        status.textContent = "读取中…";
+        try {
+          if (file.size > 6 * 1024 * 1024) throw Error("文件不能超过6MiB");
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          if (generation !== state.generation) return;
+          let binary = "";
+          for (let i = 0; i < bytes.length; i += 8192)
+            binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          state.value = btoa(binary);
+          state.filename = file.name;
+          state.requiresFile = false;
+          status.textContent = file.name;
+        } catch (error) {
+          if (generation === state.generation) {
+            state.error = error.message;
+            status.textContent = error.message;
+          }
+        } finally {
+          if (generation === state.generation) state.pending = false;
+        }
+      };
+    }
+  };
+  bindFormRows();
   const bindRemove = () => {
     for (const button of container.querySelectorAll(
       "[data-step-remove], [data-step-rule-remove]",
@@ -271,6 +418,7 @@ export function bindStepEditor(container, step) {
         .querySelector('[data-step-pairs="' + group + '"]')
         .insertAdjacentHTML("beforeend", pairRow(group, -1));
       bindRemove();
+      bindFormRows();
     };
   for (const button of container.querySelectorAll("[data-step-rule-add]"))
     button.onclick = () => {
@@ -289,19 +437,42 @@ export function bindStepEditor(container, step) {
       ]),
     );
     fields.auth = collectAuth();
+    fields.tls = Object.fromEntries(
+      [...container.querySelectorAll("[data-step-tls]")].map((element) => [
+        element.dataset.stepTls,
+        element.value,
+      ]),
+    );
     const groups = {},
       rules = {};
-    for (const kind of ["headers", "query", "path", "cookies"])
+    for (const kind of ["headers", "query", "path", "cookies", "form"])
       groups[kind] = [
         ...container.querySelectorAll(
           '[data-step-pairs="' + kind + '"] [data-step-pair-row]',
         ),
-      ].map((row) => ({
-        index: Number(row.dataset.stepPairRow.split(":")[1]),
-        key: row.querySelector("[data-step-key]").value,
-        value: row.querySelector("[data-step-value]").value,
-        enabled: row.querySelector("[data-step-enabled]").checked,
-      }));
+      ].map((row) => {
+        const state = formRows.get(row);
+        if (state?.pending) throw Error("文件正在读取，请稍后保存");
+        if (state?.error) throw Error(state.error);
+        return {
+          index: Number(row.dataset.stepPairRow.split(":")[1]),
+          key: row.querySelector("[data-step-key]").value,
+          value: row.querySelector("[data-step-value]").value,
+          enabled: row.querySelector("[data-step-enabled]").checked,
+          ...(state
+            ? {
+                type: state.type,
+                ...(state.type === "file"
+                  ? {
+                      value: state.value,
+                      filename: state.filename,
+                      requiresFile: state.requiresFile,
+                    }
+                  : {}),
+              }
+            : {}),
+        };
+      });
     for (const kind of ["assertions", "extract"])
       rules[kind] = [
         ...container.querySelectorAll(

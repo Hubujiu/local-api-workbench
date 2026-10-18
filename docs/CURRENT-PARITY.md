@@ -4,9 +4,9 @@
 
 ## 最近已核验
 
-a86fb985c1e37943518138137a597fd6f2f62c35 / Actions39099321090：9项全部通过，168项核心测试。包含三平台核心、真实浏览器、Windows x64/macOS arm64/Linux x64实际成品包启动、数据库集成与格式/依赖/资源重建校验。Mac仅CI临时签名，未公证。
+eb2935b9e5031e44cbc7f91b416072a6a74b3a5e / Actions39113795792：9项全部通过，175项核心测试。包含三平台核心、真实浏览器、Windows x64/macOS arm64/Linux x64实际成品包启动、数据库集成与格式/依赖/资源重建校验。Mac仅CI临时签名，未公证。
 
-自定义函数验证、固定/变量/有界Mock动态参数、Raw Body插入、Markdown预览/导出、七类属性与文档状态均已核验。OAuth1/AWS/Hawk/EdgeGrid、stdio跨进程进度、步骤认证/断言/提取编辑、CryptoJS/Chai与有限Apipost JSON导入也已核验。后续脚本兼容层173项本地测试通过，独立CI尚待运行。
+自定义函数验证、固定/变量/有界Mock动态参数、Raw Body插入、Markdown预览/导出、七类属性与文档状态均已核验。OAuth1/AWS/Hawk/EdgeGrid、stdio跨进程进度、步骤认证/断言/提取编辑、CryptoJS/Chai与有限Apipost JSON导入也已核验。脚本兼容助手、前置断言证据、失败步骤分组展示、函数预览可见性与参考垂直间距也已核验；后续步骤表单文件与连接编辑须独立CI。
 
 ## 已发现并处理的问题
 
@@ -27,3 +27,5 @@ a86fb985c1e37943518138137a597fd6f2f62c35 / Actions39099321090：9项全部通过
 - Trae等真实外部客户端连接仍未执行；不派发外部Agent任务。
 
 仍在同一PR #1 / develop迭代，未合入main、未部署。CI全绿只证明此提交的固定验收通过，不代表已完成完整复刻。
+
+CI触发异常曾在673acb3/3eabe40出现；用户授权后于08:59UTC关闭并重开同一PR一次，恢复运行。Windows CLI早前一次失败未重现、原因未定，stdout诊断保留。

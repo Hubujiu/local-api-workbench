@@ -21,11 +21,21 @@ try {
 }
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
 const app = await createApp({ root, port: 0 });
-let stdioChild,
+let uploadedMultipart,
+  stdioChild,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
 const fixture = http.createServer(async (request, response) => {
-  if (request.url === "/sse") {
+  if (request.url === "/upload") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    uploadedMultipart = {
+      body: Buffer.concat(chunks),
+      headers: request.headers,
+    };
+    response.setHeader("content-type", "application/json");
+    response.end('{"received":true}');
+  } else if (request.url === "/sse") {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.write("data: ui-stream-fixture\n\n");
   } else if (request.url === "/slow-mcp") {
@@ -196,6 +206,44 @@ try {
   );
   await page.locator('[data-step-edit="0"]').click();
   await page.locator('[data-step-field="name"]').fill("独立快照步骤");
+  await page.locator('[data-step-field="url"]').fill(fixtureURL + "/upload");
+  await page.locator('[data-step-field="bodyType"]').selectOption("form-data");
+  await page
+    .locator("#dialog-content summary")
+    .getByText("表单字段（form-data / urlencoded）", { exact: true })
+    .click();
+  await page.locator('[data-step-add="form"]').click();
+  const uploadRow = page
+    .locator('[data-step-pairs="form"] [data-step-pair-row]')
+    .last();
+  await uploadRow.locator("[data-step-key]").fill("attachment");
+  await uploadRow.locator("[data-step-form-type]").selectOption("file");
+  await uploadRow.locator("[data-step-file]").setInputFiles({
+    name: "proof.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([0, 1, 255, 13, 10]),
+  });
+  await uploadRow
+    .locator(".step-file-status")
+    .getByText("proof.bin", { exact: true })
+    .waitFor();
+  await page.locator('[data-step-add="form"]').click();
+  const textFormRow = page
+    .locator('[data-step-pairs="form"] [data-step-pair-row]')
+    .last();
+  await textFormRow.locator("[data-step-key]").fill("label");
+  await textFormRow.locator("[data-step-value]").fill("step-upload");
+  await page
+    .locator("#dialog-content summary")
+    .getByText("连接与证书", { exact: true })
+    .click();
+  await page.locator('[data-step-field="timeout"]').fill("3000");
+  await page.locator('[data-step-tls="passphrase"]').fill("fixture-passphrase");
+  assert.equal(
+    await page.locator('[data-step-tls="passphrase"]').getAttribute("type"),
+    "password",
+  );
+
   await page
     .locator(".step-editor summary")
     .getByText("Header", { exact: true })
@@ -246,6 +294,18 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-step-edit="0"]').click();
+  assert.equal(
+    await page.locator('[data-step-field="timeout"]').inputValue(),
+    "3000",
+  );
+  assert.equal(
+    await page.locator('[data-step-tls="passphrase"]').inputValue(),
+    "fixture-passphrase",
+  );
+  assert.match(
+    await page.locator('[data-step-pairs="form"]').textContent(),
+    /proof.bin/,
+  );
   assert.equal(
     await page.locator('[data-step-field="name"]').inputValue(),
     "独立快照步骤",
@@ -307,6 +367,16 @@ try {
     .last()
     .click();
   await page.getByText("✓ 通过", { exact: false }).waitFor();
+  assert(
+    uploadedMultipart.body.includes(Buffer.from([0, 1, 255, 13, 10])),
+    "selected binary file bytes reach real multipart HTTP fixture",
+  );
+  assert.match(uploadedMultipart.body.toString(), /filename="proof.bin"/);
+  assert.match(uploadedMultipart.body.toString(), /step-upload/);
+  assert.equal(
+    uploadedMultipart.headers.authorization,
+    "Bearer step-fixture-token",
+  );
   await page.screenshot({ path: "/tmp/local-api-plan.png" });
   // An intentionally failing pre-script must expose its assertion without sending.
   await page.locator('[data-plan-tab="plans"]').click();

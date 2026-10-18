@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：a86fb985c1e37943518138137a597fd6f2f62c35
+已核验提交：eb2935b9e5031e44cbc7f91b416072a6a74b3a5e
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39099321090)，168项核心测试。
-后续脚本兼容层173项本地测试通过，尚待独立CI；不借用本版绿灯。
+9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39113795792)，175项核心测试。
+后续步骤表单文件与连接编辑须独立CI；不借用本版绿灯。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
 
@@ -37,7 +37,7 @@
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
 | F25 数据库连接 | 部分实现 | SQLite/PG/MySQL只读查询已测；原版支持库种类、写入及脚本联动未公开完整 | database/remote-database tests |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离同步脚本、CryptoJS/Chai、六项apt变更助手、变量持久化已验证；完整SDK、异步网络/数据库/宿主操作不等价。后续兼容助手与异步断言拒绝规则尚待独立CI。 | src/script-worker.mjs; src/vendor/script-libraries.js; tests/script-libraries.test.mjs |
+| F27 接口前后置操作 | 部分实现 | 隔离同步脚本、CryptoJS/Chai、pm请求/响应与作用域助手、apt.assert及旧变量别名已验证；前置断言保留证据，未支持的异步断言明确失败。异步网络/数据库/完整SDK仍不等价。 | src/script-compatibility.mjs; src/script-worker.mjs; tests/script-compatibility.test.mjs; tests/plan-evidence.test.mjs |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39099321090; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39113795792; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -115,7 +115,7 @@
 | U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取可视化快照编辑已验证；TLS、文件、动态值等高级字段仍未全面可视化。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
 | U12 AI变更视觉语言 | 已实现 | AI 变更字段/步骤编号橙色及说明提示。 | public/plan-view.js; src/plan-version.mjs |
 | U13 MCP配置页面 | 部分实现 | 状态/授权/客户端标签/密钥操作已实现；页面结构仍为配置区加弹窗。 | public/app.js; public/mcp-client-config.js |
-| U14 计划执行记录页面 | 部分实现 | 计划/记录独立标签与步骤证据可展开；细部布局与失败默认展开仍未完全对齐。 | public/plan-view.js; tests/ui-smoke.mjs |
+| U14 计划执行记录页面 | 部分实现 | 计划/记录独立标签，失败步骤默认展开，按断言、请求、响应、日志、提取变量及完整JSON分组；具体原版布局仍不同。 | public/plan-view.js; tests/plan-evidence.test.mjs; tests/ui-smoke.mjs |
 
 ## 排除项
 

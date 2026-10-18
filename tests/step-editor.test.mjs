@@ -118,3 +118,88 @@ test("advanced step edits preserve source metadata while editing auth assertions
     /名称/,
   );
 });
+
+test("step form and transport edits preserve metadata and do not mutate the saved source", () => {
+  const step = {
+    name: "source",
+    request: {
+      form: [
+        {
+          key: "file",
+          type: "file",
+          filename: "old.bin",
+          requiresFile: true,
+          value: "",
+          description: "keep",
+        },
+        { key: "text", type: "text", value: "old", schema: { type: "string" } },
+      ],
+      tls: { ca: "old", note: "preserve" },
+      timeout: 15000,
+      httpVersion: "1.1",
+    },
+  };
+  const next = applyStepEdits(
+    step,
+    {
+      name: "edited",
+      timeout: "3000",
+      httpVersion: "2",
+      proxy: "http://127.0.0.1:8080",
+      tls: {
+        ca: "fixture-ca",
+        cert: "fixture-cert",
+        key: "fixture-key",
+        passphrase: "fixture-pass",
+      },
+    },
+    {
+      form: [
+        {
+          index: 0,
+          key: "file",
+          type: "file",
+          filename: "new.bin",
+          requiresFile: false,
+          value: "AAH/",
+          enabled: true,
+        },
+        { index: 1, key: "text", type: "text", value: "new", enabled: false },
+      ],
+    },
+  );
+  assert.equal(next.request.form[0].description, "keep");
+  assert.equal(next.request.form[0].filename, "new.bin");
+  assert.equal(next.request.form[0].value, "AAH/");
+  assert.equal(next.request.form[0].requiresFile, false);
+  assert.deepEqual(next.request.form[1].schema, { type: "string" });
+  assert.equal(next.request.form[1].enabled, false);
+  assert.equal(next.request.timeout, 3000);
+  assert.equal(next.request.httpVersion, "2");
+  assert.equal(next.request.proxy, "http://127.0.0.1:8080");
+  assert.equal(next.request.tls.note, "preserve");
+  assert.equal(next.request.tls.key, "fixture-key");
+  assert.equal(step.request.form[0].requiresFile, true);
+  assert.equal(step.request.tls.ca, "old");
+  assert.throws(
+    () => applyStepEdits(step, { name: "edited", timeout: "0" }, {}),
+    /超时/,
+  );
+  assert.throws(
+    () => applyStepEdits(step, { name: "edited", httpVersion: "3" }, {}),
+    /协议/,
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "edited" },
+        {
+          form: [
+            { index: -1, key: "f", type: "unknown", value: "", enabled: true },
+          ],
+        },
+      ),
+    /表单/,
+  );
+});

@@ -338,3 +338,11 @@ Visual inspection of ad4587's actual function screenshot showed that the earlier
 - Eight jobs passed, including Windows CLI/core and all three native packages. The earlier Windows CLI failure did not recur; root cause remains unproven and stdout diagnostics stay enabled.
 - Browser reached the intended failed-precondition record and rendered the error, assertion and logs correctly. Its text-based pre locator matched the earlier hidden request-configuration JSON because that JSON also contains the log text in the script source. Give evidence sections explicit labels and scope the regression to the opened log section; preserve the same visible-log assertion.
 - New reference spacing assertions passed before this failure. Function-preview clipping fix was not reached, so its verification remains pending.
+
+## Fiftieth pass: visual step multipart and transport overrides
+
+- Wrote the metadata/persistence/validation regression first; it failed because the prior editor ignored form replacements. Implemented visual text/file form rows, enabled flags, add/remove and explicit browser file selection up to6MiB. File contents remain in the independent plan snapshot, not the source interface.
+- File reads block saving while pending, surface size/read errors, and ignore superseded reads after switching type or choosing a newer file. No arbitrary filesystem reads or imported file path resolution.
+- Added per-step timeout, HTTP version, proxy and CA/client certificate/private-key/passphrase controls. TLS verification remains enabled; secrets are explicitly described as stored in the local snapshot. Existing unknown metadata remains preserved.
+- Browser regression selects fixed binary bytes, saves/reopens the snapshot, and verifies actual multipart bytes/name/text plus bearer auth at a local HTTP fixture. Transport field persistence is checked; existing transport tests cover real TLS behavior.
+- eb2935b9 passed175tests and all9CI jobs in Actions39113795792. Actual function-preview and failed-step screenshots inspected; previous clipping and evidence display fixes are confirmed. New form/transport controls require their own CI.

@@ -1335,3 +1335,26 @@ body.compact-ui .sidebar {
   border: 0;
   background: transparent;
 }
+
+.step-form-row {
+  display: grid;
+  grid-template-columns: 24px minmax(100px, 1fr) 100px 30px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.step-form-row [data-step-remove] {
+  grid-column: 4;
+  grid-row: 1;
+}
+.step-form-row [data-step-value],
+.step-form-row [data-step-file],
+.step-form-row .step-file-status {
+  grid-column: 2 / 5;
+  min-width: 0;
+}
+.step-file-status {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
