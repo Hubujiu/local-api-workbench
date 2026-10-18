@@ -151,3 +151,7 @@ Twenty-third pass:
 - Added pm.variables as a genuine request-local scope, following https://wiki.apipost.cn/docs/http/temp-variables/ . It survives pre-to-post scripts, shadows shared values during current-request interpolation, and is discarded before the next request.
 - set/get/has/unset/clear operate only on this local map; existing apt.setVar and environment runtime behavior are unchanged. Regression verifies local values neither leak into the next step nor overwrite shared plan variables.
 - Full persisted environment/global script scopes remain a separate unresolved parity area; local scope is not mislabeled as them.
+
+Load diagnostic checkpoint:
+- 8cf82f7 Windows core failed the existing 100-request local Mock load acceptance: 100 results returned but 99 passed. Other OSes/browser/database passed; no root cause is inferred from the count alone.
+- Failed HTTP load results now retain a bounded 1024-character response preview; the unchanged 100-success assertion prints failed result evidence. This adds actionable diagnostics rather than reducing counts or retrying away failures.

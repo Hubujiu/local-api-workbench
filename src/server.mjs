@@ -650,6 +650,13 @@ export async function createApp({
                         index,
                         status: response.status,
                         duration: response.duration,
+                        ...(response.status < 200 || response.status >= 300
+                          ? {
+                              responsePreview: String(
+                                response.body || "",
+                              ).slice(0, 1024),
+                            }
+                          : {}),
                         passed:
                           response.status >= 200 &&
                           response.status < 300 &&

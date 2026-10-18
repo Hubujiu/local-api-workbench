@@ -22,3 +22,28 @@ test("orphaned writer lock recovers without deleting project data", async (t) =>
   await release();
   assert.equal(await readFile(path.join(root, "project.json"), "utf8"), "safe");
 });
+
+test("concurrent lock handoffs keep exactly one owner across repeated acquisitions", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "api-lock-handoff-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const lock = path.join(root, "project.lock");
+  let active = 0,
+    completed = 0;
+  await Promise.all(
+    Array.from({ length: 10 }, async () => {
+      for (let i = 0; i < 10; i++) {
+        const release = await acquireFileLock(lock);
+        try {
+          active++;
+          assert.equal(active, 1);
+          await readFile(path.join(lock, "owner.json"), "utf8");
+          completed++;
+        } finally {
+          active--;
+          await release();
+        }
+      }
+    }),
+  );
+  assert.equal(completed, 100);
+});

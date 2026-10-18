@@ -217,7 +217,11 @@ test("bounded load execution reports actual requests and assertion failures", as
   const capped = await load(1000, 1000);
   assert.equal(capped.count, 100);
   assert.equal(capped.concurrency, 10);
-  assert.equal(capped.passed, 100);
+  assert.equal(
+    capped.passed,
+    100,
+    JSON.stringify(capped.results.filter((result) => !result.passed)),
+  );
   assert.deepEqual(
     capped.results.map((result) => result.index),
     Array.from({ length: 100 }, (_, i) => i),
