@@ -256,3 +256,7 @@ Fixed tests verify seed repeatability, typed transformation, invalid seed and un
 
 Replaced Windows-only assembly with a shared platform-aware packaging script and manifest layout. Added actual macOS/Linux packaged startup tests alongside Windows, using the existing HTTP/script/XML/SQLite acceptance flow. Linux uses Xvfb with sandboxing unchanged; macOS uses only an ad-hoc CI signature, not notarized distribution. tar.gz preserves non-Windows execute permissions/symlinks.
 Previous4270822 passed all7jobs with141coretests. New matrix expands the expected job count to9; local142tests pass, but native Mac/Linux results are still pending.
+
+## Native matrix first result
+
+9b9f60c / Actions39095503517 successfully launched and exercised all three native desktop packages (Windows/macOS/Linux); browser/database/format and Linux/Mac core passed. Windows core failed only the new layout unit assertion because it compared a Windows-normalized path to a literal forward-slash suffix. Replaced that expected suffix with path.join, preserving the expected components. Full9-job green still requires a new exact-commit run.

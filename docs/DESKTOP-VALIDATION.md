@@ -12,4 +12,4 @@ macOS currently uses an ad-hoc build signature for CI only. This is not an Apple
 
 Windows artifact names now include the platform consistently: LocalAPI-Windows-portable, LocalAPI-macOS-portable and LocalAPI-Linux-portable. Supported architecture is the actual runner architecture recorded in each manifest, not every architecture offered by Electron.
 
-Current status: implementation added, first native Mac/Linux CI result pending. Do not mark cross-platform desktop parity complete until those actual jobs pass.
+First native result: all three desktop jobs passed on9b9f60c / Actions39095503517. Windows core separately failed a path-separator unit assertion; the correction must pass a new full matrix before claiming the overall commit green. No notarized/signed public distribution is implied.
