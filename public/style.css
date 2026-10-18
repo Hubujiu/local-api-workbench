@@ -358,6 +358,7 @@ nav.rail {
 }
 .body-types {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: center;
   margin-bottom: 12px;
@@ -365,6 +366,9 @@ nav.rail {
 }
 label {
   cursor: pointer;
+}
+.body-types > span {
+  white-space: nowrap;
 }
 .body-types input {
   accent-color: var(--accent);
@@ -945,11 +949,20 @@ body.dark button.primary {
   min-width: 0;
 }
 .helper-toggle {
-  writing-mode: vertical-rl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
   width: 40px;
   border-radius: 0;
   background: var(--panel);
   padding: 8px;
+}
+.helper-toggle span {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 3px;
+  line-height: 1.5;
 }
 .parameter-helper {
   width: 230px;

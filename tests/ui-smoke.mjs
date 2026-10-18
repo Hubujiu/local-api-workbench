@@ -67,6 +67,13 @@ try {
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
+  const helperLabelBox = await page
+    .locator("#toggle-parameter-helper span")
+    .boundingBox();
+  assert(
+    helperLabelBox.height >= 50,
+    "helper label must have non-overlapping vertical text",
+  );
   const originalBody = await page.locator("#body-code").inputValue();
   await page.locator("#toggle-parameter-helper").click();
   await page.getByText("插入环境变量", { exact: true }).waitFor();

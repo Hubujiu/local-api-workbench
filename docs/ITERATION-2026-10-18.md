@@ -88,3 +88,4 @@ Twelfth pass:
 - a5d5853483f143efa9e5376630dbb594ff745e0d passed all seven jobs in run 39086847229, including dictionary import/reload/reuse and packaged Windows startup.
 - The JSON body helper now shows reusable dictionary parameters and inserts typed default/example values, refusing duplicate keys or non-object/invalid JSON without overwriting existing data.
 - 91 local tests pass. A browser regression checks insertion preserves existing body fields; this new change still requires its own exact-head CI.
+- Inspected the actual a5d5853 browser PNGs at 1328×876: parameter-helper Chinese text overlapped vertically, and the body-toolbar hint wrapped awkwardly. Helper text now has an explicit upright span and measured browser regression; toolbar items wrap as whole controls.

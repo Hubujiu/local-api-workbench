@@ -427,7 +427,7 @@ function paramPanel(r) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-expanded="${helperOpen}">参数助手</button>${
+              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-expanded="${helperOpen}"><span>参数助手</span></button>${
               helperOpen
                 ? `<aside class="parameter-helper"><h4>插入环境变量</h4>${
                     Object.keys({
