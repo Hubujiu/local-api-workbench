@@ -47,6 +47,7 @@ const responses = new Map();
 const caseResults = new Map();
 const temporaryParameters = new Map();
 const collapsedFolders = new Set();
+const loadOptions = new Map();
 let opened = [],
   token = "",
   projects = [],
@@ -574,7 +575,7 @@ function modePanel(r) {
         .join("") ||
       '<div class="notice">尚无用例。可分别验证成功、参数缺失和认证失败等场景。</div>'
     }</div>`;
-  return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><div class="row"><label>请求数 <input id="load-count" type="number" value="10" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="1" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div>${
+  return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><div class="row"><label>请求数 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div>${
     loadResult
       ? `<div class="grid-stats">${[
           ["完成", loadResult.count],
@@ -2110,14 +2111,31 @@ function bind() {
       render();
     }
   });
+  on("#load-count,#load-concurrency", "input", () => {
+    loadOptions.set(project.id + ":" + current, {
+      count: $("#load-count").value,
+      concurrency: $("#load-concurrency").value,
+    });
+  });
   on("#load-run", "click", async () => {
     collect();
+    const count = Number($("#load-count").value),
+      concurrency = Number($("#load-concurrency").value);
+    if (
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > 100 ||
+      !Number.isInteger(concurrency) ||
+      concurrency < 1 ||
+      concurrency > 10
+    )
+      throw Error("压测次数须为1至100整数，并发须为1至10整数");
     if (
       !confirm("确认你有权执行此次压测，以及其中脚本和子请求可能产生的副作用？")
     )
       return;
-    const count = Number($("#load-count").value),
-      concurrency = Number($("#load-concurrency").value);
+    loadOptions.set(project.id + ":" + current, { count, concurrency });
+    loadResult = null;
     busy = true;
     runId = uid();
     render();

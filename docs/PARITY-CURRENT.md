@@ -1,9 +1,9 @@
 # 逐项复刻对照（2026-10-18）
 
-已核验提交：946f5d95ed36cd52568fc57c7ce5b7bf708d21a8
+已核验提交：0e9430e78c42feaca2625efe0eaaee12c5532ab0
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39115885319)，181项核心测试。
-后续文字层级样式须独立CI；不借用本版绿灯。
+9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39117781360)，186项核心测试。
+后续控件状态与弹窗可见性修正须独立CI；不借用本版绿灯。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
 
@@ -20,7 +20,7 @@
 | F07 目录、接口和文档树 | 已实现 | 统一树包括 HTTP、Markdown 文档与保存的 SSE/WS/TCP 定义；协议点击不自动连接。 | src/protocol-definitions.mjs; tests/ui-smoke.mjs |
 | F08 最近请求 | 已实现 | 本地最近 50 条历史，可查看证据 | Store.append; public/app.js history |
 | F09 回收站 | 已实现 | 软删除和恢复接口 | public/app.js trash; src/mcp.mjs delete |
-| F10 API 设计 | 部分实现 | 请求/响应 Schema、参数类型/必填/描述、响应定义及 OpenAPI 往返已实现；复杂可视模型编辑未完全对齐。 | src/core.mjs; tests/core.test.mjs |
+| F10 API 设计 | 部分实现 | 独立设计页、参数定义、嵌套请求/响应Schema树编辑（类型/必填/说明/JSON示例）、响应状态/媒体类型和OpenAPI往返已验证；引用/组合条件等复杂约束保留JSON高级编辑。 | public/schema-editor.js; tests/schema-editor.test.mjs; tests/core.test.mjs; tests/ui-smoke.mjs |
 | F11 HTTP 调试 | 已实现 | 真实 HTTP(S)，超时、取消、响应证据 | executeRequest; runtime.test |
 | F12 Header/Query/Path/Cookie | 已实现 | 可编辑键值行、开关、变量替换 | public/app.js parameter editors; runtime |
 | F13 请求体类型 | 已实现 | 实现相应模式；原版选项布局尚不同 | runtime.test; MessagePack byte vectors |
@@ -30,7 +30,7 @@
 | F17 参数助手 | 已实现 | 右侧参数助手含变量插入、共享函数/结构提示、参数字典字段插入。 | public/dictionary-view.js; tests/parameter-dictionary.test.mjs; tests/ui-smoke.mjs |
 | F18 响应展示与日志 | 已实现 | 实时响应、响应头、Cookie、响应示例、实际请求、断言/提取、控制台标签。 | public/app.js responseContent; tests/ui-smoke.mjs |
 | F19 接口用例 | 已实现 | 独立接口用例创建、编辑、删除、快照保存与执行，不再仅引导转计划。 | src/cases.mjs; tests/cases.test.mjs; tests/ui-smoke.mjs |
-| F20 一键压测 | 部分实现 | 可运行有界 100 次/10并发、P50/P95、取消；高级配置与报告等同未证实 | server load; bounded-load test |
+| F20 一键压测 | 部分实现 | 最多100次主请求/并发10，完整脚本/动态值/断言管线、逐次变量隔离、主/子请求计数、错误证据、P50/P95和取消均已验证；原版高级压测配置/报告完全等价未证实。 | src/load-runner.mjs; tests/load-pipeline.test.mjs; tests/server.test.mjs; tests/ui-smoke.mjs |
 | F21 Mock 基础 | 已实现 | 项目 Mock 开关、基础响应示例、响应头和有界延迟。 | src/mock.mjs; tests/mock.test.mjs |
 | F22 智能 Mock 匹配 | 部分实现 | 按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。 | src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs |
 | F23 文档与分享 | 部分实现 | Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，图片按文本处理，不提供在线托管分享。 | src/markdown-renderer.mjs; tests/markdown.test.mjs; public/document-export.js; tests/ui-smoke.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39115885319; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39117781360; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 

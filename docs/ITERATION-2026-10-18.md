@@ -404,3 +404,9 @@ Response retry review additionally keeps pending schema edits transactional when
 - Keep100primary executions/concurrency10, count script child calls separately, and preserve cancellation. Per-sample variable scopes are isolated and do not persist to disk or leak across concurrent samples; UI and confirmation text describe script side effects.
 - Summaries retain failed assertion names/phases, bounded child evidence, HTTP duration and full-sample elapsed. No-response runs show no latency sample instead of implying a0msrequest.
 - Tests exercise parallel token callbacks, dynamic JSON body, post-script failure, isolated variable counters, unchanged saved project variables and cancellation after the first observed request. The existing ten100-request probe remains unchanged. Browser checks execute2authorized local mock samples and confirm script counts and unchanged config revision.
+
+## Fifty-ninth pass: screenshot-observed control state
+
+- 0e9430e78 passed186tests and all9CI jobs in Actions39117781360. Inspected its actual schema/response/load screenshots (artifact12132549613, SHA2566bede6d555de61c41a51b6e5e729daa199b5ac027eb256b419d76a22d7c2c1f9).
+- The load run correctly completed2samples/concurrency2, but rerendered inputs incorrectly reset to10/1. Keep per-request UI options, validate them before starting, and clear stale results at the next run. Browser assertions now check both retained inputs.
+- Response-schema field actions sat just below the dialog's visible content edge. Allow the schema dialog content to use the available viewport while retaining header/footer space, and assert that the pending field action is above the footer at1000×760.

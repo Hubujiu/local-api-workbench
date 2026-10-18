@@ -1513,3 +1513,7 @@ dialog:has(#schema-editor) {
     grid-template-columns: 1fr;
   }
 }
+
+#dialog:has(#schema-editor) #dialog-content {
+  max-height: calc(94vh - 120px);
+}

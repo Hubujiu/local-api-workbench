@@ -523,6 +523,12 @@ try {
   const preLoadRevision = (await app.store.get(scopeSavedProject.id))
     .configRevision;
   await page.locator('[data-mode="load"]').click();
+  await page.locator("#load-count").fill("0");
+  await page.locator("#load-run").click();
+  await page
+    .getByText("压测次数须为1至100整数，并发须为1至10整数", { exact: true })
+    .waitFor();
+
   await page.locator("#load-count").fill("2");
   await page.locator("#load-concurrency").fill("2");
   page.once("dialog", (dialog) => {
@@ -548,6 +554,8 @@ try {
     .locator(".grid-stats")
     .getByText("脚本子请求", { exact: false })
     .waitFor();
+  assert.equal(await page.locator("#load-count").inputValue(), "2");
+  assert.equal(await page.locator("#load-concurrency").inputValue(), "2");
   await page.screenshot({ path: "/tmp/local-api-load-pipeline.png" });
   await page.locator('[data-mode="debug"]').click();
 
@@ -1209,6 +1217,17 @@ try {
   assert.equal(await page.locator("#dialog").isVisible(), true);
   await page.locator("[data-schema-example]").fill("true");
   await page.locator("#schema-response-status").fill("201");
+  const responseApplyBox = await page
+    .locator("[data-schema-apply]")
+    .boundingBox();
+  const responseContentBox = await page
+    .locator("#dialog-content")
+    .boundingBox();
+  assert(
+    responseApplyBox.y + responseApplyBox.height <=
+      responseContentBox.y + responseContentBox.height,
+    "pending response field actions must remain above the footer",
+  );
   await page.screenshot({ path: "/tmp/local-api-response-schema.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
