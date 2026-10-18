@@ -31,6 +31,16 @@ export class ProtocolSessions {
     session.events = session.events.slice(-200);
   }
   start(input) {
+    if (this.sessions.size >= 50)
+      for (const old of this.sessions.values()) {
+        if (!["open", "connecting"].includes(old.state)) {
+          this.stop(old.id);
+          clearTimeout(old.expiry);
+          this.sessions.delete(old.id);
+          if (this.sessions.size < 50) break;
+        }
+      }
+    if (this.sessions.size >= 50) throw Error("协议会话记录已达到上限");
     if (
       [...this.sessions.values()].filter(
         (s) => s.state === "open" || s.state === "connecting",

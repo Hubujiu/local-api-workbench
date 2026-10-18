@@ -71,3 +71,9 @@ Ninth pass:
 - Format references: https://developers.openai.com/learn/docs-mcp ; https://developers.openai.com/ja-JP/docs/config-file/config-reference ; https://code.visualstudio.com/docs/agents/reference/mcp-configuration ; https://cloud.tencent.com/document/product/1831/137039 . Trae remains explicitly labeled generic/unverified.
 - UI project saves no longer resend potentially huge history/run bodies; server preserves authoritative history.
 - 87 local tests pass. 9bbf29c passed all seven jobs in run 39085954384 before the persistence/config-view changes.
+
+Tenth pass:
+- Unified project tree now includes HTTP definitions, documents and saved SSE/WebSocket/TCP connection definitions, with type and keyword filters. Clicking a saved protocol never automatically connects.
+- Protocol definitions are persisted separately and use validated stable IDs. Session registry is capped at 50 retained sessions, in addition to the existing five active connections.
+- Browser regression exposed a genuine modal bug: client-tab buttons inside a dialog form submitted/closed it. All content action buttons are now explicitly type=button; the repeated client-tab test is retained.
+- 88 local tests pass. This tree and modal fix must pass exact-head browser/desktop CI.

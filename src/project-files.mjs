@@ -13,6 +13,7 @@ const groups = {
   environments: "envs",
   plans: "plans",
   cases: "cases",
+  protocols: "protocols",
 };
 const filename = (id) => {
   if (typeof id !== "string" || !id || id.length > 200)

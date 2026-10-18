@@ -242,6 +242,13 @@ export function createMCP({
                     url,
                     folder,
                   })),
+                ...(p.protocols || []).map((protocol) => ({
+                  id: protocol.id,
+                  type: protocol.type,
+                  name: protocol.name,
+                  url: protocol.url,
+                  folder: protocol.folder || "",
+                })),
                 ...(p.documents || []).map((document) => ({
                   id: document.id,
                   type: "document",
@@ -259,7 +266,7 @@ export function createMCP({
               break;
             }
             case "localapi_get_api_detail":
-              output = p.requests.find(
+              output = [...p.requests, ...(p.protocols || [])].find(
                 (r) => r.id === args.apiId && !r.deletedAt,
               );
               if (!output) throw Error("接口不存在");

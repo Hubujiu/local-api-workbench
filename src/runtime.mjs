@@ -1,3 +1,4 @@
+import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { existsSync } from "node:fs";
 import {
   readProject,
@@ -136,6 +137,7 @@ export class Store {
       ],
       plans: [],
       cases: [],
+      protocols: [],
       runs: [],
       history: [],
       dictionary: [],
@@ -165,6 +167,15 @@ export class Store {
   }
   async save(p, { activity = false } = {}) {
     validateEnvironmentModel(p);
+    if (p.protocols !== undefined) {
+      if (!Array.isArray(p.protocols) || p.protocols.length > 1000)
+        throw Error("协议定义最多1000个");
+      p.protocols = p.protocols.map(normalizeProtocol);
+    }
+    p.documents = (p.documents || []).map((document) => ({
+      ...document,
+      id: document.id || id(),
+    }));
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);

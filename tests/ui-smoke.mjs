@@ -226,6 +226,22 @@ try {
   await saveAndWait();
   await page.locator('[data-page="protocols"]').click();
   await page.locator("#protocol-url").fill(fixtureURL + "/sse");
+  await page.locator("#protocol-name").fill("Saved SSE fixture");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#save-protocol").click(),
+  ]);
+  await page.locator("[data-protocol-id]").waitFor();
+  await page.locator("#tree-type").selectOption("sse");
+  assert.equal(await page.locator("[data-request]").count(), 0);
+  await page.locator("[data-protocol-id]").click();
+  assert.equal(
+    await page.locator("#protocol-url").inputValue(),
+    fixtureURL + "/sse",
+  );
+  await page.locator("#tree-type").selectOption("all");
   await page.locator("#session-connect").click();
   await page
     .locator("#session-events")

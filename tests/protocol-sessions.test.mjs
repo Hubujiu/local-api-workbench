@@ -41,3 +41,14 @@ test("interactive TCP retains multiple sends and closes deterministically", asyn
   assert.equal(sessions.snapshot(session.id).state, "closed");
   assert.throws(() => sessions.send(session.id, "third"), /不可发送/);
 });
+
+test("invalid connection attempts do not retain an unbounded session registry", () => {
+  const manager = new ProtocolSessions();
+  try {
+    for (let i = 0; i < 80; i++)
+      manager.start({ type: "tcp", host: "", port: 0 });
+    assert(manager.sessions.size <= 50);
+  } finally {
+    manager.close();
+  }
+});

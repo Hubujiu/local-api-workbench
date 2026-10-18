@@ -38,6 +38,8 @@ let opened = [],
   busy = false,
   runId = "",
   search = "",
+  searchType = "all",
+  selectedProtocolId = "",
   planId = "",
   planTab = "plans",
   lastRun = null,
@@ -197,6 +199,7 @@ async function openProject(id) {
   lastRun = null;
   loadResult = null;
   planId = "";
+  selectedProtocolId = "";
   sessionStorage.setItem("project", id);
   render();
 }
@@ -204,6 +207,8 @@ function modal(title, html, onSave, label = "确定") {
   const d = $("#dialog");
   $("#dialog-title").textContent = title;
   $("#dialog-content").innerHTML = html;
+  for (const button of $("#dialog-content").querySelectorAll("button"))
+    button.type = "button";
   $("#dialog-save").textContent = label;
   $("#dialog-save").onclick = async () => {
     try {
@@ -246,36 +251,58 @@ function nav() {
     .join("");
 }
 function tree() {
-  const requests =
-    project?.requests.filter(
-      (r) =>
-        !r.deletedAt &&
-        (r.name + " " + r.url + " " + r.folder)
-          .toLowerCase()
-          .includes(search.toLowerCase()),
-    ) || [];
+  const items = [
+    ...(project?.requests || [])
+      .filter((item) => !item.deletedAt)
+      .map((item) => ({
+        ...item,
+        kind: "http",
+        label: item.method === "DELETE" ? "DEL" : item.method,
+        attribute: 'data-request="' + esc(item.id) + '"',
+      })),
+    ...(project?.documents || []).map((item, index) => ({
+      ...item,
+      name: item.title,
+      url: "",
+      kind: "document",
+      label: "MD",
+      attribute: 'data-document-index="' + index + '"',
+    })),
+    ...(project?.protocols || []).map((item) => ({
+      ...item,
+      kind: item.type,
+      label: item.type === "websocket" ? "WS" : item.type.toUpperCase(),
+      attribute: 'data-protocol-id="' + esc(item.id) + '"',
+    })),
+  ].filter(
+    (item) =>
+      (searchType === "all" || item.kind === searchType) &&
+      (item.name + " " + (item.url || "") + " " + (item.folder || ""))
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
   const folders = [
     ...new Set([
       ...(project?.folders || []),
-      ...requests.map((r) => r.folder || "未分组"),
+      ...items.map((item) => item.folder || "未分组"),
     ]),
   ];
   return (
     folders
       .map(
         (folder) =>
-          `<div class="folder"><button class="ghost folder-edit" data-edit-folder="${esc(folder)}">⌄ &nbsp;▱ ${esc(folder)}</button> <span>(${requests.filter((r) => (r.folder || "未分组") === folder).length})</span></div>${requests
-            .filter((r) => (r.folder || "未分组") === folder)
+          `<div class="folder"><button class="ghost folder-edit" data-edit-folder="${esc(folder)}">⌄ &nbsp;▱ ${esc(folder)}</button> <span>(${items.filter((item) => (item.folder || "未分组") === folder).length})</span></div>${items
+            .filter((item) => (item.folder || "未分组") === folder)
             .map(
-              (r) =>
-                `<button class="tree-item ${r.id === current ? "active" : ""}" data-request="${r.id}"><span class="method ${r.method}">${r.method === "DELETE" ? "DEL" : r.method}</span><span>${esc(r.name)}</span></button>`,
+              (item) =>
+                `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`,
             )
             .join("")}`,
       )
-      .join("") ||
-    '<div class="notice">暂无接口。新建接口，或导入已有定义。</div>'
+      .join("") || '<div class="notice">没有匹配的项目内容。</div>'
   );
 }
+
 function render() {
   const r = request();
   $("#app").innerHTML =
@@ -287,7 +314,25 @@ function render() {
       )
       .join(
         "",
-      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><button id="mcp-status" data-page="settings" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${page === "settings" ? settingsSidebar() : `<div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button>`}</aside><main class="workspace">${
+      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button><button id="mcp-status" data-page="settings" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
+      page === "settings"
+        ? settingsSidebar()
+        : `<div class="search"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="tree-filter"><select id="tree-type" aria-label="内容类型">${[
+            ["all", "全部类型"],
+            ["http", "HTTP"],
+            ["sse", "SSE"],
+            ["websocket", "WebSocket"],
+            ["tcp", "TCP"],
+            ["document", "文档"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${value === searchType ? "selected" : ""}>${label}</option>`,
+            )
+            .join(
+              "",
+            )}</select></div><div class="section-label">▧ 全部接口 <button id="import" class="ghost" title="导入">⇥</button></div><div id="tree">${tree()}</div><button class="new-item" id="new-request">＋ 新建</button><button class="new-item" id="new-folder">＋ 新建目录</button><button class="new-item" id="export">⇧ 导出项目</button>`
+    }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
             .filter((id) =>
@@ -498,7 +543,18 @@ function renderPage() {
   if (page === "dictionary")
     return `<div class="page"><div class="page-head"><div><h1>数据字典</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${project.dictionary.map((d, i) => `<div class="card"><div class="row"><strong class="grow">${esc(d.name)}</strong><button data-edit-dictionary="${i}">编辑</button><button data-use-dictionary="${i}">应用到当前接口</button></div><pre>${esc(JSON.stringify(d.schema, null, 2))}</pre></div>`).join("") || '<div class="empty"><p>暂无数据模型</p></div>'}</div>`;
   if (page === "protocols")
-    return `<div class="page"><h1>实时协议调试</h1><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type"><option value="sse">SSE</option><option value="websocket">WebSocket</option><option value="tcp">TCP</option></select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events"><label>TCP 端口</label><input id="protocol-port" type="number" value="8080"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
+    return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
+      ["sse", "SSE"],
+      ["websocket", "WebSocket"],
+      ["tcp", "TCP"],
+    ]
+      .map(
+        ([type, label]) =>
+          `<option value="${type}" ${(project.protocols?.find((item) => item.id === selectedProtocolId)?.type || "sse") === type ? "selected" : ""}>${label}</option>`,
+      )
+      .join(
+        "",
+      )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
     return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL · 只读事务 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名</label><input id="db-name"><label>TLS</label><input id="db-tls" type="checkbox"><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
@@ -1165,6 +1221,39 @@ function bind() {
       "导出",
     ),
   );
+  on("#tree-type", "change", (_, element) => {
+    searchType = element.value;
+    $("#tree").innerHTML = tree();
+    bindTree();
+  });
+  on("#save-protocol", "click", async () => {
+    const item = {
+      id: selectedProtocolId || uid(),
+      name: $("#protocol-name").value || "新连接",
+      type: $("#protocol-type").value,
+      url: $("#protocol-url").value,
+      port: Number($("#protocol-port").value),
+    };
+    project.protocols ??= [];
+    const index = project.protocols.findIndex(
+      (existing) => existing.id === item.id,
+    );
+    if (index < 0) project.protocols.push(item);
+    else project.protocols[index] = item;
+    selectedProtocolId = item.id;
+    mark();
+    await save();
+  });
+  on("#delete-protocol", "click", async () => {
+    if (!selectedProtocolId) throw Error("请从目录选择已保存的连接");
+    if (!confirm("删除连接定义？当前连接不会因此断开。")) return;
+    project.protocols = (project.protocols || []).filter(
+      (item) => item.id !== selectedProtocolId,
+    );
+    selectedProtocolId = "";
+    mark();
+    await save();
+  });
   on("#session-connect", "click", async () => {
     if (activeSession && ["open", "connecting"].includes(activeSession.state))
       throw Error("请先断开当前会话");
@@ -1685,6 +1774,30 @@ function bind() {
   );
 }
 function bindTree() {
+  on("[data-document-index]", "click", (_, element) => {
+    collect();
+    const index = Number(element.dataset.documentIndex);
+    page = "docs";
+    render();
+    document
+      .querySelector('[data-edit-document="' + index + '"]')
+      ?.closest("article")
+      ?.scrollIntoView({ block: "start" });
+  });
+  on("[data-protocol-id]", "click", (_, element) => {
+    collect();
+    const item = project.protocols.find(
+      (item) => item.id === element.dataset.protocolId,
+    );
+    if (!item) return;
+    selectedProtocolId = item.id;
+    page = "protocols";
+    render();
+    $("#protocol-type").value = item.type;
+    $("#protocol-url").value = item.url;
+    $("#protocol-port").value = item.port || "";
+    $("#protocol-name").value = item.name;
+  });
   on("[data-edit-folder]", "click", (_, element) => {
     const old = element.dataset.editFolder;
     modal(
@@ -1694,7 +1807,11 @@ function bindTree() {
         const remove = $("#folder-remove").checked,
           name = $("#folder-name").value.trim();
         if (!remove && !name) throw Error("名称不能为空");
-        for (const item of project.requests)
+        for (const item of [
+          ...project.requests,
+          ...(project.protocols || []),
+          ...project.documents,
+        ])
           if ((item.folder || "未分组") === old)
             item.folder = remove ? "" : name;
         project.folders = (project.folders || []).filter(
@@ -1881,10 +1998,12 @@ function editDocument(index) {
   };
   modal(
     "项目文档",
-    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
+    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea>`,
     () => {
       const document = {
+        id: existing.id || uid(),
         title: $("#document-title").value,
+        folder: $("#document-folder").value,
         content: $("#document-content").value,
       };
       if (index === undefined) project.documents.push(document);
