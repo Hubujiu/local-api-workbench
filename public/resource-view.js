@@ -60,6 +60,7 @@ export function settingsSidebar() {
     [
       ["settings-basic", "基本设置"],
       ["settings-environments", "环境与服务"],
+      ["settings-mock", "Mock 服务"],
       ["resource-functions", "自定义函数"],
       ["resource-statusCodes", "状态码字典"],
       ["resource-attributes", "接口属性"],

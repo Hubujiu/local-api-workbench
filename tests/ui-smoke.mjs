@@ -68,6 +68,15 @@ try {
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
   const originalBody = await page.locator("#body-code").inputValue();
+  await page.locator("#toggle-parameter-helper").click();
+  await page.getByText("插入环境变量", { exact: true }).waitFor();
+  await page.locator("#toggle-parameter-helper").click();
+  assert.equal(await page.locator("#body-code").inputValue(), originalBody);
+  await page.locator('summary[aria-label="发送更多操作"]').click();
+  await page.locator("#send-menu-curl").click();
+  await page.locator("#dialog").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+
   await page.locator('input[name="body-type"][value="none"]').check();
   await page.getByText("此请求没有 Body", { exact: true }).waitFor();
   await page.locator('input[name="body-type"][value="raw"]').check();
@@ -311,6 +320,40 @@ try {
     .getByText('"outcome": "passed"', { exact: false })
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-cases.png" });
+  await page.locator('[data-mode="mock"]').click();
+  await page.locator("#edit-mock-rules").click();
+  await page
+    .locator("#modal-json")
+    .fill(
+      JSON.stringify([
+        {
+          name: "UI smart rule",
+          conditions: [{ target: "query.scenario", op: "eq", value: "smart" }],
+          response: {
+            status: 201,
+            body: '{"smart":true}',
+            headers: { "content-type": "application/json" },
+          },
+        },
+      ]),
+    );
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#use-mock").click();
+  const mockURL = await page.locator("#url").inputValue();
+  await page.locator("#url").fill(mockURL + "?scenario=smart");
+  await page.locator("#send").click();
+  await page
+    .locator(".response-body")
+    .getByText('"smart": true', { exact: false })
+    .waitFor();
+  await saveAndWait();
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

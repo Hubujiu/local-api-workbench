@@ -1,3 +1,4 @@
+import { selectMockResponse } from "./mock.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { versionPlan } from "./plan-version.mjs";
 import {
@@ -169,13 +170,35 @@ export async function createApp({
         const p = await store.get(parts[1]),
           r = p.requests.find((r) => r.id === parts[2] && !r.deletedAt);
         if (!r) return json(res, 404, { error: "Mock not found" });
-        const example = r.examples[
-          Number(u.searchParams.get("example")) || 0
-        ] || { status: 200, body: "{}" };
-        res.writeHead(example.status || 200, {
-          "Content-Type": "application/json",
+        if (p.settings?.mockEnabled === false)
+          return json(res, 503, { error: "Mock服务已关闭" });
+        const chunks = [];
+        let bytes = 0;
+        for await (const chunk of req) {
+          bytes += chunk.length;
+          if (bytes > 8 * 1024 * 1024) throw Error("Mock请求体超过8MiB");
+          chunks.push(chunk);
+        }
+        const raw = Buffer.concat(chunks).toString("utf8");
+        let incoming = raw;
+        try {
+          incoming = JSON.parse(raw);
+        } catch {}
+        const selected = selectMockResponse(r, {
+          method: req.method,
+          query: Object.fromEntries(u.searchParams),
+          headers: req.headers,
+          body: incoming,
         });
-        return res.end(example.body || "{}");
+        if (selected.delayMs)
+          await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
+        res.writeHead(selected.status, {
+          "Content-Type": "application/json",
+          ...selected.headers,
+        });
+        return res.end(
+          [204, 304].includes(selected.status) ? "" : selected.body,
+        );
       }
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)

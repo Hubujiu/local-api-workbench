@@ -106,6 +106,7 @@ export function normalizeRequest(r = {}) {
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    mockRules: r.mockRules || [],
     schema: r.schema || {},
     proxy: r.proxy || "",
     tls: r.tls || {},

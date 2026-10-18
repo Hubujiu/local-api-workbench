@@ -31,3 +31,9 @@ Third pass:
 - Shared functions are copied into plans/cases so future project edits do not silently mutate saved tests.
 - Settings gets a secondary navigation tied to real resource sections. Workbench body types use radio selectors; warm dark palette and reference viewport dimensions have passed run 39084413706 on e0d6bcf, prior to these resource/case changes.
 - Latest local suite: 76 passing tests. Expanded browser case/resource checks must pass on this next exact head; not claimed complete.
+
+Fourth pass:
+- Smart Mock implements ordered enabled rules, AND conditions on method/query/headers/body paths, bounded delay and custom safe response headers. No regex evaluation or host script execution; default response examples remain fallback.
+- Project Mock switch is editable in settings. Rule semantics are an explicit independent implementation because the public screenshot names the feature but does not expose all original matching rules.
+- Added usable parameter-helper drawer (variable insertion, function names, request schema), and send/save dropdown actions.
+- Local fixture verification now 78 tests; browser adds repeated helper open/close, cURL menu and real smart Mock response coverage. Exact-head CI remains required.

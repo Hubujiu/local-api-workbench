@@ -933,3 +933,72 @@ body.dark button.primary {
   color: var(--muted);
   padding: 8px;
 }
+
+.body-editor-shell {
+  display: flex;
+  height: calc(100% - 44px);
+  min-height: 180px;
+}
+.body-editor-shell .code-editor {
+  height: 100%;
+  flex: 1;
+  min-width: 0;
+}
+.helper-toggle {
+  writing-mode: vertical-rl;
+  width: 40px;
+  border-radius: 0;
+  background: var(--panel);
+  padding: 8px;
+}
+.parameter-helper {
+  width: 230px;
+  overflow: auto;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.parameter-helper button {
+  display: block;
+  margin-bottom: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.parameter-helper pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.button-menu {
+  position: relative;
+  align-self: stretch;
+}
+.button-menu summary {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+.button-menu > div {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 160px;
+  background: var(--bg);
+  padding: 6px;
+  border: 1px solid var(--line);
+  z-index: 20;
+  box-shadow: 0 6px 16px #0002;
+}
+.button-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+#request-status {
+  max-width: 125px;
+}
