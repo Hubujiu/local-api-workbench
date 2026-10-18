@@ -144,7 +144,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
-  for (const key of ["auth", "tls", "attributes"])
+  for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
       (!r[key] || typeof r[key] !== "object" || Array.isArray(r[key]))
@@ -203,6 +203,7 @@ export function normalizeRequest(r = {}) {
         : r.body == null
           ? ""
           : JSON.stringify(r.body),
+    bodyDynamic: r.bodyDynamic || {},
     form: r.form || [],
     assertions: r.assertions || [],
     extract: r.extract || [],

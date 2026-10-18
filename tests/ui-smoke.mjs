@@ -498,7 +498,7 @@ try {
   await page.locator('[data-doc-attribute="mail"]').fill("doc@example.test");
   await page.locator("#dialog-save").click();
   await page.locator("#app").getByText("已完成", { exact: true }).waitFor();
-  await page.locator(".markdown-content table").waitFor();
+  await page.locator("#app .markdown-content table").waitFor();
   await page.screenshot({ path: "/tmp/local-api-markdown-document.png" });
   await saveAndWait();
   await page.locator('.rail [data-page="settings"]').click();
@@ -729,6 +729,27 @@ try {
   assert.equal(generatedBody.n, 2);
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
+  await page.locator("#body-code").fill("");
+  if (!(await page.locator("#new-body-dynamic").isVisible()))
+    await page.locator("#toggle-parameter-helper").click();
+  await page.locator("#new-body-dynamic").click();
+  await page.locator("#dynamic-value").fill('{"n":7,"literal":"{{keep}}"}');
+  await page.locator("#dialog-save").click();
+  assert.match(await page.locator("#body-code").inputValue(), /\{\{@value:/);
+  const bodyDynamicResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const bodyDynamicResult = await (await bodyDynamicResponse).json();
+  assert.deepEqual(JSON.parse(bodyDynamicResult.request.body), {
+    n: 7,
+    literal: "{{keep}}",
+  });
+  await page.locator("[data-edit-body-dynamic]").click();
+  await page.locator("#dynamic-remove").click();
+  assert.equal(await page.locator("#body-code").inputValue(), "");
+  await page.locator("#body-code").fill(JSON.stringify(generatedBody));
+
   await page.locator('[data-param="extract"]').click();
   await page.locator("#add-extract").click();
   await page.locator('[data-extract="0:name"]').fill("elapsed");

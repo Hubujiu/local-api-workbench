@@ -145,3 +145,34 @@ test("dynamic values reject invalid JSON and excessive aggregate work before eva
   );
   assert.equal(result.query[0].value, "0");
 });
+
+test("raw Body dynamic tokens preserve typed JSON and do not interpolate generated strings", async () => {
+  const request = {
+    body: '{"n":{{@value:one}},"text":{{@value:two}},"v":"{{v}}"}',
+    bodyDynamic: {
+      one: {
+        source: "variable",
+        value: "n",
+        functions: ["double"],
+        format: "json",
+      },
+      two: { source: "fixed", value: 'a"{{literal}}', format: "json" },
+    },
+  };
+  const result = await resolveDynamicRequest(
+    request,
+    { n: 3, v: "ok" },
+    functions,
+    interpolate,
+  );
+  assert.deepEqual(JSON.parse(result.body), {
+    n: 6,
+    text: 'a"{{literal}}',
+    v: "ok",
+  });
+  assert.equal(result.bodyDynamic, undefined);
+  await assert.rejects(
+    resolveDynamicRequest({ body: "{{@value:missing}}" }, {}, [], interpolate),
+    /不存在/,
+  );
+});

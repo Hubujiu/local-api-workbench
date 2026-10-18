@@ -59,8 +59,25 @@ export async function resolveDynamicRequest(
       delete row.dynamic;
     }
   }
-  if (specs.length > 100) throw Error("每个请求最多100个动态值");
-  const transforms = specs.reduce(
+  const body = String(clone.body || "");
+  const definitions = clone.bodyDynamic || {};
+  const parts = body.split(/(\{\{@value:[A-Za-z0-9_-]{1,100}\}\})/g);
+  const bodySpecs = [];
+  for (const [index, part] of parts.entries()) {
+    const match = /^\{\{@value:([A-Za-z0-9_-]{1,100})\}\}$/.exec(part);
+    if (!match) continue;
+    if (!Object.hasOwn(definitions, match[1]))
+      throw Error("Body动态值定义不存在: " + match[1]);
+    const spec = definitions[match[1]];
+    if (!["json", "text"].includes(spec.format))
+      throw Error("Body动态值输出格式无效");
+    bodySpecs.push({ index, spec });
+  }
+  clone.body = "";
+  delete clone.bodyDynamic;
+  if (specs.length + bodySpecs.length > 100)
+    throw Error("每个请求最多100个动态值");
+  const transforms = [...specs, ...bodySpecs].reduce(
     (total, { spec }) =>
       total + (Array.isArray(spec.functions) ? spec.functions.length : 0),
     0,
@@ -75,5 +92,22 @@ export async function resolveDynamicRequest(
     resolved[group][index].value =
       typeof value === "string" ? value : JSON.stringify(value);
   }
+  for (const [index, part] of parts.entries()) {
+    const dynamic = bodySpecs.find((item) => item.index === index);
+    if (!dynamic) {
+      parts[index] = interpolate(part, variables);
+      continue;
+    }
+    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    const value = await resolveDynamicValue(dynamic.spec, variables, functions);
+    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    parts[index] =
+      dynamic.spec.format === "json" || typeof value !== "string"
+        ? JSON.stringify(value)
+        : value;
+  }
+  resolved.body = parts.join("");
+  if (bodySpecs.length && resolved.body.length > 1024 * 1024)
+    throw Error("动态Body超过1MiB");
   return resolved;
 }

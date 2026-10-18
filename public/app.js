@@ -443,7 +443,14 @@ function paramPanel(r) {
                 "\n",
               )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
               helperOpen
-                ? `<aside class="parameter-helper"><h4>插入环境变量</h4>${
+                ? `<aside class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+                    r.bodyDynamic || {},
+                  )
+                    .map(
+                      (id) =>
+                        `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
+                    )
+                    .join("")}<h4>插入环境变量</h4>${
                     Object.keys({
                       ...project.globalVariables,
                       ...project.environments.find((item) => item.id === env())
@@ -1347,6 +1354,10 @@ function bind() {
     helperOpen = !helperOpen;
     render();
   });
+  on("#new-body-dynamic", "click", () => editDynamicValue("body"));
+  on("[data-edit-body-dynamic]", "click", (_, element) =>
+    editDynamicValue("body", element.dataset.editBodyDynamic),
+  );
   on("[data-insert-variable]", "click", (_, element) => {
     const editor = $("#body-code");
     if (!editor) return;
@@ -2800,7 +2811,18 @@ function editFunction(index) {
 }
 
 function editDynamicValue(group, index) {
-  const row = request()[group][index];
+  const target = request();
+  const editor = $("#body-code");
+  const selection = {
+    start: editor?.selectionStart || 0,
+    end: editor?.selectionEnd || 0,
+  };
+  collect();
+  const bodyId = group === "body" ? index || uid() : undefined;
+  const row =
+    group === "body"
+      ? { dynamic: target.bodyDynamic?.[bodyId] }
+      : target[group][index];
   if (row.type === "file") {
     toast("文件参数不能配置动态文本值");
     return;
@@ -2816,6 +2838,7 @@ function editDynamicValue(group, index) {
       $("#dynamic-source").value === "fixed"
         ? JSON.parse($("#dynamic-value").value)
         : $("#dynamic-value").value,
+    ...(group === "body" ? { format: $("#dynamic-format").value } : {}),
     functions: $("#dynamic-functions")
       .value.split(",")
       .map((name) => name.trim())
@@ -2823,13 +2846,25 @@ function editDynamicValue(group, index) {
   });
   modal(
     "动态参数值",
-    `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option></select><label>输入值 / 变量名</label><textarea id="dynamic-value"></textarea><label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
+    `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option></select><label>输入值 / 变量名</label><textarea id="dynamic-value"></textarea>${group === "body" ? '<label>输出方式</label><select id="dynamic-format"><option value="json">JSON值（自动转义/引号）</option><option value="text">原始文本</option></select>' : ""}<label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
     () => {
-      row.dynamic = read();
+      const spec = read();
+      if (group === "body") {
+        target.bodyDynamic ??= {};
+        target.bodyDynamic[bodyId] = spec;
+        if (!index)
+          target.body =
+            target.body.slice(0, selection.start) +
+            "{{@value:" +
+            bodyId +
+            "}}" +
+            target.body.slice(selection.end);
+      } else row.dynamic = spec;
       mark();
       render();
     },
   );
+  if (group === "body") $("#dynamic-format").value = initial.format || "json";
   $("#dynamic-source").value = initial.source;
   $("#dynamic-value").value =
     initial.source === "fixed" ? JSON.stringify(initial.value) : initial.value;
@@ -2851,7 +2886,10 @@ function editDynamicValue(group, index) {
     }
   };
   $("#dynamic-remove").onclick = () => {
-    delete row.dynamic;
+    if (group === "body") {
+      delete target.bodyDynamic?.[bodyId];
+      target.body = target.body.split("{{@value:" + bodyId + "}}").join("");
+    } else delete row.dynamic;
     mark();
     $("#dialog").close();
     render();

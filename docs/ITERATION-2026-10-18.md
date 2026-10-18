@@ -241,3 +241,8 @@ Pinned markdown-it15.0.3 and esbuild0.28.2 from the official npm registry. The b
 Following markdown-it's safety guidance, raw HTML stays disabled. Only explicit HTTP(S), mailto and fragment links are allowed; images are rendered as text so opening a document does not silently fetch remote trackers. Source previews are bounded to256KiB and nesting30. This is a documented safety limit, not full rich-HTML compatibility.
 Core fixtures compare the production browser bundle to the source renderer and reject active URLs/HTML/remote images. Browser acceptance edits Markdown, checks the preview and saved table, and captures a screenshot.
 Also tightened dynamic-value JSON validation and aggregate-work limits. The earlier75da820 commit passed all7CI jobs; the isolated Windows regex failure from1f40c0d did not recur, with diagnostic assertions retained and no timeout relaxation.
+
+## Thirty-fifth pass: raw Body dynamic insertion
+
+Added named Body dynamic tokens with separate definitions preserved in snapshots. The helper inserts at the current selection, allows editing/removal, and chooses typed JSON escaping or literal text output. Resolution happens after pre-request variables, without re-interpolating generated braces. Missing definitions fail explicitly. Total field/transform/time bounds also cover Body occurrences.
+The Markdown browser failure in d2c5d8f was a strict locator matching both saved content and the retained hidden modal preview; scoped the assertion to the main document, preserving the table requirement. Source-format (including reproducible bundled output) passed.
