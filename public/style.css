@@ -958,11 +958,15 @@ body.dark button.primary {
   background: var(--panel);
   padding: 8px;
 }
-.helper-toggle span {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  letter-spacing: 3px;
-  line-height: 1.5;
+.helper-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.helper-label > span {
+  display: block;
+  height: 18px;
+  line-height: 18px;
 }
 .parameter-helper {
   width: 230px;

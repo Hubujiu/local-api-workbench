@@ -427,7 +427,7 @@ function paramPanel(r) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-expanded="${helperOpen}"><span>参数助手</span></button>${
+              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
               helperOpen
                 ? `<aside class="parameter-helper"><h4>插入环境变量</h4>${
                     Object.keys({
@@ -458,7 +458,27 @@ function paramPanel(r) {
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
-    return `<table><thead><tr><th>变量名</th><th>响应 JSON 路径</th><th></th></tr></thead><tbody>${r.extract.map((a, i) => `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><input data-extract="${i}:path" value="${esc(a.path)}" placeholder="$.data.token"></td><td><button data-remove-extract="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">在计划内传递给后续步骤；单次调试返回提取结果，不自动覆盖持久化环境。</div>`;
+    return `<table><thead><tr><th>变量名</th><th>来源</th><th>JSON 路径 / 头名 / Cookie 名</th><th></th></tr></thead><tbody>${r.extract
+      .map(
+        (a, i) =>
+          `<tr><td><input data-extract="${i}:name" value="${esc(a.name)}"></td><td><select data-extract="${i}:source">${[
+            ["json", "Response JSON"],
+            ["header", "Response Header"],
+            ["cookie", "Response Cookie"],
+            ["duration", "响应时间 (ms)"],
+            ["text", "完整响应文本"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${(a.source || "json") === value ? "selected" : ""}>${label}</option>`,
+            )
+            .join(
+              "",
+            )}</select></td><td><input data-extract="${i}:path" value="${esc(a.path)}" placeholder="$.data.token"></td><td><button data-remove-extract="${i}">×</button></td></tr>`,
+      )
+      .join(
+        "",
+      )}</tbody></table><p><button id="add-extract">＋ 提取变量</button></p><div class="notice">在计划内传递给后续步骤；单次调试保留为调试变量，不覆盖持久化环境。响应时间与完整文本不需要路径；暂不支持 XML/XPath 或文本正则。</div>`;
   if (param === "before" || param === "after")
     return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/网络/Node 访问。支持 apt.setVar/getVar、pm.environment、pm.response、pm.test 和 console.log；250ms CPU 截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {

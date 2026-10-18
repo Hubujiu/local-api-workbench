@@ -68,7 +68,7 @@ try {
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
   const helperLabelBox = await page
-    .locator("#toggle-parameter-helper span")
+    .locator("#toggle-parameter-helper .helper-label")
     .boundingBox();
   assert(
     helperLabelBox.height >= 50,
@@ -432,7 +432,17 @@ try {
     existing: true,
     customerId: "",
   });
+  await page.locator('[data-param="extract"]').click();
+  await page.locator("#add-extract").click();
+  await page.locator('[data-extract="0:name"]').fill("elapsed");
+  await page.locator('[data-extract="0:source"]').selectOption("duration");
   await saveAndWait();
+  await page.reload();
+  await page.locator('[data-param="extract"]').click();
+  assert.equal(
+    await page.locator('[data-extract="0:source"]').inputValue(),
+    "duration",
+  );
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

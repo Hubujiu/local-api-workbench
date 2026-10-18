@@ -30,6 +30,50 @@ export function jsonPath(obj, path) {
   }
   return obj;
 }
+export function extractResponseValue(response, extraction) {
+  if (
+    typeof extraction.name !== "string" ||
+    !extraction.name.trim() ||
+    ["__proto__", "prototype", "constructor"].includes(extraction.name)
+  )
+    throw Error("提取变量名称无效");
+  const source = extraction.source || "json";
+  let value;
+  const headers = Object.fromEntries(
+    Object.entries(response.headers || {}).map(([key, v]) => [
+      key.toLowerCase(),
+      v,
+    ]),
+  );
+  if (source === "json")
+    value = jsonPath(JSON.parse(response.body), extraction.path);
+  else if (source === "header")
+    value = headers[String(extraction.path).toLowerCase()];
+  else if (source === "duration") value = response.duration;
+  else if (source === "text") value = response.body;
+  else if (source === "cookie") {
+    const setCookie = headers["set-cookie"];
+    const lines = Array.isArray(setCookie)
+      ? setCookie
+      : setCookie
+        ? [setCookie]
+        : [];
+    for (const line of lines) {
+      const pair = String(line).split(";")[0];
+      const separator = pair.indexOf("=");
+      if (
+        separator > 0 &&
+        pair.slice(0, separator).trim() === extraction.path
+      ) {
+        value = pair.slice(separator + 1).trim();
+        break;
+      }
+    }
+  } else throw Error("不支持的提取来源: " + source);
+  if (value === undefined)
+    throw Error("无法提取 " + (extraction.path || source));
+  return value;
+}
 export function normalizeRequest(r = {}) {
   if (!r || typeof r !== "object" || Array.isArray(r))
     throw Error("接口定义必须是对象");
@@ -239,11 +283,7 @@ export async function runPlan(
         record.request.assertions,
       );
       for (const extraction of record.request.extract) {
-        const value = jsonPath(
-          JSON.parse(record.response.body),
-          extraction.path,
-        );
-        if (value === undefined) throw Error(`无法提取 ${extraction.path}`);
+        const value = extractResponseValue(record.response, extraction);
         vars[extraction.name] = value;
         record.extracted[extraction.name] = value;
       }

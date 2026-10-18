@@ -89,3 +89,10 @@ Twelfth pass:
 - The JSON body helper now shows reusable dictionary parameters and inserts typed default/example values, refusing duplicate keys or non-object/invalid JSON without overwriting existing data.
 - 91 local tests pass. A browser regression checks insertion preserves existing body fields; this new change still requires its own exact-head CI.
 - Inspected the actual a5d5853 browser PNGs at 1328×876: parameter-helper Chinese text overlapped vertically, and the body-toolbar hint wrapped awkwardly. Helper text now has an explicit upright span and measured browser regression; toolbar items wrap as whole controls.
+
+Thirteenth pass:
+- Dictionary helper commit 090686c passed all seven jobs in run 39087172439.
+- Expanded variable extraction to response headers (case-insensitive), Set-Cookie values, duration and whole text, retaining existing JSON-path behavior. Missing values fail with actual response evidence; reserved variable names are rejected. XML/XPath, regex and persisted environment/global destination scopes remain unsupported.
+- Source scope: https://wiki.apipost.cn/docs/http_debug/set-valuable/ is supplementary online documentation, not proof of identical offline semantics.
+- 93 local tests pass; browser adds extraction-source save/reload.
+- Visual regression a07aa54 correctly failed: this Linux font's vertical glyph metrics still overlap with writing-mode. Replaced vertical shaping with four ordinary horizontal glyph rows rather than weakening the height check.
