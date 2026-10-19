@@ -474,3 +474,17 @@ Response retry review additionally keeps pending schema edits transactional when
 - Pass69 UTF-8 correction aa28ee4c6e4cedee8469604943650fe875808c6e passed all nine CI jobs (Actions39139381051),207core tests.
 - Official Cookie documentation (https://wiki.apipost.cn/docs/http/cookies/) describes explicit Cookie parameters overriding the header when configured, with the header used otherwise. Current implementation incorrectly blanked an explicit Cookie header when the parameter list contained only disabled entries; blank UI placeholder keys were also serialized.
 - A new real loopback HTTP regression first reproduced the missing header. Runtime and cURL export now filter enabled, named parameters before deciding to override. The same fixture verifies exported/imported request behavior and does not change source objects. This is explicit request-parameter precedence only; automatic persistent Cookie management remains unimplemented.
+
+## 2026-10-19: callback compatibility and visual constraints
+
+- 96aada8: bounded setTimeout/clearTimeout, callback assertion completion and
+  timer/HTTP interleaving; 216 core tests, CI39196303965 first-attempt9/9.
+- 89eb0fb: Apipost-style $.ajax callback subset through the same HTTP broker;
+  JSON/form/query, success/error/complete and explicit unsupported-option errors.
+  220 core tests, CI39196662569 first-attempt9/9. Promise/await still unsupported.
+- Current next change: visual Schema minimum/maximum/multipleOf, string lengths,
+  array/property bounds, format/pattern and typed enum. Original advanced
+  keywords are preserved; unchanged controls do not rewrite existing constraints.
+  Invalid ranges/enum inputs keep the modal and source unchanged for correction.
+  Metadata editing does not execute regexes or pretend to solve all Schema
+  constraints. Full local suite221passes; browser verification pending exact CI.

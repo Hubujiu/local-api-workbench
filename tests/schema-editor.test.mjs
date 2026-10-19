@@ -197,3 +197,56 @@ test("visual response definitions retain media examples headers and unrelated re
     3,
   );
 });
+
+test("visual constraint edits preserve advanced keywords and validate atomically", () => {
+  const original = {
+    type: "string",
+    format: "email",
+    minLength: 2,
+    maxLength: 20,
+    "x-custom": { keep: true },
+    allOf: [{ type: "string" }],
+  };
+  const next = editSchemaNode(original, [], {
+    constraints: {
+      minLength: "3",
+      maxLength: "12",
+      pattern: "^[a-z]+$",
+      format: "",
+      enum: '["abc","def"]',
+    },
+  });
+  assert.equal(next.minLength, 3);
+  assert.equal(next.maxLength, 12);
+  assert.equal(next.pattern, "^[a-z]+$");
+  assert.equal(next.format, undefined);
+  assert.deepEqual(next.enum, ["abc", "def"]);
+  assert.deepEqual(next.allOf, original.allOf);
+  assert.equal(original.minLength, 2);
+  const number = editSchemaNode({ type: "number", minimum: 0 }, [], {
+    constraints: {
+      minimum: "-2",
+      maximum: "0",
+      multipleOf: "0.5",
+      enum: "[0,false,null]",
+    },
+  });
+  assert.equal(number.minimum, -2);
+  assert.equal(number.maximum, 0);
+  assert.deepEqual(number.enum, [0, false, null]);
+  for (const constraints of [
+    { minLength: "4", maxLength: "3" },
+    { minItems: "-1" },
+    { maxProperties: "1.5" },
+    { minimum: "Infinity" },
+    { multipleOf: "0" },
+    { enum: "[]" },
+    { enum: "{}" },
+    { unknown: "1" },
+  ])
+    assert.throws(
+      () => editSchemaNode(original, [], { constraints }),
+      /约束|枚举/,
+    );
+  assert.equal(original.minLength, 2);
+});

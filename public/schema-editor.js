@@ -17,6 +17,69 @@ const types = [
   "array",
   "null",
 ];
+const constraintFields = {
+  minimum: "数值下限",
+  maximum: "数值上限",
+  multipleOf: "数值步长",
+  minLength: "最短长度",
+  maxLength: "最长长度",
+  minItems: "最少数组项",
+  maxItems: "最多数组项",
+  minProperties: "最少属性数",
+  maxProperties: "最多属性数",
+  format: "格式",
+  pattern: "正则表达式",
+  enum: "枚举（JSON数组）",
+};
+function editConstraints(node, fields) {
+  if (!object(fields)) throw Error("约束字段必须为对象");
+  for (const [key, value] of Object.entries(fields)) {
+    if (!Object.hasOwn(constraintFields, key)) throw Error("未支持的约束字段");
+    if (typeof value !== "string" || value.length > 65536)
+      throw Error("约束输入无效或过长");
+    if (!value.trim()) {
+      delete node[key];
+      continue;
+    }
+    if (key === "enum") {
+      let values;
+      try {
+        values = JSON.parse(value);
+      } catch {
+        throw Error("枚举必须为JSON数组");
+      }
+      if (!Array.isArray(values) || !values.length || values.length > 100)
+        throw Error("枚举须含1至100项");
+      node[key] = values;
+    } else if (["format", "pattern"].includes(key)) {
+      if (value.length > 4096) throw Error("文本约束最多4096字符");
+      node[key] = value;
+    } else {
+      const n = Number(value);
+      if (
+        !Number.isFinite(n) ||
+        (key === "multipleOf" && n <= 0) ||
+        (/Length$|Items$|Properties$/.test(key) &&
+          (!Number.isSafeInteger(n) || n < 0))
+      )
+        throw Error("数值约束无效");
+      node[key] = n;
+    }
+  }
+  for (const [min, max] of [
+    ["minimum", "maximum"],
+    ["minLength", "maxLength"],
+    ["minItems", "maxItems"],
+    ["minProperties", "maxProperties"],
+  ])
+    if (
+      (Object.hasOwn(fields, min) || Object.hasOwn(fields, max)) &&
+      typeof node[min] === "number" &&
+      typeof node[max] === "number" &&
+      node[min] > node[max]
+    )
+      throw Error("约束下限不能大于上限");
+}
 function nodeAt(schema, path) {
   if (!Array.isArray(path) || path.length > 32) throw Error("结构路径无效");
   let node = schema;
@@ -106,6 +169,8 @@ export function editSchemaNode(schema, path, fields) {
   const next = structuredClone(schema),
     node = nodeAt(next, path);
   editable(node);
+  if (Object.hasOwn(fields, "constraints"))
+    editConstraints(node, fields.constraints);
   if (fields.type) {
     if (!types.includes(fields.type)) throw Error("字段类型无效");
     node.type = fields.type;
@@ -266,6 +331,11 @@ export function bindSchemaEditor(container, schema) {
         description: container.querySelector("[data-schema-description]").value,
         example: container.querySelector("[data-schema-example]").value,
         required: container.querySelector("[data-schema-required]").checked,
+        constraints: Object.fromEntries(
+          [...container.querySelectorAll("[data-schema-constraint]")]
+            .filter((input) => input.value !== input.defaultValue)
+            .map((input) => [input.dataset.schemaConstraint, input.value]),
+        ),
       });
   };
   const commit = () => {
@@ -307,7 +377,26 @@ export function bindSchemaEditor(container, schema) {
           esc(
             Object.hasOwn(node, "example") ? JSON.stringify(node.example) : "",
           ) +
-          "</textarea>") +
+          '</textarea><details class="schema-constraints"><summary>范围、格式与枚举</summary><p class="muted">留空清除；未显示的高级约束保持不变。正则仅保存，不在编辑器中执行。</p>' +
+          Object.entries(constraintFields)
+            .map(
+              ([key, label]) =>
+                "<label>" +
+                label +
+                '</label><input data-schema-constraint="' +
+                key +
+                '" value="' +
+                esc(
+                  Object.hasOwn(node, key)
+                    ? key === "enum"
+                      ? JSON.stringify(node[key])
+                      : String(node[key])
+                    : "",
+                ) +
+                '">',
+            )
+            .join("") +
+          "</details>") +
       '<button type="button" data-schema-apply>应用字段</button><button type="button" data-schema-cancel>放弃字段编辑</button>';
     container.querySelector("[data-schema-apply]").onclick = () =>
       report(() => {

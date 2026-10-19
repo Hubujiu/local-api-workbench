@@ -1321,6 +1321,18 @@ try {
   );
   await page.locator('[data-schema-edit="1"]').click();
   await page.locator("[data-schema-description]").fill("数量范围保留");
+  await page.locator(".schema-constraints > summary").click();
+  await page.locator('[data-schema-constraint="minimum"]').fill("5");
+  await page.locator("[data-schema-apply]").click();
+  await page
+    .locator(".schema-error")
+    .getByText("约束下限不能大于上限", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
+  await page.locator('[data-schema-constraint="minimum"]').fill("1");
+  await page.locator('[data-schema-constraint="enum"]').fill("[1,2,3,4]");
+  await page.screenshot({ path: "/tmp/local-api-schema-constraints.png" });
+  await page.locator(".schema-constraints > summary").click();
   await page.locator("[data-schema-required]").check();
   await page.locator("[data-schema-example]").fill("2");
   await page.locator("[data-schema-apply]").click();
@@ -1340,7 +1352,8 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   const visualSchema = JSON.parse(await page.locator("#schema").inputValue());
-  assert.equal(visualSchema.properties.n.minimum, 2);
+  assert.equal(visualSchema.properties.n.minimum, 1);
+  assert.deepEqual(visualSchema.properties.n.enum, [1, 2, 3, 4]);
   assert.equal(visualSchema.properties.n.maximum, 4);
   assert(visualSchema.required.includes("n"));
   assert.equal(visualSchema.properties.flag.example, false);
