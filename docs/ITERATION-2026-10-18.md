@@ -508,3 +508,8 @@ for the reopened dialog before injecting the conflict; no assertion is removed.
 The PNG also showed the privacy notice partly scrolled away after save, so the
 redraw resets its scroll and the Cookie text area is compact. New visibility
 assertion keeps that notice in view. Local231tests pass; exact new CI pending.
+
+Cookie manager50a0752 passed9/9CI first attempt (run39198811901),231core tests.
+The stale-revision UI fixture now targets the visible project and preserves all
+conflict assertions. A follow-up adds dialog-instance guards and a deliberately
+delayed browser read to cover close/reopen without clobbering a newer draft.

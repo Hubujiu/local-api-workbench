@@ -1781,6 +1781,49 @@ try {
     () => document.querySelectorAll("[data-cookie-remove]").length === 0,
   );
   await page.locator("#dialog-save").click();
+  // A delayed read from a closed manager must not replace the reopened draft.
+  let releaseCookieRead, cookieReadReady;
+  const cookieReadGate = new Promise((resolve) => {
+    releaseCookieRead = resolve;
+  });
+  const cookieReady = new Promise((resolve) => {
+    cookieReadReady = resolve;
+  });
+  let holdCookieRead = true;
+  const cookieRoute = async (route) => {
+    if (!holdCookieRead) return route.continue();
+    holdCookieRead = false;
+    const response = await route.fetch();
+    cookieReadReady();
+    await cookieReadGate;
+    await route.fulfill({ response });
+  };
+  await page.route("**/cookies?environmentId=*", cookieRoute);
+  await page.locator("#cookie-manager").click();
+  await cookieReady;
+  await page.locator("#dialog").waitFor({ state: "visible" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#cookie-manager").click();
+  await page.locator("#cookie-toggle").waitFor();
+  await page.locator("#cookie-url").fill("https://new-draft.example.test/");
+  const lateCookieResponse = page.waitForResponse((r) =>
+    r.url().includes("/cookies?environmentId="),
+  );
+  releaseCookieRead();
+  await (await lateCookieResponse).finished();
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  assert.equal(
+    await page.locator("#cookie-url").inputValue(),
+    "https://new-draft.example.test/",
+  );
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.unroute("**/cookies?environmentId=*", cookieRoute);
+  await page.locator("#dialog-save").click();
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

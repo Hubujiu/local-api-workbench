@@ -49,3 +49,8 @@ coverage includes restart, project/environment separation, domain/path/Secure,
 prefixes, Max-Age, IPv6, revision conflicts, concurrent response capture, real
 script/main requests and load snapshot isolation. Browser checks cover opt-in,
 creation/edit persistence, masked display, stale revision recovery and deletion.
+
+Manager dialog reads/writes are scoped to the exact open dialog instance. Closing
+and reopening cannot let a delayed response overwrite the newer draft. The
+browser regression deliberately holds an earlier read, reopens the manager and
+edits a new URL before releasing that read; the new draft must remain intact.

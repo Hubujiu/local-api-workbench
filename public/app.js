@@ -3024,15 +3024,37 @@ async function openCookieManager() {
   collect();
   const environmentId = env(),
     endpoint = "/projects/" + project.id + "/cookies";
-  let state = await api(
-    endpoint + "?environmentId=" + encodeURIComponent(environmentId),
+  const dialog = $("#dialog"),
+    marker = {};
+  dialog.cookieManagerRequest = marker;
+  const active = () =>
+    dialog.open &&
+    dialog.cookieManagerRequest === marker &&
+    $("#dialog-title").textContent === "Cookie管理器";
+  modal(
+    "Cookie管理器",
+    '<p role="status">正在读取Cookie…</p>',
+    () => {},
+    "完成",
   );
+  let state;
+  try {
+    state = await api(
+      endpoint + "?environmentId=" + encodeURIComponent(environmentId),
+    );
+  } catch (error) {
+    if (active())
+      $("#dialog-content").textContent = "读取Cookie失败：" + error.message;
+    return;
+  }
+  if (!active()) return;
   const view = () =>
     `<p class="notice">Cookie明文仅存当前电脑，按项目与环境隔离，Cookie库不进入项目备份，但请求/响应历史可能含Cookie，分享前请检查。开启后自动保存/发送匹配Cookie，并覆盖请求里手工填写的Cookie。此处操作立即生效，关闭窗口不撤销。</p><p id="cookie-error" class="failed" role="alert"></p><button id="cookie-toggle">${state.enabled ? "关闭自动Cookie" : "开启自动Cookie"}</button><button id="cookie-refresh">重新加载</button><button id="cookie-clear">清空当前环境Cookie</button><p>状态：${state.enabled ? "已开启" : "已关闭"} · ${state.cookies.length}/500</p><div class="cookie-table"><table><thead><tr><th>名称</th><th>值</th><th>域 / 路径</th><th>属性</th><th></th></tr></thead><tbody>${state.cookies.map((c, i) => `<tr><td>${esc(c.key)}</td><td><input type="password" readonly value="${esc(c.value)}" aria-label="Cookie值"></td><td>${esc(c.domain)}<br>${esc(c.path)}</td><td>${c.secure ? "Secure " : ""}${c.httpOnly ? "HttpOnly " : ""}${c.hostOnly ? "HostOnly" : ""}</td><td><button data-cookie-edit="${i}">编辑</button><button data-cookie-remove="${i}">删除</button></td></tr>`).join("")}</tbody></table></div><label>来源URL（HTTP/HTTPS）</label><input id="cookie-url" placeholder="https://api.example.test/"><label>Set-Cookie（同域、同路径、同名会覆盖；更改身份会新增）</label><textarea id="cookie-line" placeholder="name=value; Path=/; Secure"></textarea><button id="cookie-set">保存Cookie</button>`;
   const attempt = (fn) => async () => {
     try {
       await fn();
     } catch (error) {
+      if (!active()) return;
       $("#cookie-error").textContent = error.message;
       $("#dialog-content").scrollTop = 0;
     }
@@ -3046,6 +3068,7 @@ async function openCookieManager() {
     draw();
   };
   const draw = () => {
+    if (!active()) return;
     $("#dialog-content").innerHTML = view();
     $("#dialog-content").scrollTop = 0;
     for (const button of $("#dialog-content").querySelectorAll("button"))
@@ -3108,6 +3131,5 @@ async function openCookieManager() {
           (c.maxAge !== undefined ? "; Max-Age=" + c.maxAge : "");
       };
   };
-  modal("Cookie管理器", view(), () => {}, "完成");
   draw();
 }
