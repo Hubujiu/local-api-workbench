@@ -6,8 +6,10 @@ import { parentPort, workerData } from "node:worker_threads";
 import { getQuickJS } from "quickjs-emscripten";
 let runtime, context;
 const callbacks = new Map(),
+  timers = new Map(),
   replies = [];
 let wake,
+  timerCount = 0,
   requestCount = 0;
 const receive = (message) => {
   if (message.kind === "http") {
@@ -58,8 +60,56 @@ try {
   context.setProp(context.global, "__sendRequest", sendFunction);
   sendFunction.dispose();
 
+  const scheduleTimer = context.newFunction(
+    "__scheduleTimer",
+    (callback, delay) => {
+      if (context.typeof(callback) !== "function")
+        return { error: context.newError("定时器需要回调函数") };
+      const milliseconds = context.getNumber(delay);
+      if (
+        !Number.isFinite(milliseconds) ||
+        milliseconds < 0 ||
+        milliseconds > 1000
+      )
+        return { error: context.newError("定时器延迟须为0至1000毫秒") };
+      if (timerCount >= 100 || timers.size >= 32)
+        return { error: context.newError("脚本定时器最多100次、同时32次") };
+      const id = ++timerCount;
+      timers.set(id, {
+        callback: callback.dup(),
+        due: Date.now() + milliseconds,
+      });
+      return context.newNumber(id);
+    },
+  );
+  const cancelTimer = context.newFunction("__cancelTimer", (handle) => {
+    const id = context.getNumber(handle),
+      timer = timers.get(id);
+    if (timer) {
+      timers.delete(id);
+      timer.callback.dispose();
+    }
+    return context.undefined;
+  });
+  context.setProp(context.global, "__scheduleTimer", scheduleTimer);
+  context.setProp(context.global, "__cancelTimer", cancelTimer);
+  scheduleTimer.dispose();
+  cancelTimer.dispose();
+
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
+    ((schedule,cancel)=>{
+    globalThis.setTimeout=(callback,delay=0,...args)=>{
+      if(typeof callback!=='function')throw Error('定时器需要回调函数');
+      return schedule(()=>{
+        const result=callback(...args);
+        if(result && typeof result.then==='function')throw Error('定时器回调暂不支持Promise返回');
+      },Number(delay));
+    };
+    globalThis.clearTimeout=id=>cancel(Number(id));
+    })(__scheduleTimer,__cancelTimer);
+    delete globalThis.__scheduleTimer;
+    delete globalThis.__cancelTimer;
     globalThis.Event = class {
       constructor(type, options={}) { this.type=String(type);this.cancelable=Boolean(options.cancelable);this.defaultPrevented=false; }
       preventDefault(){if(this.cancelable)this.defaultPrevented=true;}
@@ -282,10 +332,25 @@ try {
     result.value.dispose();
   }
 
-  while (callbacks.size) {
-    if (!replies.length)
+  while (callbacks.size || timers.size) {
+    const earliest = Math.min(
+      ...[...timers.values()].map((timer) => timer.due),
+    );
+    if (!replies.length && earliest > Date.now())
       await new Promise((resolve) => {
-        wake = resolve;
+        let timeout;
+        wake = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        if (Number.isFinite(earliest))
+          timeout = setTimeout(
+            () => {
+              wake = null;
+              resolve();
+            },
+            Math.max(0, earliest - Date.now()),
+          );
       });
     for (const message of replies.splice(0)) {
       const callback = callbacks.get(message.id);
@@ -311,6 +376,26 @@ try {
         response.dispose();
       }
     }
+    const now = Date.now();
+    for (const [id, timer] of [...timers].sort(
+      (a, b) => a[1].due - b[1].due || a[0] - b[0],
+    )) {
+      if (timer.due > now || !timers.has(id)) continue;
+      timers.delete(id);
+      try {
+        const result = bounded(() =>
+          context.callFunction(timer.callback, context.undefined),
+        );
+        if (result.error) {
+          const value = context.dump(result.error);
+          result.error.dispose();
+          throw Error(value.message || JSON.stringify(value));
+        }
+        result.value.dispose();
+      } finally {
+        timer.callback.dispose();
+      }
+    }
   }
   deadline = Date.now() + Math.max(0, remaining);
   const output = context.evalCode(
@@ -329,6 +414,7 @@ try {
 } finally {
   parentPort.off("message", receive);
   for (const callback of callbacks.values()) callback.dispose();
+  for (const timer of timers.values()) timer.callback.dispose();
   context?.dispose();
   runtime?.dispose();
 }
