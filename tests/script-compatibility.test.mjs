@@ -142,3 +142,23 @@ test("unsupported async assertions never report a false pass and assertion count
     /最多1000/,
   );
 });
+
+test("callback assertions settle explicitly and cannot erase prior failures", async () => {
+  const result = await runScript(
+    `
+    pm.test('success', done => done());
+    pm.test('error', done => done(Error('reported')));
+    pm.test('missing', done => {});
+    pm.test('duplicate', done => {done();done();});
+    pm.test('throw-after-done', done => {done();throw Error('late');});
+    pm.test('failure-stays', done => {done(Error('first'));done();});
+  `,
+    { variables: {} },
+  );
+  assert.deepEqual(
+    result.tests.map((x) => x.passed),
+    [true, false, false, false, false, false],
+  );
+  assert.match(result.tests[1].error, /reported/);
+  assert.match(result.tests[2].error, /异步断言/);
+});

@@ -195,7 +195,25 @@ try {
       environment: environmentAPI,
       globals: globalsAPI,
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
-      test: (name, fn) => { try { if(fn.length>0)throw Error('回调式异步断言尚不支持'); const result=fn(); if(result && typeof result.then==='function')throw Error('Promise异步断言尚不支持'); tests.push({ name, passed: true }); } catch (e) { tests.push({ name, passed: false, error: String(e.message).slice(0,4000) }); } },
+      test: (name, fn) => {
+        const record={name,passed:false,error:'异步断言未调用done完成'};
+        tests.push(record);
+        let called=false, failed=false;
+        const fail=error=>{failed=true;record.passed=false;record.error=String(error?.message ?? error).slice(0,4000);};
+        const done=error=>{
+          if(called){fail(Error('异步断言done不能重复调用'));return;}
+          called=true;
+          if(error){fail(error);return;}
+          if(!failed){record.passed=true;delete record.error;}
+        };
+        try {
+          const asynchronous=fn.length>0;
+          const result=asynchronous?fn(done):fn();
+          if(result && typeof result.then==='function')throw Error('Promise异步断言尚不支持');
+          if(!asynchronous && !failed){record.passed=true;delete record.error;}
+        } catch(error){fail(error);}
+        return pm;
+      },
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
     };
   `;

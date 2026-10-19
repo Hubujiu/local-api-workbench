@@ -167,3 +167,29 @@ test("script HTTP request count, response size and callback compute remain bound
     /同时4/,
   );
 });
+
+test("callback assertions await brokered HTTP without losing registration order", async (t) => {
+  const f = await fixture(t);
+  const result = await runScript(
+    `
+    pm.test('network', done => {
+      pm.sendRequest(${JSON.stringify(f.url)}, (err,res) => {
+        if(err) return done(err);
+        try { pm.expect(res.code).to.equal(200); pm.variables.set('completed',true); done(); }
+        catch(error) { done(error); }
+      });
+    });
+    pm.test('sync', () => {});
+  `,
+    { variables: {}, allowNetwork: true },
+  );
+  assert.deepEqual(
+    result.tests.map((x) => [x.name, x.passed]),
+    [
+      ["network", true],
+      ["sync", true],
+    ],
+  );
+  assert.equal(result.localVariables.completed, true);
+  assert.equal(result.networkRequests.length, 1);
+});
