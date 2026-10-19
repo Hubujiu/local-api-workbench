@@ -488,3 +488,14 @@ Response retry review additionally keeps pending schema edits transactional when
   Invalid ranges/enum inputs keep the modal and source unchanged for correction.
   Metadata editing does not execute regexes or pretend to solve all Schema
   constraints. Full local suite221passes; browser verification pending exact CI.
+
+Visual constraints2e82d54 passed9/9CI (run39196870875,221core tests).
+The actual PNG showed the expanded form scrolling too far and obscuring the tree;
+follow-up uses a bounded190px inner two-column constraint viewport and verifies
+that the enum input remains above the footer.
+
+Object sample generation now honors minProperties/maxProperties, prioritizes
+required fields, fills additional properties using their schema, and rejects
+conflicts. Bounds are0..1000; this remains illustrative generation, not a general
+constraint solver. Reference: https://json-schema.org/understanding-json-schema/reference/object#size .
+Full local suite223passes; new exact-commit CI and screenshot inspection pending.

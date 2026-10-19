@@ -217,3 +217,50 @@ test("schema sample references decode URI fragments once before JSON Pointer tok
     /递归/,
   );
 });
+
+test("object samples honor property counts while retaining all required fields", () => {
+  const schema = {
+    type: "object",
+    maxProperties: 1,
+    required: ["last"],
+    properties: { first: { type: "string" }, last: { const: 0 } },
+  };
+  assert.deepEqual(sampleFromSchema(schema), { last: 0 });
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "object",
+      maxProperties: 0,
+      properties: { optional: false },
+    }),
+    {},
+  );
+  const filled = sampleFromSchema({
+    type: "object",
+    minProperties: 3,
+    properties: { additionalProperty1: { const: false } },
+    required: ["missing"],
+    additionalProperties: { const: null },
+  });
+  assert.deepEqual(filled, {
+    additionalProperty1: false,
+    missing: null,
+    additionalProperty2: null,
+  });
+});
+
+test("object property count conflicts fail instead of returning an invalid sample", () => {
+  for (const schema of [
+    { type: "object", minProperties: 2, maxProperties: 1 },
+    { type: "object", minProperties: -1 },
+    { type: "object", maxProperties: 1.5 },
+    { type: "object", minProperties: 1001 },
+    { type: "object", maxProperties: 0, required: ["x"] },
+    {
+      type: "object",
+      minProperties: 2,
+      properties: { x: { type: "string" } },
+      additionalProperties: false,
+    },
+  ])
+    assert.throws(() => sampleFromSchema(schema), /属性|Properties|required/);
+});

@@ -1562,3 +1562,31 @@ dialog:has(#schema-editor) {
   min-height: 64px;
   height: 80px;
 }
+
+/* Keep long constraints inside their own viewport, leaving the field/tree visible. */
+.schema-constraints {
+  margin-top: 8px;
+}
+.schema-constraints > summary {
+  cursor: pointer;
+}
+.schema-constraints > .muted {
+  margin: 6px 0;
+  font-size: 11px;
+}
+.schema-constraint-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 0 5px 6px 0;
+  overscroll-behavior: contain;
+}
+.schema-constraint-grid > div {
+  min-width: 0;
+}
+.schema-constraint-grid input {
+  width: 100%;
+  min-width: 0;
+}

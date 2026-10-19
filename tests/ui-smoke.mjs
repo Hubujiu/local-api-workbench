@@ -1331,6 +1331,21 @@ try {
   assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
   await page.locator('[data-schema-constraint="minimum"]').fill("1");
   await page.locator('[data-schema-constraint="enum"]').fill("[1,2,3,4]");
+  const constraintBox = await page
+    .locator(".schema-constraint-grid")
+    .boundingBox();
+  assert(
+    constraintBox.height <= 200,
+    "constraint inputs must use a bounded inner viewport",
+  );
+  const constraintFooter = await page.locator("#dialog-save").boundingBox();
+  const constraintEnum = await page
+    .locator('[data-schema-constraint="enum"]')
+    .boundingBox();
+  assert(
+    constraintEnum.y + constraintEnum.height <= constraintFooter.y,
+    "enum field must not overlap the save footer",
+  );
   await page.screenshot({ path: "/tmp/local-api-schema-constraints.png" });
   await page.locator(".schema-constraints > summary").click();
   await page.locator("[data-schema-required]").check();

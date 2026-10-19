@@ -377,11 +377,11 @@ export function bindSchemaEditor(container, schema) {
           esc(
             Object.hasOwn(node, "example") ? JSON.stringify(node.example) : "",
           ) +
-          '</textarea><details class="schema-constraints"><summary>范围、格式与枚举</summary><p class="muted">留空清除；未显示的高级约束保持不变。正则仅保存，不在编辑器中执行。</p>' +
+          '</textarea><details class="schema-constraints"><summary>范围、格式与枚举</summary><p class="muted">留空清除；未显示的高级约束保持不变。正则仅保存，不在编辑器中执行。</p><div class="schema-constraint-grid">' +
           Object.entries(constraintFields)
             .map(
               ([key, label]) =>
-                "<label>" +
+                "<div><label>" +
                 label +
                 '</label><input data-schema-constraint="' +
                 key +
@@ -393,10 +393,10 @@ export function bindSchemaEditor(container, schema) {
                       : String(node[key])
                     : "",
                 ) +
-                '">',
+                '"></div>',
             )
             .join("") +
-          "</details>") +
+          "</div></details>") +
       '<button type="button" data-schema-apply>应用字段</button><button type="button" data-schema-cancel>放弃字段编辑</button>';
     container.querySelector("[data-schema-apply]").onclick = () =>
       report(() => {

@@ -68,8 +68,6 @@ export function sampleFromSchema(
       "dependentRequired",
       "unevaluatedItems",
       "unevaluatedProperties",
-      "minProperties",
-      "maxProperties",
     ])
       if (schema[key] !== undefined)
         throw Error("复杂约束 " + key + " 请提供 example");
@@ -104,28 +102,49 @@ export function sampleFromSchema(
         throw Error("properties 必须是对象");
       if (schema.required !== undefined && !Array.isArray(schema.required))
         throw Error("required 必须是数组");
-      const entries = Object.entries(properties).map(([key, value]) => [
+      const min = schema.minProperties ?? 0,
+        max = schema.maxProperties ?? 1000;
+      for (const bound of [min, max])
+        if (!Number.isSafeInteger(bound) || bound < 0 || bound > 1000)
+          throw Error("对象属性数须为0至1000，请提供example处理更大对象");
+      if (min > max) throw Error("对象属性数下限大于上限");
+      const required = new Set(schema.required || []);
+      if (required.size > max) throw Error("required超过最大属性数");
+      for (const name of required) {
+        if (typeof name !== "string") throw Error("required 字段名无效");
+        if (
+          !Object.hasOwn(properties, name) &&
+          schema.additionalProperties === false
+        )
+          throw Error("required 与 additionalProperties 约束冲突");
+      }
+      const additional =
+        typeof schema.additionalProperties === "object"
+          ? schema.additionalProperties
+          : {};
+      const selected = new Map();
+      let optionalSlots = max - required.size;
+      for (const [name, value] of Object.entries(properties)) {
+        if (required.has(name)) selected.set(name, value);
+        else if (value !== false && optionalSlots > 0) {
+          selected.set(name, value);
+          optionalSlots--;
+        }
+      }
+      for (const name of required)
+        if (!selected.has(name)) selected.set(name, additional);
+      if (selected.size < min && schema.additionalProperties === false)
+        throw Error("可用属性不足minProperties且禁止额外属性");
+      let suffix = 1;
+      while (selected.size < min) {
+        const name = "additionalProperty" + suffix++;
+        if (!selected.has(name) && !Object.hasOwn(properties, name))
+          selected.set(name, additional);
+      }
+      const entries = [...selected].map(([key, value]) => [
         key,
         sample(value, level + 1, seen, key),
       ]);
-      for (const name of schema.required || []) {
-        if (typeof name !== "string") throw Error("required 字段名无效");
-        if (!Object.hasOwn(properties, name)) {
-          if (schema.additionalProperties === false)
-            throw Error("required 与 additionalProperties 约束冲突");
-          entries.push([
-            name,
-            sample(
-              typeof schema.additionalProperties === "object"
-                ? schema.additionalProperties
-                : {},
-              level + 1,
-              seen,
-              name,
-            ),
-          ]);
-        }
-      }
       return Object.fromEntries(entries);
     }
     if (type === "array") {
