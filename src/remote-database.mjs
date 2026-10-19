@@ -1,7 +1,9 @@
+import { queryMongo } from "./mongodb.mjs";
 import { queryRedis } from "./redis.mjs";
 /** Read-only DB connections; credentials are request-scoped and never persisted here. */
 export async function queryRemoteDatabase(input) {
   if (input.type === "redis") return queryRedis(input);
+  if (input.type === "mongodb") return queryMongo(input);
   const { type, sql, parameters = [] } = input;
   if (!["postgres", "mysql"].includes(type)) throw Error("数据库类型无效");
   if (

@@ -78,3 +78,7 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 ## 常用内置动态变量
 
 URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等89种基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
+
+## 数据库只读查询
+
+支持 SQLite、PostgreSQL、MySQL、Redis有界命令和MongoDB find。Redis输入JSON命令数组；MongoDB输入collection/filter/projection/sort/limit等JSON查询对象，结果采用Extended JSON。均不自动保存连接凭据；不提供数据库写入或任意脚本执行。具体限额见 docs/ADR-REDIS-READS.md、docs/ADR-MONGODB-FIND.md。

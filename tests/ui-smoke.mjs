@@ -1892,7 +1892,48 @@ try {
         page.viewportSize().height,
     "database result scrolls into view",
   );
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-redis-query.png" });
+  let releaseDatabaseReply, databaseReplyReady;
+  const databaseGate = new Promise((resolve) => {
+    releaseDatabaseReply = resolve;
+  });
+  const databaseReady = new Promise((resolve) => {
+    databaseReplyReady = resolve;
+  });
+  const delayedDatabaseRoute = async (route) => {
+    const response = await route.fetch();
+    databaseReplyReady();
+    await databaseGate;
+    await route.fulfill({ response });
+  };
+  await page.route("**/api/projects/*/database", delayedDatabaseRoute);
+  await page.locator("#db-query").click();
+  await databaseReady;
+  await page.locator("#db-type").selectOption("mongodb");
+  const staleDatabaseResponse = page.waitForResponse((r) =>
+    r.url().endsWith("/database"),
+  );
+  releaseDatabaseReply();
+  await (await staleDatabaseResponse).finished();
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  await page.unroute("**/api/projects/*/database", delayedDatabaseRoute);
+  assert.equal(await page.locator("#db-query").isEnabled(), true);
+
+  assert.equal(await page.locator("#db-auth-source").isVisible(), true);
+  assert.equal(await page.locator("#db-params").isVisible(), false);
+  assert.equal(await page.locator("#db-result").innerText(), "");
+  assert.equal(
+    await page.locator("#db-sql").inputValue(),
+    '["GET","ui-fixture"]',
+    "switching type preserves edited query text",
+  );
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
