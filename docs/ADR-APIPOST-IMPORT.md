@@ -12,3 +12,9 @@ Sources:
 - https://www.npmjs.com/package/swagger2apipost
 - https://www.npmjs.com/package/apipost-runtime
 - tests/fixtures/APIPOST-FIXTURE.md
+
+Offline2 static inspection (2026-10-19) identified overlapping `apis` exports
+with additional `global`, `models`, `samples`, and `automated_testings` markers.
+The legacy importer rejects these markers rather than silently dropping their
+contents. See [original-package research](ORIGINAL-OFFLINE2-RESEARCH.md). This
+hardening does not add native Offline2 migration support.

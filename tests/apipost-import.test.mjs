@@ -119,3 +119,37 @@ test("legacy metadata import preserves empty folders and rejects dependencies be
   );
   assert.deepEqual(project, before);
 });
+test("Offline2 export markers cannot silently enter the legacy importer", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  // Synthetic regression cases based on static format markers, not native exports.
+  const api = {
+    target_type: "api",
+    name: "Existing",
+    url: "https://example.test",
+    request: {},
+  };
+  for (const [field, value] of Object.entries({
+    global: { envs: [{ env_id: "production" }] },
+    models: [{ model_id: "model" }],
+    samples: [{ sample_id: "sample" }],
+    automated_testings: [{ testing_id: "plan" }],
+  })) {
+    for (const marker of [value, Array.isArray(value) ? [] : {}, null]) {
+      const document = { apis: [api], [field]: marker };
+      for (const input of [document, { status: "success", data: document }]) {
+        assert.throws(() => importDocument(input), /Offline2.*未验证/);
+        const project = {
+          requests: [structuredClone(api)],
+          folders: ["Existing"],
+          environments: [],
+        };
+        const before = structuredClone(project);
+        assert.throws(
+          () => importIntoProject(project, JSON.stringify(input)),
+          /Offline2.*未验证/,
+        );
+        assert.deepEqual(project, before);
+      }
+    }
+  }
+});

@@ -94,6 +94,16 @@ function inheritedParameters(request) {
 export function importApipost(document) {
   const source = apipostDocument(document);
   if (!source) throw Error("不是支持的Apipost公共JSON格式");
+  // Offline2 exports overlap with legacy `apis`, but carry different dependencies.
+  // Reject even empty markers until the complete format has a verified migration.
+  if (
+    ["global", "models", "samples", "automated_testings"].some((key) =>
+      Object.hasOwn(source, key),
+    )
+  )
+    throw Error(
+      "Apipost Offline2原生导出格式尚未验证，不能按旧版JSON导入；请先使用OpenAPI/Postman导出，并单独保留测试和全局配置",
+    );
   if (
     (source.env !== undefined && !Array.isArray(source.env)) ||
     (source.dataModel !== undefined && !Array.isArray(source.dataModel))
