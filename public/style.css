@@ -1613,3 +1613,11 @@ dialog:has(#cookie-line) {
   width: 100%;
   min-width: 0;
 }
+#db-ca {
+  min-height: 80px;
+  height: 80px;
+}
+#db-result {
+  max-height: 240px;
+  overflow: auto;
+}

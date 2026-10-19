@@ -21,7 +21,7 @@
 | 执行计划 | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次 | core.test.mjs、plan-snapshots.test.mjs、cli.test.mjs、server.test.mjs、ui-smoke.mjs |
 | 用例与压测 | 独立接口用例与执行计划、最多 100 请求/10 并发的有界压测 | core.test.mjs、server.test.mjs |
 | 协议 | WebSocket/TCP 交互、SSE 接收；最长 15 分钟、8 MiB、最近 200 消息 | protocols.test.mjs、protocol-sessions.test.mjs、ui-smoke.mjs |
-| 数据库 | SQLite/PostgreSQL/MySQL 只读查询、参数化、行数/时间限制 | database.test.mjs、remote-database.mjs、desktop-smoke.mjs |
+| 数据库 | SQLite/PostgreSQL/MySQL只读查询与Redis有界只读命令、参数化、行数/时间限制 | database.test.mjs、remote-database.mjs、desktop-smoke.mjs |
 | MCP | stdio 与可选 HTTP、显式项目 allowlist、独立读写/执行权限、同步 OpenAPI 稳定 ID | mcp.test.mjs、server.test.mjs、ui-smoke.mjs |
 | 桌面与 Git 入口 | Windows x64/macOS arm64/Linux x64 Electron成品包、自选项目位置、打开目录/终端、关闭未保存提示 | desktop-smoke.mjs、terminal.test.mjs |
 | 可视界面 | 浅色/深色、紧凑布局、编辑器行号/JSON 高亮、响应/日志/历史 | code-format.test.mjs、ui-smoke.mjs 的截图/视频/trace |
@@ -51,6 +51,8 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-最近已全绿检查点96aada8d0ce2b7d740370a527c63fa8da2e99090：216项核心测试、9项CI通过，Actions39196303965。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
+最近已全绿检查点a92191c691f93f9b5a9409bacf6c492e7b71a950：245项核心测试、9项CI通过，Actions39201156403。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
 
-本页全绿检查点为上述216项测试提交；本次新增$.ajax回调适配的220项本地测试已通过，最新CI结论以PR关联的精确提交为准。原版静态研究及迁移限制见 [研究记录](ORIGINAL-OFFLINE2-RESEARCH.md)。
+当前检查点245项测试、9项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
+
+本轮新增并核验：Cookie管理器及关闭重开隔离、89种动态变量与replaceIn、Schema约束编辑/对象样例边界、真实Redis只读查询。详细安全边界见对应ADR；这些并不消除原生迁移、完整SDK和未公开原版行为的缺口。

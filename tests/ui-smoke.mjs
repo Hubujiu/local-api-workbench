@@ -1874,6 +1874,8 @@ try {
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-page="database"]').click();
   await page.locator("#db-type").selectOption("redis");
+  assert.equal(await page.locator("#db-path").isVisible(), false);
+  assert.equal(await page.locator("#db-params").isVisible(), false);
   await page.locator("#db-host").fill("127.0.0.1");
   await page.locator("#db-port").fill(String(redisFixture.address().port));
   await page.locator("#db-name").fill("0");
@@ -1883,6 +1885,13 @@ try {
     .locator("#db-result")
     .getByText("redis-ui-fixture", { exact: false })
     .waitFor();
+  const databaseResultBox = await page.locator("#db-result").boundingBox();
+  assert(
+    databaseResultBox.y >= 0 &&
+      databaseResultBox.y + databaseResultBox.height <=
+        page.viewportSize().height,
+    "database result scrolls into view",
+  );
   await page.screenshot({ path: "/tmp/local-api-redis-query.png" });
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

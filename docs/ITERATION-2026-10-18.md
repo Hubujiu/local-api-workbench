@@ -524,3 +524,10 @@ Redis read-only support is now locally validated against bounded RESP/TLS/auth
 fixtures (245core tests overall). A real Redis7.2 service plus GET/MGET/list/hash
 scan verification and browser query fixture have been added to CI; exact new CI
 is still pending, so real-service support is not yet claimed as verified.
+
+Redis a92191c passed9/9CI first attempt (run39201156403),245core tests; database
+job emitted REAL_REDIS_FIXTURES_PASS against the actual Redis7.2 service.
+Browser PNG verified the builtin selector stays visible after insertion. Redis
+result existed but was below the fold; the follow-up hides irrelevant fields,
+scrolls query results into view, exposes optional inline CA, and ignores late
+results belonging to a discarded database page. CI for that UI change pending.
