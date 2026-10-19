@@ -1704,6 +1704,72 @@ try {
   stdioChild.stdin.end();
   await stdioClosed;
   stdioLines.close();
+  // Cookie manager: explicit opt-in, edit persistence, stale revision and deletion.
+  await page.locator('[data-param="cookies"]').click();
+  await page.locator("#cookie-manager").click();
+  await page
+    .getByRole("button", { name: "开启自动Cookie", exact: true })
+    .waitFor();
+  await page.locator("#cookie-url").fill(fixtureURL + "/");
+  await page
+    .locator("#cookie-line")
+    .fill("ui-session=fixture-one; Path=/; HttpOnly");
+  await page.locator("#cookie-set").click();
+  await page
+    .locator(".cookie-table")
+    .getByText("ui-session", { exact: true })
+    .waitFor();
+  await page.locator("#cookie-toggle").click();
+  await page
+    .getByRole("button", { name: "关闭自动Cookie", exact: true })
+    .waitFor();
+  await page.locator('[data-cookie-edit="0"]').click();
+  await page
+    .locator("#cookie-line")
+    .fill("ui-session=fixture-two; Path=/; HttpOnly");
+  await page.locator("#cookie-set").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".cookie-table input")?.value === "fixture-two",
+  );
+  assert.equal(
+    await page.locator(".cookie-table input").getAttribute("type"),
+    "password",
+  );
+  await page.screenshot({ path: "/tmp/local-api-cookie-manager.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#cookie-manager").click();
+  assert.equal(
+    await page.locator(".cookie-table input").inputValue(),
+    "fixture-two",
+  );
+  const { ProjectCookieJar } = await import("../src/cookie-jar.mjs");
+  const cookieProject = await app.store.get(observedProject.id);
+  const cookieEnvironment = await page.locator("#env").inputValue();
+  const concurrentJar = new ProjectCookieJar(
+    root,
+    cookieProject.id,
+    cookieEnvironment,
+  );
+  await concurrentJar.configure({
+    enabled: false,
+    expectedRevision: (await concurrentJar.inspect()).revision,
+  });
+  await page.locator("#cookie-toggle").click();
+  await page
+    .getByText("Cookie已有其他修改，请重新加载", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.locator("#cookie-refresh").click();
+  await page
+    .getByRole("button", { name: "开启自动Cookie", exact: true })
+    .waitFor();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('[data-cookie-remove="0"]').click();
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-cookie-remove]").length === 0,
+  );
+  await page.locator("#dialog-save").click();
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

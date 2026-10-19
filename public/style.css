@@ -1590,3 +1590,12 @@ dialog:has(#schema-editor) {
   width: 100%;
   min-width: 0;
 }
+.cookie-table {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0;
+}
+.cookie-table input {
+  min-width: 60px;
+  max-width: 160px;
+}

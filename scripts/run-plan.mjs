@@ -1,3 +1,4 @@
+import { projectCookieSession } from "../src/cookie-jar.mjs";
 import { scopedExecution } from "../src/variable-scopes.mjs";
 import {
   environmentVariables,
@@ -33,6 +34,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       executeRequest,
       {
         ...scopedExecution(store, project, environmentId),
+        cookieSession: projectCookieSession(store, project, environmentId),
         signal: controller.signal,
         prepareRequest: (request) =>
           resolveServiceRequest(project, request, environmentId),

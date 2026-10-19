@@ -1,3 +1,4 @@
+import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
 import { scopedExecution } from "./variable-scopes.mjs";
 import { versionPlan } from "./plan-version.mjs";
@@ -402,6 +403,11 @@ export function createMCP({
                   .variables,
                 executeRequest,
                 {
+                  cookieSession: projectCookieSession(
+                    store,
+                    p,
+                    args.environmentId,
+                  ),
                   ...scopedExecution(
                     store,
                     p,
@@ -447,6 +453,11 @@ export function createMCP({
                 executeRequest,
                 {
                   ...scopedExecution(store, p, plan.environmentId),
+                  cookieSession: projectCookieSession(
+                    store,
+                    p,
+                    plan.environmentId,
+                  ),
                   onStep: (step) =>
                     onProgress({
                       completed: ++completed,

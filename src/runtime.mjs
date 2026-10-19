@@ -279,7 +279,7 @@ export class Store {
     }
   }
 }
-export async function executeRequest(input, signal) {
+export async function executeRequest(input, signal, { cookieSession } = {}) {
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
@@ -312,6 +312,13 @@ export async function executeRequest(input, signal) {
   const activeCookies = r.cookies.filter((c) => c.enabled !== false && c.key);
   if (activeCookies.length)
     headers.cookie = activeCookies.map((c) => `${c.key}=${c.value}`).join("; ");
+  if (cookieSession) {
+    const managed = await cookieSession.header(u.href);
+    if (managed !== null) {
+      if (managed) headers.cookie = managed;
+      else delete headers.cookie;
+    }
+  }
   let body;
   if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");
@@ -492,6 +499,13 @@ export async function executeRequest(input, signal) {
     if (body) req.write(body);
     req.end();
   }).finally(() => connection.cleanup());
+  if (cookieSession && !signal?.aborted) {
+    try {
+      await cookieSession.capture(u.href, response.headers["set-cookie"]);
+    } catch (error) {
+      response.cookieError = "Cookie保存失败：" + error.message;
+    }
+  }
   if (
     r.auth.type === "digest" &&
     response.status === 401 &&
@@ -519,6 +533,7 @@ export async function executeRequest(input, signal) {
         ],
       },
       signal,
+      { cookieSession },
     );
     authenticated.authHandshake = {
       status: response.status,

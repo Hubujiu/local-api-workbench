@@ -1,3 +1,4 @@
+import { projectCookieSession } from "./cookie-jar.mjs";
 import { runLoad } from "./load-runner.mjs";
 import { readMCPActivities } from "./mcp-activity.mjs";
 import {
@@ -345,6 +346,24 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "cookies") {
+            const b = req.method === "POST" ? await body(req) : {};
+            const jar = projectCookieSession(
+              store,
+              p,
+              b.environmentId || u.searchParams.get("environmentId"),
+            );
+            if (req.method === "POST") {
+              if (b.operation === "configure") await jar.configure(b);
+              else if (b.operation === "set")
+                await jar.setCookie(b.url, b.cookie, b);
+              else if (b.operation === "remove") await jar.remove(b);
+              else if (b.operation === "clear") await jar.clear(b);
+              else throw Error("未知Cookie操作");
+            } else if (req.method !== "GET") throw Error("Cookie方法无效");
+            return json(res, 200, await jar.inspect());
+          }
+
           if (action === "error-codes-preview" && req.method === "POST") {
             const data = await body(req);
             return json(res, 200, { codes: parseErrorCodeList(data.source) });
@@ -605,6 +624,11 @@ export async function createApp({
                 executeRequest,
                 {
                   ...scoped,
+                  cookieSession: projectCookieSession(
+                    store,
+                    p,
+                    context.environment.id,
+                  ),
                   signal: controller.signal,
                   prepareRequest: (request) =>
                     resolveServiceRequest(p, request, context.environment.id),
@@ -700,6 +724,7 @@ export async function createApp({
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 ...scopedExecution(store, p, environmentId),
+                cookieSession: projectCookieSession(store, p, environmentId),
                 signal: controller.signal,
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
@@ -724,6 +749,11 @@ export async function createApp({
                 res,
                 200,
                 await runLoad(p, b.request, {
+                  cookieState: await projectCookieSession(
+                    store,
+                    p,
+                    context.environment.id,
+                  ).inspect(),
                   count: b.count,
                   concurrency: b.concurrency,
                   environmentId: context.environment.id,

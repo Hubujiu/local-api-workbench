@@ -305,7 +305,14 @@ export async function runPlan(
   plan,
   variables,
   execute,
-  { signal, onStep, prepareRequest, variableScopes, onScopeChanges } = {},
+  {
+    signal,
+    onStep,
+    prepareRequest,
+    variableScopes,
+    onScopeChanges,
+    cookieSession,
+  } = {},
 ) {
   const snapshot = structuredClone(plan);
   for (const step of snapshot.steps) step.request.serviceSnapshot = true;
@@ -378,7 +385,7 @@ export async function runPlan(
             functions: snapshot.functions || [],
             request: configuredRequest,
           },
-          { signal },
+          { signal, cookieSession },
         );
         record.subrequests.push(
           ...scripted.networkRequests.map((item) => ({
@@ -410,7 +417,14 @@ export async function runPlan(
         interpolate,
       );
       if (prepareRequest) record.request = prepareRequest(record.request);
-      record.response = await execute(record.request, signal);
+      record.response = await execute(record.request, signal, {
+        cookieSession,
+      });
+      if (record.response.cookieError)
+        record.logs.push({
+          phase: "cookies",
+          message: record.response.cookieError,
+        });
       record.assertions.push(
         ...evaluateAssertions(record.response, record.request.assertions).map(
           (assertion) => ({ ...assertion, phase: "response" }),
@@ -456,7 +470,7 @@ export async function runPlan(
             request: record.request,
             response: record.response,
           },
-          { signal },
+          { signal, cookieSession },
         );
         record.subrequests.push(
           ...scripted.networkRequests.map((item) => ({

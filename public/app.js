@@ -440,7 +440,11 @@ function pairs(rows, key) {
 }
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
-    return pairs(r[param], param);
+    return (
+      (param === "cookies"
+        ? '<button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span>'
+        : "") + pairs(r[param], param)
+    );
   if (param === "body")
     return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>${
       ["form-data", "urlencoded"].includes(r.bodyType)
@@ -775,6 +779,7 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  on("#cookie-manager", "click", openCookieManager);
   on("#compact-ui", "click", () => {
     collect();
     compactUI = !compactUI;
@@ -3013,4 +3018,94 @@ function editDynamicValue(group, index) {
     $("#dialog").close();
     render();
   };
+}
+
+async function openCookieManager() {
+  collect();
+  const environmentId = env(),
+    endpoint = "/projects/" + project.id + "/cookies";
+  let state = await api(
+    endpoint + "?environmentId=" + encodeURIComponent(environmentId),
+  );
+  const view = () =>
+    `<p class="notice">Cookie明文仅存当前电脑，按项目与环境隔离，Cookie库不进入项目备份，但请求/响应历史可能含Cookie，分享前请检查。开启后自动保存/发送匹配Cookie，并覆盖请求里手工填写的Cookie。此处操作立即生效，关闭窗口不撤销。</p><button id="cookie-toggle">${state.enabled ? "关闭自动Cookie" : "开启自动Cookie"}</button><button id="cookie-refresh">重新加载</button><button id="cookie-clear">清空当前环境Cookie</button><p>状态：${state.enabled ? "已开启" : "已关闭"} · ${state.cookies.length}/500</p><div class="cookie-table"><table><thead><tr><th>名称</th><th>值</th><th>域 / 路径</th><th>属性</th><th></th></tr></thead><tbody>${state.cookies.map((c, i) => `<tr><td>${esc(c.key)}</td><td><input type="password" readonly value="${esc(c.value)}" aria-label="Cookie值"></td><td>${esc(c.domain)}<br>${esc(c.path)}</td><td>${c.secure ? "Secure " : ""}${c.httpOnly ? "HttpOnly " : ""}${c.hostOnly ? "HostOnly" : ""}</td><td><button data-cookie-edit="${i}">编辑</button><button data-cookie-remove="${i}">删除</button></td></tr>`).join("")}</tbody></table></div><label>来源URL（HTTP/HTTPS）</label><input id="cookie-url" placeholder="https://api.example.test/"><label>Set-Cookie（同域、同路径、同名会覆盖；更改身份会新增）</label><textarea id="cookie-line" placeholder="name=value; Path=/; Secure"></textarea><button id="cookie-set">保存Cookie</button>`;
+  const attempt = (fn) => async () => {
+    try {
+      await fn();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  const change = async (data) => {
+    state = await api(endpoint, "POST", {
+      environmentId,
+      expectedRevision: state.revision,
+      ...data,
+    });
+    draw();
+  };
+  const draw = () => {
+    $("#dialog-content").innerHTML = view();
+    for (const button of $("#dialog-content").querySelectorAll("button"))
+      button.type = "button";
+    $("#cookie-toggle").onclick = attempt(() =>
+      change({ operation: "configure", enabled: !state.enabled }),
+    );
+    $("#cookie-refresh").onclick = attempt(async () => {
+      state = await api(
+        endpoint + "?environmentId=" + encodeURIComponent(environmentId),
+      );
+      draw();
+    });
+    $("#cookie-clear").onclick = attempt(async () => {
+      if (confirm("清空当前环境的全部Cookie？"))
+        await change({ operation: "clear" });
+    });
+    $("#cookie-set").onclick = attempt(() =>
+      change({
+        operation: "set",
+        url: $("#cookie-url").value,
+        cookie: $("#cookie-line").value,
+      }),
+    );
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-cookie-remove]",
+    ))
+      button.onclick = attempt(async () => {
+        const c = state.cookies[Number(button.dataset.cookieRemove)];
+        if (confirm("删除此Cookie？"))
+          await change({
+            operation: "remove",
+            domain: c.domain,
+            path: c.path,
+            key: c.key,
+          });
+      });
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-cookie-edit]",
+    ))
+      button.onclick = () => {
+        const c = state.cookies[Number(button.dataset.cookieEdit)];
+        $("#cookie-url").value =
+          "https://" +
+          (c.domain.includes(":") ? "[" + c.domain + "]" : c.domain) +
+          c.path;
+        $("#cookie-line").value =
+          c.key +
+          "=" +
+          c.value +
+          "; Path=" +
+          c.path +
+          (c.hostOnly ? "" : "; Domain=" + c.domain) +
+          (c.secure ? "; Secure" : "") +
+          (c.httpOnly ? "; HttpOnly" : "") +
+          (c.sameSite ? "; SameSite=" + c.sameSite : "") +
+          (c.expires && c.expires !== "Infinity"
+            ? "; Expires=" + new Date(c.expires).toUTCString()
+            : "") +
+          (c.maxAge !== undefined ? "; Max-Age=" + c.maxAge : "");
+      };
+  };
+  modal("Cookie管理器", view(), () => {}, "完成");
+  draw();
 }

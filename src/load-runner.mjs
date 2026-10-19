@@ -1,3 +1,4 @@
+import { memoryCookieSession } from "./cookie-jar.mjs";
 import { runPlan, snapshotPlan } from "./core.mjs";
 import {
   freezeServiceBinding,
@@ -39,12 +40,13 @@ export async function runLoad(project, request, options = {}) {
           const run = await runPlan(
             plan,
             variables,
-            async (definition, signal) => {
+            async (definition, signal, transport) => {
               mainRequests++;
-              return executeRequest(definition, signal);
+              return executeRequest(definition, signal, transport);
             },
             {
               signal: options.signal,
+              cookieSession: memoryCookieSession(options.cookieState),
               variableScopes: scopes,
               prepareRequest: (definition) =>
                 resolveServiceRequest(project, definition, environmentId),

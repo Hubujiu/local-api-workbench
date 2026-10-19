@@ -2,7 +2,7 @@ import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
 
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
-export function runScript(code, input, { signal } = {}) {
+export function runScript(code, input, { signal, cookieSession } = {}) {
   validateResources({ functions: input.functions || [] });
   if (typeof code !== "string" || code.length > 100000)
     throw Error("脚本不能超过 100 KB");
@@ -68,13 +68,18 @@ export function runScript(code, input, { signal } = {}) {
             body: request.body,
             form: request.form,
           };
-          response = await executeRequest(request, controller.signal);
+          response = await executeRequest(request, controller.signal, {
+            cookieSession,
+          });
           response = {
             status: response.status,
             statusText: response.statusText,
             duration: response.duration,
             headers: response.headers,
             body: response.body,
+            ...(response.cookieError
+              ? { cookieError: response.cookieError }
+              : {}),
           };
           if (Buffer.byteLength(JSON.stringify(response)) > 262144) {
             response = undefined;

@@ -70,3 +70,7 @@ node tests/ui-smoke.mjs
 支持 Digest MD5/SHA-256/SHA-512-256 与 auth/auth-int challenge；OAuth2 提供 client_credentials、refresh_token、授权码 PKCE S256。授权码回调地址在界面显示，需要在提供方登记。凭据只发往用户输入的 endpoint，优先使用 HTTPS；本地保存令牌前仍需用户点击保存。
 
 HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨重启保留授权、端口和密钥，不勾选时每次启动重新授权；提供单独的连接令牌、项目 allowlist 和读写/执行权限。关闭即撤销令牌。TLS 证书校验始终开启，支持自定义 CA、客户端 PEM 证书/私钥与 HTTP/HTTPS CONNECT 代理。
+
+## Cookie管理器
+
+请求的Cookie标签可管理当前项目/环境的本机Cookie。默认关闭；开启后自动保存和发送匹配Cookie，并覆盖手工Cookie输入。本机明文存储（界面遮蔽值），Cookie库文件不进入项目导出/备份，但请求响应历史可能含Cookie，分享前必须检查；请勿将数据目录公开。调试、计划、CLI及授权MCP共享所选环境的Cookie；压测每次迭代使用隔离副本且不写回。详见 docs/ADR-COOKIE-JAR.md。
