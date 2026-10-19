@@ -1609,3 +1609,7 @@ dialog:has(#cookie-line) {
 #cookie-error:empty {
   display: none;
 }
+.parameter-helper select {
+  width: 100%;
+  min-width: 0;
+}

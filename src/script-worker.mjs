@@ -1,3 +1,4 @@
+import { fakerVariable } from "./faker-variables.mjs";
 import { builtinVariableFactory } from "./builtin-variables.mjs";
 import { ajaxCompatibilitySource } from "./script-ajax.mjs";
 import { scriptCompatibilitySource } from "./script-compatibility.mjs";
@@ -98,9 +99,26 @@ try {
   scheduleTimer.dispose();
   cancelTimer.dispose();
 
+  let fakerCalls = 0;
+  const fakerFunction = context.newFunction("__fakerVariable", (keyHandle) => {
+    if (++fakerCalls > 1000)
+      return { error: context.newError("Faker变量最多1000次") };
+    try {
+      const value = fakerVariable(context.getString(keyHandle));
+      return value === undefined
+        ? context.undefined
+        : context.newString(JSON.stringify(value));
+    } catch (error) {
+      return { error: context.newError(error.message) };
+    }
+  });
+  context.setProp(context.global, "__fakerVariable", fakerFunction);
+  fakerFunction.dispose();
+
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
-    const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now());
+    const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now(),((generate)=>key=>{const raw=generate(key);return raw===undefined?undefined:JSON.parse(raw);})(__fakerVariable));
+    delete globalThis.__fakerVariable;
     ((schedule,cancel)=>{
     globalThis.setTimeout=(callback,delay=0,...args)=>{
       if(typeof callback!=='function')throw Error('定时器需要回调函数');

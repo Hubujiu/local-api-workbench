@@ -153,6 +153,19 @@ try {
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await page.locator("#toggle-parameter-helper").click();
   await page.getByText("插入环境变量", { exact: true }).waitFor();
+  await page.locator("#body-code").fill('{"name":""}');
+  await page
+    .locator("#body-code")
+    .evaluate((element) => element.setSelectionRange(9, 9));
+  await page.locator("#builtin-variable").selectOption("$randomFirstName");
+  await page.locator("#insert-builtin-variable").click();
+  assert.equal(
+    await page.locator("#body-code").inputValue(),
+    '{"name":"{{$randomFirstName}}"}',
+  );
+  await page.screenshot({ path: "/tmp/local-api-builtin-variables.png" });
+  await page.locator("#body-code").fill(originalBody);
+
   await page.locator("#toggle-parameter-helper").click();
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await page.locator('summary[aria-label="发送更多操作"]').click();

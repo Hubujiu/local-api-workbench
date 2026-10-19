@@ -1,3 +1,4 @@
+import { builtinVariableNames } from "./builtin-variable-catalog.js";
 import {
   schemaEditor,
   bindSchemaEditor,
@@ -476,7 +477,7 @@ function paramPanel(r) {
                           `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
                       )
                       .join("") || "<p>暂无变量</p>"
-                  }<h4>参数字典 · 插入 JSON 字段</h4>${
+                  }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small><h4>参数字典 · 插入 JSON 字段</h4>${
                     effectiveParameterDictionary(project)
                       .map(
                         (entry) =>
@@ -1453,19 +1454,13 @@ function bind() {
   on("[data-edit-body-dynamic]", "click", (_, element) =>
     editDynamicValue("body", element.dataset.editBodyDynamic),
   );
+  on("#insert-builtin-variable", "click", () => {
+    const name = $("#builtin-variable").value;
+    insertVariable(name);
+    if ($("#builtin-variable")) $("#builtin-variable").value = name;
+  });
   on("[data-insert-variable]", "click", (_, element) => {
-    const editor = $("#body-code");
-    if (!editor) return;
-    const start = editor.selectionStart,
-      end = editor.selectionEnd;
-    request().body =
-      editor.value.slice(0, start) +
-      "{{" +
-      element.dataset.insertVariable +
-      "}}" +
-      editor.value.slice(end);
-    mark();
-    render();
+    insertVariable(element.dataset.insertVariable);
   });
   on("[data-insert-dictionary]", "click", (_, element) => {
     collect();
@@ -3132,4 +3127,15 @@ async function openCookieManager() {
       };
   };
   draw();
+}
+
+function insertVariable(name) {
+  const editor = $("#body-code");
+  if (!editor) return;
+  const start = editor.selectionStart,
+    end = editor.selectionEnd;
+  request().body =
+    editor.value.slice(0, start) + "{{" + name + "}}" + editor.value.slice(end);
+  mark();
+  render();
 }

@@ -1,6 +1,7 @@
+import { fakerVariable, fakerVariableNames } from "./faker-variables.mjs";
 import { randomBytes } from "node:crypto";
 /** Serializable factory: no host access beyond its bounded random-byte callback. */
-export function builtinVariableFactory(bytes, now) {
+export function builtinVariableFactory(bytes, now, fallback) {
   const integer = (maximum) => {
     const limit = Math.floor(4294967296 / maximum) * maximum;
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -57,11 +58,20 @@ export function builtinVariableFactory(bytes, now) {
     $randomAbbreviation: () =>
       ["API", "HTTP", "CSS", "TLS", "URL", "UTF", "RAM", "CPU"][integer(8)],
   };
-  return (key) =>
+  const generate = (key) =>
     Object.prototype.hasOwnProperty.call(handlers, key)
       ? handlers[key]()
-      : undefined;
+      : fallback?.(key);
+  generate.names = Object.freeze(Object.keys(handlers));
+  return generate;
 }
-export const builtinVariable = builtinVariableFactory(randomBytes, () =>
-  Date.now(),
+export const builtinVariable = builtinVariableFactory(
+  randomBytes,
+  () => Date.now(),
+  fakerVariable,
 );
+
+export const builtinVariableNames = Object.freeze([
+  ...builtinVariable.names,
+  ...fakerVariableNames,
+]);

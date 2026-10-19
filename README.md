@@ -77,4 +77,4 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 
 ## 常用内置动态变量
 
-URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等16种常用占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。未知变量仍报错；不是完整Faker目录。见 docs/ADR-BUILTIN-VARIABLES.md。
+URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等89种基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
