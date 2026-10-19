@@ -499,3 +499,12 @@ required fields, fills additional properties using their schema, and rejects
 conflicts. Bounds are0..1000; this remains illustrative generation, not a general
 constraint solver. Reference: https://json-schema.org/understanding-json-schema/reference/object#size .
 Full local suite223passes; new exact-commit CI and screenshot inspection pending.
+
+Cookie manageree5303a passed8/9CI (run39198338208); all three core suites and
+desktop packages passed. Browser creation/edit/reopen succeeded, but the new
+stale-revision test mutated a separate background MCP project's jar instead of
+the visible project. The fix selects the current project/environment and waits
+for the reopened dialog before injecting the conflict; no assertion is removed.
+The PNG also showed the privacy notice partly scrolled away after save, so the
+redraw resets its scroll and the Cookie text area is compact. New visibility
+assertion keeps that notice in view. Local231tests pass; exact new CI pending.

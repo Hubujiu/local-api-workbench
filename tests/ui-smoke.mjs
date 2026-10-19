@@ -1736,15 +1736,26 @@ try {
     await page.locator(".cookie-table input").getAttribute("type"),
     "password",
   );
+  const cookieNoticeBox = await page
+    .locator("#dialog-content .notice")
+    .boundingBox();
+  const cookieContentBox = await page.locator("#dialog-content").boundingBox();
+  assert(
+    cookieNoticeBox.y >= cookieContentBox.y,
+    "Cookie privacy notice must remain visible after save",
+  );
   await page.screenshot({ path: "/tmp/local-api-cookie-manager.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#cookie-manager").click();
+  await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(
     await page.locator(".cookie-table input").inputValue(),
     "fixture-two",
   );
   const { ProjectCookieJar } = await import("../src/cookie-jar.mjs");
-  const cookieProject = await app.store.get(observedProject.id);
+  const cookieProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
   const cookieEnvironment = await page.locator("#env").inputValue();
   const concurrentJar = new ProjectCookieJar(
     root,

@@ -1599,3 +1599,13 @@ dialog:has(#schema-editor) {
   min-width: 60px;
   max-width: 160px;
 }
+dialog:has(#cookie-line) {
+  width: 760px;
+}
+#dialog-content #cookie-line {
+  min-height: 76px;
+  height: 80px;
+}
+#cookie-error:empty {
+  display: none;
+}
