@@ -1,3 +1,4 @@
+import { builtinVariable } from "./builtin-variables.mjs";
 import { apipostDocument, importApipost } from "./apipost-import.mjs";
 import { validateAuth } from "../public/auth-model.js";
 import { resolveDynamicRequest } from "./dynamic-values.mjs";
@@ -15,8 +16,10 @@ export const id = () => randomUUID();
 export function interpolate(value, vars = {}) {
   if (typeof value === "string")
     return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, key) => {
-      if (!Object.hasOwn(vars, key)) throw Error(`未定义变量: ${key}`);
-      return String(vars[key]);
+      if (Object.hasOwn(vars, key)) return String(vars[key]);
+      const generated = builtinVariable(key);
+      if (generated === undefined) throw Error(`未定义变量: ${key}`);
+      return String(generated);
     });
   if (Array.isArray(value)) return value.map((v) => interpolate(v, vars));
   if (value && typeof value === "object")

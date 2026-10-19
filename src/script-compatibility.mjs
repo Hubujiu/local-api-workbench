@@ -9,6 +9,7 @@ function installScriptCompatibility({
   tests,
   parameterName,
   modifyPair,
+  builtinVariable,
 }) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const own = (object, key) =>
@@ -18,6 +19,37 @@ function installScriptCompatibility({
   pm.variables.has = (name) =>
     own(localVariables, name) || own(variables, name);
   pm.variables.toObject = () => copy({ ...variables, ...localVariables });
+  const utf8Size = (text) => {
+    let size = 0;
+    for (const char of text) {
+      const cp = char.codePointAt(0);
+      size += cp <= 127 ? 1 : cp <= 2047 ? 2 : cp <= 65535 ? 3 : 4;
+      if (size > 65536) break;
+    }
+    return size;
+  };
+  const replaceIn = (value) => {
+    if (typeof value !== "string" || value.length > 65536)
+      throw Error("replaceIn需要至多64KiB的字符串");
+    let size = utf8Size(value),
+      count = 0;
+    if (size > 65536) throw Error("replaceIn输入超过64KiB");
+    return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, key) => {
+      if (++count > 1000) throw Error("replaceIn最多替换1000项");
+      const generated = pm.variables.has(key)
+        ? pm.variables.get(key)
+        : builtinVariable(key);
+      if (generated === undefined && !pm.variables.has(key))
+        throw Error("未定义变量: " + key);
+      const replacement = String(generated);
+      size += utf8Size(replacement) - utf8Size(whole);
+      if (size > 65536) throw Error("replaceIn输出超过64KiB");
+      return replacement;
+    });
+  };
+  pm.variables.replaceIn = replaceIn;
+  apt.variables.replaceIn = replaceIn;
+
   pm.environment.delete = pm.environment.unset;
   pm.globals.delete = pm.globals.unset;
   pm.variables.delete = pm.variables.unset;

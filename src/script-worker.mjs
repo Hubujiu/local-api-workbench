@@ -1,3 +1,4 @@
+import { builtinVariableFactory } from "./builtin-variables.mjs";
 import { ajaxCompatibilitySource } from "./script-ajax.mjs";
 import { scriptCompatibilitySource } from "./script-compatibility.mjs";
 import { readFile } from "node:fs/promises";
@@ -99,6 +100,7 @@ try {
 
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
+    const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now());
     ((schedule,cancel)=>{
     globalThis.setTimeout=(callback,delay=0,...args)=>{
       if(typeof callback!=='function')throw Error('定时器需要回调函数');
@@ -298,7 +300,7 @@ try {
   run(
     "(" +
       scriptCompatibilitySource +
-      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair});",
+      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable});",
   );
 
   run(`pm.sendRequest=(config,callback)=>{

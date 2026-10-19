@@ -101,7 +101,14 @@ export async function resolveDynamicRequest(
   );
   if (transforms > 20) throw Error("每个请求最多20次动态函数处理");
   const deadline = Date.now() + 5000;
-  const resolved = interpolate(clone, variables);
+  // Scripts resolve templates explicitly at execution time, including post-extraction scopes.
+  const scriptSources = {};
+  for (const key of ["beforeScript", "afterScript"])
+    if (Object.hasOwn(clone, key)) {
+      scriptSources[key] = clone[key];
+      delete clone[key];
+    }
+  const resolved = { ...interpolate(clone, variables), ...scriptSources };
   for (const { group, index, spec } of specs) {
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);

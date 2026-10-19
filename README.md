@@ -74,3 +74,7 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 ## Cookie管理器
 
 请求的Cookie标签可管理当前项目/环境的本机Cookie。默认关闭；开启后自动保存和发送匹配Cookie，并覆盖手工Cookie输入。本机明文存储（界面遮蔽值），Cookie库文件不进入项目导出/备份，但请求响应历史可能含Cookie，分享前必须检查；请勿将数据目录公开。调试、计划、CLI及授权MCP共享所选环境的Cookie；压测每次迭代使用隔离副本且不写回。详见 docs/ADR-COOKIE-JAR.md。
+
+## 常用内置动态变量
+
+URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等16种常用占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。未知变量仍报错；不是完整Faker目录。见 docs/ADR-BUILTIN-VARIABLES.md。
