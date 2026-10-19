@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-18T10:49:51Z",
-  "implementationCommit": "e6b0176c88c10c801d882fc02d62139c8405387b",
+  "asOf": "2026-10-19T03:48:38Z",
+  "implementationCommit": "96aada8d0ce2b7d740370a527c63fa8da2e99090",
   "counts": {
     "F": {
       "已实现": 37,
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离脚本、CryptoJS/Chai、作用域助手和前置断言证据已验证；支持受限pm.sendRequest回调HTTP（最多10次/并发4次、原2秒总截止），子请求证据与取消保留。Promise/完整SDK/数据库脚本仍不等价。",
+      "current": "隔离脚本、CryptoJS/Chai、作用域助手和前置断言证据已验证；支持受限pm.sendRequest回调HTTP（最多10次/并发4次、原2秒总截止），子请求证据与取消保留。Promise/完整SDK/数据库脚本仍不等价。 已补done回调断言与有界setTimeout/clearTimeout，仍受原2秒总截止约束。",
       "source": "S3",
-      "evidence": "src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs",
+      "evidence": "src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -417,7 +417,7 @@
       "name": "步骤参数、Cookie和脚本覆盖",
       "status": "已实现",
       "original": "每步骤独立覆盖、可视编辑",
-      "current": "独立步骤快照可视化编辑基础参数、Cookie、脚本、认证、断言、提取、文本/文件表单、超时/协议/代理/TLS；动态值定义保留并提供JSON高级编辑。真实二进制上传、保存失败/取消隔离已验证。",
+      "current": "独立步骤快照可视化编辑基础参数、Cookie、脚本、认证、断言、提取、文本/文件表单、超时/协议/代理/TLS；固定/变量/Mock动态值及Raw Body插入已有可视化编辑和真实浏览器证据。真实二进制上传、保存失败/取消隔离已验证。",
       "source": "S9",
       "evidence": "public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -957,7 +957,7 @@
       "name": "计划编辑页面",
       "status": "部分实现",
       "original": "左计划列表+右名称/说明/环境/步骤编辑器",
-      "current": "左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值等高级配置仍可用JSON，具体原版界面仍未全部对齐。",
+      "current": "左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值和Raw Body已有可视化编辑，其他高级配置仍可用JSON，具体原版界面仍未全部对齐。",
       "source": "I4",
       "evidence": "public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39120629637",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39196303965",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述全绿版本。分类重叠，不计算总体百分比。后续编码Schema引用修正须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
+  "note": "本对照针对上述216项测试全绿版本。分类重叠，不计算总体百分比。后续$.ajax回调适配须独立CI；能力范围不等于隐藏行为或所有历史版本兼容。",
   "verification": {
-    "runId": 39120629637,
+    "runId": 39196303965,
     "conclusion": "success",
-    "coreTests": 201,
+    "coreTests": 216,
     "jobs": 9
   }
 }

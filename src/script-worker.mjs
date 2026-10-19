@@ -1,3 +1,4 @@
+import { ajaxCompatibilitySource } from "./script-ajax.mjs";
 import { scriptCompatibilitySource } from "./script-compatibility.mjs";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -311,6 +312,7 @@ try {
       if(result && typeof result.then==='function')throw Error('HTTP回调暂不支持Promise返回');
     });
   };apt.sendRequest=pm.sendRequest;`);
+  run("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
   let remaining = deadline - Date.now();
   const bounded = (fn) => {
     if (remaining <= 0) throw Error("脚本执行超时");

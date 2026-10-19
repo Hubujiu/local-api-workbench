@@ -63,6 +63,8 @@ node tests/ui-smoke.mjs
 
 前后置脚本运行在独立 QuickJS/WASM 工作线程中，不暴露 Node、文件或任意模块。支持变量作用域、pm.request/response、pm.test/Chai、CryptoJS、apt.assert与console.log。新增有界pm.sendRequest(config, callback)：最多10次、同时4次，仅HTTP(S)，单请求1500ms、请求64KiB、响应256KiB；须提供同步回调，暂不支持Promise返回。只有真实接口前后置脚本启用网络，纯函数预览/动态值/正则提取不启用。累计脚本运行预算250ms（墙钟时间，不含网络等待）、VM内存16MiB、整个工作线程仍限2秒。子请求及失败证据保留在计划记录中。
 
+支持有界 setTimeout/clearTimeout（单次0–1000ms，累计100次/同时32次）及 done 回调断言；定时器与HTTP共同等待完成，不延长总截止时间。支持有限 $.ajax 的 success/error/complete 回调、JSON字符串和标量表单/查询数据，沿用同一HTTP代理。Promise、顶层await、async:false、定时器Promise回调及setInterval仍不支持。具体边界见 docs/ADR-CALLBACK-ASSERTIONS.md 和 docs/ADR-AJAX-CALLBACKS.md。
+
 ## OAuth2 与 Digest
 
 支持 Digest MD5/SHA-256/SHA-512-256 与 auth/auth-int challenge；OAuth2 提供 client_credentials、refresh_token、授权码 PKCE S256。授权码回调地址在界面显示，需要在提供方登记。凭据只发往用户输入的 endpoint，优先使用 HTTPS；本地保存令牌前仍需用户点击保存。
