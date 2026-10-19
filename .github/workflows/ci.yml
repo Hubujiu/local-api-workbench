@@ -131,6 +131,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       mysql:
         image: mysql:8.4
         env:
@@ -151,3 +159,9 @@ jobs:
           node-version: "24"
       - run: npm ci --ignore-scripts
       - run: node tests/remote-database.mjs
+      - name: Seed isolated Redis fixtures
+        run: |
+          docker exec ${{ job.services.redis.id }} redis-cli SET localapi:fixture hello
+          docker exec ${{ job.services.redis.id }} redis-cli HSET localapi:hash a 1 b 2
+          docker exec ${{ job.services.redis.id }} redis-cli RPUSH localapi:list x y z
+      - run: node tests/redis-integration.mjs

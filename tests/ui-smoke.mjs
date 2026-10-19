@@ -1,3 +1,4 @@
+import { parseRESP } from "../src/redis.mjs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import readline from "node:readline";
@@ -95,6 +96,29 @@ h2Proxy.on("connect", (_request, client) => {
   upstream.on("error", () => client.destroy());
 });
 await new Promise((resolve) => h2Proxy.listen(0, "127.0.0.1", resolve));
+const redisSockets = new Set();
+const redisFixture = net.createServer((socket) => {
+  redisSockets.add(socket);
+  socket.on("close", () => redisSockets.delete(socket));
+  socket.on("error", () => {});
+  let buffer = Buffer.alloc(0);
+  socket.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    const frame = parseRESP(buffer);
+    if (!frame) return;
+    const command = frame.value.map((value) => value.toString());
+    assert.deepEqual(command, ["GET", "ui-fixture"]);
+    const value = Buffer.from("redis-ui-fixture");
+    socket.end(
+      Buffer.concat([
+        Buffer.from("$" + value.length + "\r\n"),
+        value,
+        Buffer.from("\r\n"),
+      ]),
+    );
+  });
+});
+await new Promise((resolve) => redisFixture.listen(0, "127.0.0.1", resolve));
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_BUNDLED
     ? undefined
@@ -162,6 +186,16 @@ try {
   assert.equal(
     await page.locator("#body-code").inputValue(),
     '{"name":"{{$randomFirstName}}"}',
+  );
+  const builtinPanelBox = await page.locator(".parameter-helper").boundingBox();
+  const builtinInsertBox = await page
+    .locator("#insert-builtin-variable")
+    .boundingBox();
+  assert(
+    builtinInsertBox.y >= builtinPanelBox.y &&
+      builtinInsertBox.y + builtinInsertBox.height <=
+        builtinPanelBox.y + builtinPanelBox.height,
+    "builtin picker stays in view after insertion",
   );
   await page.screenshot({ path: "/tmp/local-api-builtin-variables.png" });
   await page.locator("#body-code").fill(originalBody);
@@ -1837,6 +1871,19 @@ try {
   assert.equal(await page.locator("#dialog").isVisible(), true);
   await page.unroute("**/cookies?environmentId=*", cookieRoute);
   await page.locator("#dialog-save").click();
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-page="database"]').click();
+  await page.locator("#db-type").selectOption("redis");
+  await page.locator("#db-host").fill("127.0.0.1");
+  await page.locator("#db-port").fill(String(redisFixture.address().port));
+  await page.locator("#db-name").fill("0");
+  await page.locator("#db-sql").fill('["GET","ui-fixture"]');
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText("redis-ui-fixture", { exact: false })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-redis-query.png" });
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
@@ -1860,6 +1907,8 @@ try {
     new Promise((resolve) => h2Proxy.close(resolve)),
     new Promise((resolve) => h2Fixture.close(resolve)),
   ]);
+  for (const socket of redisSockets) socket.destroy();
+  await new Promise((resolve) => redisFixture.close(resolve));
   fixture.closeAllConnections();
   await new Promise((resolve) => fixture.close(resolve));
   await new Promise((r) => app.server.close(r));

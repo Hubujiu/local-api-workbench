@@ -513,3 +513,14 @@ Cookie manager50a0752 passed9/9CI first attempt (run39198811901),231core tests.
 The stale-revision UI fixture now targets the visible project and preserves all
 conflict assertions. A follow-up adds dialog-instance guards and a deliberately
 delayed browser read to cover close/reopen without clobbering a newer draft.
+
+Common builtin variablesba8d3f9 passed9/9CI (run39199646746),236core tests.
+The English-locale catalogue/pickercaff5b4 passed9/9CI (run39200288001),240tests.
+Its actual PNG showed the helper returning to the top after insertion; the next
+change preserves the helper scroll and caret, with an explicit visible-button
+assertion. No full Faker/locale/legacy-image equivalence is claimed.
+
+Redis read-only support is now locally validated against bounded RESP/TLS/auth
+fixtures (245core tests overall). A real Redis7.2 service plus GET/MGET/list/hash
+scan verification and browser query fixture have been added to CI; exact new CI
+is still pending, so real-service support is not yet claimed as verified.
