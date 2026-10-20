@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-20T00:41:21Z",
-  "implementationCommit": "358d9c9437dbbb1391b9d47caa7953f1c445a345",
+  "asOf": "2026-10-20T03:05:00Z",
+  "implementationCommit": "fbff3ae9b869b10550c7659775c40c59a60ea3fc",
   "counts": {
     "F": {
       "已实现": 37,
@@ -177,9 +177,9 @@
       "name": "认证",
       "status": "部分实现",
       "original": "截图有认证入口，MCP详情包含鉴权",
-      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权及完整高级变体未实现。RSA仅旧服务兼容，明确输入内联PEM，不读取系统密钥。",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM拒绝v1/MIC/EPA/通道绑定/代理/HTTP2，不读取系统凭据；OAuth1自动授权及高级变体仍不完整。",
       "source": "S7",
-      "evidence": "src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs; tests/oauth1-rsa.test.mjs",
+      "evidence": "src/ntlm.mjs; tests/ntlm.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; docs/ADR-NTLMV2.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -237,9 +237,9 @@
       "name": "一键压测",
       "status": "部分实现",
       "original": "保留压测入口，官方未公开所有参数",
-      "current": "最多100次主请求/并发10，完整脚本/动态值/断言管线、逐次变量隔离、主/子请求计数、错误证据、P50/P95和取消均已验证；原版高级压测配置/报告完全等价未证实。",
+      "current": "最多100次主请求/并发10，真实脚本/动态值/断言、逐次变量隔离、P50/P95、取消与CSV数据行循环已验证。CSV限64KiB/100行/50列，运行数据不回写；高级压测与报告完全等价未证实。",
       "source": "S3",
-      "evidence": "src/load-runner.mjs; tests/load-pipeline.test.mjs; tests/server.test.mjs; tests/ui-smoke.mjs",
+      "evidence": "src/load-runner.mjs; public/load-data.js; tests/load-data.test.mjs; tests/load-pipeline.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；有界Promise/await已验证；完整SDK/数据库脚本仍不等价。",
+      "current": "隔离脚本、CryptoJS/Chai/lodash/Moment/uuid、作用域、断言/HTTP子请求证据已验证；支持有界Promise/await、定时器、HTTP回调与原生未处理拒绝追踪。2秒总截止/250ms活动执行、16MiB VM及1MiB UTF-8输出边界；完整SDK/数据库脚本仍不等价。",
       "source": "S3",
-      "evidence": "src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs; tests/script-promises.test.mjs; tests/quickjs-rejections.test.mjs",
+      "evidence": "src/script-worker.mjs; tests/script-utilities.test.mjs; tests/desktop-smoke.mjs; docs/ADR-PROMISE-SCRIPTS.md; docs/ADR-SCRIPT-UTILITY-LIBRARIES.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -397,9 +397,9 @@
       "name": "导入/导出",
       "status": "部分实现",
       "original": "配置截图有手动导入与导出",
-      "current": "支持OpenAPI/Postman/cURL/本工具备份及官方公开转换器的有限Apipost JSON；遇到未支持资源明确拒绝。当前Offline2.0原生目录尚不兼容。",
+      "current": "OpenAPI/Postman/cURL/本工具备份、有限旧版Apipost JSON，以及公开实际导出结构支持的现代HTTP/目录/环境/服务/变量/响应示例/平级模型导入。未支持资源整体拒绝，不执行导入来源端点。Offline2原生目录、测试用例和复杂模型仍不兼容。",
       "source": "I3",
-      "evidence": "src/apipost-import.mjs; tests/apipost-import.test.mjs; tests/fixtures/APIPOST-FIXTURE.md",
+      "evidence": "src/apipost-modern.mjs; src/apipost-models.mjs; tests/apipost-modern.test.mjs; docs/ADR-MODERN-APIPOST-IMPORT.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39117781360; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39362220865; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -1023,13 +1023,22 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39348890602",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述259项测试全绿检查点。后续改动需核对PR精确提交CI。分类重叠，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述284项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39348890602,
+    "runId": 39362220865,
     "conclusion": "success",
-    "coreTests": 259,
+    "coreTests": 284,
     "jobs": 10
-  }
+  },
+  "supplementalItems": [
+    {
+      "id": "S-GLOBAL-PARAMETERS",
+      "name": "项目全局HTTP参数",
+      "status": "部分实现",
+      "current": "Header/Query/Cookie/表单文本集中编辑，接口同名覆盖或关闭继承；调试/cURL/压测/授权MCP按当前配置，新计划/用例冻结、旧快照不漂移。目录参数、全局认证/前后置操作尚未支持。",
+      "evidence": "src/global-parameters.mjs; tests/global-parameters.test.mjs; tests/ui-smoke.mjs; docs/ADR-GLOBAL-PARAMETERS.md"
+    }
+  ]
 }

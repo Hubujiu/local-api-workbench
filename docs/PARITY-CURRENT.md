@@ -1,8 +1,8 @@
-# 逐项复刻对照（2026-10-19）
+# 逐项复刻对照（2026-10-20）
 
-已核验提交：358d9c9437dbbb1391b9d47caa7953f1c445a345
+已核验提交：fbff3ae9b869b10550c7659775c40c59a60ea3fc
 
-10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39348890602)，259项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865)，284项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -24,20 +24,20 @@
 | F11 HTTP 调试 | 已实现 | 真实 HTTP(S)，超时、取消、响应证据 | executeRequest; runtime.test |
 | F12 Header/Query/Path/Cookie | 已实现 | 可编辑键值行、开关、变量替换 | public/app.js parameter editors; runtime |
 | F13 请求体类型 | 已实现 | 实现相应模式；原版选项布局尚不同 | runtime.test; MessagePack byte vectors |
-| F14 认证 | 部分实现 | Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid已验证；NTLM、OAuth1自动授权及完整高级变体未实现。RSA仅旧服务兼容，明确输入内联PEM，不读取系统密钥。 | src/oauth1.mjs; src/aws-signature.mjs; src/hawk-auth.mjs; src/edgegrid-auth.mjs; tests/ui-smoke.mjs; tests/oauth1-rsa.test.mjs |
+| F14 认证 | 部分实现 | Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM拒绝v1/MIC/EPA/通道绑定/代理/HTTP2，不读取系统凭据；OAuth1自动授权及高级变体仍不完整。 | src/ntlm.mjs; tests/ntlm.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; docs/ADR-NTLMV2.md |
 | F15 请求协议版本选择 | 部分实现 | 可选 HTTP/1.1 和真实 HTTP/2，含 h2c/TLS/custom CA/mTLS；HTTP/HTTPS CONNECT代理、独立代理CA与严格协议cURL导出已验证。内联证书/文件/动态签名cURL仍须手工配置，未声称所有原版协议选项等价。 | src/http2-connection.mjs; src/proxy-tunnel.mjs; tests/http2-proxy.test.mjs; tests/curl-http2.mjs; tests/ui-smoke.mjs |
 | F16 基于 Schema 生成请求数据 | 部分实现 | 常见长度/数值、局部引用、新旧元组、有界尾项及对象属性数量已验证；必填属性保留、额外属性按Schema填充，冲突明确失败。复杂组合约束仍要求example，不是通用求解器。 | src/schema-sample.mjs; tests/schema-sample.test.mjs; tests/ui-smoke.mjs |
 | F17 参数助手 | 已实现 | 右侧参数助手含变量插入、共享函数/结构提示、参数字典字段插入。 | public/dictionary-view.js; tests/parameter-dictionary.test.mjs; tests/ui-smoke.mjs |
 | F18 响应展示与日志 | 已实现 | 实时响应、响应头、Cookie、响应示例、实际请求、断言/提取、控制台标签。 | public/app.js responseContent; tests/ui-smoke.mjs |
 | F19 接口用例 | 已实现 | 独立接口用例创建、编辑、删除、快照保存与执行，不再仅引导转计划。 | src/cases.mjs; tests/cases.test.mjs; tests/ui-smoke.mjs |
-| F20 一键压测 | 部分实现 | 最多100次主请求/并发10，完整脚本/动态值/断言管线、逐次变量隔离、主/子请求计数、错误证据、P50/P95和取消均已验证；原版高级压测配置/报告完全等价未证实。 | src/load-runner.mjs; tests/load-pipeline.test.mjs; tests/server.test.mjs; tests/ui-smoke.mjs |
+| F20 一键压测 | 部分实现 | 最多100次主请求/并发10，真实脚本/动态值/断言、逐次变量隔离、P50/P95、取消与CSV数据行循环已验证。CSV限64KiB/100行/50列，运行数据不回写；高级压测与报告完全等价未证实。 | src/load-runner.mjs; public/load-data.js; tests/load-data.test.mjs; tests/load-pipeline.test.mjs; tests/ui-smoke.mjs |
 | F21 Mock 基础 | 已实现 | 项目 Mock 开关、基础响应示例、响应头和有界延迟。 | src/mock.mjs; tests/mock.test.mjs |
 | F22 智能 Mock 匹配 | 部分实现 | 按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。 | src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs |
 | F23 文档与分享 | 部分实现 | Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，图片按文本处理，不提供在线托管分享。 | src/markdown-renderer.mjs; tests/markdown.test.mjs; public/document-export.js; tests/ui-smoke.mjs |
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
-| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
+| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；有界Promise/await已验证；完整SDK/数据库脚本仍不等价。 | src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs |
+| F27 接口前后置操作 | 部分实现 | 隔离脚本、CryptoJS/Chai/lodash/Moment/uuid、作用域、断言/HTTP子请求证据已验证；支持有界Promise/await、定时器、HTTP回调与原生未处理拒绝追踪。2秒总截止/250ms活动执行、16MiB VM及1MiB UTF-8输出边界；完整SDK/数据库脚本仍不等价。 | src/script-worker.mjs; tests/script-utilities.test.mjs; tests/desktop-smoke.mjs; docs/ADR-PROMISE-SCRIPTS.md; docs/ADR-SCRIPT-UTILITY-LIBRARIES.md |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -46,9 +46,9 @@
 | F33 状态码字典 | 已实现 | 纠正为业务错误码字典：支持0、负数、字符串、批量编辑，导出 API 文档；仅明确选择时用于HTTP状态提示。 | src/error-codes.mjs; public/error-code-view.js; tests/error-codes.test.mjs |
 | F34 接口属性 | 已实现 | 支持文本、数字、单选、多选、日期、URL、邮箱，兼容布尔；API与Markdown文档可编辑，默认不分享，导出时显式选择。 | public/attribute-model.js; public/attribute-view.js; tests/attributes.test.mjs |
 | F35 接口生命周期状态 | 已实现 | 接口与Markdown文档均支持生命周期状态，项目维护状态名/颜色。 | public/app.js; tests/ui-smoke.mjs |
-| F36 导入/导出 | 部分实现 | 支持OpenAPI/Postman/cURL/本工具备份及官方公开转换器的有限Apipost JSON；遇到未支持资源明确拒绝。当前Offline2.0原生目录尚不兼容。 | src/apipost-import.mjs; tests/apipost-import.test.mjs; tests/fixtures/APIPOST-FIXTURE.md |
+| F36 导入/导出 | 部分实现 | OpenAPI/Postman/cURL/本工具备份、有限旧版Apipost JSON，以及公开实际导出结构支持的现代HTTP/目录/环境/服务/变量/响应示例/平级模型导入。未支持资源整体拒绝，不执行导入来源端点。Offline2原生目录、测试用例和复杂模型仍不兼容。 | src/apipost-modern.mjs; src/apipost-models.mjs; tests/apipost-modern.test.mjs; docs/ADR-MODERN-APIPOST-IMPORT.md |
 | F37 快照、重复步骤、顺序执行 | 已实现 | 对应执行语义已实现并测试 | snapshotPlan; runPlan; plan-snapshots.test |
-| F38 步骤参数、Cookie和脚本覆盖 | 已实现 | 独立步骤快照可视化编辑基础参数、Cookie、脚本、认证、断言、提取、文本/文件表单、超时/协议/代理/TLS；动态值定义保留并提供JSON高级编辑。真实二进制上传、保存失败/取消隔离已验证。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
+| F38 步骤参数、Cookie和脚本覆盖 | 已实现 | 独立步骤快照可视化编辑基础参数、Cookie、脚本、认证、断言、提取、文本/文件表单、超时/协议/代理/TLS；固定/变量/Mock动态值及Raw Body插入已有可视化编辑和真实浏览器证据。真实二进制上传、保存失败/取消隔离已验证。 | public/step-editor.js; tests/step-editor.test.mjs; tests/ui-smoke.mjs |
 | F39 步骤间变量传递 | 已实现 | 提取/脚本变量经vars传递 | runPlan; core.test |
 | F40 接口脚本与计划脚本隔离 | 已实现 | 复制步骤清除接口脚本；只执行计划明确配置的脚本 | plan-snapshots.js/test |
 | F41 执行结果状态规则 | 已实现 | 新建UI/MCP计划默认 strict200，与非200即失败一致；旧计划保留显式 assertions 策略以兼容既有预期错误测试。 | src/plan-version.mjs; src/core.mjs; tests/plan-version.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39348890602; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39362220865; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -112,7 +112,7 @@
 | U08 编辑器与参数助手 | 部分实现 | 行号/高亮、展开/Escape、环境/动态值助手和89种内置变量选择器已验证；插入保留滚动和光标，未保存内容保留。成熟IDE完整交互不包含。 | public/app.js; public/code-format.js; tests/ui-smoke.mjs |
 | U09 发送/保存分裂按钮 | 已实现 | 发送/保存分裂按钮与真实下拉操作。 | public/app.js; tests/ui-smoke.mjs |
 | U10 空状态与底栏 | 部分实现 | 原创线条火箭、底栏、精简模式与上下/左右布局切换已验证；授权/付费激活信息按范围排除，视觉不宣称逐像素一致。 | public/app.js; public/style.css; tests/ui-smoke.mjs |
-| U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值等高级配置仍可用JSON，具体原版界面仍未全部对齐。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
+| U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值和Raw Body已有可视化编辑，其他高级配置仍可用JSON，具体原版界面仍未全部对齐。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
 | U12 AI变更视觉语言 | 已实现 | AI 变更字段/步骤编号橙色及说明提示。 | public/plan-view.js; src/plan-version.mjs |
 | U13 MCP配置页面 | 部分实现 | 状态/授权/客户端标签/密钥操作已实现；页面结构仍为配置区加弹窗。 | public/app.js; public/mcp-client-config.js |
 | U14 计划执行记录页面 | 部分实现 | 计划/记录独立标签，失败步骤默认展开，按断言、请求、响应、日志、提取变量及完整JSON分组；具体原版布局仍不同。 | public/plan-view.js; tests/plan-evidence.test.mjs; tests/ui-smoke.mjs |
@@ -127,6 +127,11 @@
 
 来源索引：[parity-current.json](parity-current.json)。原始基线：[PARITY-AUDIT.md](PARITY-AUDIT.md)。
 
-当前检查点259项测试、10项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
 
-2026-10-20 检查点：有界 Promise/await、异步 HTTP/定时器回调、异步断言及原生未处理拒绝追踪通过三平台真实桌面包验收，新增独立运行时字节级可复现构建检查。输出序列化期间不能启动异步工作或隐藏拒绝。MongoDB只读find已通过真实MongoDB8.0集成。CSV参数化压测为本轮新增，尚须其精确提交CI验证，不计入以上检查点。
+## 当前核验检查点
+
+提交 fbff3ae9b869b10550c7659775c40c59a60ea3fc， [Actions 39362220865](https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865)，284项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+
+## 原98项之外的补充发现
+
+项目全局HTTP参数已补Header/Query/Cookie/表单文本，并验证快照隔离、UI编辑/执行；目录参数、全局认证/前后置操作仍缺失。原始清单不是穷尽规格，不因98项分类而隐藏后来发现的功能差距。
