@@ -1621,3 +1621,25 @@ dialog:has(#cookie-line) {
   max-height: 240px;
   overflow: auto;
 }
+
+.load-data-panel {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.load-data-panel p {
+  margin: 0;
+}
+.load-data-panel textarea {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  min-height: 100px;
+  resize: vertical;
+}
+.load-data-panel > label:last-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}

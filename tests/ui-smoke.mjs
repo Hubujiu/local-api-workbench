@@ -771,6 +771,9 @@ try {
     .waitFor();
   assert.equal(await page.locator("#load-count").inputValue(), "2");
   assert.equal(await page.locator("#load-concurrency").inputValue(), "2");
+  const csvBox = await page.locator("#load-data").boundingBox();
+  assert(csvBox.width >= 500, "CSV editor is wide enough to inspect rows");
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-load-pipeline.png" });
   await page.locator('[data-mode="debug"]').click();
 
