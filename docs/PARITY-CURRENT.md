@@ -1,8 +1,8 @@
 # 逐项复刻对照（2026-10-20）
 
-已核验提交：e883614228019bf99789bc9b49be5ef9e6ae4518
+已核验提交：7742f7f27de299dd160792e5e413647ab04bd209
 
-10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39368158902)，307项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39369937401)，311项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -20,7 +20,7 @@
 | F07 目录、接口和文档树 | 已实现 | 统一树包括 HTTP、Markdown 文档与保存的 SSE/WS/TCP 定义；协议点击不自动连接。 | src/protocol-definitions.mjs; tests/ui-smoke.mjs |
 | F08 最近请求 | 已实现 | 本地最近 50 条历史，可查看证据 | Store.append; public/app.js history |
 | F09 回收站 | 已实现 | 软删除和恢复接口 | public/app.js trash; src/mcp.mjs delete |
-| F10 API 设计 | 部分实现 | 独立设计页及嵌套请求/响应Schema编辑，含类型/必填/说明/示例、范围/长度/格式/正则文本/枚举；保留高级关键字并验证错误原子性。引用/组合条件仍用JSON高级编辑。 | public/schema-editor.js; tests/schema-editor.test.mjs; tests/core.test.mjs; tests/ui-smoke.mjs |
+| F10 API 设计 | 部分实现 | 独立设计页及嵌套请求/响应Schema编辑，含类型/必填/说明/示例、范围/长度/格式/正则文本/枚举；保留高级关键字并验证错误原子性。新增独立本地JSON Pointer引用编辑，校验实际Schema位置、保留兄弟约束、支持解除；组合/远程/锚点仍用JSON高级编辑。 | public/schema-editor.js; tests/schema-editor.test.mjs; tests/core.test.mjs; tests/ui-smoke.mjs |
 | F11 HTTP 调试 | 已实现 | 真实 HTTP(S)，超时、取消、响应证据 | executeRequest; runtime.test |
 | F12 Header/Query/Path/Cookie | 已实现 | 可编辑键值行、开关、变量替换 | public/app.js parameter editors; runtime |
 | F13 请求体类型 | 已实现 | 实现相应模式；原版选项布局尚不同 | runtime.test; MessagePack byte vectors |
@@ -37,7 +37,7 @@
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
 | F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md |
+| F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39368158902; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39369937401; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -130,7 +130,7 @@
 
 ## 当前核验检查点
 
-提交 e883614228019bf99789bc9b49be5ef9e6ae4518， [Actions 39368158902](https://github.com/Hubujiu/local-api-workbench/actions/runs/39368158902)，307项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+提交 7742f7f27de299dd160792e5e413647ab04bd209， [Actions 39369937401](https://github.com/Hubujiu/local-api-workbench/actions/runs/39369937401)，311项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
 
 
 ## 原98项之外的补充发现

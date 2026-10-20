@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-20T04:14:00Z",
-  "implementationCommit": "e883614228019bf99789bc9b49be5ef9e6ae4518",
+  "asOf": "2026-10-20T04:33:00Z",
+  "implementationCommit": "7742f7f27de299dd160792e5e413647ab04bd209",
   "counts": {
     "F": {
       "已实现": 37,
@@ -137,9 +137,9 @@
       "name": "API 设计",
       "status": "部分实现",
       "original": "有独立设计页、接口定义及参数/响应信息",
-      "current": "独立设计页及嵌套请求/响应Schema编辑，含类型/必填/说明/示例、范围/长度/格式/正则文本/枚举；保留高级关键字并验证错误原子性。引用/组合条件仍用JSON高级编辑。",
+      "current": "独立设计页及嵌套请求/响应Schema编辑，含类型/必填/说明/示例、范围/长度/格式/正则文本/枚举；保留高级关键字并验证错误原子性。新增独立本地JSON Pointer引用编辑，校验实际Schema位置、保留兄弟约束、支持解除；组合/远程/锚点仍用JSON高级编辑。",
       "source": "S3",
-      "evidence": "public/schema-editor.js; tests/schema-editor.test.mjs; tests/core.test.mjs; tests/ui-smoke.mjs",
+      "evidence": "public/schema-editor.js; tests/schema-editor.test.mjs; tests/core.test.mjs; tests/ui-smoke.mjs; docs/ADR-VISUAL-SCHEMA-REFERENCES.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。",
+      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。",
       "source": "S3",
-      "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md",
+      "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39368158902",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39369937401",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述307项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述311项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39368158902,
+    "runId": 39369937401,
     "conclusion": "success first attempt",
-    "coreTests": 307,
+    "coreTests": 311,
     "jobs": 10
   },
   "supplementalItems": [
