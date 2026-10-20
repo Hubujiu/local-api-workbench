@@ -38,6 +38,7 @@ const fixture = http.createServer(async (request, response) => {
       JSON.stringify({
         token: request.headers["x-global-fixture"] || "absent",
         authorization: request.headers.authorization || "",
+        sharedScript: request.headers["x-shared-script"] || "absent",
         url: request.url,
       }),
     );
@@ -2224,6 +2225,54 @@ try {
   await page.locator("#send").click();
   const noSharedResult = await (await noSharedAuth).json();
   assert.equal(JSON.parse(noSharedResult.body).authorization, "");
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  await page.locator("#parameter-scope").selectOption("");
+  await page
+    .locator('[data-shared-script="beforeScript"]')
+    .fill(
+      `pm.sendRequest('${fixtureURL}/auth',(error,response)=>{if(error)throw error;apt.setRequestHeader('x-shared-script','callback-ready');});`,
+    );
+  await page
+    .locator('[data-shared-script="afterScript"]')
+    .fill('apt.setVar("shared-script-post","done");');
+  await page.locator("#shared-scripts-enabled").check();
+  await saveAndWait("#save");
+  await page.locator("#shared-scripts-card").scrollIntoViewIfNeeded();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-shared-scripts.png" });
+  await page.locator('.rail [data-page="apis"]').click();
+  const sharedScriptReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const sharedScriptResult = await (await sharedScriptReply).json();
+  assert.equal(
+    sharedScriptResult.outcome,
+    "passed",
+    JSON.stringify(sharedScriptResult),
+  );
+  assert.equal(
+    JSON.parse(sharedScriptResult.body).sharedScript,
+    "callback-ready",
+  );
+  assert.equal(sharedScriptResult.extracted["shared-script-post"], "done");
+  assert.equal(sharedScriptResult.subrequests[0].scope, "project");
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page.locator('[data-param="before"]').click();
+  await page.locator("#inherit-shared-scripts").uncheck();
+  const noScriptReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  assert.equal(
+    JSON.parse((await (await noScriptReply).json()).body).sharedScript,
+    "absent",
+  );
   await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
 
   assert.deepEqual(errors, []);

@@ -1,3 +1,4 @@
+import { scriptStages } from "../public/shared-scripts.js";
 import { isModernApipost, importModernApipost } from "./apipost-modern.mjs";
 import { builtinVariable } from "./builtin-variables.mjs";
 import { apipostDocument, importApipost } from "./apipost-import.mjs";
@@ -11,7 +12,7 @@ import {
   scopeChanges,
 } from "./variable-scopes.mjs";
 import { parse as parseYAML } from "yaml";
-import { runScript } from "./scripts.mjs";
+import { runScript, runScriptSequence } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
 export const id = () => randomUUID();
 export function interpolate(value, vars = {}) {
@@ -127,6 +128,8 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   validateAuth(r.auth);
+  scriptStages(r, "before");
+  scriptStages(r, "after");
   if (!r || typeof r !== "object" || Array.isArray(r))
     throw Error("接口定义必须是对象");
   for (const key of [
@@ -193,6 +196,10 @@ export function normalizeRequest(r = {}) {
     serviceSnapshot: r.serviceSnapshot === true,
     parametersSnapshot: r.parametersSnapshot === true,
     authSnapshot: r.authSnapshot === true,
+    sharedScriptsSnapshot: r.sharedScriptsSnapshot === true,
+    inheritSharedScripts: r.inheritSharedScripts !== false,
+    sharedBeforeScripts: structuredClone(r.sharedBeforeScripts || []),
+    sharedAfterScripts: structuredClone(r.sharedAfterScripts || []),
     inheritAuth: r.inheritAuth !== false,
     inheritGlobalParameters: r.inheritGlobalParameters !== false,
     httpVersion: r.httpVersion === "2" ? "2" : "1.1",
@@ -306,6 +313,7 @@ export function snapshotPlan(plan) {
         serviceSnapshot: true,
         parametersSnapshot: true,
         authSnapshot: true,
+        sharedScriptsSnapshot: true,
       },
       expectedStatus: s.expectedStatus,
     })),
@@ -383,10 +391,17 @@ export async function runPlan(
       applyLegacyVariables(scopes, beforeOperations, vars);
       const localVariables = {};
       let configuredRequest = structuredClone(step.request);
-      if (configuredRequest.beforeScript) {
+      const beforeStages = scriptStages(configuredRequest, "before");
+      if (beforeStages.length) {
         scriptPhase = "before";
-        const scripted = await runScript(
-          configuredRequest.beforeScript,
+        const scripted = await (
+          configuredRequest.sharedBeforeScripts?.length
+            ? runScriptSequence
+            : runScript
+        )(
+          configuredRequest.sharedBeforeScripts?.length
+            ? beforeStages
+            : configuredRequest.beforeScript,
           {
             allowNetwork: true,
             variables: vars,
@@ -467,10 +482,17 @@ export async function runPlan(
         });
       }
       applyLegacyVariables(scopes, beforeAfterOperations, vars);
-      if (record.request.afterScript) {
+      const afterStages = scriptStages(record.request, "after");
+      if (afterStages.length) {
         scriptPhase = "after";
-        const scripted = await runScript(
-          record.request.afterScript,
+        const scripted = await (
+          record.request.sharedAfterScripts?.length
+            ? runScriptSequence
+            : runScript
+        )(
+          record.request.sharedAfterScripts?.length
+            ? afterStages
+            : record.request.afterScript,
           {
             allowNetwork: true,
             variables: vars,
@@ -524,6 +546,7 @@ export async function runPlan(
       scopes.globals = committedScopes.globals;
       record.error = error.message;
       if (error.scriptStage) record.scriptStage = error.scriptStage;
+      if (error.scriptScope) record.scriptScope = error.scriptScope;
       if (!record.request) {
         record.request = structuredClone(step.request);
         record.requestUnresolved = true;

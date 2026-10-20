@@ -1,3 +1,4 @@
+import { applySharedScripts } from "./shared-scripts.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { randomUUID } from "node:crypto";
@@ -53,11 +54,22 @@ export function effectiveServiceId(project, request) {
     return "";
   return project.settings?.folderServices?.[request.folder] || "";
 }
-export function freezeServiceBinding(project, request) {
+export function freezeServiceBinding(
+  project,
+  request,
+  { includeSharedScripts = true } = {},
+) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
   return {
-    ...applySharedAuth(project, applyGlobalParameters(project, request)),
+    ...applySharedAuth(
+      project,
+      applyGlobalParameters(
+        project,
+        includeSharedScripts ? applySharedScripts(project, request) : request,
+      ),
+    ),
+    sharedScriptsSnapshot: true,
     authSnapshot: true,
     parametersSnapshot: true,
     serviceId: effectiveServiceId(project, request),

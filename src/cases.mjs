@@ -14,6 +14,7 @@ export function snapshotCase(input) {
       serviceSnapshot: true,
       parametersSnapshot: true,
       authSnapshot: true,
+      sharedScriptsSnapshot: true,
     },
     functions: structuredClone(input.functions || []),
     createdAt: input.createdAt || new Date().toISOString(),

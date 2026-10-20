@@ -2,6 +2,9 @@
 export function snapshotInterfaceForPlan(request) {
   return {
     ...structuredClone(request),
+    sharedBeforeScripts: [],
+    sharedAfterScripts: [],
+    sharedScriptsSnapshot: true,
     before: [],
     after: [],
     beforeScript: "",

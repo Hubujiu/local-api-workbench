@@ -1,3 +1,4 @@
+import { renameSharedScriptScopes } from "./shared-scripts.js";
 import { renameSharedAuthScopes } from "./shared-auth.js";
 import { renameFolderParameters } from "./global-parameters.js";
 import { parseLoadCSV } from "./load-data.js";
@@ -583,7 +584,7 @@ function paramPanel(r) {
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
-    return `<div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
+    return `<label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -1417,6 +1418,34 @@ function bind() {
     );
     mark();
     await save();
+  });
+  on("#inherit-shared-scripts", "change", (_, element) => {
+    request().inheritSharedScripts = element.checked;
+    mark();
+  });
+  const editableSharedScripts = () => {
+    project.settings ??= {};
+    const folder = $("#parameter-scope")?.value || "";
+    const map = folder
+      ? (project.settings.folderScripts ??= {})
+      : project.settings;
+    const key = folder || "globalScripts";
+    if (!Object.hasOwn(map, key))
+      Object.defineProperty(map, key, {
+        value: { enabled: false, beforeScript: "", afterScript: "" },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    return map[key];
+  };
+  on("#shared-scripts-enabled", "change", (_, element) => {
+    editableSharedScripts().enabled = element.checked;
+    mark();
+  });
+  on("[data-shared-script]", "input", (_, element) => {
+    editableSharedScripts()[element.dataset.sharedScript] = element.value;
+    mark();
   });
   on("#inherit-auth", "change", (_, element) => {
     request().inheritAuth = element.checked;
@@ -2621,6 +2650,11 @@ function bindTree() {
           old,
           remove ? null : name,
         );
+        const folderScripts = renameSharedScriptScopes(
+          project.settings,
+          old,
+          remove ? null : name,
+        );
         const serviceId = $("#folder-service").value;
         const bindings = { ...(project.settings?.folderServices || {}) };
         delete bindings[old];
@@ -2635,6 +2669,7 @@ function bindTree() {
         project.settings.folderServices = bindings;
         project.settings.folderParameters = folderParameters;
         project.settings.folderAuth = folderAuth;
+        project.settings.folderScripts = folderScripts;
         if (parameterScopes.get(project.id) === old)
           parameterScopes.set(project.id, remove ? "" : name);
         for (const item of [

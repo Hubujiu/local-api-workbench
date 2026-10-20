@@ -1643,3 +1643,11 @@ dialog:has(#cookie-line) {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+.shared-script-code {
+  width: 100%;
+  min-height: 140px;
+  font-family: monospace;
+  display: block;
+  margin: 8px 0 16px;
+}

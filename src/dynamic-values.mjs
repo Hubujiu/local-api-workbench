@@ -103,7 +103,12 @@ export async function resolveDynamicRequest(
   const deadline = Date.now() + 5000;
   // Scripts resolve templates explicitly at execution time, including post-extraction scopes.
   const scriptSources = {};
-  for (const key of ["beforeScript", "afterScript"])
+  for (const key of [
+    "beforeScript",
+    "afterScript",
+    "sharedBeforeScripts",
+    "sharedAfterScripts",
+  ])
     if (Object.hasOwn(clone, key)) {
       scriptSources[key] = clone[key];
       delete clone[key];

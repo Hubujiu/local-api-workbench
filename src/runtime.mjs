@@ -1,3 +1,4 @@
+import { validateSharedScriptSettings } from "./shared-scripts.mjs";
 import { validateSharedAuthSettings } from "./shared-auth.mjs";
 import {
   validateGlobalParameters,
@@ -195,6 +196,7 @@ export class Store {
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
     validateSharedAuthSettings(p.settings);
+    validateSharedScriptSettings(p.settings);
     validateGlobalParameters(p.settings?.globalParameters);
     validateFolderParameters(p.settings?.folderParameters);
     for (const record of [...(p.requests || []), ...p.documents]) {
