@@ -82,3 +82,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 ## 数据库只读查询
 
 支持 SQLite、PostgreSQL、MySQL、Redis有界命令和MongoDB find。Redis输入JSON命令数组；MongoDB输入collection/filter/projection/sort/limit等JSON查询对象，结果采用Extended JSON。均不自动保存连接凭据；不提供数据库写入或任意脚本执行。具体限额见 docs/ADR-REDIS-READS.md、docs/ADR-MONGODB-FIND.md。
+
+## 参数化压测
+
+一键压测可粘贴或导入 UTF-8 CSV。首行为变量名，数据行按执行序号循环，覆盖该次执行的运行时变量，用 {{变量名}} 或 apt.getVar 读取。限64 KiB/100行/50列，不改变100次主请求和10并发上限。数据仅存在当前页面会话，不写回项目；无效CSV在发请求前拒绝。详见 docs/ADR-LOAD-DATA.md。

@@ -754,6 +754,7 @@ export async function createApp({
                     p,
                     context.environment.id,
                   ).inspect(),
+                  dataCSV: b.dataCSV,
                   count: b.count,
                   concurrency: b.concurrency,
                   environmentId: context.environment.id,

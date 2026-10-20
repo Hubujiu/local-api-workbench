@@ -1,3 +1,4 @@
+import { parseLoadCSV } from "../public/load-data.js";
 import { memoryCookieSession } from "./cookie-jar.mjs";
 import { runPlan, snapshotPlan } from "./core.mjs";
 import {
@@ -10,6 +11,7 @@ import { projectScopes } from "./variable-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
 
 export async function runLoad(project, request, options = {}) {
+  const dataRows = parseLoadCSV(options.dataCSV);
   const count = Math.min(
     100,
     Math.max(1, Math.floor(Number(options.count)) || 10),
@@ -47,7 +49,13 @@ export async function runLoad(project, request, options = {}) {
             {
               signal: options.signal,
               cookieSession: memoryCookieSession(options.cookieState),
-              variableScopes: scopes,
+              variableScopes: {
+                ...scopes,
+                runtime: {
+                  ...scopes.runtime,
+                  ...(dataRows.length ? dataRows[index % dataRows.length] : {}),
+                },
+              },
               prepareRequest: (definition) =>
                 resolveServiceRequest(project, definition, environmentId),
             },
@@ -133,6 +141,14 @@ export async function runLoad(project, request, options = {}) {
     ),
     variableIsolation: "per-request",
     cancelled: Boolean(options.signal?.aborted),
-    results: results.sort((a, b) => a.index - b.index),
+    dataRows: dataRows.length,
+    results: results
+      .sort((a, b) => a.index - b.index)
+      .map((result) => ({
+        ...result,
+        ...(dataRows.length
+          ? { dataRow: (result.index % dataRows.length) + 1 }
+          : {}),
+      })),
   };
 }

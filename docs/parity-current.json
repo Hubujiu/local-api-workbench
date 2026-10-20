@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-19T04:48:23Z",
-  "implementationCommit": "a92191c691f93f9b5a9409bacf6c492e7b71a950",
+  "asOf": "2026-10-20T00:41:21Z",
+  "implementationCommit": "358d9c9437dbbb1391b9d47caa7953f1c445a345",
   "counts": {
     "F": {
       "已实现": 37,
@@ -287,7 +287,7 @@
       "name": "数据库连接",
       "status": "部分实现",
       "original": "公开文档说明保留数据库连接",
-      "current": "SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。",
+      "current": "SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。",
       "source": "S3",
       "evidence": "database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs",
       "baselineStatus": "部分实现"
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；Promise/完整SDK/数据库脚本仍不等价。",
+      "current": "隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；有界Promise/await已验证；完整SDK/数据库脚本仍不等价。",
       "source": "S3",
-      "evidence": "src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs",
+      "evidence": "src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs; tests/script-promises.test.mjs; tests/quickjs-rejections.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39201156403",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39348890602",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述245项测试全绿检查点。后续改动需核对PR精确提交CI。分类重叠，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述259项测试全绿检查点。后续改动需核对PR精确提交CI。分类重叠，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39201156403,
+    "runId": 39348890602,
     "conclusion": "success",
-    "coreTests": 245,
-    "jobs": 9
+    "coreTests": 259,
+    "jobs": 10
   }
 }

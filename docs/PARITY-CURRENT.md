@@ -1,8 +1,8 @@
 # 逐项复刻对照（2026-10-19）
 
-已核验提交：a92191c691f93f9b5a9409bacf6c492e7b71a950
+已核验提交：358d9c9437dbbb1391b9d47caa7953f1c445a345
 
-9项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39201156403)，245项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39348890602)，259项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -37,7 +37,7 @@
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
 | F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；Promise/完整SDK/数据库脚本仍不等价。 | src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs |
+| F27 接口前后置操作 | 部分实现 | 隔离脚本、CryptoJS/Chai、作用域、前置断言及HTTP子请求证据已验证；支持HTTP/$.ajax回调、done断言、有界setTimeout/clearTimeout、replaceIn和89种基础/英文Faker变量。2秒总截止及原网络权限保持；有界Promise/await已验证；完整SDK/数据库脚本仍不等价。 | src/script-http.mjs; src/script-worker.mjs; tests/script-http.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; tests/script-timers.test.mjs; tests/script-compatibility.test.mjs; tests/script-ajax.test.mjs; tests/builtin-variables.test.mjs; tests/faker-variables.test.mjs |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39201156403; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39348890602; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -127,4 +127,6 @@
 
 来源索引：[parity-current.json](parity-current.json)。原始基线：[PARITY-AUDIT.md](PARITY-AUDIT.md)。
 
-当前检查点245项测试、9项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
+当前检查点259项测试、10项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
+
+2026-10-20 检查点：有界 Promise/await、异步 HTTP/定时器回调、异步断言及原生未处理拒绝追踪通过三平台真实桌面包验收，新增独立运行时字节级可复现构建检查。输出序列化期间不能启动异步工作或隐藏拒绝。MongoDB只读find已通过真实MongoDB8.0集成。CSV参数化压测为本轮新增，尚须其精确提交CI验证，不计入以上检查点。

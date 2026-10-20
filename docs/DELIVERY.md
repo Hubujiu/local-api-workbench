@@ -39,7 +39,7 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 ## 明确限制
 
 - 不解析或声称兼容 Apipost 专有原生目录格式；使用通用 OpenAPI/Postman/cURL 或本工具备份迁移。
-- 原站脚本 SDK 的完整兼容未实现。支持范围见 README：同步 apt/pm 变量、response、test/expect、console；支持有界HTTP/定时器/$.ajax回调，无任意npm或文件访问，Promise及完整SDK仍未实现。
+- 原站脚本 SDK 的完整兼容未实现。支持范围见 README：同步 apt/pm 变量、response、test/expect、console；支持有界HTTP/定时器/$.ajax回调，无任意npm或文件访问，有界Promise/await已验证，完整SDK仍未实现。
 - cURL 导入不执行 shell、不自动读取 @file，也不支持 -L 自动重定向；不支持的选项显式报错。
 - cURL 导出是 Bash 语法，非 cmd.exe/PowerShell 语法；会包含解析后的变量与凭据，不执行前后置脚本。二进制、MessagePack、文件上传或内联证书需单独组织文件，界面会明确拒绝不完整导出。
 - 外部 OpenAPI 引用不自动联网下载；本地引用保留。远程文档分享采用用户自行分发 HTML/Markdown，不提供公共托管服务。
@@ -51,8 +51,10 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-最近已全绿检查点a92191c691f93f9b5a9409bacf6c492e7b71a950：245项核心测试、9项CI通过，Actions39201156403。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
+最近已全绿检查点358d9c9437dbbb1391b9d47caa7953f1c445a345：259项核心测试、10项CI通过，Actions39348890602。此前Windows CLI偶发失败未重现但原因未确认，诊断保留。后续新增功能须独立验收。未合并main，未部署。
 
-当前检查点245项测试、9项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
+当前检查点259项测试、10项CI通过。完整复刻及原生迁移仍未验证；后续修改须独立核对CI。
 
 本轮新增并核验：Cookie管理器及关闭重开隔离、89种动态变量与replaceIn、Schema约束编辑/对象样例边界、真实Redis只读查询。详细安全边界见对应ADR；这些并不消除原生迁移、完整SDK和未公开原版行为的缺口。
+
+2026-10-20 检查点：有界 Promise/await、异步 HTTP/定时器回调、异步断言及原生未处理拒绝追踪通过三平台真实桌面包验收，新增独立运行时字节级可复现构建检查。输出序列化期间不能启动异步工作或隐藏拒绝。MongoDB只读find已通过真实MongoDB8.0集成。CSV参数化压测为本轮新增，尚须其精确提交CI验证，不计入以上检查点。

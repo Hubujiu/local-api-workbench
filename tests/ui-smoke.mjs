@@ -722,6 +722,24 @@ try {
 
   await page.locator("#load-count").fill("2");
   await page.locator("#load-concurrency").fill("2");
+  await page.locator("#load-data").fill("id,id\n1,2");
+  await page.locator("#load-run").click();
+  await page
+    .getByText("压测CSV变量名为空、重复或无效", { exact: true })
+    .waitFor();
+  const csv = "loadFixture\nfirst\nsecond";
+  await page.locator("#load-data-file").setInputFiles({
+    name: "data.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv),
+  });
+  await page.waitForFunction(
+    (value) => document.querySelector("#load-data").value === value,
+    csv,
+  );
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-mode="load"]').click();
+  assert.equal(await page.locator("#load-data").inputValue(), csv);
   page.once("dialog", (dialog) => {
     assert.match(dialog.message(), /有权/);
     dialog.accept();
@@ -737,6 +755,12 @@ try {
   assert.equal(loadPayload.scriptRequests, 2);
   assert.equal(loadPayload.mainRequests, 2);
   assert.equal(loadPayload.variableIsolation, "per-request");
+  assert.equal(loadPayload.dataRows, 2);
+  assert.deepEqual(
+    loadPayload.results.map((r) => r.dataRow),
+    [1, 2],
+  );
+  assert.equal(await page.locator("#load-data").inputValue(), csv);
   assert.equal(
     (await app.store.get(scopeSavedProject.id)).configRevision,
     preLoadRevision,
