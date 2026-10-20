@@ -1012,6 +1012,21 @@ try {
     accessToken: "fixture-access",
   }))
     await page.locator('[data-auth="' + key + '"]').fill(value);
+  let releaseAuthRefresh, authRefreshReady;
+  const authRefreshGate = new Promise((resolve) => {
+    releaseAuthRefresh = resolve;
+  });
+  const authRefreshStarted = new Promise((resolve) => {
+    authRefreshReady = resolve;
+  });
+  const delayedAuthRefresh = async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const fetched = await route.fetch();
+    authRefreshReady();
+    await authRefreshGate;
+    await route.fulfill({ response: fetched });
+  };
+  await page.route("**/api/projects/*", delayedAuthRefresh);
   const edgegridResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -1026,6 +1041,29 @@ try {
       "fixture-edgegrid-secret",
     ),
   );
+  await authRefreshStarted;
+  await page.locator("#url").evaluate((input) => {
+    input.focus();
+    input.select();
+  });
+  releaseAuthRefresh();
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "url",
+    "response refresh preserves the actively edited field",
+  );
+  assert.equal(
+    await page
+      .locator("#url")
+      .evaluate((input) => input.selectionEnd - input.selectionStart),
+    await page
+      .locator("#url")
+      .inputValue()
+      .then((value) => value.length),
+    "response refresh preserves text selection",
+  );
+  await page.unroute("**/api/projects/*", delayedAuthRefresh);
   await page.locator("#url").fill(ntlmFixture.url);
   await page.locator("#auth-type").selectOption("ntlm");
   await page.locator('[data-auth="username"]').fill("User");

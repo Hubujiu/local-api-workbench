@@ -332,7 +332,32 @@ function tree() {
   );
 }
 
-function render() {
+function render(preserveEditingFocus = false) {
+  const active = document.activeElement;
+  const editing =
+    preserveEditingFocus &&
+    active &&
+    active.matches(
+      'input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea',
+    ) &&
+    active.closest("#app");
+  const focusKey =
+    editing &&
+    (active.id
+      ? { id: active.id }
+      : Object.entries(active.dataset).find(
+          ([key]) => !key.startsWith("playwright"),
+        ));
+  const focusState = focusKey
+    ? {
+        value: active.value,
+        start: active.selectionStart,
+        end: active.selectionEnd,
+        direction: active.selectionDirection,
+        scrollTop: active.scrollTop,
+        scrollLeft: active.scrollLeft,
+      }
+    : null;
   const r = request();
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
@@ -378,6 +403,30 @@ function render() {
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
+  if (focusState) {
+    const replacement = focusKey.id
+      ? document.getElementById(focusKey.id)
+      : [...document.querySelectorAll("#app input, #app textarea")].find(
+          (node) => node.dataset[focusKey[0]] === focusKey[1],
+        );
+    if (
+      replacement &&
+      replacement.tagName === active.tagName &&
+      replacement.type === active.type &&
+      !replacement.disabled
+    ) {
+      replacement.value = focusState.value;
+      replacement.focus({ preventScroll: true });
+      if (focusState.start !== null && focusState.end !== null)
+        replacement.setSelectionRange(
+          focusState.start,
+          focusState.end,
+          focusState.direction,
+        );
+      replacement.scrollTop = focusState.scrollTop;
+      replacement.scrollLeft = focusState.scrollLeft;
+    }
+  }
 }
 function editor(r) {
   return `<section class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
@@ -2616,7 +2665,7 @@ async function send() {
     responses.set(projectId + ":" + targetId, result);
     if (project.id === projectId && current === targetId) response = result;
     busy = false;
-    render();
+    render(true);
   }
 }
 document.addEventListener("keydown", (e) => {
