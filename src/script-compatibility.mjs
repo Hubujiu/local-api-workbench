@@ -7,6 +7,7 @@ function installScriptCompatibility({
   variables,
   localVariables,
   tests,
+  maxTests = 1000,
   parameterName,
   modifyPair,
   builtinVariable,
@@ -220,12 +221,12 @@ function installScriptCompatibility({
   apt.response = pm.response;
   const originalTest = pm.test;
   pm.test = (name, fn) => {
-    if (tests.length >= 1000) throw Error("脚本断言最多1000条");
+    if (tests.length >= maxTests) throw Error("脚本断言最多1000条");
     return originalTest(name, fn);
   };
   apt.test = pm.test;
   apt.assert = (expression) => {
-    if (tests.length >= 1000) throw Error("脚本断言最多1000条");
+    if (tests.length >= maxTests) throw Error("脚本断言最多1000条");
     const name = String(expression);
     try {
       const result = new Function(

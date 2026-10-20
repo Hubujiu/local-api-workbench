@@ -57,7 +57,7 @@ try {
         return { error: context.newError("此脚本未启用HTTP网络能力") };
       if (context.typeof(callback) !== "function")
         return { error: context.newError("脚本HTTP需要回调函数") };
-      if (requestCount >= 10 || callbacks.size >= 4)
+      if (requestCount >= workerData.requestLimit || callbacks.size >= 4)
         return { error: context.newError("脚本HTTP最多10次、同时4次") };
       const json = context.getString(payload);
       if (json.length > 65536)
@@ -85,7 +85,7 @@ try {
         milliseconds > 1000
       )
         return { error: context.newError("定时器延迟须为0至1000毫秒") };
-      if (timerCount >= 100 || timers.size >= 32)
+      if (timerCount >= workerData.timerLimit || timers.size >= 32)
         return { error: context.newError("脚本定时器最多100次、同时32次") };
       const id = ++timerCount;
       timers.set(id, {
@@ -111,7 +111,7 @@ try {
 
   let fakerCalls = 0;
   const fakerFunction = context.newFunction("__fakerVariable", (keyHandle) => {
-    if (++fakerCalls > 1000)
+    if (++fakerCalls > workerData.fakerLimit)
       return { error: context.newError("Faker变量最多1000次") };
     try {
       const value = fakerVariable(context.getString(keyHandle));
@@ -338,12 +338,14 @@ try {
   run(setup);
   run(trustedLibraries);
   scriptStage = "compatibility";
-  deadline = Date.now() + 250;
+  deadline = Date.now() + workerData.activityBudgetMs;
   run("pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;");
   run(
     "(" +
       scriptCompatibilitySource +
-      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable});",
+      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable,maxTests:" +
+      workerData.assertionLimit +
+      "});",
   );
 
   run(`pm.sendRequest=(config,callback)=>{
@@ -388,8 +390,12 @@ try {
   let jobCount = 0;
   const drainJobs = () => {
     while (runtime.hasPendingJob()) {
-      if (jobCount >= 10000) throw Error("脚本微任务最多10000次");
-      const result = bounded(() => runtime.executePendingJobs(100));
+      if (jobCount >= workerData.jobLimit) throw Error("脚本微任务最多10000次");
+      const result = bounded(() =>
+        runtime.executePendingJobs(
+          Math.min(100, workerData.jobLimit - jobCount),
+        ),
+      );
       if (result.error) {
         result.error.dispose();
         throw Error("脚本微任务执行失败或超时");
@@ -485,7 +491,8 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
-  deadline = Date.now() + Math.max(0, remaining);
+  const serializationStart = Date.now();
+  deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
   finalizing = true;
   const output = context.evalCode(
@@ -501,7 +508,17 @@ try {
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
     throw Error("脚本输出超过 1 MiB");
-  outcome = { result: JSON.parse(json) };
+  outcome = {
+    result: {
+      ...JSON.parse(json),
+      usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      activityMs:
+        workerData.activityBudgetMs -
+        remaining +
+        Date.now() -
+        serializationStart,
+    },
+  };
 } catch (error) {
   outcome = { error: error.message, scriptStage };
 } finally {
