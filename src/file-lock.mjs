@@ -52,8 +52,11 @@ export function isTransientWindowsLockMkdir(
 async function acquireDiskLock(directory) {
   const ownerFile = path.join(directory, "owner.json"),
     nonce = randomUUID();
-  let lastTransient;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  const hardDeadline = performance.now() + 10000;
+  let idleDeadline = performance.now() + 2000,
+    lastOwner,
+    lastTransient;
+  while (performance.now() < Math.min(hardDeadline, idleDeadline)) {
     try {
       await mkdir(directory);
       await writeFile(ownerFile, JSON.stringify({ pid: process.pid, nonce }), {
@@ -82,6 +85,16 @@ async function acquireDiskLock(directory) {
         if (Number.isInteger(owner.pid) && owner.pid > 0) {
           try {
             process.kill(owner.pid, 0);
+            if (
+              typeof owner.nonce === "string" &&
+              owner.nonce.length > 0 &&
+              owner.nonce.length <= 256
+            ) {
+              const identity = owner.pid + ":" + owner.nonce;
+              if (lastOwner !== undefined && identity !== lastOwner)
+                idleDeadline = performance.now() + 2000;
+              lastOwner = identity;
+            }
           } catch (checkError) {
             if (checkError.code === "ESRCH") {
               const current = JSON.parse(await readFile(ownerFile, "utf8"));
