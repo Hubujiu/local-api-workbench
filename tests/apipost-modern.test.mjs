@@ -107,3 +107,66 @@ test("modern inheritance is flattened explicitly and cyclic or ambiguous depende
     assert.deepEqual(target, before);
   }
 });
+
+test("modern flat models preserve references and generate usable schemas without fetching remote resources", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  d.models = [
+    {
+      model_id: "user",
+      model_type: "model",
+      parent_id: "0",
+      name: "User",
+      description: "A fictional user",
+      schema: {
+        type: "object",
+        properties: { id: { type: "integer", const: 7 } },
+        required: ["id"],
+      },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "#/definitions/user" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.equal(p.dictionary.length, 1);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), { id: 7 });
+  assert.match(p.requests[0].schema.$ref, /^#\/components\/schemas\/apipost-/);
+  assert.equal(p.dictionary[0].schema.description, "A fictional user");
+  for (const ref of ["https://example.test/schema", "#/definitions/missing"]) {
+    const bad = fixture();
+    bad.models = structuredClone(d.models);
+    bad.apis[1].request.body.raw_schema = { $ref: ref };
+    const target = project(),
+      before = structuredClone(target);
+    assert.throws(() => importIntoProject(target, bad));
+    assert.deepEqual(target, before);
+  }
+  const custom = structuredClone(d);
+  custom.models[0].schema["x-schema-refs"] = { bad: { $ref: "user" } };
+  assert.throws(() => importIntoProject(project(), custom), /自定义/);
+});
+
+test("model-local pointers are rebased and conflicting reimports remain atomic", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  d.models = [
+    {
+      model_id: "local",
+      model_type: "model",
+      name: "Local",
+      schema: {
+        $defs: { Number: { const: 8 } },
+        type: "object",
+        properties: { n: { $ref: "#/$defs/Number" } },
+      },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "local" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), { n: 8 });
+  const before = structuredClone(p);
+  d.models[0].schema.$defs.Number.const = 9;
+  assert.throws(() => importIntoProject(p, d), /冲突/);
+  assert.deepEqual(p, before);
+});

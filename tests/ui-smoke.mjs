@@ -1624,6 +1624,18 @@ try {
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
   modern.apis[1].request.query.parameter = [];
+  modern.models = [
+    {
+      model_id: "browser-model",
+      model_type: "model",
+      parent_id: "0",
+      name: "BrowserModel",
+      schema: { type: "object", properties: { id: { const: 7 } } },
+    },
+  ];
+  modern.apis[1].request.body.raw_schema = {
+    $ref: "#/definitions/browser-model",
+  };
   await page.locator("#import").click();
   await page.locator("#import-text").fill(JSON.stringify(modern));
   await page.locator("#dialog-save").click();
@@ -1644,6 +1656,11 @@ try {
   assert.equal(modernResult.request.headers["x-test"], "current");
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-apipost-modern.png" });
+  await page.locator('[data-page="dictionary"]').click();
+  await page
+    .getByText("Fictional modern export / BrowserModel", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-apipost-model.png" });
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [
     normalizeRequest({

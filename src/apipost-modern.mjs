@@ -1,3 +1,4 @@
+import { prepareApipostModels } from "./apipost-models.mjs";
 import { createHash } from "node:crypto";
 import { importApipost } from "./apipost-import.mjs";
 import { validateResources } from "./resources.mjs";
@@ -82,8 +83,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const prefix = "apipost-" + digest(safe(source.project_id));
   const resource = (kind, id) =>
     prefix + "-" + kind + "-" + digest(safe(String(id)));
-  for (const name of ["models", "samples", "automated_testings"])
+  for (const name of ["samples", "automated_testings"])
     reject(source[name], name);
+  const models = prepareApipostModels(source.models, resource, source.name);
   const global = source.global;
   const knownGlobal = new Set([
     "envs",
@@ -269,6 +271,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         expect: {
           ...item.expect,
           contentType: item.expect.content_type ?? "json",
+          schema: models.rewrite(item.expect.schema ?? {}),
         },
       };
     }
@@ -325,6 +328,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
             : {
                 ...request,
                 description: node.description ?? "",
+                body: {
+                  ...request.body,
+                  raw_schema: models.rewrite(request.body?.raw_schema ?? {}),
+                },
                 header: merge("header"),
                 query: merge("query"),
                 cookie: merge("cookie"),
@@ -375,9 +382,22 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     statuses: mergeResources(project.settings?.statuses, statuses),
   };
   validateResources(settings);
+  const components = structuredClone(project.openapiComponents ?? {});
+  components.schemas ??= {};
+  for (const [key, schema] of Object.entries(models.schemas)) {
+    if (
+      Object.hasOwn(components.schemas, key) &&
+      JSON.stringify(components.schemas[key]) !== JSON.stringify(schema)
+    )
+      throw Error("Apipost模型同名冲突，请导入新项目");
+    components.schemas[key] = schema;
+  }
+  const dictionary = mergeResources(project.dictionary, models.dictionary);
   return {
     ...legacy,
     metadata: {
+      openapiComponents: components,
+      dictionary,
       environments: mergeResources(project.environments, environments),
       servers: mergeResources(project.servers, servers),
       globalVariables: mergedGlobals,
