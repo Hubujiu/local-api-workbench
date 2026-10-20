@@ -1,3 +1,4 @@
+import { globalParametersPanel } from "./global-parameters-view.js";
 import { functionPanel } from "./function-view.js";
 import { attributePanel } from "./attribute-view.js";
 import { errorCodePanel } from "./error-code-view.js";
@@ -15,7 +16,10 @@ const esc = (value) =>
 export function settingsPanel(project, active = "settings-basic") {
   let title = "基本设置",
     content = "";
-  if (active === "settings-environments") {
+  if (active === "settings-global-parameters") {
+    title = "全局请求参数";
+    content = globalParametersPanel(project);
+  } else if (active === "settings-environments") {
     title = "环境与服务";
     content =
       '<div class="page-head"><h2>环境管理</h2><button id="clear-session">清空调试临时变量</button><button id="add-env">＋ 新建环境</button></div>' +

@@ -1,3 +1,4 @@
+import { freezeServiceBinding } from "./environments.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
 import { scopedExecution } from "./variable-scopes.mjs";
@@ -391,7 +392,7 @@ export function createMCP({
                   {
                     request: resolveServiceRequest(
                       p,
-                      request,
+                      freezeServiceBinding(p, request),
                       args.environmentId,
                     ),
                   },

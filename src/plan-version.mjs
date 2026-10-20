@@ -14,7 +14,13 @@ export function versionPlan(previous, input, source = "manual", project) {
             : step.request;
         return {
           ...step,
-          request: freezeServiceBinding(project, request || {}),
+          request: freezeServiceBinding(project, {
+            ...(request || {}),
+            ...(oldStep &&
+            !Object.hasOwn(step.request || {}, "parametersSnapshot")
+              ? { parametersSnapshot: true }
+              : {}),
+          }),
         };
       }),
     };

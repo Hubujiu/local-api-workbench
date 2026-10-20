@@ -1,3 +1,4 @@
+import { validateGlobalParameters } from "./global-parameters.mjs";
 import { ntlmType1, parseNtlmChallenge, ntlmType3 } from "./ntlm.mjs";
 import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
@@ -189,6 +190,7 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
+    validateGlobalParameters(p.settings?.globalParameters);
     for (const record of [...(p.requests || []), ...p.documents]) {
       validateAttributeValues(record.attributes, p.settings?.attributes || []);
       if (

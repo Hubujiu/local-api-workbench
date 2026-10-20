@@ -12,6 +12,7 @@ export function snapshotCase(input) {
     request: {
       ...normalizeRequest(structuredClone(input.request)),
       serviceSnapshot: true,
+      parametersSnapshot: true,
     },
     functions: structuredClone(input.functions || []),
     createdAt: input.createdAt || new Date().toISOString(),

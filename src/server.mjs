@@ -1,3 +1,4 @@
+import { applyGlobalParameters } from "./global-parameters.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { runLoad } from "./load-runner.mjs";
 import { readMCPActivities } from "./mcp-activity.mjs";
@@ -582,7 +583,7 @@ export async function createApp({
                 resolveServiceRequest(
                   p,
                   await resolveDynamicRequest(
-                    data.request,
+                    applyGlobalParameters(p, data.request),
                     context.variables,
                     p.settings?.functions || [],
                     interpolate,

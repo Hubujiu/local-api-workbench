@@ -32,7 +32,15 @@ let uploadedMultipart,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
 const fixture = http.createServer(async (request, response) => {
-  if (request.url === "/upload") {
+  if (request.url.startsWith("/global-parameters")) {
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        token: request.headers["x-global-fixture"] || "absent",
+        url: request.url,
+      }),
+    );
+  } else if (request.url === "/upload") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     uploadedMultipart = {
@@ -2029,6 +2037,54 @@ try {
     '["GET","ui-fixture"]',
     "switching type preserves edited query text",
   );
+
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  await page.locator('[data-global-add="headers"]').click();
+  await page
+    .locator('[data-global-field="headers:0:key"]')
+    .fill("X-Global-Fixture");
+  await page
+    .locator('[data-global-field="headers:0:value"]')
+    .fill("shared-value");
+  await page.locator('[data-global-add="query"]').click();
+  await page.locator('[data-global-field="query:0:key"]').fill("source");
+  await page.locator('[data-global-field="query:0:value"]').fill("project");
+  await saveAndWait("#save");
+  await page.locator('[data-settings-anchor="settings-basic"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  assert.equal(
+    await page.locator('[data-global-field="headers:0:value"]').inputValue(),
+    "shared-value",
+  );
+  await page.screenshot({ path: "/tmp/local-api-global-parameters.png" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.getByRole("button", { name: "新建接口", exact: true }).click();
+  await page
+    .locator("#url")
+    .fill(`http://127.0.0.1:${fixture.address().port}/global-parameters`);
+  await page.locator("#send").click();
+  await page
+    .locator(".response-body")
+    .getByText("shared-value", { exact: false })
+    .waitFor();
+  await page
+    .locator(".response-body")
+    .getByText("source=project", { exact: false })
+    .waitFor();
+  await page.locator('[data-mode="design"]').click();
+  await page.locator("#inherit-global-parameters").uncheck();
+  await saveAndWait("#save");
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator("#send").click();
+  await page
+    .locator(".response-body")
+    .getByText("absent", { exact: false })
+    .waitFor();
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

@@ -1,3 +1,4 @@
+import { applyGlobalParameters } from "./global-parameters.mjs";
 import { randomUUID } from "node:crypto";
 function name(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 200)
@@ -55,7 +56,8 @@ export function freezeServiceBinding(project, request) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
   return {
-    ...request,
+    ...applyGlobalParameters(project, request),
+    parametersSnapshot: true,
     serviceId: effectiveServiceId(project, request),
     serviceSnapshot: true,
   };

@@ -191,6 +191,8 @@ export function normalizeRequest(r = {}) {
     sourceOperationId: String(r.sourceOperationId || ""),
     serviceId: String(r.serviceId || ""),
     serviceSnapshot: r.serviceSnapshot === true,
+    parametersSnapshot: r.parametersSnapshot === true,
+    inheritGlobalParameters: r.inheritGlobalParameters !== false,
     httpVersion: r.httpVersion === "2" ? "2" : "1.1",
     folder: r.folder || "",
     description: r.description || "",
@@ -300,6 +302,7 @@ export function snapshotPlan(plan) {
       request: {
         ...normalizeRequest(structuredClone(s.request)),
         serviceSnapshot: true,
+        parametersSnapshot: true,
       },
       expectedStatus: s.expectedStatus,
     })),
