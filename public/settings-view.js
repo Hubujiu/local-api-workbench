@@ -13,12 +13,16 @@ const esc = (value) =>
         c
       ],
   );
-export function settingsPanel(project, active = "settings-basic") {
+export function settingsPanel(
+  project,
+  active = "settings-basic",
+  parameterFolder = "",
+) {
   let title = "基本设置",
     content = "";
   if (active === "settings-global-parameters") {
     title = "全局请求参数";
-    content = globalParametersPanel(project);
+    content = globalParametersPanel(project, parameterFolder);
   } else if (active === "settings-environments") {
     title = "环境与服务";
     content =

@@ -1,8 +1,9 @@
 import {
   validateGlobalParameters,
+  validateFolderParameters,
   globalParameterKinds,
 } from "../public/global-parameters.js";
-export { validateGlobalParameters };
+export { validateGlobalParameters, validateFolderParameters };
 export function applyGlobalParameters(project, request) {
   const result = structuredClone(request);
   if (
@@ -11,6 +12,10 @@ export function applyGlobalParameters(project, request) {
   )
     return result;
   const defaults = validateGlobalParameters(project.settings?.globalParameters);
+  const folders = validateFolderParameters(project.settings?.folderParameters);
+  const folder = Object.hasOwn(folders, request.folder || "")
+    ? folders[request.folder]
+    : {};
   for (const kind of globalParameterKinds) {
     if (
       kind === "form" &&
@@ -21,10 +26,14 @@ export function applyGlobalParameters(project, request) {
     const key = (name) =>
       kind === "headers" ? String(name).toLowerCase() : String(name);
     const overrides = new Set(own.map((row) => key(row.key)));
+    const folderRows = folder[kind] || [];
+    const folderKeys = new Set(folderRows.map((row) => key(row.key)));
+    const inherited = [
+      ...defaults[kind].filter((row) => !folderKeys.has(key(row.key))),
+      ...folderRows,
+    ];
     result[kind] = [
-      ...defaults[kind].filter(
-        (row) => row.enabled && !overrides.has(key(row.key)),
-      ),
+      ...inherited.filter((row) => row.enabled && !overrides.has(key(row.key))),
       ...own,
     ];
   }

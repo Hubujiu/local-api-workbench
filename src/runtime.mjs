@@ -1,4 +1,7 @@
-import { validateGlobalParameters } from "./global-parameters.mjs";
+import {
+  validateGlobalParameters,
+  validateFolderParameters,
+} from "./global-parameters.mjs";
 import { ntlmType1, parseNtlmChallenge, ntlmType3 } from "./ntlm.mjs";
 import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
@@ -191,6 +194,7 @@ export class Store {
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
     validateGlobalParameters(p.settings?.globalParameters);
+    validateFolderParameters(p.settings?.folderParameters);
     for (const record of [...(p.requests || []), ...p.documents]) {
       validateAttributeValues(record.attributes, p.settings?.attributes || []);
       if (

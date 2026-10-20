@@ -215,4 +215,26 @@ test("real HTTP debug, cURL, load, plan and case consume defaults at creation on
   );
   assert.equal(optedOut.headers["x-token"], undefined);
   assert.equal(optedOut.url, "/echo");
+  const folderProject = await app.store.get(p.id);
+  folderProject.settings.folderParameters = {
+    Orders: { headers: [pair("X-Token", "folder-value")] },
+  };
+  await app.store.save(folderProject);
+  assert.equal(
+    JSON.parse(
+      (await call("execute", { request: { ...request, folder: "Orders" } }))
+        .body,
+    ).headers["x-token"],
+    "folder-value",
+  );
+  assert.equal(
+    JSON.parse(
+      (
+        await call("execute", {
+          request: { ...request, folder: "Orders/Child" },
+        })
+      ).body,
+    ).headers["x-token"],
+    "new",
+  );
 });

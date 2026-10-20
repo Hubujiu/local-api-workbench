@@ -2124,6 +2124,75 @@ try {
     .getByText("absent", { exact: false })
     .waitFor();
 
+  await page.locator('[data-mode="design"]').click();
+  await page.locator("#inherit-global-parameters").check();
+  await page.locator("#folder").fill("参数目录");
+  await saveAndWait("#save");
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  await page.locator("#parameter-scope").selectOption("参数目录");
+  await page.locator('[data-global-add="headers"]').click();
+  await page
+    .locator('[data-global-field="headers:0:key"]')
+    .fill("x-global-fixture");
+  await page
+    .locator('[data-global-field="headers:0:value"]')
+    .fill("folder-value");
+  await saveAndWait("#save");
+  await page.locator("#parameter-scope").selectOption("");
+  assert.equal(
+    await page.locator('[data-global-field="headers:0:value"]').inputValue(),
+    "shared-value",
+  );
+  await page.locator("#parameter-scope").selectOption("参数目录");
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-folder-parameters.png" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator('[data-mode="debug"]').click();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    ),
+    page.locator("#send").click(),
+  ]);
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page
+    .locator(".response-body")
+    .getByText("folder-value", { exact: false })
+    .waitFor();
+  await page.locator('[data-edit-folder="参数目录"]').click();
+  await page.locator("#folder-name").fill("参数目录改名");
+  await page.locator("#dialog-save").click();
+  await saveAndWait("#save");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    ),
+    page.locator("#send").click(),
+  ]);
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page
+    .locator(".response-body")
+    .getByText("folder-value", { exact: false })
+    .waitFor();
+  await page.locator('[data-edit-folder="参数目录改名"]').click();
+  await page.locator("#folder-remove").check();
+  await page.locator("#dialog-save").click();
+  await saveAndWait("#save");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    ),
+    page.locator("#send").click(),
+  ]);
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page
+    .locator(".response-body")
+    .getByText("shared-value", { exact: false })
+    .waitFor();
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

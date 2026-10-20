@@ -58,3 +58,45 @@ export function validateGlobalParameters(value = {}) {
     }),
   );
 }
+
+export function validateFolderParameters(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw Error("目录参数必须是对象");
+  if (
+    Object.keys(value).length > 100 ||
+    new TextEncoder().encode(JSON.stringify(value)).length > 262144
+  )
+    throw Error("目录参数最多100个目录、总计256KiB");
+  return Object.fromEntries(
+    Object.entries(value).map(([name, parameters]) => {
+      if (
+        !name.trim() ||
+        name.length > 500 ||
+        /[\r\n\0]/.test(name) ||
+        ["__proto__", "prototype", "constructor"].includes(name)
+      )
+        throw Error("目录参数名称无效");
+      return [name, validateGlobalParameters(parameters)];
+    }),
+  );
+}
+export function renameFolderParameters(value, previous, next) {
+  validateFolderParameters(value);
+  const result = structuredClone(value || {});
+  if (next === previous) return result;
+  if (next !== null && Object.hasOwn(result, next))
+    throw Error("目标目录参数已存在");
+  const parameters = Object.hasOwn(result, previous)
+    ? result[previous]
+    : undefined;
+  delete result[previous];
+  if (next !== null && parameters)
+    Object.defineProperty(result, next, {
+      value: parameters,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  validateFolderParameters(result);
+  return result;
+}

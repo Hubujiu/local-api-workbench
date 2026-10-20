@@ -21,7 +21,7 @@ npm start
 
 ## 已实现的核心
 
-- 项目全局 Header / Query / Cookie / 表单文本：集中编辑、接口覆盖/关闭继承，新计划与用例冻结，旧快照不漂移；认证/脚本全局继承尚未支持。见 [范围与优先级](docs/ADR-GLOBAL-PARAMETERS.md)。
+- 项目/精确目录 Header / Query / Cookie / 表单文本：集中编辑、接口覆盖/关闭继承，新计划与用例冻结，旧快照不漂移；认证/脚本全局继承尚未支持。见 [范围与优先级](docs/ADR-GLOBAL-PARAMETERS.md)。
 
 - 项目、接口、目录、搜索、复制、软删除恢复、环境变量与本地持久化
 - HTTP/HTTPS 参数、认证、Cookie、JSON/raw/表单/文件/Base64 二进制/MessagePack 请求，真实响应、超时、取消、8 MiB 限制
