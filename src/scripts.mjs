@@ -17,16 +17,17 @@ export function runScript(code, input, { signal, cookieSession } = {}) {
     });
     const controller = new AbortController(),
       networkRequests = [];
-    let settled = false,
+    let completedMessage,
+      settled = false,
       total = 0,
       active = 0;
-    const finish = (error, result) => {
+    const finish = async (error, result, terminate = true) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
       controller.abort();
-      worker.terminate();
+      if (terminate) await worker.terminate();
       if (error) {
         for (const record of networkRequests)
           if (record.status === "running") {
@@ -97,12 +98,18 @@ export function runScript(code, input, { signal, cookieSession } = {}) {
           ...(error ? { error } : {}),
         });
         worker.postMessage({ kind: "http", id: message.id, error, response });
-      } else if (message.error) finish(Error(message.error));
-      else finish(null, message.result);
+      } else completedMessage = message;
     });
     worker.once("error", (error) => finish(error));
     worker.once("exit", (exitCode) => {
-      if (!settled) finish(Error("脚本执行进程被终止: " + exitCode));
+      if (settled) return;
+      if (exitCode === 0 && completedMessage) {
+        finish(
+          completedMessage.error ? Error(completedMessage.error) : null,
+          completedMessage.result,
+          false,
+        );
+      } else finish(Error("脚本执行进程被终止: " + exitCode), undefined, false);
     });
   });
 }

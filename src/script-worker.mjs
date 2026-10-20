@@ -7,7 +7,8 @@ import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { trackedQuickJS } from "./tracked-quickjs.mjs";
-let runtime,
+let outcome,
+  runtime,
   context,
   rootPromise,
   finalizing = false;
@@ -489,9 +490,9 @@ try {
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
     throw Error("脚本输出超过 1 MiB");
-  parentPort.postMessage({ result: JSON.parse(json) });
+  outcome = { result: JSON.parse(json) };
 } catch (error) {
-  parentPort.postMessage({ error: error.message });
+  outcome = { error: error.message };
 } finally {
   parentPort.off("message", receive);
   for (const callback of callbacks.values()) callback.dispose();
@@ -500,3 +501,6 @@ try {
   context?.dispose();
   runtime?.dispose();
 }
+
+parentPort.postMessage(outcome);
+parentPort.close();
