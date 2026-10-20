@@ -1679,7 +1679,7 @@ function bind() {
   on("#import", "click", () =>
     modal(
       "导入接口",
-      `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost公共转换器JSON（有限兼容）。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
+      `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost旧版/现代JSON（有限兼容）。现代JSON同时导入环境、服务和全局变量，遇到未支持资源会拒绝；请选择导入环境后再发送。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
       async () => {
         if (dirty) {
           if (!confirm("当前有未保存修改，先保存再导入？"))

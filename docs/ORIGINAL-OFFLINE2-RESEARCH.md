@@ -63,3 +63,7 @@ project and export until a real migration has been verified.
 
 No proprietary source code, package binary or branded asset is included in this
 repository. Observed field names are used only to define compatibility limits.
+
+## 2026-10-20 additional evidence
+
+Public Apipost ecosystem exports were found independently (pinned links in ADR-MODERN-APIPOST-IMPORT.md). The global/apis/models/samples/automated_testings markers are shared modern interchange fields, not exclusive proof of Offline2 native provenance. A strict complete-envelope adapter now maps the supported HTTP/environment subset, while incomplete marker-only inputs and unsupported dependencies still reject before mutation. Original native-directory validation remains distinct; the public exports are never labeled as native Offline2 samples.

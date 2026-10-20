@@ -102,7 +102,7 @@ export function importApipost(document) {
     )
   )
     throw Error(
-      "Apipost Offline2原生导出格式尚未验证，不能按旧版JSON导入；请先使用OpenAPI/Postman导出，并单独保留测试和全局配置",
+      "Apipost Offline2/现代JSON结构不完整或尚未验证，不能按旧版JSON导入；请提供完整导出文件并保留测试和全局配置",
     );
   if (
     (source.env !== undefined && !Array.isArray(source.env)) ||

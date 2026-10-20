@@ -1,3 +1,4 @@
+import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
 import { parseRESP } from "../src/redis.mjs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -1619,6 +1620,30 @@ try {
   );
   assert.equal(await page.locator("#folder").inputValue(), "Users");
   await page.screenshot({ path: "/tmp/local-api-apipost-import.png" });
+  const modern = modernApipostFixture();
+  modern.global.envs[0].server_list[0].uri = fixtureURL;
+  modern.apis[1].url = "/auth";
+  modern.apis[1].request.query.parameter = [];
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(JSON.stringify(modern));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page
+    .locator(".import-notes")
+    .getByText("现代Apipost JSON有限互操作", { exact: false })
+    .waitFor();
+  assert.equal(await page.locator("#url").inputValue(), "/auth");
+  await page.locator("#env").selectOption({ label: "Imported" });
+  await page.locator('[data-mode="debug"]').click();
+  const modernResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const modernResult = await (await modernResponse).json();
+  assert.equal(modernResult.status, 200, JSON.stringify(modernResult));
+  assert.equal(modernResult.request.headers["x-test"], "current");
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-apipost-modern.png" });
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [
     normalizeRequest({

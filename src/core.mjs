@@ -1,3 +1,4 @@
+import { isModernApipost, importModernApipost } from "./apipost-modern.mjs";
 import { builtinVariable } from "./builtin-variables.mjs";
 import { apipostDocument, importApipost } from "./apipost-import.mjs";
 import { validateAuth } from "../public/auth-model.js";
@@ -863,6 +864,8 @@ export function importDocument(doc) {
       });
     return walk(doc.item);
   }
+  if (isModernApipost(apipostDocument(doc)))
+    throw Error("Apipost现代JSON需要完整项目导入，不能丢弃环境依赖");
   if (apipostDocument(doc))
     return importApipost(doc).requests.map(normalizeRequest);
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
@@ -1280,7 +1283,11 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
-  const legacy = apipostDocument(original) ? importApipost(original) : null;
+  const source = apipostDocument(original);
+  const modern = isModernApipost(source)
+    ? importModernApipost(source, project, { sync })
+    : null;
+  const legacy = modern || (source ? importApipost(original) : null);
   const requests = legacy
     ? legacy.requests.map(normalizeRequest)
     : importDocument(document);
@@ -1324,6 +1331,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     else project.requests.push(value);
     output.push(value);
   }
+  if (modern) Object.assign(project, modern.metadata);
   if (components) project.openapiComponents = mergedComponents;
   if (legacy)
     project.folders = [
