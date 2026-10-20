@@ -1,6 +1,7 @@
 import { fakerVariable } from "./faker-variables.mjs";
 import { builtinVariableFactory } from "./builtin-variables.mjs";
 import { ajaxCompatibilitySource } from "./script-ajax.mjs";
+import { responseCompatibilitySource } from "./script-response.mjs";
 import { scriptCompatibilitySource } from "./script-compatibility.mjs";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -347,6 +348,8 @@ try {
       workerData.assertionLimit +
       "});",
   );
+
+  run("(" + responseCompatibilitySource + ")({response,pm,apt});");
 
   run(`pm.sendRequest=(config,callback)=>{
     if(callback===undefined)return new Promise((resolve,reject)=>pm.sendRequest(config,(error,response)=>error?reject(error):resolve(response)));

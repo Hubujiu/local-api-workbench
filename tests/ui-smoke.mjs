@@ -2239,7 +2239,9 @@ try {
     );
   await page
     .locator('[data-shared-script="afterScript"]')
-    .fill('apt.setVar("shared-script-post","done");');
+    .fill(
+      'apt.setVar("shared-script-post","done"); apt.test("apt-response-browser",()=>{apt.response.to.be.success;apt.response.to.have.header("Content-Type");apt.expect(apt.response.json.sharedScript).to.equal("callback-ready");});',
+    );
   await page.locator("#shared-scripts-enabled").check();
   await saveAndWait("#save");
   await page.locator("#shared-scripts-card").scrollIntoViewIfNeeded();
@@ -2262,6 +2264,12 @@ try {
   );
   assert.equal(sharedScriptResult.extracted["shared-script-post"], "done");
   assert.equal(sharedScriptResult.subrequests[0].scope, "project");
+  assert(
+    sharedScriptResult.assertions.some(
+      (t) => t.name === "apt-response-browser" && t.passed,
+    ),
+    JSON.stringify(sharedScriptResult.assertions),
+  );
   await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
   await page.locator('[data-param="before"]').click();
   await page.locator("#inherit-shared-scripts").uncheck();
