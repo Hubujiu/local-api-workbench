@@ -1,8 +1,8 @@
 # 逐项复刻对照（2026-10-20）
 
-已核验提交：fbff3ae9b869b10550c7659775c40c59a60ea3fc
+已核验提交：af4db05e4d4d569878eef87a7f2968764fbf0346
 
-10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865)，284项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39366682437)，299项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -37,7 +37,7 @@
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
 | F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离脚本、CryptoJS/Chai/lodash/Moment/uuid、作用域、断言/HTTP子请求证据已验证；支持有界Promise/await、定时器、HTTP回调与原生未处理拒绝追踪。2秒总截止/250ms活动执行、16MiB VM及1MiB UTF-8输出边界；完整SDK/数据库脚本仍不等价。 | src/script-worker.mjs; tests/script-utilities.test.mjs; tests/desktop-smoke.mjs; docs/ADR-PROMISE-SCRIPTS.md; docs/ADR-SCRIPT-UTILITY-LIBRARIES.md |
+| F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39362220865; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39366682437; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -130,8 +130,13 @@
 
 ## 当前核验检查点
 
-提交 fbff3ae9b869b10550c7659775c40c59a60ea3fc， [Actions 39362220865](https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865)，284项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+提交 af4db05e4d4d569878eef87a7f2968764fbf0346， [Actions 39366682437](https://github.com/Hubujiu/local-api-workbench/actions/runs/39366682437)，299项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+
 
 ## 原98项之外的补充发现
 
-项目全局HTTP参数已补Header/Query/Cookie/表单文本，并验证快照隔离、UI编辑/执行；目录参数、全局认证/前后置操作仍缺失。原始清单不是穷尽规格，不因98项分类而隐藏后来发现的功能差距。
+- 项目与精确目录HTTP参数：Header/Query/Cookie/表单文本，三层覆盖、禁用屏蔽、单接口关闭、新计划/用例冻结、原子重命名/删除。递归目录及共享文件参数未实现。
+- 共享认证：项目/目录覆盖、目录none阻止上层、接口认证优先/单独关闭、独立快照。使用已有支持认证类型，不自动获取OAuth令牌或读取系统凭据。
+- 共享前后置JavaScript：显式启用/关闭、当前完整目录、等待异步完成、总预算与全部配额不重置。用例冻结；计划不隐式继承。原排序图与非JS数据库/其他操作未完整验证。
+
+原始清单不是穷尽规格；补充项单列，不重写原基线或计算总体百分比。

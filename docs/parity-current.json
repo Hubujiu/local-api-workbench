@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-20T03:05:00Z",
-  "implementationCommit": "fbff3ae9b869b10550c7659775c40c59a60ea3fc",
+  "asOf": "2026-10-20T04:00:00Z",
+  "implementationCommit": "af4db05e4d4d569878eef87a7f2968764fbf0346",
   "counts": {
     "F": {
       "已实现": 37,
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离脚本、CryptoJS/Chai/lodash/Moment/uuid、作用域、断言/HTTP子请求证据已验证；支持有界Promise/await、定时器、HTTP回调与原生未处理拒绝追踪。2秒总截止/250ms活动执行、16MiB VM及1MiB UTF-8输出边界；完整SDK/数据库脚本仍不等价。",
+      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。",
       "source": "S3",
-      "evidence": "src/script-worker.mjs; tests/script-utilities.test.mjs; tests/desktop-smoke.mjs; docs/ADR-PROMISE-SCRIPTS.md; docs/ADR-SCRIPT-UTILITY-LIBRARIES.md",
+      "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39362220865; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39366682437; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -1023,22 +1023,36 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39362220865",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39366682437",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述284项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述299项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39362220865,
-    "conclusion": "success",
-    "coreTests": 284,
+    "runId": 39366682437,
+    "conclusion": "success first attempt",
+    "coreTests": 299,
     "jobs": 10
   },
   "supplementalItems": [
     {
-      "id": "S-GLOBAL-PARAMETERS",
-      "name": "项目全局HTTP参数",
+      "id": "S-COMMON-PARAMETERS",
+      "name": "项目与精确目录HTTP参数",
       "status": "部分实现",
-      "current": "Header/Query/Cookie/表单文本集中编辑，接口同名覆盖或关闭继承；调试/cURL/压测/授权MCP按当前配置，新计划/用例冻结、旧快照不漂移。目录参数、全局认证/前后置操作尚未支持。",
-      "evidence": "src/global-parameters.mjs; tests/global-parameters.test.mjs; tests/ui-smoke.mjs; docs/ADR-GLOBAL-PARAMETERS.md"
+      "current": "Header/Query/Cookie/表单文本，三层覆盖、禁用屏蔽、单接口关闭、新计划/用例冻结、原子重命名/删除。递归目录及共享文件参数未实现。",
+      "evidence": "docs/ADR-GLOBAL-PARAMETERS.md; docs/ADR-FOLDER-PARAMETERS.md; tests/global-parameters.test.mjs; tests/folder-parameters.test.mjs"
+    },
+    {
+      "id": "S-COMMON-AUTH",
+      "name": "共享认证",
+      "status": "部分实现",
+      "current": "项目/目录覆盖、目录none阻止上层、接口认证优先/单独关闭、独立快照。使用已有支持认证类型，不自动获取OAuth令牌或读取系统凭据。",
+      "evidence": "docs/ADR-SHARED-AUTH.md; tests/shared-auth.test.mjs; tests/ui-smoke.mjs"
+    },
+    {
+      "id": "S-COMMON-SCRIPTS",
+      "name": "共享前后置JavaScript",
+      "status": "部分实现",
+      "current": "显式启用/关闭、当前完整目录、等待异步完成、总预算与全部配额不重置。用例冻结；计划不隐式继承。原排序图与非JS数据库/其他操作未完整验证。",
+      "evidence": "docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-SEQUENCE.md; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs"
     }
   ]
 }
