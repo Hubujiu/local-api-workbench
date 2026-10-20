@@ -1,3 +1,4 @@
+import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { randomUUID } from "node:crypto";
 function name(value) {
@@ -56,7 +57,8 @@ export function freezeServiceBinding(project, request) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
   return {
-    ...applyGlobalParameters(project, request),
+    ...applySharedAuth(project, applyGlobalParameters(project, request)),
+    authSnapshot: true,
     parametersSnapshot: true,
     serviceId: effectiveServiceId(project, request),
     serviceSnapshot: true,

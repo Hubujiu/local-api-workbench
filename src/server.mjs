@@ -1,3 +1,4 @@
+import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { runLoad } from "./load-runner.mjs";
@@ -583,7 +584,7 @@ export async function createApp({
                 resolveServiceRequest(
                   p,
                   await resolveDynamicRequest(
-                    applyGlobalParameters(p, data.request),
+                    applySharedAuth(p, applyGlobalParameters(p, data.request)),
                     context.variables,
                     p.settings?.functions || [],
                     interpolate,

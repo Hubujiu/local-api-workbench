@@ -37,6 +37,7 @@ const fixture = http.createServer(async (request, response) => {
     response.end(
       JSON.stringify({
         token: request.headers["x-global-fixture"] || "absent",
+        authorization: request.headers.authorization || "",
         url: request.url,
       }),
     );
@@ -2192,6 +2193,38 @@ try {
     .locator(".response-body")
     .getByText("shared-value", { exact: false })
     .waitFor();
+
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  await page.locator("#parameter-scope").selectOption("");
+  await page.locator("#shared-auth-enabled").check();
+  await page.locator("#shared-auth-type").selectOption("bearer");
+  await page.locator('[data-shared-auth="token"]').fill("shared-auth-fixture");
+  assert.equal(
+    await page.locator('[data-shared-auth="token"]').getAttribute("type"),
+    "password",
+  );
+  await saveAndWait("#save");
+  await page.locator('[data-shared-auth="token"]').scrollIntoViewIfNeeded();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-shared-auth.png" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#send").click();
+  await page
+    .locator(".response-body")
+    .getByText("Bearer shared-auth-fixture", { exact: false })
+    .waitFor();
+  await page.locator('[data-param="auth"]').click();
+  await page.locator("#inherit-auth").uncheck();
+  const noSharedAuth = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const noSharedResult = await (await noSharedAuth).json();
+  assert.equal(JSON.parse(noSharedResult.body).authorization, "");
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

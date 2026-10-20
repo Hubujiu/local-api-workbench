@@ -87,22 +87,31 @@ const options = (list, selected) =>
         `<option ${value === selected ? "selected" : ""}>${esc(value)}</option>`,
     )
     .join("");
-export function authPanel(auth = {}, { acquire = true } = {}) {
+export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
+  const attribute = shared ? "data-shared-auth" : "data-auth";
   const type = auth.type || "none";
   let html =
-    '<div class="form-grid"><label>认证类型</label><select id="auth-type">' +
+    '<div class="form-grid"><label>认证类型</label><select id="' +
+    (shared ? "shared-auth-type" : "auth-type") +
+    '">' +
     options(authTypes, type) +
     "</select>";
   if (type === "hawk")
     html +=
-      '<label>Hawk算法</label><select data-auth="algorithm">' +
+      "<label>Hawk算法</label><select " +
+      attribute +
+      '="algorithm">' +
       options(["sha256", "sha1"], auth.algorithm || "sha256") +
-      '</select><label>请求体Hash</label><select data-auth="payloadHash">' +
+      "</select><label>请求体Hash</label><select " +
+      attribute +
+      '="payloadHash">' +
       options(["enabled", "disabled"], auth.payloadHash || "enabled") +
       "</select>";
   if (type === "oauth1")
     html +=
-      '<label>签名算法</label><select data-auth="signatureMethod">' +
+      "<label>签名算法</label><select " +
+      attribute +
+      '="signatureMethod">' +
       options(
         ["HMAC-SHA1", "HMAC-SHA256", "RSA-SHA1"],
         auth.signatureMethod || "HMAC-SHA1",
@@ -110,7 +119,9 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
       "</select>";
   if (type === "oauth2")
     html +=
-      '<label>授权方式</label><select data-auth="grantType">' +
+      "<label>授权方式</label><select " +
+      attribute +
+      '="grantType">' +
       options(
         ["client_credentials", "authorization_code", "refresh_token"],
         auth.grantType || "client_credentials",
@@ -120,8 +131,8 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
     (fields[type] || [])
       .map((key) =>
         key === "privateKey"
-          ? `<label>privateKey (RSA PEM)</label><textarea data-auth="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径">${esc(auth[key])}</textarea>`
-          : `<label>${key}</label><input data-auth="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
+          ? `<label>privateKey (RSA PEM)</label><textarea ${attribute}="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径">${esc(auth[key])}</textarea>`
+          : `<label>${key}</label><input ${attribute}="${key}" value="${esc(auth[key])}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
   if (type === "ntlm")

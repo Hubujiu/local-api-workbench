@@ -1,3 +1,4 @@
+import { renameSharedAuthScopes } from "./shared-auth.js";
 import { renameFolderParameters } from "./global-parameters.js";
 import { parseLoadCSV } from "./load-data.js";
 import { builtinVariableNames } from "./builtin-variable-catalog.js";
@@ -540,7 +541,11 @@ function paramPanel(r) {
                 : ""
             }</div>`
     }`;
-  if (param === "auth") return authPanel(r.auth);
+  if (param === "auth")
+    return (
+      `<label class="notice"><input id="inherit-auth" type="checkbox" ${r.inheritAuth !== false ? "checked" : ""}>接口认证为 none 时继承项目/目录认证；取消勾选则明确不使用共享认证。</label>` +
+      authPanel(r.auth)
+    );
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
@@ -1412,6 +1417,41 @@ function bind() {
     );
     mark();
     await save();
+  });
+  on("#inherit-auth", "change", (_, element) => {
+    request().inheritAuth = element.checked;
+    mark();
+  });
+  const sharedAuthTarget = () => {
+    project.settings ??= {};
+    const folder = $("#parameter-scope")?.value || "";
+    return folder
+      ? { map: (project.settings.folderAuth ??= {}), key: folder }
+      : { map: project.settings, key: "globalAuth" };
+  };
+  on("#shared-auth-enabled", "change", (_, element) => {
+    const { map, key } = sharedAuthTarget();
+    if (element.checked)
+      Object.defineProperty(map, key, {
+        value: { type: "none" },
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    else delete map[key];
+    mark();
+    render();
+  });
+  on("#shared-auth-type", "change", (_, element) => {
+    const { map, key } = sharedAuthTarget();
+    map[key] = { type: element.value };
+    mark();
+    render();
+  });
+  on("[data-shared-auth]", "input", (_, element) => {
+    const { map, key } = sharedAuthTarget();
+    map[key][element.dataset.sharedAuth] = element.value;
+    mark();
   });
   on("#parameter-scope", "change", (_, element) => {
     parameterScopes.set(project.id, element.value);
@@ -2576,6 +2616,11 @@ function bindTree() {
           old,
           remove ? null : name,
         );
+        const folderAuth = renameSharedAuthScopes(
+          project.settings,
+          old,
+          remove ? null : name,
+        );
         const serviceId = $("#folder-service").value;
         const bindings = { ...(project.settings?.folderServices || {}) };
         delete bindings[old];
@@ -2589,6 +2634,7 @@ function bindTree() {
         project.settings ??= {};
         project.settings.folderServices = bindings;
         project.settings.folderParameters = folderParameters;
+        project.settings.folderAuth = folderAuth;
         if (parameterScopes.get(project.id) === old)
           parameterScopes.set(project.id, remove ? "" : name);
         for (const item of [

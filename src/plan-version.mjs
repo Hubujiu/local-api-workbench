@@ -16,6 +16,9 @@ export function versionPlan(previous, input, source = "manual", project) {
           ...step,
           request: freezeServiceBinding(project, {
             ...(request || {}),
+            ...(oldStep && !Object.hasOwn(step.request || {}, "authSnapshot")
+              ? { authSnapshot: true }
+              : {}),
             ...(oldStep &&
             !Object.hasOwn(step.request || {}, "parametersSnapshot")
               ? { parametersSnapshot: true }

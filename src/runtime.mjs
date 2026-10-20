@@ -1,3 +1,4 @@
+import { validateSharedAuthSettings } from "./shared-auth.mjs";
 import {
   validateGlobalParameters,
   validateFolderParameters,
@@ -193,6 +194,7 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     validateResources(p.settings || {});
+    validateSharedAuthSettings(p.settings);
     validateGlobalParameters(p.settings?.globalParameters);
     validateFolderParameters(p.settings?.folderParameters);
     for (const record of [...(p.requests || []), ...p.documents]) {
