@@ -1033,6 +1033,15 @@ try {
   assert.equal(JSON.parse(ntlmResult.body).ntlm, true);
   assert.equal(ntlmFixture.stats.sockets.size, 1);
   await page.locator("#toast").waitFor({ state: "hidden" });
+  assert.equal(await page.locator(".form-grid .notice").count(), 0);
+  const ntlmUsernameBox = await page
+    .locator('[data-auth="username"]')
+    .boundingBox();
+  assert(
+    ntlmUsernameBox.width >= 200,
+    "NTLM inputs retain the full-width form column",
+  );
+  await page.locator('[data-auth="username"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-ntlm.png" });
   await page.locator("#auth-type").selectOption("none");
   await page.locator("#url").fill(oauthPreviousURL);
