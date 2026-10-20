@@ -1,3 +1,4 @@
+import { schemaChildMode } from "../public/schema-positions.js";
 // Independent mapping of the documented modern interchange model fields.
 export function prepareApipostModels(models, resource, projectName) {
   if (!Array.isArray(models) || models.length > 100)
@@ -21,27 +22,6 @@ export function prepareApipostModels(models, resource, projectName) {
     if (!id || ids.has(id)) throw Error("Apipost模型ID为空或重复");
     ids.set(id, resource("model", id));
   }
-  const schemaMaps = new Set([
-    "properties",
-    "patternProperties",
-    "$defs",
-    "definitions",
-    "dependentSchemas",
-  ]);
-  const schemaLists = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
-  const schemaValues = new Set([
-    "additionalProperties",
-    "additionalItems",
-    "unevaluatedProperties",
-    "unevaluatedItems",
-    "contains",
-    "propertyNames",
-    "not",
-    "if",
-    "then",
-    "else",
-    "contentSchema",
-  ]);
   let nodes = 0;
   function convert(
     input,
@@ -139,19 +119,7 @@ export function prepareApipostModels(models, resource, projectName) {
             return ["$ref", "#/components/schemas/" + ids.get(modelId)];
           throw Error("Apipost模型引用不存在");
         }
-        const childMode = schemaMaps.has(key)
-          ? "map"
-          : schemaLists.has(key)
-            ? "list"
-            : key === "dependencies"
-              ? "dependencies"
-              : key === "items"
-                ? Array.isArray(value)
-                  ? "list"
-                  : "schema"
-                : schemaValues.has(key)
-                  ? "schema"
-                  : "literal";
+        const childMode = schemaChildMode(key, value);
         return [key, convert(value, root, prefix, depth + 1, childMode)];
       }),
     );

@@ -1,3 +1,4 @@
+import { schemaChildMode } from "./schema-positions.js";
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -117,11 +118,11 @@ function checkReferences(schema, path) {
       .map((key) => String(key).replace(/~/g, "~0").replace(/\//g, "~1"))
       .join("/");
   let visited = 0;
-  const visit = (node, depth = 0) => {
+  const visit = (node, depth = 0, mode = "schema") => {
     if (depth > 64) throw Error("结构嵌套过深");
     if (!node || typeof node !== "object") return;
     if (++visited > 5000) throw Error("引用检查最多5000节点，请用JSON编辑");
-    let reference = node.$ref;
+    let reference = mode === "schema" ? node.$ref : undefined;
     if (typeof reference === "string") {
       try {
         reference = decodeURIComponent(reference);
@@ -132,7 +133,18 @@ function checkReferences(schema, path) {
       (reference === prefix || reference.startsWith(prefix + "/"))
     )
       throw Error("此字段被本地引用使用，请先在JSON中更新引用");
-    for (const value of Object.values(node)) visit(value, depth + 1);
+    for (const [key, value] of Object.entries(node)) {
+      const childMode = Array.isArray(node)
+        ? mode === "list"
+          ? "schema"
+          : "literal"
+        : mode === "schema"
+          ? schemaChildMode(key, value)
+          : mode === "map" || (mode === "dependencies" && !Array.isArray(value))
+            ? "schema"
+            : "literal";
+      visit(value, depth + 1, childMode);
+    }
   };
   visit(schema);
 }

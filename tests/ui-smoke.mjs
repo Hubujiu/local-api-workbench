@@ -1456,6 +1456,7 @@ try {
         label: { type: "string", minLength: 3 },
         user_name: { type: "string" },
       },
+      "x-data": { $ref: "#/properties/label" },
     }),
   );
   const schemaBeforeVisual = await page.locator("#schema").inputValue();
@@ -1469,6 +1470,15 @@ try {
   assert(
     !(await page.locator(".schema-tree").innerText()).includes("discarded"),
   );
+  await page.locator('[data-schema-edit="2"]').click();
+  await page.locator("[data-schema-name]").fill("label-renamed");
+  await page.locator("[data-schema-apply]").click();
+  assert(
+    (await page.locator(".schema-tree").innerText()).includes("label-renamed"),
+  );
+  await page.locator('[data-schema-edit="2"]').click();
+  await page.locator("[data-schema-name]").fill("label");
+  await page.locator("[data-schema-apply]").click();
   await page.locator('[data-schema-edit="1"]').click();
   await page.locator("[data-schema-description]").fill("数量范围保留");
   await page.locator(".schema-constraints > summary").click();
@@ -1517,6 +1527,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   const visualSchema = JSON.parse(await page.locator("#schema").inputValue());
+  assert.deepEqual(visualSchema["x-data"], { $ref: "#/properties/label" });
   assert.equal(visualSchema.properties.n.minimum, 1);
   assert.deepEqual(visualSchema.properties.n.enum, [1, 2, 3, 4]);
   assert.equal(visualSchema.properties.n.maximum, 4);

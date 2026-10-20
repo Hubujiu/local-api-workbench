@@ -26,3 +26,5 @@ The subsequent increment supports at most 100 complete flat models with model_ty
 example / examples / default / const / enum 以及未知扩展中的对象属于字面数据，不能把其中的 `$ref`、`ref` 或 APIPOST_REFS 当作模型引用；属性名本身也可以叫 `$ref`。这些数据仍进行有界深拷贝，计入原有 50000 节点与 40 层限制。真实 Schema 位置中的远程引用和不支持的自定义组合仍拒绝，不联网解析。
 
 依据：https://json-schema.org/understanding-json-schema/reference/annotations 和 https://json-schema.org/understanding-json-schema/structuring 。这是修正导入数据保真，不意味着已实现完整 Schema 求解或任意扩展词汇。独立回归先在旧实现出现两个失败，再验证修复；另有完整项目导入到样例生成的端到端断言。原生 Offline2 项目格式仍不包含在此兼容声明内。
+
+同一已知 Schema 位置表也用于可视化编辑器的本地引用保护。字面 example/default/enum/未知扩展中的 `$ref` 不再误阻止字段改名或删除；实际 `$defs`、组合、条件和依赖中的引用仍阻止产生悬空引用。编辑器与导入器共享位置表，原节点/深度限制保留。新增单元回归先失败，浏览器另验证含引用形状扩展数据的字段改名往返及数据不变。

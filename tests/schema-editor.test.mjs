@@ -250,3 +250,33 @@ test("visual constraint edits preserve advanced keywords and validate atomically
     );
   assert.equal(original.minLength, 2);
 });
+
+test("literal reference-shaped examples do not block field edits while nested schema references still do", () => {
+  const source = {
+    type: "object",
+    properties: { a: { type: "string" } },
+    example: { $ref: "#/properties/a" },
+    default: { nested: { $ref: "#/properties/a" } },
+    enum: [{ $ref: "#/properties/a" }],
+    "x-data": { $ref: "#/properties/a" },
+  };
+  const renamed = editSchemaNode(source, ["properties", "a"], { name: "b" });
+  assert(renamed.properties.b);
+  assert.deepEqual(renamed.example, source.example);
+  assert.deepEqual(
+    removeSchemaProperty(source, ["properties", "a"]).properties,
+    {},
+  );
+  for (const nested of [
+    { $defs: { x: { $ref: "#/properties/a" } } },
+    { allOf: [{ $ref: "#/properties/a" }] },
+    { dependentSchemas: { x: { $ref: "#/properties/a" } } },
+    { dependencies: { x: { $ref: "#/properties/a" } } },
+  ]) {
+    assert.throws(
+      () => removeSchemaProperty({ ...source, ...nested }, ["properties", "a"]),
+      /引用/,
+    );
+  }
+  assert(source.properties.a);
+});
