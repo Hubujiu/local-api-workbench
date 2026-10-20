@@ -218,3 +218,19 @@ test("Promise HTTP and async callback scripts preserve actual subrequest evidenc
     /HTTP|URL|协议|file/i,
   );
 });
+
+test("rejected root scripts fail before waiting for unrelated pending HTTP", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(
+    runScript(
+      `pm.sendRequest(${JSON.stringify(f.url + "/slow")},()=>{}); throw Error('root-failure-fixture');`,
+      { variables: {}, allowNetwork: true },
+    ),
+    (error) => {
+      assert.match(error.message, /root-failure-fixture/);
+      assert.equal(error.networkRequests.length, 1);
+      assert.equal(error.networkRequests[0].status, "interrupted");
+      return true;
+    },
+  );
+});

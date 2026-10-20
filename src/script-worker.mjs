@@ -393,6 +393,12 @@ try {
       }
       jobCount += result.value;
     }
+    const rootState = bounded(() => context.getPromiseState(rootPromise));
+    if (rootState.type === "fulfilled") rootState.value.dispose();
+    else if (rootState.type === "rejected") {
+      rootState.error.dispose();
+      throw Error("脚本Promise被拒绝: " + tracked.unhandledMessage());
+    }
   };
   drainJobs();
   while (callbacks.size || timers.size) {
