@@ -104,6 +104,13 @@ test(
       errors += part;
     });
     const lines = readline.createInterface({ input: child.stdout });
+    let firstReply, childExit;
+    lines.on("line", (line) => {
+      firstReply ??= line;
+    });
+    child.on("exit", (code, signal) => {
+      childExit = { code, signal };
+    });
     const response = once(lines, "line");
     child.stdin.write(
       JSON.stringify({
@@ -123,10 +130,11 @@ test(
       assert.equal(r.status, 200);
       return r.json();
     };
-    let running;
+    let running, lastState;
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       const state = await config();
+      lastState = state;
       assert.equal(state.enabled, false);
       running = state.activities.find(
         (row) => row.source === "stdio" && row.completed === 1,
@@ -134,7 +142,17 @@ test(
       if (running) break;
       await new Promise((resolve) => setTimeout(resolve, 30));
     }
-    assert(running, "stdio progress did not arrive: " + errors);
+    assert(
+      running,
+      "stdio progress did not arrive: " +
+        JSON.stringify({
+          stderr: errors,
+          firstReply,
+          childExit,
+          requests,
+          state: lastState,
+        }),
+    );
     assert.equal(running.status, "running");
     assert.equal(running.total, 2);
     assert.equal(running.projectId, project.id);
