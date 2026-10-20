@@ -1,64 +1,18 @@
-// Shared, deterministic parser. This module performs no I/O or expression evaluation.
+import { parseCSVRows } from "./csv-data.js";
+// Adds the load-test-only header and data-shape contract to the shared parser.
 export function parseLoadCSV(text = "") {
   if (typeof text !== "string") throw Error("压测CSV必须为文本");
   if (new TextEncoder().encode(text).length > 65536)
     throw Error("压测CSV超过64 KiB");
-  text = text.replace(/^\uFEFF/, "");
   if (!text.trim()) return [];
-  const rows = [];
-  let row = [],
-    field = "",
-    quoted = false,
-    closed = false,
-    started = false;
-  const cell = () => {
-    row.push(field);
-    if (row.length > 50) throw Error("压测CSV最多50列");
-    field = "";
-    closed = false;
-    started = false;
-  };
-  const line = () => {
-    cell();
-    rows.push(row);
-    row = [];
-    if (rows.length > 101) throw Error("压测CSV最多100行数据");
-  };
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          quoted = false;
-          closed = true;
-        }
-      } else field += c;
-      continue;
-    }
-    if (c === ",") {
-      cell();
-      continue;
-    }
-    if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      line();
-      continue;
-    }
-    if (closed) throw Error("压测CSV引号后只能为分隔符或换行");
-    if (c === '"') {
-      if (started) throw Error("压测CSV未转义引号");
-      quoted = true;
-      started = true;
-      continue;
-    }
-    started = true;
-    field += c;
+  let rows;
+  try {
+    rows = parseCSVRows(text, 101, 50);
+  } catch (error) {
+    if (error.message === "CSV行数超过上限")
+      throw Error("压测CSV最多100行数据");
+    throw error;
   }
-  if (quoted) throw Error("压测CSV引号未闭合");
-  if (started || closed || row.length) line();
   if (rows.length < 2) throw Error("压测CSV须含表头及至少一行数据");
   const headers = rows.shift().map((x) => x.trim());
   if (

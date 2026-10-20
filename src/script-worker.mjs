@@ -1,3 +1,4 @@
+import { parseCSVRows } from "../public/csv-data.js";
 import { fakerVariable } from "./faker-variables.mjs";
 import { builtinVariableFactory } from "./builtin-variables.mjs";
 import { ajaxCompatibilitySource } from "./script-ajax.mjs";
@@ -350,6 +351,11 @@ try {
   );
 
   run("(" + responseCompatibilitySource + ")({response,pm,apt});");
+  run(
+    "globalThis.csv2array = (()=>{const parse=" +
+      parseCSVRows.toString() +
+      ";return function csv2array(text){if(arguments.length!==1)throw Error('CSV仅支持单个文本参数');return parse(text);};})();",
+  );
 
   run(`pm.sendRequest=(config,callback)=>{
     if(callback===undefined)return new Promise((resolve,reject)=>pm.sendRequest(config,(error,response)=>error?reject(error):resolve(response)));
