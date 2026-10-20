@@ -181,6 +181,9 @@ try {
     globalThis.require = name => {
       if(name === 'crypto-js') return globalThis.CryptoJS;
       if(name === 'chai') return globalThis.chai;
+      if(name === 'lodash') return globalThis._;
+      if(name === 'moment') return globalThis.moment;
+      if(name === 'uuid') return globalThis.uuid;
       throw Error('不允许加载模块: ' + name);
     };
     ${scopeRuntimeSource}
@@ -484,7 +487,8 @@ try {
   output.value.dispose();
   if (runtime.hasPendingJob() || tracked.unhandledCount())
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
-  if (json.length > 1024 * 1024) throw Error("脚本输出超过 1 MiB");
+  if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
+    throw Error("脚本输出超过 1 MiB");
   parentPort.postMessage({ result: JSON.parse(json) });
 } catch (error) {
   parentPort.postMessage({ error: error.message });

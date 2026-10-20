@@ -13,12 +13,12 @@ await build({
   legalComments: "inline",
 });
 const notices = [];
-for (const name of ["crypto-js", "chai"]) {
+for (const name of ["crypto-js", "chai", "lodash", "moment", "uuid"]) {
   const packageInfo = JSON.parse(
     await readFile("node_modules/" + name + "/package.json", "utf8"),
   );
   let text;
-  for (const filename of ["LICENSE", "LICENSE.txt"])
+  for (const filename of ["LICENSE", "LICENSE.txt", "LICENSE.md"])
     try {
       text = await readFile("node_modules/" + name + "/" + filename, "utf8");
       break;

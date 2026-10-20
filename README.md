@@ -94,3 +94,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 ## NTLMv2（有限旧服务兼容）
 
 认证面板支持显式用户名/密码/域/工作站的 NTLMv2，仅HTTP/1.1直连，在同一隔离连接完成握手。沿用TLS证书校验、总超时、取消和响应大小限制；不使用系统凭据、不降级NTLMv1/LM、不跨连接重放。要求MIC/EPA/通道绑定或会话签名/封装的服务，以及代理/HTTP2会明确拒绝。NTLM本身属于旧协议，请优先使用HTTPS和现代认证。保存凭据为本地明文，历史可含认证响应，请勿公开。详见 docs/ADR-NTLMV2.md。
+
+## 脚本工具库
+
+隔离脚本可直接使用 lodash（_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
