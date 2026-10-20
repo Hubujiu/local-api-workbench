@@ -1,3 +1,4 @@
+import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
 import { parseRESP } from "../src/redis.mjs";
 import { spawn } from "node:child_process";
@@ -25,6 +26,7 @@ try {
 }
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
 const app = await createApp({ root, port: 0 });
+const ntlmFixture = await startNtlmFixture();
 let uploadedMultipart,
   stdioChild,
   releaseMCP = () => {},
@@ -1016,6 +1018,22 @@ try {
       "fixture-edgegrid-secret",
     ),
   );
+  await page.locator("#url").fill(ntlmFixture.url);
+  await page.locator("#auth-type").selectOption("ntlm");
+  await page.locator('[data-auth="username"]').fill("User");
+  await page.locator('[data-auth="password"]').fill("Password");
+  await page.locator('[data-auth="domain"]').fill("Domain");
+  await page.locator('[data-auth="workstation"]').fill("COMPUTER");
+  const ntlmResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const ntlmResult = await (await ntlmResponse).json();
+  assert.equal(ntlmResult.status, 200, JSON.stringify(ntlmResult));
+  assert.equal(JSON.parse(ntlmResult.body).ntlm, true);
+  assert.equal(ntlmFixture.stats.sockets.size, 1);
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-ntlm.png" });
   await page.locator("#auth-type").selectOption("none");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();
@@ -2028,6 +2046,7 @@ try {
   ]);
   for (const socket of redisSockets) socket.destroy();
   await new Promise((resolve) => redisFixture.close(resolve));
+  await ntlmFixture.close();
   fixture.closeAllConnections();
   await new Promise((resolve) => fixture.close(resolve));
   await new Promise((r) => app.server.close(r));

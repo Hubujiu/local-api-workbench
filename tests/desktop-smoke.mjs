@@ -1,3 +1,4 @@
+import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { _electron as electron } from "playwright";
@@ -12,6 +13,7 @@ database.exec(
   "CREATE TABLE fixture(id INTEGER); INSERT INTO fixture VALUES(42)",
 );
 database.close();
+const ntlmFixture = await startNtlmFixture();
 let application,
   phase = "launch";
 const watchdog = setTimeout(() => {
@@ -87,6 +89,27 @@ try {
     .locator(".response-body")
     .getByText("packaged-script-ok", { exact: false })
     .waitFor();
+  phase = "ntlm";
+  await window.locator("#url").fill(ntlmFixture.url);
+  await window.locator('[data-param="auth"]').click();
+  await window.locator("#auth-type").selectOption("ntlm");
+  for (const [key, value] of Object.entries({
+    username: "User",
+    password: "Password",
+    domain: "Domain",
+    workstation: "COMPUTER",
+  }))
+    await window.locator('[data-auth="' + key + '"]').fill(value);
+  const ntlmResponse = window.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await window.locator("#send").click();
+  const ntlmResult = await (await ntlmResponse).json();
+  assert.equal(ntlmResult.status, 200, JSON.stringify(ntlmResult));
+  assert.equal(JSON.parse(ntlmResult.body).ntlm, true);
+  assert.equal(ntlmFixture.stats.sockets.size, 1);
+  await window.locator("#auth-type").selectOption("none");
+  await window.locator("#url").fill(packagedRequestURL);
   phase = "xml";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-mode="mock"]').click();
@@ -199,6 +222,7 @@ try {
     application.process().kill();
     await application.close().catch(() => {});
   }
+  await ntlmFixture.close();
   clearTimeout(watchdog);
   await rm(root, {
     recursive: true,

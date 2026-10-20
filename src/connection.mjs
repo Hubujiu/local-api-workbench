@@ -17,6 +17,22 @@ export async function prepareConnection(target, request, headers, signal) {
     ...(certificates.key ? { key: certificates.key } : {}),
     ...(certificates.passphrase ? { passphrase: certificates.passphrase } : {}),
   };
+  if (request.auth?.type === "ntlm") {
+    if (request.httpVersion !== "1.1") throw Error("NTLM仅支持HTTP/1.1");
+    if (request.proxy) throw Error("NTLM暂不支持代理连接");
+    const client = target.protocol === "https:" ? https : http;
+    const agent = new client.Agent({
+      keepAlive: true,
+      maxSockets: 1,
+      maxFreeSockets: 1,
+    });
+    return {
+      client,
+      url: target,
+      options: { ...tlsOptions, agent },
+      cleanup: () => agent.destroy(),
+    };
+  }
   if (request.httpVersion === "2") {
     const tunnel = request.proxy
       ? await openProxyTunnel(target, request, signal)

@@ -1,3 +1,4 @@
+import { ntlmType1, parseNtlmChallenge, ntlmType3 } from "./ntlm.mjs";
 import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
 import { awsSignatureHeaders } from "./aws-signature.mjs";
@@ -394,111 +395,161 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       body,
       r.auth,
     );
+  if (r.auth.type === "ntlm") {
+    headers.authorization = ntlmType1(r.auth);
+    headers.connection = "keep-alive";
+  }
   const start = performance.now();
   const connection = await prepareConnection(u, r, headers, signal);
-  const remainingTimeout = r.timeout - (performance.now() - start);
-  if (remainingTimeout <= 0) {
-    connection.cleanup();
-    throw Error("请求超时");
-  }
-  const response = await new Promise((resolve, reject) => {
-    const req = connection.client.request(
-      connection.url,
-      { method: r.method, headers, signal, ...connection.options },
-      (res) => {
-        const chunks = [];
-        let size = 0;
-        const encoding = res.headers["content-encoding"];
-        const decoder =
-          encoding === "gzip"
-            ? createGunzip()
-            : encoding === "deflate"
-              ? createInflate()
-              : encoding === "br"
-                ? createBrotliDecompress()
-                : null;
-        const stream = decoder ? res.pipe(decoder) : res;
-        if (decoder) res.on("error", (e) => decoder.destroy(e));
-        stream.on("data", (c) => {
-          size += c.length;
-          if (size > 8 * 1024 * 1024) {
-            stream.destroy(Error("响应超过 8 MiB"));
-            res.destroy();
-            req.destroy();
-          } else chunks.push(c);
-        });
-        stream.on("error", (error) => {
-          clearTimeout(totalTimer);
-          reject(error);
-        });
-        stream.on("end", async () => {
-          clearTimeout(totalTimer);
-          const raw = Buffer.concat(chunks);
-          let displayBody = raw.toString("utf8"),
-            rawBodyBase64,
-            codecError;
-          if (/msgpack/i.test(res.headers["content-type"] || "")) {
-            rawBodyBase64 = raw.toString("base64");
-            try {
-              const { decode } = await import("@msgpack/msgpack");
-              displayBody = JSON.stringify(
-                decode(raw, {
-                  useBigInt64: true,
-                  maxStrLength: 8388608,
-                  maxBinLength: 8388608,
-                  maxArrayLength: 100000,
-                  maxMapLength: 100000,
-                  maxExtLength: 8388608,
-                }),
-                (_key, value) =>
-                  typeof value === "bigint"
-                    ? value.toString()
-                    : value instanceof Uint8Array
-                      ? {
-                          type: "binary",
-                          base64: Buffer.from(value).toString("base64"),
-                        }
-                      : value,
-                null,
-                2,
-              );
-            } catch (error) {
-              codecError = error.message;
-              displayBody = rawBodyBase64;
-            }
-          }
-          resolve({
-            status: res.statusCode,
-            protocol: res.httpVersion || "1.1",
-            statusText: res.statusMessage,
-            headers: res.headers,
-            body: displayBody,
-            rawBodyBase64,
-            codecError,
-            size,
-            duration: Math.round((performance.now() - start) * 100) / 100,
-            request: {
-              method: r.method,
-              url: u.href,
-              headers,
-              body: body?.toString() || "",
-            },
+  let authSocket;
+  const requestOnce = async (headers, expectedSocket) => {
+    const remainingTimeout = r.timeout - (performance.now() - start);
+    if (remainingTimeout <= 0) {
+      connection.cleanup();
+      throw Error("请求超时");
+    }
+    return await new Promise((resolve, reject) => {
+      const req = connection.client.request(
+        connection.url,
+        { method: r.method, headers, signal, ...connection.options },
+        (res) => {
+          const chunks = [];
+          let size = 0;
+          const encoding = res.headers["content-encoding"];
+          const decoder =
+            encoding === "gzip"
+              ? createGunzip()
+              : encoding === "deflate"
+                ? createInflate()
+                : encoding === "br"
+                  ? createBrotliDecompress()
+                  : null;
+          const stream = decoder ? res.pipe(decoder) : res;
+          if (decoder) res.on("error", (e) => decoder.destroy(e));
+          stream.on("data", (c) => {
+            size += c.length;
+            if (size > 8 * 1024 * 1024) {
+              stream.destroy(Error("响应超过 8 MiB"));
+              res.destroy();
+              req.destroy();
+            } else chunks.push(c);
           });
+          stream.on("error", (error) => {
+            clearTimeout(totalTimer);
+            reject(error);
+          });
+          stream.on("end", async () => {
+            clearTimeout(totalTimer);
+            const raw = Buffer.concat(chunks);
+            let displayBody = raw.toString("utf8"),
+              rawBodyBase64,
+              codecError;
+            if (/msgpack/i.test(res.headers["content-type"] || "")) {
+              rawBodyBase64 = raw.toString("base64");
+              try {
+                const { decode } = await import("@msgpack/msgpack");
+                displayBody = JSON.stringify(
+                  decode(raw, {
+                    useBigInt64: true,
+                    maxStrLength: 8388608,
+                    maxBinLength: 8388608,
+                    maxArrayLength: 100000,
+                    maxMapLength: 100000,
+                    maxExtLength: 8388608,
+                  }),
+                  (_key, value) =>
+                    typeof value === "bigint"
+                      ? value.toString()
+                      : value instanceof Uint8Array
+                        ? {
+                            type: "binary",
+                            base64: Buffer.from(value).toString("base64"),
+                          }
+                        : value,
+                  null,
+                  2,
+                );
+              } catch (error) {
+                codecError = error.message;
+                displayBody = rawBodyBase64;
+              }
+            }
+            resolve({
+              status: res.statusCode,
+              protocol: res.httpVersion || "1.1",
+              statusText: res.statusMessage,
+              headers: res.headers,
+              body: displayBody,
+              rawBodyBase64,
+              codecError,
+              size,
+              duration: Math.round((performance.now() - start) * 100) / 100,
+              request: {
+                method: r.method,
+                url: u.href,
+                headers: { ...headers },
+                body: body?.toString() || "",
+              },
+            });
+          });
+        },
+      );
+      const totalTimer = setTimeout(
+        () => req.destroy(Error("请求超时（总时限已到）")),
+        remainingTimeout,
+      );
+      req.setTimeout(remainingTimeout, () => req.destroy(Error("请求超时")));
+      req.on("error", (error) => {
+        clearTimeout(totalTimer);
+        reject(error);
+      });
+      const sendBody = () => {
+        if (body) req.write(body);
+        req.end();
+      };
+      if (r.auth.type === "ntlm")
+        req.once("socket", (socket) => {
+          if (expectedSocket && socket !== expectedSocket) {
+            req.destroy(Error("NTLM连接已更换，拒绝重放凭据"));
+            return;
+          }
+          authSocket = socket;
+          sendBody();
         });
-      },
-    );
-    const totalTimer = setTimeout(
-      () => req.destroy(Error("请求超时（总时限已到）")),
-      remainingTimeout,
-    );
-    req.setTimeout(remainingTimeout, () => req.destroy(Error("请求超时")));
-    req.on("error", (error) => {
-      clearTimeout(totalTimer);
-      reject(error);
+      else sendBody();
     });
-    if (body) req.write(body);
-    req.end();
-  }).finally(() => connection.cleanup());
+  };
+  const response = await (async () => {
+    const first = await requestOnce(headers);
+    if (r.auth.type !== "ntlm" || first.status !== 401) return first;
+    const challenge = parseNtlmChallenge(first.headers["www-authenticate"]);
+    if (
+      !authSocket ||
+      authSocket.destroyed ||
+      String(first.headers.connection || "").toLowerCase() === "close"
+    )
+      throw Error("NTLM服务器关闭连接，拒绝重放凭据");
+    const authenticatedHeaders = {
+      ...headers,
+      authorization: ntlmType3(challenge, r.auth),
+    };
+    if (cookieSession && !signal?.aborted) {
+      await cookieSession.capture(u.href, first.headers["set-cookie"]);
+      const managed = await cookieSession.header(u.href);
+      if (managed !== null) {
+        if (managed) authenticatedHeaders.cookie = managed;
+        else delete authenticatedHeaders.cookie;
+      }
+    }
+    const final = await requestOnce(authenticatedHeaders, authSocket);
+    final.authHandshake = {
+      status: first.status,
+      duration: first.duration,
+      roundTrips: 2,
+      protocol: "NTLMv2",
+    };
+    return final;
+  })().finally(() => connection.cleanup());
   if (cookieSession && !signal?.aborted) {
     try {
       await cookieSession.capture(u.href, response.headers["set-cookie"]);

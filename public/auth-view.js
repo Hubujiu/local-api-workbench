@@ -25,6 +25,7 @@ const fields = {
   bearer: ["token"],
   basic: ["username", "password"],
   digest: ["username", "password"],
+  ntlm: ["username", "password", "domain", "workstation"],
   oauth1: [
     "consumerKey",
     "consumerSecret",
@@ -92,6 +93,9 @@ export function authPanel(auth = {}, { acquire = true } = {}) {
     '<div class="form-grid"><label>认证类型</label><select id="auth-type">' +
     options(authTypes, type) +
     "</select>";
+  if (type === "ntlm")
+    html +=
+      '<div class="notice">有限NTLMv2：仅HTTP/1.1直连，不读取系统凭据、不降级v1。需要MIC/EPA/通道绑定的服务会拒绝；请使用可信服务并优先HTTPS。保存会把密码写入本地项目，历史可能包含认证响应；勿提交真实凭据到Git。</div>';
   if (type === "hawk")
     html +=
       '<label>Hawk算法</label><select data-auth="algorithm">' +

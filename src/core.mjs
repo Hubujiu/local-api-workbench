@@ -1057,6 +1057,8 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "ntlm")
+    throw Error("NTLM导出不能保证相同v2限制，请使用原始请求/项目导出");
   if (r.auth.type === "edgegrid")
     throw Error(
       "EdgeGrid需要每次计算签名；请使用原始请求/项目导出，不生成缺失签名的cURL。",

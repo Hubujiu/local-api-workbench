@@ -3,6 +3,7 @@ export const authTypes = [
   "bearer",
   "basic",
   "digest",
+  "ntlm",
   "oauth1",
   "oauth2",
   "aws",
