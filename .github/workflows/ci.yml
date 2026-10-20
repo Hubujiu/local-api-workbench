@@ -176,3 +176,16 @@ jobs:
       - name: Seed isolated MongoDB fixtures
         run: docker exec ${{ job.services.mongodb.id }} mongosh --quiet --eval 'db.getSiblingDB("fixture").items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}])'
       - run: node tests/mongodb-integration.mjs
+
+  quickjs-reproducible:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node scripts/build-quickjs.mjs prepare "$RUNNER_TEMP/quickjs"
+      - name: Rebuild reviewed runtime with pinned official SDK
+        run: docker run --rm --network=none -v "$RUNNER_TEMP/quickjs:/work" -w /work/packages/variant-quickjs-wasmfile-release-sync emscripten/emsdk:3.1.65 make -j1 dist/emscripten-module.mjs
+      - run: node scripts/build-quickjs.mjs verify "$RUNNER_TEMP/quickjs"

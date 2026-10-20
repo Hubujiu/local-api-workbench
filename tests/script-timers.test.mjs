@@ -25,7 +25,10 @@ test("bounded timers settle assertions, preserve callback arguments and cancel p
 test("timer failures, invalid delays and scheduling limits are explicit", async () => {
   for (const [code, pattern] of [
     ["setTimeout(()=>{throw Error('timer failure')},0)", /timer failure/],
-    ["setTimeout(async()=>{},0)", /Promise/],
+    [
+      "setTimeout(async()=>{await 1;throw Error('async timer failure')},0)",
+      /async timer failure/,
+    ],
     ['setTimeout("1 + 1",0)', /回调函数/],
     ["setTimeout(()=>{},1001)", /延迟/],
     ["setTimeout(()=>{},-1)", /延迟/],

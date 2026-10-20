@@ -5,7 +5,7 @@ export async function previewFunction(fn, value) {
   if (input === undefined || input.length > 65536)
     throw Error("测试输入须为不超过64KiB的JSON值");
   const code = `
-    const output = utils[${JSON.stringify(fn.name)}](${input});
+    const output = await utils[${JSON.stringify(fn.name)}](${input});
     const serial = JSON.stringify(output, (_key, value) => {
       if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol' ||
           typeof value === 'bigint' || (typeof value === 'number' && !Number.isFinite(value)))

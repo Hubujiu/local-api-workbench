@@ -125,7 +125,7 @@ test("header facade affects a real HTTP request and legacy assertions affect fin
     'apt.assert("response.raw.status === 201");';
   assert.equal((await runPlan(plan, {}, executeRequest)).status, "failed");
 });
-test("unsupported async assertions never report a false pass and assertion count is bounded", async () => {
+test("failed or unfinished async assertions never report a false pass and assertion count is bounded", async () => {
   const result = await runScript(
     'pm.test("promise",async()=>{throw Error("must not pass")});pm.test("callback",done=>{});',
     { variables: {} },
@@ -134,7 +134,8 @@ test("unsupported async assertions never report a false pass and assertion count
     result.tests.map((item) => item.passed),
     [false, false],
   );
-  assert(result.tests.every((item) => item.error.includes("异步断言")));
+  assert.match(result.tests[0].error, /must not pass/);
+  assert.match(result.tests[1].error, /异步断言/);
   await assert.rejects(
     runScript('for(let i=0;i<1001;i++)pm.test("bounded",()=>{});', {
       variables: {},

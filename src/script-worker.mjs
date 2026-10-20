@@ -6,8 +6,11 @@ import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
-import { getQuickJS } from "quickjs-emscripten";
-let runtime, context;
+import { trackedQuickJS } from "./tracked-quickjs.mjs";
+let runtime,
+  context,
+  rootPromise,
+  finalizing = false;
 const callbacks = new Map(),
   timers = new Map(),
   replies = [];
@@ -27,7 +30,8 @@ try {
     new URL("./vendor/script-libraries.js", import.meta.url),
     "utf8",
   );
-  const engine = await getQuickJS();
+  const tracked = await trackedQuickJS();
+  const engine = tracked.engine;
   runtime = engine.newRuntime();
   runtime.setMemoryLimit(16 * 1024 * 1024);
   runtime.setMaxStackSize(512 * 1024);
@@ -45,6 +49,8 @@ try {
   const sendFunction = context.newFunction(
     "__sendRequest",
     (payload, callback) => {
+      if (finalizing)
+        return { error: context.newError("输出序列化期间不允许新增异步任务") };
       if (!workerData.input.allowNetwork)
         return { error: context.newError("此脚本未启用HTTP网络能力") };
       if (context.typeof(callback) !== "function")
@@ -66,6 +72,8 @@ try {
   const scheduleTimer = context.newFunction(
     "__scheduleTimer",
     (callback, delay) => {
+      if (finalizing)
+        return { error: context.newError("输出序列化期间不允许新增异步任务") };
       if (context.typeof(callback) !== "function")
         return { error: context.newError("定时器需要回调函数") };
       const milliseconds = context.getNumber(delay);
@@ -117,6 +125,14 @@ try {
 
   const setup = `
     const input = ${JSON.stringify(workerData.input)};
+    const pendingTasks=new Set();
+    const trackTask=value=>{
+      if(value && typeof value.then==='function'){
+        if(pendingTasks.size>=1000)throw Error('异步回调最多1000个');
+        const task=Promise.resolve(value);pendingTasks.add(task);
+        task.then(()=>pendingTasks.delete(task),error=>{pendingTasks.delete(task);throw error;});
+      }
+    };
     const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now(),((generate)=>key=>{const raw=generate(key);return raw===undefined?undefined:JSON.parse(raw);})(__fakerVariable));
     delete globalThis.__fakerVariable;
     ((schedule,cancel)=>{
@@ -124,7 +140,7 @@ try {
       if(typeof callback!=='function')throw Error('定时器需要回调函数');
       return schedule(()=>{
         const result=callback(...args);
-        if(result && typeof result.then==='function')throw Error('定时器回调暂不支持Promise返回');
+        trackTask(result);
       },Number(delay));
     };
     globalThis.clearTimeout=id=>cancel(Number(id));
@@ -280,8 +296,11 @@ try {
         try {
           const asynchronous=fn.length>0;
           const result=asynchronous?fn(done):fn();
-          if(result && typeof result.then==='function')throw Error('Promise异步断言尚不支持');
-          if(!asynchronous && !failed){record.passed=true;delete record.error;}
+          if(result && typeof result.then==='function'){
+            if(asynchronous)throw Error('异步断言不能混用Promise与done');
+            record.error='Promise异步断言未完成';
+            Promise.resolve(result).then(()=>done(),fail);
+          } else if(!asynchronous && !failed){record.passed=true;delete record.error;}
         } catch(error){fail(error);}
         return pm;
       },
@@ -322,14 +341,15 @@ try {
   );
 
   run(`pm.sendRequest=(config,callback)=>{
-    if(typeof callback !== 'function')throw Error('pm.sendRequest目前需要回调函数，不支持Promise返回');
+    if(callback===undefined)return new Promise((resolve,reject)=>pm.sendRequest(config,(error,response)=>error?reject(error):resolve(response)));
+    if(typeof callback !== 'function')throw Error('pm.sendRequest回调须为函数');
     const captured={...variables,...localVariables};
     __sendRequest(JSON.stringify({request:config,variables:captured}),(errorJSON,responseJSON)=>{
       const error=errorJSON?new Error(errorJSON):null, data=responseJSON?JSON.parse(responseJSON):null;
       const headers=data?.headers||{};
       const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
       const result=callback(error,response);
-      if(result && typeof result.then==='function')throw Error('HTTP回调暂不支持Promise返回');
+      trackTask(result);
     });
   };apt.sendRequest=pm.sendRequest;`);
   run("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
@@ -344,16 +364,33 @@ try {
       remaining -= Date.now() - start;
     }
   };
-  for (const code of [library, workerData.code]) {
+  for (const [index, code] of [
+    library,
+    "(async()=>{\n" + workerData.code + "\n})()",
+  ].entries()) {
     const result = bounded(() => context.evalCode(code));
     if (result.error) {
       const error = context.dump(result.error);
       result.error.dispose();
       throw Error(error.message || JSON.stringify(error));
     }
-    result.value.dispose();
+    if (index === 1) rootPromise = result.value;
+    else result.value.dispose();
   }
 
+  let jobCount = 0;
+  const drainJobs = () => {
+    while (runtime.hasPendingJob()) {
+      if (jobCount >= 10000) throw Error("脚本微任务最多10000次");
+      const result = bounded(() => runtime.executePendingJobs(100));
+      if (result.error) {
+        result.error.dispose();
+        throw Error("脚本微任务执行失败或超时");
+      }
+      jobCount += result.value;
+    }
+  };
+  drainJobs();
   while (callbacks.size || timers.size) {
     const earliest = Math.min(
       ...[...timers.values()].map((timer) => timer.due),
@@ -392,6 +429,7 @@ try {
           throw Error(value.message || JSON.stringify(value));
         }
         result.value.dispose();
+        drainJobs();
       } finally {
         callback.dispose();
         error.dispose();
@@ -414,12 +452,27 @@ try {
           throw Error(value.message || JSON.stringify(value));
         }
         result.value.dispose();
+        drainJobs();
       } finally {
         timer.callback.dispose();
       }
     }
+    drainJobs();
+  }
+  bounded(() =>
+    run("if(pendingTasks.size)throw Error('异步回调Promise未完成')"),
+  );
+  if (tracked.unhandledCount())
+    throw Error("未处理的Promise拒绝: " + tracked.unhandledMessage());
+  const rootState = bounded(() => context.getPromiseState(rootPromise));
+  if (rootState.type === "pending") throw Error("脚本Promise未完成");
+  if (rootState.type === "fulfilled") rootState.value.dispose();
+  else if (rootState.type === "rejected") {
+    rootState.error.dispose();
+    throw Error("脚本Promise被拒绝");
   }
   deadline = Date.now() + Math.max(0, remaining);
+  finalizing = true;
   const output = context.evalCode(
     "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests})",
   );
@@ -429,6 +482,8 @@ try {
   }
   const json = context.getString(output.value);
   output.value.dispose();
+  if (runtime.hasPendingJob() || tracked.unhandledCount())
+    throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (json.length > 1024 * 1024) throw Error("脚本输出超过 1 MiB");
   parentPort.postMessage({ result: JSON.parse(json) });
 } catch (error) {
@@ -437,6 +492,7 @@ try {
   parentPort.off("message", receive);
   for (const callback of callbacks.values()) callback.dispose();
   for (const timer of timers.values()) timer.callback.dispose();
+  rootPromise?.dispose();
   context?.dispose();
   runtime?.dispose();
 }

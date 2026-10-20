@@ -70,7 +70,7 @@ test("network permission is absent in pure function scripts and unsupported APIs
     /网络|HTTP/,
   );
   await assert.rejects(
-    runScript(`pm.sendRequest(${JSON.stringify(f.url)});`, {
+    runScript(`pm.sendRequest(${JSON.stringify(f.url)},123);`, {
       variables: {},
       allowNetwork: true,
     }),
@@ -192,4 +192,29 @@ test("callback assertions await brokered HTTP without losing registration order"
   );
   assert.equal(result.localVariables.completed, true);
   assert.equal(result.networkRequests.length, 1);
+});
+
+test("Promise HTTP and async callback scripts preserve actual subrequest evidence", async (t) => {
+  const f = await fixture(t);
+  const result = await runScript(
+    `const response=await pm.sendRequest(${JSON.stringify(f.url + "/token")});apt.setVar('status',response.code);pm.sendRequest(${JSON.stringify(f.url + "/main")},async(error,response)=>{if(error)throw error;await new Promise(resolve=>setTimeout(resolve,5));apt.setVar('callbackStatus',response.code)});`,
+    { variables: {}, allowNetwork: true },
+  );
+  assert.equal(result.variables.status, 200);
+  assert.equal(result.variables.callbackStatus, 200);
+  assert.equal(result.networkRequests.length, 2);
+  await assert.rejects(
+    runScript(
+      `pm.sendRequest(${JSON.stringify(f.url)},async()=>{await 1;throw Error('async HTTP rejected')});`,
+      { variables: {}, allowNetwork: true },
+    ),
+    /async HTTP rejected/,
+  );
+  await assert.rejects(
+    runScript("await pm.sendRequest('file:///etc/passwd')", {
+      variables: {},
+      allowNetwork: true,
+    }),
+    /HTTP|URL|协议|file/i,
+  );
 });

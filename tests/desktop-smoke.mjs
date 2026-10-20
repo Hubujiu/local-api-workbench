@@ -70,8 +70,8 @@ try {
   await window
     .locator("#script-code")
     .fill(
-      'console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
-        `pm.sendRequest(${JSON.stringify(packagedRequestURL)},(error,reply)=>{pm.test('packaged-http',()=>{pm.expect(error).to.equal(null);pm.expect(reply.code).to.equal(200);});});`,
+      'await Promise.resolve();console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
+        `const reply=await pm.sendRequest(${JSON.stringify(packagedRequestURL)});pm.test('packaged-http',async()=>{await new Promise(resolve=>setTimeout(resolve,5));pm.expect(reply.code).to.equal(200);});`,
     );
   const scriptResponse = window.waitForResponse(
     (response) =>
