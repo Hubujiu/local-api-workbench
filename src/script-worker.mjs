@@ -7,7 +7,8 @@ import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { trackedQuickJS } from "./tracked-quickjs.mjs";
-let outcome,
+let scriptStage = "bootstrap",
+  outcome,
   runtime,
   context,
   rootPromise,
@@ -336,6 +337,7 @@ try {
   };
   run(setup);
   run(trustedLibraries);
+  scriptStage = "compatibility";
   deadline = Date.now() + 250;
   run("pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;");
   run(
@@ -368,6 +370,7 @@ try {
       remaining -= Date.now() - start;
     }
   };
+  scriptStage = "script";
   for (const [index, code] of [
     library,
     "(async()=>{\n" + workerData.code + "\n})()",
@@ -401,6 +404,7 @@ try {
     }
   };
   drainJobs();
+  scriptStage = "async-completion";
   while (callbacks.size || timers.size) {
     const earliest = Math.min(
       ...[...timers.values()].map((timer) => timer.due),
@@ -482,6 +486,7 @@ try {
     throw Error("脚本Promise被拒绝");
   }
   deadline = Date.now() + Math.max(0, remaining);
+  scriptStage = "serialization";
   finalizing = true;
   const output = context.evalCode(
     "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests})",
@@ -498,7 +503,7 @@ try {
     throw Error("脚本输出超过 1 MiB");
   outcome = { result: JSON.parse(json) };
 } catch (error) {
-  outcome = { error: error.message };
+  outcome = { error: error.message, scriptStage };
 } finally {
   parentPort.off("message", receive);
   for (const callback of callbacks.values()) callback.dispose();

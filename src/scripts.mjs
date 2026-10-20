@@ -38,8 +38,19 @@ export function runScript(code, input, { signal, cookieSession } = {}) {
         reject(error);
       } else resolve({ ...result, networkRequests });
     };
-    const timer = setTimeout(() => finish(Error("脚本执行超时")), 2000);
-    const cancel = () => finish(Error("脚本执行已取消"));
+    const timer = setTimeout(
+      () =>
+        finish(
+          Object.assign(Error("脚本执行超时"), {
+            scriptStage: "total-deadline",
+          }),
+        ),
+      2000,
+    );
+    const cancel = () =>
+      finish(
+        Object.assign(Error("脚本执行已取消"), { scriptStage: "cancelled" }),
+      );
     signal?.addEventListener("abort", cancel, { once: true });
     worker.on("message", async (message) => {
       if (settled) return;
@@ -105,7 +116,11 @@ export function runScript(code, input, { signal, cookieSession } = {}) {
       if (settled) return;
       if (exitCode === 0 && completedMessage) {
         finish(
-          completedMessage.error ? Error(completedMessage.error) : null,
+          completedMessage.error
+            ? Object.assign(Error(completedMessage.error), {
+                scriptStage: completedMessage.scriptStage,
+              })
+            : null,
           completedMessage.result,
           false,
         );

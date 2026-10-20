@@ -523,6 +523,7 @@ export async function runPlan(
       scopes.environment = committedScopes.environment;
       scopes.globals = committedScopes.globals;
       record.error = error.message;
+      if (error.scriptStage) record.scriptStage = error.scriptStage;
       if (!record.request) {
         record.request = structuredClone(step.request);
         record.requestUnresolved = true;

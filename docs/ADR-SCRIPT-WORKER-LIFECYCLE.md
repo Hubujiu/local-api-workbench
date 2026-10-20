@@ -17,3 +17,5 @@ Node工作线程退出行为依据：https://nodejs.org/api/worker_threads.html 
 本地默认8个测试文件并行时，新生命周期压力fixture与其他VM测试叠加，使简单CSV脚本有一次在651ms总耗时内触发250ms活动时限；原断言保持失败。测试文件并发现固定为2（本地/CI一致），各测试内的多线程/并发请求、全部用例及生产预算完全保留。目的是避免测试文件级CPU超配；没有延长脚本时限、跳过压力覆盖或自动重试失败。该调度修改也不能证明Windows原生崩溃原因。
 
 77189b2 首轮9/10通过，Windows不再出现此前进程级错误，但原HTTP并发限制断言暴露另一个确定性问题：根脚本已被拒绝，完成循环仍等待4个挂起HTTP超时，再输出根错误；在慢环境中先撞到2秒总截止，掩盖“同时4次”错误。新增先失败的固定回归验证根错误必须直接中断子请求（证据状态interrupted，而非等待超时failed）。每次排空微任务后检查根Promise拒绝并立即结束，错误文本通过原生安全追踪器读取，不执行用户getter；所有原始截止保持。
+
+b8305ee 初次macOS核心用例中，禁止require的测试期望“不允许”，实际得到interrupted；原断言失败保留，其他两个核心任务被matrix fail-fast取消。macOS重试以及分别补跑取消的Windows/Ubuntu后全部10项完成通过，不能称首轮全绿，也不能把中断归因于已证明的原因。新增脚本阶段诊断（bootstrap / compatibility / script / async-completion / serialization，以及父线程total-deadline/cancelled），保留原错误文字并写入失败步骤证据。CI核心matrix关闭fail-fast，让一个平台失败时其他平台仍能完成原有验证。所有截止与断言保持，未采用更宽的CPU/墙钟预算。
