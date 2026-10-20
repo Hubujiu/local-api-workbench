@@ -267,10 +267,65 @@ export function removeSchemaProperty(schema, path) {
     parent.required = parent.required.filter((key) => key !== path.at(-1));
   return next;
 }
+export function editSchemaReference(schema, path, reference) {
+  if (typeof reference !== "string" || reference.length > 4096)
+    throw Error("引用须为至多4096字符的本地JSON Pointer");
+  const next = structuredClone(schema),
+    node = nodeAt(next, path);
+  if (!object(node)) throw Error("布尔结构不能添加引用");
+  if (!reference) {
+    delete node.$ref;
+    return next;
+  }
+  let pointer;
+  try {
+    pointer = decodeURIComponent(reference.slice(1));
+  } catch {
+    throw Error("引用URI编码无效");
+  }
+  if (
+    !reference.startsWith("#") ||
+    (pointer && !pointer.startsWith("/")) ||
+    /~(?:[^01]|$)/.test(pointer)
+  )
+    throw Error("仅支持当前结构内的JSON Pointer引用");
+  const parts = pointer
+    ? pointer
+        .slice(1)
+        .split("/")
+        .map((key) => key.replaceAll("~1", "/").replaceAll("~0", "~"))
+    : [];
+  if (
+    parts.length > 32 ||
+    parts.some((key) => ["__proto__", "constructor", "prototype"].includes(key))
+  )
+    throw Error("引用路径无效");
+  let target = next,
+    mode = "schema";
+  for (const key of parts) {
+    if (!target || typeof target !== "object" || !Object.hasOwn(target, key))
+      throw Error("引用目标不存在");
+    const value = target[key];
+    mode = Array.isArray(target)
+      ? mode === "list"
+        ? "schema"
+        : "literal"
+      : mode === "schema"
+        ? schemaChildMode(key, value)
+        : mode === "map" || (mode === "dependencies" && !Array.isArray(value))
+          ? "schema"
+          : "literal";
+    target = value;
+  }
+  if (mode !== "schema" || (typeof target !== "boolean" && !object(target)))
+    throw Error("引用目标不是Schema位置");
+  node.$ref = reference;
+  return next;
+}
 export function schemaEditor(schema) {
   const rows = schemaRows(schema);
   return (
-    '<p class="notice">编辑对象、数组及常见字段；原有约束保留。引用、组合条件等复杂结构仍可用JSON编辑。取消不会修改接口。</p><div class="schema-error failed" role="status"></div><div class="schema-layout"><div class="schema-tree"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th>操作</th></tr></thead><tbody>' +
+    '<p class="notice">编辑对象、数组及常见字段；原有约束保留。支持当前结构内的JSON Pointer引用；组合条件等复杂结构仍可用JSON编辑。取消不会修改接口。</p><div class="schema-error failed" role="status"></div><div class="schema-layout"><div class="schema-tree"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th>操作</th></tr></thead><tbody>' +
     rows
       .map((row, index) => {
         const node = row.schema,
@@ -299,6 +354,11 @@ export function schemaEditor(schema) {
             ? '<button type="button" data-schema-edit="' +
               index +
               '">编辑</button>'
+            : "") +
+          (object(node)
+            ? '<button type="button" data-schema-reference-edit="' +
+              index +
+              '">引用</button>'
             : "") +
           (canAdd
             ? '<button type="button" data-schema-add="' +
@@ -330,6 +390,12 @@ export function bindSchemaEditor(container, schema) {
   };
   const readPending = () => {
     if (!editing) return draft;
+    if (editing.reference)
+      return editSchemaReference(
+        draft,
+        editing.path,
+        container.querySelector("[data-schema-reference]").value,
+      );
     if (editing.add)
       return addSchemaProperty(
         draft,
@@ -421,9 +487,34 @@ export function bindSchemaEditor(container, schema) {
     };
     container.querySelector("[data-schema-name]").focus();
   };
+  const showReference = (row) => {
+    if (editing) throw Error("请先应用或放弃当前字段编辑");
+    editing = { path: row.path, reference: true };
+    container.querySelector(".schema-fields").innerHTML =
+      '<h4>编辑本地引用</h4><p class="notice">仅引用当前结构中的Schema，例如 #/$defs/User。不会联网加载；其他字段和约束保持，留空解除引用。递归结构生成示例时仍需有限example。</p><label>JSON Pointer</label><input data-schema-reference value="' +
+      esc(row.schema.$ref || "") +
+      '"><button type="button" data-schema-apply>应用引用</button><button type="button" data-schema-cancel>放弃引用编辑</button>';
+    container.querySelector("[data-schema-apply]").onclick = () =>
+      report(() => {
+        commit();
+        render();
+      });
+    container.querySelector("[data-schema-cancel]").onclick = () => {
+      editing = null;
+      render();
+    };
+    container.querySelector("[data-schema-reference]").focus();
+  };
   const render = () => {
     container.innerHTML = schemaEditor(draft);
     const rows = schemaRows(draft);
+    for (const button of container.querySelectorAll(
+      "[data-schema-reference-edit]",
+    ))
+      button.onclick = () =>
+        report(() =>
+          showReference(rows[Number(button.dataset.schemaReferenceEdit)]),
+        );
     for (const button of container.querySelectorAll("[data-schema-edit]"))
       button.onclick = () =>
         report(() => show(rows[Number(button.dataset.schemaEdit)], false));

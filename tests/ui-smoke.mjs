@@ -1457,6 +1457,7 @@ try {
         user_name: { type: "string" },
       },
       "x-data": { $ref: "#/properties/label" },
+      $defs: { SharedLabel: { type: "string", minLength: 3 } },
     }),
   );
   const schemaBeforeVisual = await page.locator("#schema").inputValue();
@@ -1478,6 +1479,17 @@ try {
   );
   await page.locator('[data-schema-edit="2"]').click();
   await page.locator("[data-schema-name]").fill("label");
+  await page.locator("[data-schema-apply]").click();
+  await page.locator('[data-schema-reference-edit="2"]').click();
+  await page.locator("[data-schema-reference]").fill("#/$defs/Missing");
+  await page.locator("[data-schema-apply]").click();
+  await page
+    .locator(".schema-error")
+    .getByText("引用目标不存在", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
+  await page.locator("[data-schema-reference]").fill("#/$defs/SharedLabel");
+  await page.screenshot({ path: "/tmp/local-api-schema-reference.png" });
   await page.locator("[data-schema-apply]").click();
   await page.locator('[data-schema-edit="1"]').click();
   await page.locator("[data-schema-description]").fill("数量范围保留");
@@ -1528,6 +1540,8 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   const visualSchema = JSON.parse(await page.locator("#schema").inputValue());
   assert.deepEqual(visualSchema["x-data"], { $ref: "#/properties/label" });
+  assert.equal(visualSchema.properties.label.$ref, "#/$defs/SharedLabel");
+  assert.equal(visualSchema.properties.label.minLength, 3);
   assert.equal(visualSchema.properties.n.minimum, 1);
   assert.deepEqual(visualSchema.properties.n.enum, [1, 2, 3, 4]);
   assert.equal(visualSchema.properties.n.maximum, 4);
@@ -1544,6 +1558,11 @@ try {
     schemaProject.requests.find((item) => item.id === schemaRequestId).schema
       .properties.flag.example,
     false,
+  );
+  assert.equal(
+    schemaProject.requests.find((item) => item.id === schemaRequestId).schema
+      .properties.label.$ref,
+    "#/$defs/SharedLabel",
   );
   const originalResponse = {
     status: "200",

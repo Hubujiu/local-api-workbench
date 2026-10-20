@@ -280,3 +280,51 @@ test("literal reference-shaped examples do not block field edits while nested sc
   }
   assert(source.properties.a);
 });
+
+test("visual local schema references resolve schema positions and preserve siblings atomically", async () => {
+  const { editSchemaReference } = await import("../public/schema-editor.js");
+  const source = {
+    type: "object",
+    properties: { field: { description: "keep", example: 0 } },
+    $defs: { "a/b": { type: "integer" }, deny: false },
+    example: { fake: { type: "string" } },
+  };
+  const linked = editSchemaReference(
+    source,
+    ["properties", "field"],
+    "#/$defs/a~1b",
+  );
+  assert.equal(linked.properties.field.$ref, "#/$defs/a~1b");
+  assert.equal(linked.properties.field.description, "keep");
+  assert.equal(linked.properties.field.example, 0);
+  assert.equal(source.properties.field.$ref, undefined);
+  assert.equal(
+    editSchemaReference(linked, ["properties", "field"], "").properties.field
+      .$ref,
+    undefined,
+  );
+  assert.equal(
+    editSchemaReference(source, ["properties", "field"], "#/$defs/deny")
+      .properties.field.$ref,
+    "#/$defs/deny",
+  );
+  for (const ref of [
+    "https://example.invalid/schema",
+    "#anchor",
+    "#/missing",
+    "#/example/fake",
+    "#/$defs",
+    "#/%ZZ",
+    "#/$defs/a~2b",
+    "#/constructor",
+  ]) {
+    assert.throws(
+      () => editSchemaReference(source, ["properties", "field"], ref),
+      /引用/,
+    );
+  }
+  assert.deepEqual(source.properties.field, {
+    description: "keep",
+    example: 0,
+  });
+});
