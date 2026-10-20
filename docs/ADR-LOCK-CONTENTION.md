@@ -7,3 +7,5 @@ Decision: retain a 2-second no-progress limit for unchanged, incomplete or unrec
 Fixed regression: a live owner nonce that changes every 100 ms for 2.4 seconds must not be treated as stalled, while an unchanged live owner must still fail after the original idle window and must never be deleted. Existing independent-process counter test remains unchanged and full CI runs on all three OSes.
 
 The regression also keeps changing the live nonce until acquisition fails and checks the independent 10-second hard cap. Tests do not reduce the original 40 counter writes. Deadline accounting uses monotonic performance.now rather than wall-clock time.
+
+Follow-up CI exposed a test-only observation race: on Windows, the hard-limit assertion parsed owner.json while the fixture updater was truncating/replacing its contents. The fixture updater is now stopped and awaited after the unchanged deadline assertions and before the final owner identity read. This does not change product lock code, required counter writes, wait windows or ownership protection checks.

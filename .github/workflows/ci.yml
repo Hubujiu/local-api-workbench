@@ -117,7 +117,8 @@ jobs:
 
   database-integration:
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    # MongoDB 8 rejects affected newer host kernels; use the supported LTS runner.
+    runs-on: ubuntu-22.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -127,7 +128,7 @@ jobs:
           POSTGRES_DB: fixture
         ports: ["5432:5432"]
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U tester -d fixture"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -135,7 +136,7 @@ jobs:
         image: mongo:8.0
         ports: ["27017:27017"]
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-cmd "mongosh --quiet --eval 'quit(db.runCommand({ping:1}).ok === 1 ? 0 : 1)'"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 15
@@ -156,7 +157,7 @@ jobs:
           MYSQL_DATABASE: fixture
         ports: ["3306:3306"]
         options: >-
-          --health-cmd "mysqladmin ping -h localhost"
+          --health-cmd "mysql --protocol=tcp -h 127.0.0.1 -u tester -plocal-fixture-only fixture -e 'SELECT 1'"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 15
@@ -166,6 +167,8 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci --ignore-scripts
+      - name: Record database host compatibility
+        run: uname -r
       - run: node tests/remote-database.mjs
       - name: Seed isolated Redis fixtures
         run: |

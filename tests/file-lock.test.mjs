@@ -201,6 +201,8 @@ test("continuous live lock turnover still reaches the independent hard deadline"
       Date.now() - started < 14000,
       "turnover cannot renew the hard deadline",
     );
+    stopped = true;
+    await turnover;
     assert.equal(JSON.parse(await readFile(owner, "utf8")).pid, process.pid);
   } finally {
     stopped = true;
