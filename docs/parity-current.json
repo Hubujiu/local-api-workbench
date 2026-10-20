@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-20T04:00:00Z",
-  "implementationCommit": "af4db05e4d4d569878eef87a7f2968764fbf0346",
+  "asOf": "2026-10-20T04:14:00Z",
+  "implementationCommit": "e883614228019bf99789bc9b49be5ef9e6ae4518",
   "counts": {
     "F": {
       "已实现": 37,
@@ -549,7 +549,7 @@
       "original": "官网截图展示macOS；公开平台清单未找到",
       "current": "Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。",
       "source": "I1",
-      "evidence": "Actions39366682437; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
+      "evidence": "Actions39368158902; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md",
       "baselineStatus": "待核实"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39366682437",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39368158902",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述299项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述307项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39366682437,
+    "runId": 39368158902,
     "conclusion": "success first attempt",
-    "coreTests": 299,
+    "coreTests": 307,
     "jobs": 10
   },
   "supplementalItems": [
