@@ -31,7 +31,7 @@ af4db05e4d4d569878eef87a7f2968764fbf0346 / Actions39366682437：10项全部通�
 CI触发异常曾在673acb3/3eabe40出现；用户授权后于08:59UTC关闭并重开同一PR一次，恢复运行。Windows CLI早前一次失败未重现、原因未定，stdout诊断保留。
 
 
-最近核验包括CSV参数化压测、公开现代Apipost JSON与平级模型导入、有限NTLMv2、隔离lodash/Moment/uuid及项目全局HTTP参数。具体边界见对应ADR。原生目录、完整SDK、精确目录参数、共享认证和共享JavaScript已补齐有限契约；递归目录、非JS共享操作与原脚本排序等价仍未完整核验。
+最近核验包括CSV参数化压测、公开现代Apipost JSON与平级模型导入、有限NTLMv2、隔离lodash/Moment/uuid及项目全局HTTP参数。具体边界见对应ADR。精确目录参数、共享认证和共享JavaScript已补齐有限契约；原生项目目录迁移、完整SDK、递归目录、非JS共享操作与原脚本排序等价仍未完整核验。
 
 16cf9c6浏览器在NTLM场景暴露请求完成历史刷新与编辑焦点竞争。保留失败trace；修复完成重绘时保留当前输入/焦点/选区/滚动，新增受控延迟刷新回归。NTLM协议断言与资源限制不变。
 

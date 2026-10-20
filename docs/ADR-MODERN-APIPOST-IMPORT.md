@@ -18,3 +18,11 @@ Imported examples retain their schema and body. Original Mock activation and aut
 ## Flat model extension
 
 The subsequent increment supports at most 100 complete flat models with model_type=model and root parent_id. Field structure and model-reference normalization are corroborated by the same pinned EchoAPI repository's src/utils/exportutils/apiToSelf.ts; implementation here is independent. Models appear in the existing model library and namespaced OpenAPI components. Recognized direct model IDs and #/definitions/ID or #/components/schemas/ID references are rewritten; model-local pointers are rebased. Remote/missing references, nested model folders and proprietary composite reference/override extensions reject atomically. No schemas or external URLs are fetched. Tests cover sample generation through references, rebasing, conflicts and visible imported model entries. This replaces the initial blanket rejection of models, not the exclusions for cases/tasks/custom composition.
+
+## Schema 位置与字面数据的区别
+
+模型转换只在 JSON Schema 的已知子 Schema 位置重写引用：properties / patternProperties / definitions / $defs / dependentSchemas 的值、组合数组、items / prefixItems、条件与附加属性等。旧版 dependencies 的字符串数组保持原样，Schema 分支才递归转换。
+
+example / examples / default / const / enum 以及未知扩展中的对象属于字面数据，不能把其中的 `$ref`、`ref` 或 APIPOST_REFS 当作模型引用；属性名本身也可以叫 `$ref`。这些数据仍进行有界深拷贝，计入原有 50000 节点与 40 层限制。真实 Schema 位置中的远程引用和不支持的自定义组合仍拒绝，不联网解析。
+
+依据：https://json-schema.org/understanding-json-schema/reference/annotations 和 https://json-schema.org/understanding-json-schema/structuring 。这是修正导入数据保真，不意味着已实现完整 Schema 求解或任意扩展词汇。独立回归先在旧实现出现两个失败，再验证修复；另有完整项目导入到样例生成的端到端断言。原生 Offline2 项目格式仍不包含在此兼容声明内。

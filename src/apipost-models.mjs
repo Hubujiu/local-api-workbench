@@ -21,15 +21,57 @@ export function prepareApipostModels(models, resource, projectName) {
     if (!id || ids.has(id)) throw Error("Apipost模型ID为空或重复");
     ids.set(id, resource("model", id));
   }
+  const schemaMaps = new Set([
+    "properties",
+    "patternProperties",
+    "$defs",
+    "definitions",
+    "dependentSchemas",
+  ]);
+  const schemaLists = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
+  const schemaValues = new Set([
+    "additionalProperties",
+    "additionalItems",
+    "unevaluatedProperties",
+    "unevaluatedItems",
+    "contains",
+    "propertyNames",
+    "not",
+    "if",
+    "then",
+    "else",
+    "contentSchema",
+  ]);
   let nodes = 0;
-  function convert(input, root = input, prefix = "", depth = 0) {
+  function convert(
+    input,
+    root = input,
+    prefix = "",
+    depth = 0,
+    mode = "schema",
+  ) {
     if (++nodes > 50000 || depth > 40)
       throw Error("Apipost模型结构超过节点/深度上限");
     if (Array.isArray(input))
-      return input.map((x) => convert(x, root, prefix, depth + 1));
+      return input.map((x) =>
+        convert(
+          x,
+          root,
+          prefix,
+          depth + 1,
+          mode === "list" ? "schema" : "literal",
+        ),
+      );
     if (!input || typeof input !== "object") return input;
     return Object.fromEntries(
       Object.entries(input).map(([key, value]) => {
+        if (mode !== "schema") {
+          const childMode =
+            mode === "map" || (mode === "dependencies" && !Array.isArray(value))
+              ? "schema"
+              : "literal";
+          return [key, convert(value, root, prefix, depth + 1, childMode)];
+        }
         if (
           [
             "APIPOST_REFS",
@@ -97,7 +139,20 @@ export function prepareApipostModels(models, resource, projectName) {
             return ["$ref", "#/components/schemas/" + ids.get(modelId)];
           throw Error("Apipost模型引用不存在");
         }
-        return [key, convert(value, root, prefix, depth + 1)];
+        const childMode = schemaMaps.has(key)
+          ? "map"
+          : schemaLists.has(key)
+            ? "list"
+            : key === "dependencies"
+              ? "dependencies"
+              : key === "items"
+                ? Array.isArray(value)
+                  ? "list"
+                  : "schema"
+                : schemaValues.has(key)
+                  ? "schema"
+                  : "literal";
+        return [key, convert(value, root, prefix, depth + 1, childMode)];
       }),
     );
   }

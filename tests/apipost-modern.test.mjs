@@ -170,3 +170,26 @@ test("model-local pointers are rebased and conflicting reimports remain atomic",
   assert.throws(() => importIntoProject(p, d), /冲突/);
   assert.deepEqual(p, before);
 });
+
+test("modern import preserves literal reference-shaped examples end to end", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  const literal = {
+    $ref: "https://example.invalid/data-only",
+    ref: "example",
+    nested: { APIPOST_REFS: { value: 1 } },
+  };
+  d.models = [
+    {
+      model_id: "literal",
+      model_type: "model",
+      name: "Literal",
+      schema: { type: "object", example: literal },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "literal" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(p.dictionary[0].schema.example, literal);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), literal);
+});
