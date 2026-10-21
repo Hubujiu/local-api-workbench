@@ -53,6 +53,8 @@ const temporaryParameters = new Map();
 const collapsedFolders = new Set();
 const loadOptions = new Map();
 const parameterScopes = new Map();
+const pendingOAuth1 = new Set();
+let modalRevision = 0;
 let opened = [],
   token = "",
   projects = [],
@@ -239,18 +241,27 @@ async function openProject(id) {
   render();
 }
 function modal(title, html, onSave, label = "确定") {
-  const d = $("#dialog");
+  const d = $("#dialog"),
+    revision = ++modalRevision;
+  let submitting = false;
+  $("#dialog-save").disabled = false;
   $("#dialog-title").textContent = title;
   $("#dialog-content").innerHTML = html;
   for (const button of $("#dialog-content").querySelectorAll("button"))
     button.type = "button";
   $("#dialog-save").textContent = label;
   $("#dialog-save").onclick = async () => {
+    if (submitting) return;
+    submitting = true;
+    $("#dialog-save").disabled = true;
     try {
       await onSave();
-      d.close();
+      if (modalRevision === revision) d.close();
     } catch (e) {
-      toast(e.message);
+      if (modalRevision === revision) toast(e.message);
+    } finally {
+      submitting = false;
+      if (modalRevision === revision) $("#dialog-save").disabled = false;
     }
   };
   d.showModal();
@@ -316,22 +327,28 @@ function tree() {
   const folders = [
     ...new Set([
       ...(project?.folders || []),
-      ...items.map((item) => item.folder || "未分组"),
+      ...items.map((item) => item.folder || ""),
     ]),
   ];
   const renderFolder = (node) => {
     const folder = node.path;
-    const direct = items.filter((item) => (item.folder || "未分组") === folder);
+    const direct = items.filter((item) => (item.folder || "") === folder);
     const total = items.filter(
       (item) =>
-        (item.folder || "未分组") === folder ||
-        (item.folder || "").startsWith(folder + "/"),
+        (item.folder || "") === folder ||
+        (folder && (item.folder || "").startsWith(folder + "/")),
     ).length;
-    return `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(node.name)}</span> <span>(${total})</span><button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button></summary>${direct.map((item) => `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`).join("")}${node.children.map(renderFolder).join("")}</details>`;
+    return `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(node.name)}</span> <span>(${total})</span>${folder ? `<button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button>` : ""}</summary>${direct.map((item) => `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`).join("")}${node.children.map(renderFolder).join("")}</details>`;
   };
   return (
-    folderTree(folders).map(renderFolder).join("") ||
-    '<div class="notice">没有匹配的项目内容。</div>'
+    [
+      ...folderTree(folders),
+      ...(items.some((item) => !item.folder)
+        ? [{ path: "", name: "未分组", children: [] }]
+        : []),
+    ]
+      .map(renderFolder)
+      .join("") || '<div class="notice">没有匹配的项目内容。</div>'
   );
 }
 
@@ -1731,52 +1748,61 @@ function bind() {
     request()[param + "Script"] = element.value;
     mark();
   });
-  on("#oauth1-get", "click", async () => {
+  on("#oauth1-get", "click", async (_, button) => {
     collect();
     const requestId = current,
       projectId = project.id,
       config = structuredClone(request().auth),
       original = JSON.stringify(request().auth);
-    if (
-      !confirm(
-        "将向填写的OAuth1端点请求临时令牌，并在你授权后交换访问令牌。请确认端点可信；获取后不会自动保存到磁盘。继续？",
-      )
-    )
-      return;
-    const flow = await api("/oauth1/start", "POST", config);
-    if (project.id !== projectId || current !== requestId)
-      throw Error("项目/接口已切换，请重新开始OAuth1授权");
-    modal(
-      "OAuth1 OOB/PIN 授权",
-      `<p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开服务授权页面</a></p><p>在服务页面授权后复制验证码。流程5分钟后过期；临时令牌密钥仅保留在内存。</p><label>Verifier / PIN</label><input id="oauth1-verifier" autocomplete="off">`,
-      async () => {
-        const target =
-          project.id === projectId &&
-          project.requests.find((item) => item.id === requestId);
-        if (!target || JSON.stringify(target.auth) !== original)
-          throw Error("原接口认证已变化，请重新授权，避免覆盖修改");
-        const result = await api("/oauth1/complete", "POST", {
-          id: flow.id,
-          verifier: $("#oauth1-verifier").value,
-        });
-        if (
-          project.id !== projectId ||
-          JSON.stringify(target.auth) !== original
+    const pendingKey = projectId + ":" + requestId;
+    if (pendingOAuth1.has(pendingKey)) return;
+    pendingOAuth1.add(pendingKey);
+    button.disabled = true;
+    try {
+      if (
+        !confirm(
+          "将向填写的OAuth1端点请求临时令牌，并在你授权后交换访问令牌。请确认端点可信；获取后不会自动保存到磁盘。继续？",
         )
-          throw Error("项目或认证已变化，令牌未写入");
-        const currentTarget = project.requests.find(
-          (item) => item.id === requestId,
-        );
-        if (!currentTarget || JSON.stringify(currentTarget.auth) !== original)
-          throw Error("接口已更新，令牌未覆盖现有修改");
-        currentTarget.auth.accessToken = result.accessToken;
-        currentTarget.auth.tokenSecret = result.tokenSecret;
-        mark();
-        render();
-        toast("OAuth1令牌已获取，尚未保存到磁盘");
-      },
-      "交换访问令牌",
-    );
+      )
+        return;
+      const flow = await api("/oauth1/start", "POST", config);
+      if (project.id !== projectId || current !== requestId)
+        throw Error("项目/接口已切换，请重新开始OAuth1授权");
+      modal(
+        "OAuth1 OOB/PIN 授权",
+        `<p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开服务授权页面</a></p><p>在服务页面授权后复制验证码。流程5分钟后过期；临时令牌密钥仅保留在内存。</p><label>Verifier / PIN</label><input id="oauth1-verifier" autocomplete="off">`,
+        async () => {
+          const target =
+            project.id === projectId &&
+            project.requests.find((item) => item.id === requestId);
+          if (!target || JSON.stringify(target.auth) !== original)
+            throw Error("原接口认证已变化，请重新授权，避免覆盖修改");
+          const result = await api("/oauth1/complete", "POST", {
+            id: flow.id,
+            verifier: $("#oauth1-verifier").value,
+          });
+          if (
+            project.id !== projectId ||
+            JSON.stringify(target.auth) !== original
+          )
+            throw Error("项目或认证已变化，令牌未写入");
+          const currentTarget = project.requests.find(
+            (item) => item.id === requestId,
+          );
+          if (!currentTarget || JSON.stringify(currentTarget.auth) !== original)
+            throw Error("接口已更新，令牌未覆盖现有修改");
+          currentTarget.auth.accessToken = result.accessToken;
+          currentTarget.auth.tokenSecret = result.tokenSecret;
+          mark();
+          render();
+          toast("OAuth1令牌已获取，尚未保存到磁盘");
+        },
+        "交换访问令牌",
+      );
+    } finally {
+      pendingOAuth1.delete(pendingKey);
+      if (button.isConnected) button.disabled = false;
+    }
   });
   on("#oauth-get", "click", async () => {
     const requestId = current,
@@ -1967,7 +1993,7 @@ function bind() {
     if (!selected || selected.deletedAt) throw Error("没有当前接口可定位");
     search = "";
     searchType = "all";
-    const selectedPath = selected.folder || "未分组";
+    const selectedPath = selected.folder || "";
     for (const key of [...collapsedFolders]) {
       const folder = key.slice((project.id + ":").length);
       if (

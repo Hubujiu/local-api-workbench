@@ -27,6 +27,8 @@ try {
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
 const app = await createApp({ root, port: 0 });
 const ntlmFixture = await startNtlmFixture();
+let oauth1Starts = 0,
+  oauth1Exchanges = 0;
 let uploadedMultipart,
   stdioChild,
   releaseMCP = () => {},
@@ -34,6 +36,8 @@ let uploadedMultipart,
 const fixture = http.createServer(async (request, response) => {
   if (request.url === "/oauth1-request" || request.url === "/oauth1-access") {
     response.setHeader("content-type", "application/x-www-form-urlencoded");
+    if (request.url === "/oauth1-request") oauth1Starts++;
+    else oauth1Exchanges++;
     if (
       request.url === "/oauth1-access" &&
       !request.headers.authorization?.includes('oauth_verifier="1234"')
@@ -985,8 +989,12 @@ try {
   await page.locator("#oauth1-get").click();
   assert.equal(await page.locator("#oauth1-verifier").count(), 0);
   page.once("dialog", (dialog) => dialog.accept());
-  await page.locator("#oauth1-get").click();
+  await page.locator("#oauth1-get").evaluate((button) => {
+    button.click();
+    button.click();
+  });
   await page.locator("#oauth1-verifier").waitFor();
+  assert.equal(oauth1Starts, 1);
   assert.equal(
     new URL(
       await page.locator("#dialog a").getAttribute("href"),
@@ -994,8 +1002,12 @@ try {
     "ui-temp",
   );
   await page.locator("#oauth1-verifier").fill("1234");
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-oauth1-flow.png" });
-  await page.locator("#dialog-save").click();
+  await page.locator("#dialog-save").evaluate((button) => {
+    button.click();
+    button.click();
+  });
   await page.locator("#dialog").waitFor({ state: "hidden" });
   assert.equal(
     await page.locator('[data-auth="accessToken"]').inputValue(),
@@ -1005,6 +1017,7 @@ try {
     await page.locator('[data-auth="tokenSecret"]').inputValue(),
     "ui-access-secret",
   );
+  assert.equal(oauth1Exchanges, 1);
   await page.locator('[data-auth="signatureMethod"]').selectOption("RSA-SHA1");
   await page
     .locator('[data-auth="privateKey"]')
@@ -2316,6 +2329,25 @@ try {
   await page.locator("#folder-name").fill("树父/子/参数目录");
   await page.locator("#dialog-save").click();
   await saveAndWait("#save");
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  assert.equal(
+    await page.locator('#parameter-scope option[value="树父"]').count(),
+    1,
+  );
+  assert.equal(
+    await page.locator('#parameter-scope option[value="树父/子"]').count(),
+    1,
+  );
+  await page.locator('.rail [data-page="apis"]').click();
+  assert.equal(
+    await page
+      .locator('[data-tree-folder=""] > summary [data-edit-folder]')
+      .count(),
+    0,
+  );
   assert.equal(
     await page
       .locator(

@@ -61,3 +61,15 @@ test("subtree conflicts and invalid moves fail atomically including implicit des
     ),
   );
 });
+
+test("legacy opaque folder names can be renamed safely without allowing new unsafe paths", () => {
+  const p = {
+    folders: ["constructor"],
+    requests: [{ folder: "constructor" }],
+    settings: {},
+  };
+  const moved = moveFolderTree(p, "constructor", "Renamed");
+  assert.equal(moved.requests[0].folder, "Renamed");
+  assert.equal(p.requests[0].folder, "constructor");
+  assert.throws(() => moveFolderTree(moved, "Renamed", "__proto__"));
+});

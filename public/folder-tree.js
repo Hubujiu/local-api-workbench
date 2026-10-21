@@ -49,7 +49,8 @@ export function folderTree(paths) {
   return roots;
 }
 export function moveFolderTree(project, previous, next) {
-  validate(previous);
+  if (typeof previous !== "string" || !previous || previous.length > 1000)
+    throw Error("源目录无效");
   if (next !== null) validate(next);
   if (next === previous) return structuredClone(project);
   if (next !== null && within(next, previous))

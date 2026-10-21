@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-21T14:44:00Z",
-  "implementationCommit": "cb405334d3076878ee6cec8137d4acacf04a9044",
+  "asOf": "2026-10-21T15:29:00Z",
+  "implementationCommit": "31ceeb6827a3723fb0c23e8f648fc678babd63d9",
   "counts": {
     "F": {
       "已实现": 37,
@@ -177,7 +177,7 @@
       "name": "认证",
       "status": "部分实现",
       "original": "截图有认证入口，MCP详情包含鉴权",
-      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM拒绝v1/MIC/EPA/通道绑定/代理/HTTP2，不读取系统凭据；OAuth1自动授权及高级变体仍不完整。",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM拒绝v1/MIC/EPA/通道绑定/代理/HTTP2，不读取系统凭据；OAuth1新增显式OOB/PIN临时令牌/验证码交换，假服务/真实HTTP签名/界面已验证；非OOB授权及高级变体仍不完整。",
       "source": "S7",
       "evidence": "src/ntlm.mjs; tests/ntlm.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; docs/ADR-NTLMV2.md",
       "baselineStatus": "部分实现"
@@ -197,7 +197,7 @@
       "name": "基于 Schema 生成请求数据",
       "status": "部分实现",
       "original": "截图有生成按钮",
-      "current": "常见长度/数值、局部引用、新旧元组、有界尾项及对象属性数量已验证；必填属性保留、额外属性按Schema填充，冲突明确失败。复杂组合约束仍要求example，不是通用求解器。",
+      "current": "常见长度/数值、局部引用、新旧元组、有界尾项及对象属性数量已验证；必填属性保留、额外属性按Schema填充，冲突明确失败。支持保守allOf对象/数值/枚举交集，修复局部引用兄弟约束覆盖问题；复杂不支持组合仍要求example，不是通用求解器。",
       "source": "I1",
       "evidence": "src/schema-sample.mjs; tests/schema-sample.test.mjs; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -267,7 +267,7 @@
       "name": "文档与分享",
       "status": "部分实现",
       "original": "文档入口和单接口分享按钮",
-      "current": "Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，图片按文本处理，不提供在线托管分享。",
+      "current": "Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，不自动加载远程图片；可插入有大小/像素限制的本地PNG/JPEG，离线导出保留。不提供在线托管分享。",
       "source": "S1",
       "evidence": "src/markdown-renderer.mjs; tests/markdown.test.mjs; public/document-export.js; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
@@ -307,7 +307,7 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。",
+      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。 $.ajax返回有界Promise并等待async回调与complete，保留错误证据与原配额。",
       "source": "S3",
       "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md; docs/ADR-SCRIPT-XML.md; docs/ADR-RECURSIVE-FOLDER-SCOPES.md",
       "baselineStatus": "部分实现"
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39619280015",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39624144584",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述329项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述343项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39619280015,
+    "runId": 39624144584,
     "conclusion": "success first attempt",
-    "coreTests": 329,
+    "coreTests": 343,
     "jobs": 10
   },
   "supplementalItems": [

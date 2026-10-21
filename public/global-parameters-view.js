@@ -1,3 +1,4 @@
+import { folderTree } from "./folder-tree.js";
 import { authPanel } from "./auth-view.js";
 const esc = (value) =>
   String(value ?? "").replace(
@@ -8,7 +9,7 @@ const esc = (value) =>
       ],
   );
 export function globalParametersPanel(project, folder = "") {
-  const folders = [
+  const paths = [
     ...new Set([
       ...(project.folders || []),
       ...(project.requests || []).map((item) => item.folder),
@@ -19,6 +20,9 @@ export function globalParametersPanel(project, folder = "") {
   ]
     .filter(Boolean)
     .sort();
+  const flatten = (nodes) =>
+    nodes.flatMap((node) => [node.path, ...flatten(node.children)]);
+  const folders = flatten(folderTree(paths));
   if (!folders.includes(folder)) folder = "";
   const value = folder
     ? Object.hasOwn(project.settings?.folderParameters || {}, folder)

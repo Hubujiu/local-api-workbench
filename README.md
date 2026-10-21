@@ -21,6 +21,13 @@ npm start
 
 ## 已实现的核心
 
+- 多级目录树与整棵子树原子改名/移除；可明确开启祖先参数/认证/脚本继承，默认保持精确目录，旧快照不变。
+- 隔离脚本支持有界 Promise/await、HTTP、定时器、await $.ajax/异步回调、CSV/XML响应解析；所有作用域共享原运行配额。
+- Schema支持常用约束、局部引用、元组以及保守的allOf交集样例；无法安全求解时明确要求example。
+- 文档可插入有大小/像素限制的本地PNG/JPEG，离线HTML/Markdown保留图片；不自动加载远程图片或执行原始HTML。
+- OAuth1提供显式OOB/PIN令牌申请/交换，服务必须支持该流程；临时秘密仅在内存，获取后仍需手工保存接口。
+
+
 - 项目/精确目录共享前后置脚本：异步完成后再进入下一作用域、单独关闭继承、用例冻结；计划仅执行显式代码，不自动加入共享脚本。见 [顺序与隔离边界](docs/ADR-SHARED-SCRIPTS.md)。
 
 - 项目/目录共享认证：显式作用域覆盖、none阻止上层、接口认证优先和单独关闭继承；不自动获取令牌或读取系统凭据。见 [认证继承边界](docs/ADR-SHARED-AUTH.md)。
@@ -33,7 +40,7 @@ npm start
 - 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
 - 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
 - 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
-- SQLite/PostgreSQL/MySQL 只读查询，MCP stdio 授权项目读写与计划执行
+- SQLite/PostgreSQL/MySQL/Redis/MongoDB 有界只读查询，MCP stdio 授权项目读写与计划执行
 - 浅色/深色工作台；无 CDN、无遥测、无内置云模型
 
 ## MCP
@@ -58,7 +65,7 @@ node tests/ui-smoke.mjs
 
 - 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
 - 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；涵盖保存竞争、脚本、导入、目录/文档持久化、OAuth、SSE 与 MCP 开关
-- 已创建 PR #1，多个候选版本七项 CI 全绿；最新迭代以对应提交的 CI 结果为准
+- 已创建 PR #1，多个候选版本十项 CI 全绿；最新迭代以对应提交的 CI 结果为准
 - 支持本地循环 OpenAPI 引用保留，外部 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
 - SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务

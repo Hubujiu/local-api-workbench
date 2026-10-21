@@ -1661,3 +1661,10 @@ dialog:has(#cookie-line) {
   max-width: 100%;
   height: auto;
 }
+
+#dialog a,
+.markdown-content a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
