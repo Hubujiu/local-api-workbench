@@ -9,7 +9,7 @@ test("ClickHouse uses readonly GET, typed escaped parameters and header-only cre
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://fixture.test");
     assert.equal(req.method, "GET");
-    assert.equal(url.searchParams.get("readonly"), "1");
+    assert.equal(url.searchParams.has("readonly"), false);
     assert.equal(url.searchParams.get("param_p0"), "a\\tb\\nc\\\\N\\0\\b");
     assert.equal(url.searchParams.get("param_p1"), "\\N");
     assert.equal(url.searchParams.has("password"), false);

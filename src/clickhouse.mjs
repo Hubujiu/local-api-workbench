@@ -22,6 +22,8 @@ export function clickhouseRequest(input) {
     typeof input.sql === "string" ? input.sql.trim().replace(/;\s*$/, "") : "";
   if (!/^(SELECT|WITH)\b/i.test(sql) || sql.length > 50000 || sql.includes(";"))
     throw Error("ClickHouse仅支持单条SELECT/WITH；分号值请使用绑定参数");
+  if (/\bSETTINGS\b/i.test(sql))
+    throw Error("ClickHouse只读查询不支持自定义SETTINGS，相关文本值请绑定参数");
   const host = input.host || "127.0.0.1";
   if (typeof host !== "string" || /[\s/@?#\\]/.test(host))
     throw Error("ClickHouse主机名无效");
@@ -44,7 +46,6 @@ export function clickhouseRequest(input) {
     `SELECT * FROM (${sql}) AS localapi_result LIMIT 1001 FORMAT JSON`,
   );
   for (const [key, value] of Object.entries({
-    readonly: 1,
     max_execution_time: 2,
     max_result_rows: 1001,
     result_overflow_mode: "break",

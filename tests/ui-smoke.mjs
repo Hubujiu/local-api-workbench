@@ -38,7 +38,7 @@ const fixture = http.createServer(async (request, response) => {
   if (request.url.startsWith("/?query=")) {
     const query = new URL(request.url, "http://fixture.test");
     assert.equal(request.method, "GET");
-    assert.equal(query.searchParams.get("readonly"), "1");
+    assert.equal(query.searchParams.has("readonly"), false);
     assert.equal(query.searchParams.get("param_p0"), "clickhouse-ui");
     response.setHeader("content-type", "application/json");
     response.end(

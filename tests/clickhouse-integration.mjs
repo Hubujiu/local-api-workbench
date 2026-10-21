@@ -59,4 +59,16 @@ await assert.rejects(
   queryRemoteDatabase({ ...base, sql: "SELECT 1 SETTINGS readonly=0" }),
   /ClickHouse/,
 );
+url.searchParams.set("query", "SELECT 1 SETTINGS readonly=0");
+const cannotUpgrade = await fetch(url, {
+  headers: {
+    Authorization:
+      "Basic " + Buffer.from("tester:local-fixture-only").toString("base64"),
+  },
+});
+assert.equal(
+  cannotUpgrade.ok,
+  false,
+  "GET read-only mode cannot be upgraded by query settings",
+);
 console.log("REAL_CLICKHOUSE_FIXTURE_PASS");
