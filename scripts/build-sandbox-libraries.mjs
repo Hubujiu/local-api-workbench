@@ -20,6 +20,7 @@ for (const name of [
   "moment",
   "uuid",
   "@xmldom/xmldom",
+  "handlebars",
 ]) {
   const packageInfo = JSON.parse(
     await readFile("node_modules/" + name + "/package.json", "utf8"),

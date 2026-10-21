@@ -245,7 +245,13 @@ export async function runScriptSequence(stages, input, options = {}) {
     networkRequests.push(
       ...result.networkRequests.map((item) => ({ ...item, scope: stage.name })),
     );
-    for (const key of ["variables", "scopes", "localVariables", "request"])
+    for (const key of [
+      "variables",
+      "scopes",
+      "localVariables",
+      "request",
+      "visualization",
+    ])
       state[key] = result[key];
     if (performance.now() > deadline || remaining < 0)
       throw Object.assign(Error("脚本执行超时"), {
@@ -259,6 +265,7 @@ export async function runScriptSequence(stages, input, options = {}) {
           scopes: state.scopes,
           localVariables: state.localVariables,
           request: state.request,
+          visualization: state.visualization,
           logs,
           tests,
         }),
@@ -277,6 +284,7 @@ export async function runScriptSequence(stages, input, options = {}) {
     scopes: state.scopes,
     localVariables: state.localVariables || {},
     request: state.request,
+    visualization: state.visualization ?? null,
     logs,
     tests,
     networkRequests,

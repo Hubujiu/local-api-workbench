@@ -211,6 +211,7 @@ try {
     const request = input.request || {};
     const response = input.response || null;
     const logs = [], tests = [];
+    let visualization = input.visualization ?? null;
     const console = { log: (...values) => {
       if (logs.length < 100) logs.push(values.map(value => typeof value === 'string' ? value : JSON.stringify(value)).join(' ').slice(0,2000));
     }};
@@ -313,6 +314,15 @@ try {
       },
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
     };
+    const visualizer = {
+      set: (template, data) => {
+        if (!response) throw Error('响应可视化仅支持后置脚本');
+        visualization = __renderVisualization(template, data);
+      },
+      clear: () => { visualization = null; }
+    };
+    apt.visualizer = visualizer;
+    pm.visualizer = visualizer;
   `;
   const library =
     "const utils=Object.create(null);\n" +
@@ -505,7 +515,7 @@ try {
   scriptStage = "serialization";
   finalizing = true;
   const output = context.evalCode(
-    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests})",
+    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization})",
   );
   if (output.error) {
     output.error.dispose();

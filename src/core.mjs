@@ -510,6 +510,7 @@ export async function runPlan(
             phase: "after",
           })),
         );
+        record.visualization = scripted.visualization;
         scopes = createScopes(scripted.variables, scripted.scopes);
         replaceVariables(vars, effectiveScopes(scopes));
         record.logs.push(

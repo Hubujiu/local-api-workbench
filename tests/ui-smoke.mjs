@@ -709,13 +709,31 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
 
   // Exercise editable scripts, response evidence and repeated modal dismissal.
+  const visualizationLeaks = [];
+  const observeVisualization = (request) => {
+    if (request.url().includes("visualizer-leak"))
+      visualizationLeaks.push(request.url());
+  };
+  page.on("request", observeVisualization);
+  const visualizationTemplate =
+    "<h2>{{title}}</h2><table><thead><tr><th>名称</th><th>结果</th></tr></thead><tbody>{{#each rows}}<tr><td>{{name}}</td><td>{{value}}</td></tr>{{/each}}</tbody></table>" +
+    '<script>parent.__visualizerExecuted=true</script><img src="' +
+    fixtureURL +
+    '/visualizer-leak.png" onerror="parent.__visualizerExecuted=true"><iframe src="' +
+    fixtureURL +
+    '/visualizer-leak-frame"></iframe><meta http-equiv="refresh" content="0;url=' +
+    fixtureURL +
+    '/visualizer-leak-nav"><style>@import url("' +
+    fixtureURL +
+    '/visualizer-leak.css");</style>';
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
   await page
     .locator("#script-code")
     .fill(
       'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); apt.assert("response.raw.status === 200"); postman.setEnvironmentVariable("legacyFromUI",response.json.message); console.log("script-done");' +
-        `pm.sendRequest(${JSON.stringify(fixtureURL + "/token")},(error,reply)=>{if(error)throw error;pm.environment.set('scriptHTTPFromUI',reply.json().access_token);pm.test('scriptHTTPStatus',()=>pm.expect(reply.code).to.equal(200));});`,
+        `pm.sendRequest(${JSON.stringify(fixtureURL + "/token")},(error,reply)=>{if(error)throw error;pm.environment.set('scriptHTTPFromUI',reply.json().access_token);pm.test('scriptHTTPStatus',()=>pm.expect(reply.code).to.equal(200));});` +
+        `apt.visualizer.set(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});`,
     );
   await page.locator("#send").click();
   await page.locator('[data-response="logs"]').click();
@@ -723,6 +741,56 @@ try {
     .locator(".response-body")
     .getByText("script-done", { exact: false })
     .waitFor();
+  await page.locator('[data-response="visualization"]').click();
+  const visualization = page.frameLocator("#response-visualization");
+  await visualization
+    .locator("h2")
+    .getByText("响应结果", { exact: true })
+    .waitFor();
+  assert.equal(await visualization.locator("tbody tr").count(), 2);
+  assert.equal(
+    await visualization
+      .locator("tbody")
+      .getByText("<b>不是HTML</b>", { exact: true })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await visualization.locator("script,img,iframe,style,body meta").count(),
+    0,
+  );
+  assert.equal(
+    await page.locator("#response-visualization").getAttribute("sandbox"),
+    "",
+  );
+  assert.equal(
+    await visualization.locator("body").evaluate(() => {
+      try {
+        void parent.document;
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+    true,
+  );
+  await page.waitForFunction(() => {
+    const frame = document.querySelector("#response-visualization");
+    return frame && frame.getAttribute("srcdoc").includes("visualizer.css");
+  });
+  assert.equal(
+    await visualization
+      .locator("body")
+      .evaluate((element) => getComputedStyle(element).fontSize),
+    "14px",
+  );
+  assert.equal(
+    await page.evaluate(() => Boolean(window.__visualizerExecuted)),
+    false,
+  );
+  assert.deepEqual(visualizationLeaks, []);
+  page.off("request", observeVisualization);
+  await page.screenshot({ path: "/tmp/local-api-response-visualizer.png" });
   await saveAndWait("#save");
   const scopeSavedProject = (await app.store.list()).find(
     (item) => !item.archived,

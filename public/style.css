@@ -1668,3 +1668,11 @@ dialog:has(#cookie-line) {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+#response-visualization {
+  width: 100%;
+  min-height: 260px;
+  height: 100%;
+  border: 1px solid var(--border);
+  background: #fff;
+}

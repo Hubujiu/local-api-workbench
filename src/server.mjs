@@ -681,6 +681,7 @@ export async function createApp({
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
                 subrequests: result.subrequests,
+                visualization: result.visualization,
                 error: result.error,
               });
             } finally {

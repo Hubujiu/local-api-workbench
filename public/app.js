@@ -1,3 +1,4 @@
+import { mountVisualization } from "./visualizer-view.js";
 import { inlineImageURI } from "./inline-image.js";
 import { folderTree, moveFolderTree } from "./folder-tree.js";
 import { parseLoadCSV } from "./load-data.js";
@@ -485,6 +486,7 @@ function editor(r) {
             "",
           )}</div><div class="request-panel ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
+          ["visualization", "可视化"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
           ["examples", "响应示例"],
@@ -622,6 +624,10 @@ function responseContent() {
     );
   if (!response)
     return `<div class="empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
+  if (responseTab === "visualization")
+    return typeof response.visualization === "string"
+      ? '<p class="muted">隔离静态预览：不执行脚本、不加载外部资源、不打开链接。可用 apt.visualizer.set(template, data)。</p><iframe id="response-visualization" title="响应可视化" sandbox="" referrerpolicy="no-referrer"></iframe>'
+      : '<div class="notice">后置脚本调用 apt.visualizer.set(template, data) 后在此预览；支持 Handlebars 表格、列表；采用内置样式。</div>';
   let v =
     responseTab === "body"
       ? response.body
@@ -859,6 +865,14 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  const visualizationFrame = $("#response-visualization");
+  if (visualizationFrame) {
+    try {
+      mountVisualization(visualizationFrame, response.visualization, document);
+    } catch (error) {
+      visualizationFrame.replaceWith(document.createTextNode(error.message));
+    }
+  }
   on("#cookie-manager", "click", openCookieManager);
   on("#compact-ui", "click", () => {
     collect();

@@ -14,3 +14,6 @@ globalThis.uuid = uuid;
 
 import { xml2Json } from "./sandbox-xml.mjs";
 globalThis.xml2Json = xml2Json;
+
+import { renderVisualization } from "./sandbox-visualizer.mjs";
+globalThis.__renderVisualization = renderVisualization;

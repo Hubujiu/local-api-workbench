@@ -111,3 +111,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 ## 脚本工具库
 
 隔离脚本可直接使用 lodash（_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
+
+### 响应可视化
+
+后置脚本支持 apt.visualizer.set(template, data) / pm.visualizer.set 与 clear，采用固定 Handlebars 4.7.10，在现有 QuickJS 配额内执行。响应区“可视化”展示隔离的静态表格/列表；丢弃脚本、图片、链接、用户CSS和外部资源，只加载本工具内置样式。不支持完整动态图表或旧 Visualizing API。模板/数据/输出限制及验证入口见 docs/ADR-RESPONSE-VISUALIZER.md。
