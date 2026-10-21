@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-20T04:33:00Z",
-  "implementationCommit": "7742f7f27de299dd160792e5e413647ab04bd209",
+  "asOf": "2026-10-21T14:44:00Z",
+  "implementationCommit": "cb405334d3076878ee6cec8137d4acacf04a9044",
   "counts": {
     "F": {
       "已实现": 37,
@@ -107,9 +107,9 @@
       "name": "目录、接口和文档树",
       "status": "已实现",
       "original": "同一树展示目录、HTTP/SSE、Markdown 文档",
-      "current": "统一树包括 HTTP、Markdown 文档与保存的 SSE/WS/TCP 定义；协议点击不自动连接。",
+      "current": "统一树包括 HTTP、Markdown 文档与保存的 SSE/WS/TCP 定义；协议点击不自动连接。 多级目录按路径形成树、定位展开祖先；子树重命名/移除同时迁移所有资源与作用域配置，旧快照不变。",
       "source": "I1",
-      "evidence": "src/protocol-definitions.mjs; tests/ui-smoke.mjs",
+      "evidence": "src/protocol-definitions.mjs; tests/ui-smoke.mjs; public/folder-tree.js; tests/folder-tree.test.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -307,9 +307,9 @@
       "name": "接口前后置操作",
       "status": "部分实现",
       "original": "公开说明及截图有前后置操作",
-      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。",
+      "current": "隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。",
       "source": "S3",
-      "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md",
+      "evidence": "src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md; docs/ADR-SCRIPT-XML.md; docs/ADR-RECURSIVE-FOLDER-SCOPES.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39369937401",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39619280015",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述311项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述329项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39369937401,
+    "runId": 39619280015,
     "conclusion": "success first attempt",
-    "coreTests": 311,
+    "coreTests": 329,
     "jobs": 10
   },
   "supplementalItems": [
@@ -1037,21 +1037,21 @@
       "id": "S-COMMON-PARAMETERS",
       "name": "项目与精确目录HTTP参数",
       "status": "部分实现",
-      "current": "Header/Query/Cookie/表单文本，三层覆盖、禁用屏蔽、单接口关闭、新计划/用例冻结、原子重命名/删除。递归目录及共享文件参数未实现。",
+      "current": "Header/Query/Cookie/表单文本支持项目、可选祖先目录、当前目录、接口覆盖及禁用屏蔽；默认精确目录，开启递归需确认。子树重命名/移除原子迁移，旧快照不漂移；共享文件参数未实现。",
       "evidence": "docs/ADR-GLOBAL-PARAMETERS.md; docs/ADR-FOLDER-PARAMETERS.md; tests/global-parameters.test.mjs; tests/folder-parameters.test.mjs"
     },
     {
       "id": "S-COMMON-AUTH",
       "name": "共享认证",
       "status": "部分实现",
-      "current": "项目/目录覆盖、目录none阻止上层、接口认证优先/单独关闭、独立快照。使用已有支持认证类型，不自动获取OAuth令牌或读取系统凭据。",
+      "current": "项目/目录/接口优先级，支持显式开启祖先目录继承和最近none屏蔽，默认关闭；旧快照不变。不自动获取令牌或读取系统凭据。",
       "evidence": "docs/ADR-SHARED-AUTH.md; tests/shared-auth.test.mjs; tests/ui-smoke.mjs"
     },
     {
       "id": "S-COMMON-SCRIPTS",
       "name": "共享前后置JavaScript",
       "status": "部分实现",
-      "current": "显式启用/关闭、当前完整目录、等待异步完成、总预算与全部配额不重置。用例冻结；计划不隐式继承。原排序图与非JS数据库/其他操作未完整验证。",
+      "current": "可选祖先目录JS继承，默认精确目录；项目→祖先→当前目录→接口顺序，每阶段等待异步完成，共享原时限和全部配额。最大34阶段结构，复杂深链仍可能耗尽原预算。计划不隐式继承，原版所有排序和非JS操作仍未等价。",
       "evidence": "docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-SEQUENCE.md; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs"
     }
   ]
