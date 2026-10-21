@@ -1676,3 +1676,18 @@ dialog:has(#cookie-line) {
   border: 1px solid var(--border);
   background: #fff;
 }
+
+.script-policy {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.script-policy summary,
+.operation-summary summary {
+  cursor: pointer;
+}
+.script-policy p {
+  margin: 8px 0 0;
+}
+.script-actions {
+  margin: 6px 0;
+}

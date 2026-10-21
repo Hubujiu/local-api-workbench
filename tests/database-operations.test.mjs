@@ -212,3 +212,69 @@ test("HTTP database connection registration enforces token/origin and project ex
   const revoked = await execute(p.id);
   assert.match(revoked.error, /失效/);
 });
+
+test("database operation limits, missing paths and cancellation cannot silently send HTTP", async () => {
+  const operation = {
+    type: "database",
+    connectionId: "fixture",
+    sql: "SELECT 1",
+    parameters: [],
+    name: "value",
+    path: "$.rows[0].value",
+  };
+  const make = (before) =>
+    snapshotPlan({
+      steps: [{ request: { url: "http://fixture.test/", before } }],
+    });
+  let queries = 0,
+    requests = 0;
+  const databaseQuery = async () => {
+    queries++;
+    return { rows: [{ value: 1 }] };
+  };
+  const execute = async () => {
+    requests++;
+    return { status: 200, headers: {}, body: "ok" };
+  };
+  const limited = await runPlan(make(Array(6).fill(operation)), {}, execute, {
+    databaseQuery,
+  });
+  assert.equal(limited.status, "failed");
+  assert.match(limited.results[0].error, /最多5/);
+  assert.equal(queries, 5);
+  assert.equal(requests, 0);
+  const missing = await runPlan(
+    make([{ ...operation, path: "$.rows[9].value" }]),
+    {},
+    execute,
+    { databaseQuery },
+  );
+  assert.match(missing.results[0].error, /路径不存在/);
+  assert.equal(requests, 0);
+  const bad = await runPlan(
+    make([{ ...operation, enabled: "true" }]),
+    {},
+    execute,
+    { databaseQuery },
+  );
+  assert.match(bad.results[0].error, /布尔/);
+  assert.equal(requests, 0);
+  const skipped = await runPlan(
+    make([{ ...operation, enabled: false }]),
+    {},
+    execute,
+  );
+  assert.equal(skipped.status, "passed");
+  assert.equal(requests, 1);
+  const controller = new AbortController();
+  const cancelled = await runPlan(make([operation]), {}, execute, {
+    signal: controller.signal,
+    databaseQuery: async () => {
+      controller.abort();
+      return { rows: [{ value: 1 }] };
+    },
+  });
+  assert.equal(cancelled.results[0].status, "failed");
+  assert.match(cancelled.results[0].error, /取消/);
+  assert.equal(requests, 1);
+});
