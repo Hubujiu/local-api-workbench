@@ -333,3 +333,39 @@ test("unsupported allOf choices fail explicitly rather than emit an invalid enum
     2,
   );
 });
+
+test("union samples preserve sibling assertions and skip impossible alternatives", () => {
+  assert.equal(
+    sampleFromSchema({ minimum: 7, anyOf: [false, { type: "integer" }] }),
+    7,
+  );
+  assert.equal(
+    sampleFromSchema({
+      type: "integer",
+      anyOf: [{ type: "string" }, { type: "integer", minimum: 9 }],
+    }),
+    9,
+  );
+  assert.equal(
+    sampleFromSchema({
+      oneOf: [{ type: "string", minLength: 3 }, { type: "integer" }],
+    }),
+    "xxx",
+  );
+  assert.equal(
+    sampleFromSchema({ oneOf: [false, { type: "integer", minimum: 4 }] }),
+    4,
+  );
+  assert.throws(
+    () =>
+      sampleFromSchema({ oneOf: [{ type: "integer" }, { type: "number" }] }),
+    /oneOf|互斥/,
+  );
+  for (const schema of [
+    { anyOf: [] },
+    { oneOf: {} },
+    { anyOf: Array(17).fill(true) },
+    { anyOf: [false, false] },
+  ])
+    assert.throws(() => sampleFromSchema(schema));
+});

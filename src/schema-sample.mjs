@@ -86,13 +86,81 @@ export function sampleFromSchema(
         throw Error("复杂约束 " + key + " 请提供 example");
     const mocked = options.valueForField?.(fieldName, schema);
     if (mocked !== undefined) return structuredClone(mocked);
-    if (schema.oneOf?.length || schema.anyOf?.length)
-      return sample(
-        (schema.oneOf || schema.anyOf)[0],
-        level + 1,
-        seen,
-        fieldName,
+    if (schema.oneOf !== undefined || schema.anyOf !== undefined) {
+      if (schema.oneOf !== undefined && schema.anyOf !== undefined)
+        throw Error("多个组合关键字请提供 example");
+      const key = schema.oneOf !== undefined ? "oneOf" : "anyOf";
+      const branches = schema[key];
+      if (!Array.isArray(branches) || !branches.length || branches.length > 16)
+        throw Error(key + "需1至16个分支，请提供 example");
+      if (
+        branches.some(
+          (branch) =>
+            typeof branch !== "boolean" &&
+            (!branch || typeof branch !== "object" || Array.isArray(branch)),
+        )
+      )
+        throw Error(key + "分支必须为Schema对象或布尔值");
+      const base = { ...schema };
+      delete base[key];
+      const live = branches.filter((branch) => branch !== false);
+      let partitions;
+      if (key === "oneOf" && live.length > 1) {
+        partitions = live.map((branch) => {
+          const types = Array.isArray(branch?.type)
+            ? branch.type
+            : [branch?.type];
+          const expanded = new Set();
+          for (const type of types) {
+            if (
+              ![
+                "string",
+                "number",
+                "integer",
+                "boolean",
+                "null",
+                "object",
+                "array",
+              ].includes(type)
+            )
+              throw Error("oneOf分支需明确互斥类型，否则请提供 example");
+            expanded.add(type);
+            if (type === "number") expanded.add("integer");
+          }
+          if (!expanded.size) throw Error("oneOf分支类型为空");
+          return expanded;
+        });
+        for (let i = 0; i < partitions.length; i++)
+          for (let j = i + 1; j < partitions.length; j++)
+            if ([...partitions[i]].some((type) => partitions[j].has(type)))
+              throw Error("oneOf分支类型不互斥，请提供 example");
+      }
+      const failures = [];
+      for (let i = 0; i < live.length; i++) {
+        try {
+          const merged = intersectSampleSchemas(base, live[i]);
+          const value = sample(merged, level + 1, seen, fieldName);
+          const type =
+            value === null
+              ? "null"
+              : Array.isArray(value)
+                ? "array"
+                : Number.isInteger(value)
+                  ? "integer"
+                  : typeof value;
+          if (partitions && !partitions[i].has(type))
+            throw Error("oneOf分支样例类型不匹配");
+          return value;
+        } catch (error) {
+          failures.push(String(error.message).slice(0, 160));
+        }
+      }
+      throw Error(
+        key +
+          "无法生成支持范围内的样例，请提供 example：" +
+          failures.join("；"),
       );
+    }
     const type = Array.isArray(schema.type)
       ? schema.type.find((x) => x !== "null") || "null"
       : schema.type;

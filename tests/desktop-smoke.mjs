@@ -171,6 +171,31 @@ try {
     .locator("#db-result")
     .getByText("42", { exact: false })
     .waitFor();
+  phase = "database-write";
+  console.log("DESKTOP_PHASE", phase);
+  await window
+    .locator("#db-sql")
+    .fill("INSERT INTO fixture(id) VALUES (?) RETURNING id");
+  await window.locator("#db-params").fill("[43]");
+  await window.locator("#db-write").check();
+  window.once("dialog", (dialog) => dialog.accept());
+  await window.locator("#db-query").click();
+  await window
+    .locator("#db-result")
+    .getByText('"committed": true', { exact: false })
+    .waitFor();
+  assert.equal(await window.locator("#db-write").isChecked(), false);
+  const writtenDatabase = new DatabaseSync(databaseFile, { readOnly: true });
+  try {
+    assert.equal(
+      writtenDatabase
+        .prepare("SELECT count(*) AS n FROM fixture WHERE id=43")
+        .get().n,
+      1,
+    );
+  } finally {
+    writtenDatabase.close();
+  }
   const settings = await application.evaluate(({ BrowserWindow }) => {
     const preferences =
       BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();

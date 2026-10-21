@@ -1,8 +1,8 @@
 # 逐项复刻对照（2026-10-21）
 
-已核验提交：31ceeb6827a3723fb0c23e8f648fc678babd63d9
+已核验提交：47353efc51234ee9daac34bbc8b0707fe3fef254
 
-10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39624144584)，343项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39630049906)，348项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -35,7 +35,7 @@
 | F22 智能 Mock 匹配 | 部分实现 | 按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。 | src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs |
 | F23 文档与分享 | 部分实现 | Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，不自动加载远程图片；可插入有大小/像素限制的本地PNG/JPEG，离线导出保留。不提供在线托管分享。 | src/markdown-renderer.mjs; tests/markdown.test.mjs; public/document-export.js; tests/ui-smoke.mjs |
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
-| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
+| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型及数据库脚本联动仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 SQLite显式单语句INSERT/UPDATE/DELETE、绑定及RETURNING已通过真实文件/HTTP/浏览器验证；默认只读，确认取消无写入、完成后重置，超量事务回滚；超时结果可能不确定，不自动重试。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
 | F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库脚本与完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。 $.ajax返回有界Promise并等待async回调与complete，保留错误证据与原配额。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md; docs/ADR-SCRIPT-XML.md; docs/ADR-RECURSIVE-FOLDER-SCOPES.md |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39624144584; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39630049906; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -130,13 +130,15 @@
 
 ## 当前核验检查点
 
-提交 31ceeb6827a3723fb0c23e8f648fc678babd63d9， [Actions 39624144584](https://github.com/Hubujiu/local-api-workbench/actions/runs/39624144584)，343项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+提交 47353efc51234ee9daac34bbc8b0707fe3fef254， [Actions 39630049906](https://github.com/Hubujiu/local-api-workbench/actions/runs/39630049906)，348项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
 
 
 ## 原98项之外的补充发现
 
-- 项目与精确目录HTTP参数：Header/Query/Cookie/表单文本，三层覆盖、禁用屏蔽、单接口关闭、新计划/用例冻结、原子重命名/删除。递归目录及共享文件参数未实现。
+- 项目与精确目录HTTP参数：Header/Query/Cookie/表单文本，三层覆盖、禁用屏蔽、单接口关闭、新计划/用例冻结、原子重命名/删除。递归目录已提供显式开关；共享文件参数未实现。
 - 共享认证：项目/目录覆盖、目录none阻止上层、接口认证优先/单独关闭、独立快照。使用已有支持认证类型，不自动获取OAuth令牌或读取系统凭据。
 - 共享前后置JavaScript：显式启用/关闭、当前完整目录、等待异步完成、总预算与全部配额不重置。用例冻结；计划不隐式继承。原排序图与非JS数据库/其他操作未完整验证。
 
 原始清单不是穷尽规格；补充项单列，不重写原基线或计算总体百分比。
+
+SQLite显式写入检查点：47353ef / Actions39630049906 全部10项通过。默认只读和逐次确认、取消不写入、实际提交后重新查询、超量及触发器事务回滚均有证据，浏览器截图已检查。该检查点的桌面测试仍仅覆盖数据库读取，写入专项桌面流程正在补充；不将已有桌面绿灯当作新写入流程的专门证据。

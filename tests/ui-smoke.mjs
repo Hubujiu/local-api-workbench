@@ -1737,6 +1737,13 @@ try {
       },
     ],
   };
+  tupleSchema.properties.alternative = {
+    minimum: 7,
+    anyOf: [false, { type: "integer" }],
+  };
+  tupleSchema.properties.exclusive = {
+    oneOf: [{ type: "string", minLength: 2 }, { type: "boolean" }],
+  };
   await page.locator("#schema").fill(JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
@@ -1755,6 +1762,8 @@ try {
   );
   assert.equal(generatedBody.n, 2);
   assert.deepEqual(generatedBody.ordered, [42, false]);
+  assert.equal(generatedBody.alternative, 7);
+  assert.equal(generatedBody.exclusive, "xx");
   assert.deepEqual(generatedBody.combined, { count: 2, label: "xx" });
   assert.equal(generatedBody.flag, false);
   await page.locator("#expand-body").click();
