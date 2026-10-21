@@ -330,6 +330,7 @@ export async function runPlan(
     variableScopes,
     onScopeChanges,
     cookieSession,
+    databaseQuery,
   } = {},
 ) {
   const snapshot = structuredClone(plan);
@@ -379,9 +380,61 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
+      const executeOperation = async (operation, budget) => {
+        if (operation.type !== "database")
+          return applyOperation(operation, vars);
+        if (
+          operation.enabled !== undefined &&
+          typeof operation.enabled !== "boolean"
+        )
+          throw Error("数据库操作启用标识必须为布尔值");
+        if (operation.enabled === false) return;
+        if (
+          operation.path !== undefined &&
+          (typeof operation.path !== "string" || operation.path.length > 1000)
+        )
+          throw Error("数据库提取路径无效");
+        if ((operation.parameters || []).length > 1000)
+          throw Error("数据库绑定参数最多1000项");
+        if (++budget.count > 5 || performance.now() > budget.deadline)
+          throw Error("每阶段数据库操作最多5项、累计10秒");
+        if (!databaseQuery) throw Error("此执行入口未授权数据库前后置操作");
+        if (
+          !operation.name ||
+          typeof operation.name !== "string" ||
+          operation.name.length > 100 ||
+          ["__proto__", "constructor", "prototype"].includes(operation.name)
+        )
+          throw Error("数据库结果变量名无效");
+        if (
+          typeof operation.connectionId !== "string" ||
+          typeof operation.sql !== "string" ||
+          operation.sql.length > 50000 ||
+          !Array.isArray(operation.parameters ?? [])
+        )
+          throw Error("数据库操作配置无效");
+        const result = await databaseQuery(
+          {
+            connectionId: operation.connectionId,
+            sql: operation.sql,
+            parameters: interpolate(operation.parameters || [], vars),
+          },
+          signal,
+        );
+        if (signal?.aborted) throw Error("数据库操作已取消");
+        if (performance.now() > budget.deadline)
+          throw Error("数据库阶段超过10秒，结果未应用");
+        const value = jsonPath(result, operation.path || "$");
+        if (value === undefined) throw Error("数据库结果提取路径不存在");
+        vars[operation.name] = structuredClone(value);
+      };
       const beforeOperations = { ...vars };
+      const beforeDatabaseBudget = {
+        count: 0,
+        deadline: performance.now() + 10000,
+      };
       for (const operation of step.request.before || []) {
-        applyOperation(operation, vars);
+        await executeOperation(operation, beforeDatabaseBudget);
         record.logs.push({
           phase: "before",
           type: operation.type,
@@ -473,8 +526,12 @@ export async function runPlan(
         record.extracted[extraction.name] = value;
       }
       const beforeAfterOperations = { ...vars };
+      const afterDatabaseBudget = {
+        count: 0,
+        deadline: performance.now() + 10000,
+      };
       for (const operation of record.request.after || []) {
-        applyOperation(operation, vars);
+        await executeOperation(operation, afterDatabaseBudget);
         record.logs.push({
           phase: "after",
           type: operation.type,

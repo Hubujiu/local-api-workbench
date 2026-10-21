@@ -602,7 +602,7 @@ function paramPanel(r) {
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
-    return `<label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
+    return `<label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><div class="notice">JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。</div><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p><button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><pre>${esc(JSON.stringify(r[param], null, 2))}</pre>`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -729,7 +729,7 @@ function renderPage() {
         "",
       )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis（有界只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</label></p><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
+    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis（有界只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
@@ -2116,6 +2116,148 @@ function bind() {
       busy = false;
       if ($("#protocol-run")) $("#protocol-run").disabled = false;
     }
+  });
+  on("#db-register", "click", () => {
+    const projectId = project.id;
+    const connection = {
+      type: $("#db-type").value,
+      filename: $("#db-path").value,
+      host: $("#db-host").value,
+      port: Number($("#db-port").value),
+      user: $("#db-user").value,
+      password: $("#db-password").value,
+      database: $("#db-name").value,
+      ssl: $("#db-tls").checked,
+      ca: $("#db-tls").checked ? $("#db-ca").value : "",
+      authSource: $("#db-auth-source").value,
+    };
+    modal(
+      "授权数据库会话连接",
+      '<label>连接名称</label><input id="db-connection-name" value="调试数据库"><p class="notice">授权后，此项目的接口、用例和手动执行计划可使用此连接进行只读前后置查询，查询结果可进入变量、HTTP请求及历史。仅连接可信数据库；自定义函数仍可能有副作用。连接信息仅存本次应用进程内存，不写入项目或导出；重启后需重新授权。MCP、CLI和压测不获得该权限。</p>',
+      async () => {
+        if (project.id !== projectId) throw Error("项目已切换，请重新操作");
+        await api("/projects/" + projectId + "/database-connections", "POST", {
+          ...connection,
+          name: $("#db-connection-name").value,
+        });
+        toast("已授权本项目会话连接，重启后失效");
+      },
+      "确认授权",
+    );
+  });
+  on("#db-connections", "click", async () => {
+    const projectId = project.id;
+    const connections = await api(
+      "/projects/" + projectId + "/database-connections",
+    );
+    if (project.id !== projectId) return;
+    modal(
+      "本项目数据库会话连接",
+      connections.length
+        ? connections
+            .map(
+              (item) =>
+                "<p>" +
+                esc(item.name) +
+                " · " +
+                esc(item.type) +
+                ' <button type="button" data-revoke-db="' +
+                esc(item.id) +
+                '">撤销</button></p>',
+            )
+            .join("")
+        : "<p>没有已授权连接。重启后需要重新配置。</p>",
+      () => {},
+    );
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-revoke-db]",
+    ))
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await api(
+            "/projects/" + projectId + "/database-connections",
+            "DELETE",
+            { id: button.dataset.revokeDb },
+          );
+          button.closest("p").textContent =
+            "已撤销；运行中的结果不会再应用，后续操作会明确失败。";
+        } catch (error) {
+          toast(error.message, true);
+          button.disabled = false;
+        }
+      };
+  });
+  on("#add-db-operation", "click", async () => {
+    collect();
+    const projectId = project.id,
+      requestId = request().id,
+      phase = param;
+    const connections = await api(
+      "/projects/" + projectId + "/database-connections",
+    );
+    if (
+      project.id !== projectId ||
+      request().id !== requestId ||
+      param !== phase
+    )
+      return;
+    if (!connections.length) {
+      toast("请先到配置 → 数据库连接，授权本项目的会话连接", true);
+      return;
+    }
+    modal(
+      "添加" + (phase === "before" ? "前置" : "后置") + "数据库查询",
+      '<div class="form-grid"><label>会话连接</label><select id="operation-db-connection">' +
+        connections
+          .map(
+            (item) =>
+              '<option value="' +
+              esc(item.id) +
+              '">' +
+              esc(item.name) +
+              " · " +
+              esc(item.type) +
+              "</option>",
+          )
+          .join("") +
+        '</select><label>SQL / Redis或MongoDB查询JSON</label><textarea id="operation-db-sql">SELECT 1 AS value</textarea><label>绑定参数JSON数组</label><input id="operation-db-parameters" value="[]"><label>结果JSON路径</label><input id="operation-db-path" value="$.rows[0].value"><label>运行时变量名</label><input id="operation-db-name" value="dbResult"></div><p class="notice">只读操作先于同阶段JavaScript执行；参数支持 {{变量}}，不直接替换SQL文本。每阶段最多5项/累计10秒。结果进入运行时变量和后续请求；连接不随快照或导出携带，重启后需重新绑定。声明式高级编辑可调整顺序或移除。</p>',
+      () => {
+        if (project.id !== projectId || request().id !== requestId)
+          throw Error("接口已切换，请重新操作");
+        const parameters = JSON.parse($("#operation-db-parameters").value),
+          name = $("#operation-db-name").value.trim();
+        if (!Array.isArray(parameters) || parameters.length > 1000)
+          throw Error("绑定参数须为最多1000项的数组");
+        if (
+          !name ||
+          name.length > 100 ||
+          ["__proto__", "constructor", "prototype"].includes(name)
+        )
+          throw Error("变量名无效");
+        const operations = request()[phase] || [];
+        if (
+          operations.filter(
+            (item) => item.type === "database" && item.enabled !== false,
+          ).length >= 5
+        )
+          throw Error("每阶段最多5项数据库操作");
+        request()[phase] = [
+          ...operations,
+          {
+            type: "database",
+            connectionId: $("#operation-db-connection").value,
+            sql: $("#operation-db-sql").value,
+            parameters,
+            name,
+            path: $("#operation-db-path").value,
+          },
+        ];
+        mark();
+        render();
+      },
+      "添加查询",
+    );
   });
   on("#db-type,#db-tls", "change", updateDatabaseFields);
   on("#db-write", "change", (_, element) => {

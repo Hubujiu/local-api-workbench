@@ -115,3 +115,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 ### 响应可视化
 
 后置脚本支持 apt.visualizer.set(template, data) / pm.visualizer.set 与 clear，采用固定 Handlebars 4.7.10，在现有 QuickJS 配额内执行。响应区“可视化”展示隔离的静态表格/列表；丢弃脚本、图片、链接、用户CSS和外部资源，只加载本工具内置样式。不支持完整动态图表或旧 Visualizing API。模板/数据/输出限制及验证入口见 docs/ADR-RESPONSE-VISUALIZER.md。
+
+### 数据库前后置操作
+
+数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。

@@ -1,3 +1,4 @@
+import { DatabaseSessions } from "./database-sessions.mjs";
 import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -63,6 +64,7 @@ export async function createApp({
   const protocolSessions = new ProtocolSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
+  const databaseSessions = new DatabaseSessions();
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
@@ -499,6 +501,20 @@ export async function createApp({
               controllers.delete(b.runId);
             }
           }
+          if (action === "database-connections") {
+            if (req.method === "GET")
+              return json(res, 200, databaseSessions.list(p.id));
+            if (req.method === "POST")
+              return json(
+                res,
+                200,
+                databaseSessions.register(p.id, await body(req)),
+              );
+            if (req.method === "DELETE") {
+              databaseSessions.revoke(p.id, (await body(req)).id);
+              return json(res, 200, { revoked: true });
+            }
+          }
           if (action === "database" && req.method === "POST") {
             const b = await body(req);
             if (b.allowWrite !== undefined && typeof b.allowWrite !== "boolean")
@@ -648,6 +664,8 @@ export async function createApp({
                 executeRequest,
                 {
                   ...scoped,
+                  databaseQuery: (operation, signal) =>
+                    databaseSessions.query(p.id, operation, signal),
                   cookieSession: projectCookieSession(
                     store,
                     p,
@@ -749,6 +767,8 @@ export async function createApp({
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 ...scopedExecution(store, p, environmentId),
+                databaseQuery: (operation, signal) =>
+                  databaseSessions.query(p.id, operation, signal),
                 cookieSession: projectCookieSession(store, p, environmentId),
                 signal: controller.signal,
                 prepareRequest: (request) =>
@@ -821,6 +841,7 @@ export async function createApp({
     protocolSessions.close();
     oauth.close();
     oauth1.close();
+    databaseSessions.close();
   });
   const listen = (listenPort) =>
     new Promise((resolve, reject) => {

@@ -59,6 +59,7 @@ const fixture = http.createServer(async (request, response) => {
         token: request.headers["x-global-fixture"] || "absent",
         authorization: request.headers.authorization || "",
         sharedScript: request.headers["x-shared-script"] || "absent",
+        databaseValue: request.headers["x-database-fixture"] || "",
         url: request.url,
       }),
     );
@@ -790,6 +791,7 @@ try {
   );
   assert.deepEqual(visualizationLeaks, []);
   page.off("request", observeVisualization);
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-response-visualizer.png" });
   await saveAndWait("#save");
   const scopeSavedProject = (await app.store.list()).find(
@@ -2263,6 +2265,70 @@ try {
   assert.equal(await page.locator("#db-write").isChecked(), false);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-sqlite-write.png" });
+  await page.locator("#db-register").click();
+  await page.locator("#db-connection-name").fill("UI SQLite session");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.getByRole("button", { name: "新建接口", exact: true }).click();
+  await page.locator("#url").fill(fixtureURL + "/global-parameters");
+  await page.locator('[data-param="before"]').click();
+  await page.locator("#add-db-operation").click();
+  await page
+    .locator("#operation-db-sql")
+    .fill("SELECT value FROM entries LIMIT 1");
+  await page.locator("#operation-db-path").fill("$.rows[0].value");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page
+    .locator("#script-code")
+    .fill(
+      'apt.setRequestHeader("X-Database-Fixture", apt.getVar("dbResult"));',
+    );
+  const databaseOperationReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const databaseOperationResult = await (await databaseOperationReply).json();
+  assert.equal(
+    databaseOperationResult.outcome,
+    "passed",
+    JSON.stringify(databaseOperationResult),
+  );
+  assert.equal(databaseOperationResult.extracted.dbResult, "from-ui");
+  assert.equal(
+    JSON.parse(databaseOperationResult.body).databaseValue,
+    "from-ui",
+  );
+  await page.locator('[data-response="body"]').click();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-database-operation.png" });
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-page="database"]').click();
+  await page.locator("#db-connections").click();
+  await page.locator("[data-revoke-db]").click();
+  await page
+    .locator("#dialog-content")
+    .getByText("已撤销", { exact: false })
+    .waitFor();
+  await page.locator("#dialog-save").click();
+  await page.locator('.rail [data-page="apis"]').click();
+  const revokedDatabaseReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  assert.match(
+    (await (await revokedDatabaseReply).json()).error,
+    /失效|未授权/,
+  );
+  await page.locator('[data-param="before"]').click();
+  await page.locator("#edit-operations").click();
+  await page.locator("#modal-json").fill("[]");
+  await page.locator("#dialog-save").click();
+  await page.locator("#script-code").fill("");
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-page="database"]').click();
+
   await page.locator("#db-type").selectOption("redis");
   assert.equal(await page.locator("#db-path").isVisible(), false);
   assert.equal(await page.locator("#db-params").isVisible(), false);
