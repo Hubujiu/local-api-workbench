@@ -11,7 +11,16 @@ export class DatabaseSessions {
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw Error("连接配置无效");
     const type = input.type || "sqlite";
-    if (!["sqlite", "postgres", "mysql", "redis", "mongodb"].includes(type))
+    if (
+      ![
+        "sqlite",
+        "postgres",
+        "mysql",
+        "redis",
+        "mongodb",
+        "clickhouse",
+      ].includes(type)
+    )
       throw Error("数据库类型无效");
     if (
       typeof input.name !== "string" ||

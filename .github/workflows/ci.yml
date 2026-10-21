@@ -121,6 +121,19 @@ jobs:
     # MongoDB 8 rejects affected newer host kernels; use the supported LTS runner.
     runs-on: ubuntu-22.04
     services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.8.3.105-alpine
+        env:
+          CLICKHOUSE_USER: tester
+          CLICKHOUSE_PASSWORD: local-fixture-only
+          CLICKHOUSE_DB: fixture
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        ports: ["8123:8123"]
+        options: >-
+          --health-cmd "clickhouse-client --user tester --password local-fixture-only --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
       postgres:
         image: postgres:17-alpine
         env:
@@ -180,6 +193,7 @@ jobs:
       - name: Seed isolated MongoDB fixtures
         run: docker exec ${{ job.services.mongodb.id }} mongosh --quiet --eval 'db.getSiblingDB("fixture").items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}])'
       - run: node tests/mongodb-integration.mjs
+      - run: node tests/clickhouse-integration.mjs
 
   quickjs-reproducible:
     timeout-minutes: 15

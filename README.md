@@ -40,7 +40,7 @@ npm start
 - 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
 - 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
 - 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
-- SQLite/PostgreSQL/MySQL/Redis/MongoDB 默认只读查询、显式确认的 SQLite 单语句写入，MCP stdio 授权项目读写与计划执行
+- SQLite/PostgreSQL/MySQL/Redis/MongoDB/ClickHouse 默认只读查询、显式确认的 SQLite 单语句写入，MCP stdio 授权项目读写与计划执行
 - 浅色/深色工作台；无 CDN、无遥测、无内置云模型
 
 ## MCP
@@ -119,3 +119,5 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 ### 数据库前后置操作
 
 数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
+
+ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。

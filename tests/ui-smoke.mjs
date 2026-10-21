@@ -35,7 +35,22 @@ let uploadedMultipart,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
 const fixture = http.createServer(async (request, response) => {
-  if (request.url === "/oauth1-request" || request.url === "/oauth1-access") {
+  if (request.url.startsWith("/?query=")) {
+    const query = new URL(request.url, "http://fixture.test");
+    assert.equal(request.method, "GET");
+    assert.equal(query.searchParams.get("readonly"), "1");
+    assert.equal(query.searchParams.get("param_p0"), "clickhouse-ui");
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        meta: [{ name: "value", type: "String" }],
+        data: [{ value: "clickhouse-ui" }],
+      }),
+    );
+  } else if (
+    request.url === "/oauth1-request" ||
+    request.url === "/oauth1-access"
+  ) {
     response.setHeader("content-type", "application/x-www-form-urlencoded");
     if (request.url === "/oauth1-request") oauth1Starts++;
     else oauth1Exchanges++;
@@ -2389,6 +2404,24 @@ try {
     '["GET","ui-fixture"]',
     "switching type preserves edited query text",
   );
+  await page.locator("#db-type").selectOption("clickhouse");
+  assert.equal(
+    await page.locator("#db-port").getAttribute("placeholder"),
+    "8123",
+  );
+  assert.equal(await page.locator("#db-auth-source").isVisible(), false);
+  assert.equal(await page.locator("#db-params").isVisible(), true);
+  await page.locator("#db-port").fill(String(fixture.address().port));
+  await page.locator("#db-name").fill("default");
+  await page.locator("#db-sql").fill("SELECT {p0:String} AS value");
+  await page.locator("#db-params").fill('["clickhouse-ui"]');
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText("clickhouse-ui", { exact: false })
+    .waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-clickhouse-query.png" });
 
   await page.locator('.rail [data-page="settings"]').click();
   await page
