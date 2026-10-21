@@ -2307,6 +2307,57 @@ try {
   await page.locator("#operation-db-path").fill("$.rows[0].value");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-edit-db-operation="0"]').evaluate((button) => {
+    button.click();
+    button.click();
+  });
+  assert.equal(
+    await page.locator("#operation-db-sql").inputValue(),
+    "SELECT value FROM entries LIMIT 1",
+  );
+  await page.locator("#operation-db-parameters").fill("{}");
+  await page.locator("#dialog-save").click();
+  await page
+    .locator("#toast")
+    .getByText("绑定参数须为", { exact: false })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.keyboard.press("Escape");
+  await page.locator('[data-edit-db-operation="0"]').click();
+  assert.equal(
+    await page.locator("#operation-db-parameters").inputValue(),
+    "[]",
+  );
+  await page
+    .locator("#operation-db-sql")
+    .fill("SELECT value FROM entries WHERE value = ?");
+  await page.locator("#operation-db-parameters").fill('["from-ui"]');
+  await page.locator("#dialog-save").click();
+  await page.locator("#add-db-operation").click();
+  await page.locator("#operation-db-sql").fill("SELECT 'extra' AS value");
+  await page.locator("#operation-db-name").fill("extraValue");
+  await page.locator("#dialog-save").click();
+  await page.locator('[data-move-operation="1:-1"]').click();
+  assert.match(
+    await page.locator('[data-operation-index="0"] strong').innerText(),
+    /extraValue/,
+  );
+  await page.locator('[data-toggle-db-operation="0"]').click();
+  assert.equal(
+    await page.locator('[data-toggle-db-operation="0"]').innerText(),
+    "启用",
+  );
+  await page.locator('[data-toggle-db-operation="0"]').click();
+  assert.equal(
+    await page.locator('[data-toggle-db-operation="0"]').innerText(),
+    "停用",
+  );
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator('[data-remove-operation="0"]').click();
+  assert.equal(await page.locator("[data-operation-index]").count(), 2);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('[data-remove-operation="0"]').click();
+  assert.equal(await page.locator("[data-operation-index]").count(), 1);
   await page
     .locator("#script-code")
     .fill(
@@ -2348,6 +2399,31 @@ try {
     (await (await revokedDatabaseReply).json()).error,
     /失效|未授权/,
   );
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-page="database"]').click();
+  await page.locator("#db-path").fill(sqliteWriteFile);
+  await page.locator("#db-register").click();
+  await page.locator("#db-connection-name").fill("UI SQLite replacement");
+  await page.locator("#dialog-save").click();
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator('[data-param="before"]').click();
+  await page.locator('[data-edit-db-operation="0"]').click();
+  assert.equal(await page.locator("#operation-db-connection").inputValue(), "");
+  await page.locator("#dialog-save").click();
+  await page
+    .locator("#toast")
+    .getByText("请明确选择", { exact: false })
+    .waitFor();
+  await page
+    .locator("#operation-db-connection")
+    .selectOption({ label: "UI SQLite replacement · sqlite" });
+  await page.locator("#dialog-save").click();
+  const reboundReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  assert.equal((await (await reboundReply).json()).outcome, "passed");
+
   await page.locator('[data-param="before"]').click();
   await page.locator("#edit-operations").click();
   await page.locator("#modal-json").fill("[]");

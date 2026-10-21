@@ -1691,3 +1691,18 @@ dialog:has(#cookie-line) {
 .script-actions {
   margin: 6px 0;
 }
+
+.operation-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 8px;
+}
+.operation-card .row {
+  flex-wrap: wrap;
+}
+.operation-card pre {
+  margin: 6px 0 0;
+  max-height: 110px;
+  overflow: auto;
+}

@@ -602,7 +602,7 @@ function paramPanel(r) {
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
   if (param === "before" || param === "after")
-    return `<label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p></details><p class="script-actions"><button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea>${r[param]?.length ? `<details class="operation-summary"><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary><pre>${esc(JSON.stringify(r[param], null, 2))}</pre></details>` : ""}`;
+    return `<label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p></details><p class="script-actions"><button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><textarea id="script-code" class="full-code" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea>${r[param]?.length ? `<details class="operation-summary" open><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary>${r[param].map((operation, index) => `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`).join("")}</details>` : ""}`;
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -2188,76 +2188,156 @@ function bind() {
         }
       };
   });
-  on("#add-db-operation", "click", async () => {
-    collect();
-    const projectId = project.id,
-      requestId = request().id,
-      phase = param;
-    const connections = await api(
-      "/projects/" + projectId + "/database-connections",
-    );
-    if (
-      project.id !== projectId ||
-      request().id !== requestId ||
-      param !== phase
-    )
-      return;
-    if (!connections.length) {
-      toast("请先到配置 → 数据库连接，授权本项目的会话连接", true);
-      return;
-    }
-    modal(
-      "添加" + (phase === "before" ? "前置" : "后置") + "数据库查询",
-      '<div class="form-grid"><label>会话连接</label><select id="operation-db-connection">' +
-        connections
-          .map(
-            (item) =>
-              '<option value="' +
-              esc(item.id) +
-              '">' +
-              esc(item.name) +
-              " · " +
-              esc(item.type) +
-              "</option>",
+  let databaseDialogOpening = false;
+  const databaseOperationDialog = async (index = -1) => {
+    if (databaseDialogOpening) return;
+    databaseDialogOpening = true;
+    try {
+      collect();
+      const projectId = project.id,
+        requestId = request().id,
+        phase = param;
+      const original =
+        index >= 0 ? structuredClone(request()[phase]?.[index]) : null;
+      if (index >= 0 && original?.type !== "database")
+        throw Error("数据库操作已改变，请重新打开");
+      const fingerprint = JSON.stringify(original),
+        openingRevision = modalRevision;
+      const connections = await api(
+        "/projects/" + projectId + "/database-connections",
+      );
+      if (
+        project.id !== projectId ||
+        request().id !== requestId ||
+        param !== phase ||
+        modalRevision !== openingRevision
+      )
+        return;
+      if (
+        original &&
+        JSON.stringify(request()[phase]?.[index]) !== fingerprint
+      ) {
+        toast("操作已改变，请重新打开编辑器", true);
+        return;
+      }
+      if (!connections.length) {
+        toast("请先到配置 → 数据库连接，授权本项目的会话连接", true);
+        return;
+      }
+      const expired =
+        original &&
+        !connections.some((item) => item.id === original.connectionId);
+      modal(
+        (original ? "编辑" : "添加") +
+          (phase === "before" ? "前置" : "后置") +
+          "数据库查询",
+        `<div class="form-grid"><label>会话连接</label><select id="operation-db-connection">${expired ? '<option value="" selected>原连接已失效，请重新选择</option>' : ""}${connections.map((item) => `<option value="${esc(item.id)}" ${original?.connectionId === item.id ? "selected" : ""}>${esc(item.name)} · ${esc(item.type)}</option>`).join("")}</select><label>SQL / Redis或MongoDB查询JSON</label><textarea id="operation-db-sql">${esc(original?.sql ?? "SELECT 1 AS value")}</textarea><label>绑定参数JSON数组</label><input id="operation-db-parameters" value="${esc(JSON.stringify(original?.parameters ?? []))}"><label>结果JSON路径</label><input id="operation-db-path" value="${esc(original?.path ?? "$.rows[0].value")}"><label>运行时变量名</label><input id="operation-db-name" value="${esc(original?.name ?? "dbResult")}"></div><p class="notice">只读操作先于同阶段JavaScript执行；参数支持 {{变量}}，不直接替换SQL文本。ClickHouse数组参数使用 {p0:String} 等类型化占位符。每阶段最多5项/累计10秒。结果可进入后续HTTP请求；连接不随快照导出，重启后需明确重新选择会话连接。</p>`,
+        () => {
+          if (
+            project.id !== projectId ||
+            request().id !== requestId ||
+            param !== phase
           )
-          .join("") +
-        '</select><label>SQL / Redis或MongoDB查询JSON</label><textarea id="operation-db-sql">SELECT 1 AS value</textarea><label>绑定参数JSON数组</label><input id="operation-db-parameters" value="[]"><label>结果JSON路径</label><input id="operation-db-path" value="$.rows[0].value"><label>运行时变量名</label><input id="operation-db-name" value="dbResult"></div><p class="notice">只读操作先于同阶段JavaScript执行；参数支持 {{变量}}，不直接替换SQL文本。每阶段最多5项/累计10秒。结果进入运行时变量和后续请求；连接不随快照或导出携带，重启后需重新绑定。声明式高级编辑可调整顺序或移除。</p>',
-      () => {
-        if (project.id !== projectId || request().id !== requestId)
-          throw Error("接口已切换，请重新操作");
-        const parameters = JSON.parse($("#operation-db-parameters").value),
-          name = $("#operation-db-name").value.trim();
-        if (!Array.isArray(parameters) || parameters.length > 1000)
-          throw Error("绑定参数须为最多1000项的数组");
-        if (
-          !name ||
-          name.length > 100 ||
-          ["__proto__", "constructor", "prototype"].includes(name)
-        )
-          throw Error("变量名无效");
-        const operations = request()[phase] || [];
-        if (
-          operations.filter(
-            (item) => item.type === "database" && item.enabled !== false,
-          ).length >= 5
-        )
-          throw Error("每阶段最多5项数据库操作");
-        request()[phase] = [
-          ...operations,
-          {
+            throw Error("接口或阶段已切换，请重新操作");
+          const operations = request()[phase] || [];
+          if (original && JSON.stringify(operations[index]) !== fingerprint)
+            throw Error("操作已改变，请重新打开编辑器");
+          const connectionId = $("#operation-db-connection").value;
+          if (!connections.some((item) => item.id === connectionId))
+            throw Error("请明确选择一个已授权的会话连接");
+          const parameters = JSON.parse($("#operation-db-parameters").value),
+            name = $("#operation-db-name").value.trim();
+          if (!Array.isArray(parameters) || parameters.length > 1000)
+            throw Error("绑定参数须为最多1000项的数组");
+          if (
+            !name ||
+            name.length > 100 ||
+            ["__proto__", "constructor", "prototype"].includes(name)
+          )
+            throw Error("变量名无效");
+          const enabled = original?.enabled !== false;
+          if (
+            enabled &&
+            operations.filter(
+              (item, at) =>
+                at !== index &&
+                item.type === "database" &&
+                item.enabled !== false,
+            ).length >= 5
+          )
+            throw Error("每阶段最多5项数据库操作");
+          const operation = {
             type: "database",
-            connectionId: $("#operation-db-connection").value,
+            connectionId,
             sql: $("#operation-db-sql").value,
             parameters,
             name,
             path: $("#operation-db-path").value,
-          },
-        ];
-        mark();
-        render();
-      },
-      "添加查询",
-    );
+            enabled,
+          };
+          request()[phase] = original
+            ? operations.map((item, at) => (at === index ? operation : item))
+            : [...operations, operation];
+          mark();
+          render();
+        },
+        original ? "保存查询" : "添加查询",
+      );
+    } finally {
+      databaseDialogOpening = false;
+    }
+  };
+  on("#add-db-operation", "click", () => databaseOperationDialog());
+  on("[data-edit-db-operation]", "click", (_, element) =>
+    databaseOperationDialog(Number(element.dataset.editDbOperation)),
+  );
+  on("[data-remove-operation]", "click", (_, element) => {
+    collect();
+    const index = Number(element.dataset.removeOperation),
+      operations = request()[param];
+    if (
+      !operations?.[index] ||
+      !confirm("移除此声明式操作？不会修改数据库或已保存的计划快照。")
+    )
+      return;
+    operations.splice(index, 1);
+    mark();
+    render();
+  });
+  on("[data-move-operation]", "click", (_, element) => {
+    collect();
+    const [index, delta] = element.dataset.moveOperation.split(":").map(Number),
+      operations = request()[param],
+      next = index + delta;
+    if (
+      !operations?.[index] ||
+      next < 0 ||
+      next >= operations.length ||
+      ![-1, 1].includes(delta)
+    )
+      return;
+    [operations[index], operations[next]] = [
+      operations[next],
+      operations[index],
+    ];
+    mark();
+    render();
+  });
+  on("[data-toggle-db-operation]", "click", (_, element) => {
+    collect();
+    const operations = request()[param],
+      operation = operations?.[Number(element.dataset.toggleDbOperation)];
+    if (operation?.type !== "database") return;
+    if (
+      operation.enabled === false &&
+      operations.filter(
+        (item) => item.type === "database" && item.enabled !== false,
+      ).length >= 5
+    )
+      throw Error("每阶段最多5项数据库操作");
+    operation.enabled = operation.enabled === false;
+    mark();
+    render();
   });
   on("#db-type,#db-tls", "change", updateDatabaseFields);
   on("#db-write", "change", (_, element) => {

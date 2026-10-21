@@ -23,3 +23,9 @@ Each result is capped at1MiB before variable application. Invalid/missing result
 `database-operations.test.mjs`: real temporary SQLite files, cross-project denial, metadata redaction/no credential persistence, write rejection, revoke-during-query, pre-request input/header and post-response assertions, no resolver/no HTTP, cancellation, token/origin boundaries and real local HTTP debug integration.
 
 `ui-smoke.mjs`: register a temporary fixture connection through the confirmation, add a pre-operation, execute HTTP with its extracted header, inspect result, then revoke through the connection manager. Screenshot local-api-database-operation.png. Current exact-head CI determines completion of browser and platform verification.
+
+## Editing and reconnecting
+
+The operation list exposes database editing/rebinding, enable/disable, movement and removal. Edits preserve bindings and disabled state; invalid input/Cancel leaves the operation unchanged. An expired connection is shown as unselected and requires an explicit choice, never automatic rebinding by name. Async dialog opening checks project/request/phase, modal revision and the original operation fingerprint; repeated clicks cannot replace an in-progress edit with a late reply. Reordering affects only the current request, not saved plan/case snapshots. Enable/disable does not clear earlier runtime variable values.
+
+The browser acceptance adds invalid-edit/cancel/reopen, parameter binding edit, reordering, toggling, canceled/accepted removal, revoke→failed execution→new connection→explicit rebind→successful HTTP. The prior generic JSON editor remains available for non-database operations and complete configuration.
