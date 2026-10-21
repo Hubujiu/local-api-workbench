@@ -103,7 +103,7 @@ test("script sequences reject oversized aggregate source and malformed scope des
       { name: "y", code: "x".repeat(60000) },
     ],
     [{ name: "x", code: [] }],
-    Array.from({ length: 5 }, () => ({ name: "x", code: "" })),
+    Array.from({ length: 35 }, () => ({ name: "x", code: "" })),
   ])
     await assert.rejects(async () =>
       runScriptSequence(stages, { variables: {} }),

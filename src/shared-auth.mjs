@@ -1,3 +1,4 @@
+import { folderScopePaths } from "../public/folder-scopes.js";
 import { validateSharedAuthSettings } from "../public/shared-auth.js";
 export { validateSharedAuthSettings } from "../public/shared-auth.js";
 export function applySharedAuth(project, request) {
@@ -10,9 +11,9 @@ export function applySharedAuth(project, request) {
     return result;
   validateSharedAuthSettings(project.settings);
   const folders = project.settings?.folderAuth || {};
-  const inherited = Object.hasOwn(folders, request.folder || "")
-    ? folders[request.folder]
-    : project.settings?.globalAuth;
+  let inherited = project.settings?.globalAuth;
+  for (const scope of folderScopePaths(project.settings, request.folder))
+    if (Object.hasOwn(folders, scope)) inherited = folders[scope];
   if (inherited) result.auth = structuredClone(inherited);
   return result;
 }

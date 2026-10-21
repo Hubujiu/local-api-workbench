@@ -1,3 +1,4 @@
+import { folderScopePaths } from "../public/folder-scopes.js";
 import {
   validateSharedScriptSettings,
   scriptStages,
@@ -17,12 +18,12 @@ export function applySharedScripts(project, request) {
     const folders = project.settings?.folderScripts || {};
     const configs = [
       ["project", project.settings?.globalScripts],
-      [
-        "folder",
-        Object.hasOwn(folders, request.folder || "")
-          ? folders[request.folder]
-          : undefined,
-      ],
+      ...folderScopePaths(project.settings, request.folder).map((scope, i) => [
+        project.settings?.recursiveFolderScopes
+          ? "folder:" + i + ":" + scope.slice(-170)
+          : "folder",
+        Object.hasOwn(folders, scope) ? folders[scope] : undefined,
+      ]),
     ];
     for (const [source, target] of [
       ["beforeScript", "sharedBeforeScripts"],

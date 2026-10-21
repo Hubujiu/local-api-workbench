@@ -1,3 +1,4 @@
+import { folderScopePaths } from "./folder-scopes.js";
 import { validateFolderParameters } from "./global-parameters.js";
 function validateConfig(config) {
   if (
@@ -21,6 +22,7 @@ function validateConfig(config) {
     throw Error("共享脚本源码最多100000字符");
 }
 export function validateSharedScriptSettings(settings = {}) {
+  folderScopePaths(settings);
   if (Object.hasOwn(settings, "globalScripts"))
     validateConfig(settings.globalScripts);
   if (settings.folderScripts !== undefined) {
@@ -42,7 +44,7 @@ export function scriptStages(request, phase) {
   const stages = request[shared] ?? [];
   if (
     !Array.isArray(stages) ||
-    stages.length > 3 ||
+    stages.length > 33 ||
     stages.some(
       (item) =>
         !item ||

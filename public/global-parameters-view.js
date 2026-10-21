@@ -37,7 +37,7 @@ export function globalParametersPanel(project, folder = "") {
       : undefined
     : project.settings?.globalScripts;
   return (
-    `<div class="card"><label for="parameter-scope">参数作用范围</label><select id="parameter-scope"><option value="">整个项目</option>${folders.map((name) => `<option value="${esc(name)}" ${name === folder ? "selected" : ""}>目录：${esc(name)}</option>`).join("")}</select><p class="muted">优先级：项目 → 当前目录 → 接口。同名禁用行屏蔽上层参数；目录按完整名称匹配，不递归继承。</p></div>` +
+    `<div class="card"><label for="parameter-scope">参数作用范围</label><select id="parameter-scope"><option value="">整个项目</option>${folders.map((name) => `<option value="${esc(name)}" ${name === folder ? "selected" : ""}>目录：${esc(name)}</option>`).join("")}</select><p class="muted">优先级：项目 → 所选目录作用域 → 接口。同名禁用行屏蔽上层参数。</p><label><input id="recursive-folder-scopes" type="checkbox" ${project.settings?.recursiveFolderScopes === true ? "checked" : ""}>启用祖先目录参数、认证与脚本继承</label><p class="muted">默认关闭，保持完整目录精确匹配。开启后按项目 → 父目录 → 子目录 → 接口处理，可能向后代接口添加凭据或代码；已有快照不变。目录服务绑定仍为精确匹配。</p></div>` +
     '<div class="notice">公共参数会用于所选范围内继承它的 HTTP 请求，请勿填入跨站点通用密钥。同名接口参数优先，禁用的同名行也会屏蔽全局值；Header 忽略大小写。已有计划与用例保留原快照。</div>' +
     Object.entries({
       headers: "Header",

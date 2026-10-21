@@ -2112,6 +2112,35 @@ try {
   await page
     .locator('[data-settings-anchor="settings-global-parameters"]')
     .click();
+  assert.equal(
+    await page.locator("#recursive-folder-scopes").isChecked(),
+    false,
+  );
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#recursive-folder-scopes").click();
+  assert.equal(
+    await page.locator("#recursive-folder-scopes").isChecked(),
+    false,
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#recursive-folder-scopes").check();
+  await saveAndWait("#save");
+  assert.equal(
+    (await app.store.get(await page.locator("#project-select").inputValue()))
+      .settings.recursiveFolderScopes,
+    true,
+  );
+  await page.locator('[data-settings-anchor="settings-basic"]').click();
+  await page
+    .locator('[data-settings-anchor="settings-global-parameters"]')
+    .click();
+  assert.equal(
+    await page.locator("#recursive-folder-scopes").isChecked(),
+    true,
+  );
+  await page.screenshot({ path: "/tmp/local-api-recursive-scopes.png" });
+  await page.locator("#recursive-folder-scopes").uncheck();
+  await saveAndWait("#save");
   await page.locator('[data-global-add="headers"]').click();
   await page
     .locator('[data-global-field="headers:0:key"]')

@@ -1417,6 +1417,20 @@ function bind() {
     mark();
     await save();
   });
+  on("#recursive-folder-scopes", "change", (_, element) => {
+    if (
+      element.checked &&
+      !confirm(
+        "开启后，祖先目录的参数、认证和脚本将用于后代接口。请确认这些接口的目标可信；已有计划和用例快照不变。继续？",
+      )
+    ) {
+      element.checked = false;
+      return;
+    }
+    project.settings ??= {};
+    project.settings.recursiveFolderScopes = element.checked;
+    mark();
+  });
   on("#inherit-shared-scripts", "change", (_, element) => {
     request().inheritSharedScripts = element.checked;
     mark();

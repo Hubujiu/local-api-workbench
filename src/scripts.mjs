@@ -176,7 +176,7 @@ export function runScript(
 export async function runScriptSequence(stages, input, options = {}) {
   if (
     !Array.isArray(stages) ||
-    stages.length > 4 ||
+    stages.length > 34 ||
     stages.some(
       (stage) =>
         !stage ||
@@ -187,7 +187,7 @@ export async function runScriptSequence(stages, input, options = {}) {
     ) ||
     stages.reduce((sum, stage) => sum + stage.code.length, 0) > 100000
   )
-    throw Error("脚本阶段格式无效，最多4阶段、源码合计100000字符");
+    throw Error("脚本阶段格式无效，最多34阶段、源码合计100000字符");
   const deadline = performance.now() + 2000;
   let remaining = 250,
     requestLimit = 10,
