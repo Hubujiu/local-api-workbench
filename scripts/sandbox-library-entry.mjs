@@ -11,3 +11,6 @@ globalThis._ = lodash;
 moment.locale("en");
 globalThis.moment = moment;
 globalThis.uuid = uuid;
+
+import { xml2Json } from "./sandbox-xml.mjs";
+globalThis.xml2Json = xml2Json;

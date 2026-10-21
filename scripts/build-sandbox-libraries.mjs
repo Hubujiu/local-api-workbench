@@ -13,7 +13,14 @@ await build({
   legalComments: "inline",
 });
 const notices = [];
-for (const name of ["crypto-js", "chai", "lodash", "moment", "uuid"]) {
+for (const name of [
+  "crypto-js",
+  "chai",
+  "lodash",
+  "moment",
+  "uuid",
+  "@xmldom/xmldom",
+]) {
   const packageInfo = JSON.parse(
     await readFile("node_modules/" + name + "/package.json", "utf8"),
   );

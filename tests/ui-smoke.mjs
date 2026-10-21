@@ -2270,7 +2270,7 @@ try {
   await page
     .locator('[data-shared-script="afterScript"]')
     .fill(
-      'apt.setVar("shared-script-post","done"); apt.test("apt-response-browser",()=>{apt.response.to.be.success;apt.response.to.have.header("Content-Type");apt.expect(apt.response.json.sharedScript).to.equal("callback-ready");apt.expect(csv2array("name,age")[0]).to.deep.equal(["name","age"]);});',
+      'apt.setVar("shared-script-post","done"); apt.test("apt-response-browser",()=>{apt.response.to.be.success;apt.response.to.have.header("Content-Type");apt.expect(apt.response.json.sharedScript).to.equal("callback-ready");apt.expect(csv2array("name,age")[0]).to.deep.equal(["name","age"]);apt.expect(xml2Json("<a>ok</a>").a).to.equal("ok");});',
     );
   await page.locator("#shared-scripts-enabled").check();
   await saveAndWait("#save");
