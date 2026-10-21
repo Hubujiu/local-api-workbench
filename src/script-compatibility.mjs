@@ -11,6 +11,7 @@ function installScriptCompatibility({
   parameterName,
   modifyPair,
   builtinVariable,
+  executionContext,
 }) {
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const own = (object, key) =>
@@ -29,7 +30,7 @@ function installScriptCompatibility({
     }
     return size;
   };
-  const replaceIn = (value) => {
+  const replaceIn = (value, scope = pm.variables) => {
     if (typeof value !== "string" || value.length > 65536)
       throw Error("replaceIn需要至多64KiB的字符串");
     let size = utf8Size(value),
@@ -37,10 +38,8 @@ function installScriptCompatibility({
     if (size > 65536) throw Error("replaceIn输入超过64KiB");
     return value.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (whole, key) => {
       if (++count > 1000) throw Error("replaceIn最多替换1000项");
-      const generated = pm.variables.has(key)
-        ? pm.variables.get(key)
-        : builtinVariable(key);
-      if (generated === undefined && !pm.variables.has(key))
+      const generated = scope.has(key) ? scope.get(key) : builtinVariable(key);
+      if (generated === undefined && !scope.has(key))
         throw Error("未定义变量: " + key);
       const replacement = String(generated);
       size += utf8Size(replacement) - utf8Size(whole);
@@ -51,6 +50,30 @@ function installScriptCompatibility({
   pm.variables.replaceIn = replaceIn;
   apt.variables.replaceIn = replaceIn;
   globalThis.mockExp = replaceIn;
+  const { iteration, iterationCount, iterationData } = executionContext;
+  const identity = {
+    iteration,
+    iterationCount,
+    requestId: String(request.id || ""),
+    requestName: String(request.name || ""),
+  };
+  apt.info = Object.freeze({
+    ...identity,
+    eventName: response ? "test" : "pre_script",
+  });
+  pm.info = Object.freeze({
+    ...identity,
+    eventName: response ? "test" : "prerequest",
+  });
+  const dataAPI = {
+    has: (name) => own(iterationData, name),
+    get: (name) =>
+      own(iterationData, name) ? copy(iterationData[name]) : undefined,
+    toObject: () => copy(iterationData),
+    replaceIn: (value) => replaceIn(value, dataAPI),
+  };
+  apt.iterationData = pm.iterationData = Object.freeze(dataAPI);
+  pm.globals.replaceIn = (value) => replaceIn(value, pm.globals);
 
   pm.environment.delete = pm.environment.unset;
   pm.globals.delete = pm.globals.unset;

@@ -48,6 +48,13 @@ export async function runLoad(project, request, options = {}) {
             },
             {
               signal: options.signal,
+              executionContext: {
+                iteration: index,
+                iterationCount: count,
+                iterationData: dataRows.length
+                  ? dataRows[index % dataRows.length]
+                  : {},
+              },
               cookieSession: memoryCookieSession(options.cookieState),
               variableScopes: {
                 ...scopes,

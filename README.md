@@ -125,3 +125,7 @@ ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0
 ### Apipost Faker 占位符
 
 支持已列明的 $fakerjs.Company.name、$fakerjs.Internet.displayName/password 等固定无参数路径，并提供沙箱内 mockExp(text)。沿用英文Faker及原有大小/次数/执行预算，不开放任意属性路径或完整Mock.js语法。完整可选名单由参数助手展示，具体兼容范围见 docs/ADR-APIPOST-FAKER-ALIASES.md。
+
+### 脚本执行上下文
+
+apt.info / pm.info 提供实际脚本阶段、请求ID/名称与迭代编号；普通调试为0/1，压测使用真实迭代和CSV行。apt.iterationData / pm.iterationData 支持只读 has/get/toObject/replaceIn，不能修改测试数据。原变量优先级和脚本配额不变，见 docs/ADR-SCRIPT-EXECUTION-CONTEXT.md。

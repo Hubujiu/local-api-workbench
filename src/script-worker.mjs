@@ -355,7 +355,7 @@ try {
   run(
     "(" +
       scriptCompatibilitySource +
-      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable,maxTests:" +
+      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable,executionContext:input.executionContext,maxTests:" +
       workerData.assertionLimit +
       "});",
   );

@@ -72,7 +72,7 @@ try {
   await window
     .locator("#script-code")
     .fill(
-      'await Promise.resolve();pm.test("packaged-utilities",()=>{pm.expect(_.sum([1,2,3])).to.equal(6);pm.expect(csv2array("name,age")[0]).to.deep.equal(["name","age"]);apt.expect(xml2Json("<a>ok</a>").a).to.equal("ok");pm.expect(moment.utc("2024-02-28").add(1,"day").format("YYYY-MM-DD")).to.equal("2024-02-29");pm.expect(uuid.validate(uuid.v4())).to.equal(true)});console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
+      'await Promise.resolve();pm.test("packaged-utilities",()=>{pm.expect(_.sum([1,2,3])).to.equal(6);pm.expect(apt.info.eventName).to.equal("test");pm.expect(apt.info.iteration).to.equal(0);pm.expect(apt.info.iterationCount).to.equal(1);pm.expect(pm.iterationData.toObject()).to.deep.equal({});pm.expect(csv2array("name,age")[0]).to.deep.equal(["name","age"]);apt.expect(xml2Json("<a>ok</a>").a).to.equal("ok");pm.expect(moment.utc("2024-02-28").add(1,"day").format("YYYY-MM-DD")).to.equal("2024-02-29");pm.expect(uuid.validate(uuid.v4())).to.equal(true)});console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
         `const reply=await pm.sendRequest(${JSON.stringify(packagedRequestURL)});pm.test('packaged-http',async()=>{await new Promise(resolve=>setTimeout(resolve,5));pm.expect(reply.code).to.equal(200);});`,
     );
   const scriptResponse = window.waitForResponse(

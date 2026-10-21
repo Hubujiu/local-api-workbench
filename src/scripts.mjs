@@ -1,3 +1,4 @@
+import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
 
@@ -37,6 +38,10 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  input = {
+    ...input,
+    executionContext: normalizeExecutionContext(input.executionContext),
+  };
   validateResources({ functions: input.functions || [] });
   if (typeof code !== "string" || code.length > 100000)
     throw Error("脚本不能超过 100 KB");

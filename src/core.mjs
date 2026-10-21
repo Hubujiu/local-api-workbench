@@ -331,6 +331,7 @@ export async function runPlan(
     onScopeChanges,
     cookieSession,
     databaseQuery,
+    executionContext,
   } = {},
 ) {
   const snapshot = structuredClone(plan);
@@ -457,6 +458,7 @@ export async function runPlan(
             : configuredRequest.beforeScript,
           {
             allowNetwork: true,
+            executionContext,
             variables: vars,
             scopes,
             localVariables,
@@ -552,6 +554,7 @@ export async function runPlan(
             : record.request.afterScript,
           {
             allowNetwork: true,
+            executionContext,
             variables: vars,
             scopes,
             localVariables,
