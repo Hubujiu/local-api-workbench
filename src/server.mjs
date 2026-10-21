@@ -1,3 +1,4 @@
+import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
@@ -61,6 +62,7 @@ export async function createApp({
   await store.init();
   const protocolSessions = new ProtocolSessions();
   const oauth = new OAuthManager();
+  const oauth1 = new OAuth1Manager();
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
@@ -264,6 +266,10 @@ export async function createApp({
             return json(res, 200, protocolSessions.snapshot(parts[2]));
           }
         }
+        if (u.pathname === "/api/oauth1/start" && req.method === "POST")
+          return json(res, 200, await oauth1.start(await body(req)));
+        if (u.pathname === "/api/oauth1/complete" && req.method === "POST")
+          return json(res, 200, await oauth1.complete(await body(req)));
         if (u.pathname === "/api/oauth/start" && req.method === "POST")
           return json(res, 200, oauth.start(await body(req), base));
         if (
@@ -797,6 +803,7 @@ export async function createApp({
   server.on("close", () => {
     protocolSessions.close();
     oauth.close();
+    oauth1.close();
   });
   const listen = (listenPort) =>
     new Promise((resolve, reject) => {
@@ -830,7 +837,7 @@ export async function createApp({
   return {
     server,
     store,
-    oauthAllowed: (url) => oauth.allowed(url),
+    oauthAllowed: (url) => oauth.allowed(url) || oauth1.allowed(url),
     launchUrl: `http://127.0.0.1:${server.address().port}/#token=${token}`,
     token,
     url: `http://127.0.0.1:${server.address().port}`,

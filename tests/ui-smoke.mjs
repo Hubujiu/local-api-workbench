@@ -32,7 +32,22 @@ let uploadedMultipart,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
 const fixture = http.createServer(async (request, response) => {
-  if (request.url.startsWith("/global-parameters")) {
+  if (request.url === "/oauth1-request" || request.url === "/oauth1-access") {
+    response.setHeader("content-type", "application/x-www-form-urlencoded");
+    if (
+      request.url === "/oauth1-access" &&
+      !request.headers.authorization?.includes('oauth_verifier="1234"')
+    ) {
+      response.writeHead(400);
+      response.end("invalid verifier");
+      return;
+    }
+    response.end(
+      request.url === "/oauth1-request"
+        ? "oauth_token=ui-temp&oauth_token_secret=ui-temp-secret&oauth_callback_confirmed=true"
+        : "oauth_token=ui-access&oauth_token_secret=ui-access-secret",
+    );
+  } else if (request.url.startsWith("/global-parameters")) {
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({
@@ -957,6 +972,39 @@ try {
   assert(
     !JSON.parse(oauth1Result.body).authorization.includes("fixture-secret"),
   );
+  await page
+    .locator('[data-auth="requestTokenEndpoint"]')
+    .fill(fixtureURL + "/oauth1-request");
+  await page
+    .locator('[data-auth="authorizationEndpoint"]')
+    .fill(fixtureURL + "/authorize");
+  await page
+    .locator('[data-auth="tokenEndpoint"]')
+    .fill(fixtureURL + "/oauth1-access");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#oauth1-get").click();
+  assert.equal(await page.locator("#oauth1-verifier").count(), 0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#oauth1-get").click();
+  await page.locator("#oauth1-verifier").waitFor();
+  assert.equal(
+    new URL(
+      await page.locator("#dialog a").getAttribute("href"),
+    ).searchParams.get("oauth_token"),
+    "ui-temp",
+  );
+  await page.locator("#oauth1-verifier").fill("1234");
+  await page.screenshot({ path: "/tmp/local-api-oauth1-flow.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator('[data-auth="accessToken"]').inputValue(),
+    "ui-access",
+  );
+  assert.equal(
+    await page.locator('[data-auth="tokenSecret"]').inputValue(),
+    "ui-access-secret",
+  );
   await page.locator('[data-auth="signatureMethod"]').selectOption("RSA-SHA1");
   await page
     .locator('[data-auth="privateKey"]')
@@ -1263,6 +1311,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#app").getByText("已完成", { exact: true }).waitFor();
   await page.locator("#app .markdown-content table").waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-markdown-document.png" });
   await saveAndWait();
   await page.locator('.rail [data-page="settings"]').click();
@@ -1694,7 +1743,9 @@ try {
   assert.deepEqual(generatedBody.ordered, [42, false]);
   assert.deepEqual(generatedBody.combined, { count: 2, label: "xx" });
   assert.equal(generatedBody.flag, false);
+  await page.locator("#expand-body").click();
   await page.screenshot({ path: "/tmp/local-api-schema-allof.png" });
+  await page.keyboard.press("Escape");
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator("#body-code").fill("");

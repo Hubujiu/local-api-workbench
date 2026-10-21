@@ -27,6 +27,9 @@ const fields = {
   digest: ["username", "password"],
   ntlm: ["username", "password", "domain", "workstation"],
   oauth1: [
+    "requestTokenEndpoint",
+    "authorizationEndpoint",
+    "tokenEndpoint",
     "consumerKey",
     "consumerSecret",
     "accessToken",
@@ -146,9 +149,12 @@ export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
       ? '<div class="notice">授权码模式启用PKCE S256。凭据只发送到配置的endpoint；优先使用HTTPS。获取的令牌仅在当前编辑状态，保存时才写入项目。</div>'
       : '<div class="notice">步骤快照使用明确填写的令牌，不自动启动授权跳转。</div>';
   }
+  if (type === "oauth1" && acquire)
+    html +=
+      '<p><button id="oauth1-get" class="primary">OAuth1 授权（OOB/PIN）</button></p>';
   if (type === "oauth1")
     html +=
-      '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；此处使用已有凭据，不自动运行OAuth1授权跳转。RSA-SHA1仅兼容旧服务，非新系统推荐算法；RSA私钥仅在本机签名，不发送私钥。保存接口/步骤会把填写的凭据写入本地项目文件，请勿提交真实密钥到Git。PLAINTEXT尚不支持。</p>';
+      '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；可使用已有凭据；OOB/PIN流程可请求临时令牌、打开服务授权页并用验证码交换访问令牌。服务必须支持OOB，端点和Consumer凭据需填明确值。RSA-SHA1仅兼容旧服务，非新系统推荐算法；RSA私钥仅在本机签名，不发送私钥。保存接口/步骤会把填写的凭据写入本地项目文件，请勿提交真实密钥到Git。PLAINTEXT尚不支持。</p>';
   if (type === "aws")
     html +=
       '<p class="notice">AWS Signature V4使用明确填写的凭据与region/service，不读取系统AWS配置或自动登录。对最终请求体计算SHA256；S3使用对应路径规则。优先使用HTTPS。</p>';

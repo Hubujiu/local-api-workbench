@@ -1731,6 +1731,53 @@ function bind() {
     request()[param + "Script"] = element.value;
     mark();
   });
+  on("#oauth1-get", "click", async () => {
+    collect();
+    const requestId = current,
+      projectId = project.id,
+      config = structuredClone(request().auth),
+      original = JSON.stringify(request().auth);
+    if (
+      !confirm(
+        "将向填写的OAuth1端点请求临时令牌，并在你授权后交换访问令牌。请确认端点可信；获取后不会自动保存到磁盘。继续？",
+      )
+    )
+      return;
+    const flow = await api("/oauth1/start", "POST", config);
+    if (project.id !== projectId || current !== requestId)
+      throw Error("项目/接口已切换，请重新开始OAuth1授权");
+    modal(
+      "OAuth1 OOB/PIN 授权",
+      `<p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开服务授权页面</a></p><p>在服务页面授权后复制验证码。流程5分钟后过期；临时令牌密钥仅保留在内存。</p><label>Verifier / PIN</label><input id="oauth1-verifier" autocomplete="off">`,
+      async () => {
+        const target =
+          project.id === projectId &&
+          project.requests.find((item) => item.id === requestId);
+        if (!target || JSON.stringify(target.auth) !== original)
+          throw Error("原接口认证已变化，请重新授权，避免覆盖修改");
+        const result = await api("/oauth1/complete", "POST", {
+          id: flow.id,
+          verifier: $("#oauth1-verifier").value,
+        });
+        if (
+          project.id !== projectId ||
+          JSON.stringify(target.auth) !== original
+        )
+          throw Error("项目或认证已变化，令牌未写入");
+        const currentTarget = project.requests.find(
+          (item) => item.id === requestId,
+        );
+        if (!currentTarget || JSON.stringify(currentTarget.auth) !== original)
+          throw Error("接口已更新，令牌未覆盖现有修改");
+        currentTarget.auth.accessToken = result.accessToken;
+        currentTarget.auth.tokenSecret = result.tokenSecret;
+        mark();
+        render();
+        toast("OAuth1令牌已获取，尚未保存到磁盘");
+      },
+      "交换访问令牌",
+    );
+  });
   on("#oauth-get", "click", async () => {
     const requestId = current,
       projectId = project.id;
@@ -3066,6 +3113,7 @@ function editDocument(index) {
         throw Error("文档超过256KiB预览限制");
       input.setRangeText(text, start, end, "end");
       input.dispatchEvent(new Event("input"));
+      toast("图片已插入，保存文档后生效");
     } catch (error) {
       if (input.isConnected) toast(error.message);
     } finally {
