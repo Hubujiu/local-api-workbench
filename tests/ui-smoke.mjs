@@ -2311,6 +2311,7 @@ try {
     button.click();
     button.click();
   });
+  await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(
     await page.locator("#operation-db-sql").inputValue(),
     "SELECT value FROM entries LIMIT 1",
@@ -2323,7 +2324,9 @@ try {
     .waitFor();
   assert.equal(await page.locator("#dialog").isVisible(), true);
   await page.keyboard.press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-edit-db-operation="0"]').click();
+  await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(
     await page.locator("#operation-db-parameters").inputValue(),
     "[]",
