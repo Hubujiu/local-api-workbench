@@ -1656,3 +1656,8 @@ dialog:has(#cookie-line) {
   margin-left: 12px;
   border-left: 1px solid var(--line);
 }
+
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+}

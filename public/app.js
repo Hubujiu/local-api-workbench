@@ -1,3 +1,4 @@
+import { inlineImageURI } from "./inline-image.js";
 import { folderTree, moveFolderTree } from "./folder-tree.js";
 import { parseLoadCSV } from "./load-data.js";
 import { builtinVariableNames } from "./builtin-variable-catalog.js";
@@ -3005,7 +3006,7 @@ function editDocument(index) {
   const statuses = project.settings?.statuses || [];
   modal(
     "项目文档",
-    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea><label>实时预览</label><div id="document-preview" class="markdown-content"></div>`,
+    `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea><label>插入本地图片（PNG/JPEG，最多128KiB，随文档离线保存）</label><input id="document-image" type="file" accept="image/png,image/jpeg"><label>实时预览</label><div id="document-preview" class="markdown-content"></div>`,
     () => {
       const fields = project.settings?.attributes || [];
       validateAttributeDefinitions(fields);
@@ -3044,6 +3045,32 @@ function editDocument(index) {
     timer = setTimeout(() => {
       preview.innerHTML = renderMarkdown(input.value);
     }, 120);
+  };
+  $("#document-image").onchange = async (event) => {
+    const picker = event.target,
+      file = picker.files?.[0];
+    if (!file) return;
+    try {
+      if (file.size > 128 * 1024) throw Error("图片最多128KiB");
+      const uri = inlineImageURI(
+        new Uint8Array(await file.arrayBuffer()),
+        file.type,
+      );
+      const bitmap = await createImageBitmap(file);
+      bitmap.close();
+      if (!input.isConnected || $("#document-content") !== input) return;
+      const start = input.selectionStart,
+        end = input.selectionEnd;
+      const text = "\n![图片](" + uri + ")\n";
+      if (input.value.length - (end - start) + text.length > 256 * 1024)
+        throw Error("文档超过256KiB预览限制");
+      input.setRangeText(text, start, end, "end");
+      input.dispatchEvent(new Event("input"));
+    } catch (error) {
+      if (input.isConnected) toast(error.message);
+    } finally {
+      picker.value = "";
+    }
   };
   preview.innerHTML = renderMarkdown(input.value);
 }

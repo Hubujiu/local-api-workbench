@@ -1237,6 +1237,27 @@ try {
     await page.locator("#document-preview strong").innerText(),
     "保存在本地。",
   );
+  await page.locator("#document-image").setInputFiles({
+    name: "invalid.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("not a PNG"),
+  });
+  await page.getByText("PNG文件头无效", { exact: true }).waitFor();
+  assert.equal(await page.locator("#document-preview img").count(), 0);
+  await page
+    .locator("#document-content")
+    .evaluate((el) => el.setSelectionRange(el.value.length, el.value.length));
+  await page.locator("#document-image").setInputFiles({
+    name: "pixel.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC",
+      "base64",
+    ),
+  });
+  await page.waitForFunction(
+    () => document.querySelector("#document-preview img")?.naturalWidth === 1,
+  );
   await page.locator("#document-status").selectOption("ready");
   await page.locator('[data-doc-attribute="mail"]').fill("doc@example.test");
   await page.locator("#dialog-save").click();
@@ -1673,6 +1694,7 @@ try {
   assert.deepEqual(generatedBody.ordered, [42, false]);
   assert.deepEqual(generatedBody.combined, { count: 2, label: "xx" });
   assert.equal(generatedBody.flag, false);
+  await page.screenshot({ path: "/tmp/local-api-schema-allof.png" });
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator("#body-code").fill("");
