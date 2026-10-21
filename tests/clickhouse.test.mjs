@@ -10,6 +10,10 @@ test("ClickHouse uses readonly GET, typed escaped parameters and header-only cre
     const url = new URL(req.url, "http://fixture.test");
     assert.equal(req.method, "GET");
     assert.equal(url.searchParams.has("readonly"), false);
+    assert.equal(
+      url.searchParams.get("output_format_json_quote_64bit_integers"),
+      "1",
+    );
     assert.equal(url.searchParams.get("param_p0"), "a\\tb\\nc\\\\N\\0\\b");
     assert.equal(url.searchParams.get("param_p1"), "\\N");
     assert.equal(url.searchParams.has("password"), false);
@@ -60,6 +64,8 @@ test("ClickHouse rejects redirects, malformed and oversized replies and truncate
       res.writeHead(302, { Location: "http://127.0.0.1:1/" });
       res.end();
     } else if (mode === "large") res.end("x".repeat(1024 * 1024 + 1));
+    else if (mode === "unsafe")
+      res.end('{"meta":[{"name":"n"}],"data":[{"n":9007199254740993}]}');
     else if (mode === "invalid") res.end("not JSON");
     else if (mode === "exception") {
       res.setHeader("X-ClickHouse-Exception-Code", "123");
@@ -78,7 +84,7 @@ test("ClickHouse rejects redirects, malformed and oversized replies and truncate
   const result = await queryClickHouse(input);
   assert.equal(result.rows.length, 1000);
   assert.equal(result.truncated, true);
-  for (const value of ["redirect", "large", "invalid", "exception"]) {
+  for (const value of ["redirect", "large", "invalid", "exception", "unsafe"]) {
     mode = value;
     await assert.rejects(queryClickHouse(input));
   }

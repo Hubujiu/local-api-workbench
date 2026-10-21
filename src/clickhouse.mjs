@@ -50,6 +50,7 @@ export function clickhouseRequest(input) {
     max_result_rows: 1001,
     result_overflow_mode: "break",
     enable_http_compression: 0,
+    output_format_json_quote_64bit_integers: 1,
   }))
     url.searchParams.set(key, String(value));
   if (input.database) url.searchParams.set("database", String(input.database));
@@ -157,9 +158,19 @@ export async function queryClickHouse(input) {
   });
   let value;
   try {
-    value = JSON.parse(body);
-  } catch {
-    throw Error("ClickHouse未返回有效JSON结果");
+    value = JSON.parse(body, (key, item) => {
+      if (
+        typeof item === "number" &&
+        Number.isInteger(item) &&
+        !Number.isSafeInteger(item)
+      )
+        throw Error("整数超出JavaScript安全整数范围，服务器必须以字符串返回");
+      return item;
+    });
+  } catch (error) {
+    throw Error(
+      "ClickHouse未返回安全JSON结果：" + String(error.message).slice(0, 160),
+    );
   }
   if (
     !value ||
