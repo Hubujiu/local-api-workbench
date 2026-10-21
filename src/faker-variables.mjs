@@ -77,6 +77,15 @@ const catalogue = {
   $randomCommonFileType: ["system", "commonFileType"],
   $randomCommonFileExt: ["system", "commonFileExt"],
 };
+// Documented Apipost spelling, limited to already reviewed no-argument paths.
+for (const [group, method, options] of Object.values(catalogue)) {
+  if (options !== undefined) continue;
+  const category = group[0].toUpperCase() + group.slice(1);
+  catalogue["$fakerjs." + category + "." + method] = [group, method];
+}
+catalogue["$fakerjs.Internet.displayName"] = ["internet", "displayName"];
+catalogue["$fakerjs.Internet.password"] = ["internet", "password"];
+Object.freeze(catalogue);
 export const fakerVariableNames = Object.freeze(Object.keys(catalogue));
 export function fakerVariable(name) {
   if (!Object.hasOwn(catalogue, name)) return undefined;

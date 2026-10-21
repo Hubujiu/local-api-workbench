@@ -50,6 +50,7 @@ function installScriptCompatibility({
   };
   pm.variables.replaceIn = replaceIn;
   apt.variables.replaceIn = replaceIn;
+  globalThis.mockExp = replaceIn;
 
   pm.environment.delete = pm.environment.unset;
   pm.globals.delete = pm.globals.unset;

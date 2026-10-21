@@ -119,3 +119,26 @@ test("replaceIn bounds UTF-8 input and expanded output and rejects excessive sub
     /1000/,
   );
 });
+
+test("documented Apipost Faker aliases and mockExp use the bounded explicit catalogue", async () => {
+  assert(interpolate("{{$fakerjs.Company.name}}").length > 0);
+  assert(interpolate("{{$fakerjs.Internet.displayName}}").length > 0);
+  assert(interpolate("{{$fakerjs.Internet.password}}").length > 0);
+  const result = await runScript(
+    'apt.setVar("company", mockExp("{{$fakerjs.Company.name}}")); apt.setVar("displayName", mockExp("{{$fakerjs.Internet.displayName}}")); apt.setVar("explicit", mockExp("{{value}}"));',
+    { variables: { value: "literal" } },
+  );
+  assert.equal(typeof result.variables.company, "string");
+  assert(result.variables.company.length > 0);
+  assert.equal(result.variables.explicit, "literal");
+  await assert.rejects(
+    runScript('mockExp("{{$fakerjs.constructor.constructor}}");', {
+      variables: {},
+    }),
+    /未定义/,
+  );
+  await assert.rejects(
+    runScript('mockExp({name:"value"});', { variables: {} }),
+    /字符串/,
+  );
+});

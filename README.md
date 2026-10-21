@@ -90,7 +90,7 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 
 ## 常用内置动态变量
 
-URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等89种基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
+URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等163个可选名称（含别名）的基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
 
 ## 数据库查询与显式 SQLite 写入
 
@@ -121,3 +121,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
 
 ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
+
+### Apipost Faker 占位符
+
+支持已列明的 $fakerjs.Company.name、$fakerjs.Internet.displayName/password 等固定无参数路径，并提供沙箱内 mockExp(text)。沿用英文Faker及原有大小/次数/执行预算，不开放任意属性路径或完整Mock.js语法。完整可选名单由参数助手展示，具体兼容范围见 docs/ADR-APIPOST-FAKER-ALIASES.md。

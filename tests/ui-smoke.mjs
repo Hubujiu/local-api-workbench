@@ -749,9 +749,21 @@ try {
     .fill(
       'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); apt.assert("response.raw.status === 200"); postman.setEnvironmentVariable("legacyFromUI",response.json.message); console.log("script-done");' +
         `pm.sendRequest(${JSON.stringify(fixtureURL + "/token")},(error,reply)=>{if(error)throw error;pm.environment.set('scriptHTTPFromUI',reply.json().access_token);pm.test('scriptHTTPStatus',()=>pm.expect(reply.code).to.equal(200));});` +
-        `apt.visualizer.set(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});`,
+        `apt.visualizer.set(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});` +
+        'apt.setVar("fakerCompany", mockExp("{{$fakerjs.Company.name}}")); pm.test("Apipost Faker helper",()=>pm.expect(apt.getVar("fakerCompany")).to.be.a("string"));',
     );
+  const scriptHelperReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
   await page.locator("#send").click();
+  const scriptHelperResult = await (await scriptHelperReply).json();
+  assert.equal(
+    scriptHelperResult.outcome,
+    "passed",
+    JSON.stringify(scriptHelperResult),
+  );
+  assert.equal(typeof scriptHelperResult.extracted.fakerCompany, "string");
+  assert(scriptHelperResult.extracted.fakerCompany.length > 0);
   await page.locator('[data-response="logs"]').click();
   await page
     .locator(".response-body")
