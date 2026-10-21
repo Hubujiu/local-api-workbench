@@ -264,3 +264,72 @@ test("object property count conflicts fail instead of returning an invalid sampl
   ])
     assert.throws(() => sampleFromSchema(schema), /属性|Properties|required/);
 });
+
+test("allOf combines bounded object fields and numeric constraints without weakening either branch", () => {
+  assert.deepEqual(
+    sampleFromSchema({
+      allOf: [
+        {
+          type: "object",
+          properties: { id: { type: "integer", minimum: 2 } },
+          required: ["id"],
+        },
+        {
+          type: "object",
+          properties: { name: { type: "string", minLength: 3 } },
+          required: ["name"],
+        },
+      ],
+    }),
+    { id: 2, name: "xxx" },
+  );
+  assert.equal(
+    sampleFromSchema({
+      type: "integer",
+      minimum: 5,
+      allOf: [{ maximum: 7 }, { minimum: 6 }],
+    }),
+    6,
+  );
+  assert.throws(
+    () =>
+      sampleFromSchema({
+        allOf: [{ type: "integer", minimum: 7 }, { maximum: 3 }],
+      }),
+    /约束/,
+  );
+});
+test("ref siblings intersect constraints and closed allOf objects never silently gain extra fields", () => {
+  const root = { $defs: { Item: { type: "integer", minimum: 10 } } };
+  assert.equal(
+    sampleFromSchema({ $ref: "#/$defs/Item", minimum: 2 }, 0, root),
+    10,
+  );
+  assert.throws(
+    () =>
+      sampleFromSchema({
+        allOf: [
+          {
+            type: "object",
+            properties: { a: { type: "string" } },
+            additionalProperties: false,
+          },
+          { properties: { b: { type: "string" } }, required: ["b"] },
+        ],
+      }),
+    /example|约束/,
+  );
+});
+
+test("unsupported allOf choices fail explicitly rather than emit an invalid enum or branch", () => {
+  for (const schema of [
+    { allOf: [{ enum: [1] }, { minimum: 5 }] },
+    { allOf: [{ const: 1 }, { type: "string" }] },
+    { allOf: [{ anyOf: [{ type: "string" }] }, { type: "integer" }] },
+  ])
+    assert.throws(() => sampleFromSchema(schema), /example/);
+  assert.deepEqual(
+    sampleFromSchema({ allOf: [{ enum: [1, 2] }, { enum: [2, 3] }] }),
+    2,
+  );
+});

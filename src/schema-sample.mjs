@@ -1,3 +1,4 @@
+import { intersectSampleSchemas } from "./schema-intersection.mjs";
 import { isDeepStrictEqual } from "node:util";
 // Deterministic illustrative samples, not a general JSON Schema solver.
 export function sampleFromSchema(
@@ -53,13 +54,25 @@ export function sampleFromSchema(
       const overrides = { ...schema };
       delete overrides.$ref;
       const next =
-        target === false
-          ? false
-          : { ...(target === true ? {} : target), ...overrides };
+        target === false ? false : intersectSampleSchemas(target, overrides);
       return sample(next, level + 1, new Set([...seen, ref]), fieldName);
     }
+    if (schema.allOf !== undefined) {
+      if (
+        !Array.isArray(schema.allOf) ||
+        !schema.allOf.length ||
+        schema.allOf.length > 16
+      )
+        throw Error("allOf需1至16个分支，请提供 example");
+      const base = { ...schema };
+      delete base.allOf;
+      const combined = schema.allOf.reduce(
+        (result, branch) => intersectSampleSchemas(result, branch),
+        base,
+      );
+      return sample(combined, level + 1, seen, fieldName);
+    }
     for (const key of [
-      "allOf",
       "not",
       "if",
       "contains",

@@ -1639,6 +1639,20 @@ try {
     prefixItems: [{ const: 42 }, { const: false }],
     items: false,
   };
+  tupleSchema.properties.combined = {
+    allOf: [
+      {
+        type: "object",
+        properties: { count: { type: "integer", minimum: 2 } },
+        required: ["count"],
+      },
+      {
+        type: "object",
+        properties: { label: { type: "string", minLength: 2 } },
+        required: ["label"],
+      },
+    ],
+  };
   await page.locator("#schema").fill(JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
@@ -1657,6 +1671,7 @@ try {
   );
   assert.equal(generatedBody.n, 2);
   assert.deepEqual(generatedBody.ordered, [42, false]);
+  assert.deepEqual(generatedBody.combined, { count: 2, label: "xx" });
   assert.equal(generatedBody.flag, false);
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
