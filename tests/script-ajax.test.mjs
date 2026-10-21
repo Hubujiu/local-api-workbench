@@ -127,11 +127,62 @@ test("ajax empty responses and text overrides retain their declared semantics", 
     { variables: {}, allowNetwork: true },
   );
   assert.equal(text.variables.text, "not-json");
-  await assert.rejects(
-    runScript(`$.ajax({url:${JSON.stringify(f.url)},success:async()=>{}});`, {
-      variables: {},
-      allowNetwork: true,
-    }),
-    /Promise/,
+  const asyncResult = await runScript(
+    `$.ajax({url:${JSON.stringify(f.url)},success:async()=>{await Promise.resolve();apt.setVar('asyncDone',true)}});`,
+    { variables: {}, allowNetwork: true },
   );
+  assert.equal(asyncResult.variables.asyncDone, true);
+});
+
+test("ajax awaits async success and completion in order without resetting budgets", async (t) => {
+  const f = await fixture(t);
+  const r = await runScript(
+    `let order='';$.ajax({url:${JSON.stringify(f.url)},success:async()=>{await new Promise(r=>setTimeout(r,5));order+='success';},complete:async()=>{await Promise.resolve();apt.setVar('order',order+'-complete')}});`,
+    { variables: {}, allowNetwork: true },
+  );
+  assert.equal(r.variables.order, "success-complete");
+});
+test("ajax async rejection preserves its original error even if completion rejects", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(
+    runScript(
+      `$.ajax({url:${JSON.stringify(f.url)},success:async()=>{await Promise.resolve();throw Error('original-async-failure')},complete:async()=>{await Promise.resolve();throw Error('secondary-complete-failure')}});`,
+      { variables: {}, allowNetwork: true },
+    ),
+    /original-async-failure/,
+  );
+});
+
+test("ajax async handlers cannot hide undefined rejection or unfinished callbacks", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(
+    runScript(
+      `$.ajax({url:${JSON.stringify(f.url)},success:async()=>{throw undefined}});`,
+      { variables: {}, allowNetwork: true },
+    ),
+  );
+  await assert.rejects(
+    runScript(
+      `$.ajax({url:${JSON.stringify(f.url)},complete:async()=>await new Promise(()=>{})});`,
+      { variables: {}, allowNetwork: true },
+    ),
+    /未完成|超时|Promise/,
+  );
+  const handled = await runScript(
+    `$.ajax({url:${JSON.stringify(f.url + "/fail")},error:async()=>{await Promise.resolve();apt.setVar('handled',true)},complete:async()=>{await Promise.resolve();apt.setVar('completed',true)}});`,
+    { variables: {}, allowNetwork: true },
+  );
+  assert.equal(handled.variables.handled, true);
+  assert.equal(handled.variables.completed, true);
+});
+
+test("ajax returned Promise can be awaited or caught without losing completion ordering", async (t) => {
+  const f = await fixture(t);
+  const r = await runScript(
+    `const value=await $.ajax({url:${JSON.stringify(f.url + "/json")},dataType:'json',complete:async()=>{await Promise.resolve();apt.setVar('complete',true)}});apt.setVar('value',value);apt.setVar('awaitComplete',apt.getVar('complete'));try{await $.ajax({url:${JSON.stringify(f.url + "/fail")}})}catch(e){apt.setVar('caught',String(e))}`,
+    { variables: {}, allowNetwork: true },
+  );
+  assert.equal(r.variables.awaitComplete, true);
+  assert.equal(typeof r.variables.value, "object");
+  assert.match(r.variables.caught, /HTTP 400/);
 });

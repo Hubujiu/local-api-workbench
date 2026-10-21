@@ -2339,7 +2339,7 @@ try {
   await page
     .locator('[data-shared-script="beforeScript"]')
     .fill(
-      `pm.sendRequest('${fixtureURL}/auth',(error,response)=>{if(error)throw error;apt.setRequestHeader('x-shared-script','callback-ready');});`,
+      `await $.ajax({url:'${fixtureURL}/auth',success:async()=>{await Promise.resolve();apt.setRequestHeader('x-shared-script','callback-ready');},complete:async()=>{await Promise.resolve();apt.setVar('ajaxComplete',true);}});apt.test('ajax-complete',()=>apt.expect(apt.getVar('ajaxComplete')).to.equal(true));`,
     );
   await page
     .locator('[data-shared-script="afterScript"]')

@@ -1,11 +1,8 @@
 /** This factory executes only inside QuickJS, using the existing HTTP broker. */
 export const ajaxCompatibilitySource = String(
   function installAjax(sendRequest) {
-    const invoke = (callback, args) => {
-      if (!callback) return;
-      const result = callback(...args);
-      if (result && typeof result.then === "function")
-        throw Error("ajax回调暂不支持Promise返回");
+    const invoke = async (callback, args) => {
+      if (callback) await callback(...args);
     };
     const scalar = (value) => {
       if (value === null) return "";
@@ -107,62 +104,75 @@ export const ajaxCompatibilitySource = String(
         )
           copiedHeaders["content-type"] =
             "application/x-www-form-urlencoded; charset=UTF-8";
-        sendRequest(
-          {
-            url,
-            method,
-            headers: copiedHeaders,
-            ...(data === undefined ? {} : { body: data }),
-            ...(options.timeout === undefined
-              ? {}
-              : { timeout: options.timeout }),
-          },
-          (error, response) => {
-            const xhr = {
-              status: response?.code || 0,
-              statusText: response?.status || "",
-              responseText: response?.text() || "",
-              getResponseHeader: (name) => response?.headers.get(name),
-            };
-            let status = "success",
-              value = xhr.responseText,
-              failure = error;
-            if (
-              !failure &&
-              !((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304)
-            )
-              failure = Error("HTTP " + xhr.status);
-            if (failure) status = "error";
-            else if (xhr.status === 204 || method === "HEAD") {
-              status = "nocontent";
-              value = undefined;
-            } else if (xhr.status === 304) {
-              status = "notmodified";
-              value = undefined;
-            } else if (
-              options.dataType === "json" ||
-              (options.dataType === undefined &&
-                /\bjson\b/i.test(response?.headers.get("content-type") || ""))
-            ) {
-              try {
-                value = JSON.parse(xhr.responseText);
-                xhr.responseJSON = value;
-              } catch (error) {
+        return new Promise((resolve, reject) => {
+          sendRequest(
+            {
+              url,
+              method,
+              headers: copiedHeaders,
+              ...(data === undefined ? {} : { body: data }),
+              ...(options.timeout === undefined
+                ? {}
+                : { timeout: options.timeout }),
+            },
+            async (error, response) => {
+              const xhr = {
+                status: response?.code || 0,
+                statusText: response?.status || "",
+                responseText: response?.text() || "",
+                getResponseHeader: (name) => response?.headers.get(name),
+              };
+              let status = "success",
+                value = xhr.responseText,
                 failure = error;
-                status = "parsererror";
+              if (
+                !failure &&
+                !((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304)
+              )
+                failure = Error("HTTP " + xhr.status);
+              if (failure) status = "error";
+              else if (xhr.status === 204 || method === "HEAD") {
+                status = "nocontent";
+                value = undefined;
+              } else if (xhr.status === 304) {
+                status = "notmodified";
+                value = undefined;
+              } else if (
+                options.dataType === "json" ||
+                (options.dataType === undefined &&
+                  /\bjson\b/i.test(response?.headers.get("content-type") || ""))
+              ) {
+                try {
+                  value = JSON.parse(xhr.responseText);
+                  xhr.responseJSON = value;
+                } catch (error) {
+                  failure = error;
+                  status = "parsererror";
+                }
               }
-            }
-            try {
-              if (failure) {
-                if (options.error)
-                  invoke(options.error, [xhr, status, failure]);
-                else throw failure;
-              } else invoke(options.success, [value, status, xhr]);
-            } finally {
-              invoke(options.complete, [xhr, status]);
-            }
-          },
-        );
+              let callbackError,
+                callbackFailed = false;
+              try {
+                if (failure) {
+                  if (options.error)
+                    await invoke(options.error, [xhr, status, failure]);
+                  else throw failure;
+                } else await invoke(options.success, [value, status, xhr]);
+              } catch (error) {
+                callbackError = error;
+                callbackFailed = true;
+              }
+              try {
+                await invoke(options.complete, [xhr, status]);
+              } catch (error) {
+                if (!callbackFailed) callbackError = error;
+                callbackFailed = true;
+              }
+              if (callbackFailed) reject(callbackError);
+              else resolve(failure ? undefined : value);
+            },
+          );
+        });
       },
     });
   },
