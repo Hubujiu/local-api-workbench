@@ -26,7 +26,7 @@
 | 桌面与 Git 入口 | Windows x64/macOS arm64/Linux x64 Electron成品包、自选项目位置、打开目录/终端、关闭未保存提示 | desktop-smoke.mjs、terminal.test.mjs |
 | 可视界面 | 浅色/深色、紧凑布局、编辑器行号/JSON 高亮、响应/日志/历史 | code-format.test.mjs、ui-smoke.mjs 的截图/视频/trace |
 
-CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实PostgreSQL/MySQL服务测试、格式/依赖/构建资源审计、三平台实际打包程序启动测试。测试访问本地临时fixture，不使用用户业务账号或压测第三方服务。macOS仅CI临时签名；未经Developer ID签名或公证。
+CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实PostgreSQL/MySQL服务测试、格式/依赖/构建资源审计、三平台实际打包程序启动测试。测试访问本地临时fixture，不使用用户业务账号或压测第三方服务。macOS仅CI临时签名；未经Developer ID签名或公证。
 
 ## 安装与数据
 
@@ -57,7 +57,7 @@ CI九项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 剩余交付缺口分类
 
-- 实际功能缺口：完整脚本SDK和数据库前后置联动、完整Faker/Mock目录、部分高级Schema和压测配置、NTLM高级部署、非OOB OAuth1流程、更多数据库与写操作等。
+- 实际功能缺口：完整脚本SDK和数据库前后置联动、完整Faker/Mock目录、部分高级Schema和压测配置、NTLM高级部署、非OOB OAuth1流程、更多数据库与远程写操作等。SQLite 单语句显式写入的范围与验证见 ADR-SQLITE-WRITES，不等同数据库全功能。
 - 互操作证据缺口：Offline2真实原生项目样本和全部隐含操作顺序尚未取得，不能声称原生迁移或所有历史格式兼容。
 - 环境/分发缺口：原版正常GUI启动受限；未运行真实外部AI客户端；macOS仅临时签名，正式签名/公证未提供。
 - 界面差距：保持原创品牌，主布局已按参考截图调整并验证，但没有逐像素等价结论。

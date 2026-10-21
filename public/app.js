@@ -723,7 +723,7 @@ function renderPage() {
         "",
       )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB · 只读查询 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis（有界只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
+    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis（有界只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</label></p><p><button id="db-query" class="primary">执行只读查询</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
@@ -2104,6 +2104,11 @@ function bind() {
     }
   });
   on("#db-type,#db-tls", "change", updateDatabaseFields);
+  on("#db-write", "change", (_, element) => {
+    $("#db-query").textContent = element.checked
+      ? "确认并执行写入"
+      : "执行只读查询";
+  });
   updateDatabaseFields();
   on("#db-query", "click", async () => {
     const target = $("#db-result"),
@@ -2119,16 +2124,33 @@ function bind() {
       ssl: $("#db-tls").checked,
       ca: $("#db-tls").checked ? $("#db-ca").value || undefined : undefined,
       authSource: $("#db-auth-source").value,
+      allowWrite: type === "sqlite" && $("#db-write").checked,
       filename: $("#db-path").value,
       sql: $("#db-sql").value,
       parameters: ["redis", "mongodb"].includes(type)
         ? []
         : JSON.parse($("#db-params").value),
     };
+    if (
+      input.allowWrite &&
+      !confirm(
+        "即将修改SQLite文件：" +
+          input.filename +
+          "\nSQL：" +
+          input.sql.slice(0, 500) +
+          "\n这是数据写入，可能更新或删除记录，请先备份。单条事务限1000条计数变更；超时结果可能不确定，不能盲目重试。继续？",
+      )
+    ) {
+      $("#db-write").checked = false;
+      button.textContent = "执行只读查询";
+      return;
+    }
     const queryMarker = {};
     target.activeQuery = queryMarker;
     button.disabled = true;
-    target.textContent = "正在查询…";
+    target.textContent = input.allowWrite
+      ? "正在执行写入，请勿重复提交…"
+      : "正在查询…";
     try {
       const result = await api(
         "/projects/" + project.id + "/database",
@@ -2145,8 +2167,11 @@ function bind() {
         target.scrollIntoView({ block: "nearest" });
       }
     } finally {
-      if (button.isConnected && target.activeQuery === queryMarker)
+      if (button.isConnected && target.activeQuery === queryMarker) {
         button.disabled = false;
+        $("#db-write").checked = false;
+        button.textContent = "执行只读查询";
+      }
     }
   });
   on("#archive-project", "click", async () => {
@@ -3538,6 +3563,12 @@ function updateDatabaseFields() {
   ])
     show(id, type !== "sqlite");
   show("#db-path", type === "sqlite");
+  $("#db-write-label").hidden = type !== "sqlite";
+  if (type !== "sqlite") $("#db-write").checked = false;
+  $("#db-query").textContent =
+    type === "sqlite" && $("#db-write").checked
+      ? "确认并执行写入"
+      : "执行只读查询";
   show("#db-params", !["redis", "mongodb"].includes(type));
   show("#db-auth-source", type === "mongodb");
   show("#db-ca", type !== "sqlite" && $("#db-tls").checked);

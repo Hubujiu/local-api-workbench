@@ -33,7 +33,7 @@ import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 import { captureSSE, exchangeTCP, exchangeWebSocket } from "./protocols.mjs";
-import { querySQLiteBounded } from "./database.mjs";
+import { querySQLiteBounded, mutateSQLiteBounded } from "./database.mjs";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -501,6 +501,22 @@ export async function createApp({
           }
           if (action === "database" && req.method === "POST") {
             const b = await body(req);
+            if (b.allowWrite !== undefined && typeof b.allowWrite !== "boolean")
+              throw Error("写入标识必须为布尔值");
+            if (b.allowWrite === true) {
+              if (b.type && b.type !== "sqlite")
+                throw Error("显式写入目前仅支持SQLite");
+              return json(
+                res,
+                200,
+                await mutateSQLiteBounded(
+                  b.filename,
+                  b.sql,
+                  b.parameters || [],
+                ),
+              );
+            }
+
             return json(
               res,
               200,

@@ -40,7 +40,7 @@ npm start
 - 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
 - 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
 - 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
-- SQLite/PostgreSQL/MySQL/Redis/MongoDB 有界只读查询，MCP stdio 授权项目读写与计划执行
+- SQLite/PostgreSQL/MySQL/Redis/MongoDB 默认只读查询、显式确认的 SQLite 单语句写入，MCP stdio 授权项目读写与计划执行
 - 浅色/深色工作台；无 CDN、无遥测、无内置云模型
 
 ## MCP
@@ -67,7 +67,7 @@ node tests/ui-smoke.mjs
 - 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；涵盖保存竞争、脚本、导入、目录/文档持久化、OAuth、SSE 与 MCP 开关
 - 已创建 PR #1，多个候选版本十项 CI 全绿；最新迭代以对应提交的 CI 结果为准
 - 支持本地循环 OpenAPI 引用保留，外部 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
-- SQLite/PostgreSQL/MySQL 仅提供只读查询；未提供数据库写操作。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
+- PostgreSQL/MySQL 仅提供只读查询；SQLite 可逐次明确允许单条 INSERT/UPDATE/DELETE，拒绝多语句/DDL/REPLACE。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
 - 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
 
 源文件和文档将通过一个固定开发分支的 PR 迭代；未经批准不合入 main、不部署。
@@ -92,9 +92,9 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 
 URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等89种基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
 
-## 数据库只读查询
+## 数据库查询与显式 SQLite 写入
 
-支持 SQLite、PostgreSQL、MySQL、Redis有界命令和MongoDB find。Redis输入JSON命令数组；MongoDB输入collection/filter/projection/sort/limit等JSON查询对象，结果采用Extended JSON。均不自动保存连接凭据；不提供数据库写入或任意脚本执行。具体限额见 docs/ADR-REDIS-READS.md、docs/ADR-MONGODB-FIND.md。
+支持 SQLite、PostgreSQL、MySQL、Redis有界命令和MongoDB find。Redis输入JSON命令数组；MongoDB输入collection/filter/projection/sort/limit等JSON查询对象，结果采用Extended JSON。均不自动保存连接凭据，不提供任意脚本执行。SQLite 另提供逐次勾选并确认的单语句 DML，带事务和结果限额；超时可能结果不确定，需先查询再决定是否重试。只操作可信数据库并先备份；详见 docs/ADR-SQLITE-WRITES.md。具体限额见 docs/ADR-REDIS-READS.md、docs/ADR-MONGODB-FIND.md。
 
 ## 参数化压测
 

@@ -1,8 +1,8 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { querySQLite } from "./database.mjs";
+import { querySQLite, mutateSQLite } from "./database.mjs";
 try {
   parentPort.postMessage({
-    result: querySQLite(
+    result: (workerData.mode === "write" ? mutateSQLite : querySQLite)(
       workerData.filename,
       workerData.sql,
       workerData.parameters,

@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
 import { parseRESP } from "../src/redis.mjs";
@@ -2148,6 +2149,43 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-page="database"]').click();
+  const sqliteWriteFile = path.join(root, "ui-write.db");
+  const sqliteWriteFixture = new DatabaseSync(sqliteWriteFile);
+  sqliteWriteFixture.exec("CREATE TABLE entries(value TEXT)");
+  sqliteWriteFixture.close();
+  const countSQLiteRows = () => {
+    const db = new DatabaseSync(sqliteWriteFile, { readOnly: true });
+    try {
+      return db.prepare("SELECT count(*) AS n FROM entries").get().n;
+    } finally {
+      db.close();
+    }
+  };
+  await page.locator("#db-path").fill(sqliteWriteFile);
+  await page.locator("#db-sql").fill("INSERT INTO entries(value) VALUES (?)");
+  await page.locator("#db-params").fill('["from-ui"]');
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText("仅支持只读", { exact: false })
+    .waitFor();
+  assert.equal(countSQLiteRows(), 0);
+  await page.locator("#db-write").check();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#db-query").click();
+  assert.equal(countSQLiteRows(), 0);
+  assert.equal(await page.locator("#db-write").isChecked(), false);
+  await page.locator("#db-write").check();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText('"committed": true', { exact: false })
+    .waitFor();
+  assert.equal(countSQLiteRows(), 1);
+  assert.equal(await page.locator("#db-write").isChecked(), false);
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-sqlite-write.png" });
   await page.locator("#db-type").selectOption("redis");
   assert.equal(await page.locator("#db-path").isVisible(), false);
   assert.equal(await page.locator("#db-params").isVisible(), false);
