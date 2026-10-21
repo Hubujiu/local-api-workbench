@@ -1,6 +1,4 @@
-import { renameSharedScriptScopes } from "./shared-scripts.js";
-import { renameSharedAuthScopes } from "./shared-auth.js";
-import { renameFolderParameters } from "./global-parameters.js";
+import { folderTree, moveFolderTree } from "./folder-tree.js";
 import { parseLoadCSV } from "./load-data.js";
 import { builtinVariableNames } from "./builtin-variable-catalog.js";
 import {
@@ -320,19 +318,19 @@ function tree() {
       ...items.map((item) => item.folder || "未分组"),
     ]),
   ];
+  const renderFolder = (node) => {
+    const folder = node.path;
+    const direct = items.filter((item) => (item.folder || "未分组") === folder);
+    const total = items.filter(
+      (item) =>
+        (item.folder || "未分组") === folder ||
+        (item.folder || "").startsWith(folder + "/"),
+    ).length;
+    return `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(node.name)}</span> <span>(${total})</span><button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button></summary>${direct.map((item) => `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`).join("")}${node.children.map(renderFolder).join("")}</details>`;
+  };
   return (
-    folders
-      .map(
-        (folder) =>
-          `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(folder)}</span> <span>(${items.filter((item) => (item.folder || "未分组") === folder).length})</span><button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button></summary>${items
-            .filter((item) => (item.folder || "未分组") === folder)
-            .map(
-              (item) =>
-                `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`,
-            )
-            .join("")}</details>`,
-      )
-      .join("") || '<div class="notice">没有匹配的项目内容。</div>'
+    folderTree(folders).map(renderFolder).join("") ||
+    '<div class="notice">没有匹配的项目内容。</div>'
   );
 }
 
@@ -1907,7 +1905,15 @@ function bind() {
     if (!selected || selected.deletedAt) throw Error("没有当前接口可定位");
     search = "";
     searchType = "all";
-    collapsedFolders.delete(project.id + ":" + (selected.folder || "未分组"));
+    const selectedPath = selected.folder || "未分组";
+    for (const key of [...collapsedFolders]) {
+      const folder = key.slice((project.id + ":").length);
+      if (
+        key.startsWith(project.id + ":") &&
+        (selectedPath === folder || selectedPath.startsWith(folder + "/"))
+      )
+        collapsedFolders.delete(key);
+    }
     page = "apis";
     render();
     const item = document.querySelector(
@@ -2623,66 +2629,41 @@ function bindTree() {
     $("#protocol-name").value = item.name;
   });
   on("[data-edit-folder]", "click", (_, element) => {
+    collect();
     const old = element.dataset.editFolder;
     modal(
       "编辑目录",
-      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label>目录默认服务</label><select id="folder-service"><option value="">不绑定服务</option>${project.settings?.folderServices?.[old] && !(project.servers || []).some((service) => service.id === project.settings.folderServices[old]) ? `<option selected value="${esc(project.settings.folderServices[old])}">已删除服务（保留引用）</option>` : ""}${(project.servers || []).map((service) => `<option value="${esc(service.id)}" ${project.settings?.folderServices?.[old] === service.id ? "selected" : ""}>${esc(service.name)}</option>`).join("")}</select><p class="muted">只影响本目录未显式绑定服务的相对路径接口；完整 URL 保持直连。已有计划和用例快照不变。</p><label><input id="folder-remove" type="checkbox">删除目录并将接口移至未分组（目录服务继承会失效）</label>`,
+      `<label>目录名称</label><input id="folder-name" value="${esc(old)}"><label>目录默认服务</label><select id="folder-service"><option value="">不绑定服务</option>${project.settings?.folderServices?.[old] && !(project.servers || []).some((service) => service.id === project.settings.folderServices[old]) ? `<option selected value="${esc(project.settings.folderServices[old])}">已删除服务（保留引用）</option>` : ""}${(project.servers || []).map((service) => `<option value="${esc(service.id)}" ${project.settings?.folderServices?.[old] === service.id ? "selected" : ""}>${esc(service.name)}</option>`).join("")}</select><p class="muted">只影响本目录未显式绑定服务的相对路径接口；完整 URL 保持直连。已有计划和用例快照不变。</p><label><input id="folder-remove" type="checkbox">删除此目录及所有子目录，将其中内容移至未分组（共享配置将移除）</label>`,
       () => {
         const remove = $("#folder-remove").checked,
           name = $("#folder-name").value.trim();
         if (!remove && !name) throw Error("名称不能为空");
-        if (
-          !remove &&
-          name !== old &&
-          [
-            ...(project.folders || []),
-            ...project.requests.map((item) => item.folder),
-          ].includes(name)
-        )
-          throw Error("目标目录已存在，请使用其他名称");
-        const folderParameters = renameFolderParameters(
-          project.settings?.folderParameters,
-          old,
-          remove ? null : name,
-        );
-        const folderAuth = renameSharedAuthScopes(
-          project.settings,
-          old,
-          remove ? null : name,
-        );
-        const folderScripts = renameSharedScriptScopes(
-          project.settings,
-          old,
-          remove ? null : name,
-        );
+        const changed = moveFolderTree(project, old, remove ? null : name);
         const serviceId = $("#folder-service").value;
-        const bindings = { ...(project.settings?.folderServices || {}) };
-        delete bindings[old];
-        if (!remove && serviceId)
-          Object.defineProperty(bindings, name, {
-            value: serviceId,
-            enumerable: true,
-            configurable: true,
-            writable: true,
-          });
-        project.settings ??= {};
-        project.settings.folderServices = bindings;
-        project.settings.folderParameters = folderParameters;
-        project.settings.folderAuth = folderAuth;
-        project.settings.folderScripts = folderScripts;
-        if (parameterScopes.get(project.id) === old)
-          parameterScopes.set(project.id, remove ? "" : name);
-        for (const item of [
-          ...project.requests,
-          ...(project.protocols || []),
-          ...project.documents,
-        ])
-          if ((item.folder || "未分组") === old)
-            item.folder = remove ? "" : name;
-        project.folders = (project.folders || []).filter(
-          (folder) => folder !== old,
-        );
-        if (!remove) project.folders.push(name);
+        if (!remove) {
+          changed.settings.folderServices ??= {};
+          delete changed.settings.folderServices[name];
+          if (serviceId)
+            Object.defineProperty(changed.settings.folderServices, name, {
+              value: serviceId,
+              enumerable: true,
+              writable: true,
+              configurable: true,
+            });
+        }
+        const selectedScope = parameterScopes.get(project.id) || "";
+        if (selectedScope === old || selectedScope.startsWith(old + "/"))
+          parameterScopes.set(
+            project.id,
+            remove ? "" : name + selectedScope.slice(old.length),
+          );
+        for (const key of [...collapsedFolders])
+          if (
+            key === project.id + ":" + old ||
+            key.startsWith(project.id + ":" + old + "/")
+          )
+            collapsedFolders.delete(key);
+        project = changed;
         mark();
         render();
       },

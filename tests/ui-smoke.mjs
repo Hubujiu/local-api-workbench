@@ -2194,6 +2194,51 @@ try {
     .locator(".response-body")
     .getByText("folder-value", { exact: false })
     .waitFor();
+  // A nested exact-scope path renders actual ancestors and moves atomically.
+  await page.locator('[data-edit-folder="参数目录"]').click();
+  await page.locator("#folder-name").fill("树父/子/参数目录");
+  await page.locator("#dialog-save").click();
+  await saveAndWait("#save");
+  assert.equal(
+    await page
+      .locator(
+        '[data-tree-folder="树父"] [data-tree-folder="树父/子"] [data-tree-folder="树父/子/参数目录"]',
+      )
+      .count(),
+    1,
+  );
+  await page.locator('[data-tree-folder="树父"] > summary').click();
+  assert.equal(await page.locator(".tree-item.active").isVisible(), false);
+  await page.locator("#locate-request").click();
+  assert.equal(await page.locator(".tree-item.active").isVisible(), true);
+  await page.locator('[data-edit-folder="树父"]').click();
+  await page.locator("#folder-name").fill("树改名");
+  await page.locator("#dialog-save").click();
+  await saveAndWait("#save");
+  await page.locator('[data-mode="design"]').click();
+  assert.equal(
+    await page.locator("#folder").inputValue(),
+    "树改名/子/参数目录",
+  );
+  const nestedProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  assert.equal(
+    nestedProject.settings.folderParameters["树改名/子/参数目录"].headers[0]
+      .value,
+    "folder-value",
+  );
+  assert.equal(
+    nestedProject.settings.folderParameters["树父/子/参数目录"],
+    undefined,
+  );
+  await page.screenshot({ path: "/tmp/local-api-folder-tree.png" });
+  // Move the leaf back; following existing assertions verify effective HTTP data.
+  await page.locator('[data-edit-folder="树改名/子/参数目录"]').click();
+  await page.locator("#folder-name").fill("参数目录");
+  await page.locator("#dialog-save").click();
+  await saveAndWait("#save");
+  await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-edit-folder="参数目录"]').click();
   await page.locator("#folder-name").fill("参数目录改名");
   await page.locator("#dialog-save").click();
