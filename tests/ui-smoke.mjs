@@ -1348,6 +1348,36 @@ try {
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.locator('[data-auth="iss"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-asap-auth.png" });
+  await page.locator('[data-param="after"]').click();
+  for (const expected of [61, 60]) {
+    await page
+      .locator("#script-code")
+      .fill(
+        'apt.test("JSON value",()=>apt.response.to.have.jsonBody("ttl",' +
+          expected +
+          '));pm.test("JSON format",()=>pm.response.to.have.jsonBody());apt.test("JSON missing",()=>apt.response.to.not.have.jsonBody("error"));',
+      );
+    const reply = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    );
+    await page.locator("#send").click();
+    const result = await (await reply).json();
+    assert.equal(result.status, 200);
+    assert.equal(
+      result.outcome,
+      expected === 60 ? "passed" : "failed",
+      JSON.stringify(result),
+    );
+    await page.locator("#send:not([disabled])").waitFor();
+  }
+  await page.locator('[data-response="assertions"]').click();
+  await page
+    .locator(".response-body")
+    .getByText("JSON value", { exact: false })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-jsonbody-assertions.png" });
+  await page.locator('[data-response="body"]').click();
+
   await page.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("hawk");

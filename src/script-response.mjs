@@ -1,6 +1,7 @@
 // Serialized into the existing isolated VM; no host module references.
 function installResponseCompatibility({ response, pm, apt }) {
   const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const { toPath, isEqual, isPlainObject } = globalThis._;
   const headers = response?.headers || Object.create(null);
   const headerView = new Proxy(headers, {
     get(target, key) {
@@ -65,6 +66,47 @@ function installResponseCompatibility({ response, pm, apt }) {
           own(headers, key) && (arguments.length < 2 || headers[key] === value),
           "响应Header " + name,
         );
+      },
+      jsonBody(path, value) {
+        if (!response) throw Error("当前脚本没有响应");
+        if (arguments.length > 2) throw Error("jsonBody最多接受两个参数");
+        let data,
+          valid = true;
+        try {
+          data = JSON.parse(response.body);
+        } catch {
+          valid = false;
+        }
+        if (!arguments.length) return check(valid, "响应JSON格式");
+        if (!valid) throw Error("jsonBody路径或值断言需要有效JSON响应");
+        if (typeof path === "string") {
+          if (path.length > 1024) throw Error("jsonBody路径最多1024字符");
+          const parts =
+            path === "" || (data != null && own(data, path))
+              ? [path]
+              : toPath(path);
+          if (!parts.length || parts.length > 32)
+            throw Error("jsonBody路径最多32层");
+          let found = true,
+            current = data;
+          for (const part of parts) {
+            if (current == null || !own(current, part)) {
+              found = false;
+              break;
+            }
+            current = current[part];
+          }
+          return check(
+            found && (arguments.length < 2 || isEqual(current, value)),
+            "响应JSON路径 " + path,
+          );
+        }
+        if (
+          arguments.length === 1 &&
+          (isPlainObject(path) || Array.isArray(path))
+        )
+          return check(isEqual(data, path), "响应JSON整体值");
+        throw Error("jsonBody需要字符串路径或JSON对象/数组");
       },
       body(value) {
         if (typeof value !== "string") throw Error("body需要完整文本");

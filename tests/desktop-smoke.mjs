@@ -236,6 +236,22 @@ try {
     jwt: true,
     algorithm: "RS256",
   });
+  phase = "json-body-assertions";
+  console.log("DESKTOP_PHASE", phase);
+  await window.locator('[data-param="after"]').click();
+  await window
+    .locator("#script-code")
+    .fill(
+      'apt.test("packaged JSON",()=>{apt.response.to.have.jsonBody();apt.response.to.have.jsonBody("algorithm","RS256");pm.response.to.have.jsonBody({algorithm:"RS256",jwt:true});apt.response.to.not.have.jsonBody("error");});',
+    );
+  const jsonReply = window.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await window.locator("#send").click();
+  const jsonResult = await (await jsonReply).json();
+  assert.equal(jsonResult.status, 200);
+  assert.equal(jsonResult.outcome, "passed", JSON.stringify(jsonResult));
+  await window.locator("#send:not([disabled])").waitFor();
   await window.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await window.locator('[data-param="auth"]').click();
   await window.locator("#auth-type").selectOption("none");

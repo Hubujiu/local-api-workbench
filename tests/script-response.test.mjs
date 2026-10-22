@@ -99,7 +99,7 @@ test("response assertions use real HTTP evidence and a mismatch fails the plan",
         request: {
           url: `http://127.0.0.1:${server.address().port}`,
           afterScript:
-            'apt.test("wire",()=>{apt.response.to.have.status(201);apt.response.to.be.success;apt.response.to.have.header("Content-Type","application/json");apt.expect(apt.response.json.wire).to.equal(true);apt.expect(apt.response.cookies.wire).to.equal("yes");});',
+            'apt.test("wire",()=>{apt.response.to.have.status(201);apt.response.to.be.success;apt.response.to.have.header("Content-Type","application/json");apt.expect(apt.response.json.wire).to.equal(true);apt.response.to.have.jsonBody("wire",true);pm.response.to.have.jsonBody({wire:true});apt.expect(apt.response.cookies.wire).to.equal("yes");});',
         },
       },
     ],
@@ -108,4 +108,78 @@ test("response assertions use real HTTP evidence and a mismatch fails the plan",
   plan.steps[0].request.afterScript =
     'apt.test("wrong wire status",()=>apt.response.to.be.notFound);';
   assert.equal((await runPlan(plan, {}, executeRequest)).status, "failed");
+});
+
+test("jsonBody checks JSON validity, own nested paths and deep values without silent no-ops", async () => {
+  const body = JSON.stringify({
+    value: 7,
+    list: [{ ok: true }],
+    "a.b": "literal",
+    empty: null,
+    "": 0,
+  });
+  const result = await runScript(
+    `
+    apt.test("valid",()=>apt.response.to.have.jsonBody());
+    apt.test("path",()=>apt.response.to.have.jsonBody("list[0].ok", true));
+    pm.test("literal",()=>pm.response.to.have.jsonBody("a.b", "literal"));
+    apt.test("empty key",()=>apt.response.to.have.jsonBody("", 0));
+    apt.test("null",()=>apt.response.to.have.jsonBody("empty", null));
+    apt.test("missing",()=>apt.response.to.not.have.jsonBody("error"));
+    apt.test("different",()=>apt.response.to.not.have.jsonBody("value", 8));
+    apt.test("whole",()=>apt.response.to.have.jsonBody({ "":0, empty:null, "a.b":"literal", list:[{ok:true}], value:7 }));
+    apt.test("wrong",()=>apt.response.to.have.jsonBody("value", 8));
+    apt.test("not equal",()=>apt.response.to.not.have.jsonBody("value", 7));
+    apt.test("prototype",()=>apt.response.to.have.jsonBody("constructor"));
+    apt.test("unsupported",()=>apt.response.to.have.jsonBody(7));
+  `,
+    { response: { ...response, body } },
+  );
+  assert.deepEqual(
+    result.tests.map((t) => t.passed),
+    [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ],
+  );
+});
+
+test("jsonBody guards malformed data, missing response, invalid arity and excessive paths", async () => {
+  const invalid = await runScript(
+    `
+    apt.test("invalid",()=>apt.response.to.have.jsonBody());
+    apt.test("not JSON",()=>apt.response.to.not.have.jsonBody());
+    apt.test("bad negative path",()=>apt.response.to.not.have.jsonBody("error"));
+  `,
+    { response: { ...response, body: "invalid JSON" } },
+  );
+  assert.deepEqual(
+    invalid.tests.map((t) => t.passed),
+    [false, true, false],
+  );
+  const absent = await runScript(
+    'apt.test("absent",()=>apt.response.to.not.have.jsonBody());',
+    {},
+  );
+  assert.equal(absent.tests[0].passed, false);
+  const limits = await runScript(
+    `
+    apt.test("arity",()=>apt.response.to.have.jsonBody("value",7,"ignored"));
+    apt.test("long",()=>apt.response.to.not.have.jsonBody("x".repeat(1025)));
+    apt.test("deep",()=>apt.response.to.not.have.jsonBody(Array(34).fill("x").join(".")));
+    apt.test("array path",()=>apt.response.to.have.jsonBody(["value"],7));
+  `,
+    { response },
+  );
+  assert(limits.tests.every((t) => !t.passed));
 });
