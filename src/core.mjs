@@ -3,6 +3,7 @@ import {
   referenceModeIsAllowed,
 } from "./openapi-reference-context.mjs";
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
+import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import {
   importOpenAPIBody,
   exportOpenAPIBody,
@@ -1438,6 +1439,13 @@ export function resolveLocalReferences(document) {
           : true;
       if (!target || typeof target !== "object" || Array.isArray(target))
         throw Error("无效 OpenAPI 引用目标 " + ref);
+      if (mode === "schema" && String(root.openapi).startsWith("3.1."))
+        return visit(
+          schemaReferenceWithSiblings(target, siblings),
+          nextSeen,
+          depth + 1,
+          mode,
+        );
       return visit({ ...target, ...siblings }, nextSeen, depth + 1, mode);
     }
     return Object.fromEntries(

@@ -25,6 +25,13 @@ export function openapiExample(media, fallback = {}) {
   }
   return fallback;
 }
+function hasComposition(schema) {
+  return (
+    schema &&
+    typeof schema === "object" &&
+    ["allOf", "anyOf", "oneOf"].some((key) => Object.hasOwn(schema, key))
+  );
+}
 export function importOpenAPIBody(requestBody) {
   if (requestBody === undefined)
     return {
@@ -66,6 +73,7 @@ export function importOpenAPIBody(requestBody) {
   )
     throw Error("尚不支持该 OpenAPI 请求体媒体类型: " + mediaName);
   const example = openapiExample(media, {});
+  if (hasComposition(schema)) throw Error("尚不支持 OpenAPI 复杂表单 Schema");
   if (!example || typeof example !== "object" || Array.isArray(example))
     throw Error("表单示例必须是对象");
   const properties = schema.properties || {};
@@ -81,6 +89,7 @@ export function importOpenAPIBody(requestBody) {
       throw Error("尚不支持 OpenAPI 表单自定义 encoding");
     if (
       ["array", "object"].includes(definition.type) ||
+      hasComposition(definition) ||
       definition.properties ||
       definition.items
     )
