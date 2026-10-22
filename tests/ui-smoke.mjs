@@ -2360,6 +2360,38 @@ try {
       responseContentBox.y + responseContentBox.height,
     "pending response field actions must remain above the footer",
   );
+  const responseChrome = await page.locator("#dialog").evaluate((dialog) => {
+    const bounds = dialog.getBoundingClientRect();
+    const header = dialog
+      .querySelector(":scope > form > header")
+      .getBoundingClientRect();
+    const footer = dialog
+      .querySelector(":scope > form > footer")
+      .getBoundingClientRect();
+    const close = dialog.querySelector('button[aria-label="关闭"]');
+    const button = close.getBoundingClientRect();
+    return {
+      headerInside: header.top >= bounds.top && header.bottom <= bounds.bottom,
+      footerInside: footer.top >= bounds.top && footer.bottom <= bounds.bottom,
+      closeUnobscured: close.contains(
+        document.elementFromPoint(
+          button.x + button.width / 2,
+          button.y + button.height / 2,
+        ),
+      ),
+      scrollTop: dialog.scrollTop,
+    };
+  });
+  assert.deepEqual(
+    responseChrome,
+    {
+      headerInside: true,
+      footerInside: true,
+      closeUnobscured: true,
+      scrollTop: 0,
+    },
+    "schema field focus must not scroll the dialog title or close control away",
+  );
   await page.screenshot({ path: "/tmp/local-api-response-schema.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });

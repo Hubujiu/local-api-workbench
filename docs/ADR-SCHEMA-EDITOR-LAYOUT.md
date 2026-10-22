@@ -20,3 +20,10 @@ give active field inputs their own bounded scrolling area with a separate action
 row. Field, reference and composition forms share this structure. Only open Schema
 dialogs adopt this flex layout; closed dialogs remain hidden. Preserve the existing
 browser assertion that pending field actions stay above the modal footer.
+
+The dialog has a real `form` wrapper. It, not the dialog alone, must own the flex
+column containing header, content and footer. Screenshot review caught a second
+issue that the action-row assertion alone missed: focusing a field scrolled the
+outer dialog and hid its title and close button. Bound the form and content, keep
+the header/footer outside the inner scrolling region, and verify header/footer
+geometry, close-button hit testing and zero outer scroll after the real focus flow.

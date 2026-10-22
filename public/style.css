@@ -1616,12 +1616,20 @@ dialog:has(#schema-editor) {
   display: flex;
   flex-direction: column;
   max-height: 94vh;
+  overflow: hidden;
 }
 #dialog[open]:has(#schema-editor .schema-fields:not(:empty)) {
   height: min(94vh, 800px);
 }
-#dialog:has(#schema-editor) > header,
-#dialog:has(#schema-editor) > footer {
+#dialog:has(#schema-editor) > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+#dialog:has(#schema-editor) > form > header,
+#dialog:has(#schema-editor) > form > footer {
   flex-shrink: 0;
 }
 #dialog:has(#schema-editor) #dialog-content {
