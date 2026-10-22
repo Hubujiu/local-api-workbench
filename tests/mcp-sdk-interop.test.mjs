@@ -246,6 +246,70 @@ test(
           arguments: { projectId: allowed.id, ...args },
         }),
       );
+    const syncDocument = {
+      openapi: "3.1.0",
+      servers: [{ url: app.url }],
+      paths: {
+        ["/mock/" + allowed.id + "/sdk-fixture"]: {
+          get: {
+            summary: "Imported SDK request",
+            responses: { 200: { description: "OK" } },
+          },
+        },
+      },
+    };
+    const scriptMapping = [
+      {
+        method: "GET",
+        url: "/mock/" + allowed.id + "/sdk-fixture",
+        beforeScript: 'apt.environment.set("syncProof", "executed");',
+      },
+    ];
+    const imported = await invokeFlowTool("sync_openapi", {
+      document: JSON.stringify(syncDocument),
+      coverMode: "both",
+      apiScripts: scriptMapping,
+    });
+    assert.equal(imported.length, 1);
+    assert.equal(
+      (await app.store.get(allowed.id)).environments[0].variables.syncProof,
+      undefined,
+    );
+    assert.equal(
+      (await invokeFlowTool("execute_api", { apiId: imported[0].id })).status,
+      "passed",
+    );
+    assert.equal(
+      (await app.store.get(allowed.id)).environments[0].variables.syncProof,
+      "executed",
+    );
+    assert.equal(
+      (
+        await invokeFlowTool("sync_openapi", {
+          document: syncDocument,
+          coverMode: "ignore",
+        })
+      ).length,
+      0,
+    );
+    const beforeRejectedSync = await app.store.get(allowed.id);
+    assert.equal(
+      (
+        await replacement.callTool({
+          name: "localapi_sync_openapi",
+          arguments: {
+            projectId: allowed.id,
+            document: syncDocument,
+            coverMode: "clear",
+          },
+        })
+      ).isError,
+      true,
+    );
+    assert.deepEqual(
+      (await app.store.get(allowed.id)).requests,
+      beforeRejectedSync.requests,
+    );
     const defaultEnvironmentId = allowed.environments[0].id;
     const alternate = await invokeFlowTool("create_environment", {
       name: "SDK alternate environment",

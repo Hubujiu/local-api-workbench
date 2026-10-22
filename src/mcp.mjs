@@ -1,3 +1,4 @@
+import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
 import { applyMCPInput } from "./mcp-request-input.mjs";
 import {
   listExecutionHistory,
@@ -12,7 +13,7 @@ import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store, executeRequest } from "./runtime.mjs";
-import { importIntoProject, snapshotPlan, runPlan } from "./core.mjs";
+import { snapshotPlan, runPlan } from "./core.mjs";
 import {
   environmentVariables,
   selectedEnvironment,
@@ -64,7 +65,29 @@ export function createMCP({
           [
             "localapi_sync_openapi",
             "向授权项目导入 OpenAPI（不会执行请求）",
-            { projectId: { type: "string" }, document: { type: "object" } },
+            {
+              projectId: { type: "string" },
+              document: { oneOf: [{ type: "object" }, { type: "string" }] },
+              folder: { type: "string" },
+              coverMode: {
+                type: "string",
+                enum: ["url_and_folder", "url", "ignore", "both"],
+              },
+              apiScripts: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    method: { type: "string" },
+                    url: { type: "string" },
+                    beforeScript: { type: "string" },
+                    afterScript: { type: "string" },
+                  },
+                  required: ["method", "url"],
+                  additionalProperties: false,
+                },
+              },
+            },
           ],
           [
             "localapi_save_plan",
@@ -97,7 +120,7 @@ export function createMCP({
       type: "object",
       properties,
       required: Object.keys(properties).filter(
-        (k) => !["keyword", "folder"].includes(k),
+        (k) => !["keyword", "folder", "coverMode", "apiScripts"].includes(k),
       ),
       additionalProperties: false,
     },
@@ -346,7 +369,7 @@ export function createMCP({
               if (!output) throw Error("记录不存在");
               break;
             case "localapi_sync_openapi":
-              output = importIntoProject(p, args.document, { sync: true });
+              output = syncMCPOpenAPI(p, args);
               await store.save(p);
               break;
             case "localapi_create_execution_flow":
