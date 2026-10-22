@@ -2452,7 +2452,9 @@ try {
   const inferredExample = { id: 7, tags: ["a", "b"], active: true };
   await page.locator("#add-dictionary").click();
   await page.locator("#dict-name").fill("JSON Inferred Model");
-  await page.getByText("从 JSON 样例生成 Schema", { exact: true }).click();
+  await page
+    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .click();
   const originalDraft = await page.locator("#modal-json").inputValue();
   await page.locator("#model-json-sample").fill("{");
   await page.locator("#infer-model-schema").click();
@@ -2479,7 +2481,9 @@ try {
   await page
     .locator("#dict-name")
     .fill("Fictional modern export / BrowserModel");
-  await page.getByText("从 JSON 样例生成 Schema", { exact: true }).click();
+  await page
+    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .click();
   await page
     .locator("#model-json-sample")
     .fill(JSON.stringify(inferredExample));
@@ -2530,6 +2534,62 @@ try {
     inferredExample,
   );
 
+  await saveAndWait("#save-project");
+
+  await page.locator('[data-page="dictionary"]').click();
+  await page.locator("#add-dictionary").click();
+  await page.locator("#dict-name").fill("DDL Inferred Model");
+  await page
+    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .click();
+  await page.locator("#model-source-format").selectOption("mysql");
+  const ddlDraft = await page.locator("#modal-json").inputValue();
+  await page
+    .locator("#model-json-sample")
+    .fill("CREATE TABLE t (id INT); DROP TABLE t");
+  await page.locator("#infer-model-schema").click();
+  await page
+    .locator("#model-infer-error")
+    .getByText("仅支持单条CREATE TABLE", { exact: false })
+    .waitFor();
+  assert.equal(await page.locator("#modal-json").inputValue(), ddlDraft);
+  await page
+    .locator("#model-json-sample")
+    .fill(
+      "CREATE TABLE t (id INT NOT NULL DEFAULT 7 COMMENT 'identifier', status ENUM('ready','a)b') DEFAULT 'ready', created DATETIME DEFAULT CURRENT_TIMESTAMP)",
+    );
+  await page.locator("#infer-model-schema").click();
+  const ddlSchema = JSON.parse(await page.locator("#modal-json").inputValue());
+  assert.equal(ddlSchema.properties.id.default, 7);
+  assert.equal(ddlSchema.required, undefined);
+  assert.deepEqual(ddlSchema.properties.status.enum, ["ready", "a)b"]);
+  assert.match(ddlSchema.properties.created.description, /默认表达式未求值/);
+  await page.locator("#modal-json").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-model-ddl-preview.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait("#save-project");
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page
+    .locator(".card")
+    .filter({ has: page.getByText("DDL Inferred Model", { exact: true }) })
+    .locator("[data-use-dictionary]")
+    .click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="body"]').click();
+  await page.locator("#generate-body").click();
+  await page.waitForFunction(() => {
+    try {
+      return (
+        JSON.parse(document.querySelector("#body-code").value).status ===
+        "ready"
+      );
+    } catch {
+      return false;
+    }
+  });
+  assert.equal(JSON.parse(await page.locator("#body-code").inputValue()).id, 7);
   await saveAndWait("#save-project");
 
   const h2Project = await app.store.create("HTTP2 browser fixture");

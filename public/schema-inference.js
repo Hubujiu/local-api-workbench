@@ -1,3 +1,4 @@
+import { parseMySQLColumns } from "./mysql-ddl.js";
 // Pure local inference. An example demonstrates types, not requiredness or limits.
 export function inferSchemaFromJSON(source) {
   if (typeof source !== "string") throw Error("JSON样例必须为文本");
@@ -51,4 +52,56 @@ export function inferSchemaFromJSON(source) {
     return { type: "object", properties };
   }
   return { ...infer(example, 0), example };
+}
+
+export function inferSchemaFromMySQL(source) {
+  if (
+    typeof source !== "string" ||
+    new TextEncoder().encode(source).length > 65536
+  )
+    throw Error("模型DDL输入最多64KiB文本");
+  const entries = parseMySQLColumns(source),
+    names = new Set();
+  if (!entries.length) throw Error("模型DDL至少需要一个字段");
+  const properties = entries.map((entry) => {
+    if (
+      !entry.key ||
+      entry.key.length > 200 ||
+      ["__proto__", "prototype", "constructor"].includes(entry.key)
+    )
+      throw Error("模型DDL字段名无效");
+    const identity = entry.key.toLowerCase();
+    if (names.has(identity)) throw Error("模型DDL字段名重复");
+    names.add(identity);
+    const property = { type: entry.type };
+    const notes = [
+      entry.description,
+      entry.note,
+      entry.required ? "SQL NOT NULL（不自动标记API必填）" : "",
+    ].filter(Boolean);
+    if (entry.enum) property.enum = entry.enum;
+    if (Object.hasOwn(entry, "default")) {
+      const value = entry.default;
+      if (value === null)
+        notes.push("SQL默认NULL；未自动推断API可空性或生成默认值");
+      else {
+        const compatible =
+          entry.type === "integer"
+            ? Number.isSafeInteger(value)
+            : entry.type === "object"
+              ? typeof value === "object" && !Array.isArray(value)
+              : typeof value === entry.type;
+        if (!compatible)
+          throw Error(
+            "DDL默认值需要数据库类型转换，无法直接映射: " + entry.key,
+          );
+        if (entry.enum && !entry.enum.includes(value))
+          throw Error("DDL默认值不在枚举中: " + entry.key);
+        property.default = value;
+      }
+    }
+    if (notes.length) property.description = notes.join("\n");
+    return [entry.key, property];
+  });
+  return { type: "object", properties: Object.fromEntries(properties) };
 }

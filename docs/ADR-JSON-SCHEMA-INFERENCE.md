@@ -1,13 +1,15 @@
 # Infer a model from a JSON example
 
 The original model editor documents JSON, XML, JSON Schema and MySQL DDL inputs:
-https://wiki.apipost.cn/docs/schema/create/ . This addition covers JSON examples
-only; existing raw Schema editing remains separate. It is not an XML/DDL model
-importer or evidence of native project-directory compatibility.
+https://wiki.apipost.cn/docs/schema/create/ . This document covers JSON example inference; existing raw Schema editing stays
+separate. The bounded MySQL companion is described in ADR-MODEL-DDL-INFERENCE.
+Neither is an XML importer or evidence of native project-directory compatibility.
 
 Inference is local and pure. It preserves primitive types, object properties and
 array item structures; distinct array shapes become `anyOf`, with no truncation.
-It retains the parsed example for reproducible request-body generation. A single
+It retains the parsed example for reproducible request-body generation. Because
+explicit examples take precedence, subsequent structural edits must also update
+or remove that example; the preview explains this. A single
 example does not establish requiredness, formats, ranges or length constraints,
 so those are not invented. Empty arrays have unconstrained items.
 
