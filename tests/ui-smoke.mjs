@@ -2584,6 +2584,45 @@ try {
   assert.equal(await page.locator("#db-write").isChecked(), false);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-sqlite-write.png" });
+  const sqliteWriteSQL = await page.locator("#db-sql").inputValue();
+  await page.locator("#db-write").check();
+  await page.locator("#db-type").selectOption("postgres");
+  assert.equal(await page.locator("#db-write").isChecked(), false);
+  await page.locator("#db-host").fill("127.0.0.1");
+  await page.locator("#db-port").fill("5432");
+  await page.locator("#db-name").fill("fixture");
+  await page.locator("#db-user").fill("tester");
+  await page.locator("#db-sql").fill("INSERT INTO entries(value) VALUES ($1)");
+  await page.locator("#db-write").check();
+  const postgresRequests = [];
+  const recordDatabaseRequest = (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname.endsWith("/database")
+    )
+      postgresRequests.push(request.url());
+  };
+  page.on("request", recordDatabaseRequest);
+  page.once("dialog", async (dialog) => {
+    assert.match(dialog.message(), /PostgreSQL.*127.0.0.1:5432\/fixture/);
+    assert.match(dialog.message(), /序列与外部副作用不能回滚/);
+    await dialog.dismiss();
+  });
+  await page.locator("#db-query").click();
+  await page.waitForFunction(
+    () => !document.querySelector("#db-write").checked,
+  );
+  assert.equal(
+    postgresRequests.length,
+    0,
+    "cancel must not contact the database",
+  );
+  page.off("request", recordDatabaseRequest);
+  await page.locator("#db-type").selectOption("mysql");
+  assert.equal(await page.locator("#db-write-label").isVisible(), false);
+  await page.locator("#db-type").selectOption("sqlite");
+  await page.locator("#db-sql").fill(sqliteWriteSQL);
+
   await page.locator("#db-register").click();
   await page.locator("#db-connection-name").fill("UI SQLite session");
   await page.locator("#dialog-save").click();

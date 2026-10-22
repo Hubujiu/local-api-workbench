@@ -41,4 +41,134 @@ const limited = await queryRemoteDatabase({
 });
 assert.equal(limited.rows.length, 1000);
 assert.equal(limited.truncated, true);
+
+// Dedicated disposable CI service, never a user database.
+const { Client } = await import("pg");
+const { createApp } = await import("../src/server.mjs");
+const { mkdtemp, rm } = await import("node:fs/promises");
+const { tmpdir } = await import("node:os");
+const { join } = await import("node:path");
+const root = await mkdtemp(join(tmpdir(), "pg-write-http-"));
+let app;
+const setup = new Client({ ...common, port: 5432 });
+const table = "localapi_write_" + process.pid;
+await setup.connect();
+try {
+  await setup.query(
+    `CREATE TABLE ${table}(id integer PRIMARY KEY, value text)`,
+  );
+  app = await createApp({ root, port: 0 });
+  const project = await app.store.create("PostgreSQL disposable fixture");
+  const endpoint = app.url + "/api/projects/" + project.id + "/database";
+  const headers = {
+    "content-type": "application/json",
+    "x-local-token": app.token,
+  };
+  const write = async (sql, parameters = []) => {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ...common,
+        type: "postgres",
+        allowWrite: true,
+        sql,
+        parameters,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw Error(result.error);
+    return result;
+  };
+  const denied = {
+    ...common,
+    type: "postgres",
+    sql: `INSERT INTO ${table} VALUES (99, 'denied')`,
+  };
+  for (const request of [
+    { headers, body: denied },
+    {
+      headers: { "content-type": "application/json" },
+      body: { ...denied, allowWrite: true },
+    },
+    {
+      headers: { ...headers, Origin: "https://untrusted.example" },
+      body: { ...denied, allowWrite: true },
+    },
+  ]) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify(request.body),
+    });
+    assert.equal(response.ok, false);
+  }
+  const count = async () =>
+    Number((await setup.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n);
+  const inserted = await write(`INSERT INTO "${table}" VALUES ($1, $2)`, [
+    1,
+    "literal ) -- /* RETURNING",
+  ]);
+  assert.equal(inserted.committed, true);
+  assert.equal(inserted.affectedRows, 1);
+  assert.equal(await count(), 1);
+  await assert.rejects(
+    queryRemoteDatabase({
+      ...common,
+      type: "postgres",
+      sql: `SELECT 1) AS escaped; COMMIT; DELETE FROM ${table}; SELECT 1 --`,
+    }),
+    /multiple commands|prepared statement/i,
+  );
+  assert.equal(
+    await count(),
+    1,
+    "read-only query cannot end its transaction through a SQL batch",
+  );
+
+  await assert.rejects(
+    write(`INSERT INTO ${table} SELECT generate_series(100,1100), 'overflow'`),
+    /1000/,
+  );
+  assert.equal(await count(), 1, "overflow is rolled back on the real service");
+  await assert.rejects(
+    write(
+      `INSERT INTO ${table} VALUES (2, 'escape')) SELECT '0' AS affected_rows --`,
+    ),
+  );
+  await assert.rejects(write(`DELETE FROM ${table}; DROP TABLE ${table}`));
+  assert.equal(await count(), 1, "escaped and batched SQL did not mutate data");
+  const updated = await write(`UPDATE ${table} SET value = $1 WHERE id = $2`, [
+    "updated",
+    1,
+  ]);
+  assert.equal(updated.affectedRows, 1);
+  assert.equal(
+    (await setup.query(`SELECT value FROM ${table} WHERE id = 1`)).rows[0]
+      .value,
+    "updated",
+  );
+  assert.equal(
+    (await write(`DELETE FROM ${table} WHERE id = $1`, [1])).affectedRows,
+    1,
+  );
+  assert.equal(
+    (
+      await write(
+        `INSERT INTO ${table} SELECT generate_series(1,1000), 'boundary'`,
+      )
+    ).affectedRows,
+    1000,
+  );
+  assert.equal((await write(`DELETE FROM ${table}`)).affectedRows, 1000);
+  assert.equal(await count(), 0);
+} finally {
+  if (app) await new Promise((resolve) => app.server.close(resolve));
+  await rm(root, { recursive: true, force: true });
+  try {
+    await setup.query(`DROP TABLE IF EXISTS ${table}`);
+  } finally {
+    await setup.end();
+  }
+}
 console.log("REAL_DATABASE_FIXTURES_PASS");

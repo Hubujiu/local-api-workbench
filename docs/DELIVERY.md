@@ -10,21 +10,21 @@
 
 ## 能力与固定证据
 
-| 能力 | 实现 | 固定验证入口 |
-| --- | --- | --- |
-| 项目/接口/文件夹/搜索/标签/复制/回收站/归档/恢复 | JSON 本地持久化、自选目录、原子保存、配置版本冲突检查 | runtime.test.mjs、server.test.mjs、ui-smoke.mjs |
-| HTTP/HTTPS | Query/Path/Header/Cookie，JSON/raw/form/file/binary/MessagePack，Basic/Bearer/API Key/Digest/OAuth2/OAuth1 HMAC/RSA-SHA1/AWS SigV4/Hawk/EdgeGrid | runtime.test.mjs、connection.test.mjs、digest.test.mjs、oauth.test.mjs |
-| 网络边界 | 超时/取消、8 MiB 请求响应上限、压缩响应、自定义 CA、客户端 PEM、HTTP(S) CONNECT 代理 | runtime.test.mjs、connection.test.mjs |
-| 导入/导出 | OpenAPI JSON/YAML、本地递归引用、Postman、cURL Bash、有限Apipost公开JSON、备份恢复、独立 HTML/Markdown 文档 | core.test.mjs、document-export.test.mjs、ui-smoke.mjs |
-| API 设计 | 描述、请求 Schema、响应示例、数据字典、loopback Mock | core.test.mjs、server.test.mjs、ui-smoke.mjs |
-| 断言/提取/脚本 | 可视化规则、全局/环境/运行时/本请求变量、隔离QuickJS脚本、受限HTTP回调与CryptoJS/Chai、子请求/断言/日志证据 | scripts.test.mjs、server.test.mjs、core.test.mjs、ui-smoke.mjs |
-| 执行计划 | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次 | core.test.mjs、plan-snapshots.test.mjs、cli.test.mjs、server.test.mjs、ui-smoke.mjs |
-| 用例与压测 | 独立接口用例与执行计划、最多 100 请求/10 并发的有界压测 | core.test.mjs、server.test.mjs |
-| 协议 | WebSocket/TCP 交互、SSE 接收；最长 15 分钟、8 MiB、最近 200 消息 | protocols.test.mjs、protocol-sessions.test.mjs、ui-smoke.mjs |
-| 数据库 | SQLite/PostgreSQL/MySQL/Redis/MongoDB/ClickHouse只读查询、SQLite显式DML、临时会话授权的只读前后置查询与变量联动 | database.test.mjs、remote-database.mjs、desktop-smoke.mjs |
-| MCP | stdio 与可选 HTTP、显式项目 allowlist、独立读写/执行权限、同步 OpenAPI 稳定 ID | mcp.test.mjs、server.test.mjs、ui-smoke.mjs |
-| 桌面与 Git 入口 | Windows x64/macOS arm64/Linux x64 Electron成品包、自选项目位置、打开目录/终端、关闭未保存提示 | desktop-smoke.mjs、terminal.test.mjs |
-| 可视界面 | 浅色/深色、紧凑布局、编辑器行号/JSON 高亮、响应/日志/历史 | code-format.test.mjs、ui-smoke.mjs 的截图/视频/trace |
+| 能力                                             | 实现                                                                                                                                             | 固定验证入口                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| 项目/接口/文件夹/搜索/标签/复制/回收站/归档/恢复 | JSON 本地持久化、自选目录、原子保存、配置版本冲突检查                                                                                            | runtime.test.mjs、server.test.mjs、ui-smoke.mjs                                     |
+| HTTP/HTTPS                                       | Query/Path/Header/Cookie，JSON/raw/form/file/binary/MessagePack，Basic/Bearer/API Key/Digest/OAuth2/OAuth1 HMAC/RSA-SHA1/AWS SigV4/Hawk/EdgeGrid | runtime.test.mjs、connection.test.mjs、digest.test.mjs、oauth.test.mjs              |
+| 网络边界                                         | 超时/取消、8 MiB 请求响应上限、压缩响应、自定义 CA、客户端 PEM、HTTP(S) CONNECT 代理                                                             | runtime.test.mjs、connection.test.mjs                                               |
+| 导入/导出                                        | OpenAPI JSON/YAML、本地递归引用、Postman、cURL Bash、有限Apipost公开JSON、备份恢复、独立 HTML/Markdown 文档                                      | core.test.mjs、document-export.test.mjs、ui-smoke.mjs                               |
+| API 设计                                         | 描述、请求 Schema、响应示例、数据字典、loopback Mock                                                                                             | core.test.mjs、server.test.mjs、ui-smoke.mjs                                        |
+| 断言/提取/脚本                                   | 可视化规则、全局/环境/运行时/本请求变量、隔离QuickJS脚本、受限HTTP回调与CryptoJS/Chai、子请求/断言/日志证据                                      | scripts.test.mjs、server.test.mjs、core.test.mjs、ui-smoke.mjs                      |
+| 执行计划                                         | 独立请求快照、重复步骤、顺序执行、失败继续、hash、逐步证据、最近 50 次                                                                           | core.test.mjs、plan-snapshots.test.mjs、cli.test.mjs、server.test.mjs、ui-smoke.mjs |
+| 用例与压测                                       | 独立接口用例与执行计划、最多 100 请求/10 并发的有界压测                                                                                          | core.test.mjs、server.test.mjs                                                      |
+| 协议                                             | WebSocket/TCP 交互、SSE 接收；最长 15 分钟、8 MiB、最近 200 消息                                                                                 | protocols.test.mjs、protocol-sessions.test.mjs、ui-smoke.mjs                        |
+| 数据库                                           | SQLite/PostgreSQL/MySQL/Redis/MongoDB/ClickHouse只读查询、SQLite显式DML、临时会话授权的只读前后置查询与变量联动                                  | database.test.mjs、remote-database.mjs、desktop-smoke.mjs                           |
+| MCP                                              | stdio 与可选 HTTP、显式项目 allowlist、独立读写/执行权限、同步 OpenAPI 稳定 ID                                                                   | mcp.test.mjs、server.test.mjs、ui-smoke.mjs                                         |
+| 桌面与 Git 入口                                  | Windows x64/macOS arm64/Linux x64 Electron成品包、自选项目位置、打开目录/终端、关闭未保存提示                                                    | desktop-smoke.mjs、terminal.test.mjs                                                |
+| 可视界面                                         | 浅色/深色、紧凑布局、编辑器行号/JSON 高亮、响应/日志/历史                                                                                        | code-format.test.mjs、ui-smoke.mjs 的截图/视频/trace                                |
 
 CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实PostgreSQL/MySQL服务测试、格式/依赖/构建资源审计、三平台实际打包程序启动测试。测试访问本地临时fixture，不使用用户业务账号或压测第三方服务。macOS仅CI临时签名；未经Developer ID签名或公证。
 
@@ -51,7 +51,7 @@ CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-已核验功能提交c9f7e1b11c93ed5d0913e45c947cfe57d8f9486a：394项核心测试、10项CI首轮通过，Actions39739009350。涵盖三平台核心与成品包、真实浏览器、数据库服务、生成资源与QuickJS可复现构建。后续提交须检查其独立CI，不能自动沿用此结论。未合并main、未部署。
+已核验功能提交449a52a77fe80445d68b9c46c02ea169717edc59：396项核心测试、10项CI首轮通过，Actions39740023841。涵盖三平台核心与成品包、真实浏览器、数据库服务、生成资源与QuickJS可复现构建。后续提交须检查其独立CI，不能自动沿用此结论。未合并main、未部署。
 
 本轮新增已验证：有界XML、嵌套目录及子树原子操作、显式开启的递归作用域、awaitable ajax与异步回调、保守allOf与引用交集样例、离线PNG/JPEG文档图片、OAuth1 OOB/PIN假服务流程。具体边界见对应ADR。OAuth未连接真实账户；图片不开放远程加载；生成器不是通用Schema求解器。
 
@@ -64,6 +64,6 @@ CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 以上明确区分已实现、已验证与尚未完成。测试通过说明指定契约的证据，不替代完整复刻验收。
 
+2026-10-21 17:11 已核验：d0abac93 / Actions39640729111，363核心与10项CI通过。ClickHouse真实服务只读/精度、固定Faker别名与mockExp、数据库编辑及显式重绑定、脚本info与只读CSV迭代数据均有对应证据。保留之前ClickHouse两次差异与弹窗观测时序失败记录；后续修复没有放宽原断言或预算。
 
-
-2026-10-21 17:11 已核验：d0abac93 / Actions39739009350，363核心与10项CI通过。ClickHouse真实服务只读/精度、固定Faker别名与mockExp、数据库编辑及显式重绑定、脚本info与只读CSV迭代数据均有对应证据。保留之前ClickHouse两次差异与弹窗观测时序失败记录；后续修复没有放宽原断言或预算。
+2026-10-22：449a52a 模型目录新建、改名、移动、仅删除空目录和取消/保存/刷新已通过全部CI。后续新增 PostgreSQL 逐次授权单条写入与只读扩展协议保护，详见 ADR-POSTGRES-WRITES；本地回归通过，真实服务和浏览器须检查本次提交CI，不能沿用449结论。

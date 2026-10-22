@@ -197,7 +197,7 @@ test("database HTTP writes require local authentication, valid origin and explic
   );
   assert.equal((await post({ ...input, allowWrite: false })).ok, false);
   assert.equal((await post({ ...input, allowWrite: "true" })).ok, false);
-  assert.equal((await post({ ...input, type: "postgres" })).ok, false);
+  assert.equal((await post({ ...input, type: "mysql" })).ok, false);
   assert.equal(
     querySQLite(filename, "SELECT count(*) AS n FROM entries").rows[0].n,
     0,

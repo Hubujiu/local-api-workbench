@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-22T07:17:29Z",
-  "implementationCommit": "c9f7e1b11c93ed5d0913e45c947cfe57d8f9486a",
+  "asOf": "2026-10-22T07:46:08Z",
+  "implementationCommit": "449a52a77fe80445d68b9c46c02ea169717edc59",
   "counts": {
     "F": {
       "已实现": 37,
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39739009350",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39740023841",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述394项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述396项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39739009350,
+    "runId": 39740023841,
     "conclusion": "success first attempt",
-    "coreTests": 394,
+    "coreTests": 396,
     "jobs": 10
   },
   "supplementalItems": [
@@ -1067,6 +1067,13 @@
       "status": "部分实现",
       "current": "固定官方SDK1.32.1的真实HTTP/stdio、工具发现、项目隔离、撤销和获准执行已验证；未声称六种宿主客户端GUI全部接入、原版工具契约完全等价。",
       "evidence": "docs/ADR-MCP-SDK-INTEROP.md; tests/mcp-sdk-interop.test.mjs"
+    },
+    {
+      "id": "S-POSTGRES-WRITES",
+      "name": "PostgreSQL 手工逐次授权写入",
+      "status": "部分实现",
+      "current": "单条 DML、目标行数限制、事务及提交确认；不支持 RETURNING/任意 SQL，不扩展脚本/MCP/CLI 会话权限。本地回归通过，真实服务和浏览器以本次提交 CI 为准，非上述历史检查点结论。",
+      "evidence": "docs/ADR-POSTGRES-WRITES.md; tests/postgres-write.test.mjs; tests/remote-database.mjs; tests/ui-smoke.mjs"
     }
   ]
 }

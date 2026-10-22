@@ -2,7 +2,7 @@ import { queryClickHouse } from "./clickhouse.mjs";
 import { queryMongo } from "./mongodb.mjs";
 import { queryRedis } from "./redis.mjs";
 /** Read-only DB connections; credentials are request-scoped and never persisted here. */
-export async function queryRemoteDatabase(input) {
+export async function queryRemoteDatabase(input, dependencies = {}) {
   if (input.type === "clickhouse") return queryClickHouse(input);
   if (input.type === "redis") return queryRedis(input);
   if (input.type === "mongodb") return queryMongo(input);
@@ -16,24 +16,10 @@ export async function queryRemoteDatabase(input) {
     throw Error("远程数据库仅接受 SELECT / WITH 查询");
   if (!Array.isArray(parameters)) throw Error("参数必须是数组");
   const boundedSQL = `SELECT * FROM (${sql.trim().replace(/;\s*$/, "")}) AS localapi_result LIMIT 1001`;
-  const config = {
-    host: input.host || "127.0.0.1",
-    port: Number(input.port) || (type === "postgres" ? 5432 : 3306),
-    user: input.user,
-    password: input.password,
-    database: input.database,
-    ...(input.ssl
-      ? {
-          ssl: {
-            rejectUnauthorized: true,
-            ...(input.ca ? { ca: input.ca } : {}),
-          },
-        }
-      : {}),
-  };
+  const config = remoteConnectionConfig(input);
   let rows, columns;
   if (type === "postgres") {
-    const { Client } = await import("pg");
+    const { Client } = dependencies.Client ? dependencies : await import("pg");
     const client = new Client({
       ...config,
       connectionTimeoutMillis: 3000,
@@ -43,7 +29,11 @@ export async function queryRemoteDatabase(input) {
     try {
       await client.connect();
       await client.query("BEGIN READ ONLY");
-      const result = await client.query(boundedSQL, parameters);
+      const result = await client.query({
+        text: boundedSQL,
+        values: parameters,
+        queryMode: "extended",
+      });
       rows = result.rows;
       columns = result.fields.map((field) => field.name);
     } finally {
@@ -74,5 +64,23 @@ export async function queryRemoteDatabase(input) {
     rows: rows.slice(0, 1000),
     truncated: rows.length > 1000,
     limit: 1000,
+  };
+}
+
+export function remoteConnectionConfig(input) {
+  return {
+    host: input.host || "127.0.0.1",
+    port: Number(input.port) || (input.type === "postgres" ? 5432 : 3306),
+    user: input.user,
+    password: input.password,
+    database: input.database,
+    ...(input.ssl
+      ? {
+          ssl: {
+            rejectUnauthorized: true,
+            ...(input.ca ? { ca: input.ca } : {}),
+          },
+        }
+      : {}),
   };
 }
