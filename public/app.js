@@ -1,3 +1,4 @@
+import { applySelectedFormFile } from "./form-file-selection.js";
 import { variableRows } from "./variable-definitions.js";
 import { mountVariableEditor } from "./variable-editor.js";
 import {
@@ -1753,20 +1754,26 @@ function bind() {
   });
   on("[data-field-file]", "change", async (_, e) => {
     const file = e.files[0];
-    if (!file) return;
-    if (file.size > 6 * 1024 * 1024) throw Error("文件不能超过 6 MiB");
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 8192)
-      binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-    Object.assign(request().form[e.dataset.fieldFile], {
-      type: "file",
-      filename: file.name,
-      requiresFile: false,
-      value: btoa(binary),
-    });
-    mark();
-    render();
+    const selectedProject = project;
+    const selectedRequest = request();
+    const index = Number(e.dataset.fieldFile);
+    const field = selectedRequest?.form[index];
+    const selectedBodyType = selectedRequest?.bodyType;
+    await applySelectedFormFile(
+      file,
+      field,
+      () =>
+        page === "apis" &&
+        project === selectedProject &&
+        request() === selectedRequest &&
+        selectedRequest.bodyType === selectedBodyType &&
+        selectedRequest.form[index] === field &&
+        field.type === "file",
+      () => {
+        mark();
+        render();
+      },
+    );
   });
   on("[data-pair]", "input", (_, e) => {
     const [k, i, f] = e.dataset.pair.split(":");

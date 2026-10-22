@@ -3705,6 +3705,79 @@ try {
   );
   await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
 
+  // Hold File reads so navigation and newer choices can overtake older uploads.
+  await page.evaluate(() => {
+    window.originalFileRead = File.prototype.arrayBuffer;
+    window.fileReadGates = [];
+    File.prototype.arrayBuffer = function () {
+      const selected = this;
+      return new Promise((resolve) =>
+        window.fileReadGates.push(async () =>
+          resolve(await window.originalFileRead.call(selected)),
+        ),
+      );
+    };
+  });
+  const createFileTarget = async (name) => {
+    await page.locator("#add-request").click();
+    await page.locator("#request-name").fill(name);
+    await page.locator('[data-param="body"]').click();
+    await page.locator('input[name="body-type"][value="form-data"]').check();
+    await page.locator('[data-add-pair="form"]').click();
+    await page.locator('[data-pair="form:0:key"]').fill("file");
+    await page.locator('[data-field-type="0"]').selectOption("file");
+  };
+  await createFileTarget("Upload race source");
+  await page.locator('[data-field-file="0"]').setInputFiles({
+    name: "stale.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([1]),
+  });
+  await page.waitForFunction(() => window.fileReadGates.length === 1);
+  await createFileTarget("Upload race destination");
+  await page.evaluate(() => window.fileReadGates[0]());
+  await saveAndWait("#save-project");
+  const raceState = (
+    await Promise.all((await app.store.list()).map((p) => app.store.get(p.id)))
+  ).find((p) => p.requests.some((r) => r.name === "Upload race destination"));
+  assert(raceState, "upload fixture project persisted");
+  const raceProject = { id: raceState.id };
+  assert.equal(
+    raceState.requests.find((r) => r.name === "Upload race source").form[0]
+      .filename,
+    undefined,
+  );
+  assert.equal(
+    raceState.requests.find((r) => r.name === "Upload race destination").form[0]
+      .filename,
+    undefined,
+  );
+  await page.locator('[data-field-file="0"]').setInputFiles({
+    name: "older.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([2]),
+  });
+  await page.waitForFunction(() => window.fileReadGates.length === 2);
+  await page.locator('[data-field-file="0"]').setInputFiles({
+    name: "latest.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([255]),
+  });
+  await page.waitForFunction(() => window.fileReadGates.length === 3);
+  await page.evaluate(() => window.fileReadGates[2]());
+  await page.getByText("latest.bin", { exact: true }).waitFor();
+  await page.evaluate(() => window.fileReadGates[1]());
+  await saveAndWait("#save-project");
+  const finalUpload = (await app.store.get(raceProject.id)).requests.find(
+    (r) => r.name === "Upload race destination",
+  ).form[0];
+  assert.equal(finalUpload.filename, "latest.bin");
+  assert.equal(finalUpload.value, "/w==");
+  await page.evaluate(() => {
+    File.prototype.arrayBuffer = window.originalFileRead;
+  });
+  await page.screenshot({ path: "/tmp/local-api-file-selection.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
