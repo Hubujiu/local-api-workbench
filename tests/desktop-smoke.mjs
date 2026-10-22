@@ -163,6 +163,12 @@ try {
   assert.equal(ntlmFixture.stats.sockets.size, 1);
   phase = "jwt";
   console.log("DESKTOP_PHASE", phase);
+  const beforeJWTRequest = await window
+    .locator(".tab.selected [data-open-tab]")
+    .getAttribute("data-open-tab");
+  await window.getByRole("button", { name: "新建接口", exact: true }).click();
+  await window.locator("#request-name").fill("JWT packaged fixture");
+  await window.locator('[data-param="auth"]').click();
   await window
     .locator("#url")
     .fill("http://127.0.0.1:" + jwtFixture.address().port);
@@ -186,9 +192,12 @@ try {
     await window.locator("#send").click();
     const result = await (await reply).json();
     assert.equal(result.status, 200);
+    assert.equal(result.outcome, "passed", JSON.stringify(result));
     assert.deepEqual(JSON.parse(result.body), { jwt: true, algorithm });
   }
 
+  await window.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
+  await window.locator('[data-param="auth"]').click();
   await window.locator("#auth-type").selectOption("none");
   await window.locator("#url").fill(packagedRequestURL);
   phase = "xml";

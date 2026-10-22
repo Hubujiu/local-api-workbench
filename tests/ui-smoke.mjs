@@ -1234,8 +1234,13 @@ try {
   assert(
     !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
   );
-  const beforeJWTURL = await page.locator("#url").inputValue();
+  const beforeJWTRequest = await page
+    .locator(".tab.selected [data-open-tab]")
+    .getAttribute("data-open-tab");
+  await page.getByRole("button", { name: "新建接口", exact: true }).click();
+  await page.locator("#request-name").fill("JWT independent fixture");
   await page.locator("#url").fill(fixtureURL + "/jwt-auth");
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("jwt");
   await page.locator('[data-auth="secret"]').fill(jwtFixtureSecret);
   await page.locator('[data-auth="payload"]').fill('{"sub":"browser-fixture"}');
@@ -1249,6 +1254,7 @@ try {
     await page.locator("#send").click();
     const jwtResult = await (await jwtResponse).json();
     assert.equal(jwtResult.status, 200);
+    assert.equal(jwtResult.outcome, "passed", JSON.stringify(jwtResult));
     assert.deepEqual(JSON.parse(jwtResult.body), {
       valid: true,
       sub: "browser-fixture",
@@ -1257,7 +1263,10 @@ try {
   }
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-jwt-auth.png" });
-  await page.locator("#url").fill(beforeJWTURL);
+  await page.locator('[data-auth="payload"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-jwt-options.png" });
+  await page.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("hawk");
   await page.locator('[data-auth="id"]').fill("hawk-fixture");
   await page.locator('[data-auth="key"]').fill("hawk-fixture-secret");
