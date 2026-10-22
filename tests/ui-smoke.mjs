@@ -2170,6 +2170,52 @@ try {
       .properties.label.$ref,
     "#/$defs/SharedLabel",
   );
+  const identifierSchema = structuredClone(visualSchema);
+  identifierSchema.properties["metadata-remove"] = {
+    type: "object",
+    properties: { $id: { type: "string" } },
+    example: { $id: "payload-id", $anchor: "payload-anchor" },
+  };
+  identifierSchema.properties["metadata-protected"] = {
+    type: "string",
+    $anchor: "real-anchor",
+  };
+  await page.locator("#schema").fill(JSON.stringify(identifierSchema));
+  await page.locator("#visual-schema").click();
+  await page
+    .locator(".schema-tree tbody tr")
+    .filter({ has: page.getByText("metadata-protected", { exact: true }) })
+    .locator("[data-schema-remove]")
+    .click();
+  await page
+    .locator(".schema-error")
+    .getByText("包含结构标识或锚点，请用JSON编辑删除", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-schema-identifier-guard.png" });
+  await page
+    .locator(".schema-tree tbody tr")
+    .filter({ has: page.getByText("metadata-remove", { exact: true }) })
+    .locator("[data-schema-remove]")
+    .click();
+  assert.equal(await page.locator(".schema-error").innerText(), "");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait("#save");
+  const identifierSaved = (
+    await app.store.get(await page.locator("#project-select").inputValue())
+  ).requests.find((item) => item.id === schemaRequestId).schema;
+  assert.equal(
+    Object.hasOwn(identifierSaved.properties, "metadata-remove"),
+    false,
+  );
+  assert.equal(
+    identifierSaved.properties["metadata-protected"].$anchor,
+    "real-anchor",
+  );
+  delete identifierSaved.properties["metadata-protected"];
+  assert.deepEqual(identifierSaved, visualSchema);
+  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await saveAndWait("#save");
   const originalResponse = {
     status: "200",
     description: "retained",

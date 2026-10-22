@@ -111,28 +111,13 @@ function name(value) {
     throw Error("字段名不能为空且至多200字符");
   return text;
 }
-function checkReferences(schema, path) {
-  const prefix =
-    "#/" +
-    path
-      .map((key) => String(key).replace(/~/g, "~0").replace(/\//g, "~1"))
-      .join("/");
+function visitSchemaPositions(schema, callback) {
   let visited = 0;
   const visit = (node, depth = 0, mode = "schema") => {
     if (depth > 64) throw Error("结构嵌套过深");
     if (!node || typeof node !== "object") return;
     if (++visited > 5000) throw Error("引用检查最多5000节点，请用JSON编辑");
-    let reference = mode === "schema" ? node.$ref : undefined;
-    if (typeof reference === "string") {
-      try {
-        reference = decodeURIComponent(reference);
-      } catch {}
-    }
-    if (
-      typeof reference === "string" &&
-      (reference === prefix || reference.startsWith(prefix + "/"))
-    )
-      throw Error("此字段被本地引用使用，请先在JSON中更新引用");
+    if (mode === "schema") callback(node);
     for (const [key, value] of Object.entries(node)) {
       const childMode = Array.isArray(node)
         ? mode === "list"
@@ -147,6 +132,26 @@ function checkReferences(schema, path) {
     }
   };
   visit(schema);
+}
+function checkReferences(schema, path) {
+  const prefix =
+    "#/" +
+    path
+      .map((key) => String(key).replace(/~/g, "~0").replace(/\//g, "~1"))
+      .join("/");
+  visitSchemaPositions(schema, (node) => {
+    let reference = node.$ref;
+    if (typeof reference === "string") {
+      try {
+        reference = decodeURIComponent(reference);
+      } catch {}
+    }
+    if (
+      typeof reference === "string" &&
+      (reference === prefix || reference.startsWith(prefix + "/"))
+    )
+      throw Error("此字段被本地引用使用，请先在JSON中更新引用");
+  });
 }
 export function schemaRows(schema) {
   const rows = [];
@@ -253,9 +258,14 @@ export function removeSchemaProperty(schema, path) {
   if (path.length < 2 || path.at(-2) !== "properties")
     throw Error("只能删除对象属性");
   checkReferences(schema, path);
-  const serialized = JSON.stringify(nodeAt(schema, path));
-  if (/"\$(?:id|anchor|dynamicAnchor)"\s*:/.test(serialized))
-    throw Error("包含结构标识或锚点，请用JSON编辑删除");
+  visitSchemaPositions(nodeAt(schema, path), (node) => {
+    if (
+      ["$id", "$anchor", "$dynamicAnchor"].some((key) =>
+        Object.hasOwn(node, key),
+      )
+    )
+      throw Error("包含结构标识或锚点，请用JSON编辑删除");
+  });
   const next = structuredClone(schema),
     parent = nodeAt(next, path.slice(0, -2));
   editable(parent);
