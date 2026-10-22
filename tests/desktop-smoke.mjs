@@ -208,6 +208,7 @@ try {
     assert.equal(result.status, 200);
     assert.equal(result.outcome, "passed", JSON.stringify(result));
     assert.deepEqual(JSON.parse(result.body), { jwt: true, algorithm });
+    await window.locator("#send:not([disabled])").waitFor();
   }
 
   phase = "asap";

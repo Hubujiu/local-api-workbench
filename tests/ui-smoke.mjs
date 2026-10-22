@@ -1307,6 +1307,7 @@ try {
     });
   }
   await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.locator("#send:not([disabled])").waitFor();
   await page.screenshot({ path: "/tmp/local-api-jwt-auth.png" });
   await page.locator('[data-auth="payload"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-jwt-options.png" });
@@ -1342,6 +1343,8 @@ try {
     });
   }
   assert.equal(asapNonces.size, 2);
+  // execute HTTP completion precedes the project/history refresh and final render.
+  await page.locator("#send:not([disabled])").waitFor();
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.locator('[data-auth="iss"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-asap-auth.png" });
