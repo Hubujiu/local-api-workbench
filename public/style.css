@@ -1870,6 +1870,8 @@ dialog:has(#cookie-line) {
   width: 100%;
 }
 .variable-table textarea {
+  height: 74px;
+  resize: vertical;
   min-height: 74px;
   font-family: monospace;
 }

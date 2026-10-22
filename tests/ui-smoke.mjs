@@ -1699,6 +1699,7 @@ try {
   await tenantRow
     .locator('[data-variable-field="description"]')
     .fill("Tenant initial value");
+  await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-variable-definitions.png" });
   await page.locator("#dialog-save").click();
   await page.locator("[data-edit-variable-definitions]").first().click();
