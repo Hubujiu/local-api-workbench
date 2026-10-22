@@ -1,3 +1,7 @@
+import {
+  responseMutationSource,
+  responseMutationValidatorSource,
+} from "./script-response-mutation.mjs";
 import { parseCSVRows } from "../public/csv-data.js";
 import { fakerVariable } from "./faker-variables.mjs";
 import { builtinVariableFactory } from "./builtin-variables.mjs";
@@ -391,6 +395,13 @@ try {
       ")({response,pm,apt});",
   );
   run(
+    "const __readResponseMutation = (" +
+      responseMutationSource +
+      ")({response,pm,apt,previous:input.responseOriginals,wireResponse:input.responseWire}, (" +
+      responseMutationValidatorSource +
+      "));",
+  );
+  run(
     'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;}',
   );
   run(
@@ -551,7 +562,7 @@ try {
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   finalizing = true;
   const output = context.evalCode(
-    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization})",
+    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
   );
   if (output.error) {
     output.error.dispose();

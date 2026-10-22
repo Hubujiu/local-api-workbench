@@ -43,7 +43,15 @@ let uploadedMultipart,
 const jwtFixtureSecret = "fictional-browser-jwt-secret-".repeat(3);
 const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
+let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
+  if (request.url === "/script-response-wire") {
+    response.writeHead(500, { "content-type": "application/json" });
+    response.end('{"wire":true}');
+    return;
+  }
+  if (request.url === "/response-mutation-leak") responseMutationLeaks++;
+
   if (request.url === "/asap-auth") {
     try {
       assert.match(request.headers.authorization || "", /^Bearer /);
@@ -4579,6 +4587,55 @@ try {
   await page.getByText("Edited zero · 201", { exact: true }).waitFor();
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-openapi-examples.png" });
+
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator("#url").fill(fixtureURL + "/script-response-wire");
+  await page.locator('[data-param="after"]').click();
+  const derivedBody = {
+    value: 0,
+    html: '<img src="' + fixtureURL + '/response-mutation-leak">',
+  };
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.response.setBody(" +
+        JSON.stringify(derivedBody) +
+        '); pm.response.setCode(200); pm.test("derived-view", () => { pm.expect(pm.response.json().value).to.equal(0); pm.expect(pm.response.originalCode()).to.equal(500); });',
+    );
+  await saveAndWait();
+  const responseMutationReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const responseMutationResult = await (await responseMutationReply).json();
+  assert.equal(responseMutationResult.status, 500);
+  assert.equal(responseMutationResult.body, '{"wire":true}');
+  assert.equal(responseMutationResult.outcome, "failed");
+  assert.deepEqual(responseMutationResult.scriptResponse, {
+    body: JSON.stringify(derivedBody),
+    status: 200,
+  });
+  assert(
+    responseMutationResult.assertions.some(
+      (x) => x.name === "derived-view" && x.passed,
+    ),
+  );
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page.locator('[data-response="body"]').click();
+  assert.match(await page.locator(".response pre").innerText(), /"wire": true/);
+  await page.locator('[data-response="scriptResponse"]').click();
+  assert.equal(
+    await page.locator("#response-script-view").innerText(),
+    JSON.stringify(derivedBody),
+  );
+  assert.equal(await page.locator("#response-script-view img").count(), 0);
+  assert.match(
+    await page.locator(".response").innerText(),
+    /处理状态：200.*网络状态：500/,
+  );
+  assert.equal(responseMutationLeaks, 0);
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-response-mutation.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

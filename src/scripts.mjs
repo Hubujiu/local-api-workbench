@@ -1,3 +1,4 @@
+import { validateResponseMutation } from "./script-response-mutation.mjs";
 import { compileTrackedQuickJS } from "./tracked-quickjs.mjs";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
@@ -47,6 +48,11 @@ export function runScript(
   input = {
     ...input,
     executionContext: normalizeExecutionContext(input.executionContext),
+    responseOriginals: validateResponseMutation(
+      input.responseOriginals,
+      Boolean(input.response),
+      true,
+    ),
   };
   validateResources({ functions: input.functions || [] });
   if (typeof code !== "string" || code.length > 100000)
@@ -91,7 +97,27 @@ export function runScript(
           }
         error.networkRequests = structuredClone(networkRequests);
         reject(error);
-      } else resolve({ ...result, networkRequests });
+      } else {
+        try {
+          resolve({
+            ...result,
+            responseOverride: validateResponseMutation(
+              result.responseOverride,
+              Boolean(input.response),
+            ),
+            responseOriginals: validateResponseMutation(
+              result.responseOriginals,
+              Boolean(input.response),
+              true,
+            ),
+            networkRequests,
+          });
+        } catch (error) {
+          error.scriptStage = "response-override";
+          error.networkRequests = structuredClone(networkRequests);
+          reject(error);
+        }
+      }
     };
     const startedAt = performance.now();
     let lastWorkerStage = "starting";
@@ -217,6 +243,9 @@ export async function runScriptSequence(stages, input, options = {}) {
     jobLimit = 10000,
     assertionLimit = 1000,
     state = structuredClone(input);
+  state.responseOverride = null;
+  state.responseOriginals = null;
+  state.responseWire = undefined;
   const logs = [],
     tests = [],
     networkRequests = [];
@@ -251,6 +280,15 @@ export async function runScriptSequence(stages, input, options = {}) {
       ];
       throw error;
     }
+    if (result.responseOverride) {
+      state.responseWire ??= structuredClone(input.response);
+      state.responseOverride = validateResponseMutation(
+        { ...state.responseOverride, ...result.responseOverride },
+        Boolean(state.response),
+      );
+      state.response = { ...state.response, ...state.responseOverride };
+    }
+    state.responseOriginals = result.responseOriginals;
     remaining -= result.activityMs;
     requestLimit -= result.networkRequests.length;
     timerLimit -= result.usage.timers;
@@ -287,6 +325,8 @@ export async function runScriptSequence(stages, input, options = {}) {
           localVariables: state.localVariables,
           request: state.request,
           visualization: state.visualization,
+          responseOverride: state.responseOverride,
+          responseOriginals: state.responseOriginals,
           logs,
           tests,
         }),
@@ -306,6 +346,8 @@ export async function runScriptSequence(stages, input, options = {}) {
     localVariables: state.localVariables || {},
     request: state.request,
     visualization: state.visualization ?? null,
+    responseOverride: state.responseOverride,
+    responseOriginals: state.responseOriginals,
     logs,
     tests,
     networkRequests,

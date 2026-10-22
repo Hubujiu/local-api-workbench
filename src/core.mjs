@@ -596,6 +596,8 @@ export async function runPlan(
           })),
         );
         record.visualization = scripted.visualization;
+        if (scripted.responseOverride)
+          record.scriptResponse = scripted.responseOverride;
         scopes = createScopes(scripted.variables, scripted.scopes);
         replaceVariables(vars, effectiveScopes(scopes));
         record.logs.push(

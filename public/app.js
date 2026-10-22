@@ -507,6 +507,7 @@ function editor(r) {
           )}</div><div class="request-panel ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
           ["visualization", "可视化"],
+          ["scriptResponse", "脚本视图"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
           ["examples", "响应示例"],
@@ -658,6 +659,12 @@ function responseContent() {
     );
   if (!response)
     return `<div class="empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
+  if (responseTab === "scriptResponse") {
+    if (!response.scriptResponse)
+      return '<div class="notice">后置脚本可用 pm.response.setBody(value) / setCode(code) 创建处理视图；不改写原始网络证据。</div>';
+    const view = response.scriptResponse;
+    return `<div class="notice">脚本处理视图，不改写网络响应、预设断言或最终成功状态。Header、耗时和大小仍属于原始网络响应。</div><p>处理状态：${esc(view.status ?? response.status)} · 网络状态：${esc(response.status)}</p><pre id="response-script-view">${esc(view.body ?? response.body ?? "")}</pre>`;
+  }
   if (responseTab === "visualization")
     return typeof response.visualization === "string"
       ? '<p class="muted">隔离静态预览：不执行脚本、不加载外部资源、不打开链接。可用 apt.visualizer.set(template, data)。</p><iframe id="response-visualization" title="响应可视化" sandbox="" referrerpolicy="no-referrer"></iframe>'

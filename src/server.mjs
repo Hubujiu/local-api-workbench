@@ -716,6 +716,7 @@ export async function createApp({
                 logs: result.logs,
                 subrequests: result.subrequests,
                 visualization: result.visualization,
+                scriptResponse: result.scriptResponse,
                 error: result.error,
               });
             } finally {
