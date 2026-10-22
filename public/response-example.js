@@ -6,6 +6,15 @@ const transportHeaders = new Set([
   "upgrade",
   "trailer",
 ]);
+const isolationHeaders = new Set([
+  "content-security-policy",
+  "content-security-policy-report-only",
+  "x-content-type-options",
+  "cache-control",
+  "set-cookie",
+  "clear-site-data",
+  "refresh",
+]);
 export function validateMockResponse(
   response,
   { allowInformational = false } = {},
@@ -46,6 +55,7 @@ export function validateMockResponse(
   if (entries.length > 100) throw Error("响应头最多100项");
   for (const [key, value] of entries) {
     const lower = key.toLowerCase();
+    if (isolationHeaders.has(lower)) throw Error("Mock不可覆盖工作台隔离头");
     if (transportHeaders.has(lower)) throw Error("Mock不可覆盖传输控制头");
     if (
       !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key) ||

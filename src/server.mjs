@@ -247,6 +247,10 @@ export async function createApp({
         res.writeHead(selected.status, {
           "Content-Type": "application/json",
           ...selected.headers,
+          "Content-Security-Policy":
+            "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
         });
         return res.end(
           [204, 205, 304].includes(selected.status) ? "" : selected.body,

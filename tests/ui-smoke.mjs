@@ -4440,6 +4440,58 @@ try {
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-schema-mock-response.png" });
 
+  await page.locator('[data-mode="mock"]').click();
+  await page.locator("#add-example").click();
+  await page.locator("#ex-name").fill("Sandboxed HTML fixture");
+  await page
+    .locator("#ex-body")
+    .fill(
+      '<h1 id="isolation-fixture">Isolated Mock</h1><script>globalThis.__mockExecuted=true;fetch("/api/session?mock-isolation-probe=script")</script><img src="/api/session?mock-isolation-probe=image"><form action="/api/session"><input name="mock-isolation-probe" value="form"><button>Blocked form</button></form>',
+    );
+  await page.locator("#ex-headers").fill('{"content-type":"text/html"}');
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait();
+  const isolationURL = await page.locator(".mock-url").inputValue();
+  const isolationRequests = [];
+  const recordIsolationProbe = (request) => {
+    if (request.url.includes("mock-isolation-probe"))
+      isolationRequests.push(request.url);
+  };
+  app.server.on("request", recordIsolationProbe);
+  const isolatedPage = await page.context().newPage();
+  try {
+    const isolated = await isolatedPage.goto(isolationURL + "?example=0");
+    assert.equal(isolated.status(), 200);
+    assert.match(
+      isolated.headers()["content-security-policy"],
+      /(?:^|;)\s*sandbox\s*(?:;|$)/,
+    );
+    await isolatedPage.locator("#isolation-fixture").waitFor();
+    assert.equal(
+      await isolatedPage.evaluate(() => globalThis.__mockExecuted === true),
+      false,
+      "Mock document scripts must not run in the workbench origin",
+    );
+    await isolatedPage.getByRole("button", { name: "Blocked form" }).click();
+    assert.equal(isolatedPage.url(), isolationURL + "?example=0");
+    assert.deepEqual(
+      isolationRequests,
+      [],
+      "Mock HTML must not issue script, image, or form probes to the session API",
+    );
+    await isolatedPage.screenshot({
+      path: "/tmp/local-api-mock-isolation.png",
+    });
+  } finally {
+    app.server.off("request", recordIsolationProbe);
+    await isolatedPage.close();
+  }
+  assert.equal(
+    await page.locator("#project-select").inputValue(),
+    schemaMockProjectId,
+  );
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
