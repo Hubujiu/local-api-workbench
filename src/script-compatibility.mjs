@@ -245,6 +245,7 @@ function installScriptCompatibility({
   };
   pm.response.raw = response?.raw;
   pm.response.responseTime = response?.duration;
+  pm.response.responseSize = response?.size;
   pm.response.status = response?.statusText;
   pm.cookies = {
     get: (name) => cookies[name],

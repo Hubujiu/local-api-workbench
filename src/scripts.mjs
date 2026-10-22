@@ -150,6 +150,7 @@ export function runScript(
             status: response.status,
             statusText: response.statusText,
             duration: response.duration,
+            size: response.size,
             headers: response.headers,
             body: response.body,
             ...(response.cookieError

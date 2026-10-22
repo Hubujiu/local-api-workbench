@@ -392,7 +392,7 @@ try {
     __sendRequest(JSON.stringify({request:config,variables:captured}),(errorJSON,responseJSON)=>{
       const error=errorJSON?new Error(errorJSON):null, data=responseJSON?JSON.parse(responseJSON):null;
       const headers=data?.headers||{};
-      const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
+      const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,responseSize:data.size,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
       const result=callback(error,response);
       trackTask(result);
     });

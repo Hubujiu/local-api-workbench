@@ -183,3 +183,48 @@ test("jsonBody guards malformed data, missing response, invalid arity and excess
   );
   assert(limits.tests.every((t) => !t.passed));
 });
+
+test("responseSize exposes recorded bytes, including zero, without inventing missing measurements", async () => {
+  for (const size of [7, 0, undefined]) {
+    const measured = { ...response, size };
+    const expected = size === undefined ? "undefined" : String(size);
+    const result = await runScript(
+      `pm.test("pm bytes",()=>pm.expect(pm.response.responseSize).to.equal(${expected}));
+       apt.test("apt bytes",()=>apt.expect(apt.response.responseSize).to.equal(${expected}));`,
+      { response: measured },
+    );
+    assert(
+      result.tests.every((item) => item.passed),
+      JSON.stringify(result.tests),
+    );
+  }
+});
+
+test("responseSize measures HTTP body bytes in main and callback responses, not UTF-16 text or headers", async (t) => {
+  const http = await import("node:http");
+  const { runPlan, snapshotPlan } = await import("../src/core.mjs");
+  const { executeRequest } = await import("../src/runtime.mjs");
+  const server = http.createServer((req, res) => {
+    res.setHeader("x-padding", "a".repeat(100));
+    res.end("雪🙂");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const plan = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url,
+          beforeScript: `pm.sendRequest(${JSON.stringify(url)},(error,res)=>{if(error)throw error;pm.test("callback bytes",()=>pm.expect(res.responseSize).to.equal(7));});`,
+          afterScript:
+            'pm.test("main bytes",()=>pm.expect(pm.response.responseSize).to.equal(7));apt.test("alias bytes",()=>apt.expect(apt.response.responseSize).to.equal(7));',
+        },
+      },
+    ],
+  });
+  const run = await runPlan(plan, {}, executeRequest);
+  assert.equal(run.status, "passed", JSON.stringify(run.results));
+  assert.equal(run.results[0].response.size, 7);
+  assert.equal(run.results[0].subrequests[0].response.size, 7);
+});

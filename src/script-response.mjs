@@ -17,6 +17,7 @@ function installResponseCompatibility({ response, pm, apt }) {
     code: response?.status,
     status: response?.statusText,
     responseTime: response?.duration,
+    responseSize: response?.size,
     json: response?.json,
     headers: headerView,
     cookies: response?.cookies || Object.create(null),
