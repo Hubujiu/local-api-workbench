@@ -88,11 +88,15 @@ export function runScript(
         reject(error);
       } else resolve({ ...result, networkRequests });
     };
+    const startedAt = performance.now();
+    let lastWorkerStage = "starting";
     const timer = setTimeout(
       () =>
         finish(
           Object.assign(Error("脚本执行超时"), {
             scriptStage: "total-deadline",
+            lastWorkerStage,
+            elapsedMs: Math.round(performance.now() - startedAt),
           }),
         ),
       wallBudgetMs,
@@ -104,6 +108,10 @@ export function runScript(
     signal?.addEventListener("abort", cancel, { once: true });
     worker.on("message", async (message) => {
       if (settled) return;
+      if (message.kind === "stage") {
+        lastWorkerStage = message.stage;
+        return;
+      }
       if (message.kind === "http") {
         if (!input.allowNetwork) {
           finish(Error("此脚本未启用HTTP网络能力"));

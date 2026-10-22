@@ -30,8 +30,14 @@ const receive = (message) => {
 };
 parentPort.on("message", receive);
 try {
+  parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
   const trustedLibraries = await readFile(
     new URL("./vendor/script-libraries.js", import.meta.url),
+    "utf8",
+  );
+  parentPort.postMessage({ kind: "stage", stage: "loading-engine" });
+  const json5Library = await readFile(
+    new URL("./vendor/json5-library.js", import.meta.url),
     "utf8",
   );
   const tracked = await trackedQuickJS();
@@ -188,6 +194,7 @@ try {
       if(name === 'lodash') return globalThis._;
       if(name === 'moment') return globalThis.moment;
       if(name === 'uuid') return globalThis.uuid;
+      if(name === 'json5') return globalThis.JSON5;
       throw Error('不允许加载模块: ' + name);
     };
     ${scopeRuntimeSource}
@@ -347,9 +354,17 @@ try {
     }
     result.value.dispose();
   };
+  parentPort.postMessage({ kind: "stage", stage: "bootstrap" });
   run(setup);
   run(trustedLibraries);
+  const json5Source = context.newString(json5Library);
+  context.setProp(context.global, "__json5Source", json5Source);
+  json5Source.dispose();
+  run(
+    "(()=>{let cached;const source=globalThis.__json5Source;delete globalThis.__json5Source;Object.defineProperty(globalThis,'JSON5',{get(){if(!cached){(0,eval)(source);cached=globalThis.__boundedJSON5;delete globalThis.__boundedJSON5;}return cached;}});})();",
+  );
   scriptStage = "compatibility";
+  parentPort.postMessage({ kind: "stage", stage: scriptStage });
   deadline = Date.now() + workerData.activityBudgetMs;
   run("pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;");
   run(
@@ -395,6 +410,7 @@ try {
     }
   };
   scriptStage = "script";
+  parentPort.postMessage({ kind: "stage", stage: scriptStage });
   for (const [index, code] of [
     library,
     "(async()=>{\n" + workerData.code + "\n})()",
@@ -433,6 +449,7 @@ try {
   };
   drainJobs();
   scriptStage = "async-completion";
+  parentPort.postMessage({ kind: "stage", stage: scriptStage });
   while (callbacks.size || timers.size) {
     const earliest = Math.min(
       ...[...timers.values()].map((timer) => timer.due),
@@ -516,6 +533,7 @@ try {
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
+  parentPort.postMessage({ kind: "stage", stage: scriptStage });
   finalizing = true;
   const output = context.evalCode(
     "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization})",

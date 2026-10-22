@@ -1,8 +1,8 @@
 # 逐项复刻对照（2026-10-21）
 
-已核验提交：603d55e0b50b2b141e9b37c1c5581976f72794ae
+已核验提交：e2b81352592a4847f48cb7abdce30893ed36aed5
 
-10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39633687285)，354项核心测试。
+10项CI通过：[运行证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/39707152176)，367项核心测试。
 控件状态、弹窗可见性与HTTP/2代理已在本版核验；cURL默认配置隔离、元组样例及窄屏状态栏已验证；OAuth1 RSA已独立验证；编码Schema引用、UTF-8动态值边界、Cookie请求头优先级与步骤动态值编辑已通过后续CI。
 
 保留原始98项编号；分类重叠，不计算总体百分比。历史在线版补充文档不能自动证明当前离线版完整支持范围。
@@ -35,9 +35,9 @@
 | F22 智能 Mock 匹配 | 部分实现 | 按字段名通配符与类型生成数据，支持有界 * ? [] 取反/花括号、固定种子、内置规则；条件响应期望是独立功能。并非完整 Mock.js/Faker 兼容。 | src/mock-fields.mjs; tests/mock-fields.test.mjs; tests/ui-smoke.mjs |
 | F23 文档与分享 | 部分实现 | Markdown表格/标题/列表/代码块与编辑预览，API描述及单接口HTML离线导出；原始HTML禁用，不自动加载远程图片；可插入有大小/像素限制的本地PNG/JPEG，离线导出保留。不提供在线托管分享。 | src/markdown-renderer.mjs; tests/markdown.test.mjs; public/document-export.js; tests/ui-smoke.mjs |
 | F24 数据字典 | 部分实现 | 纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 | src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs |
-| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 SQLite显式单语句INSERT/UPDATE/DELETE、绑定及RETURNING已通过真实文件/HTTP/浏览器验证；默认只读，确认取消无写入、完成后重置，超量事务回滚；超时结果可能不确定，不自动重试。 显式项目级临时会话授权支持只读前后置查询与变量/断言联动；连接凭据不落盘，撤销/跨项目隔离及真实HTTP浏览器路径已验证。非全量数据库和任意顺序/写操作。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
+| F25 数据库连接 | 部分实现 | SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 SQLite显式单语句INSERT/UPDATE/DELETE、绑定及RETURNING已通过真实文件/HTTP/浏览器验证；默认只读，确认取消无写入、完成后重置，超量事务回滚；超时结果可能不确定，不自动重试。 显式项目级临时会话授权支持只读前后置查询与变量/断言联动；连接凭据不落盘，撤销/跨项目隔离及真实HTTP浏览器路径已验证。非全量数据库和任意顺序/写操作。 ClickHouse HTTP/TLS只读、类型化绑定、UInt64精度、真实26.8服务已验证；操作可编辑/重排/启停/移除/显式重新绑定，撤销不会静默换连接。 | database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs |
 | F26 可视化断言与变量提取 | 已实现 | JSON/Header/Cookie/耗时/全文/隔离正则/XML XPath 提取；可写运行时、本请求、当前环境、全局作用域，环境和全局写入有冲突检测。 | src/variable-scopes.mjs; src/xml-extraction.mjs; tests/variable-scopes.test.mjs |
-| F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库查询联动已提供会话授权的只读子集；任意混排、写操作和完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。 $.ajax返回有界Promise并等待async回调与complete，保留错误证据与原配额。 响应可视化模板支持静态隔离预览。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md; docs/ADR-SCRIPT-XML.md; docs/ADR-RECURSIVE-FOLDER-SCOPES.md |
+| F27 接口前后置操作 | 部分实现 | 隔离SDK、Promise/await/HTTP/定时器、原生拒绝追踪及共享项目/精确目录前后置JS已验证。共享阶段等待异步完成并共用原预算；本工具明确项目→目录→接口顺序，原排序图未核验。计划不隐式继承；数据库查询联动已提供会话授权的只读子集；任意混排、写操作和完整SDK仍不等价。 有界响应值/状态Header正文断言及CSV解析已验证；官方JSON属性/函数文档冲突按明确契约处理。 有界xml2Json响应转换和显式开启的祖先目录继承已实现；原预算不放宽。 $.ajax返回有界Promise并等待async回调与complete，保留错误证据与原配额。 响应可视化模板支持静态隔离预览。 新增固定Apipost Faker别名/mockExp、实际apt.info/pm.info与只读iterationData；并发CSV迭代、浏览器及三平台包已验证。 | src/scripts.mjs; src/shared-scripts.mjs; tests/script-sequence.test.mjs; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs; docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-RESPONSE.md; docs/ADR-SCRIPT-CSV.md; docs/ADR-SCRIPT-XML.md; docs/ADR-RECURSIVE-FOLDER-SCOPES.md |
 | F28 项目环境管理 | 已实现 | 统一当前环境与环境 CRUD，显式环境失效不会静默回退。 | src/environments.mjs; tests/environments.test.mjs |
 | F29 多服务与环境地址矩阵 | 已实现 | 共享服务、逐环境地址矩阵、请求显式绑定和目录服务继承；保存计划/用例时冻结绑定。目录采用明确的完整路径映射。 | src/environments.mjs; tests/environments.test.mjs |
 | F30 项目全局变量 | 已实现 | 项目全局变量与环境变量独立维护，全局低于环境低于调试运行值。 | src/environments.mjs; src/mcp-environments.mjs; tests/mcp-expanded.test.mjs |
@@ -61,7 +61,7 @@
 | F48 MCP本机服务与授权 | 已实现 | stdio/HTTP、allowlist、写入/执行授权；默认关 | createMCP; server MCP; tests |
 | F49 MCP各客户端配置 | 部分实现 | 六客户端配置页及密钥轮换；Trae 为通用未实测模板；未启动真实外部 Agent 验证。 | public/mcp-client-config.js; tests/mcp-client-config.test.mjs |
 | F50 MCP重启与密钥生命周期 | 部分实现 | 主动选择后可持久化本机端口/密钥/权限；端口冲突时关闭 MCP，密钥可轮换；默认仍为临时关闭状态。 | src/mcp-config-store.mjs; tests/mcp-persistence.test.mjs |
-| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39633687285; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
+| F51 跨平台桌面包 | 已实现 | Windows x64、macOS arm64、Linux x64真实成品包已启动并验证HTTP/脚本/XML/SQLite；macOS仅CI临时签名，未公证，不宣称全架构/正式发行。 | Actions39707152176; desktop/build-layout.mjs; tests/desktop-smoke.mjs; docs/DESKTOP-VALIDATION.md |
 
 ## MCP能力
 
@@ -109,7 +109,7 @@
 | U05 功能入口位置 | 已实现 | 六个主 rail 入口加回收站；计划进入顶栏，协议从树的新建菜单/保存项打开，数据库置于配置。 | public/app.js; tests/ui-smoke.mjs; tests/desktop-smoke.mjs |
 | U06 接口工作区标签 | 部分实现 | 主模式、状态、名称、分享与操作齐全；间距/个别工具不逐像素相同。 | public/app.js; ui-evidence |
 | U07 Body类型选择 | 已实现 | 横排 Body radio 与 raw 格式下拉，单独编辑器工具条。 | public/app.js; tests/ui-smoke.mjs |
-| U08 编辑器与参数助手 | 部分实现 | 行号/高亮、展开/Escape、环境/动态值助手和89种内置变量选择器已验证；插入保留滚动和光标，未保存内容保留。成熟IDE完整交互不包含。 | public/app.js; public/code-format.js; tests/ui-smoke.mjs |
+| U08 编辑器与参数助手 | 部分实现 | 行号/高亮、展开/Escape、环境/动态值助手和163个可选变量名（含别名）选择器已验证；插入保留滚动和光标，未保存内容保留。成熟IDE完整交互不包含。 | public/app.js; public/code-format.js; tests/ui-smoke.mjs |
 | U09 发送/保存分裂按钮 | 已实现 | 发送/保存分裂按钮与真实下拉操作。 | public/app.js; tests/ui-smoke.mjs |
 | U10 空状态与底栏 | 部分实现 | 原创线条火箭、底栏、精简模式与上下/左右布局切换已验证；授权/付费激活信息按范围排除，视觉不宣称逐像素一致。 | public/app.js; public/style.css; tests/ui-smoke.mjs |
 | U11 计划编辑页面 | 部分实现 | 左右计划布局及基础参数、认证、断言、变量提取、表单文件和连接/TLS可视化快照编辑已验证；动态值和Raw Body已有可视化编辑，其他高级配置仍可用JSON，具体原版界面仍未全部对齐。 | public/plan-view.js; public/step-editor.js; tests/ui-smoke.mjs |
@@ -130,7 +130,7 @@
 
 ## 当前核验检查点
 
-提交 603d55e0b50b2b141e9b37c1c5581976f72794ae， [Actions 39633687285](https://github.com/Hubujiu/local-api-workbench/actions/runs/39633687285)，354项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
+提交 e2b81352592a4847f48cb7abdce30893ed36aed5， [Actions 39707152176](https://github.com/Hubujiu/local-api-workbench/actions/runs/39707152176)，367项核心测试、10项CI全部通过。三平台实际成品包、浏览器、四类数据库服务及引擎复现均纳入；不等于完整复刻。
 
 
 ## 原98项之外的补充发现
@@ -142,4 +142,5 @@
 原始清单不是穷尽规格；补充项单列，不重写原基线或计算总体百分比。
 
 
-2026-10-21 16:23 检查点：603d55e / Actions39633687285 全部10项通过，354项核心。新增受限anyOf/互斥oneOf、三平台SQLite实际写入、Handlebars4.7.10响应可视化和显式会话数据库只读前后置操作。可视化/数据库请求结果截图已检查；模板隔离与撤销/跨项目拒绝均验证。完整原生迁移、完整SDK/动态图表、持久化连接管理和任意操作混排仍未完成。
+
+2026-10-21 17:11 已核验：d0abac93 / Actions39707152176，363核心与10项CI通过。ClickHouse真实服务只读/精度、固定Faker别名与mockExp、数据库编辑及显式重绑定、脚本info与只读CSV迭代数据均有对应证据。保留之前ClickHouse两次差异与弹窗观测时序失败记录；后续修复没有放宽原断言或预算。

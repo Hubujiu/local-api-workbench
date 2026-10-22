@@ -37,6 +37,7 @@
     "crypto-js": "4.2.0",
     "esbuild": "0.28.2",
     "handlebars": "4.7.10",
+    "json5": "2.2.3",
     "lodash": "4.18.1",
     "moment": "2.31.0",
     "prettier": "3.6.2",

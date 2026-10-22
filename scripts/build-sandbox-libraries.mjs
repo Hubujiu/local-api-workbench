@@ -12,6 +12,16 @@ await build({
   external: ["crypto"],
   legalComments: "inline",
 });
+await build({
+  entryPoints: ["scripts/sandbox-json5-entry.mjs"],
+  outfile: "src/vendor/json5-library.js",
+  bundle: true,
+  minify: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  legalComments: "inline",
+});
 const notices = [];
 for (const name of [
   "crypto-js",
@@ -21,6 +31,7 @@ for (const name of [
   "uuid",
   "@xmldom/xmldom",
   "handlebars",
+  "json5",
 ]) {
   const packageInfo = JSON.parse(
     await readFile("node_modules/" + name + "/package.json", "utf8"),
