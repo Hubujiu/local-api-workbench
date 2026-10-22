@@ -267,10 +267,11 @@ const browser = await chromium.launch({
   headless: true,
   args: ["--no-sandbox"],
 });
-const page = await browser.newPage({
+const browserContext = await browser.newContext({
   viewport: { width: 1440, height: 950 },
   recordVideo: { dir: "/tmp/local-api-video" },
 });
+const page = await browserContext.newPage();
 await page
   .context()
   .tracing.start({ screenshots: true, snapshots: true, sources: true });
@@ -4508,6 +4509,7 @@ try {
   releaseMCP();
   stdioChild?.kill();
   await page.context().tracing.stop({ path: "/tmp/local-api-trace.zip" });
+  await browserContext.close();
   await browser.close();
   for (const session of h2Sessions) session.destroy();
   for (const socket of h2Sockets) socket.destroy();
