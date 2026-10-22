@@ -104,7 +104,7 @@ export function sampleFromSchema(
       const base = { ...schema };
       delete base[key];
       const live = branches.filter((branch) => branch !== false);
-      let partitions;
+      let partitions, tagged;
       if (key === "oneOf" && live.length > 1) {
         partitions = live.map((branch) => {
           const types = Array.isArray(branch?.type)
@@ -130,10 +130,17 @@ export function sampleFromSchema(
           if (!expanded.size) throw Error("oneOf分支类型为空");
           return expanded;
         });
-        for (let i = 0; i < partitions.length; i++)
-          for (let j = i + 1; j < partitions.length; j++)
-            if ([...partitions[i]].some((type) => partitions[j].has(type)))
-              throw Error("oneOf分支类型不互斥，请提供 example");
+        if (
+          partitions.some((types, i) =>
+            partitions
+              .slice(i + 1)
+              .some((other) => [...types].some((type) => other.has(type))),
+          )
+        ) {
+          tagged = taggedObjectPartition(live, budget);
+          if (!tagged) throw Error("oneOf分支类型不互斥，请提供 example");
+          partitions = undefined;
+        }
       }
       const failures = [];
       for (let i = 0; i < live.length; i++) {
@@ -150,6 +157,13 @@ export function sampleFromSchema(
                   : typeof value;
           if (partitions && !partitions[i].has(type))
             throw Error("oneOf分支样例类型不匹配");
+          if (
+            tagged &&
+            (type !== "object" ||
+              !Object.hasOwn(value, tagged.key) ||
+              !tagged.values[i].has(value[tagged.key]))
+          )
+            throw Error("oneOf分支样例标签不匹配");
           return value;
         } catch (error) {
           failures.push(String(error.message).slice(0, 160));
@@ -331,6 +345,109 @@ export function sampleFromSchema(
   if (Buffer.byteLength(JSON.stringify(value)) > 1024 * 1024)
     throw Error("生成样例超过1 MiB上限");
   return value;
+}
+
+function taggedObjectPartition(branches, budget) {
+  if (
+    branches.some(
+      (branch) =>
+        branch?.type !== "object" ||
+        !Array.isArray(branch.required) ||
+        branch.required.length > 1000 ||
+        !branch.properties ||
+        typeof branch.properties !== "object" ||
+        Array.isArray(branch.properties),
+    )
+  )
+    return null;
+  const charge = (amount) => {
+    budget.nodes += amount;
+    if (budget.nodes > 10000) throw Error("Schema 生成超过节点/深度上限");
+  };
+  const annotations = new Set([
+    "title",
+    "description",
+    "default",
+    "example",
+    "examples",
+    "deprecated",
+    "readOnly",
+    "writeOnly",
+    "$comment",
+  ]);
+  const candidates = [...new Set(branches[0].required)].slice(0, 32);
+  for (const key of candidates) {
+    charge(1);
+    if (
+      typeof key !== "string" ||
+      ["__proto__", "prototype", "constructor"].includes(key)
+    )
+      continue;
+    const sets = [];
+    for (const branch of branches) {
+      charge(branch.required.length + 1);
+      if (
+        !branch.required.includes(key) ||
+        !Object.hasOwn(branch.properties, key)
+      )
+        break;
+      const field = branch.properties[key];
+      if (
+        !field ||
+        typeof field !== "object" ||
+        Array.isArray(field) ||
+        (field.type !== undefined && field.type !== "string")
+      )
+        break;
+      const fieldKeys = Object.keys(field);
+      charge(fieldKeys.length);
+      if (
+        fieldKeys.some(
+          (name) =>
+            !["type", "const", "enum"].includes(name) &&
+            !annotations.has(name) &&
+            !name.startsWith("x-"),
+        )
+      )
+        break;
+      const hasConst = Object.hasOwn(field, "const"),
+        hasEnum = Object.hasOwn(field, "enum");
+      if (!hasConst && !hasEnum) break;
+      if (
+        hasEnum &&
+        (!Array.isArray(field.enum) ||
+          !field.enum.length ||
+          field.enum.length > 100)
+      )
+        break;
+      const enumValues = hasEnum ? Array.from(field.enum) : [];
+      const values = hasConst ? [field.const] : enumValues;
+      charge(values.length + (hasEnum ? field.enum.length : 0));
+      if (
+        values.some(
+          (value) => typeof value !== "string" || value.length > 1024,
+        ) ||
+        (hasEnum &&
+          enumValues.some(
+            (value) => typeof value !== "string" || value.length > 1024,
+          ))
+      )
+        break;
+      if (hasEnum && new Set(enumValues).size !== enumValues.length) break;
+      if (hasConst && hasEnum && !field.enum.includes(field.const)) break;
+      sets.push(new Set(values));
+    }
+    if (sets.length !== branches.length) continue;
+    if (
+      !sets.some((values, i) =>
+        sets
+          .slice(i + 1)
+          .some((other) => [...values].some((value) => other.has(value))),
+      )
+    )
+      return { key, values: sets };
+  }
+  return null;
 }
 function numberSample(schema, type) {
   for (const key of ["minimum", "maximum", "multipleOf"])

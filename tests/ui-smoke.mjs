@@ -2473,6 +2473,26 @@ try {
   tupleSchema.properties.exclusive = {
     oneOf: [{ type: "string", minLength: 2 }, { type: "boolean" }],
   };
+  tupleSchema.properties.tagged = {
+    oneOf: [
+      {
+        type: "object",
+        required: ["kind"],
+        properties: {
+          kind: { const: "cat" },
+          lives: { type: "integer", minimum: 9 },
+        },
+      },
+      {
+        type: "object",
+        required: ["kind"],
+        properties: {
+          kind: { enum: ["dog", "wolf"] },
+          barks: { type: "boolean" },
+        },
+      },
+    ],
+  };
   await page.locator("#schema").fill(JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
@@ -2493,6 +2513,7 @@ try {
   assert.deepEqual(generatedBody.ordered, [42, false]);
   assert.equal(generatedBody.alternative, 7);
   assert.equal(generatedBody.exclusive, "xx");
+  assert.deepEqual(generatedBody.tagged, { kind: "cat", lives: 9 });
   assert.deepEqual(generatedBody.combined, { count: 2, label: "xx" });
   assert.equal(generatedBody.flag, false);
   await page.locator("#expand-body").click();
