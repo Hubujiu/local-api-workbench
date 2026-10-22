@@ -43,6 +43,8 @@ jobs:
         with:
           node-version: "24"
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - name: Use canonical signed Ubuntu archive
+        run: sudo --preserve-env=GITHUB_ACTIONS "$(command -v node)" scripts/ci-ubuntu-mirror.mjs
       - run: npx playwright install --with-deps chromium
       - run: node tests/curl-http2.mjs
       - run: node tests/ui-smoke.mjs
