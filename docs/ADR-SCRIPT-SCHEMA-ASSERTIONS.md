@@ -5,6 +5,14 @@ including negation and existing Apipost aliases. The original package's static
 sandbox implementation exposes this assertion family. This implementation is
 independent and uses the project's pinned Ajv 8.20.0 plus ajv-formats 3.0.1.
 
+Chai assertions recognize the main response and actual brokered callback/Promise
+HTTP response objects by identity in a private WeakMap. Their JSON body is read
+without changing transport evidence. Ordinary objects are data, not responses
+inferred from a `json` property; arbitrary user methods are not invoked as parsers.
+Registration is captured by the trusted HTTP wrapper and removed from the global
+object before user code runs. This does not add the entire response assertion
+chain or response mutation APIs to callback objects.
+
 ## Authority and correctness boundaries
 
 Compilation and validation happen only inside the existing QuickJS worker, never
@@ -41,6 +49,8 @@ third-party license notices. A source/package change fails the build pending rev
 Regression tests cover actual positive/negative assertion results, local references,
 formats, mutation isolation, malformed inputs, limits, regex equivalence and real
 HTTP execution. Reproducible bundle checks and all existing CI gates stay enabled.
+Browser and packaged-desktop smoke scenarios exercise both main-response and
+brokered-response validation alongside the existing script helpers.
 
 References:
 

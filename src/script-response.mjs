@@ -39,17 +39,25 @@ function installResponseCompatibility({ response, pm, apt }) {
     notFound: [404, 404],
     rateLimited: [429, 429],
   };
-  const responseJSON = () => {
-    if (!response) throw Error("当前脚本没有响应");
+  const parseJSON = (body) => {
     try {
-      return JSON.parse(response.body);
+      return JSON.parse(body);
     } catch {
       throw Error("jsonSchema 断言需要有效 JSON 响应");
     }
   };
+  const responseJSON = () => {
+    if (!response) throw Error("当前脚本没有响应");
+    return parseJSON(response.body);
+  };
+  const schemaReaders = new WeakMap([
+    [pm.response, responseJSON],
+    [apt.response, responseJSON],
+  ]);
   globalThis.chai.Assertion.addMethod("jsonSchema", function (schema, options) {
     let data = globalThis.chai.util.flag(this, "object");
-    if (data === pm.response || data === apt.response) data = responseJSON();
+    const read = schemaReaders.get(data);
+    if (read) data = read();
     const result = globalThis.__validateJSONSchema(schema, data, options);
     this.assert(
       result.valid,
@@ -160,6 +168,7 @@ function installResponseCompatibility({ response, pm, apt }) {
   }
   for (const facade of [apt.response, pm.response])
     Object.defineProperty(facade, "to", { get: () => chain() });
+  return (facade, body) => schemaReaders.set(facade, () => parseJSON(body));
 }
 export const responseCompatibilitySource =
   installResponseCompatibility.toString();

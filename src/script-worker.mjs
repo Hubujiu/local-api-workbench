@@ -385,7 +385,11 @@ try {
       "});",
   );
 
-  run("(" + responseCompatibilitySource + ")({response,pm,apt});");
+  run(
+    "globalThis.__registerSchemaResponse = (" +
+      responseCompatibilitySource +
+      ")({response,pm,apt});",
+  );
   run(
     'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;}',
   );
@@ -395,7 +399,7 @@ try {
       ";return function csv2array(text){if(arguments.length!==1)throw Error('CSV仅支持单个文本参数');return parse(text);};})();",
   );
 
-  run(`pm.sendRequest=(config,callback)=>{
+  run(`pm.sendRequest=((registerSchemaResponse)=>(config,callback)=>{
     if(callback===undefined)return new Promise((resolve,reject)=>pm.sendRequest(config,(error,response)=>error?reject(error):resolve(response)));
     if(typeof callback !== 'function')throw Error('pm.sendRequest回调须为函数');
     const captured={...variables,...localVariables};
@@ -403,10 +407,11 @@ try {
       const error=errorJSON?new Error(errorJSON):null, data=responseJSON?JSON.parse(responseJSON):null;
       const headers=data?.headers||{};
       const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,responseSize:data.size,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
+      if(response)registerSchemaResponse(response,data.body);
       const result=callback(error,response);
       trackTask(result);
     });
-  };apt.sendRequest=pm.sendRequest;`);
+  })(globalThis.__registerSchemaResponse);delete globalThis.__registerSchemaResponse;apt.sendRequest=pm.sendRequest;`);
   run("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
   let remaining = deadline - Date.now();
   const bounded = (fn) => {
