@@ -51,7 +51,7 @@ CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 ## 验收状态
 
-已核验功能提交e2b81352592a4847f48cb7abdce30893ed36aed5：367项核心测试、10项CI首轮通过，Actions39707152176。涵盖三平台核心与成品包、真实浏览器、数据库服务、生成资源与QuickJS可复现构建。后续提交须检查其独立CI，不能自动沿用此结论。未合并main、未部署。
+已核验功能提交ade522f8cc4ba6e1d92718406a6ac778d627552c：370项核心测试、10项CI首轮通过，Actions39710363952。涵盖三平台核心与成品包、真实浏览器、数据库服务、生成资源与QuickJS可复现构建。后续提交须检查其独立CI，不能自动沿用此结论。未合并main、未部署。
 
 本轮新增已验证：有界XML、嵌套目录及子树原子操作、显式开启的递归作用域、awaitable ajax与异步回调、保守allOf与引用交集样例、离线PNG/JPEG文档图片、OAuth1 OOB/PIN假服务流程。具体边界见对应ADR。OAuth未连接真实账户；图片不开放远程加载；生成器不是通用Schema求解器。
 
@@ -66,4 +66,4 @@ CI十项：Linux/macOS/Windows核心测试、真实Chromium测试、真实Postgr
 
 
 
-2026-10-21 17:11 已核验：d0abac93 / Actions39707152176，363核心与10项CI通过。ClickHouse真实服务只读/精度、固定Faker别名与mockExp、数据库编辑及显式重绑定、脚本info与只读CSV迭代数据均有对应证据。保留之前ClickHouse两次差异与弹窗观测时序失败记录；后续修复没有放宽原断言或预算。
+2026-10-21 17:11 已核验：d0abac93 / Actions39710363952，363核心与10项CI通过。ClickHouse真实服务只读/精度、固定Faker别名与mockExp、数据库编辑及显式重绑定、脚本info与只读CSV迭代数据均有对应证据。保留之前ClickHouse两次差异与弹窗观测时序失败记录；后续修复没有放宽原断言或预算。

@@ -20,7 +20,8 @@ export async function runLoad(project, request, options = {}) {
     10,
     Math.max(1, Math.floor(Number(options.concurrency)) || 1),
   );
-  const environmentId = selectedEnvironment(project, options.environmentId).id;
+  const selected = selectedEnvironment(project, options.environmentId);
+  const environmentId = selected.id;
   const variables =
     options.variables || environmentVariables(project, environmentId);
   const scopes = projectScopes(project, environmentId, variables);
@@ -49,6 +50,10 @@ export async function runLoad(project, request, options = {}) {
             {
               signal: options.signal,
               executionContext: {
+                environment: {
+                  id: String(selected.id),
+                  name: String(selected.name || ""),
+                },
                 iteration: index,
                 iterationCount: count,
                 iterationData: dataRows.length

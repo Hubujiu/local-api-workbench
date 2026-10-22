@@ -155,11 +155,18 @@ export const scopeRuntimeSource = [
   .join("\n");
 
 export function scopedExecution(store, project, environmentId, debugValues) {
-  const selectedId = selectedEnvironment(project, environmentId).id;
+  const selected = selectedEnvironment(project, environmentId);
+  const selectedId = selected.id;
   const initial = projectScopes(project, selectedId);
   const baseConfigRevision = project.configRevision ?? project.revision;
   let commits = 0;
   return {
+    executionContext: {
+      environment: {
+        id: String(selected.id),
+        name: String(selected.name || ""),
+      },
+    },
     variableScopes: projectScopes(project, selectedId, debugValues),
     onScopeChanges: async (changes) => {
       const saved = await persistScopeChanges(

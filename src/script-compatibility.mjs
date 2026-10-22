@@ -75,6 +75,17 @@ function installScriptCompatibility({
   apt.iterationData = pm.iterationData = Object.freeze(dataAPI);
   pm.globals.replaceIn = (value) => replaceIn(value, pm.globals);
 
+  const environmentIdentity = executionContext.environment;
+  Object.defineProperties(pm.environment, {
+    id: { value: environmentIdentity?.id, enumerable: true },
+    name: { value: environmentIdentity?.name, enumerable: true },
+  });
+  pm.environment.getName = () => environmentIdentity?.name;
+  pm.environment.getCollection = () => pm.environment.toObject();
+  // Apipost's variables.getCollection explicitly returns the environment collection.
+  pm.variables.getName = pm.environment.getName;
+  pm.variables.getCollection = pm.environment.getCollection;
+
   pm.environment.delete = pm.environment.unset;
   pm.globals.delete = pm.globals.unset;
   pm.variables.delete = pm.variables.unset;

@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-22T01:46:00Z",
-  "implementationCommit": "e2b81352592a4847f48cb7abdce30893ed36aed5",
+  "asOf": "2026-10-22T02:28:00Z",
+  "implementationCommit": "ade522f8cc4ba6e1d92718406a6ac778d627552c",
   "counts": {
     "F": {
       "已实现": 37,
@@ -1023,11 +1023,11 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39707152176",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39710363952",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
   "note": "本对照针对上述363项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39707152176,
+    "runId": 39710363952,
     "conclusion": "success first attempt",
     "coreTests": 363,
     "jobs": 10

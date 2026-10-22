@@ -4,10 +4,29 @@ export function normalizeExecutionContext(value = {}) {
     typeof value !== "object" ||
     Array.isArray(value) ||
     Object.keys(value).some(
-      (key) => !["iteration", "iterationCount", "iterationData"].includes(key),
+      (key) =>
+        ![
+          "iteration",
+          "iterationCount",
+          "iterationData",
+          "environment",
+        ].includes(key),
     )
   )
     throw Error("脚本执行上下文无效");
+  const environment = value.environment;
+  if (
+    environment !== undefined &&
+    (!environment ||
+      typeof environment !== "object" ||
+      Array.isArray(environment) ||
+      Object.keys(environment).some((key) => !["id", "name"].includes(key)) ||
+      ["id", "name"].some(
+        (key) =>
+          typeof environment[key] !== "string" || environment[key].length > 200,
+      ))
+  )
+    throw Error("脚本环境标识须为最多200字符的id/name");
   const iteration = value.iteration ?? 0,
     iterationCount = value.iterationCount ?? 1,
     data = value.iterationData ?? {};
@@ -48,5 +67,12 @@ export function normalizeExecutionContext(value = {}) {
   }
   if (Buffer.byteLength(json) > 512 * 1024)
     throw Error("脚本测试数据JSON最多512KiB");
-  return { iteration, iterationCount, iterationData: JSON.parse(json) };
+  return {
+    iteration,
+    iterationCount,
+    iterationData: JSON.parse(json),
+    ...(environment === undefined
+      ? {}
+      : { environment: { id: environment.id, name: environment.name } }),
+  };
 }

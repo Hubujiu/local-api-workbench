@@ -14,7 +14,7 @@ Not full SDK parity: $.ajax remains the documented callback subset and rejects P
 
 Upstream quickjs-emscripten 0.31.0 does not expose a supported host rejection-tracker API. Draining jobs alone can falsely report success after detached rejection. We compile a small reviewed C extension using JS_SetHostPromiseRejectionTracker, never exposing tracker reset/hooks to VM code. The extension retains at most 1000 rejected promise/reason pairs, frees them on handled notification and before context/runtime disposal, and reports overflow explicitly. The reporter does not invoke arbitrary getters, proxies or coercion hooks. It copies only plain Error.message or primitive text, bounded to 4096 bytes.
 
-Each worker loads a fresh isolated module through the upstream public variant-loader and FFI API. It verifies SHA-256 of generated glue and decoded WASM before loading. The base64 asset is transport encoding, not encryption. This hash guards accidental asset mismatch, not an attacker who can replace both manifest and executable files.
+Each worker creates a fresh isolated WASM instance through the upstream public variant-loader and FFI API. Application startup verifies SHA-256 of generated glue and decoded WASM and compiles immutable engine code once; workers can share only that compiled WebAssembly.Module, never runtime memory or user state. Worker glue/manifest identity is rechecked. See ADR-COMPILED-ENGINE.md. The base64 asset is transport encoding, not encryption. This hash guards accidental asset mismatch, not an attacker who can replace both manifest and executable files.
 
 ## Provenance and reproducibility
 

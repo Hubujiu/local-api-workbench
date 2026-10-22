@@ -40,7 +40,7 @@ try {
     new URL("./vendor/json5-library.js", import.meta.url),
     "utf8",
   );
-  const tracked = await trackedQuickJS();
+  const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
   runtime.setMemoryLimit(16 * 1024 * 1024);

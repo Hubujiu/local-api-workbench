@@ -1,7 +1,11 @@
+import { compileTrackedQuickJS } from "./tracked-quickjs.mjs";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
+
+// Application startup only; each worker receives immutable compiled code, never a shared VM.
+const compiledEngine = await compileTrackedQuickJS();
 
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(
@@ -54,6 +58,7 @@ export function runScript(
     }
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
+        compiledEngine,
         code,
         input,
         activityBudgetMs,

@@ -763,7 +763,7 @@ try {
         'pm.test("JSON5 helper",()=>pm.expect(JSON5.parse("{unquoted:1,}").unquoted).to.equal(1));' +
         'apt.variables.set("dialectPrivate","local");pm.test("Apipost8 JSON",()=>pm.expect(apt.response.json().message).to.equal(pm.response.json().message));' +
         'apt.setVar("fakerCompany", mockExp("{{$fakerjs.Company.name}}")); pm.test("Apipost Faker helper",()=>pm.expect(apt.getVar("fakerCompany")).to.be.a("string"));' +
-        'pm.test("execution context",()=>{pm.expect(apt.info.eventName).to.equal("test");pm.expect(apt.info.requestId.length).to.be.above(0);if(apt.iterationData.has("loadFixture")){pm.expect(apt.info.iterationCount).to.equal(2);pm.expect(pm.iterationData.get("loadFixture")).to.equal(apt.info.iteration===0?"first":"second");}else{pm.expect(apt.info.iteration).to.equal(0);pm.expect(apt.info.iterationCount).to.equal(1);}});',
+        'pm.test("execution context",()=>{pm.expect(apt.environment.getName()).to.be.a("string").and.not.empty;pm.expect(pm.environment.id).to.be.a("string").and.not.empty;pm.expect(pm.variables.getName()).to.equal(apt.environment.getName());pm.expect(apt.info.eventName).to.equal("test");pm.expect(apt.info.requestId.length).to.be.above(0);if(apt.iterationData.has("loadFixture")){pm.expect(apt.info.iterationCount).to.equal(2);pm.expect(pm.iterationData.get("loadFixture")).to.equal(apt.info.iteration===0?"first":"second");}else{pm.expect(apt.info.iteration).to.equal(0);pm.expect(apt.info.iterationCount).to.equal(1);}});',
     );
   const scriptHelperReply = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
