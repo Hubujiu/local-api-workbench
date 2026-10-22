@@ -7,7 +7,12 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { snapshotPlan, exportOpenAPI, normalizeRequest } from "../src/core.mjs";
+import {
+  snapshotPlan,
+  exportOpenAPI,
+  normalizeRequest,
+  importDocument,
+} from "../src/core.mjs";
 import http from "node:http";
 import http2 from "node:http2";
 import net from "node:net";
@@ -3787,6 +3792,85 @@ try {
     File.prototype.arrayBuffer = window.originalFileRead;
   });
   await page.screenshot({ path: "/tmp/local-api-file-selection.png" });
+
+  const formSchemaProject = await app.store.create(
+    "Form schema browser fixture",
+  );
+  formSchemaProject.requests = importDocument({
+    openapi: "3.1.0",
+    paths: {
+      "/form": {
+        post: {
+          summary: "Form schema fidelity",
+          requestBody: {
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  properties: { a: { type: "string" }, forbidden: false },
+                  additionalProperties: false,
+                },
+                example: { a: "a", extra: "x", rename: "r", upload: "" },
+              },
+            },
+          },
+          responses: { 200: { description: "OK" } },
+        },
+      },
+    },
+  });
+  await app.store.save(formSchemaProject);
+  await page.reload();
+  await page.locator("#project-select").selectOption(formSchemaProject.id);
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#request-name")?.value === "Form schema fidelity",
+  );
+  await page.locator('[data-param="body"]').click();
+  await page.locator('[data-pair="form:2:value"]').fill("payload edit only");
+  await saveAndWait("#save-project");
+  let formState = await app.store.get(formSchemaProject.id);
+  assert.equal(formState.requests[0].form[2].schemaDefined, false);
+  assert.equal(
+    Object.hasOwn(
+      exportOpenAPI(formState).paths["/form"].post.requestBody.content[
+        "multipart/form-data"
+      ].schema.properties,
+      "extra",
+    ),
+    false,
+  );
+  await page.locator('[data-define-pair="form:1"]').click();
+  assert.equal(await page.locator("#modal-json").inputValue(), "false");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-define-pair="form:2"]').click();
+  await page.locator("#modal-json").fill('{"type":"string","minLength":2}');
+  await page.locator("#parameter-required").check();
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-pair="form:3:key"]').fill("renamed");
+  await page.locator('[data-field-type="4"]').selectOption("file");
+  await saveAndWait("#save-project");
+  formState = await app.store.get(formSchemaProject.id);
+  const formContract =
+    exportOpenAPI(formState).paths["/form"].post.requestBody.content[
+      "multipart/form-data"
+    ].schema;
+  assert.equal(formContract.additionalProperties, false);
+  assert.deepEqual(formContract.required, ["extra"]);
+  assert.deepEqual(formContract.properties.forbidden, { not: {} });
+  assert.deepEqual(formContract.properties.extra, {
+    type: "string",
+    minLength: 2,
+  });
+  assert.deepEqual(formContract.properties.renamed, {});
+  assert.deepEqual(formContract.properties.upload, {
+    type: "string",
+    format: "binary",
+  });
+  assert.equal(formState.requests[0].form[1].schema, false);
+  await page.screenshot({ path: "/tmp/local-api-form-schema.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

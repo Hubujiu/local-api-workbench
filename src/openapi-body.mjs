@@ -74,6 +74,8 @@ export function importOpenAPIBody(requestBody) {
     throw Error("尚不支持该 OpenAPI 请求体媒体类型: " + mediaName);
   const example = openapiExample(media, {});
   if (hasComposition(schema)) throw Error("尚不支持 OpenAPI 复杂表单 Schema");
+  if (schema.type !== undefined && schema.type !== "object")
+    throw Error("OpenAPI 表单根类型必须是 object");
   if (!example || typeof example !== "object" || Array.isArray(example))
     throw Error("表单示例必须是对象");
   const properties = schema.properties || {};
@@ -113,6 +115,7 @@ export function importOpenAPIBody(requestBody) {
       required: Array.isArray(schema.required) && schema.required.includes(key),
       description: definition.description || "",
       schema: definition,
+      ...(!Object.hasOwn(properties, key) ? { schemaDefined: false } : {}),
       ...(file ? { requiresFile: true, filename: key } : {}),
     };
   });
@@ -151,39 +154,44 @@ export function exportOpenAPIBody(request) {
     }
   }
   if (["urlencoded", "form-data"].includes(type)) {
+    const formKeys = new Set((request.form || []).map((field) => field.key));
     const properties = Object.create(null),
-      required = [],
+      required = (Array.isArray(schema.required) ? schema.required : []).filter(
+        (key) =>
+          !Object.hasOwn(schema.properties || {}, key) && !formKeys.has(key),
+      ),
+      seen = new Set(),
       values = Object.create(null);
     for (const field of request.form || []) {
       if (field.enabled === false || !field.key) continue;
       if (["__proto__", "prototype", "constructor"].includes(field.key))
         throw Error("不安全的表单字段");
-      if (Object.hasOwn(properties, field.key))
-        throw Error("OpenAPI 导出不支持重复表单键");
-      properties[field.key] =
-        field.type === "file"
+      if (seen.has(field.key)) throw Error("OpenAPI 导出不支持重复表单键");
+      seen.add(field.key);
+      let definition =
+        field.type === "file" &&
+        field.schema?.format !== "binary" &&
+        field.schema?.contentEncoding !== "base64"
           ? { type: "string", format: "binary" }
           : structuredClone(field.schema ?? { type: "string" });
       if (field.required) required.push(field.key);
       if (field.description) {
-        if (typeof properties[field.key] === "boolean")
-          properties[field.key] = {
-            allOf: [properties[field.key]],
+        if (typeof definition === "boolean")
+          definition = {
+            allOf: [definition],
             description: field.description,
           };
-        else properties[field.key].description = field.description;
+        else definition.description = field.description;
       }
+      if (field.schemaDefined !== false) properties[field.key] = definition;
       if (field.type !== "file") {
         let value = field.value ?? "";
-        if (
-          ["boolean", "number", "integer"].includes(properties[field.key].type)
-        ) {
+        if (["boolean", "number", "integer"].includes(definition.type)) {
           try {
             const parsed = JSON.parse(value);
             if (
-              typeof parsed === properties[field.key].type ||
-              (properties[field.key].type === "integer" &&
-                Number.isInteger(parsed))
+              typeof parsed === definition.type ||
+              (definition.type === "integer" && Number.isInteger(parsed))
             )
               value = parsed;
           } catch {}
@@ -191,12 +199,19 @@ export function exportOpenAPIBody(request) {
         values[field.key] = value;
       }
     }
-    if (typeof schema !== "boolean")
+    if (typeof schema !== "boolean") {
+      const original = structuredClone(schema);
+      delete original.required;
       schema = {
-        type: "object",
+        ...(!request.openapiOperation?.requestBody &&
+        !Object.keys(original).length
+          ? { type: "object" }
+          : {}),
+        ...original,
         properties,
         ...(required.length ? { required } : {}),
       };
+    }
     example = values;
   }
   return {

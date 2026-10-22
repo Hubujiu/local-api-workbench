@@ -1261,6 +1261,7 @@ function bind() {
             ...(entry.enum ? { enum: entry.enum } : {}),
           },
         });
+        delete request()[kind][Number(index)].schemaDefined;
         mark();
         render();
       },
@@ -1319,11 +1320,12 @@ function bind() {
       parameter = request()[kind][Number(index)];
     modal(
       "参数定义",
-      `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}"><label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema || { type: "string" })}`,
+      `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}"><label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema ?? { type: "string" })}`,
       () => {
         parameter.description = $("#parameter-description").value;
         parameter.required = $("#parameter-required").checked;
         parameter.schema = JSON.parse($("#modal-json").value);
+        delete parameter.schemaDefined;
         if (parameter.key && parameter.description) {
           const entry = {
             key: parameter.key,
@@ -1749,6 +1751,7 @@ function bind() {
   });
   on("[data-field-type]", "change", (_, e) => {
     request().form[e.dataset.fieldType].type = e.value;
+    delete request().form[e.dataset.fieldType].schemaDefined;
     mark();
     render();
   });
@@ -1778,6 +1781,7 @@ function bind() {
   on("[data-pair]", "input", (_, e) => {
     const [k, i, f] = e.dataset.pair.split(":");
     request()[k][i][f] = e.value;
+    if (f === "key") delete request()[k][i].schemaDefined;
     mark();
   });
   on("[data-pair-enabled]", "change", (_, e) => {
