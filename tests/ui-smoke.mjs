@@ -725,6 +725,16 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
 
   // Exercise editable scripts, response evidence and repeated modal dismissal.
+  await page.locator('[data-page="apis"]').click();
+  await page.locator('[data-param="after"]').click();
+  assert.equal(await page.locator("#script-dialect").inputValue(), "legacy");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#script-dialect").selectOption("apipost8");
+  assert.equal(await page.locator("#script-dialect").inputValue(), "legacy");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#script-dialect").selectOption("apipost8");
+  assert.equal(await page.locator("#script-dialect").inputValue(), "apipost8");
+
   const visualizationLeaks = [];
   const observeVisualization = (request) => {
     if (request.url().includes("visualizer-leak"))
@@ -750,6 +760,7 @@ try {
       'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); apt.assert("response.raw.status === 200"); postman.setEnvironmentVariable("legacyFromUI",response.json.message); console.log("script-done");' +
         `pm.sendRequest(${JSON.stringify(fixtureURL + "/token")},(error,reply)=>{if(error)throw error;pm.environment.set('scriptHTTPFromUI',reply.json().access_token);pm.test('scriptHTTPStatus',()=>pm.expect(reply.code).to.equal(200));});` +
         `apt.visualizer.set(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});` +
+        'apt.variables.set("dialectPrivate","local");pm.test("Apipost8 JSON",()=>pm.expect(apt.response.json().message).to.equal(pm.response.json().message));' +
         'apt.setVar("fakerCompany", mockExp("{{$fakerjs.Company.name}}")); pm.test("Apipost Faker helper",()=>pm.expect(apt.getVar("fakerCompany")).to.be.a("string"));' +
         'pm.test("execution context",()=>{pm.expect(apt.info.eventName).to.equal("test");pm.expect(apt.info.requestId.length).to.be.above(0);if(apt.iterationData.has("loadFixture")){pm.expect(apt.info.iterationCount).to.equal(2);pm.expect(pm.iterationData.get("loadFixture")).to.equal(apt.info.iteration===0?"first":"second");}else{pm.expect(apt.info.iteration).to.equal(0);pm.expect(apt.info.iterationCount).to.equal(1);}});',
     );
@@ -763,6 +774,7 @@ try {
     "passed",
     JSON.stringify(scriptHelperResult),
   );
+  assert.equal(scriptHelperResult.extracted.dialectPrivate, undefined);
   assert.equal(typeof scriptHelperResult.extracted.fakerCompany, "string");
   assert(scriptHelperResult.extracted.fakerCompany.length > 0);
   await page.locator('[data-response="logs"]').click();

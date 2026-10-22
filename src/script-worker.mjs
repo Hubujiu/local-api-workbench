@@ -362,6 +362,9 @@ try {
 
   run("(" + responseCompatibilitySource + ")({response,pm,apt});");
   run(
+    'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;}',
+  );
+  run(
     "globalThis.csv2array = (()=>{const parse=" +
       parseCSVRows.toString() +
       ";return function csv2array(text){if(arguments.length!==1)throw Error('CSV仅支持单个文本参数');return parse(text);};})();",

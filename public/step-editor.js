@@ -1,4 +1,9 @@
 import {
+  normalizeScriptDialect,
+  scriptDialectOptions,
+  scriptDialectNotice,
+} from "./script-dialect.js";
+import {
   dynamicEditor,
   parseDynamicEdits,
   bindDynamicEditors,
@@ -139,6 +144,7 @@ export function stepEditor(step) {
       )
       .join("") +
     "<details><summary>本步骤脚本</summary>" +
+    `<label>脚本兼容模式<select data-step-field="scriptDialect">${scriptDialectOptions(r.scriptDialect)}</select></label><p class="muted">${scriptDialectNotice}</p>` +
     textarea("beforeScript", "前置脚本（隔离 VM）", r.beforeScript) +
     textarea("afterScript", "后置脚本（隔离 VM）", r.afterScript) +
     "</details></div>"
@@ -202,6 +208,8 @@ export function applyStepEdits(step, fields, pairGroups, rules = {}) {
     "proxy",
   ])
     if (Object.hasOwn(fields, key)) next.request[key] = fields[key];
+  if (Object.hasOwn(fields, "scriptDialect"))
+    next.request.scriptDialect = normalizeScriptDialect(fields.scriptDialect);
   if (Object.hasOwn(fields, "timeout")) {
     const timeout = Number(fields.timeout);
     if (!Number.isInteger(timeout) || timeout < 100 || timeout > 60000)

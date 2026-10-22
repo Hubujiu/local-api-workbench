@@ -1,3 +1,4 @@
+import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { scriptStages } from "../public/shared-scripts.js";
 import { isModernApipost, importModernApipost } from "./apipost-modern.mjs";
 import { builtinVariable } from "./builtin-variables.mjs";
@@ -229,6 +230,7 @@ export function normalizeRequest(r = {}) {
     assertions: r.assertions || [],
     extract: r.extract || [],
     before: r.before || [],
+    scriptDialect: normalizeScriptDialect(r.scriptDialect),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],

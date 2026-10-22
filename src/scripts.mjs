@@ -1,3 +1,4 @@
+import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
@@ -38,6 +39,7 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  normalizeScriptDialect(input.request?.scriptDialect);
   input = {
     ...input,
     executionContext: normalizeExecutionContext(input.executionContext),
