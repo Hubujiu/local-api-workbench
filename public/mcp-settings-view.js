@@ -12,7 +12,11 @@ const hidden =
 export function mcpStatusMarkup(config, projects) {
   const known = Array.isArray(config.projects);
   const names = new Map(projects.map((p) => [p.id, p.name]));
-  const time = config.lastActivity ? new Date(config.lastActivity) : null;
+  const activityTime =
+    typeof config.lastActivity === "object" && config.lastActivity !== null
+      ? config.lastActivity.finishedAt || config.lastActivity.startedAt
+      : config.lastActivity;
+  const time = activityTime ? new Date(activityTime) : null;
   const recent =
     time && Number.isFinite(time.getTime())
       ? time.toLocaleString()

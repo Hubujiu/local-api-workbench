@@ -13,7 +13,8 @@
     "format": "prettier --write \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
     "format:check": "prettier --check \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
     "build:markdown": "node scripts/build-markdown.mjs",
-    "build:sandbox": "node scripts/build-sandbox-libraries.mjs"
+    "build:sandbox": "node scripts/build-sandbox-libraries.mjs",
+    "audit:ci": "node scripts/audit-dependencies.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -33,6 +34,7 @@
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "chai": "6.3.0",
     "crypto-js": "4.2.0",
     "esbuild": "0.28.2",

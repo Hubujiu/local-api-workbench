@@ -108,3 +108,16 @@ test("MCP preview hides revoked keys and interrupted copies cannot leak an old c
   await showing;
   assert(!code.textContent.includes(config.token));
 });
+
+test("MCP last activity reads the actual server activity object", () => {
+  const html = mcpStatusMarkup(
+    {
+      enabled: true,
+      projects: [],
+      lastActivity: { finishedAt: "2026-10-22T06:00:00Z", status: "completed" },
+    },
+    [],
+  );
+  assert(!html.includes("暂无连接记录"));
+  assert(html.includes("2026"));
+});

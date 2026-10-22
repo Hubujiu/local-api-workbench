@@ -10,6 +10,10 @@ test("desktop dependency audits remain mandatory before building despite bounded
       "utf8",
     ),
   ).jobs.desktop;
+  const pkg = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  assert.equal(pkg.scripts["audit:ci"], "node scripts/audit-dependencies.mjs");
   assert.equal(job["continue-on-error"], undefined);
   assert.equal(job["timeout-minutes"], 15);
   assert.equal(job.env.NPM_CONFIG_FETCH_TIMEOUT, "30000");
@@ -18,8 +22,8 @@ test("desktop dependency audits remain mandatory before building despite bounded
     (s) => s.run === "node scripts/build-desktop.mjs",
   );
   for (const command of [
-    "npm audit --audit-level=high",
-    "npm audit --prefix desktop --audit-level=high",
+    "npm run audit:ci",
+    "npm run audit:ci -- --prefix desktop",
   ]) {
     const at = job.steps.findIndex((s) => s.run === command);
     assert.ok(at >= 0 && at < build);

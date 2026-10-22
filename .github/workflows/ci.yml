@@ -71,8 +71,8 @@ jobs:
           node-version: "24"
       - run: npm ci --ignore-scripts --no-audit
       - run: npm ci --prefix desktop --no-audit
-      - run: npm audit --audit-level=high
-      - run: npm audit --prefix desktop --audit-level=high
+      - run: npm run audit:ci
+      - run: npm run audit:ci -- --prefix desktop
       - run: npx --no install-electron
         working-directory: desktop
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
@@ -116,7 +116,7 @@ jobs:
         with:
           node-version: "24"
       - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=high
+      - run: npm run audit:ci
       - run: npm run format:check
       - run: node scripts/build-markdown.mjs
       - run: node scripts/build-sandbox-libraries.mjs
