@@ -41,6 +41,20 @@ try {
     );
     const command =
       "curl " + fixture.args.map(quoteCurl).join(" ") + " " + quoteCurl(url);
+    if (fixture.ambiguousLeadingEmpty) {
+      const wire = JSON.parse(stdout);
+      assert(
+        ["a=1", "&a=1"].includes(wire.body),
+        "only the two observed curl empty-prefix behaviors are recognized",
+      );
+      assert.throws(
+        () => importCurl(command),
+        /空片段.*版本/,
+        "unknown source curl version must not silently choose either body",
+      );
+      console.log("CURL_EMPTY_PREFIX_REJECTED", JSON.stringify(wire.body));
+      continue;
+    }
     const request = importCurl(command);
     const actual = JSON.parse((await executeRequest(request)).body);
     assert.deepEqual(actual, JSON.parse(stdout), JSON.stringify(fixture.args));

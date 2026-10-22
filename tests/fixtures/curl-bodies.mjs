@@ -2,7 +2,8 @@ export const quoteCurl = (value) =>
   "'" + String(value).replaceAll("'", "'\\''") + "'";
 export const curlBodyCases = [
   { args: ["-d", "a=1", "-d", "b=two"], body: "a=1&b=two" },
-  { args: ["-d", "", "-d", "a=1"], body: "a=1" },
+  { args: ["-d", "", "-d", "a=1"], body: "a=1", ambiguousLeadingEmpty: true },
+  { args: ["-d", ""], body: "" },
   { args: ["-d", "a=1", "-d", ""], body: "a=1&" },
   {
     args: ["--data-raw", "@literal", "--data-binary", "a\r\nb"],

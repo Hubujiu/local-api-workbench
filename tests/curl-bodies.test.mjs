@@ -27,6 +27,19 @@ test("literal cURL bodies preserve concatenation, encoding, headers and explicit
   });
   const url = "http://127.0.0.1:" + server.address().port;
   for (const fixture of curlBodyCases) {
+    if (fixture.ambiguousLeadingEmpty) {
+      assert.throws(
+        () =>
+          importCurl(
+            "curl " +
+              fixture.args.map(quoteCurl).join(" ") +
+              " " +
+              quoteCurl(url),
+          ),
+        /空片段.*版本/,
+      );
+      continue;
+    }
     const request = importCurl(
       "curl " + fixture.args.map(quoteCurl).join(" ") + " " + quoteCurl(url),
     );

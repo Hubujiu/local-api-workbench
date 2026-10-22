@@ -1047,6 +1047,10 @@ export function importCurl(source) {
       const kind = t === "--json" ? "json" : "data";
       if (r.bodyType === "form-data" || (dataKind && dataKind !== kind))
         throw Error("暂不支持混用不同 cURL 请求体类型");
+      if (dataKind === "data" && r.body === "")
+        throw Error(
+          "重复空片段的 cURL 行为随版本不同，请合并为单个 --data-raw 参数",
+        );
       if (t === "--data-urlencode") {
         const equal = value.indexOf("=");
         if (equal < 0 && value.includes("@"))

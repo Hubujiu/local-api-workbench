@@ -14,3 +14,12 @@ exercise import/export/reimport; browser import checks persisted Unicode content
 This is not support for arbitrary cURL flags, files, certificates or shell syntax.
 
 Reference: https://curl.se/docs/manpage.html#--data
+
+The first CI comparison exposed a real version difference: curl 8.5.0 sends
+`&a=1` for `-d '' -d a=1`, while the local curl 8.14.1 sends `a=1`. A pasted
+command does not identify its source version. Therefore repeated data after an
+empty prefix is explicitly rejected, rather than guessing. A single empty body,
+trailing empty pieces and JSON concatenation remain supported. The original
+counterexample stays in both the unit and actual-curl tests as a required refusal;
+normal-body wire comparisons are unchanged. Users can disambiguate by combining
+their intended bytes into one literal data-raw argument.
