@@ -105,3 +105,89 @@ test("explicit null dictionary defaults and enums are preserved rather than repl
     { nullable: null },
   );
 });
+
+test("DDL literals do not become attributes and enum parentheses stay inside strings", () => {
+  const entries = parseParameterImport(
+    "CREATE TABLE t (label VARCHAR(40) COMMENT 'NOT NULL DEFAULT 7', choice ENUM('a)b','x,y','it''s') DEFAULT 'a)b', amount DOUBLE DEFAULT -1.25e+3);",
+    "mysql",
+  );
+  assert.equal(entries[0].required, false);
+  assert.equal(Object.hasOwn(entries[0], "default"), false);
+  assert.equal(entries[0].description, "NOT NULL DEFAULT 7");
+  assert.deepEqual(entries[1].enum, ["a)b", "x,y", "it's"]);
+  assert.equal(entries[1].default, "a)b");
+  assert.equal(entries[2].default, -1250);
+});
+
+test("DDL comments, unsafe integer defaults and unevaluated expressions are explicit", () => {
+  const entries = parseParameterImport(
+    "CREATE TABLE t (a INT /* NOT NULL DEFAULT 9 */, stamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP(6), n INT DEFAULT TRUE, text VARCHAR(20) DEFAULT 'a\\nb');",
+    "mysql",
+  );
+  assert.equal(entries[0].required, false);
+  assert.equal(Object.hasOwn(entries[0], "default"), false);
+  assert.equal(Object.hasOwn(entries[1], "default"), false);
+  assert.match(entries[1].note, /CURRENT_TIMESTAMP/);
+  assert.equal(entries[2].default, 1);
+  assert.equal(entries[3].default, "a\nb");
+  assert.throws(
+    () =>
+      parseParameterImport(
+        "CREATE TABLE t (id BIGINT DEFAULT 9007199254740993);",
+        "mysql",
+      ),
+    /精度/,
+  );
+  assert.throws(
+    () =>
+      parseParameterImport("CREATE TABLE t (a INT); DROP TABLE t;", "mysql"),
+    /单条/,
+  );
+});
+
+test("DDL handles quoted identifiers and comments without accepting executable or unbounded input", () => {
+  const entries = parseParameterImport(
+    "/* header */ CREATE TABLE `db`.`t` (`odd``name` VARCHAR(20) DEFAULT 'a' 'b', `PRIMARY` INT NOT NULL, e ENUM('x;--','a\\%b')) ENGINE=InnoDB COMMENT='DROP TABLE t;';",
+    "mysql",
+  );
+  assert.equal(entries[0].key, "odd`name");
+  assert.equal(entries[0].default, "ab");
+  assert.equal(entries[1].key, "PRIMARY");
+  assert.equal(entries[1].required, true);
+  assert.deepEqual(entries[2].enum, ["x;--", "a\\%b"]);
+  for (const ddl of [
+    "CREATE TABLE t(a INT; DROP TABLE x)",
+    "CREATE TABLE t(a INT) /*! engine=foo */",
+    "CREATE TABLE t(a ENUM('unclosed))",
+    "CREATE TABLE t(a INT) /* unfinished",
+  ])
+    assert.throws(() => parseParameterImport(ddl, "mysql"));
+  assert.throws(
+    () =>
+      parseParameterImport(
+        "CREATE TABLE t(a INT DEFAULT " +
+          "(".repeat(33) +
+          "1" +
+          ")".repeat(33) +
+          ")",
+        "mysql",
+      ),
+    /32层/,
+  );
+});
+
+test("DDL adjacent comment literals are preserved and missing DEFAULT values are rejected", () => {
+  const [entry] = parseParameterImport(
+    "CREATE TABLE t(a VARCHAR(20) COMMENT 'one' 'two')",
+    "mysql",
+  );
+  assert.equal(entry.description, "onetwo");
+  assert.throws(
+    () =>
+      parseParameterImport(
+        "CREATE TABLE t(a INT DEFAULT COMMENT 'x')",
+        "mysql",
+      ),
+    /DEFAULT缺少值/,
+  );
+});

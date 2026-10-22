@@ -1601,6 +1601,60 @@ try {
   await page.reload();
   await page.locator('[data-page="dictionary"]').click();
   await page.getByText("customerId", { exact: true }).waitFor();
+  await page.locator("#import-parameter-dictionary").click();
+  await page.locator("#dictionary-format").selectOption("mysql");
+  await page
+    .locator("#dictionary-source")
+    .fill("CREATE TABLE t(id BIGINT DEFAULT 9007199254740993);");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("DDL默认数值超出JSON安全精度", { exact: false })
+    .last()
+    .waitFor();
+  assert.equal(await page.locator("#dictionary-format").inputValue(), "mysql");
+  await page
+    .locator("#dictionary-source")
+    .fill(
+      "CREATE TABLE t(ddlChoice ENUM('a)b','x,y') DEFAULT 'a)b' COMMENT 'NOT NULL DEFAULT 7', ddlTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP(6), ddlAmount DOUBLE DEFAULT 1e3);",
+    );
+  const ddlReply = page.waitForResponse(
+    (r) => r.url().endsWith("/dictionary-preview") && r.status() === 200,
+  );
+  await page.locator("#dialog-save").click();
+  const ddlPreview = await (await ddlReply).json();
+  const ddlChoice = ddlPreview.find(
+    (item) => item.entry.key === "ddlChoice",
+  ).entry;
+  assert.deepEqual(ddlChoice.enum, ["a)b", "x,y"]);
+  assert.equal(ddlChoice.default, "a)b");
+  assert.equal(ddlChoice.required, false);
+  assert.equal(
+    ddlPreview.find((item) => item.entry.key === "ddlAmount").entry.default,
+    1000,
+  );
+  await page
+    .locator("#dialog-title")
+    .getByText("确认字典导入", { exact: true })
+    .waitFor();
+  await page
+    .locator("#dialog")
+    .getByText("默认表达式未求值: CURRENT_TIMESTAMP(6)", { exact: false })
+    .waitFor();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page.getByText("ddlChoice", { exact: true }).waitFor();
+  await page
+    .getByText("默认表达式未求值: CURRENT_TIMESTAMP(6)", { exact: false })
+    .waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-dictionary-ddl.png" });
+
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();

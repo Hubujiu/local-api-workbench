@@ -54,6 +54,11 @@ jobs:
             /tmp/local-api-video/
   desktop:
     timeout-minutes: 15
+    env:
+      NPM_CONFIG_FETCH_TIMEOUT: "30000"
+      NPM_CONFIG_FETCH_RETRIES: "1"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "2000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
     strategy:
       fail-fast: false
       matrix:
@@ -64,8 +69,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm ci --ignore-scripts
-      - run: npm ci --prefix desktop
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm ci --prefix desktop --no-audit
+      - run: npm audit --audit-level=high
       - run: npm audit --prefix desktop --audit-level=high
       - run: npx --no install-electron
         working-directory: desktop
@@ -73,7 +79,7 @@ jobs:
       - name: Install only production dependencies for the package
         run: |
           node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
-          npm ci --omit=dev --ignore-scripts --prefix production
+          npm ci --omit=dev --ignore-scripts --prefix production --no-audit
       - run: node scripts/build-desktop.mjs
       - run: node scripts/build-manifest.mjs
         env:

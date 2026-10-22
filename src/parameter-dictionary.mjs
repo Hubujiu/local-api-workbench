@@ -1,3 +1,4 @@
+import { parseMySQLColumns } from "./mysql-ddl.mjs";
 import { randomUUID } from "node:crypto";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
 export function normalizeParameterEntry(input) {
@@ -32,45 +33,6 @@ export function normalizeParameterEntry(input) {
       : {}),
   };
 }
-function splitSQL(source) {
-  const parts = [];
-  let value = "",
-    quote = "",
-    depth = 0;
-  for (let i = 0; i < source.length; i++) {
-    const c = source[i];
-    if (quote) {
-      value += c;
-      if (c === "\\" && i + 1 < source.length) value += source[++i];
-      else if (c === quote) {
-        if (source[i + 1] === quote) value += source[++i];
-        else quote = "";
-      }
-      continue;
-    }
-    if (["'", '"', "`"].includes(c)) {
-      quote = c;
-      value += c;
-      continue;
-    }
-    if (c === "(") depth++;
-    if (c === ")") depth--;
-    if (c === "," && depth === 0) {
-      parts.push(value);
-      value = "";
-    } else value += c;
-  }
-  if (quote || depth !== 0) throw Error("DDL括号或引号不完整");
-  if (value.trim()) parts.push(value);
-  return parts;
-}
-function sqlString(value) {
-  return value
-    .slice(1, -1)
-    .replace(/''/g, "'")
-    .replace(/\\'/g, "'")
-    .replace(/\\\\/g, "\\");
-}
 export function parseParameterImport(source, format) {
   if (typeof source !== "string" || Buffer.byteLength(source) > 1024 * 1024)
     throw Error("字典导入最多1MiB");
@@ -100,65 +62,7 @@ export function parseParameterImport(source, format) {
         });
       });
   if (format !== "mysql") throw Error("未知字典导入格式");
-  const table = source.match(
-    /^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`[^`]+`|[\w.]+)\s*\(([\s\S]*)\)\s*(?:[^;]*)?;?\s*$/i,
-  );
-  if (!table) throw Error("仅支持单条CREATE TABLE字段定义，不执行SQL");
-  const entries = [];
-  for (const column of splitSQL(table[1])) {
-    if (
-      /^\s*(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN|CHECK|FULLTEXT|SPATIAL)\b/i.test(
-        column,
-      )
-    )
-      continue;
-    const match = column.match(
-      /^\s*(?:`([^`]+)`|([A-Za-z_][\w$]*))\s+([A-Za-z]+)(?:\s*\(([^)]*)\))?([\s\S]*)$/,
-    );
-    if (!match) throw Error("无法解析DDL字段: " + column.slice(0, 80));
-    const [, quoted, plain, sqlType, size, rest] = match,
-      key = quoted || plain,
-      kind = sqlType.toLowerCase();
-    let type;
-    if (/^(tinyint|smallint|mediumint|int|integer|bigint)$/.test(kind))
-      type = kind === "tinyint" && size === "1" ? "boolean" : "integer";
-    else if (/^(float|double|decimal|numeric|real)$/.test(kind))
-      type = "number";
-    else if (/^(bool|boolean)$/.test(kind)) type = "boolean";
-    else if (kind === "json") type = "object";
-    else if (
-      /^(char|varchar|text|tinytext|mediumtext|longtext|date|datetime|timestamp|time|year|enum|set|binary|varbinary|blob|tinyblob|mediumblob|longblob)$/.test(
-        kind,
-      )
-    )
-      type = "string";
-    else throw Error("未支持的DDL字段类型: " + sqlType);
-    const description = rest.match(/COMMENT\s+('(?:\\.|''|[^'])*')/i);
-    const entry = {
-      key,
-      type,
-      description: description ? sqlString(description[1]) : "",
-      required: /\bNOT\s+NULL\b/i.test(rest),
-    };
-    if (kind === "enum") {
-      entry.enum = splitSQL(size || "").map(sqlString);
-    }
-    const defaultValue = rest.match(
-      /\bDEFAULT\s+('(?:\\.|''|[^'])*'|-?\d+(?:\.\d+)?|NULL|TRUE|FALSE)/i,
-    );
-    if (defaultValue) {
-      const value = defaultValue[1];
-      entry.default = value.startsWith("'")
-        ? sqlString(value)
-        : /^null$/i.test(value)
-          ? null
-          : type === "boolean"
-            ? value === "1" || /^true$/i.test(value)
-            : Number(value);
-    }
-    entries.push(normalizeParameterEntry(entry));
-  }
-  return entries;
+  return parseMySQLColumns(source).map(normalizeParameterEntry);
 }
 export function previewParameterImport(entries, existing = []) {
   const selected = new Map(),

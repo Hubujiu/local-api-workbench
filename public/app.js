@@ -1256,7 +1256,7 @@ function bind() {
                 preview
                   .map(
                     (item, index) =>
-                      `<label><input data-import-parameter="${index}" type="checkbox" ${item.duplicate ? "" : "checked"}>${esc(item.entry.key)} · ${esc(item.entry.type)} · ${item.duplicate ? "已有重复" : "新增"}</label>`,
+                      `<label><input data-import-parameter="${index}" type="checkbox" ${item.duplicate ? "" : "checked"}>${esc(item.entry.key)} · ${esc(item.entry.type)} · ${item.duplicate ? "已有重复" : "新增"}${item.entry.note ? `<br><small class="muted">${esc(item.entry.note)}</small>` : ""}</label>`,
                   )
                   .join(""),
               async () => {
