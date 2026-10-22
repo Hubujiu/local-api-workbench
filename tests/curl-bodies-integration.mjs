@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { importCurl, toCurl } from "../src/core.mjs";
 import { executeRequest } from "../src/runtime.mjs";
 import { curlBodyCases, quoteCurl } from "./fixtures/curl-bodies.mjs";
+import { curlQueryCases } from "./fixtures/curl-queries.mjs";
 const exec = promisify(execFile);
 const server = http.createServer((q, r) => {
   let body = "";
@@ -14,6 +15,7 @@ const server = http.createServer((q, r) => {
     r.end(
       JSON.stringify({
         body,
+        url: q.url,
         method: q.method,
         contentType: q.headers["content-type"] ?? null,
         accept: q.headers.accept ?? null,
@@ -23,8 +25,9 @@ const server = http.createServer((q, r) => {
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 try {
-  const url = "http://127.0.0.1:" + server.address().port + "/bodies";
-  for (const fixture of curlBodyCases) {
+  const origin = "http://127.0.0.1:" + server.address().port;
+  for (const fixture of [...curlBodyCases, ...curlQueryCases]) {
+    const url = origin + (fixture.path || "/bodies");
     const { stdout } = await exec(
       "curl",
       [
@@ -58,6 +61,12 @@ try {
       console.log("CURL_EMPTY_PREFIX_REJECTED", JSON.stringify(wire.body));
       continue;
     }
+    if (fixture.queryPath)
+      assert.equal(
+        JSON.parse(stdout).url,
+        fixture.queryPath,
+        "native curl exact query path",
+      );
     const request = importCurl(command);
     const actual = JSON.parse((await executeRequest(request)).body);
     assert.deepEqual(actual, JSON.parse(stdout), JSON.stringify(fixture.args));

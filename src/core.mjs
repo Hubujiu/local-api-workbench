@@ -994,6 +994,51 @@ export function importDocument(doc) {
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
   throw Error("无法识别导入格式");
 }
+function curlEncodedLiteral(value) {
+  const equal = value.indexOf("=");
+  if (value.includes("\0")) throw Error("cURL参数不能包含NUL");
+  if (equal < 0 && value.includes("@"))
+    throw Error("不自动读取 cURL 文件，请使用文件选择器");
+  const encoded = encodeURIComponent(equal < 0 ? value : value.slice(equal + 1))
+    .replace(
+      /[!'()*]/g,
+      (character) => "%" + character.charCodeAt(0).toString(16).toUpperCase(),
+    )
+    .replaceAll("%20", "+");
+  return (equal > 0 ? value.slice(0, equal) + "=" : "") + encoded;
+}
+function appendCurlQuery(url, parts) {
+  const query = parts
+    .map((value) => {
+      if (
+        !value ||
+        value.length > 65536 ||
+        /[^A-Za-z0-9._~!$&()*+,;=:@\/?%\[\]{}-]/.test(value) ||
+        /%(?![0-9a-fA-F]{2})/.test(value)
+      )
+        throw Error(
+          "cURL查询片段须为非空、已编码的URL文本且不超过64KiB；请使用--data-urlencode或--url-query",
+        );
+      return value.replace(/%[0-9a-fA-F]{2}/g, (escape) =>
+        escape.toLowerCase(),
+      );
+    })
+    .join("&");
+  if (query.length > 65536) throw Error("cURL查询数据超过64KiB");
+  const hash = url.indexOf("#");
+  const head = hash < 0 ? url : url.slice(0, hash),
+    fragment = hash < 0 ? "" : url.slice(hash);
+  return (
+    head +
+    (head.includes("?")
+      ? head.indexOf("?") === head.length - 1 || head.endsWith("&")
+        ? ""
+        : "&"
+      : "?") +
+    query +
+    fragment
+  );
+}
 export function importCurl(source) {
   const tokens = shellTokens(source);
   const clean = (value) => value;
@@ -1002,7 +1047,9 @@ export function importCurl(source) {
   let explicitMethod = false,
     proxyTunnel = false,
     noProxy,
-    dataKind;
+    dataKind,
+    getQuery = false;
+  const queryParts = [];
   const setURL = (value) => {
     if (r.url) throw Error("暂不支持一条cURL中的多个URL");
     r.url = value;
@@ -1048,26 +1095,25 @@ export function importCurl(source) {
         throw Error(
           "重复空片段的 cURL 行为随版本不同，请合并为单个 --data-raw 参数",
         );
-      if (t === "--data-urlencode") {
-        const equal = value.indexOf("=");
-        if (equal < 0 && value.includes("@"))
-          throw Error("不自动读取 cURL 文件，请使用文件选择器");
-        const encoded = encodeURIComponent(
-          equal < 0 ? value : value.slice(equal + 1),
-        )
-          .replace(
-            /[!'()*]/g,
-            (character) =>
-              "%" + character.charCodeAt(0).toString(16).toUpperCase(),
-          )
-          .replaceAll("%20", "+");
-        value = (equal > 0 ? value.slice(0, equal) + "=" : "") + encoded;
-      } else if (t !== "--data-raw" && value.startsWith("@"))
+      if (t === "--data-urlencode") value = curlEncodedLiteral(value);
+      else if (t !== "--data-raw" && value.startsWith("@"))
         throw Error("不自动读取 cURL 文件，请使用文件选择器");
       r.body = (r.body ? r.body + (kind === "json" ? "" : "&") : "") + value;
       dataKind = kind;
       r.bodyType = "raw";
       if (!explicitMethod) r.method = "POST";
+    } else if (t === "--get" || t === "-G") getQuery = true;
+    else if (t === "--url-query") {
+      const value = tokens[++i];
+      if (
+        value === undefined ||
+        value.length > 65536 ||
+        queryParts.length >= 1000
+      )
+        throw Error("cURL查询参数缺失或超过上限");
+      queryParts.push(
+        value.startsWith("+") ? value.slice(1) : curlEncodedLiteral(value),
+      );
     } else if (t === "--url") setURL(clean(tokens[++i]));
     else if (t === "--http2-prior-knowledge") r.httpVersion = "2";
     else if (t === "--http1.1") r.httpVersion = "1.1";
@@ -1109,6 +1155,17 @@ export function importCurl(source) {
       throw Error(`不支持的 cURL 参数: ${t}`);
   }
   if (!r.url) throw Error("cURL 缺少 URL");
+  if (getQuery && (queryParts.length || r.bodyType === "form-data"))
+    throw Error("暂不混用--get与--url-query或multipart；避免静默丢弃查询数据");
+  if (getQuery) {
+    if (!explicitMethod) r.method = "GET";
+    if (dataKind) {
+      queryParts.push(r.body);
+      r.body = "";
+      r.bodyType = "none";
+    }
+  }
+  if (queryParts.length) r.url = appendCurlQuery(r.url, queryParts);
   const defaultHeader = (key, value) => {
     if (
       !r.headers.some(
@@ -1117,7 +1174,7 @@ export function importCurl(source) {
     )
       r.headers.push({ key, value, enabled: true });
   };
-  if (dataKind)
+  if (dataKind && (!getQuery || dataKind === "json"))
     defaultHeader(
       "Content-Type",
       dataKind === "json"
