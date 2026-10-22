@@ -48,3 +48,7 @@ Mock URL path values are encoded and rendered as escaped attributes. Tests cover
 selection precedence, malformed indices, actual HTTP errors, preserved query
 metadata, pending-edit persistence and UI sending of a specifically selected
 empty-body example.
+
+Same-origin Mock also enforces server-owned isolation/browser-state headers, as
+described in [Mock origin isolation](ADR-MOCK-ORIGIN-ISOLATION.md). Arbitrary
+cookie-changing or executable-HTML responses are not supported on this origin.

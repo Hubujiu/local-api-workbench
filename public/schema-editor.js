@@ -721,3 +721,43 @@ export function editResponseDefinition(responses, index, fields) {
   if (index < 0) next.push(item);
   return next;
 }
+
+export function editRequestResponseDefinition(request, index, fields) {
+  const oldStatus = request.responses?.[index]?.status;
+  const responses = editResponseDefinition(
+    request.responses || [],
+    index,
+    fields,
+  );
+  const status = responses[index < 0 ? responses.length - 1 : index].status;
+  const update = { responses };
+  if (
+    request.openapiExampleBindingsVersion !== 1 ||
+    index < 0 ||
+    String(oldStatus) === status
+  )
+    return update;
+  const sources = request.openapiExampleSources || [];
+  if (
+    sources.some((source) => String(source.status) === String(oldStatus)) &&
+    !/^[1-5]\d\d$/.test(status)
+  )
+    throw Error("含绑定示例的响应只能改为具体状态码，请先处理这些示例");
+  const move = (source) =>
+    source && String(source.status) === String(oldStatus)
+      ? { ...source, status }
+      : source;
+  update.openapiExampleSources = sources.map(move);
+  update.examples = (request.examples || []).map((example) => {
+    if (String(example.openapiExampleSource?.status) !== String(oldStatus))
+      return example;
+    return {
+      ...example,
+      openapiExampleSource: move(example.openapiExampleSource),
+      ...(String(example.status) === String(oldStatus)
+        ? { status: Number(status) }
+        : {}),
+    };
+  });
+  return update;
+}

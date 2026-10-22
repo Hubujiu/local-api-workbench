@@ -178,6 +178,8 @@ test("OpenAPI export keeps named examples exclusive and literal text media liter
     requests: [
       {
         ...request,
+        // This is an independent manual example, not a managed source edit.
+        openapiExampleBindingsVersion: undefined,
         responses: [],
         examples: [
           {

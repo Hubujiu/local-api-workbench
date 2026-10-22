@@ -4,7 +4,7 @@
 
 OpenAPI Media Type Objects keep `schema`, `example`, and named `examples` as distinct data. A missing example must not be converted to an explicit `{}` response, because explicit examples take precedence over schema generation.
 
-- Import materializes an explicit inline JSON example, or the first inline named JSON value, only for a concrete 100–599 status. Falsy JSON values remain explicit values. `application/json` is preferred over another JSON subtype/suffix. Selected media is retained in the example's Content-Type.
+- New imports materialize all supported inline response examples for concrete 100–599 statuses, with JSON media preferred for default ordering. Falsy JSON values and literal text/XML remain distinct. See [managed response examples](ADR-OPENAPI-RESPONSE-EXAMPLES.md) for source bindings and limits.
 - Missing examples produce no flat Mock example. `default` and wildcard statuses keep their original response metadata without inventing a concrete 200 example. External example URLs are not fetched.
 - Explicit index selection returns that example; without an index, conditional rules precede the first stored example. Otherwise the first concrete 2xx response with a schema is selected in request-definition order. Legacy top-level `schema` is supported; visual/OpenAPI `content[media].schema` is now supported too.
 - Within that response, prefer `application/json`, then another JSON subtype or `+json` media with a schema. A non-JSON-only response produces an explicit unsupported error, rather than silently jumping to a later status. False/unsatisfiable schemas remain errors. With no eligible schema at all, the historical 200 `{}` fallback remains.
@@ -15,7 +15,7 @@ OpenAPI Media Type Objects keep `schema`, `example`, and named `examples` as dis
 
 Flat examples use their explicit Content-Type instead of inventing a parallel `application/json` media entry. Non-JSON text remains literal text. Original named examples remain exclusive with `example`, as required by OpenAPI.
 
-Original imported media example annotations remain authoritative on OpenAPI export. Editing a separate flat Mock example does not rewrite all named source examples. Full bidirectional multi-example editing, all non-JSON imports, wildcard-status Mock selection, and an OpenAPI 3.1 exporter are not claimed here. Unsupported schema keywords continue to fail explicitly in the existing 3.0 exporter.
+Managed imports now rebuild body examples from the edited cases during export, with source fingerprints preventing conflicting raw-annotation edits. Legacy unbound projects retain original annotation precedence. Arbitrary binary media, per-case delay/header mappings, wildcard-status Mock selection, and an OpenAPI 3.1 exporter are not claimed. Unsupported schema keywords still fail explicitly in the existing 3.0 exporter.
 
 ## Verification
 

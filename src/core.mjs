@@ -1,8 +1,8 @@
 import {
-  selectJsonResponseMedia,
-  isJsonResponseType,
-  isResponseMediaType,
-} from "./response-media.mjs";
+  importResponseExamples,
+  appendResponseExamples,
+  responseContent,
+} from "./openapi-response-examples.mjs";
 import {
   referenceChildMode,
   referenceModeIsAllowed,
@@ -10,11 +10,7 @@ import {
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
-import {
-  importOpenAPIBody,
-  exportOpenAPIBody,
-  openapiExample,
-} from "./openapi-body.mjs";
+import { importOpenAPIBody, exportOpenAPIBody } from "./openapi-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -143,6 +139,11 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  if (
+    r.openapiExampleBindingsVersion !== undefined &&
+    r.openapiExampleBindingsVersion !== 1
+  )
+    throw Error("响应示例绑定版本暂不支持");
   validateAuth(r.auth);
   scriptStages(r, "before");
   scriptStages(r, "after");
@@ -254,6 +255,12 @@ export function normalizeRequest(r = {}) {
     schema: r.schema ?? {},
     responses: r.responses || [],
     openapiOperation: r.openapiOperation || {},
+    ...(r.openapiExampleBindingsVersion === 1
+      ? {
+          openapiExampleBindingsVersion: 1,
+          openapiExampleSources: structuredClone(r.openapiExampleSources || []),
+        }
+      : {}),
     proxy: r.proxy || "",
     tls: r.tls || {},
     timeout: Math.min(60000, Math.max(100, Number(r.timeout) || 15000)),
@@ -701,6 +708,19 @@ export function importDocument(doc) {
         )
         .map(([method, op]) => {
           const importedBody = importOpenAPIBody(op.requestBody);
+          const normalizedResponses = Object.fromEntries(
+            Object.entries(op.responses || {}).map(([status, response]) => [
+              status,
+              {
+                ...response,
+                content: responseContent(
+                  response,
+                  op.produces || doc.produces || ["application/json"],
+                ),
+              },
+            ]),
+          );
+          const responseExamples = importResponseExamples(normalizedResponses);
           const params = [
             ...new Map(
               [...(item.parameters || []), ...(op.parameters || [])].map(
@@ -777,8 +797,13 @@ export function importDocument(doc) {
             body: importedBody.body,
             form: importedBody.form,
             schema: importedBody.schema,
-            responses: Object.entries(op.responses || {}).map(
+            responses: Object.entries(normalizedResponses).map(
               ([status, response]) => ({
+                ...Object.fromEntries(
+                  Object.entries(response).filter(
+                    ([key]) => key === "links" || key.startsWith("x-"),
+                  ),
+                ),
                 status,
                 description: response.description || "",
                 content: response.content || {
@@ -787,27 +812,10 @@ export function importDocument(doc) {
                 headers: response.headers || {},
               }),
             ),
-            examples: Object.entries(op.responses || {}).flatMap(
-              ([status, r]) => {
-                // A wildcard/default definition does not identify a concrete HTTP status.
-                if (!/^[1-5]\d\d$/.test(status)) return [];
-                const absent = Symbol("absent example");
-                const selected = selectJsonResponseMedia(
-                  r.content,
-                  (media) => openapiExample(media, absent) !== absent,
-                );
-                if (!selected) return [];
-                const [contentType, media] = selected;
-                return [
-                  {
-                    name: r.description || status,
-                    status: Number(status),
-                    body: JSON.stringify(openapiExample(media), null, 2),
-                    headers: { "content-type": contentType },
-                  },
-                ];
-              },
-            ),
+            examples: responseExamples.examples,
+            importNotes: responseExamples.importNotes,
+            openapiExampleBindingsVersion: 1,
+            openapiExampleSources: responseExamples.openapiExampleSources,
           });
         }),
     );
@@ -1212,6 +1220,11 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    if (
+      r.openapiExampleBindingsVersion !== undefined &&
+      r.openapiExampleBindingsVersion !== 1
+    )
+      throw Error("响应示例绑定版本暂不支持");
     let path;
     try {
       path = new URL(r.url.replace(/\{\{[^}]+\}\}/g, "localhost")).pathname
@@ -1223,9 +1236,16 @@ export function exportOpenAPI(project) {
     paths[path] ??= {};
     const responses = Object.create(null);
     for (const response of r.responses || []) {
-      if (!/^(default|[1-5][0-9X]{2})$/.test(String(response.status)))
+      if (!/^(default|[1-5](?:[0-9]{2}|XX))$/.test(String(response.status)))
         throw Error("响应状态定义无效");
       responses[String(response.status)] = {
+        ...structuredClone(
+          Object.fromEntries(
+            Object.entries(response).filter(
+              ([key]) => key === "links" || key.startsWith("x-"),
+            ),
+          ),
+        ),
         description: response.description || "",
         content: structuredClone(response.content || {}),
         ...(response.headers
@@ -1233,34 +1253,10 @@ export function exportOpenAPI(project) {
           : {}),
       };
     }
-    for (const example of r.examples || []) {
-      const status = String(example.status ?? 200);
-      if (!/^[1-5]\d\d$/.test(status)) throw Error("响应示例状态无效");
-      const contentType =
-        Object.entries(example.headers || {}).find(
-          ([name]) => name.toLowerCase() === "content-type",
-        )?.[1] ?? "application/json";
-      if (!isResponseMediaType(contentType))
-        throw Error("响应示例Content-Type无效");
-      responses[status] ??= {
-        description: example.name || "Response",
-        content: {},
-      };
-      responses[status].content ??= {};
-      const media = (responses[status].content[contentType] ??= {});
-      // Preserve original named examples; OpenAPI forbids both fields together.
-      if (Object.hasOwn(media, "example") || Object.hasOwn(media, "examples"))
-        continue;
-      let value = example.body;
-      if (isJsonResponseType(contentType)) {
-        try {
-          value = JSON.parse(example.body);
-        } catch {
-          /* retain a literal example */
-        }
-      }
-      media.example = value;
-    }
+    appendResponseExamples(responses, r.examples || [], {
+      managed: r.openapiExampleBindingsVersion === 1,
+      registry: r.openapiExampleSources,
+    });
     if (!Object.keys(responses).length)
       responses["200"] = { description: "Successful response" };
     const requestBody = exportOpenAPIBody(r);

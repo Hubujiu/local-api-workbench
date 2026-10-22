@@ -4493,6 +4493,93 @@ try {
     schemaMockProjectId,
   );
 
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("Response example roundtrip");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(
+    JSON.stringify({
+      openapi: "3.1.0",
+      info: { title: "Bound examples", version: "1" },
+      servers: [{ url: app.url }],
+      paths: {
+        "/response-cases": {
+          get: {
+            summary: "Bound response examples",
+            responses: {
+              200: {
+                description: "Response metadata",
+                content: {
+                  "application/json": {
+                    schema: {},
+                    examples: {
+                      first: { value: { remove: true } },
+                      second: {
+                        value: false,
+                        description: "retain description",
+                        "x-retained": true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+  );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-mode="mock"]').click();
+  assert.equal(await page.locator("[data-edit-example]").count(), 2);
+  await page.locator('[data-edit-example="1"]').click();
+  await page.locator("#ex-name").fill("Edited zero");
+  await page.locator("#ex-body").fill("0");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('[data-delete-example="0"]').click();
+  await saveAndWait();
+  await page.locator('[data-mode="design"]').click();
+  await page.locator("[data-response-schema]").first().click();
+  await page.locator("#schema-response-status").fill("201");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait();
+  const exampleExportDownload = page.waitForEvent("download");
+  await page.locator("#export").click();
+  await page.locator("#export-format").selectOption("openapi");
+  await page.locator("#dialog-save").click();
+  const exampleExportFile = await exampleExportDownload;
+  const exampleExportDocument = JSON.parse(
+    await readFile(await exampleExportFile.path(), "utf8"),
+  );
+  const exportedCases =
+    exampleExportDocument.paths["/response-cases"].get.responses;
+  assert.equal(Object.hasOwn(exportedCases, "200"), false);
+  const exportedNamedCases =
+    exportedCases[201].content["application/json"].examples;
+  assert.deepEqual(Object.keys(exportedNamedCases), ["second"]);
+  assert.deepEqual(exportedNamedCases.second, {
+    value: 0,
+    description: "retain description",
+    "x-retained": true,
+    summary: "Edited zero",
+  });
+  const reimportedCases = importDocument(exampleExportDocument).find(
+    (item) => item.name === "Bound response examples",
+  );
+  assert.equal(reimportedCases.examples.length, 1);
+  assert.equal(reimportedCases.examples[0].body, "0");
+  assert.equal(reimportedCases.examples[0].status, 201);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-mode="mock"]').click();
+  await page.getByText("Edited zero · 201", { exact: true }).waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-openapi-examples.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
