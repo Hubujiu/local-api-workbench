@@ -24,6 +24,6 @@ key constraints, nullable unions, string lengths, numeric precision, date format
 SQL-mode conversions or generated columns. In particular the inherited TINYINT(1)
 boolean and JSON-object mappings are compatibility approximations, not the full
 set of values MySQL accepts. Users review the raw Schema before confirming and
-can edit constraints explicitly. XML model input remains unsupported.
+can edit constraints explicitly. The separate XML mapping is documented in ADR-MODEL-XML-INFERENCE.
 
 Errors preserve the previous draft; confirmation and project save remain explicit.

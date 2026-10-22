@@ -100,4 +100,9 @@ test("plan CLI returns machine-readable evidence and truthful pass/fail exit cod
   assert.equal(invalid.code, 2);
   assert.match(invalid.stderr, /Usage/);
   assert.equal((await app.store.get(project.id)).runs.length, 2);
+  assert(
+    (await app.store.get(project.id)).runs.every(
+      (run) => run.source === "cli" && Number.isFinite(run.durationMs),
+    ),
+  );
 });

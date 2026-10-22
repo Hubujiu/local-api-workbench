@@ -226,6 +226,15 @@ test("MCP plan execution reports ordered progress and preserves final evidence",
     planId: plan.id,
   });
   assert.equal(result.status, "passed");
+  const summaries = await call("list_execution_runs", {
+    projectId: p.id,
+    scope: "flow",
+    source: "mcp",
+    planId: plan.id,
+  });
+  assert.equal(summaries[0].id, result.id);
+  assert(Number.isFinite(summaries[0].durationMs));
+  assert.equal(summaries[0].failedStepCount, 0);
   assert.deepEqual(
     events.map((event) => event.completed),
     [1, 2],

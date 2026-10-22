@@ -693,6 +693,8 @@ export async function createApp({
                 createdAt: new Date().toISOString(),
                 name: request.name,
                 ...result,
+                source: "manual",
+                durationMs: single.durationMs,
               });
               return json(res, 200, {
                 ...result.response,
@@ -777,7 +779,7 @@ export async function createApp({
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
               });
-              await store.append(p.id, "runs", run);
+              await store.append(p.id, "runs", { ...run, source: "manual" });
               return json(res, 200, run);
             } finally {
               controllers.delete(b.runId);

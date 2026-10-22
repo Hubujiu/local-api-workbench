@@ -42,7 +42,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
           process.stderr.write(`${step.status.toUpperCase()} ${step.name}\n`),
       },
     );
-    await store.append(project.id, "runs", run);
+    await store.append(project.id, "runs", { ...run, source: "cli" });
     const json = JSON.stringify(run, null, 2) + "\n";
     if (args.includes("--output"))
       await writeFile(option("--output"), json, { mode: 0o600 });

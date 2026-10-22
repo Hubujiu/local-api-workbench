@@ -3,7 +3,8 @@
 The original model editor documents JSON, XML, JSON Schema and MySQL DDL inputs:
 https://wiki.apipost.cn/docs/schema/create/ . This document covers JSON example inference; existing raw Schema editing stays
 separate. The bounded MySQL companion is described in ADR-MODEL-DDL-INFERENCE.
-Neither is an XML importer or evidence of native project-directory compatibility.
+The bounded XML mapping is described in ADR-MODEL-XML-INFERENCE. None of these
+are evidence of native project-directory compatibility.
 
 Inference is local and pure. It preserves primitive types, object properties and
 array item structures; distinct array shapes become `anyOf`, with no truncation.

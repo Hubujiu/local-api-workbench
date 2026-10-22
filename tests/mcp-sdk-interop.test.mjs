@@ -115,6 +115,49 @@ test(
     );
     assert.equal(result.status, "passed");
     assert.equal(result.results[0].response.status, 200);
+    const summaries = decode(
+      await replacement.callTool({
+        name: "localapi_list_execution_runs",
+        arguments: {
+          projectId: allowed.id,
+          scope: "api",
+          source: "mcp",
+          status: "passed",
+          limit: 1,
+        },
+      }),
+    );
+    assert.equal(summaries[0].id, result.id);
+    assert.equal(summaries[0].scope, "api");
+    assert(Number.isFinite(summaries[0].durationMs));
+    assert.equal(Object.hasOwn(summaries[0], "response"), false);
+    const detail = decode(
+      await replacement.callTool({
+        name: "localapi_get_execution_result",
+        arguments: { projectId: allowed.id, runId: result.id },
+      }),
+    );
+    assert.equal(detail.response.status, 200);
+    assert.equal(detail.source, "mcp");
+    assert.equal(
+      (
+        await replacement.callTool({
+          name: "localapi_list_execution_runs",
+          arguments: { projectId: allowed.id, limit: 0 },
+        })
+      ).isError,
+      true,
+    );
+    assert.equal(
+      (
+        await replacement.callTool({
+          name: "localapi_get_execution_result",
+          arguments: { projectId: denied.id, runId: result.id },
+        })
+      ).isError,
+      true,
+    );
+
     await configure({ enabled: false });
     await assert.rejects(replacement.listTools(), /403|unauthorized/i);
   },

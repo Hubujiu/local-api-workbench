@@ -50,6 +50,11 @@ test("session, project persistence, permission boundary, mock and snapshot plan"
   });
   assert.equal(run.status, "passed");
   assert.equal((await call("/api/projects/" + p.id)).runs.length, 1);
+  const stored = await call("/api/projects/" + p.id);
+  assert.equal(stored.history[0].source, "manual");
+  assert.equal(stored.runs[0].source, "manual");
+  assert(Number.isFinite(stored.history[0].durationMs));
+  assert(Number.isFinite(stored.runs[0].durationMs));
 });
 test("HTTP MCP is disabled by default and enforces token, project and write grants", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "api-http-mcp-"));

@@ -1,6 +1,7 @@
 import {
   inferSchemaFromJSON,
   inferSchemaFromMySQL,
+  inferSchemaFromXML,
 } from "./schema-inference.js";
 import {
   saveModelFolder,
@@ -3162,7 +3163,7 @@ function editDictionary(index) {
   };
   modal(
     "数据模型",
-    `<label>名称</label><input id="dict-name" maxlength="500" value="${esc(d.name)}"><label>模型目录</label><select id="dict-folder"><option value="">根目录</option>${(project.modelFolders || []).map((folder) => `<option value="${esc(folder.id)}" ${d.folderId === folder.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, folder.id))}</option>`).join("")}</select><p class="muted">模型ID保持不变。修改关联组件后，引用该模型的后续数据生成将使用新Schema。</p><details><summary>从 JSON / MySQL DDL 生成 Schema</summary><label>输入格式<select id="model-source-format"><option value="json">JSON 样例</option><option value="mysql">MySQL CREATE TABLE</option></select></label><p class="muted">仅静态生成草稿，不执行SQL。输入最多64KiB；JSON最多2000节点、20层、16种数组结构，保留example，后续改结构须同步更新或删除example。DDL沿用字典的有限类型映射，保留注释/字面默认值/枚举；表达式只作说明，不猜测API必填、可空、长度范围或键约束。XML暂不支持。确认后才修改模型。</p><textarea id="model-json-sample" placeholder="粘贴JSON样例或单条MySQL CREATE TABLE"></textarea><button type="button" id="infer-model-schema">生成预览</button><p id="model-infer-error" role="alert"></p></details>${jsonEditor(d.schema)}`,
+    `<label>名称</label><input id="dict-name" maxlength="500" value="${esc(d.name)}"><label>模型目录</label><select id="dict-folder"><option value="">根目录</option>${(project.modelFolders || []).map((folder) => `<option value="${esc(folder.id)}" ${d.folderId === folder.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, folder.id))}</option>`).join("")}</select><p class="muted">模型ID保持不变。修改关联组件后，引用该模型的后续数据生成将使用新Schema。</p><details><summary>从 JSON / XML / MySQL DDL 生成 Schema</summary><label>输入格式<select id="model-source-format"><option value="json">JSON 样例</option><option value="mysql">MySQL CREATE TABLE</option><option value="xml">XML → JSON结构</option></select></label><p class="muted">仅静态生成草稿，不执行SQL。输入最多64KiB；JSON最多2000节点、20层、16种数组结构，保留example，后续改结构须同步更新或删除example。DDL沿用字典的有限类型映射，保留注释/字面默认值/枚举；表达式只作说明，不猜测API必填、可空、长度范围或键约束。XML映射为JSON结构：属性放$、叶子文本保持字符串、重复节点为数组；禁止DTD/实体和混合内容，不生成XML正文。确认后才修改模型。</p><textarea id="model-json-sample" placeholder="粘贴JSON、XML样例或单条MySQL CREATE TABLE"></textarea><button type="button" id="infer-model-schema">生成预览</button><p id="model-infer-error" role="alert"></p></details>${jsonEditor(d.schema)}`,
     () => {
       saveModel(
         project,
@@ -3184,7 +3185,9 @@ function editDictionary(index) {
       const schema =
         $("#model-source-format").value === "mysql"
           ? inferSchemaFromMySQL(source)
-          : inferSchemaFromJSON(source);
+          : $("#model-source-format").value === "xml"
+            ? inferSchemaFromXML(source)
+            : inferSchemaFromJSON(source);
       $("#modal-json").value = JSON.stringify(schema, null, 2);
       $("#model-infer-error").textContent = "已生成草稿；请核对后确认保存。";
     } catch (error) {

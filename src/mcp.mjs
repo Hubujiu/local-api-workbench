@@ -1,3 +1,7 @@
+import {
+  listExecutionHistory,
+  findExecutionResult,
+} from "./execution-history.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
@@ -123,8 +127,15 @@ export function createMCP({
   });
   addTool(
     "list_execution_runs",
-    "查询运行摘要",
-    { ...projectArg, planId: str },
+    "查询最近执行摘要，默认 20 条、最多 50 条，不含请求响应正文",
+    {
+      ...projectArg,
+      planId: str,
+      scope: { type: "string", enum: ["api", "flow"] },
+      source: { type: "string", enum: ["manual", "mcp", "cli", "unknown"] },
+      status: { type: "string", enum: ["passed", "failed", "cancelled"] },
+      limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+    },
     ["projectId"],
   );
   addTool("get_execution_result", "读取逐步证据", {
@@ -293,6 +304,8 @@ export function createMCP({
               };
               break;
             case "localapi_get_execution_result":
+              output = findExecutionResult(p, args.runId);
+              break;
             case "localapi_get_run":
               output = p.runs.find((r) => r.id === args.runId);
               if (!output) throw Error("记录不存在");
@@ -370,18 +383,7 @@ export function createMCP({
               output = { deletedId: args.planId };
               break;
             case "localapi_list_execution_runs":
-              output = p.runs
-                .filter((run) => !args.planId || run.planId === args.planId)
-                .map(
-                  ({ id, planId, planName, status, createdAt, planHash }) => ({
-                    id,
-                    planId,
-                    planName,
-                    status,
-                    createdAt,
-                    planHash,
-                  }),
-                );
+              output = listExecutionHistory(p, args);
               break;
             case "localapi_execute_api": {
               const request = p.requests.find(
@@ -443,6 +445,8 @@ export function createMCP({
                 createdAt: output.createdAt,
                 name: request.name,
                 ...output.results[0],
+                source: "mcp",
+                durationMs: output.durationMs,
               });
               break;
             }
@@ -474,7 +478,7 @@ export function createMCP({
                     resolveServiceRequest(p, request, plan.environmentId),
                 },
               );
-              await store.append(p.id, "runs", output);
+              await store.append(p.id, "runs", { ...output, source: "mcp" });
               break;
             }
           }

@@ -338,6 +338,7 @@ export async function runPlan(
     executionContext,
   } = {},
 ) {
+  const runStarted = performance.now();
   const snapshot = structuredClone(plan);
   for (const step of snapshot.steps) step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
@@ -625,6 +626,7 @@ export async function runPlan(
     id: id(),
     planId: plan.id,
     planName: plan.name,
+    durationMs: Math.max(0, performance.now() - runStarted),
     planHash: createHash("sha256")
       .update(JSON.stringify(snapshot))
       .digest("hex"),

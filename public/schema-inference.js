@@ -1,3 +1,4 @@
+import { xmlToValue } from "./xml-value.js";
 import { parseMySQLColumns } from "./mysql-ddl.js";
 // Pure local inference. An example demonstrates types, not requiredness or limits.
 export function inferSchemaFromJSON(source) {
@@ -104,4 +105,13 @@ export function inferSchemaFromMySQL(source) {
     return [entry.key, property];
   });
   return { type: "object", properties: Object.fromEntries(properties) };
+}
+
+export function inferSchemaFromXML(source, Parser = globalThis.DOMParser) {
+  const value = xmlToValue(source, Parser);
+  try {
+    return inferSchemaFromJSON(JSON.stringify(value));
+  } catch (error) {
+    throw Error("XML转换后的JSON结构: " + error.message);
+  }
 }

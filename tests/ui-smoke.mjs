@@ -2453,7 +2453,7 @@ try {
   await page.locator("#add-dictionary").click();
   await page.locator("#dict-name").fill("JSON Inferred Model");
   await page
-    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .getByText("从 JSON / XML / MySQL DDL 生成 Schema", { exact: true })
     .click();
   const originalDraft = await page.locator("#modal-json").inputValue();
   await page.locator("#model-json-sample").fill("{");
@@ -2482,7 +2482,7 @@ try {
     .locator("#dict-name")
     .fill("Fictional modern export / BrowserModel");
   await page
-    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .getByText("从 JSON / XML / MySQL DDL 生成 Schema", { exact: true })
     .click();
   await page
     .locator("#model-json-sample")
@@ -2540,7 +2540,7 @@ try {
   await page.locator("#add-dictionary").click();
   await page.locator("#dict-name").fill("DDL Inferred Model");
   await page
-    .getByText("从 JSON / MySQL DDL 生成 Schema", { exact: true })
+    .getByText("从 JSON / XML / MySQL DDL 生成 Schema", { exact: true })
     .click();
   await page.locator("#model-source-format").selectOption("mysql");
   const ddlDraft = await page.locator("#modal-json").inputValue();
@@ -2590,6 +2590,81 @@ try {
     }
   });
   assert.equal(JSON.parse(await page.locator("#body-code").inputValue()).id, 7);
+  await saveAndWait("#save-project");
+
+  await page.locator('[data-page="dictionary"]').click();
+  await page.locator("#add-dictionary").click();
+  await page.locator("#dict-name").fill("XML Inferred Model");
+  await page
+    .getByText("从 JSON / XML / MySQL DDL 生成 Schema", { exact: true })
+    .click();
+  await page.locator("#model-source-format").selectOption("xml");
+  const xmlDraft = await page.locator("#modal-json").inputValue();
+  const xmlLeaks = [];
+  const observeXML = (request) => {
+    if (request.url().includes("model-xml-leak")) xmlLeaks.push(request.url());
+  };
+  page.on("request", observeXML);
+  for (const [source, message] of [
+    ["<root>", "XML格式错误"],
+    [
+      '<!DOCTYPE r [<!ENTITY x SYSTEM "' +
+        fixtureURL +
+        '/model-xml-leak">]><r>&x;</r>',
+      "XML不允许DTD或实体声明",
+    ],
+  ]) {
+    await page.locator("#model-json-sample").fill(source);
+    await page.locator("#infer-model-schema").click();
+    await page
+      .locator("#model-infer-error")
+      .getByText(message, { exact: false })
+      .waitFor();
+    assert.equal(await page.locator("#modal-json").inputValue(), xmlDraft);
+  }
+  await page
+    .locator("#model-json-sample")
+    .fill(
+      '<root id="7"><item>one</item><item><![CDATA[two<3]]></item><flag>true</flag></root>',
+    );
+  await page.locator("#infer-model-schema").click();
+  const xmlExpected = {
+    root: { $: { id: "7" }, item: ["one", "two<3"], flag: "true" },
+  };
+  const xmlSchema = JSON.parse(await page.locator("#modal-json").inputValue());
+  assert.deepEqual(xmlSchema.example, xmlExpected);
+  assert.equal(xmlSchema.properties.root.properties.flag.type, "string");
+  await page.locator("#modal-json").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-model-xml-preview.png" });
+  assert.deepEqual(xmlLeaks, []);
+  page.off("request", observeXML);
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait("#save-project");
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page
+    .locator(".card")
+    .filter({ has: page.getByText("XML Inferred Model", { exact: true }) })
+    .locator("[data-use-dictionary]")
+    .click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="body"]').click();
+  await page.locator("#generate-body").click();
+  await page.waitForFunction(() => {
+    try {
+      return (
+        JSON.parse(document.querySelector("#body-code").value).root.flag ===
+        "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+  assert.deepEqual(
+    JSON.parse(await page.locator("#body-code").inputValue()),
+    xmlExpected,
+  );
   await saveAndWait("#save-project");
 
   const h2Project = await app.store.create("HTTP2 browser fixture");
