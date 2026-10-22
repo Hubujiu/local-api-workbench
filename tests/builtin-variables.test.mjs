@@ -142,3 +142,78 @@ test("documented Apipost Faker aliases and mockExp use the bounded explicit cata
     /字符串/,
   );
 });
+
+test("Apipost millisecond timestamp and floating random aliases have exact unit and boundary semantics", async () => {
+  const { builtinVariableFactory } = await import(
+    "../src/builtin-variables.mjs"
+  );
+  const instant = 1780000000123;
+  const low = builtinVariableFactory(
+    (n) => new Uint8Array(n),
+    () => instant,
+  );
+  const high = builtinVariableFactory(
+    (n) => new Uint8Array(n).fill(255),
+    () => instant,
+  );
+  assert.equal(low("$microTimestamp"), instant);
+  assert.equal(low("$timestamp"), Math.floor(instant / 1000));
+  assert.equal(low("$randomFloat"), 0);
+  assert.equal(high("$randomFloat"), (4294967295 / 4294967296) * 1000);
+  assert(high("$randomFloat") < 1000);
+  assert.equal(
+    interpolate("{{$microTimestamp}}:{{$randomFloat}}", {
+      $microTimestamp: 0,
+      $randomFloat: false,
+    }),
+    "0:false",
+  );
+});
+
+test("Apipost dynamic aliases work inside isolated script replaceIn", async () => {
+  const start = Date.now();
+  const result = await runScript(
+    `apt.setVar('milliseconds',pm.variables.replaceIn('{{$microTimestamp}}'));apt.setVar('fraction',apt.variables.replaceIn('{{$randomFloat}}'));`,
+    { variables: {} },
+  );
+  const end = Date.now();
+  assert(
+    Number(result.variables.milliseconds) >= start &&
+      Number(result.variables.milliseconds) <= end,
+  );
+  assert(
+    Number(result.variables.fraction) >= 0 &&
+      Number(result.variables.fraction) < 1000,
+  );
+});
+
+test("Apipost dynamic aliases arrive as numeric JSON in a real HTTP request", async (t) => {
+  let received;
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const part of req) body += part;
+    received = JSON.parse(body);
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const start = Date.now();
+  const plan = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url: `http://127.0.0.1:${server.address().port}/`,
+          method: "POST",
+          bodyType: "json",
+          body: '{"milliseconds":{{$microTimestamp}},"fraction":{{$randomFloat}}}',
+        },
+      },
+    ],
+  });
+  const result = await runPlan(plan, {}, executeRequest);
+  assert.equal(result.status, "passed", JSON.stringify(result.results));
+  assert.equal(typeof received.milliseconds, "number");
+  assert(received.milliseconds >= start && received.milliseconds <= Date.now());
+  assert.equal(typeof received.fraction, "number");
+  assert(received.fraction >= 0 && received.fraction < 1000);
+});
