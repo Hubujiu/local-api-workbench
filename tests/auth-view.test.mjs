@@ -63,3 +63,18 @@ test("JWT authentication controls cover algorithms, destinations and explicit se
     /data-shared-auth="secret"/,
   );
 });
+
+test("ASAP editor exposes asymmetric algorithms and explicit lifetime without symmetric downgrade", () => {
+  const html = authPanel({
+    type: "asap",
+    privateKey: "<private>",
+    claims: '{"x":"<script>"}',
+  });
+  assert.match(html, /data-auth="alg"/);
+  assert.match(html, /<option selected>RS256<\/option>/);
+  assert.equal(html.includes("<option>HS256</option>"), false);
+  assert.match(html, /有效期（秒）/);
+  assert.match(html, /不注册服务/);
+  assert.equal(html.includes("<private>"), false);
+  assert.equal(html.includes("<script>"), false);
+});

@@ -1,3 +1,4 @@
+import { asapAuthorization } from "./asap-auth.mjs";
 import { jwtAuthorization } from "./jwt-auth.mjs";
 import { validateModelFolders } from "../public/model-folders.js";
 import { validateSharedScriptSettings } from "./shared-scripts.mjs";
@@ -323,6 +324,8 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     if (r.auth.in === "query") u.searchParams.set(r.auth.key, r.auth.value);
     else headers[r.auth.key] = r.auth.value;
   }
+  if (r.auth.type === "asap")
+    headers.authorization = (await asapAuthorization(r.auth)).value;
   if (r.auth.type === "jwt") {
     const jwt = await jwtAuthorization(r.auth);
     if (jwt.in === "query") u.searchParams.set(jwt.key, jwt.value);

@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, generateKeyPairSync, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
@@ -36,7 +36,52 @@ let uploadedMultipart,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
 const jwtFixtureSecret = "fictional-browser-jwt-secret-".repeat(3);
+const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const asapNonces = new Set();
 const fixture = http.createServer(async (request, response) => {
+  if (request.url === "/asap-auth") {
+    try {
+      assert.match(request.headers.authorization || "", /^Bearer /);
+      const [h, p, signature] = request.headers.authorization
+        .slice(7)
+        .split(".");
+      const header = JSON.parse(Buffer.from(h, "base64url"));
+      const claims = JSON.parse(Buffer.from(p, "base64url"));
+      assert.equal(header.alg, "RS256");
+      assert.equal(header.kid, "fixture-service/key-1");
+      assert.equal(
+        verify(
+          "sha256",
+          Buffer.from(h + "." + p),
+          asapPair.publicKey,
+          Buffer.from(signature, "base64url"),
+        ),
+        true,
+      );
+      assert.equal(claims.iss, "fixture-service");
+      assert.equal(claims.aud, "fixture-resource");
+      assert.equal(claims.sub, "browser-fixture");
+      assert.equal(claims.exp - claims.iat, 60);
+      assert(claims.iat <= Math.floor(Date.now() / 1000));
+      assert(claims.exp > Math.floor(Date.now() / 1000));
+      assert.match(claims.jti, /^[0-9a-f-]{36}$/);
+      assert.equal(asapNonces.has(claims.jti), false);
+      asapNonces.add(claims.jti);
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          asap: true,
+          issuer: claims.iss,
+          ttl: 60,
+          fresh: true,
+        }),
+      );
+    } catch {
+      response.statusCode = 401;
+      response.end("invalid ASAP fixture");
+    }
+    return;
+  }
   if (request.url.startsWith("/jwt-auth")) {
     const url = new URL(request.url, "http://fixture");
     const token =
@@ -1265,6 +1310,41 @@ try {
   await page.screenshot({ path: "/tmp/local-api-jwt-auth.png" });
   await page.locator('[data-auth="payload"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-jwt-options.png" });
+  await page.locator("#request-name").fill("ASAP independent fixture");
+  await page.locator("#url").fill(fixtureURL + "/asap-auth");
+  await page.locator("#auth-type").selectOption("asap");
+  assert.equal(await page.locator('[data-auth="alg"]').inputValue(), "RS256");
+  assert.equal(
+    await page.locator('[data-auth="ttlSeconds"]').inputValue(),
+    "60",
+  );
+  for (const [key, value] of Object.entries({
+    iss: "fixture-service",
+    aud: "fixture-resource",
+    kid: "fixture-service/key-1",
+    sub: "browser-fixture",
+    privateKey: asapPair.privateKey.export({ type: "pkcs8", format: "pem" }),
+  }))
+    await page.locator('[data-auth="' + key + '"]').fill(value);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const reply = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    );
+    await page.locator("#send").click();
+    const result = await (await reply).json();
+    assert.equal(result.status, 200);
+    assert.equal(result.outcome, "passed", JSON.stringify(result));
+    assert.deepEqual(JSON.parse(result.body), {
+      asap: true,
+      issuer: "fixture-service",
+      ttl: 60,
+      fresh: true,
+    });
+  }
+  assert.equal(asapNonces.size, 2);
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.locator('[data-auth="iss"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-asap-auth.png" });
   await page.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("hawk");

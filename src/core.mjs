@@ -1112,16 +1112,17 @@ export function exportOpenAPI(project) {
     }
     const original = structuredClone(r.openapiOperation || {});
     delete original.requestBody;
-    if (r.auth?.type === "jwt") {
+    if (["jwt", "asap"].includes(r.auth?.type)) {
       const scheme =
-        r.auth.addTokenTo === "queryParam"
+        r.auth.type === "jwt" && r.auth.addTokenTo === "queryParam"
           ? {
               type: "apiKey",
               in: "query",
               name: r.auth.queryParamKey ?? "token",
               description: "JWT; signing credentials are not exported",
             }
-          : (r.auth.headerPrefix ?? "Bearer") === "Bearer"
+          : r.auth.type === "asap" ||
+              (r.auth.headerPrefix ?? "Bearer") === "Bearer"
             ? { type: "http", scheme: "bearer", bearerFormat: "JWT" }
             : {
                 type: "apiKey",
@@ -1192,6 +1193,10 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "asap")
+    throw Error(
+      "ASAP需要逐次签名，请使用原始请求/项目导出，不生成缺失认证的cURL。",
+    );
   if (r.auth.type === "jwt")
     throw Error(
       "JWT需要本地生成签名；请使用原始请求/项目导出，不生成缺失认证的cURL。",

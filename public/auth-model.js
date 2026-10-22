@@ -11,6 +11,7 @@ export const authTypes = [
   "edgegrid",
   "apiKey",
   "jwt",
+  "asap",
 ];
 export function validateAuth(auth = {}) {
   if (!auth || typeof auth !== "object" || Array.isArray(auth))

@@ -1,3 +1,4 @@
+import { asapAlgorithms } from "./asap-auth-model.js";
 import { jwtAlgorithms } from "./jwt-auth-model.js";
 import { authTypes } from "./auth-model.js";
 export { authTypes } from "./auth-model.js";
@@ -12,6 +13,7 @@ const esc = (value) =>
 
 const fields = {
   none: [],
+  asap: ["iss", "aud", "kid", "privateKey", "sub", "ttlSeconds", "claims"],
   jwt: ["secret", "payload", "header", "headerPrefix", "queryParamKey"],
   edgegrid: [
     "clientToken",
@@ -79,6 +81,9 @@ const secret = new Set([
 ]);
 const hints = {
   in: "header 或 query",
+  aud: "单个受众，或JSON字符串数组",
+  kid: "Issuer/key-id",
+  ttlSeconds: "1至3600秒，默认60",
   clientAuthentication: "body 或 basic",
   nonce: "留空每次自动生成",
   timestamp: "留空每次自动生成",
@@ -101,6 +106,13 @@ export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
     '">' +
     options(authTypes, type) +
     "</select>";
+  if (type === "asap")
+    html +=
+      "<label>ASAP算法</label><select " +
+      attribute +
+      '="alg">' +
+      options(asapAlgorithms, auth.alg || "RS256") +
+      "</select>";
   if (type === "jwt")
     html +=
       "<label>JWT算法</label><select " +
@@ -150,16 +162,20 @@ export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
   html +=
     (fields[type] || [])
       .map((key) =>
-        type === "jwt" && ["secret", "payload", "header"].includes(key)
+        (type === "jwt" && ["secret", "payload", "header"].includes(key)) ||
+        (type === "asap" && key === "claims")
           ? `<label>${esc(key === "secret" ? "Secret / PEM私钥" : key)}</label><textarea ${attribute}="${key}" rows="3" autocomplete="off" spellcheck="false">${esc(auth[key] ?? (key === "secret" ? "" : "{}"))}</textarea>`
           : key === "privateKey"
-            ? `<label>privateKey (RSA PEM)</label><textarea ${attribute}="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径">${esc(auth[key])}</textarea>`
-            : `<label>${key}</label><input ${attribute}="${key}" value="${esc(auth[key] ?? (type === "jwt" ? { headerPrefix: "Bearer", queryParamKey: "token" }[key] : ""))}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
+            ? `<label>privateKey (${type === "asap" ? "RSA / EC" : "RSA"} PEM)</label><textarea ${attribute}="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="${type === "asap" ? "未加密PEM或{{变量}}，不读取文件路径" : "仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径"}">${esc(auth[key])}</textarea>`
+            : `<label>${key === "ttlSeconds" ? "有效期（秒）" : key}</label><input ${attribute}="${key}" value="${esc(auth[key] ?? (type === "jwt" ? { headerPrefix: "Bearer", queryParamKey: "token" }[key] : type === "asap" && key === "ttlSeconds" ? "60" : ""))}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
   if (type === "jwt")
     html +=
       '<p class="notice">JWT仅在本机签名，不登录、不读取密钥文件；HMAC密钥至少32/48/64字节，RSA为2048至8192位，EC曲线必须匹配。仅接受未加密PEM；Payload/Header为JSON对象，不自动添加iat/exp。仅支持alg/typ/cty/kid头字段，拒绝none和远程取钥。保存会把Secret/私钥明文写入项目；Query令牌可能进入URL、历史和日志，请优先HTTPS Header，勿提交真实凭据到Git。</p>';
+  if (type === "asap")
+    html +=
+      '<p class="notice">ASAP按协议仅允许非对称签名，默认RS256；仅发送Bearer Header。Issuer与公钥必须已在服务端登记，本工具不注册服务、不上传或发现密钥。有效期默认60秒、最多3600秒，每次生成新jti；claims不得覆盖专用字段。仅支持未加密内联PEM。保存会明文写入私钥，请优先HTTPS，勿提交真实凭据到Git。</p>';
   if (type === "ntlm")
     html +=
       '<div class="notice">有限NTLMv2：仅HTTP/1.1直连，不读取系统凭据、不降级v1。需要MIC/EPA/通道绑定的服务会拒绝；请使用可信服务并优先HTTPS。保存会把密码写入本地项目，历史可能包含认证响应；勿提交真实凭据到Git。</div>';

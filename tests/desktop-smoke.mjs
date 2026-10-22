@@ -53,6 +53,20 @@ const jwtFixture = http.createServer((request, response) => {
       JSON.parse(Buffer.from(payload, "base64url")).sub,
       "packaged-fixture",
     );
+    if (request.url === "/asap") {
+      const claims = JSON.parse(Buffer.from(payload, "base64url"));
+      assert.equal(algorithm, "RS256");
+      assert.equal(
+        JSON.parse(Buffer.from(header, "base64url")).kid,
+        "fixture-service/key-1",
+      );
+      assert.equal(claims.iss, "fixture-service");
+      assert.equal(claims.aud, "fixture-resource");
+      assert.equal(claims.exp - claims.iat, 60);
+      assert(claims.iat <= Math.floor(Date.now() / 1000));
+      assert(claims.exp > Math.floor(Date.now() / 1000));
+      assert.match(claims.jti, /^[0-9a-f-]{36}$/);
+    }
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ jwt: true, algorithm }));
   } catch {
@@ -196,6 +210,31 @@ try {
     assert.deepEqual(JSON.parse(result.body), { jwt: true, algorithm });
   }
 
+  phase = "asap";
+  console.log("DESKTOP_PHASE", phase);
+  await window
+    .locator("#url")
+    .fill("http://127.0.0.1:" + jwtFixture.address().port + "/asap");
+  await window.locator("#auth-type").selectOption("asap");
+  for (const [key, value] of Object.entries({
+    iss: "fixture-service",
+    aud: "fixture-resource",
+    kid: "fixture-service/key-1",
+    sub: "packaged-fixture",
+    privateKey: jwtRSA.privateKey.export({ type: "pkcs8", format: "pem" }),
+  }))
+    await window.locator('[data-auth="' + key + '"]').fill(value);
+  const asapReply = window.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await window.locator("#send").click();
+  const asapResult = await (await asapReply).json();
+  assert.equal(asapResult.status, 200);
+  assert.equal(asapResult.outcome, "passed", JSON.stringify(asapResult));
+  assert.deepEqual(JSON.parse(asapResult.body), {
+    jwt: true,
+    algorithm: "RS256",
+  });
   await window.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await window.locator('[data-param="auth"]').click();
   await window.locator("#auth-type").selectOption("none");
