@@ -2220,9 +2220,19 @@ try {
   const responseRequest = responseProject.requests.find(
     (item) => item.id === schemaRequestId,
   );
+  // The edited request contains $defs: retain it in project storage, but do not
+  // label that dialect as OpenAPI 3.0. Verify response-only export separately.
+  assert.throws(
+    () =>
+      exportOpenAPI({
+        name: "unsupported schema dialect",
+        requests: [responseRequest],
+      }),
+    /OpenAPI 3\.0.*\$defs/,
+  );
   const exportedResponse = exportOpenAPI({
     name: "visual response",
-    requests: [responseRequest],
+    requests: [{ ...responseRequest, schema: {} }],
   });
   const exportedOperation = Object.values(exportedResponse.paths)[0][
     responseRequest.method.toLowerCase()

@@ -1,3 +1,4 @@
+import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import {
   importOpenAPIBody,
   exportOpenAPIBody,
@@ -243,7 +244,7 @@ export function normalizeRequest(r = {}) {
     after: r.after || [],
     examples: r.examples || [],
     mockRules: r.mockRules || [],
-    schema: r.schema || {},
+    schema: r.schema ?? {},
     responses: r.responses || [],
     openapiOperation: r.openapiOperation || {},
     proxy: r.proxy || "",
@@ -718,7 +719,7 @@ export function importDocument(doc) {
               .filter((p) => p.in === "query")
               .map((p) => ({
                 key: p.name,
-                schema: p.schema || { type: p.type || "string" },
+                schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
                 value: p.example ?? p.schema?.default ?? "",
@@ -728,7 +729,7 @@ export function importDocument(doc) {
               .filter((p) => p.in === "path")
               .map((p) => ({
                 key: p.name,
-                schema: p.schema || { type: p.type || "string" },
+                schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
                 value: p.example ?? "",
@@ -739,7 +740,7 @@ export function importDocument(doc) {
                 .filter((p) => p.in === "header")
                 .map((p) => ({
                   key: p.name,
-                  schema: p.schema || { type: p.type || "string" },
+                  schema: p.schema ?? { type: p.type || "string" },
                   required: p.required === true,
                   description: p.description || "",
                   value: p.example ?? "",
@@ -759,7 +760,7 @@ export function importDocument(doc) {
               .filter((p) => p.in === "cookie")
               .map((p) => ({
                 key: p.name,
-                schema: p.schema || { type: p.type || "string" },
+                schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
                 value: p.example ?? p.schema?.default ?? "",
@@ -774,7 +775,7 @@ export function importDocument(doc) {
                 status,
                 description: response.description || "",
                 content: response.content || {
-                  "application/json": { schema: response.schema || {} },
+                  "application/json": { schema: response.schema ?? {} },
                 },
                 headers: response.headers || {},
               }),
@@ -1186,7 +1187,7 @@ export function exportOpenAPI(project) {
             in: location,
             required: location === "path" || parameter.required === true,
             description: parameter.description || "",
-            schema: parameter.schema || { type: "string" },
+            schema: parameter.schema ?? { type: "string" },
             example: parameter.value,
           })),
       ),
@@ -1194,12 +1195,12 @@ export function exportOpenAPI(project) {
       ...(requestBody ? { requestBody } : {}),
     };
   }
-  return {
+  return normalizeOpenAPI30Schemas({
     openapi: "3.0.3",
     info: { title: project.name, version: "1.0.0" },
     paths,
     ...(Object.keys(components).length ? { components } : {}),
-  };
+  });
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
@@ -1396,13 +1397,25 @@ export function resolveLocalReferences(document) {
           throw Error("无效 OpenAPI 引用 " + ref);
         target = target[part];
       }
+      const siblings = Object.fromEntries(
+        Object.entries(value).filter(([key]) => key !== "$ref"),
+      );
+      if (target === false)
+        return Object.keys(siblings).length
+          ? visit(
+              { allOf: [false, siblings] },
+              new Set([...seen, ref]),
+              depth + 1,
+            )
+          : false;
+      if (target === true)
+        return Object.keys(siblings).length
+          ? visit(siblings, new Set([...seen, ref]), depth + 1)
+          : true;
+      if (!target || typeof target !== "object" || Array.isArray(target))
+        throw Error("无效 OpenAPI 引用目标 " + ref);
       return visit(
-        {
-          ...target,
-          ...Object.fromEntries(
-            Object.entries(value).filter(([k]) => k !== "$ref"),
-          ),
-        },
+        { ...target, ...siblings },
         new Set([...seen, ref]),
         depth + 1,
       );

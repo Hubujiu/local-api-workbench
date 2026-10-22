@@ -43,7 +43,7 @@ export function importOpenAPIBody(requestBody) {
   if (/[\r\n]/.test(mediaName)) throw Error("媒体类型包含非法换行");
   const mime = mediaName.split(";")[0].trim().toLowerCase();
   const media = content[mediaName],
-    schema = media?.schema || {};
+    schema = media?.schema ?? {};
   const base = { schema, form: [], contentType: mediaName };
   if (mime === "application/json" || mime.endsWith("+json"))
     return {
@@ -75,7 +75,7 @@ export function importOpenAPIBody(requestBody) {
   const form = keys.map((key) => {
     if (["__proto__", "constructor", "prototype"].includes(key))
       throw Error("不安全的表单字段");
-    const definition = properties[key] || {},
+    const definition = properties[key] ?? {},
       encoding = media.encoding?.[key] || {};
     if (Object.keys(encoding).length)
       throw Error("尚不支持 OpenAPI 表单自定义 encoding");
@@ -132,7 +132,7 @@ export function exportOpenAPIBody(request) {
       : type === "urlencoded"
         ? "application/x-www-form-urlencoded"
         : header || (type === "json" ? "application/json" : "text/plain");
-  let schema = request.schema || {},
+  let schema = request.schema ?? {},
     example = request.body;
   if (type === "json") {
     try {
@@ -154,10 +154,16 @@ export function exportOpenAPIBody(request) {
       properties[field.key] =
         field.type === "file"
           ? { type: "string", format: "binary" }
-          : structuredClone(field.schema || { type: "string" });
+          : structuredClone(field.schema ?? { type: "string" });
       if (field.required) required.push(field.key);
-      if (field.description)
-        properties[field.key].description = field.description;
+      if (field.description) {
+        if (typeof properties[field.key] === "boolean")
+          properties[field.key] = {
+            allOf: [properties[field.key]],
+            description: field.description,
+          };
+        else properties[field.key].description = field.description;
+      }
       if (field.type !== "file") {
         let value = field.value ?? "";
         if (
@@ -176,11 +182,12 @@ export function exportOpenAPIBody(request) {
         values[field.key] = value;
       }
     }
-    schema = {
-      type: "object",
-      properties,
-      ...(required.length ? { required } : {}),
-    };
+    if (typeof schema !== "boolean")
+      schema = {
+        type: "object",
+        properties,
+        ...(required.length ? { required } : {}),
+      };
     example = values;
   }
   return {
