@@ -1,3 +1,8 @@
+import {
+  responseMediaEntries,
+  selectJsonResponseMedia,
+  isJsonResponseType,
+} from "./response-media.mjs";
 import { sampleFromSchema } from "./schema-sample.mjs";
 import { randomUUID } from "node:crypto";
 const types = [
@@ -505,23 +510,36 @@ export function sampleProjectSchema(project, schema) {
   );
 }
 export function schemaMockResponse(project, request) {
-  const definition = (request.responses || []).find(
-    (item) => item.schema !== undefined && /^2\d\d$/.test(String(item.status)),
-  );
-  if (!definition)
+  for (const definition of request.responses || []) {
+    if (!/^2\d\d$/.test(String(definition.status))) continue;
+    let schema, contentType;
+    if (definition.schema !== undefined) {
+      schema = definition.schema;
+      contentType = definition.contentType || "application/json";
+    } else {
+      const hasSchema = (media) => media.schema !== undefined;
+      if (
+        !responseMediaEntries(definition.content).some(([, media]) =>
+          hasSchema(media),
+        )
+      )
+        continue;
+      const selected = selectJsonResponseMedia(definition.content, hasSchema);
+      if (selected) [contentType, { schema }] = selected;
+    }
+    if (!isJsonResponseType(contentType))
+      throw Error("自动Schema Mock仅支持JSON响应，请提供显式响应示例");
     return {
-      status: 200,
-      body: "{}",
-      headers: { "content-type": "application/json" },
+      status: Number(definition.status),
+      body: JSON.stringify(sampleProjectSchema(project, schema)),
+      headers: { "content-type": contentType },
       delayMs: 0,
     };
-  const contentType = definition.contentType || "application/json";
-  if (!contentType.includes("json"))
-    throw Error("自动Schema Mock仅支持JSON响应，请提供显式响应示例");
+  }
   return {
-    status: Number(definition.status),
-    body: JSON.stringify(sampleProjectSchema(project, definition.schema)),
-    headers: { "content-type": contentType },
+    status: 200,
+    body: "{}",
+    headers: { "content-type": "application/json" },
     delayMs: 0,
   };
 }

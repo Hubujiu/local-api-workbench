@@ -1955,6 +1955,19 @@ try {
         page.viewportSize().height,
     "example save action remains reachable",
   );
+  const exampleFieldsVisible = await page
+    .locator("#dialog-content")
+    .evaluate((content) => {
+      const bounds = content.getBoundingClientRect();
+      return [...content.querySelectorAll("input, textarea")].every((field) => {
+        const box = field.getBoundingClientRect();
+        return box.top >= bounds.top && box.bottom <= bounds.bottom;
+      });
+    });
+  assert(
+    exampleFieldsVisible,
+    "example fields must not be obscured by the footer at the desktop viewport",
+  );
   await page.screenshot({ path: "/tmp/local-api-response-example.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -4337,6 +4350,64 @@ try {
   }
   await page.setViewportSize({ width: 1000, height: 760 });
   await page.screenshot({ path: "/tmp/local-api-form-schema.png" });
+
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(
+    JSON.stringify({
+      openapi: "3.1.0",
+      info: { title: "Browser schema Mock", version: "1" },
+      servers: [{ url: app.url }],
+      paths: {
+        "/schema-mock": {
+          get: {
+            summary: "Schema-only Mock",
+            responses: {
+              201: {
+                description: "generated",
+                content: {
+                  "application/problem+json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        source: { type: "string", enum: ["schema"] },
+                      },
+                      required: ["source"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+  );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const schemaMockProjectId = await page
+    .locator("#project-select")
+    .inputValue();
+  const schemaMockRequest = (
+    await app.store.get(schemaMockProjectId)
+  ).requests.find((item) => item.name === "Schema-only Mock");
+  assert.deepEqual(schemaMockRequest.examples, []);
+  await page.reload();
+  await page.locator(`[data-request="${schemaMockRequest.id}"]`).click();
+  await page.locator('[data-mode="mock"]').click();
+  await page.locator("#use-mock").click();
+  const generatedResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const generated = await (await generatedResponse).json();
+  assert.equal(generated.status, 201, JSON.stringify(generated));
+  assert.deepEqual(JSON.parse(generated.body), { source: "schema" });
+  await page
+    .locator(".response-body")
+    .getByText('"source": "schema"', { exact: false })
+    .waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-schema-mock-response.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

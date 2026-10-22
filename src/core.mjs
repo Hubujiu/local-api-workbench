@@ -1,4 +1,9 @@
 import {
+  selectJsonResponseMedia,
+  isJsonResponseType,
+  isResponseMediaType,
+} from "./response-media.mjs";
+import {
   referenceChildMode,
   referenceModeIsAllowed,
 } from "./openapi-reference-context.mjs";
@@ -782,15 +787,27 @@ export function importDocument(doc) {
                 headers: response.headers || {},
               }),
             ),
-            examples: Object.entries(op.responses || {}).map(([status, r]) => ({
-              name: r.description || status,
-              status: Number(status) || 200,
-              body: JSON.stringify(
-                openapiExample(r.content?.["application/json"]),
-                null,
-                2,
-              ),
-            })),
+            examples: Object.entries(op.responses || {}).flatMap(
+              ([status, r]) => {
+                // A wildcard/default definition does not identify a concrete HTTP status.
+                if (!/^[1-5]\d\d$/.test(status)) return [];
+                const absent = Symbol("absent example");
+                const selected = selectJsonResponseMedia(
+                  r.content,
+                  (media) => openapiExample(media, absent) !== absent,
+                );
+                if (!selected) return [];
+                const [contentType, media] = selected;
+                return [
+                  {
+                    name: r.description || status,
+                    status: Number(status),
+                    body: JSON.stringify(openapiExample(media), null, 2),
+                    headers: { "content-type": contentType },
+                  },
+                ];
+              },
+            ),
           });
         }),
     );
@@ -1217,21 +1234,32 @@ export function exportOpenAPI(project) {
       };
     }
     for (const example of r.examples || []) {
-      const status = String(example.status || 200);
+      const status = String(example.status ?? 200);
+      if (!/^[1-5]\d\d$/.test(status)) throw Error("响应示例状态无效");
+      const contentType =
+        Object.entries(example.headers || {}).find(
+          ([name]) => name.toLowerCase() === "content-type",
+        )?.[1] ?? "application/json";
+      if (!isResponseMediaType(contentType))
+        throw Error("响应示例Content-Type无效");
       responses[status] ??= {
         description: example.name || "Response",
-        content: { "application/json": {} },
+        content: {},
       };
       responses[status].content ??= {};
-      responses[status].content["application/json"] ??= {};
-      let value;
-      try {
-        value = JSON.parse(example.body);
-      } catch {
-        value = example.body;
+      const media = (responses[status].content[contentType] ??= {});
+      // Preserve original named examples; OpenAPI forbids both fields together.
+      if (Object.hasOwn(media, "example") || Object.hasOwn(media, "examples"))
+        continue;
+      let value = example.body;
+      if (isJsonResponseType(contentType)) {
+        try {
+          value = JSON.parse(example.body);
+        } catch {
+          /* retain a literal example */
+        }
       }
-      if (responses[status].content["application/json"].example === undefined)
-        responses[status].content["application/json"].example = value;
+      media.example = value;
     }
     if (!Object.keys(responses).length)
       responses["200"] = { description: "Successful response" };

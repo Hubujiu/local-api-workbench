@@ -41,7 +41,8 @@ export function selectMockResponse(request, input, fallback) {
     });
     if (matches) return { ...rule.response, ruleName: rule.name || "" };
   }
-  if (!request.examples?.length && fallback) return fallback();
+  if (!request.examples?.length && fallback)
+    return validateMockResponse(fallback());
   const index = Number(input.query?.example) || 0;
   const example = request.examples?.[index] || { status: 200, body: "{}" };
   if (!example || typeof example !== "object" || Array.isArray(example))

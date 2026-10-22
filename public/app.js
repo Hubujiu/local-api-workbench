@@ -3239,7 +3239,7 @@ function editExample(index) {
     };
   modal(
     "响应示例",
-    `<label>名称</label><input id="ex-name" value="${esc(ex.name)}"><label>状态码</label><input id="ex-status" type="number" value="${esc(ex.status)}"><p class="muted">100–199 可记录为文档示例，但不能单独作为 Mock 最终响应。204/205/304 不发送正文。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea><label>延迟（0–5000ms）</label><input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}">`,
+    `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}"></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
     () => {
       const val = editResponseExample(ex, {
         name: $("#ex-name").value,
