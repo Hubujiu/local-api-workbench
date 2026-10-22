@@ -40,6 +40,10 @@ try {
     new URL("./vendor/json5-library.js", import.meta.url),
     "utf8",
   );
+  const schemaLibrary = await readFile(
+    new URL("./vendor/schema-library.js", import.meta.url),
+    "utf8",
+  );
   const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
@@ -362,6 +366,12 @@ try {
   json5Source.dispose();
   run(
     "(()=>{let cached;const source=globalThis.__json5Source;delete globalThis.__json5Source;Object.defineProperty(globalThis,'JSON5',{get(){if(!cached){(0,eval)(source);cached=globalThis.__boundedJSON5;delete globalThis.__boundedJSON5;}return cached;}});})();",
+  );
+  const schemaSource = context.newString(schemaLibrary);
+  context.setProp(context.global, "__schemaSource", schemaSource);
+  schemaSource.dispose();
+  run(
+    "(()=>{let cached;const source=globalThis.__schemaSource;delete globalThis.__schemaSource;Object.defineProperty(globalThis,'__validateJSONSchema',{get(){if(!cached){(0,eval)(source);cached=globalThis.__boundedJSONSchema;delete globalThis.__boundedJSONSchema;}return cached;}});})();",
   );
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });

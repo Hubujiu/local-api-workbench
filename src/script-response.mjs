@@ -39,6 +39,24 @@ function installResponseCompatibility({ response, pm, apt }) {
     notFound: [404, 404],
     rateLimited: [429, 429],
   };
+  const responseJSON = () => {
+    if (!response) throw Error("当前脚本没有响应");
+    try {
+      return JSON.parse(response.body);
+    } catch {
+      throw Error("jsonSchema 断言需要有效 JSON 响应");
+    }
+  };
+  globalThis.chai.Assertion.addMethod("jsonSchema", function (schema, options) {
+    let data = globalThis.chai.util.flag(this, "object");
+    if (data === pm.response || data === apt.response) data = responseJSON();
+    const result = globalThis.__validateJSONSchema(schema, data, options);
+    this.assert(
+      result.valid,
+      result.message,
+      "expected data to not satisfy JSON Schema",
+    );
+  });
   function chain(negative = false) {
     let proxy;
     const check = (condition, label) => {
@@ -47,6 +65,14 @@ function installResponseCompatibility({ response, pm, apt }) {
       return proxy;
     };
     const methods = {
+      jsonSchema(schema, options) {
+        const result = globalThis.__validateJSONSchema(
+          schema,
+          responseJSON(),
+          options,
+        );
+        return check(result.valid, result.message);
+      },
       status(value) {
         if (
           typeof value !== "string" &&
