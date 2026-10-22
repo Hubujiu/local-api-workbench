@@ -1832,3 +1832,20 @@ dialog:has(#cookie-line) {
 .model-folder-content .card {
   margin-bottom: 8px;
 }
+
+.model-folder-actions {
+  float: right;
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 10px;
+}
+.model-folder-actions button {
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: normal;
+}
+.model-folder > summary::after {
+  content: "";
+  display: block;
+  clear: both;
+}

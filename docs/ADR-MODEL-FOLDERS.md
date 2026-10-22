@@ -12,3 +12,9 @@ Local modelFolders metadata persists with the project and backup. Save/restore v
 This increment supports imported hierarchy and its display/persistence. It does not yet add full model-folder CRUD or prove original native-directory migration. The legacy flat-model display and editing remain usable; full proprietary schema composition stays explicitly unsupported.
 
 Validation: failing import regression before implementation, malformed graph and unsupported data rejection, actual project save/reload and backup, merge failure atomicity, and browser import/collapse/expand/reload evidence. Exact-commit CI is the verification record.
+
+## Explicit local folder management
+
+The follow-on editor adds create, rename, reparent and empty-folder removal. Models can be moved using the model editor's full-path selector. Changes are validated before replacing the directory list; moving a parent leaves descendants/model IDs unchanged, while cycles/missing parents/invalid names reject atomically. Only empty folders may be removed, with explicit UI confirmation; no recursive data deletion is implemented. Cancelled dialogs/confirmations do not mutate the project. Existing description/sort metadata is preserved unless the user edits the description.
+
+Browser coverage creates a nested directory after a validation error, cancels an edit, moves an existing imported model, confirms nonempty deletion is disabled, renames/reparents its directory, cancels then confirms deletion of a different empty folder, saves and reloads. This closes basic local folder CRUD, not native Offline2 format equivalence or every original visual detail.

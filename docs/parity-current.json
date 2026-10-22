@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-22T06:24:22Z",
-  "implementationCommit": "b8add750f27623b826d96667e20af7c4889395bc",
+  "asOf": "2026-10-22T07:17:29Z",
+  "implementationCommit": "c9f7e1b11c93ed5d0913e45c947cfe57d8f9486a",
   "counts": {
     "F": {
       "已实现": 37,
@@ -977,9 +977,9 @@
       "name": "MCP配置页面",
       "status": "部分实现",
       "original": "服务状态卡片、授权区、六客户端标签、密钥操作",
-      "current": "状态/授权/客户端标签/密钥操作已实现；页面结构仍为配置区加弹窗。",
+      "current": "独立服务状态、权限/项目概览和六客户端内联配置标签已验证；密钥默认隐藏，显式显示/复制前读取最新配置，撤销后清理。权限修改仍保留确认弹窗，不自动联系客户端；非逐像素一致。",
       "source": "I3",
-      "evidence": "public/app.js; public/mcp-client-config.js",
+      "evidence": "public/mcp-settings-view.js; public/mcp-client-config.js; tests/mcp-settings-view.test.mjs; tests/ui-smoke.mjs; docs/ADR-MCP-SETTINGS-PANEL.md",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39733528691",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39739009350",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述379项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述394项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39733528691,
+    "runId": 39739009350,
     "conclusion": "success first attempt",
-    "coreTests": 379,
+    "coreTests": 394,
     "jobs": 10
   },
   "supplementalItems": [
@@ -1053,6 +1053,20 @@
       "status": "部分实现",
       "current": "可选祖先目录JS继承，默认精确目录；项目→祖先→当前目录→接口顺序，每阶段等待异步完成，共享原时限和全部配额。最大34阶段结构，复杂深链仍可能耗尽原预算。计划不隐式继承，原版所有排序和非JS操作仍未等价。",
       "evidence": "docs/ADR-SHARED-SCRIPTS.md; docs/ADR-SCRIPT-SEQUENCE.md; tests/shared-scripts.test.mjs; tests/ui-smoke.mjs"
+    },
+    {
+      "id": "S-MODEL-FOLDERS",
+      "name": "模型目录与编辑身份保留",
+      "status": "部分实现",
+      "current": "现代交换格式模型目录/空组、保存恢复及关联组件编辑已验证。原生Offline2目录仍未等价；新目录CRUD须核验后续提交。",
+      "evidence": "docs/ADR-MODEL-FOLDERS.md; docs/ADR-MODEL-EDIT-IDENTITY.md; tests/model-folders.test.mjs; tests/model-edit.test.mjs; tests/ui-smoke.mjs"
+    },
+    {
+      "id": "S-MCP-SDK-INTEROP",
+      "name": "独立MCP客户端互操作",
+      "status": "部分实现",
+      "current": "固定官方SDK1.32.1的真实HTTP/stdio、工具发现、项目隔离、撤销和获准执行已验证；未声称六种宿主客户端GUI全部接入、原版工具契约完全等价。",
+      "evidence": "docs/ADR-MCP-SDK-INTEROP.md; tests/mcp-sdk-interop.test.mjs"
     }
   ]
 }

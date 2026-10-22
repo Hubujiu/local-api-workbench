@@ -1,3 +1,7 @@
+import {
+  saveModelFolder,
+  removeEmptyModelFolder,
+} from "./model-folder-actions.js";
 import { saveModel } from "./model-edit.js";
 import { modelCards, modelFolderPath } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
@@ -722,7 +726,7 @@ function renderPage() {
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
   if (page === "dictionary")
-    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${modelCards(project)}</div>`;
+    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</div>`;
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],
@@ -2939,6 +2943,20 @@ function bind() {
       "导出",
     );
   });
+  on("#add-model-folder", "click", () => editModelFolder());
+  on("[data-edit-model-folder]", "click", (event, element) => {
+    event.preventDefault();
+    event.stopPropagation();
+    editModelFolder(element.dataset.editModelFolder);
+  });
+  on("[data-delete-model-folder]", "click", (event, element) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm("删除这个空模型目录？不会删除任何数据模型。")) return;
+    removeEmptyModelFolder(project, element.dataset.deleteModelFolder);
+    mark();
+    render();
+  });
   on("#add-dictionary", "click", () => editDictionary());
   on("[data-edit-dictionary]", "click", (_, e) =>
     editDictionary(Number(e.dataset.editDictionary)),
@@ -3076,6 +3094,41 @@ function editExample(index) {
       if (val.status < 100 || val.status > 599) throw Error("状态码无效");
       if (index === undefined) r.examples.push(val);
       else r.examples[index] = val;
+      mark();
+      render();
+    },
+  );
+}
+function editModelFolder(id) {
+  const folder =
+    id === undefined
+      ? { name: "新目录", parentId: "", description: "" }
+      : project.modelFolders.find((item) => item.id === id);
+  if (!folder) throw Error("模型目录不存在");
+  modal(
+    "模型目录",
+    `<label>名称</label><input id="model-folder-name" maxlength="200" value="${esc(folder.name)}"><label>父目录</label><select id="model-folder-parent"><option value="">根目录</option>${(
+      project.modelFolders || []
+    )
+      .filter((item) => item.id !== id)
+      .map(
+        (item) =>
+          `<option value="${esc(item.id)}" ${folder.parentId === item.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, item.id))}</option>`,
+      )
+      .join(
+        "",
+      )}</select><label>说明</label><textarea id="model-folder-description" maxlength="5000">${esc(folder.description || "")}</textarea><p class="muted">移动目录会保留模型和子目录的ID；不能移动到自身子目录。仅空目录可以删除。</p>`,
+    () => {
+      saveModelFolder(
+        project,
+        id,
+        {
+          name: $("#model-folder-name").value,
+          parentId: $("#model-folder-parent").value,
+          description: $("#model-folder-description").value,
+        },
+        uid(),
+      );
       mark();
       render();
     },

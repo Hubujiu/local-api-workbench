@@ -89,7 +89,7 @@ export function modelCards(project) {
     )
       .map(
         (folder) =>
-          `<details class="model-folder" data-model-folder="${esc(folder.id)}" open><summary>${esc(folder.name)}</summary>${folder.description ? `<p class="muted">${esc(folder.description)}</p>` : ""}<div class="model-folder-content">${group(folder.id) || '<p class="muted">空模型目录</p>'}</div></details>`,
+          `<details class="model-folder" data-model-folder="${esc(folder.id)}" open><summary><span>${esc(folder.name)}</span><span class="model-folder-actions"><button data-edit-model-folder="${esc(folder.id)}">编辑目录</button><button data-delete-model-folder="${esc(folder.id)}" class="danger" ${folders.some((f) => f.parentId === folder.id) || models.some(({ model }) => model.folderId === folder.id) ? 'disabled title="只能删除空目录"' : ""}>删除空目录</button></span></summary>${folder.description ? `<p class="muted">${esc(folder.description)}</p>` : ""}<div class="model-folder-content">${group(folder.id) || '<p class="muted">空模型目录</p>'}</div></details>`,
       )
       .join("");
     return cards + children;

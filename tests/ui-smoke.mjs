@@ -2174,6 +2174,98 @@ try {
     .first()
     .screenshot({ path: "/tmp/local-api-model-folder-tree.png" });
 
+  await page.locator("#add-model-folder").click();
+  await page.locator("#model-folder-name").fill("");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("模型目录定义无效或ID重复", { exact: false })
+    .last()
+    .waitFor();
+  assert(await page.locator("#dialog").isVisible());
+  await page.locator("#model-folder-name").fill("UI Model Group");
+  await page.locator("#model-folder-parent").selectOption(importedModelFolder);
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const groupSummary = (name) =>
+    page
+      .locator("summary")
+      .filter({ has: page.getByText(name, { exact: true }) });
+  await groupSummary("UI Model Group")
+    .locator("[data-edit-model-folder]")
+    .click();
+  await page.locator("#model-folder-name").fill("Discarded name");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.getByText("UI Model Group", { exact: true }).waitFor();
+  await page
+    .locator(".card")
+    .filter({
+      has: page.getByText("Fictional modern export / BrowserModel", {
+        exact: true,
+      }),
+    })
+    .locator("[data-edit-dictionary]")
+    .click();
+  await page
+    .locator("#dict-folder")
+    .selectOption({ label: "API Models / UI Model Group" });
+  const movedModelFolder = await page.locator("#dict-folder").inputValue();
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert(
+    await groupSummary("UI Model Group")
+      .locator("[data-delete-model-folder]")
+      .isDisabled(),
+  );
+  await groupSummary("UI Model Group")
+    .locator("[data-edit-model-folder]")
+    .click();
+  await page.locator("#model-folder-name").fill("Edited Model Group");
+  await page.locator("#model-folder-parent").selectOption("");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await groupSummary("Empty Model Group")
+    .locator("[data-delete-model-folder]")
+    .click();
+  await page.getByText("Empty Model Group", { exact: true }).waitFor();
+  page.once("dialog", (dialog) => dialog.accept());
+  await groupSummary("Empty Model Group")
+    .locator("[data-delete-model-folder]")
+    .click();
+  assert.equal(
+    await page.getByText("Empty Model Group", { exact: true }).count(),
+    0,
+  );
+  const foldersSave = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.status() === 200 &&
+      r.url().includes("/api/projects/"),
+  );
+  await page.locator("#save-project").click();
+  const savedFoldersProject = await (await foldersSave).json();
+  assert.equal(
+    savedFoldersProject.dictionary.find((m) => m.id === savedModel.id).folderId,
+    movedModelFolder,
+  );
+  assert.equal(
+    savedFoldersProject.modelFolders.find((f) => f.id === movedModelFolder)
+      .parentId,
+    "",
+  );
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page.getByText("Edited Model Group", { exact: true }).waitFor();
+  await page
+    .locator(".model-folder")
+    .filter({
+      has: page.getByText("Fictional modern export / BrowserModel", {
+        exact: true,
+      }),
+    })
+    .screenshot({ path: "/tmp/local-api-model-folder-edit.png" });
+
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [
     normalizeRequest({
