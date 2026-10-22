@@ -247,7 +247,7 @@ export async function createApp({
           ...selected.headers,
         });
         return res.end(
-          [204, 304].includes(selected.status) ? "" : selected.body,
+          [204, 205, 304].includes(selected.status) ? "" : selected.body,
         );
       }
       if (parts[0] === "api") {

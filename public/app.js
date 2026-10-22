@@ -1,3 +1,4 @@
+import { editResponseExample } from "./response-example.js";
 import { applySelectedFormFile } from "./form-file-selection.js";
 import { variableRows } from "./variable-definitions.js";
 import { mountVariableEditor } from "./variable-editor.js";
@@ -650,7 +651,7 @@ function responseContent() {
       request()
         .examples.map(
           (example) =>
-            `<h4>${esc(example.name)} · ${example.status}</h4><pre>${esc(example.body)}</pre>`,
+            `<h4>${esc(example.name)} · ${esc(example.status)}</h4><pre>${esc(example.body)}</pre>`,
         )
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
@@ -680,7 +681,7 @@ function modePanel(r) {
   if (mode === "design")
     return `<div class="page">${r.importNotes?.length ? `<div class="notice import-notes">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}<div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><label>响应定义（状态、描述、Content 与 Schema）</label><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div><textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
-    return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例；没有示例时，按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${e.status}</strong><button data-edit-example="${i}">编辑</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
+    return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">规则按顺序匹配；一条规则内条件全部满足才生效；不匹配时返回响应示例；没有示例时，按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。</p><input class="mock-url" readonly value="${location.origin}/mock/${project.id}/${r.id}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${esc(e.status)}</strong><button data-edit-example="${i}">编辑</button><button data-delete-example="${i}">删除</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
     return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="create-case">从当前接口创建执行计划</button>${
       (project.cases || [])
@@ -778,7 +779,7 @@ function renderPage() {
         .filter((r) => !r.deletedAt)
         .map(
           (r) =>
-            `<article class="card markdown"><div class="row"><span class="method ${r.method}">${r.method}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><p>${esc(r.description || "暂无描述")}</p>${r.query.length ? `<h4>Query 参数</h4><table>${r.query.map((p) => `<tr><td>${esc(p.key)}</td><td>${esc(p.value)}</td></tr>`).join("")}</table>` : ""}${r.bodyType !== "none" ? `<h4>请求体 · ${esc(r.bodyType)}</h4><pre>${esc(r.body)}</pre>` : ""}${r.examples.map((e) => `<h4>${esc(e.name)} · ${e.status}</h4><pre>${esc(e.body)}</pre>`).join("")}</article>`,
+            `<article class="card markdown"><div class="row"><span class="method ${r.method}">${r.method}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><p>${esc(r.description || "暂无描述")}</p>${r.query.length ? `<h4>Query 参数</h4><table>${r.query.map((p) => `<tr><td>${esc(p.key)}</td><td>${esc(p.value)}</td></tr>`).join("")}</table>` : ""}${r.bodyType !== "none" ? `<h4>请求体 · ${esc(r.bodyType)}</h4><pre>${esc(r.body)}</pre>` : ""}${r.examples.map((e) => `<h4>${esc(e.name)} · ${esc(e.status)}</h4><pre>${esc(e.body)}</pre>`).join("")}</article>`,
         )
         .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
   }</div>`;
@@ -2765,6 +2766,23 @@ function bind() {
     );
   });
   on("#add-example", "click", () => editExample());
+  on("[data-delete-example]", "click", (_, element) => {
+    const examples = request().examples,
+      index = Number(element.dataset.deleteExample);
+    if (!Number.isInteger(index) || index < 0 || index >= examples.length)
+      throw Error("响应示例不存在");
+    if (
+      !confirm(
+        "移除响应示例 " +
+          JSON.stringify(examples[index].name || "未命名") +
+          "？",
+      )
+    )
+      return;
+    examples.splice(index, 1);
+    mark();
+    render();
+  });
   on("[data-edit-example]", "click", (_, e) =>
     editExample(Number(e.dataset.editExample)),
   );
@@ -3221,14 +3239,15 @@ function editExample(index) {
     };
   modal(
     "响应示例",
-    `<label>名称</label><input id="ex-name" value="${esc(ex.name)}"><label>状态码</label><input id="ex-status" type="number" value="${ex.status}"><label>响应内容</label><textarea id="ex-body">${esc(ex.body)}</textarea>`,
+    `<label>名称</label><input id="ex-name" value="${esc(ex.name)}"><label>状态码</label><input id="ex-status" type="number" value="${esc(ex.status)}"><p class="muted">100–199 可记录为文档示例，但不能单独作为 Mock 最终响应。204/205/304 不发送正文。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea><label>延迟（0–5000ms）</label><input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}">`,
     () => {
-      const val = {
+      const val = editResponseExample(ex, {
         name: $("#ex-name").value,
         status: Number($("#ex-status").value),
         body: $("#ex-body").value,
-      };
-      if (val.status < 100 || val.status > 599) throw Error("状态码无效");
+        headers: JSON.parse($("#ex-headers").value.trim() || "{}"),
+        delayMs: Number($("#ex-delay").value),
+      });
       if (index === undefined) r.examples.push(val);
       else r.examples[index] = val;
       mark();
@@ -3236,6 +3255,7 @@ function editExample(index) {
     },
   );
 }
+
 function editModelFolder(id) {
   const folder =
     id === undefined

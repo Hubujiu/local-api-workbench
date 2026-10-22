@@ -1,4 +1,4 @@
-import { validateHeaderName, validateHeaderValue } from "node:http";
+import { validateMockResponse } from "../public/response-example.js";
 import { jsonPath } from "./core.mjs";
 export function validateMockRules(rules = []) {
   if (!Array.isArray(rules) || rules.length > 100)
@@ -12,41 +12,7 @@ export function validateMockRules(rules = []) {
         !["eq", "neq", "contains", "exists"].includes(condition.op)
       )
         throw Error("Mock匹配操作无效");
-    const response = rule.response;
-    if (
-      !response ||
-      !Number.isInteger(response.status) ||
-      response.status < 200 ||
-      response.status > 599
-    )
-      throw Error("Mock响应状态须为200至599");
-    if (
-      typeof response.body !== "string" ||
-      Buffer.byteLength(response.body) > 8 * 1024 * 1024
-    )
-      throw Error("Mock响应体超过8MiB或格式无效");
-    if (
-      response.delayMs !== undefined &&
-      (!Number.isInteger(response.delayMs) ||
-        response.delayMs < 0 ||
-        response.delayMs > 5000)
-    )
-      throw Error("Mock延迟须为0至5000ms");
-    for (const [key, value] of Object.entries(response.headers || {})) {
-      validateHeaderName(key);
-      if (
-        [
-          "content-length",
-          "transfer-encoding",
-          "connection",
-          "upgrade",
-          "trailer",
-        ].includes(key.toLowerCase())
-      )
-        throw Error("Mock不可覆盖传输控制头");
-      if (typeof value !== "string") throw Error("Mock响应头必须为字符串");
-      validateHeaderValue(key, value);
-    }
+    validateMockResponse(rule.response);
   }
   return rules;
 }
@@ -78,10 +44,12 @@ export function selectMockResponse(request, input, fallback) {
   if (!request.examples?.length && fallback) return fallback();
   const index = Number(input.query?.example) || 0;
   const example = request.examples?.[index] || { status: 200, body: "{}" };
-  return {
-    status: example.status || 200,
-    body: example.body || "{}",
-    headers: { "content-type": "application/json" },
-    delayMs: 0,
-  };
+  if (!example || typeof example !== "object" || Array.isArray(example))
+    throw Error("响应示例格式无效");
+  return validateMockResponse({
+    status: example.status ?? 200,
+    body: example.body ?? "{}",
+    headers: example.headers ?? { "content-type": "application/json" },
+    delayMs: example.delayMs ?? 0,
+  });
 }

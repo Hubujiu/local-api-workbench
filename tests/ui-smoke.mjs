@@ -1929,6 +1929,88 @@ try {
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-cases.png" });
   await page.locator('[data-mode="mock"]').click();
+  const exampleMockURL = await page.locator(".mock-url").inputValue();
+  const exampleRequestId = new URL(exampleMockURL).pathname.split("/").at(-1);
+  const exampleProjectId = await page.locator("#project-select").inputValue();
+  const originalExamples = structuredClone(
+    (await app.store.get(exampleProjectId)).requests.find(
+      (r) => r.id === exampleRequestId,
+    ).examples,
+  );
+  await page.locator("#add-example").click();
+  await page.locator("#ex-name").fill("Exact empty mock");
+  await page.locator("#ex-status").fill("200");
+  await page.locator("#ex-body").fill("");
+  await page.locator("#ex-headers").fill(
+    JSON.stringify({
+      "content-type": "text/plain",
+      "x-example": "preserved",
+    }),
+  );
+  await page.locator("#ex-delay").fill("1");
+  const exampleSaveBounds = await page.locator("#dialog-save").boundingBox();
+  assert(
+    exampleSaveBounds.y >= 0 &&
+      exampleSaveBounds.y + exampleSaveBounds.height <=
+        page.viewportSize().height,
+    "example save action remains reachable",
+  );
+  await page.screenshot({ path: "/tmp/local-api-response-example.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait();
+  const exampleIndex = (await app.store.get(exampleProjectId)).requests
+    .find((r) => r.id === exampleRequestId)
+    .examples.findIndex((e) => e.name === "Exact empty mock");
+  assert(exampleIndex >= 0);
+  await page.reload();
+  await page.locator('[data-request="' + exampleRequestId + '"]').click();
+  await page.locator('[data-mode="mock"]').click();
+  await page.locator('[data-edit-example="' + exampleIndex + '"]').click();
+  assert.equal(await page.locator("#ex-body").inputValue(), "");
+  assert.deepEqual(JSON.parse(await page.locator("#ex-headers").inputValue()), {
+    "content-type": "text/plain",
+    "x-example": "preserved",
+  });
+  await page.locator("#ex-headers").fill('{"Content-Length":"999"}');
+  await page.locator("#dialog-save").click();
+  await page.locator("#toast").getByText("传输", { exact: false }).waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator('[data-edit-example="' + exampleIndex + '"]').click();
+  assert.equal(
+    JSON.parse(await page.locator("#ex-headers").inputValue())["x-example"],
+    "preserved",
+    "invalid/cancelled edits do not replace metadata",
+  );
+  await page.locator("#ex-name").fill("Exact empty mock edited");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait();
+  const exactMock = await page.request.get(
+    exampleMockURL + "?example=" + exampleIndex,
+  );
+  assert.equal(exactMock.status(), 200);
+  assert.equal(await exactMock.text(), "");
+  assert.equal(exactMock.headers()["content-type"], "text/plain");
+  assert.equal(exactMock.headers()["x-example"], "preserved");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator('[data-delete-example="' + exampleIndex + '"]').click();
+  assert.equal(
+    await page.locator('[data-edit-example="' + exampleIndex + '"]').count(),
+    1,
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('[data-delete-example="' + exampleIndex + '"]').click();
+  await saveAndWait();
+  assert.deepEqual(
+    (await app.store.get(exampleProjectId)).requests.find(
+      (r) => r.id === exampleRequestId,
+    ).examples,
+    originalExamples,
+  );
+  await page.locator("#toast").waitFor({ state: "hidden" });
+
   await page.locator("#edit-mock-rules").click();
   await page.locator("#modal-json").fill(
     JSON.stringify([
