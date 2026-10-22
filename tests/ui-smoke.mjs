@@ -2574,33 +2574,42 @@ try {
   assert.equal(countSQLiteRows(), 0);
   assert.equal(await page.locator("#db-write").isChecked(), false);
   await page.locator("#db-write").check();
-  let releaseDatabaseWrite;
+  let releaseDatabaseWrite, databaseWriteReady;
   const databaseWriteGate = new Promise((resolve) => {
     releaseDatabaseWrite = resolve;
   });
+  const databaseWriteStarted = new Promise((resolve) => {
+    databaseWriteReady = resolve;
+  });
   const gatedDatabaseRoute = async (route) => {
+    const response = await route.fetch();
+    databaseWriteReady();
     await databaseWriteGate;
-    await route.continue();
+    await route.fulfill({ response });
   };
   await page.route("**/api/projects/*/database", gatedDatabaseRoute);
   page.once("dialog", (dialog) => dialog.accept());
   try {
     await page.locator("#db-query").click();
-    await page.waitForFunction(
-      () =>
-        document.querySelector("#db-query").disabled &&
-        document.querySelector("#db-type").disabled &&
-        document.querySelector("#db-tls").disabled,
+    await databaseWriteStarted;
+    assert.equal(await page.locator("#db-query").isDisabled(), true);
+    assert.equal(await page.locator("#db-type").isDisabled(), true);
+    assert.equal(await page.locator("#db-tls").isDisabled(), true);
+    assert.equal(
+      countSQLiteRows(),
+      1,
+      "exactly one real write while its acknowledgement is held",
     );
-    assert.equal(countSQLiteRows(), 0, "write is held before its real request");
   } finally {
     releaseDatabaseWrite();
-    await page.unroute("**/api/projects/*/database", gatedDatabaseRoute);
   }
   await page
     .locator("#db-result")
     .getByText('"committed": true', { exact: false })
     .waitFor();
+  await page.unroute("**/api/projects/*/database", gatedDatabaseRoute);
+  assert.equal(await page.locator("#db-type").isEnabled(), true);
+  assert.equal(await page.locator("#db-tls").isEnabled(), true);
   assert.equal(countSQLiteRows(), 1);
   assert.equal(await page.locator("#db-write").isChecked(), false);
   await page.locator("#toast").waitFor({ state: "hidden" });

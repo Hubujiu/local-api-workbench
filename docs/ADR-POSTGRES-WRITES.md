@@ -26,8 +26,10 @@
 - tests/remote-database.mjs：CI 专用 PostgreSQL 服务，经真实 HTTP 路由完成授权拒绝、参数化写入/更新/删除、1000 行边界、1001 行回滚和只读批次逃逸拒绝；专用表自动清理，不使用用户数据库。
 - tests/ui-smoke.mjs：切换提供方清除授权，确认目标及风险提示，取消后零数据库请求，MySQL 不展示写入授权。浏览器本身不冒充真实 PostgreSQL 成功执行，成功执行证据来自独立真实服务测试。
 - dde1ea720242bb9dda15eae985563fa05a7146b6 已通过402项核心回归及全部10项CI，包含真实数据库 HTTP 验证和浏览器取消路径：[Actions 39743195242](https://github.com/Hubujiu/local-api-workbench/actions/runs/39743195242)。
-- 后续界面补充：切换提供方或 TLS 清空旧结果，避免把前一个数据库的成功结果当成当前结果；执行期间锁定提供方与 TLS 并防止重复触发。门控真实 SQLite 请求验证等待期间控件锁定，完成后恢复；PostgreSQL 面板另有截图。后续改动以其独立CI为准。
+- 后续界面补充：保留原有提供方切换清空/失效旧结果的行为，并增加 TLS 切换清理。仅写入等待期间锁定提供方与 TLS，保留只读查询期间切换并丢弃旧响应的既有能力。门控真实 SQLite 响应确认等待期间控件锁定，完成后恢复；PostgreSQL 面板另有截图。后续改动以其独立CI为准。
 
 ## 依据
 
 PostgreSQL 17 官方文档：[数据修改 CTE](https://www.postgresql.org/docs/17/queries-with.html#QUERIES-WITH-MODIFYING)、[BEGIN](https://www.postgresql.org/docs/17/sql-begin.html)。驱动 extended 分支另经已安装 pg 的 lib/query.js 检查与真实服务测试覆盖。
+
+验证记录：af593b6 首轮浏览器在新增 gate 的 route.continue 抛出 already handled，其余9项通过。失败包因未处理异常没有最终trace，不声称已从trace确认唯一根因。后续改用与已有用例一致的 fetch/fulfill 响应门控，在实际响应显示后再移除路由；保留原写入计数/取消断言以及只读切换回归，未延长任何生产预算。

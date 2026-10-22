@@ -2372,11 +2372,7 @@ function bind() {
     mark();
     render();
   });
-  on("#db-type,#db-tls", "change", () => {
-    if ($("#db-query").disabled) return;
-    $("#db-result").textContent = "";
-    updateDatabaseFields();
-  });
+  on("#db-type,#db-tls", "change", updateDatabaseFields);
   on("#db-write", "change", (_, element) => {
     $("#db-query").textContent = element.checked
       ? "确认并执行写入"
@@ -2435,7 +2431,8 @@ function bind() {
     const queryMarker = {};
     target.activeQuery = queryMarker;
     button.disabled = true;
-    for (const control of connectionControls) control.disabled = true;
+    if (input.allowWrite)
+      for (const control of connectionControls) control.disabled = true;
     target.textContent = input.allowWrite
       ? "正在执行写入，请勿重复提交…"
       : "正在查询…";
@@ -3880,7 +3877,8 @@ function updateDatabaseFields() {
     mongodb: '{"collection":"items","filter":{},"limit":100}',
   };
   const previous = selector.dataset.previousType;
-  if (previous && previous !== type) {
+  const tls = String($("#db-tls").checked);
+  if (previous && (previous !== type || selector.dataset.previousTLS !== tls)) {
     if ($("#db-sql").value === defaults[previous])
       $("#db-sql").value = defaults[type];
     $("#db-result").textContent = "";
@@ -3888,6 +3886,7 @@ function updateDatabaseFields() {
     $("#db-query").disabled = false;
   }
   selector.dataset.previousType = type;
+  selector.dataset.previousTLS = tls;
   $("#db-sql").previousElementSibling.textContent =
     type === "redis"
       ? "Redis命令JSON数组"
