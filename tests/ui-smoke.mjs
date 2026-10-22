@@ -223,6 +223,8 @@ h2Proxy.on("connect", (_request, client) => {
 });
 await new Promise((resolve) => h2Proxy.listen(0, "127.0.0.1", resolve));
 const redisSockets = new Set();
+const redisCommands = [];
+let redisValue = "redis-ui-fixture";
 const redisFixture = net.createServer((socket) => {
   redisSockets.add(socket);
   socket.on("close", () => redisSockets.delete(socket));
@@ -233,8 +235,21 @@ const redisFixture = net.createServer((socket) => {
     const frame = parseRESP(buffer);
     if (!frame) return;
     const command = frame.value.map((value) => value.toString());
+    redisCommands.push(command);
+    if (command[0] === "SET") {
+      assert.deepEqual(command, [
+        "SET",
+        "ui-fixture",
+        "redis-written-value",
+        "XX",
+        "KEEPTTL",
+      ]);
+      redisValue = command[2];
+      socket.end("+OK\r\n");
+      return;
+    }
     assert.deepEqual(command, ["GET", "ui-fixture"]);
-    const value = Buffer.from("redis-ui-fixture");
+    const value = Buffer.from(redisValue);
     socket.end(
       Buffer.concat([
         Buffer.from("$" + value.length + "\r\n"),
@@ -3587,6 +3602,90 @@ try {
   );
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-redis-query.png" });
+  const redisBeforeWrite = redisCommands.length;
+  const redisHTTPRequests = [];
+  const recordRedisHTTP = (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname.endsWith("/database")
+    )
+      redisHTTPRequests.push(request.url());
+  };
+  page.on("request", recordRedisHTTP);
+  await page.locator("#db-write").check();
+  await page.locator("#db-sql").fill('["SET","","v"]');
+  await page.locator("#db-query").click();
+  await page.waitForFunction(
+    () => !document.querySelector("#db-write").checked,
+  );
+  assert.equal(
+    redisHTTPRequests.length,
+    0,
+    "invalid key consumes the one-shot grant without an HTTP request",
+  );
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page
+    .locator("#db-sql")
+    .fill('["SET","ui-fixture","redis-written-value","XX","KEEPTTL"]');
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText("只读", { exact: false })
+    .waitFor();
+  assert.equal(
+    redisCommands.length,
+    redisBeforeWrite,
+    "default reads cannot send SET",
+  );
+  await page.locator("#db-write").check();
+  page.once("dialog", async (dialog) => {
+    assert(
+      dialog
+        .message()
+        .includes("Redis：127.0.0.1:" + redisFixture.address().port + "/0"),
+    );
+    assert(dialog.message().includes('目标键："ui-fixture"'));
+    assert.match(dialog.message(), /不能回滚/);
+    assert.match(dialog.message(), /清除原TTL/);
+    assert.match(dialog.message(), /磁盘持久化/);
+    await dialog.dismiss();
+  });
+  await page.locator("#db-query").click();
+  await page.waitForFunction(
+    () => !document.querySelector("#db-write").checked,
+  );
+  assert.equal(
+    redisCommands.length,
+    redisBeforeWrite,
+    "cancelled SET never reaches Redis",
+  );
+  assert.equal(
+    redisHTTPRequests.length,
+    1,
+    "cancel adds no request after the default read rejection",
+  );
+  await page.locator("#db-write").check();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText('"applied": true', { exact: false })
+    .waitFor();
+  assert.equal(await page.locator("#db-write").isChecked(), false);
+  assert.equal(redisCommands.length, redisBeforeWrite + 1);
+  assert.equal(
+    redisHTTPRequests.length,
+    2,
+    "only the confirmed write adds one request",
+  );
+  page.off("request", recordRedisHTTP);
+  await page.screenshot({ path: "/tmp/local-api-redis-write.png" });
+  await page.locator("#db-sql").fill('["GET","ui-fixture"]');
+  await page.locator("#db-query").click();
+  await page
+    .locator("#db-result")
+    .getByText("redis-written-value", { exact: false })
+    .waitFor();
   let releaseDatabaseReply, databaseReplyReady;
   const databaseGate = new Promise((resolve) => {
     releaseDatabaseReply = resolve;

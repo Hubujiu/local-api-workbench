@@ -3,6 +3,7 @@
 Apipost's database reference includes Redis among its database integrations:
 https://wiki.apipost.cn/docs/http_debug/database/ . This adds a read-only subset;
 it does not claim all commands, Redis Cluster/Sentinel or database script hooks.
+The separate manual SET entry point is specified in [ADR-REDIS-WRITES.md](ADR-REDIS-WRITES.md); this query entry point and session/script connections remain read-only.
 
 The wire client implements bounded RESP2 framing from
 https://redis.io/docs/latest/develop/reference/protocol-spec/ . Arguments use

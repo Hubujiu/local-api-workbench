@@ -74,7 +74,7 @@ export function parseRESP(buffer) {
   }
   return parse(0, 0);
 }
-export function redisCommand(input) {
+function commandArguments(input, stringsOnly = false) {
   let args = input.command;
   if (args === undefined) {
     try {
@@ -87,15 +87,23 @@ export function redisCommand(input) {
     !Array.isArray(args) ||
     !args.length ||
     args.length > 102 ||
-    args.some(
-      (v) =>
-        !["string", "number"].includes(typeof v) ||
-        Buffer.byteLength(String(v)) > 4096,
+    Array.from({ length: args.length }, (_, i) => i).some(
+      (i) =>
+        !Object.hasOwn(args, i) ||
+        !(stringsOnly ? ["string"] : ["string", "number"]).includes(
+          typeof args[i],
+        ) ||
+        (stringsOnly && !args[i].isWellFormed()) ||
+        Buffer.byteLength(String(args[i])) > 4096,
     )
   )
     throw Error("Redis命令参数无效");
   args = args.map(String);
   args[0] = args[0].toUpperCase();
+  return args;
+}
+export function redisCommand(input) {
+  let args = commandArguments(input);
   const [command, ...rest] = args;
   const exact = {
     PING: 0,
@@ -162,6 +170,51 @@ export function redisCommand(input) {
   encodeRESP(args);
   return args;
 }
+export function redisWriteCommand(input) {
+  if (input.allowWrite !== true) throw Error("Redis写入需要仅本次明确授权");
+  const args = commandArguments(input, true);
+  if (args[0] !== "SET" || args.length < 3 || !args[1])
+    throw Error("Redis写入仅支持单键SET，键名不能为空，参数须为字符串");
+  let condition = false,
+    expiry = false;
+  for (let i = 3; i < args.length; i++) {
+    const option = args[i].toUpperCase();
+    args[i] = option;
+    if (["NX", "XX"].includes(option) && !condition) condition = true;
+    else if (["EX", "PX", "KEEPTTL"].includes(option) && !expiry) {
+      expiry = true;
+      if (option !== "KEEPTTL") {
+        const ttl = args[++i];
+        if (
+          !/^[1-9]\d*$/.test(ttl || "") ||
+          !Number.isSafeInteger(Number(ttl)) ||
+          Number(ttl) > 2147483647
+        )
+          throw Error("Redis EX/PX时长须为1至2147483647的整数字符串");
+      }
+    } else throw Error("Redis SET选项不支持或重复；仅支持NX/XX与EX/PX/KEEPTTL");
+  }
+  encodeRESP(args);
+  return args;
+}
+export async function mutateRedis(input) {
+  const command = redisWriteCommand(input);
+  if (
+    input.type !== "redis" ||
+    typeof input.host !== "string" ||
+    !input.host ||
+    input.host.trim() !== input.host ||
+    !["string", "number"].includes(typeof input.port) ||
+    !Number.isInteger(Number(input.port)) ||
+    Number(input.port) < 1 ||
+    Number(input.port) > 65535 ||
+    !["string", "number"].includes(typeof input.database) ||
+    !/^(0|[1-9]\d*)$/.test(String(input.database)) ||
+    Number(input.database) > 1023
+  )
+    throw Error("Redis写入必须明确指定主机、端口和数据库索引0至1023");
+  return executeRedis(input, command, true);
+}
 function output(value) {
   if (Buffer.isBuffer(value)) {
     try {
@@ -203,8 +256,10 @@ function table(command, value) {
   };
 }
 export async function queryRedis(input) {
-  const command = redisCommand(input),
-    host = input.host || "127.0.0.1",
+  return executeRedis(input, redisCommand(input), false);
+}
+async function executeRedis(input, command, writing) {
+  const host = input.host || "127.0.0.1",
     port = Number(input.port) || 6379,
     database = Number(input.database || 0);
   if (
@@ -242,7 +297,8 @@ export async function queryRedis(input) {
     let buffer = Buffer.alloc(0),
       received = 0,
       index = 0,
-      settled = false;
+      settled = false,
+      writeSent = false;
     if (input.ssl !== undefined && typeof input.ssl !== "boolean")
       throw Error("Redis TLS开关无效");
     const options = { host, port },
@@ -259,6 +315,13 @@ export async function queryRedis(input) {
       settled = true;
       clearTimeout(timer);
       socket.destroy();
+      if (error && writeSent) {
+        error = Error(
+          error.message +
+            "；Redis写入结果可能不确定，不能盲目重试，请先核查目标键（不能回滚）",
+        );
+        error.code = "REDIS_WRITE_UNCERTAIN";
+      }
       error ? reject(error) : resolve(result);
     };
     const timeout = Math.min(
@@ -269,9 +332,18 @@ export async function queryRedis(input) {
       () => finish(Error("Redis查询超时（总时限已到），已断开")),
       timeout,
     );
-    socket.once(input.ssl ? "secureConnect" : "connect", () =>
-      socket.write(encodeRESP(commands[index])),
-    );
+    const send = () => {
+      const packet = encodeRESP(commands[index]);
+      if (writing && index === commands.length - 1) writeSent = true;
+      socket.write(packet);
+    };
+    socket.once(input.ssl ? "secureConnect" : "connect", () => {
+      try {
+        send();
+      } catch (error) {
+        finish(error);
+      }
+    });
     socket.on("error", (error) => finish(error));
     socket.on("close", () => finish(Error("Redis连接提前关闭")));
     socket.on("data", (chunk) => {
@@ -283,11 +355,32 @@ export async function queryRedis(input) {
         if (!frame) return;
         if (frame.bytes !== buffer.length)
           throw Error("Redis收到额外的未请求响应");
+        const nullBulk = buffer.equals(Buffer.from("$-1\r\n"));
         buffer = Buffer.alloc(0);
-        if (index === commands.length - 1)
-          return finish(null, table(command[0], frame.value));
+        if (index === commands.length - 1) {
+          const result = table(command[0], frame.value);
+          if (writing) {
+            const conditional = command
+              .slice(3)
+              .some((option) => ["NX", "XX"].includes(option));
+            if (
+              frame.value !== "OK" &&
+              !(conditional && frame.value === null && nullBulk)
+            )
+              throw Error("Redis SET确认响应无效");
+            Object.assign(result, {
+              write: true,
+              command: "SET",
+              acknowledged: true,
+              applied: frame.value === "OK",
+              affectedKeys: frame.value === "OK" ? 1 : 0,
+            });
+          }
+          return finish(null, result);
+        }
         if (frame.value !== "OK") throw Error("Redis认证或数据库选择失败");
-        socket.write(encodeRESP(commands[++index]));
+        index++;
+        send();
       } catch (error) {
         finish(error);
       }
