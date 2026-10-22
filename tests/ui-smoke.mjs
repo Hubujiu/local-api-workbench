@@ -1451,6 +1451,12 @@ try {
     "response refresh preserves text selection",
   );
   await page.unroute("**/api/projects/*", delayedAuthRefresh);
+  const beforeNTLMRequest = await page
+    .locator(".tab.selected [data-open-tab]")
+    .getAttribute("data-open-tab");
+  await page.getByRole("button", { name: "新建接口", exact: true }).click();
+  await page.locator("#request-name").fill("NTLM independent fixture");
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#url").fill(ntlmFixture.url);
   await page.locator("#auth-type").selectOption("ntlm");
   await page.locator('[data-auth="username"]').fill("User");
@@ -1463,19 +1469,23 @@ try {
   await page.locator("#send").click();
   const ntlmResult = await (await ntlmResponse).json();
   assert.equal(ntlmResult.status, 200, JSON.stringify(ntlmResult));
+  assert.equal(ntlmResult.outcome, "passed", JSON.stringify(ntlmResult));
   assert.equal(JSON.parse(ntlmResult.body).ntlm, true);
   assert.equal(ntlmFixture.stats.sockets.size, 1);
+  await page.locator("#send:not([disabled])").waitFor();
   await page.locator("#toast").waitFor({ state: "hidden" });
   assert.equal(await page.locator(".form-grid .notice").count(), 0);
   const ntlmUsernameBox = await page
     .locator('[data-auth="username"]')
     .boundingBox();
   assert(
-    ntlmUsernameBox.width >= 200,
+    ntlmUsernameBox && ntlmUsernameBox.width >= 200,
     "NTLM inputs retain the full-width form column",
   );
   await page.locator('[data-auth="username"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-ntlm.png" });
+  await page.locator('[data-open-tab="' + beforeNTLMRequest + '"]').click();
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("none");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();
