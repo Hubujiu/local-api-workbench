@@ -153,7 +153,23 @@ test(
           state: lastState,
         }),
     );
-    assert.equal(running.status, "running");
+    if (running.status !== "running")
+      await Promise.race([
+        response,
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+    assert.equal(
+      running.status,
+      "running",
+      "stdio stopped before the gated second response: " +
+        JSON.stringify({
+          running,
+          stderr: errors,
+          firstReply,
+          childExit,
+          requests,
+        }),
+    );
     assert.equal(running.total, 2);
     assert.equal(running.projectId, project.id);
     release();
