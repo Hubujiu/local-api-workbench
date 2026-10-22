@@ -1516,6 +1516,12 @@ body.dark .response-tabs button {
 .schema-tree table {
   width: 100%;
 }
+.schema-tree thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+}
 .schema-tree td {
   padding: 6px;
   vertical-align: top;
@@ -1544,6 +1550,12 @@ dialog:has(#schema-editor) {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(220px, 1fr);
   gap: 16px;
+}
+.schema-layout:has(> .schema-fields:empty) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.schema-fields:empty {
+  display: none;
 }
 #dialog-content .schema-fields h4 {
   margin: 4px 0;

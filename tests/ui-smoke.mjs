@@ -2068,7 +2068,35 @@ try {
   );
   const schemaBeforeVisual = await page.locator("#schema").inputValue();
   await page.locator("#visual-schema").click();
+  const idleSchemaLayout = await page
+    .locator(".schema-layout")
+    .evaluate((element) => ({
+      width: element.getBoundingClientRect().width,
+      tree: element.querySelector(".schema-tree").getBoundingClientRect().width,
+      fields: getComputedStyle(element.querySelector(".schema-fields")).display,
+    }));
+  assert(idleSchemaLayout.tree >= idleSchemaLayout.width - 1);
+  assert.equal(idleSchemaLayout.fields, "none");
   await page.locator('[data-schema-add="0"]').click();
+  const activeSchemaLayout = await page
+    .locator(".schema-layout")
+    .evaluate((element) => {
+      const tree = element
+          .querySelector(".schema-tree")
+          .getBoundingClientRect(),
+        fields = element
+          .querySelector(".schema-fields")
+          .getBoundingClientRect();
+      return {
+        treeWidth: tree.width,
+        fieldsWidth: fields.width,
+        gap: fields.left - tree.right,
+      };
+    });
+  assert(
+    activeSchemaLayout.treeWidth > 200 && activeSchemaLayout.fieldsWidth > 200,
+  );
+  assert(activeSchemaLayout.gap >= 0);
   await page.locator("[data-schema-name]").fill("discarded");
   await page.locator("[data-schema-apply]").click();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
@@ -2191,6 +2219,18 @@ try {
     .locator(".schema-error")
     .getByText("包含结构标识或锚点，请用JSON编辑删除", { exact: true })
     .waitFor();
+  const stickySchemaHeader = await page
+    .locator(".schema-tree")
+    .evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      return {
+        scroll: element.scrollTop,
+        top: element.getBoundingClientRect().top,
+        header: element.querySelector("thead").getBoundingClientRect().top,
+      };
+    });
+  assert(stickySchemaHeader.scroll > 0);
+  assert(Math.abs(stickySchemaHeader.top - stickySchemaHeader.header) <= 2);
   await page.screenshot({ path: "/tmp/local-api-schema-identifier-guard.png" });
   await page
     .locator(".schema-tree tbody tr")
