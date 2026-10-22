@@ -18,6 +18,7 @@ const types = [
   "array",
   "null",
 ];
+const combinations = ["allOf", "anyOf", "oneOf"];
 const constraintFields = {
   minimum: "数值下限",
   maximum: "数值上限",
@@ -97,6 +98,14 @@ function nodeAt(schema, path) {
     } else if (path[i] === "items" && object(node.items)) {
       node = node.items;
       i++;
+    } else if (
+      combinations.includes(path[i]) &&
+      Array.isArray(node[path[i]]) &&
+      Number.isInteger(path[i + 1]) &&
+      Object.hasOwn(node[path[i]], path[i + 1])
+    ) {
+      node = node[path[i]][path[i + 1]];
+      i += 2;
     } else throw Error("结构路径无效");
   }
   return node;
@@ -133,7 +142,7 @@ function visitSchemaPositions(schema, callback) {
   };
   visit(schema);
 }
-function checkReferences(schema, path) {
+function checkReferences(schema, path, { strictPointers = false } = {}) {
   const prefix =
     "#/" +
     path
@@ -146,6 +155,15 @@ function checkReferences(schema, path) {
         reference = decodeURIComponent(reference);
       } catch {}
     }
+    if (
+      strictPointers &&
+      (Object.hasOwn(node, "$dynamicRef") ||
+        Object.hasOwn(node, "$recursiveRef") ||
+        (Object.hasOwn(node, "$ref") &&
+          (typeof reference !== "string" ||
+            (reference !== "#" && !reference.startsWith("#/")))))
+    )
+      throw Error("组合包含非本地Pointer或动态引用，请用JSON编辑");
     if (
       typeof reference === "string" &&
       (reference === prefix || reference.startsWith(prefix + "/"))
@@ -178,6 +196,26 @@ export function schemaRows(schema) {
       );
     if (object(node.items))
       walk(node.items, [...path, "items"], "数组项", false, depth + 1);
+    for (const kind of combinations) {
+      if (!Object.hasOwn(node, kind)) continue;
+      if (
+        !Array.isArray(node[kind]) ||
+        !node[kind].length ||
+        node[kind].length > 100
+      )
+        throw Error("组合须含1至100个分支");
+      for (const [index, branch] of node[kind].entries()) {
+        if (typeof branch !== "boolean" && !object(branch))
+          throw Error("组合分支须为Schema对象或布尔值");
+        walk(
+          branch,
+          [...path, kind, index],
+          kind + " 分支 " + (index + 1),
+          false,
+          depth + 1,
+        );
+      }
+    }
   };
   walk(schema, [], "根结构", false, 0);
   return rows;
@@ -258,14 +296,7 @@ export function removeSchemaProperty(schema, path) {
   if (path.length < 2 || path.at(-2) !== "properties")
     throw Error("只能删除对象属性");
   checkReferences(schema, path);
-  visitSchemaPositions(nodeAt(schema, path), (node) => {
-    if (
-      ["$id", "$anchor", "$dynamicAnchor"].some((key) =>
-        Object.hasOwn(node, key),
-      )
-    )
-      throw Error("包含结构标识或锚点，请用JSON编辑删除");
-  });
+  checkIdentifiers(nodeAt(schema, path));
   const next = structuredClone(schema),
     parent = nodeAt(next, path.slice(0, -2));
   editable(parent);
@@ -275,6 +306,52 @@ export function removeSchemaProperty(schema, path) {
   );
   if (parent.required)
     parent.required = parent.required.filter((key) => key !== path.at(-1));
+  return next;
+}
+function checkIdentifiers(schema) {
+  visitSchemaPositions(schema, (node) => {
+    if (
+      ["$id", "$anchor", "$dynamicAnchor"].some((key) =>
+        Object.hasOwn(node, key),
+      )
+    )
+      throw Error("包含结构标识或锚点，请用JSON编辑删除");
+  });
+}
+export function addSchemaBranch(schema, path, kind, type) {
+  if (!combinations.includes(kind)) throw Error("组合类型无效");
+  if (!types.includes(type)) throw Error("分支类型无效");
+  schemaRows(schema);
+  const next = structuredClone(schema),
+    node = nodeAt(next, path);
+  editable(node);
+  if ((node[kind]?.length || 0) >= 100) throw Error("组合最多100个分支");
+  (node[kind] ??= []).push(
+    type === "array" ? { type, items: { type: "string" } } : { type },
+  );
+  schemaRows(next);
+  return next;
+}
+export function removeSchemaBranch(schema, path) {
+  if (
+    !Array.isArray(path) ||
+    path.length < 2 ||
+    !combinations.includes(path.at(-2)) ||
+    !Number.isInteger(path.at(-1))
+  )
+    throw Error("组合分支路径无效");
+  schemaRows(schema);
+  const node = nodeAt(schema, path),
+    parent = nodeAt(schema, path.slice(0, -2)),
+    kind = path.at(-2);
+  editable(parent);
+  if (parent[kind].length <= 1)
+    throw Error("组合至少保留一个分支；移除整个组合请用JSON编辑");
+  checkReferences(schema, path.slice(0, -1), { strictPointers: true });
+  checkIdentifiers(node);
+  const next = structuredClone(schema);
+  nodeAt(next, path.slice(0, -2))[kind].splice(path.at(-1), 1);
+  schemaRows(next);
   return next;
 }
 export function editSchemaReference(schema, path, reference) {
@@ -335,7 +412,7 @@ export function editSchemaReference(schema, path, reference) {
 export function schemaEditor(schema) {
   const rows = schemaRows(schema);
   return (
-    '<p class="notice">编辑对象、数组及常见字段；原有约束保留。支持当前结构内的JSON Pointer引用；组合条件等复杂结构仍可用JSON编辑。取消不会修改接口。</p><div class="schema-error failed" role="status"></div><div class="schema-layout"><div class="schema-tree"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th>操作</th></tr></thead><tbody>' +
+    '<p class="notice">编辑对象、数组、组合分支及常见字段；原有约束保留。支持当前结构内的JSON Pointer引用；其他高级结构仍可用JSON编辑。取消不会修改接口。</p><div class="schema-error failed" role="status"></div><div class="schema-layout"><div class="schema-tree"><table><thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th><th>操作</th></tr></thead><tbody>' +
     rows
       .map((row, index) => {
         const node = row.schema,
@@ -375,6 +452,16 @@ export function schemaEditor(schema) {
               index +
               '">加字段</button>'
             : "") +
+          (canEdit
+            ? '<button type="button" data-schema-branch-add="' +
+              index +
+              '">组合</button>'
+            : "") +
+          (combinations.includes(row.path.at(-2))
+            ? '<button type="button" data-schema-branch-remove="' +
+              index +
+              '">删分支</button>'
+            : "") +
           (row.path.at(-2) === "properties"
             ? '<button type="button" data-schema-remove="' +
               index +
@@ -405,6 +492,13 @@ export function bindSchemaEditor(container, schema) {
         draft,
         editing.path,
         container.querySelector("[data-schema-reference]").value,
+      );
+    if (editing.branch)
+      return addSchemaBranch(
+        draft,
+        editing.path,
+        container.querySelector("[data-schema-combination]").value,
+        container.querySelector("[data-schema-branch-type]").value,
       );
     if (editing.add)
       return addSchemaProperty(
@@ -497,6 +591,24 @@ export function bindSchemaEditor(container, schema) {
     };
     container.querySelector("[data-schema-name]").focus();
   };
+  const showBranch = (row) => {
+    if (editing) throw Error("请先应用或放弃当前字段编辑");
+    editing = { path: row.path, branch: true };
+    container.querySelector(".schema-fields").innerHTML =
+      '<h4>添加组合分支</h4><p class="notice">保留当前节点的其他约束。allOf须全部满足；anyOf至少满足一个；oneOf恰好满足一个。新分支追加在末尾。</p><label for="schema-combination">组合规则</label><select id="schema-combination" data-schema-combination><option value="allOf">allOf · 全部满足</option><option value="anyOf">anyOf · 至少一个</option><option value="oneOf">oneOf · 恰好一个</option></select><label for="schema-branch-type">分支类型</label><select id="schema-branch-type" data-schema-branch-type>' +
+      types.map((type) => "<option>" + type + "</option>").join("") +
+      '</select><button type="button" data-schema-apply>添加分支</button><button type="button" data-schema-cancel>放弃分支编辑</button>';
+    container.querySelector("[data-schema-apply]").onclick = () =>
+      report(() => {
+        commit();
+        render();
+      });
+    container.querySelector("[data-schema-cancel]").onclick = () => {
+      editing = null;
+      render();
+    };
+    container.querySelector("[data-schema-combination]").focus();
+  };
   const showReference = (row) => {
     if (editing) throw Error("请先应用或放弃当前字段编辑");
     editing = { path: row.path, reference: true };
@@ -518,6 +630,21 @@ export function bindSchemaEditor(container, schema) {
   const render = () => {
     container.innerHTML = schemaEditor(draft);
     const rows = schemaRows(draft);
+    for (const button of container.querySelectorAll("[data-schema-branch-add]"))
+      button.onclick = () =>
+        report(() => showBranch(rows[Number(button.dataset.schemaBranchAdd)]));
+    for (const button of container.querySelectorAll(
+      "[data-schema-branch-remove]",
+    ))
+      button.onclick = () =>
+        report(() => {
+          if (editing) throw Error("请先应用或放弃当前字段编辑");
+          draft = removeSchemaBranch(
+            draft,
+            rows[Number(button.dataset.schemaBranchRemove)].path,
+          );
+          render();
+        });
     for (const button of container.querySelectorAll(
       "[data-schema-reference-edit]",
     ))

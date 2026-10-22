@@ -2256,6 +2256,73 @@ try {
   assert.deepEqual(identifierSaved, visualSchema);
   await page.locator("#schema").fill(JSON.stringify(visualSchema));
   await saveAndWait("#save");
+  const compositionSchema = {
+    type: "integer",
+    minimum: 0,
+    allOf: [{ maximum: 5 }],
+    example: 3,
+    "x-data": { $ref: "#/allOf/0" },
+  };
+  await page.locator("#schema").fill(JSON.stringify(compositionSchema));
+  const appendNumberBranch = async () => {
+    await page.locator('[data-schema-branch-add="0"]').click();
+    await page.locator("[data-schema-combination]").selectOption("allOf");
+    await page.locator("[data-schema-branch-type]").selectOption("number");
+    await page.locator("[data-schema-apply]").click();
+  };
+  const compositionRow = (index) =>
+    page
+      .locator(".schema-tree tbody tr")
+      .filter({ has: page.getByText("allOf 分支 " + index, { exact: true }) });
+  await page.locator("#visual-schema").click();
+  await appendNumberBranch();
+  await compositionRow(2).waitFor();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.deepEqual(
+    JSON.parse(await page.locator("#schema").inputValue()),
+    compositionSchema,
+  );
+  await page.locator("#visual-schema").click();
+  await appendNumberBranch();
+  await compositionRow(1).locator("[data-schema-edit]").click();
+  await page.locator(".schema-constraints summary").click();
+  await page.locator('[data-schema-constraint="maximum"]').fill("10");
+  await page.locator("[data-schema-apply]").click();
+  await compositionRow(2).locator("[data-schema-branch-remove]").click();
+  await compositionRow(1).locator("[data-schema-branch-remove]").click();
+  await page
+    .locator(".schema-error")
+    .getByText("组合至少保留一个分支；移除整个组合请用JSON编辑", {
+      exact: true,
+    })
+    .waitFor();
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait("#save");
+  const compositionSaved = (
+    await app.store.get(await page.locator("#project-select").inputValue())
+  ).requests.find((item) => item.id === schemaRequestId).schema;
+  assert.equal(compositionSaved.type, "integer");
+  assert.equal(compositionSaved.minimum, 0);
+  assert.equal(compositionSaved.allOf.length, 1);
+  assert.equal(compositionSaved.allOf[0].maximum, 10);
+  assert.deepEqual(compositionSaved["x-data"], compositionSchema["x-data"]);
+  const guardedComposition = {
+    ...compositionSaved,
+    allOf: [...compositionSaved.allOf, { type: "number" }],
+    $defs: { Keep: { $ref: "#/allOf/1" } },
+  };
+  await page.locator("#schema").fill(JSON.stringify(guardedComposition));
+  await page.locator("#visual-schema").click();
+  await compositionRow(1).locator("[data-schema-branch-remove]").click();
+  await page
+    .locator(".schema-error")
+    .getByText("此字段被本地引用使用，请先在JSON中更新引用", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-schema-compositions.png" });
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await saveAndWait("#save");
   const originalResponse = {
     status: "200",
     description: "retained",
