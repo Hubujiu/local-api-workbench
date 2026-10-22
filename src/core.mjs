@@ -1,3 +1,8 @@
+import {
+  importOpenAPIBody,
+  exportOpenAPIBody,
+  openapiExample,
+} from "./openapi-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -662,13 +667,6 @@ export function applyOperation(op, vars) {
       throw Error("仅支持声明式 set/uuid/timestamp/delete 前后置操作");
   }
 }
-function openapiExample(media) {
-  if (media && Object.hasOwn(media, "example")) return media.example;
-  for (const example of Object.values(media?.examples || {})) {
-    if (example && Object.hasOwn(example, "value")) return example.value;
-  }
-  return {};
-}
 export function importDocument(doc) {
   if (typeof doc === "string") {
     try {
@@ -694,6 +692,7 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
+          const importedBody = importOpenAPIBody(op.requestBody);
           const params = [
             ...new Map(
               [...(item.parameters || []), ...(op.parameters || [])].map(
@@ -735,16 +734,27 @@ export function importDocument(doc) {
                 value: p.example ?? "",
                 enabled: true,
               })),
-            headers: params
-              .filter((p) => p.in === "header")
-              .map((p) => ({
-                key: p.name,
-                schema: p.schema || { type: p.type || "string" },
-                required: p.required === true,
-                description: p.description || "",
-                value: p.example ?? "",
-                enabled: true,
-              })),
+            headers: [
+              ...params
+                .filter((p) => p.in === "header")
+                .map((p) => ({
+                  key: p.name,
+                  schema: p.schema || { type: p.type || "string" },
+                  required: p.required === true,
+                  description: p.description || "",
+                  value: p.example ?? "",
+                  enabled: true,
+                })),
+              ...(importedBody.contentType
+                ? [
+                    {
+                      key: "Content-Type",
+                      value: importedBody.contentType,
+                      enabled: true,
+                    },
+                  ]
+                : []),
+            ],
             cookies: params
               .filter((p) => p.in === "cookie")
               .map((p) => ({
@@ -755,15 +765,10 @@ export function importDocument(doc) {
                 value: p.example ?? p.schema?.default ?? "",
                 enabled: true,
               })),
-            bodyType: op.requestBody ? "json" : "none",
-            body: op.requestBody
-              ? JSON.stringify(
-                  openapiExample(op.requestBody.content?.["application/json"]),
-                  null,
-                  2,
-                )
-              : "",
-            schema: op.requestBody?.content?.["application/json"]?.schema || {},
+            bodyType: importedBody.bodyType,
+            body: importedBody.body,
+            form: importedBody.form,
+            schema: importedBody.schema,
             responses: Object.entries(op.responses || {}).map(
               ([status, response]) => ({
                 status,
@@ -1114,21 +1119,7 @@ export function exportOpenAPI(project) {
     }
     if (!Object.keys(responses).length)
       responses["200"] = { description: "Successful response" };
-    let requestBody;
-    if (r.bodyType === "json") {
-      let example;
-      try {
-        example = JSON.parse(r.body || "{}");
-      } catch {}
-      requestBody = {
-        content: {
-          "application/json": {
-            schema: r.schema || { type: "object" },
-            ...(example === undefined ? {} : { example }),
-          },
-        },
-      };
-    }
+    const requestBody = exportOpenAPIBody(r);
     const original = structuredClone(r.openapiOperation || {});
     delete original.requestBody;
     if (["jwt", "asap"].includes(r.auth?.type)) {
