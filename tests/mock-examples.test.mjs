@@ -181,6 +181,11 @@ test("Mock sends exact example bodies and headers over HTTP and suppresses bodie
       req.on("error", reject);
       req.end();
     });
+  for (const index of ["", "-1", "1.5", "bad", "6", "0&example=5"]) {
+    const invalid = await request(index);
+    assert.equal(invalid.status, 400, index);
+    assert.match(invalid.body, /示例/);
+  }
   const empty = await request(0);
   assert.equal(empty.status, 200);
   assert.equal(empty.body, "");
@@ -196,4 +201,87 @@ test("Mock sends exact example bodies and headers over HTTP and suppresses bodie
   assert.equal(xml.body, "<root>中</root>");
   assert.equal(xml.headers["content-type"], "application/xml");
   assert.equal((await request(5, "HEAD")).body, "");
+});
+
+test("explicit Mock example selection never silently returns a different or invented response", () => {
+  const request = {
+    examples: [
+      { status: 200, body: "first" },
+      { status: 201, body: "second" },
+    ],
+  };
+  assert.equal(
+    selectMockResponse(request, { query: { example: "1" } }).body,
+    "second",
+  );
+  for (const example of [
+    "",
+    "-1",
+    "1.5",
+    "01",
+    "1e0",
+    "0x1",
+    "bad",
+    "2",
+    "9007199254740992",
+    [],
+    false,
+  ])
+    assert.throws(
+      () => selectMockResponse(request, { query: { example } }),
+      /示例/,
+    );
+  assert.throws(
+    () =>
+      selectMockResponse({ examples: [] }, { query: { example: "0" } }, () => ({
+        status: 200,
+        body: "schema",
+      })),
+    /示例/,
+  );
+  assert.throws(() => selectMockResponse({ examples: [null] }, {}), /示例/);
+  assert.equal(
+    selectMockResponse({ examples: [] }, {}, () => ({
+      status: 200,
+      body: "schema",
+    })).body,
+    "schema",
+  );
+});
+
+test("explicit example selection bypasses conditional rules but ordinary Mock retains rule priority", () => {
+  const request = {
+    examples: [{ status: 201, body: "selected" }],
+    mockRules: [{ conditions: [], response: { status: 202, body: "rule" } }],
+  };
+  assert.equal(selectMockResponse(request, {}).body, "rule");
+  assert.equal(
+    selectMockResponse(request, { query: { example: "0" } }).body,
+    "selected",
+  );
+});
+test("Mock debug targets preserve unrelated query values and do not mutate source rows", async () => {
+  const { mockURL, mockDebugTarget } = await import("../public/mock-target.js");
+  const request = {
+    id: "r",
+    examples: [{ status: 200 }],
+    query: [
+      { key: "example", value: "old", enabled: true, description: "retain" },
+      { key: "scenario", value: "smart", enabled: true },
+    ],
+  };
+  const original = structuredClone(request);
+  const target = mockDebugTarget("http://localhost:1234", "p", request, 0);
+  assert.equal(target.url, "http://localhost:1234/mock/p/r?example=0");
+  assert.deepEqual(target.query, [
+    { ...request.query[0], enabled: false },
+    request.query[1],
+  ]);
+  assert.deepEqual(request, original);
+  assert.throws(
+    () => mockDebugTarget("http://localhost", "p", request, 1),
+    /示例/,
+  );
+  assert.throws(() => mockURL("file:///", "p", "r"), /HTTP/);
+  assert(!mockURL("http://localhost", "p", '"<r>').includes('"'));
 });

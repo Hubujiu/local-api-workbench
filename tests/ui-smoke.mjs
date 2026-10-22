@@ -1999,7 +1999,29 @@ try {
   await page.locator("#ex-name").fill("Exact empty mock edited");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
-  await saveAndWait();
+  await page.locator('[data-use-example="' + exampleIndex + '"]').click();
+  await page.locator("#send").waitFor();
+  assert.equal(
+    new URL(await page.locator("#url").inputValue()).searchParams.get(
+      "example",
+    ),
+    String(exampleIndex),
+  );
+  assert.equal(
+    (await app.store.get(exampleProjectId)).requests.find(
+      (item) => item.id === exampleRequestId,
+    ).examples[exampleIndex].name,
+    "Exact empty mock edited",
+    "selecting Mock saves pending example changes first",
+  );
+  const selectedExampleResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const selectedExampleResult = await (await selectedExampleResponse).json();
+  assert.equal(selectedExampleResult.status, 200);
+  assert.equal(selectedExampleResult.body, "");
+  await page.locator('[data-mode="mock"]').click();
   const exactMock = await page.request.get(
     exampleMockURL + "?example=" + exampleIndex,
   );

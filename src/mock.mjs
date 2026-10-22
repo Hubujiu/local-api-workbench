@@ -17,6 +17,20 @@ export function validateMockRules(rules = []) {
   return rules;
 }
 export function selectMockResponse(request, input, fallback) {
+  const examples = request.examples ?? [];
+  if (!Array.isArray(examples)) throw Error("响应示例必须是数组");
+  if (Object.hasOwn(input.query || {}, "example")) {
+    const raw = input.query.example;
+    if (
+      (typeof raw !== "string" && typeof raw !== "number") ||
+      !/^(0|[1-9]\d{0,14})$/.test(String(raw))
+    )
+      throw Error("Mock示例索引无效");
+    const index = Number(raw);
+    if (!Number.isSafeInteger(index) || index >= examples.length)
+      throw Error("Mock示例不存在");
+    return exampleResponse(examples[index]);
+  }
   validateMockRules(request.mockRules || []);
   const source = {
     method: input.method,
@@ -41,10 +55,12 @@ export function selectMockResponse(request, input, fallback) {
     });
     if (matches) return { ...rule.response, ruleName: rule.name || "" };
   }
-  if (!request.examples?.length && fallback)
-    return validateMockResponse(fallback());
-  const index = Number(input.query?.example) || 0;
-  const example = request.examples?.[index] || { status: 200, body: "{}" };
+  if (!examples.length && fallback) return validateMockResponse(fallback());
+  return exampleResponse(
+    examples.length ? examples[0] : { status: 200, body: "{}" },
+  );
+}
+function exampleResponse(example) {
   if (!example || typeof example !== "object" || Array.isArray(example))
     throw Error("响应示例格式无效");
   return validateMockResponse({
