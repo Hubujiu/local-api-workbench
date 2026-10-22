@@ -1,3 +1,23 @@
+function requestBodyAnnotations(body = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    throw Error("OpenAPI requestBody 必须是对象");
+  for (const [key, type] of [
+    ["required", "boolean"],
+    ["description", "string"],
+  ]) {
+    if (Object.hasOwn(body, key) && typeof body[key] !== type)
+      throw Error("OpenAPI requestBody " + key + " 类型无效");
+  }
+  return Object.fromEntries(
+    Object.entries(body)
+      .filter(
+        ([key]) =>
+          key === "required" || key === "description" || key.startsWith("x-"),
+      )
+      .map(([key, value]) => [key, structuredClone(value)]),
+  );
+}
+
 export function openapiExample(media, fallback = {}) {
   if (media && Object.hasOwn(media, "example")) return media.example;
   for (const example of Object.values(media?.examples || {})) {
@@ -6,7 +26,7 @@ export function openapiExample(media, fallback = {}) {
   return fallback;
 }
 export function importOpenAPIBody(requestBody) {
-  if (!requestBody)
+  if (requestBody === undefined)
     return {
       bodyType: "none",
       body: "",
@@ -14,6 +34,7 @@ export function importOpenAPIBody(requestBody) {
       form: [],
       contentType: "",
     };
+  requestBodyAnnotations(requestBody);
   const content = requestBody.content || {};
   const names = Object.keys(content);
   if (!names.length) throw Error("OpenAPI requestBody 缺少媒体类型");
@@ -163,6 +184,7 @@ export function exportOpenAPIBody(request) {
     example = values;
   }
   return {
+    ...requestBodyAnnotations(request.openapiOperation?.requestBody),
     content: {
       [media]: { schema, ...(example === undefined ? {} : { example }) },
     },

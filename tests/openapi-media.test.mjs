@@ -163,3 +163,91 @@ test("text and URL encoded imported bodies arrive at a real server; unselected f
     /重新选择/,
   );
 });
+
+test("OpenAPI request body annotations survive media regeneration without overriding its schema", () => {
+  for (const media of [
+    "application/json",
+    "text/plain",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+  ]) {
+    const doc = source({
+      [media]: {
+        schema: { type: "object", description: "schema only", properties: {} },
+        example: media === "text/plain" ? "hello" : {},
+      },
+    });
+    Object.assign(doc.paths["/send"].post.requestBody, {
+      required: true,
+      description: "Body **documentation**",
+      "x-owner": { name: "fixture" },
+    });
+    const [request] = importDocument(doc);
+    const exported = exportOpenAPI({ name: "fixture", requests: [request] });
+    const body = exported.paths["/send"].post.requestBody;
+    assert.equal(body.required, true);
+    assert.equal(body.description, "Body **documentation**");
+    assert.deepEqual(body["x-owner"], { name: "fixture" });
+    assert(body.content[media]);
+    assert.notEqual(body.content[media].schema.description, body.description);
+    body["x-owner"].name = "changed";
+    assert.equal(
+      request.openapiOperation.requestBody["x-owner"].name,
+      "fixture",
+    );
+  }
+});
+
+test("OpenAPI body annotations preserve explicit false and empty values but do not resurrect a removed body", () => {
+  const doc = source({ "application/json": { example: false } });
+  Object.assign(doc.paths["/send"].post.requestBody, {
+    required: false,
+    description: "",
+    "x-empty": null,
+  });
+  const [request] = importDocument(doc);
+  const body = exportOpenAPI({ name: "fixture", requests: [request] }).paths[
+    "/send"
+  ].post.requestBody;
+  assert.equal(body.required, false);
+  assert.equal(body.description, "");
+  assert.equal(body["x-empty"], null);
+  request.bodyType = "none";
+  assert.equal(
+    exportOpenAPI({ name: "fixture", requests: [request] }).paths["/send"].post
+      .requestBody,
+    undefined,
+  );
+});
+
+test("OpenAPI local requestBody references retain their annotations on export", () => {
+  const doc = source({ "application/json": { example: 0 } });
+  const shared = {
+    ...doc.paths["/send"].post.requestBody,
+    required: true,
+    description: "Shared body",
+  };
+  doc.components = { requestBodies: { Shared: shared } };
+  doc.paths["/send"].post.requestBody = {
+    $ref: "#/components/requestBodies/Shared",
+  };
+  const requests = importDocument(doc);
+  const body = exportOpenAPI({ name: "fixture", requests }).paths["/send"].post
+    .requestBody;
+  assert.equal(body.required, true);
+  assert.equal(body.description, "Shared body");
+  assert.equal(body.content["application/json"].example, 0);
+  assert.equal(body.$ref, undefined);
+});
+
+test("OpenAPI malformed request body annotations fail explicitly instead of coercing values", () => {
+  for (const annotations of [
+    { required: "false" },
+    { required: 0 },
+    { description: {} },
+  ]) {
+    const doc = source({ "application/json": {} });
+    Object.assign(doc.paths["/send"].post.requestBody, annotations);
+    assert.throws(() => importDocument(doc), /requestBody/);
+  }
+});
