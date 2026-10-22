@@ -1,6 +1,26 @@
 export const quoteCurl = (value) =>
   "'" + String(value).replaceAll("'", "'\\''") + "'";
 export const curlBodyCases = [
+  {
+    args: ["--data-raw", "a\\qb"],
+    syntax: String.raw`--data-raw "a\qb"`,
+    body: "a\\qb",
+  },
+  {
+    args: ["--data-raw", "joined"],
+    syntax: "--data-raw \\\n 'joined'",
+    body: "joined",
+  },
+  {
+    args: ["--data-raw", "cost $5"],
+    syntax: String.raw`--data-raw "cost \$5"`,
+    body: "cost $5",
+  },
+  {
+    args: ["--data-raw", "$HOME;literal"],
+    syntax: "--data-raw '$HOME;literal'",
+    body: "$HOME;literal",
+  },
   { args: ["-d", "a=1", "-d", "b=two"], body: "a=1&b=two" },
   { args: ["-d", "", "-d", "a=1"], body: "a=1", ambiguousLeadingEmpty: true },
   { args: ["-d", ""], body: "" },

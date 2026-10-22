@@ -40,7 +40,10 @@ try {
       { timeout: 5000, maxBuffer: 262144 },
     );
     const command =
-      "curl " + fixture.args.map(quoteCurl).join(" ") + " " + quoteCurl(url);
+      "curl " +
+      (fixture.syntax ?? fixture.args.map(quoteCurl).join(" ")) +
+      " " +
+      quoteCurl(url);
     if (fixture.ambiguousLeadingEmpty) {
       const wire = JSON.parse(stdout);
       assert(
@@ -58,6 +61,24 @@ try {
     const request = importCurl(command);
     const actual = JSON.parse((await executeRequest(request)).body);
     assert.deepEqual(actual, JSON.parse(stdout), JSON.stringify(fixture.args));
+    if (fixture.syntax) {
+      const quoted = await exec(
+        "sh",
+        [
+          "-c",
+          "curl --disable --noproxy '*' --silent --max-time 3 " +
+            fixture.syntax +
+            " " +
+            quoteCurl(url),
+        ],
+        { timeout: 5000, maxBuffer: 262144 },
+      );
+      assert.deepEqual(
+        JSON.parse(quoted.stdout),
+        actual,
+        "fixed literal shell quoting",
+      );
+    }
     const exported = await exec("sh", ["-c", toCurl(request)], {
       timeout: 5000,
       maxBuffer: 262144,

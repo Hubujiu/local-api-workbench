@@ -41,7 +41,10 @@ test("literal cURL bodies preserve concatenation, encoding, headers and explicit
       continue;
     }
     const request = importCurl(
-      "curl " + fixture.args.map(quoteCurl).join(" ") + " " + quoteCurl(url),
+      "curl " +
+        (fixture.syntax ?? fixture.args.map(quoteCurl).join(" ")) +
+        " " +
+        quoteCurl(url),
     );
     const expected = {
       body: fixture.body,
@@ -59,6 +62,27 @@ test("literal cURL bodies preserve concatenation, encoding, headers and explicit
         JSON.stringify(fixture.args),
       );
   }
+});
+
+test("cURL import refuses nonliteral shell expansion and command operators without executing them", () => {
+  for (const fragment of [
+    '--data-raw "$HOME"',
+    '--data-raw "$(printf hi)"',
+    '--data-raw "`printf hi`"',
+    "--data-raw $'a\\n'",
+    "--data-raw x; echo y",
+    "--data-raw x | cat",
+    "--data-raw x > out",
+    "--data-raw #comment",
+  ])
+    assert.throws(
+      () => importCurl("curl http://localhost " + fragment),
+      /Shell/,
+    );
+  assert.equal(
+    importCurl('curl http://localhost --data-raw "cost $"').body,
+    "cost $",
+  );
 });
 
 test("cURL rejects file input and incompatible body families rather than changing their meaning", () => {

@@ -23,3 +23,14 @@ trailing empty pieces and JSON concatenation remain supported. The original
 counterexample stays in both the unit and actual-curl tests as a required refusal;
 normal-body wire comparisons are unchanged. Users can disambiguate by combining
 their intended bytes into one literal data-raw argument.
+
+The literal tokenizer also preserves backslashes before ordinary characters inside
+double quotes and removes backslash-newline continuations without inventing empty
+arguments. It does not read shell variables or evaluate command substitutions.
+Recognized expansions, unquoted command operators and comments are rejected;
+single-quoted or escaped literal dollar signs remain usable. This is a bounded
+import parser, not a shell interpreter. Fixed, reviewed quoting fixtures are checked
+against a real noninteractive shell and curl only inside the Linux test entry point.
+No imported user command is executed by the product or test helpers.
+
+Quoting reference: https://www.gnu.org/s/bash/manual/html_node/Double-Quotes.html

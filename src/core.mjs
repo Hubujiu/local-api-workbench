@@ -1640,10 +1640,27 @@ function shellTokens(source) {
     if (character === "\\" && quote !== "'") {
       const next = source[++index];
       if (next === undefined) throw Error("不完整的 cURL 转义");
-      if (next !== "\n") value += next;
+      if (next === "\n") continue;
+      if (quote === '"' && !['"', "\\", "$", "`"].includes(next)) value += "\\";
+      value += next;
       started = true;
       continue;
     }
+    const following = source[index + 1];
+    if (
+      character === "`" ||
+      (character === "$" &&
+        following &&
+        (/[A-Za-z0-9_]/.test(following) ||
+          "{([?@*#$!-".includes(following) ||
+          (!quote && "\"'".includes(following))))
+    )
+      throw Error("不执行 Shell 展开；请先提供实际值，或用单引号表示字面值");
+    if (
+      !quote &&
+      ("|&;<>()".includes(character) || (character === "#" && !started))
+    )
+      throw Error("不支持 Shell 运算符或注释；字面值请加引号");
     if (quote === '"') {
       if (character === '"') quote = null;
       else value += character;
