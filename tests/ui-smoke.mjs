@@ -1681,6 +1681,113 @@ try {
   await page.locator("#edit-globals").click();
   await page.locator("#modal-json").fill('{"tenant":"ui-global"}');
   await page.locator("#dialog-save").click();
+  await page.locator("#edit-global-definitions").click();
+  const tenantRow = page.locator('[data-variable-index="0"]');
+  await tenantRow.locator('[data-variable-field="initial"]').fill("{invalid");
+  await page.locator("#dialog-save").click();
+  await page.getByText("第1行初始值不是有效JSON", { exact: false }).waitFor();
+  assert(await page.locator("#dialog").isVisible());
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#edit-global-definitions").click();
+  assert.equal(
+    await tenantRow.locator('[data-variable-field="initial"]').inputValue(),
+    '"ui-global"',
+  );
+  await tenantRow
+    .locator('[data-variable-field="initial"]')
+    .fill('"initial-global"');
+  await tenantRow
+    .locator('[data-variable-field="description"]')
+    .fill("Tenant initial value");
+  await page.screenshot({ path: "/tmp/local-api-variable-definitions.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("[data-edit-variable-definitions]").first().click();
+  await page.locator("#variable-add").click();
+  const addedVariable = page.locator("[data-variable-index]").last();
+  await addedVariable
+    .locator('[data-variable-field="key"]')
+    .fill("uiDualValue");
+  await addedVariable
+    .locator('[data-variable-field="initial"]')
+    .fill('"first"');
+  await addedVariable
+    .locator('[data-variable-field="current"]')
+    .fill('"second"');
+  await addedVariable
+    .locator('[data-variable-field="description"]')
+    .fill("UI dual values");
+  await page.locator("#dialog-save").click();
+  await saveAndWait();
+  const variableProjectId = await page.locator("#project-select").inputValue();
+  const variableProject = await app.store.get(variableProjectId);
+  assert.equal(variableProject.globalVariables.tenant, "ui-global");
+  assert.deepEqual(variableProject.globalVariableDefinitions.tenant, {
+    initialValue: "initial-global",
+    description: "Tenant initial value",
+  });
+  assert.equal(variableProject.environments[0].variables.uiDualValue, "second");
+  assert.equal(
+    variableProject.environments[0].variableDefinitions.uiDualValue
+      .initialValue,
+    "first",
+  );
+  await page.locator("[data-edit-variable-definitions]").first().click();
+  const persistedVariable = page.locator(
+    '[data-variable-index]:has([data-variable-field="key"][value="uiDualValue"])',
+  );
+  await persistedVariable
+    .locator('[data-variable-field="currentSet"]')
+    .uncheck();
+  assert(
+    await persistedVariable
+      .locator('[data-variable-field="current"]')
+      .isDisabled(),
+  );
+  await persistedVariable.locator("[data-variable-reset]").click();
+  assert.equal(
+    await persistedVariable
+      .locator('[data-variable-field="current"]')
+      .inputValue(),
+    '"first"',
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.equal(
+    (await app.store.get(variableProjectId)).environments[0].variables
+      .uiDualValue,
+    "second",
+  );
+  const paginated = await page.evaluate(async () => {
+    const { mountVariableEditor } = await import("/variable-editor.js");
+    const host = document.createElement("div");
+    document.body.append(host);
+    try {
+      const editor = mountVariableEditor(
+        host,
+        Array.from({ length: 51 }, (_, index) => ({
+          key: "page" + index,
+          initialValue: index,
+          currentValue: index,
+          currentSet: true,
+          description: "",
+          initialExplicit: true,
+        })),
+      );
+      host.querySelector(
+        '[data-variable-index="0"] [data-variable-field="current"]',
+      ).value = "100";
+      host.querySelector('[data-variable-page="1"]').click();
+      host.querySelector(
+        '[data-variable-index="50"] [data-variable-field="current"]',
+      ).value = "200";
+      host.querySelector('[data-variable-page="-1"]').click();
+      return editor.read();
+    } finally {
+      host.remove();
+    }
+  });
+  assert.equal(paginated.values.page0, 100);
+  assert.equal(paginated.values.page50, 200);
+  assert.equal(paginated.definitions.page0.initialValue, 0);
   await page.locator("#add-service").click();
   await page.locator("#service-name").fill("UI Backend");
   await page.locator("[data-service-url]").first().fill(fixtureURL);
@@ -1702,6 +1809,15 @@ try {
   await page.locator('[data-settings-anchor="settings-environments"]').click();
   await page.locator("[data-edit-service]").waitFor();
   assert((await page.locator("body").innerText()).includes("ui-global"));
+  await page.locator("#edit-global-definitions").click();
+  assert.equal(
+    await page
+      .locator('[data-variable-index="0"] [data-variable-field="initial"]')
+      .inputValue(),
+    '"initial-global"',
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+
   await page.screenshot({ path: "/tmp/local-api-settings.png" });
   await page.locator('[data-page="plans"]').click();
   await page.locator("[data-plan]").first().click();

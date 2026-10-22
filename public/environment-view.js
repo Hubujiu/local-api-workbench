@@ -8,7 +8,7 @@ const esc = (value) =>
   );
 export function environmentExtras(project) {
   return (
-    '<div class="page-head"><h2>全局变量</h2><button id="edit-globals">编辑全局变量</button></div><div class="card"><p class="muted">同名值优先级：全局 → 环境 → 本次调试运行时。全局与环境值保存在本地。</p><pre>' +
+    '<div class="page-head"><h2>全局变量</h2><button id="edit-global-definitions">初始值 / 当前值</button><button id="edit-globals">编辑全局变量</button></div><div class="card"><p class="muted">同名值优先级：全局 → 环境 → 本次调试运行时。全局与环境值保存在本地。</p><pre>' +
     esc(JSON.stringify(project.globalVariables || {}, null, 2)) +
     "</pre></div>" +
     '<div class="page-head"><h2>共享服务与环境地址</h2><button id="add-service">＋ 新建服务</button></div>' +

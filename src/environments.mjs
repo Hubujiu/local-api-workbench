@@ -1,3 +1,7 @@
+import {
+  variableRows,
+  updateVariable,
+} from "../public/variable-definitions.js";
 import { applySharedScripts } from "./shared-scripts.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -190,28 +194,56 @@ export function manageEnvironment(project, operation, args = {}) {
       return {
         environmentId: env.id,
         variables: structuredClone(env.variables || {}),
+        definitions: structuredClone(env.variableDefinitions || {}),
+        entries: variableRows(
+          env.variables || {},
+          env.variableDefinitions || {},
+        ),
         effectiveVariables: environmentVariables(project, env.id),
       };
     case "get_global_variables":
-      return { variables: structuredClone(project.globalVariables) };
+      return {
+        variables: structuredClone(project.globalVariables),
+        definitions: structuredClone(project.globalVariableDefinitions || {}),
+        entries: variableRows(
+          project.globalVariables,
+          project.globalVariableDefinitions || {},
+        ),
+      };
     case "upsert_environment_variable":
     case "upsert_global_variable": {
-      const map = operation.includes("global")
-        ? project.globalVariables
-        : (env.variables ??= {});
-      const variable = key(args.key);
-      if (args.value === undefined) throw Error("变量值不可为undefined");
-      map[variable] = structuredClone(args.value);
-      return { key: variable, value: structuredClone(map[variable]) };
+      const global = operation.includes("global");
+      const updated = updateVariable(
+        global ? project.globalVariables : env.variables || {},
+        global
+          ? project.globalVariableDefinitions || {}
+          : env.variableDefinitions || {},
+        args,
+      );
+      if (global) {
+        project.globalVariables = updated.values;
+        project.globalVariableDefinitions = updated.definitions;
+      } else {
+        env.variables = updated.values;
+        env.variableDefinitions = updated.definitions;
+      }
+      return { ...updated.variable, value: updated.variable.currentValue };
     }
+
     case "delete_environment_variable":
     case "delete_global_variable": {
       const map = operation.includes("global")
           ? project.globalVariables
           : (env.variables ??= {}),
         variable = key(args.key);
-      const existed = Object.hasOwn(map, variable);
+      const definitions = operation.includes("global")
+        ? project.globalVariableDefinitions
+        : env.variableDefinitions;
+      const existed =
+        Object.hasOwn(map, variable) ||
+        Boolean(definitions && Object.hasOwn(definitions, variable));
       delete map[variable];
+      if (definitions) delete definitions[variable];
       return { key: variable, deleted: existed };
     }
     default:
@@ -256,6 +288,11 @@ export function validateEnvironmentModel(project) {
     for (const variable of Object.keys(map)) key(variable);
   }
   if (project.globalVariables !== undefined) variables(project.globalVariables);
+  if (project.globalVariableDefinitions !== undefined)
+    variableRows(
+      project.globalVariables || {},
+      project.globalVariableDefinitions,
+    );
   if (
     !Array.isArray(project.environments) ||
     project.environments.length === 0 ||
@@ -269,6 +306,8 @@ export function validateEnvironmentModel(project) {
     ids.add(env.id);
     name(env.name);
     variables(env.variables);
+    if (env.variableDefinitions !== undefined)
+      variableRows(env.variables, env.variableDefinitions);
     if (env.serverUrls !== undefined) {
       if (
         !env.serverUrls ||

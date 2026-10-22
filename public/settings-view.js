@@ -37,7 +37,9 @@ export function settingsPanel(
             esc(e.name) +
             '</strong><button data-debug-env="' +
             esc(e.id) +
-            '">运行时变量</button><button data-edit-env="' +
+            '">运行时变量</button><button data-edit-variable-definitions="' +
+            esc(e.id) +
+            '">初始值 / 当前值</button><button data-edit-env="' +
             esc(e.id) +
             '">编辑变量</button><button data-delete-env="' +
             esc(e.id) +

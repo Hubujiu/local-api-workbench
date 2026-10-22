@@ -1849,3 +1849,32 @@ dialog:has(#cookie-line) {
   display: block;
   clear: both;
 }
+
+#dialog:has(.variable-editor) {
+  width: min(1060px, 96vw);
+}
+.variable-editor .table-scroll {
+  overflow-x: auto;
+}
+.variable-table {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+}
+.variable-table th,
+.variable-table td {
+  vertical-align: top;
+}
+.variable-table input:not([type="checkbox"]),
+.variable-table textarea {
+  width: 100%;
+}
+.variable-table textarea {
+  min-height: 74px;
+  font-family: monospace;
+}
+.variable-table small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+}

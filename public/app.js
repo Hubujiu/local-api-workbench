@@ -1,3 +1,5 @@
+import { variableRows } from "./variable-definitions.js";
+import { mountVariableEditor } from "./variable-editor.js";
 import {
   inferSchemaFromJSON,
   inferSchemaFromMySQL,
@@ -2515,18 +2517,69 @@ function bind() {
     project.name = e.value;
     mark();
   });
+  function editVariableDefinitions(environmentId) {
+    const environment = environmentId
+      ? project.environments.find((item) => item.id === environmentId)
+      : null;
+    if (environmentId && !environment) throw Error("环境不存在");
+    const values = environment
+      ? environment.variables
+      : project.globalVariables || {};
+    const definitions = environment
+      ? environment.variableDefinitions || {}
+      : project.globalVariableDefinitions || {};
+    const rows = variableRows(values, definitions);
+    const openedProjectId = project.id,
+      openedRevision = project.configRevision ?? project.revision;
+    let editor;
+    modal(
+      environment ? "变量 · " + environment.name : "全局变量 · 初始值 / 当前值",
+      '<div id="variable-editor" class="variable-editor"></div>',
+      () => {
+        if (
+          project.id !== openedProjectId ||
+          (project.configRevision ?? project.revision) !== openedRevision
+        )
+          throw Error("项目已更新，请重新打开变量表后编辑");
+        const updated = editor.read();
+        if (environment) {
+          const target = project.environments.find(
+            (item) => item.id === environmentId,
+          );
+          if (!target) throw Error("环境不存在");
+          target.variables = updated.values;
+          target.variableDefinitions = updated.definitions;
+        } else {
+          project.globalVariables = updated.values;
+          project.globalVariableDefinitions = updated.definitions;
+        }
+        mark();
+        render();
+      },
+    );
+    editor = mountVariableEditor($("#variable-editor"), rows);
+  }
+  on("#edit-global-definitions", "click", () => editVariableDefinitions());
+  on("[data-edit-variable-definitions]", "click", (_, element) =>
+    editVariableDefinitions(element.dataset.editVariableDefinitions),
+  );
   on("#edit-globals", "click", () =>
-    modal("编辑全局变量", jsonEditor(project.globalVariables || {}), () => {
-      const values = JSON.parse($("#modal-json").value);
-      if (!values || typeof values !== "object" || Array.isArray(values))
-        throw Error("变量必须是JSON对象");
-      for (const key of Object.keys(values))
-        if (["__proto__", "prototype", "constructor"].includes(key))
-          throw Error("变量名无效");
-      project.globalVariables = values;
-      mark();
-      render();
-    }),
+    modal(
+      "编辑全局变量",
+      "<p>仅编辑当前值，已有初始值和说明保持不变。删除整个变量请使用变量表。</p>" +
+        jsonEditor(project.globalVariables || {}),
+      () => {
+        const values = JSON.parse($("#modal-json").value);
+        if (!values || typeof values !== "object" || Array.isArray(values))
+          throw Error("变量必须是JSON对象");
+        for (const key of Object.keys(values))
+          if (["__proto__", "prototype", "constructor"].includes(key))
+            throw Error("变量名无效");
+        project.globalVariables = values;
+        mark();
+        render();
+      },
+    ),
   );
   function editService(id) {
     const server = (project.servers || []).find((item) => item.id === id);
@@ -2610,7 +2663,7 @@ function bind() {
     const v = project.environments.find((v) => v.id === e.dataset.editEnv);
     modal(
       "编辑 " + v.name,
-      `<label>环境名称</label><input id="edit-env-name" value="${esc(v.name)}">` +
+      `<label>环境名称</label><input id="edit-env-name" value="${esc(v.name)}"><p>JSON仅编辑当前值，已有初始值和说明保持不变。</p>` +
         jsonEditor(v.variables),
       () => {
         v.name = $("#edit-env-name").value.trim() || v.name;

@@ -69,8 +69,15 @@ const environmentOperations = [
   [
     "upsert_environment_variable",
     "设置环境变量",
-    { environmentId: string, key: string, value: any },
-    ["environmentId", "key", "value"],
+    {
+      environmentId: string,
+      key: string,
+      value: any,
+      initialValue: any,
+      currentValue: any,
+      description: string,
+    },
+    ["environmentId", "key"],
     true,
   ],
   [
@@ -84,8 +91,14 @@ const environmentOperations = [
   [
     "upsert_global_variable",
     "设置全局变量",
-    { key: string, value: any },
-    ["key", "value"],
+    {
+      key: string,
+      value: any,
+      initialValue: any,
+      currentValue: any,
+      description: string,
+    },
+    ["key"],
     true,
   ],
   ["delete_global_variable", "删除全局变量", { key: string }, ["key"], true],

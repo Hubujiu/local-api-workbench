@@ -1,3 +1,4 @@
+import { variableRows } from "../public/variable-definitions.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { prepareApipostModels } from "./apipost-models.mjs";
 import { createHash } from "node:crypto";
@@ -58,6 +59,19 @@ function variables(map = {}) {
       return [key, structuredClone(value ?? "")];
     }),
   );
+}
+function variableDefinitions(map = {}) {
+  const definitions = Object.fromEntries(
+    Object.entries(map).map(([key, item]) => [
+      key,
+      {
+        initialValue: structuredClone(item.value ?? ""),
+        description: item.description ?? "",
+      },
+    ]),
+  );
+  variableRows({}, definitions);
+  return definitions;
 }
 function parameterRows(value, label) {
   if (value === undefined) return [];
@@ -149,12 +163,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       id: resource("env", env.env_id),
       name: safe(env.name),
       variables: variables(env.env_var_list ?? {}),
+      variableDefinitions: variableDefinitions(env.env_var_list ?? {}),
       serverUrls: urls,
     };
   });
   if (new Set(environments.map((e) => e.id)).size !== environments.length)
     throw Error("Apipost环境ID重复");
   const globals = variables(global.global_vars ?? {});
+  const globalDefinitions = variableDefinitions(global.global_vars ?? {});
   const statuses = list(global.marks ?? [], "marks", 100).map((mark) => ({
     id: resource("mark", mark.mark_id),
     name: safe(mark.name),
@@ -378,6 +394,30 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       throw Error("Apipost全局变量冲突: " + key);
     mergedGlobals[key] = value;
   }
+  const mergedGlobalDefinitions = structuredClone(
+    project.globalVariableDefinitions || {},
+  );
+  variableRows(project.globalVariables || {}, mergedGlobalDefinitions);
+  for (const [key, definition] of Object.entries(globalDefinitions)) {
+    const previous = mergedGlobalDefinitions[key];
+    if (
+      previous &&
+      (JSON.stringify(previous.initialValue) !==
+        JSON.stringify(definition.initialValue) ||
+        (previous.description || "") !== definition.description)
+    )
+      throw Error("Apipost全局变量初始定义冲突: " + key);
+    mergedGlobalDefinitions[key] = definition;
+  }
+  const previousEnvironments = (project.environments || []).map((env) => {
+    const incoming = environments.find((item) => item.id === env.id);
+    if (!incoming || env.variableDefinitions !== undefined) return env;
+    const withoutDefinitions = { ...incoming };
+    delete withoutDefinitions.variableDefinitions;
+    return JSON.stringify(env) === JSON.stringify(withoutDefinitions)
+      ? incoming
+      : env;
+  });
   const settings = {
     ...(project.settings ?? {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
@@ -402,9 +442,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       openapiComponents: components,
       dictionary,
       ...(modelFolders.length ? { modelFolders } : {}),
-      environments: mergeResources(project.environments, environments),
+      environments: mergeResources(previousEnvironments, environments),
       servers: mergeResources(project.servers, servers),
       globalVariables: mergedGlobals,
+      globalVariableDefinitions: mergedGlobalDefinitions,
       settings,
     },
   };

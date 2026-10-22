@@ -32,6 +32,8 @@ test("modern export preserves wrapped parameters, environments, services, global
   const doc = fixture();
   doc.global.envs[0].server_list[0].uri =
     "http://127.0.0.1:" + server.address().port;
+  doc.global.envs[0].env_var_list.id.description = "Identifier";
+  doc.global.global_vars.shared.description = "Shared token";
   const p = project();
   const imported = importIntoProject(p, doc);
   assert.equal(imported.length, 1);
@@ -42,6 +44,14 @@ test("modern export preserves wrapped parameters, environments, services, global
   assert.equal(p.requests[0].examples[0].body, '{"ok":true}');
   assert.equal(p.requests[0].statusId, p.settings.statuses[0].id);
   const env = p.environments.find((x) => x.id !== "existing");
+  assert.deepEqual(env.variableDefinitions.id, {
+    initialValue: "42",
+    description: "Identifier",
+  });
+  assert.deepEqual(p.globalVariableDefinitions.shared, {
+    initialValue: "global",
+    description: "Shared token",
+  });
   const request = interpolate(
     resolveServiceRequest(p, p.requests[0], env.id),
     environmentVariables(p, env.id),
@@ -192,4 +202,15 @@ test("modern import preserves literal reference-shaped examples end to end", asy
   importIntoProject(p, d);
   assert.deepEqual(p.dictionary[0].schema.example, literal);
   assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), literal);
+});
+
+test("modern import rejects conflicting initial variable definitions atomically", () => {
+  const p = project();
+  p.globalVariables.shared = "current";
+  p.globalVariableDefinitions = {
+    shared: { initialValue: "different", description: "" },
+  };
+  const before = structuredClone(p);
+  assert.throws(() => importIntoProject(p, fixture()), /初始定义冲突/);
+  assert.deepEqual(p, before);
 });

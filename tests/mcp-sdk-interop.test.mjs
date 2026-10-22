@@ -180,7 +180,15 @@ test(
     await invokeFlowTool("upsert_environment_variable", {
       environmentId: alternate.id,
       key: "selection",
-      value: "alternate",
+      initialValue: "initial-selection",
+      currentValue: "alternate",
+      description: "Persistent initial value",
+    });
+    await invokeFlowTool("upsert_global_variable", {
+      key: "globalProof",
+      initialValue: "initial-global",
+      currentValue: "runtime-global",
+      description: "Global initial value",
     });
     const flow = await invokeFlowTool("create_execution_flow", {
       plan: {
@@ -190,8 +198,13 @@ test(
           {
             request: {
               ...allowed.requests[0],
-              headers: [{ key: "x-selection", value: "{{selection}}" }],
+              headers: [
+                { key: "x-selection", value: "{{selection}}" },
+                { key: "x-global", value: "{{globalProof}}" },
+              ],
               beforeScript: 'pm.environment.set("touched","yes");',
+              afterScript:
+                'pm.environment.set("selection","script-updated");pm.globals.set("globalProof","after-global");',
             },
           },
         ],
@@ -209,7 +222,29 @@ test(
       ).value,
       "alternate",
     );
+    assert.equal(
+      overridden.results[0].request.headers.find(
+        (row) => row.key === "x-global",
+      ).value,
+      "runtime-global",
+    );
     const persistedOverride = await app.store.get(allowed.id);
+    assert.equal(
+      persistedOverride.environments.find((env) => env.id === alternate.id)
+        .variableDefinitions.selection.initialValue,
+      "initial-selection",
+    );
+    assert.equal(
+      persistedOverride.environments.find((env) => env.id === alternate.id)
+        .variables.selection,
+      "script-updated",
+    );
+    assert.equal(persistedOverride.globalVariables.globalProof, "after-global");
+    assert.deepEqual(persistedOverride.globalVariableDefinitions.globalProof, {
+      initialValue: "initial-global",
+      description: "Global initial value",
+    });
+
     assert.equal(persistedOverride.currentEnvironmentId, defaultEnvironmentId);
     assert.equal(
       persistedOverride.plans.find((plan) => plan.id === flow.id).environmentId,
