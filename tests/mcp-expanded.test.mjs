@@ -74,7 +74,11 @@ test("MCP covers project/environment/service/global lifecycle and plan CRUD with
     (await call("get_execution_flow", { projectId: p.id, planId: plan.id })).id,
     plan.id,
   );
-  await call("delete_execution_flow", { projectId: p.id, planId: plan.id });
+  await call("delete_execution_flow", {
+    projectId: p.id,
+    planId: plan.id,
+    confirm: true,
+  });
   assert.equal(
     (await call("list_execution_flows", { projectId: p.id })).length,
     0,

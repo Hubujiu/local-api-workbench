@@ -99,7 +99,7 @@ test("HTTP MCP is disabled by default and enforces token, project and write gran
   assert.equal(JSON.parse(result.result.content[0].text)[0].id, project.id);
   const denied = await call({
     name: "localapi_delete_apis",
-    arguments: { projectId: project.id, apiIds: [] },
+    arguments: { projectId: project.id, apiIds: [], confirm: true },
   });
   assert.equal(denied.result.isError, true);
   await fetch(app.url + "/api/mcp/config", {

@@ -247,6 +247,24 @@ test(
     });
     assert.equal(invalidEnvironment.isError, true);
     assert.equal((await app.store.get(allowed.id)).runs.length, runCount);
+    const rejectedDelete = await replacement.callTool({
+      name: "localapi_delete_execution_flow",
+      arguments: { projectId: allowed.id, planId: flow.id, confirm: false },
+    });
+    assert.equal(rejectedDelete.isError, true);
+    assert.equal(
+      (await invokeFlowTool("get_execution_flow", { planId: flow.id })).id,
+      flow.id,
+    );
+    await invokeFlowTool("delete_execution_flow", {
+      planId: flow.id,
+      confirm: true,
+    });
+    assert.equal(
+      (await invokeFlowTool("get_execution_result", { runId: defaultRun.id }))
+        .id,
+      defaultRun.id,
+    );
     await configure({ enabled: false });
     await assert.rejects(replacement.listTools(), /403|unauthorized/i);
   },

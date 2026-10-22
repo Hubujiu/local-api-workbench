@@ -172,6 +172,16 @@ export function createMCP({
       );
     }
   }
+  for (const tool of tools) {
+    if (!tool.name.startsWith("localapi_delete_")) continue;
+    tool.inputSchema.properties.confirm = {
+      type: "boolean",
+      const: true,
+      description: "本次删除操作必须显式确认；不替代项目写权限",
+    };
+    tool.inputSchema.required = [...tool.inputSchema.required, "confirm"];
+    tool.description += "；必须显式传入 confirm: true";
+  }
   return async function dispatch(message) {
     const { id: requestId, method, params = {} } = message;
     if (requestId === undefined) return null;
@@ -216,6 +226,8 @@ export function createMCP({
         if (schema.type === "array" && !Array.isArray(value))
           throw Error("参数必须为数组 " + key);
       }
+      if (tool.name.startsWith("localapi_delete_") && args.confirm !== true)
+        throw Error("删除操作必须显式传入 confirm: true");
       let output;
       if (params.name === "localapi_list_projects")
         output = (await store.list()).filter(
