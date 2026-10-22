@@ -29,10 +29,13 @@ export function xmlToValue(text, Parser) {
   }).parseFromString(text, "application/xml");
   if (!document.documentElement) throw Error("XML没有根元素");
   if (
-    document.getElementsByTagNameNS(
+    [
       "http://www.mozilla.org/newlayout/xml/parsererror.xml",
-      "parsererror",
-    ).length
+      "http://www.w3.org/1999/xhtml",
+    ].some(
+      (namespace) =>
+        document.getElementsByTagNameNS(namespace, "parsererror").length,
+    )
   )
     throw Error("XML格式错误");
   let count = 0;

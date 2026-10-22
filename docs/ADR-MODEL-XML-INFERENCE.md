@@ -26,3 +26,9 @@ reserved for diagnostics, not accepted as ordinary input.
 Preview errors retain the previous draft. The converted example remains explicit
 and must be updated or removed when later editing structure. Confirmation and
 project save are separate; this does not establish native Offline2 migration.
+
+Native DOMParser reports invalid XML as an error document instead of invoking the
+xmldom error callback. Both Gecko and Chromium/WebKit parsererror namespaces are
+rejected conservatively. An ordinary unnamespaced element named parsererror is
+still valid input. The original browser malformed-input rejection assertion is
+retained unchanged.

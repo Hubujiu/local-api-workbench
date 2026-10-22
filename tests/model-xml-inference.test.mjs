@@ -29,3 +29,30 @@ test("XML model inference rejects DTD entities malformed and mixed-content input
     assert.throws(() => inferSchemaFromXML(source, DOMParser));
   assert.throws(() => inferSchemaFromXML({}, DOMParser));
 });
+
+test("native browser XML error documents are rejected across Gecko and WebKit namespaces", () => {
+  for (const namespace of [
+    "http://www.mozilla.org/newlayout/xml/parsererror.xml",
+    "http://www.w3.org/1999/xhtml",
+  ]) {
+    class NativeErrorParser {
+      parseFromString() {
+        return new DOMParser().parseFromString(
+          `<parsererror xmlns="${namespace}"><h3>XML parsing error</h3></parsererror>`,
+          "application/xml",
+        );
+      }
+    }
+    assert.throws(
+      () => inferSchemaFromXML("<root>", NativeErrorParser),
+      /XML格式错误/,
+    );
+  }
+  assert.deepEqual(
+    inferSchemaFromXML(
+      "<parsererror>ordinary user element</parsererror>",
+      DOMParser,
+    ).example,
+    { parsererror: "ordinary user element" },
+  );
+});
