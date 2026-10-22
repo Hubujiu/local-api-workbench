@@ -1700,6 +1700,18 @@ try {
     .locator('[data-variable-field="description"]')
     .fill("Tenant initial value");
   await page.locator("#toast").waitFor({ state: "hidden" });
+  assert.equal(
+    await tenantRow
+      .locator('[data-variable-field="initial"]')
+      .evaluate((element) => getComputedStyle(element).minHeight),
+    "74px",
+  );
+  assert.equal(
+    await tenantRow
+      .locator('[data-variable-field="initial"]')
+      .evaluate((element) => element.getBoundingClientRect().height),
+    74,
+  );
   await page.screenshot({ path: "/tmp/local-api-variable-definitions.png" });
   await page.locator("#dialog-save").click();
   await page.locator("[data-edit-variable-definitions]").first().click();

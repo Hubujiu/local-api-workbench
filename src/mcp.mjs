@@ -1,3 +1,4 @@
+import { applyMCPInput } from "./mcp-request-input.mjs";
 import {
   listExecutionHistory,
   findExecutionResult,
@@ -166,8 +167,24 @@ export function createMCP({
       );
       addTool(
         "execute_api",
-        "执行已有HTTP接口并记录证据",
-        { ...projectArg, apiId: str, environmentId: str },
+        "执行已有HTTP接口，可临时覆盖已定义输入；历史证据可能包含输入值",
+        {
+          ...projectArg,
+          apiId: str,
+          environmentId: str,
+          input: {
+            type: "object",
+            properties: {
+              query: { type: "object" },
+              path: { type: "object" },
+              headers: { type: "object" },
+              cookies: { type: "object" },
+              body: {},
+              auth: { type: "object" },
+            },
+            additionalProperties: false,
+          },
+        },
         ["projectId", "apiId"],
       );
     }
@@ -413,10 +430,13 @@ export function createMCP({
                 functions: p.settings?.functions || [],
                 steps: [
                   {
-                    request: resolveServiceRequest(
-                      p,
-                      freezeServiceBinding(p, request),
-                      args.environmentId,
+                    request: applyMCPInput(
+                      resolveServiceRequest(
+                        p,
+                        freezeServiceBinding(p, request),
+                        args.environmentId,
+                      ),
+                      args.input,
                     ),
                   },
                 ],

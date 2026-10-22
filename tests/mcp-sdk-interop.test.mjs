@@ -100,12 +100,93 @@ test(
         examples: [{ status: 200, body: '{"sdk":true}' }],
       },
     ];
+    allowed.requests.push({
+      id: "input-fixture",
+      name: "Temporary inputs",
+      method: "POST",
+      url: app.url + "/mock/" + allowed.id + "/{fixtureId}",
+      path: [{ key: "fixtureId", value: "missing" }],
+      query: [{ key: "q", value: "saved", enabled: false }],
+      headers: [{ key: "X-Test", value: "saved" }],
+      cookies: [{ key: "session", value: "saved" }],
+      bodyType: "json",
+      body: '{"message":"saved"}',
+      auth: { type: "basic", username: "saved", password: "saved" },
+      examples: [{ status: 200, body: '{"ok":true}' }],
+    });
     await app.store.save(allowed);
     await configure({ write: true, execute: true });
     assert(
       (await replacement.listTools()).tools.some(
         (x) => x.name === "localapi_execute_api",
       ),
+    );
+    const beforeInput = await app.store.get(allowed.id);
+    const observed = new Promise((resolve) => {
+      const listener = (request) => {
+        if (!request.url.startsWith("/mock/" + allowed.id + "/input-fixture"))
+          return;
+        app.server.off("request", listener);
+        const chunks = [];
+        request.on("data", (chunk) => chunks.push(chunk));
+        request.on("end", () =>
+          resolve({
+            url: request.url,
+            headers: request.headers,
+            body: Buffer.concat(chunks).toString(),
+          }),
+        );
+      };
+      app.server.on("request", listener);
+      t.after(() => app.server.off("request", listener));
+    });
+    const temporary = decode(
+      await replacement.callTool({
+        name: "localapi_execute_api",
+        arguments: {
+          projectId: allowed.id,
+          apiId: "input-fixture",
+          input: {
+            path: { fixtureId: "input-fixture" },
+            query: { q: "new value" },
+            headers: { "x-test": "override" },
+            cookies: { session: "override" },
+            body: { message: "temporary" },
+            auth: { username: "temporary", password: "fixture-only" },
+          },
+        },
+      }),
+    );
+    assert.equal(temporary.status, "passed");
+    const wire = await observed;
+    assert.equal(new URL(wire.url, app.url).searchParams.get("q"), "new value");
+    assert.equal(wire.headers["x-test"], "override");
+    assert.match(wire.headers.cookie, /session=override/);
+    assert.equal(
+      wire.headers.authorization,
+      "Basic " + Buffer.from("temporary:fixture-only").toString("base64"),
+    );
+    assert.deepEqual(JSON.parse(wire.body), { message: "temporary" });
+    const afterInput = await app.store.get(allowed.id);
+    assert.deepEqual(afterInput.requests, beforeInput.requests);
+    for (const input of [
+      { query: { unknown: 1 } },
+      { url: "http://example.invalid" },
+      { auth: { type: "bearer" } },
+    ]) {
+      assert.equal(
+        (
+          await replacement.callTool({
+            name: "localapi_execute_api",
+            arguments: { projectId: allowed.id, apiId: "input-fixture", input },
+          })
+        ).isError,
+        true,
+      );
+    }
+    assert.deepEqual(
+      (await app.store.get(allowed.id)).history,
+      afterInput.history,
     );
     const result = decode(
       await replacement.callTool({
