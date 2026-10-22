@@ -25,3 +25,23 @@ test("CI mirror adjustment changes only exact Azure Ubuntu URI fields", () => {
     "URIs: http://azure.archive.ubuntu.com/ubuntu-evil https://azure.archive.ubuntu.com.evil/ubuntu\n",
   );
 });
+
+test("CI recognizes legacy source lines and mirror indirection files without touching comments or options", () => {
+  const source =
+    "  Uris: http://azure.archive.ubuntu.com/ubuntu/\n" +
+    "deb [arch=amd64 signed-by=/keys/ubuntu.gpg] http://azure.archive.ubuntu.com/ubuntu noble main\n" +
+    "deb-src https://azure.archive.ubuntu.com/ubuntu/ noble-security main\n" +
+    "http://azure.archive.ubuntu.com/ubuntu/\n" +
+    "# http://azure.archive.ubuntu.com/ubuntu/\n" +
+    "URIs: mirror+file:/etc/apt/mirrors/ubuntu.list\n";
+  const changed = useCanonicalUbuntuArchive(source);
+  assert.equal(
+    changed.split("https://archive.ubuntu.com/ubuntu/").length - 1,
+    4,
+  );
+  assert.match(changed, /signed-by=\/keys\/ubuntu.gpg/);
+  assert.match(changed, /noble-security main/);
+  assert(changed.includes("# http://azure.archive.ubuntu.com/ubuntu/"));
+  assert(changed.includes("mirror+file:/etc/apt/mirrors/ubuntu.list"));
+  assert.equal(useCanonicalUbuntuArchive(changed), changed);
+});

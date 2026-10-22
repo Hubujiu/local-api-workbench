@@ -15,3 +15,11 @@ function is tested against preserved signatures/comments and lookalike domains.
 
 Reference for the Ubuntu sources-file format and package workflow:
 https://ubuntu.com/server/docs/how-to/software/package-management/
+
+The first narrowly scoped deb822 rewrite reported no changes while APT continued
+using Azure. The helper now also recognizes legacy deb/deb-src source entries and
+mirror+file URL-list files. It scans only the standard APT source/mirror directories,
+preserves comments and source options, logs changed filenames without dumping
+source contents, and refuses unrecognized remaining active Azure entries. This
+addresses a no-op configuration path, rather than treating a successful helper
+exit as evidence that the download route changed.
