@@ -2122,6 +2122,58 @@ try {
     .waitFor();
   await page.getByText("Empty Model Group", { exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-apipost-model.png" });
+  const importedModelCard = page.locator(".card").filter({
+    has: page.getByText("Fictional modern export / BrowserModel", {
+      exact: true,
+    }),
+  });
+  await importedModelCard.locator("[data-edit-dictionary]").click();
+  await page.locator("#dialog").waitFor({ state: "visible" });
+  const importedModelFolder = await page.locator("#dict-folder").inputValue();
+  assert(importedModelFolder);
+  await page.locator("#dict-name").fill("");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("模型名称须为1至500个字符", { exact: false })
+    .last()
+    .waitFor();
+  assert(await page.locator("#dialog").isVisible());
+  await page
+    .locator("#dict-name")
+    .fill("Fictional modern export / BrowserModel");
+  await page
+    .locator("#modal-json")
+    .fill(JSON.stringify({ type: "object", properties: { id: { const: 8 } } }));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const modelSave = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.status() === 200 &&
+      r.url().includes("/api/projects/"),
+  );
+  await page.locator("#save-project").click();
+  const savedModelProject = await (await modelSave).json();
+  const savedModel = savedModelProject.dictionary.find(
+    (m) => m.name === "Fictional modern export / BrowserModel",
+  );
+  assert(savedModel.id);
+  assert.equal(savedModel.folderId, importedModelFolder);
+  assert.equal(
+    savedModelProject.openapiComponents.schemas[savedModel.id].properties.id
+      .const,
+    8,
+  );
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page
+    .getByText("Fictional modern export / BrowserModel", { exact: true })
+    .waitFor();
+  await page
+    .locator(".model-folder")
+    .first()
+    .screenshot({ path: "/tmp/local-api-model-folder-tree.png" });
+
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [
     normalizeRequest({

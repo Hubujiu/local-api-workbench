@@ -1,4 +1,5 @@
-import { modelCards } from "./model-folders.js";
+import { saveModel } from "./model-edit.js";
+import { modelCards, modelFolderPath } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
@@ -3087,14 +3088,18 @@ function editDictionary(index) {
   };
   modal(
     "数据模型",
-    `<label>名称</label><input id="dict-name" value="${esc(d.name)}">${jsonEditor(d.schema)}`,
+    `<label>名称</label><input id="dict-name" maxlength="500" value="${esc(d.name)}"><label>模型目录</label><select id="dict-folder"><option value="">根目录</option>${(project.modelFolders || []).map((folder) => `<option value="${esc(folder.id)}" ${d.folderId === folder.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, folder.id))}</option>`).join("")}</select><p class="muted">模型ID保持不变。修改关联组件后，引用该模型的后续数据生成将使用新Schema。</p>${jsonEditor(d.schema)}`,
     () => {
-      const value = {
-        name: $("#dict-name").value,
-        schema: JSON.parse($("#modal-json").value),
-      };
-      if (index === undefined) project.dictionary.push(value);
-      else project.dictionary[index] = value;
+      saveModel(
+        project,
+        index,
+        {
+          name: $("#dict-name").value,
+          schema: JSON.parse($("#modal-json").value),
+          folderId: $("#dict-folder").value,
+        },
+        uid(),
+      );
       mark();
       render();
     },

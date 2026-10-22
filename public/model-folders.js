@@ -96,3 +96,18 @@ export function modelCards(project) {
   }
   return group("") || '<div class="empty"><p>暂无数据模型</p></div>';
 }
+
+export function modelFolderPath(folders, id) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const names = [],
+    seen = new Set();
+  while (id) {
+    if (seen.has(id) || seen.size >= 20) throw Error("模型目录路径无效");
+    seen.add(id);
+    const folder = byId.get(id);
+    if (!folder) throw Error("模型目录不存在");
+    names.unshift(folder.name);
+    id = folder.parentId || "";
+  }
+  return names.join(" / ");
+}
