@@ -13,3 +13,10 @@ modal dismissal or editor limits.
 Browser geometry assertions verify full-width browsing, visible nonoverlapping
 editing panels and sticky headings after actual scrolling. Existing field editing,
 cancel, reference and identifier-guard flows remain in the same smoke scenario.
+
+Composition editing exposed a wrapped-notice regression: response field actions
+fell below the modal content viewport. Keep modal metadata and outer actions fixed;
+give active field inputs their own bounded scrolling area with a separate action
+row. Field, reference and composition forms share this structure. Only open Schema
+dialogs adopt this flex layout; closed dialogs remain hidden. Preserve the existing
+browser assertion that pending field actions stay above the modal footer.

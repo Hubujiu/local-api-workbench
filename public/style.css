@@ -1538,18 +1538,36 @@ body.dark .response-tabs button {
   min-height: 70px;
   height: 80px;
 }
-.schema-fields > button {
-  margin-top: 10px;
-  margin-right: 6px;
-}
-
 dialog:has(#schema-editor) {
   width: 1000px;
 }
 .schema-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(220px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 16px;
+}
+.schema-fields {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.schema-field-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 3px;
+}
+.schema-field-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 0;
+  background: var(--bg);
 }
 .schema-layout:has(> .schema-fields:empty) {
   grid-template-columns: minmax(0, 1fr);
@@ -1570,6 +1588,10 @@ dialog:has(#schema-editor) {
 @media (max-width: 700px) {
   .schema-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 2fr);
+  }
+  .schema-layout:has(> .schema-fields:empty) {
+    grid-template-rows: minmax(0, 1fr);
   }
 }
 
@@ -1590,8 +1612,38 @@ dialog:has(#schema-editor) {
   }
 }
 
+#dialog[open]:has(#schema-editor) {
+  display: flex;
+  flex-direction: column;
+  max-height: 94vh;
+}
+#dialog[open]:has(#schema-editor .schema-fields:not(:empty)) {
+  height: min(94vh, 800px);
+}
+#dialog:has(#schema-editor) > header,
+#dialog:has(#schema-editor) > footer {
+  flex-shrink: 0;
+}
 #dialog:has(#schema-editor) #dialog-content {
-  max-height: calc(94vh - 120px);
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+}
+#dialog:has(#schema-editor) #dialog-content > :not(#schema-editor) {
+  flex-shrink: 0;
+}
+#schema-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#schema-editor > .notice,
+#schema-editor > .schema-error {
+  flex-shrink: 0;
 }
 
 .step-editor [data-step-pair-row].row {

@@ -529,7 +529,7 @@ export function bindSchemaEditor(container, schema) {
     editing = { path: row.path, add };
     const node = row.schema;
     container.querySelector(".schema-fields").innerHTML =
-      "<h4>" +
+      '<div class="schema-field-content"><h4>' +
       (add ? "添加字段" : "编辑字段") +
       '</h4><label>字段名称</label><input data-schema-name value="' +
       esc(add ? "" : row.name) +
@@ -579,7 +579,7 @@ export function bindSchemaEditor(container, schema) {
             )
             .join("") +
           "</div></details>") +
-      '<button type="button" data-schema-apply>应用字段</button><button type="button" data-schema-cancel>放弃字段编辑</button>';
+      '</div><div class="schema-field-actions"><button type="button" data-schema-apply>应用字段</button><button type="button" data-schema-cancel>放弃字段编辑</button></div>';
     container.querySelector("[data-schema-apply]").onclick = () =>
       report(() => {
         commit();
@@ -595,9 +595,9 @@ export function bindSchemaEditor(container, schema) {
     if (editing) throw Error("请先应用或放弃当前字段编辑");
     editing = { path: row.path, branch: true };
     container.querySelector(".schema-fields").innerHTML =
-      '<h4>添加组合分支</h4><p class="notice">保留当前节点的其他约束。allOf须全部满足；anyOf至少满足一个；oneOf恰好满足一个。新分支追加在末尾。</p><label for="schema-combination">组合规则</label><select id="schema-combination" data-schema-combination><option value="allOf">allOf · 全部满足</option><option value="anyOf">anyOf · 至少一个</option><option value="oneOf">oneOf · 恰好一个</option></select><label for="schema-branch-type">分支类型</label><select id="schema-branch-type" data-schema-branch-type>' +
+      '<div class="schema-field-content"><h4>添加组合分支</h4><p class="notice">保留当前节点的其他约束。allOf须全部满足；anyOf至少满足一个；oneOf恰好满足一个。新分支追加在末尾。</p><label for="schema-combination">组合规则</label><select id="schema-combination" data-schema-combination><option value="allOf">allOf · 全部满足</option><option value="anyOf">anyOf · 至少一个</option><option value="oneOf">oneOf · 恰好一个</option></select><label for="schema-branch-type">分支类型</label><select id="schema-branch-type" data-schema-branch-type>' +
       types.map((type) => "<option>" + type + "</option>").join("") +
-      '</select><button type="button" data-schema-apply>添加分支</button><button type="button" data-schema-cancel>放弃分支编辑</button>';
+      '</select></div><div class="schema-field-actions"><button type="button" data-schema-apply>添加分支</button><button type="button" data-schema-cancel>放弃分支编辑</button></div>';
     container.querySelector("[data-schema-apply]").onclick = () =>
       report(() => {
         commit();
@@ -613,9 +613,9 @@ export function bindSchemaEditor(container, schema) {
     if (editing) throw Error("请先应用或放弃当前字段编辑");
     editing = { path: row.path, reference: true };
     container.querySelector(".schema-fields").innerHTML =
-      '<h4>编辑本地引用</h4><p class="notice">仅引用当前结构中的Schema，例如 #/$defs/User。不会联网加载；其他字段和约束保持，留空解除引用。递归结构生成示例时仍需有限example。</p><label>JSON Pointer</label><input data-schema-reference value="' +
+      '<div class="schema-field-content"><h4>编辑本地引用</h4><p class="notice">仅引用当前结构中的Schema，例如 #/$defs/User。不会联网加载；其他字段和约束保持，留空解除引用。递归结构生成示例时仍需有限example。</p><label>JSON Pointer</label><input data-schema-reference value="' +
       esc(row.schema.$ref || "") +
-      '"><button type="button" data-schema-apply>应用引用</button><button type="button" data-schema-cancel>放弃引用编辑</button>';
+      '"></div><div class="schema-field-actions"><button type="button" data-schema-apply>应用引用</button><button type="button" data-schema-cancel>放弃引用编辑</button></div>';
     container.querySelector("[data-schema-apply]").onclick = () =>
       report(() => {
         commit();
