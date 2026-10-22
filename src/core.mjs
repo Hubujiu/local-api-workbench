@@ -1,3 +1,7 @@
+import {
+  referenceChildMode,
+  referenceModeIsAllowed,
+} from "./openapi-reference-context.mjs";
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import {
   importOpenAPIBody,
@@ -1375,14 +1379,31 @@ export function restoreProject(document) {
 }
 export function resolveLocalReferences(document) {
   const root = structuredClone(document);
-  function visit(value, seen = new Set(), depth = 0) {
+  const contextual = Boolean(root?.openapi || root?.swagger);
+  const swagger = Boolean(root?.swagger);
+  let nodes = 0;
+  function visit(
+    value,
+    seen = new Set(),
+    depth = 0,
+    mode = contextual ? "document" : "generic",
+  ) {
+    if (mode === "literal") return value;
+    if (++nodes > 50000) throw Error("OpenAPI 引用展开超过节点上限");
     if (depth > 50) throw Error("OpenAPI 引用层级过深");
     if (!value || typeof value !== "object") return value;
     if (Array.isArray(value))
-      return value.map((v) => visit(v, seen, depth + 1));
-    if (value.$ref) {
+      return value.map((child, index) =>
+        visit(
+          child,
+          seen,
+          depth + 1,
+          referenceChildMode(mode, String(index), child, swagger),
+        ),
+      );
+    if (referenceModeIsAllowed(mode) && Object.hasOwn(value, "$ref")) {
       const ref = value.$ref;
-      if (!ref.startsWith("#/"))
+      if (typeof ref !== "string" || !ref.startsWith("#/"))
         throw Error("不自动下载外部 OpenAPI 引用，请先打包为单文件");
       if (seen.has(ref)) return { $ref: ref };
       let target = root;
@@ -1400,32 +1421,40 @@ export function resolveLocalReferences(document) {
       const siblings = Object.fromEntries(
         Object.entries(value).filter(([key]) => key !== "$ref"),
       );
+      const nextSeen = new Set([...seen, ref]);
+      if (
+        typeof target === "boolean" &&
+        mode !== "schema" &&
+        mode !== "generic"
+      )
+        throw Error("无效 OpenAPI 引用目标 " + ref);
       if (target === false)
         return Object.keys(siblings).length
-          ? visit(
-              { allOf: [false, siblings] },
-              new Set([...seen, ref]),
-              depth + 1,
-            )
+          ? visit({ allOf: [false, siblings] }, nextSeen, depth + 1, mode)
           : false;
       if (target === true)
         return Object.keys(siblings).length
-          ? visit(siblings, new Set([...seen, ref]), depth + 1)
+          ? visit(siblings, nextSeen, depth + 1, mode)
           : true;
       if (!target || typeof target !== "object" || Array.isArray(target))
         throw Error("无效 OpenAPI 引用目标 " + ref);
-      return visit(
-        { ...target, ...siblings },
-        new Set([...seen, ref]),
-        depth + 1,
-      );
+      return visit({ ...target, ...siblings }, nextSeen, depth + 1, mode);
     }
     return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, visit(v, seen, depth + 1)]),
+      Object.entries(value).map(([key, child]) => [
+        key,
+        visit(
+          child,
+          seen,
+          depth + 1,
+          referenceChildMode(mode, key, child, swagger),
+        ),
+      ]),
     );
   }
   return visit(root);
 }
+
 export { sampleFromSchema } from "./schema-sample.mjs";
 
 function replaceVariables(target, source) {
