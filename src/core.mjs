@@ -1383,6 +1383,19 @@ export function resolveLocalReferences(document) {
   const contextual = Boolean(root?.openapi || root?.swagger);
   const swagger = Boolean(root?.swagger);
   let nodes = 0;
+  function visitChildren(value, seen, depth, mode) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        visit(
+          child,
+          seen,
+          depth + 1,
+          referenceChildMode(mode, key, child, swagger),
+        ),
+      ]),
+    );
+  }
   function visit(
     value,
     seen = new Set(),
@@ -1406,7 +1419,10 @@ export function resolveLocalReferences(document) {
       const ref = value.$ref;
       if (typeof ref !== "string" || !ref.startsWith("#/"))
         throw Error("不自动下载外部 OpenAPI 引用，请先打包为单文件");
-      if (seen.has(ref)) return { $ref: ref };
+      if (seen.has(ref))
+        return mode === "schema" && String(root.openapi).startsWith("3.1.")
+          ? visitChildren(value, seen, depth, mode)
+          : { $ref: ref };
       let target = root;
       for (const part of ref
         .slice(2)
@@ -1448,17 +1464,7 @@ export function resolveLocalReferences(document) {
         );
       return visit({ ...target, ...siblings }, nextSeen, depth + 1, mode);
     }
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        visit(
-          child,
-          seen,
-          depth + 1,
-          referenceChildMode(mode, key, child, swagger),
-        ),
-      ]),
-    );
+    return visitChildren(value, seen, depth, mode);
   }
   return visit(root);
 }

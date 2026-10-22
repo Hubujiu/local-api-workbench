@@ -51,6 +51,8 @@ export function normalizeOpenAPI30Schemas(document) {
     if (value === true) return {};
     if (value === false) return { not: {} };
     if (!object(value)) throw Error("OpenAPI Schema 必须是对象或布尔值");
+    if (own(value, "$ref") && typeof value.$ref !== "string")
+      throw Error("OpenAPI Schema 引用必须是字符串");
     for (const key of Object.keys(value))
       if (!keywords.has(key) && !key.startsWith("x-"))
         throw Error(
@@ -83,8 +85,8 @@ export function normalizeOpenAPI30Schemas(document) {
     }
     for (const key of ["allOf", "anyOf", "oneOf"]) {
       if (!own(value, key)) continue;
-      if (!Array.isArray(value[key]))
-        throw Error("Schema " + key + " 必须是数组");
+      if (!Array.isArray(value[key]) || !value[key].length)
+        throw Error("Schema " + key + " 必须是非空数组");
       result[key] = value[key].map((child) => schema(child, depth + 1));
     }
     for (const key of ["items", "not"])
@@ -97,6 +99,14 @@ export function normalizeOpenAPI30Schemas(document) {
         value.additionalProperties,
         depth + 1,
       );
+    // OpenAPI 3.0 Reference Objects ignore siblings. Keep those constraints
+    // on a Schema Object instead, with the reference as an allOf member.
+    if (own(result, "$ref") && Object.keys(result).length > 1) {
+      enter(depth + 1);
+      const reference = { $ref: result.$ref };
+      delete result.$ref;
+      result.allOf = [reference, ...(result.allOf || [])];
+    }
     return result;
   }
   function map(value, visitor, depth) {
