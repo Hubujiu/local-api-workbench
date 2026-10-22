@@ -662,6 +662,13 @@ export function applyOperation(op, vars) {
       throw Error("仅支持声明式 set/uuid/timestamp/delete 前后置操作");
   }
 }
+function openapiExample(media) {
+  if (media && Object.hasOwn(media, "example")) return media.example;
+  for (const example of Object.values(media?.examples || {})) {
+    if (example && Object.hasOwn(example, "value")) return example.value;
+  }
+  return {};
+}
 export function importDocument(doc) {
   if (typeof doc === "string") {
     try {
@@ -738,10 +745,20 @@ export function importDocument(doc) {
                 value: p.example ?? "",
                 enabled: true,
               })),
+            cookies: params
+              .filter((p) => p.in === "cookie")
+              .map((p) => ({
+                key: p.name,
+                schema: p.schema || { type: p.type || "string" },
+                required: p.required === true,
+                description: p.description || "",
+                value: p.example ?? p.schema?.default ?? "",
+                enabled: true,
+              })),
             bodyType: op.requestBody ? "json" : "none",
             body: op.requestBody
               ? JSON.stringify(
-                  op.requestBody.content?.["application/json"]?.example || {},
+                  openapiExample(op.requestBody.content?.["application/json"]),
                   null,
                   2,
                 )
@@ -761,7 +778,7 @@ export function importDocument(doc) {
               name: r.description || status,
               status: Number(status) || 200,
               body: JSON.stringify(
-                r.content?.["application/json"]?.example || {},
+                openapiExample(r.content?.["application/json"]),
                 null,
                 2,
               ),
