@@ -3430,8 +3430,8 @@ try {
   await page.locator("#add-db-operation").click();
   await page
     .locator("#operation-db-sql")
-    .fill("SELECT value FROM entries LIMIT 1");
-  await page.locator("#operation-db-path").fill("$.rows[0].value");
+    .fill('SELECT value AS "row.value" FROM entries LIMIT 1');
+  await page.locator("#operation-db-path").fill('$.rows[0]["row.value"]');
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-edit-db-operation="0"]').evaluate((button) => {
@@ -3441,7 +3441,11 @@ try {
   await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(
     await page.locator("#operation-db-sql").inputValue(),
-    "SELECT value FROM entries LIMIT 1",
+    'SELECT value AS "row.value" FROM entries LIMIT 1',
+  );
+  assert.equal(
+    await page.locator("#operation-db-path").inputValue(),
+    '$.rows[0]["row.value"]',
   );
   await page.locator("#operation-db-parameters").fill("{}");
   await page.locator("#dialog-save").click();
@@ -3460,7 +3464,7 @@ try {
   );
   await page
     .locator("#operation-db-sql")
-    .fill("SELECT value FROM entries WHERE value = ?");
+    .fill('SELECT value AS "row.value" FROM entries WHERE value = ?');
   await page.locator("#operation-db-parameters").fill('["from-ui"]');
   await page.locator("#dialog-save").click();
   await page.locator("#add-db-operation").click();

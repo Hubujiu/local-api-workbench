@@ -4,6 +4,7 @@ import {
 } from "./openapi-reference-context.mjs";
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
+import { jsonPathSegments } from "./json-path.mjs";
 import {
   importOpenAPIBody,
   exportOpenAPIBody,
@@ -45,11 +46,7 @@ export function interpolate(value, vars = {}) {
   return value;
 }
 export function jsonPath(obj, path) {
-  const parts = String(path)
-    .replace(/^\$\.?/, "")
-    .replace(/\[(\d+)\]/g, ".$1")
-    .split(".")
-    .filter(Boolean);
+  const parts = jsonPathSegments(path);
   for (const p of parts) {
     if (["__proto__", "prototype", "constructor"].includes(p))
       throw Error("禁止的 JSON 路径");
