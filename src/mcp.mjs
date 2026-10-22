@@ -180,12 +180,15 @@ export function createMCP({
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
-      const args = params.arguments || {};
+      const args = params.arguments === undefined ? {} : params.arguments;
+      if (!args || typeof args !== "object" || Array.isArray(args))
+        throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
         if (!Object.hasOwn(args, key)) throw Error("缺少参数 " + key);
       for (const [key, value] of Object.entries(args)) {
+        if (!Object.hasOwn(tool.inputSchema.properties, key))
+          throw Error("未知参数 " + key);
         const schema = tool.inputSchema.properties[key];
-        if (!schema) throw Error("未知参数 " + key);
         if (schema.type === "string" && typeof value !== "string")
           throw Error("参数必须为字符串 " + key);
         if (

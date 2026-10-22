@@ -2574,8 +2574,29 @@ try {
   assert.equal(countSQLiteRows(), 0);
   assert.equal(await page.locator("#db-write").isChecked(), false);
   await page.locator("#db-write").check();
+  let releaseDatabaseWrite;
+  const databaseWriteGate = new Promise((resolve) => {
+    releaseDatabaseWrite = resolve;
+  });
+  const gatedDatabaseRoute = async (route) => {
+    await databaseWriteGate;
+    await route.continue();
+  };
+  await page.route("**/api/projects/*/database", gatedDatabaseRoute);
   page.once("dialog", (dialog) => dialog.accept());
-  await page.locator("#db-query").click();
+  try {
+    await page.locator("#db-query").click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#db-query").disabled &&
+        document.querySelector("#db-type").disabled &&
+        document.querySelector("#db-tls").disabled,
+    );
+    assert.equal(countSQLiteRows(), 0, "write is held before its real request");
+  } finally {
+    releaseDatabaseWrite();
+    await page.unroute("**/api/projects/*/database", gatedDatabaseRoute);
+  }
   await page
     .locator("#db-result")
     .getByText('"committed": true', { exact: false })
@@ -2588,6 +2609,7 @@ try {
   await page.locator("#db-write").check();
   await page.locator("#db-type").selectOption("postgres");
   assert.equal(await page.locator("#db-write").isChecked(), false);
+  assert.equal(await page.locator("#db-result").textContent(), "");
   await page.locator("#db-host").fill("127.0.0.1");
   await page.locator("#db-port").fill("5432");
   await page.locator("#db-name").fill("fixture");
@@ -2618,6 +2640,7 @@ try {
     "cancel must not contact the database",
   );
   page.off("request", recordDatabaseRequest);
+  await page.screenshot({ path: "/tmp/local-api-postgres-write.png" });
   await page.locator("#db-type").selectOption("mysql");
   assert.equal(await page.locator("#db-write-label").isVisible(), false);
   await page.locator("#db-type").selectOption("sqlite");

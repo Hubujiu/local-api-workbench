@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-22T07:46:08Z",
-  "implementationCommit": "449a52a77fe80445d68b9c46c02ea169717edc59",
+  "asOf": "2026-10-22T07:53:50Z",
+  "implementationCommit": "dde1ea720242bb9dda15eae985563fa05a7146b6",
   "counts": {
     "F": {
       "已实现": 37,
@@ -287,7 +287,7 @@
       "name": "数据库连接",
       "status": "部分实现",
       "original": "公开文档说明保留数据库连接",
-      "current": "SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 SQLite显式单语句INSERT/UPDATE/DELETE、绑定及RETURNING已通过真实文件/HTTP/浏览器验证；默认只读，确认取消无写入、完成后重置，超量事务回滚；超时结果可能不确定，不自动重试。 显式项目级临时会话授权支持只读前后置查询与变量/断言联动；连接凭据不落盘，撤销/跨项目隔离及真实HTTP浏览器路径已验证。非全量数据库和任意顺序/写操作。 ClickHouse HTTP/TLS只读、类型化绑定、UInt64精度、真实26.8服务已验证；操作可编辑/重排/启停/移除/显式重新绑定，撤销不会静默换连接。",
+      "current": "SQLite/PostgreSQL/MySQL只读查询及Redis有界只读命令已验证；Redis有严格TLS、可选CA、RESP大小/时间限制，真实Redis7.2服务CI通过。更多数据库类型仍缺失。 MongoDB只读find/投影/排序已通过真实MongoDB8.0服务测试。 SQLite显式单语句INSERT/UPDATE/DELETE、绑定及RETURNING已通过真实文件/HTTP/浏览器验证；默认只读，确认取消无写入、完成后重置，超量事务回滚；超时结果可能不确定，不自动重试。 显式项目级临时会话授权支持只读前后置查询与变量/断言联动；连接凭据不落盘，撤销/跨项目隔离及真实HTTP浏览器路径已验证。非全量数据库和任意顺序/写操作。 ClickHouse HTTP/TLS只读、类型化绑定、UInt64精度、真实26.8服务已验证；操作可编辑/重排/启停/移除/显式重新绑定，撤销不会静默换连接。 PostgreSQL 手工逐次确认的单条DML已通过真实服务HTTP：1000目标行、超限回滚、提交确认与只读批次拒绝；无RETURNING，不扩展脚本会话权限，不承诺触发器/外部副作用计数。",
       "source": "S3",
       "evidence": "database/remote-database tests; src/redis.mjs; tests/redis.test.mjs; tests/redis-integration.mjs; tests/database.test.mjs; docs/ADR-SQLITE-WRITES.md",
       "baselineStatus": "部分实现"
@@ -397,7 +397,7 @@
       "name": "导入/导出",
       "status": "部分实现",
       "original": "配置截图有手动导入与导出",
-      "current": "OpenAPI/Postman/cURL/本工具备份、有限旧版Apipost JSON，以及公开实际导出结构支持的现代HTTP/目录/环境/服务/变量/响应示例/平级模型导入。未支持资源整体拒绝，不执行导入来源端点。Offline2原生目录、测试用例和复杂模型仍不兼容。",
+      "current": "OpenAPI/Postman/cURL/本工具备份、有限旧版Apipost JSON，以及公开实际导出结构支持的现代HTTP/目录/环境/服务/变量/响应示例/平级模型导入。未支持资源整体拒绝，不执行导入来源端点。Offline2原生目录、测试用例和复杂模型仍不兼容。 现代模型目录、空组、父级关系及模型编辑身份/组件保留已验证；这不等于Offline2原生项目迁移。",
       "source": "I3",
       "evidence": "src/apipost-modern.mjs; src/apipost-models.mjs; tests/apipost-modern.test.mjs; docs/ADR-MODERN-APIPOST-IMPORT.md",
       "baselineStatus": "部分实现"
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39740023841",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39743195242",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述396项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述402项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39740023841,
+    "runId": 39743195242,
     "conclusion": "success first attempt",
-    "coreTests": 396,
+    "coreTests": 402,
     "jobs": 10
   },
   "supplementalItems": [
@@ -1072,7 +1072,7 @@
       "id": "S-POSTGRES-WRITES",
       "name": "PostgreSQL 手工逐次授权写入",
       "status": "部分实现",
-      "current": "单条 DML、目标行数限制、事务及提交确认；不支持 RETURNING/任意 SQL，不扩展脚本/MCP/CLI 会话权限。本地回归通过，真实服务和浏览器以本次提交 CI 为准，非上述历史检查点结论。",
+      "current": "手工逐次确认的单条 DML、目标行数限制、事务及提交确认，经真实服务HTTP及浏览器取消路径验证；不支持 RETURNING/任意 SQL，不扩展脚本/MCP/CLI会话权限；不是所有触发器副作用的总行数限制。",
       "evidence": "docs/ADR-POSTGRES-WRITES.md; tests/postgres-write.test.mjs; tests/remote-database.mjs; tests/ui-smoke.mjs"
     }
   ]

@@ -97,3 +97,65 @@ test("authorized MCP sync updates existing interfaces rather than duplicating th
   assert.equal(value.requests.length, 1);
   assert.equal(value.requests[0].id, id);
 });
+
+test("MCP tool arguments must be JSON objects, while omitted arguments remain valid", async () => {
+  let reads = 0;
+  const dispatch = createMCP({
+    store: {
+      ...store,
+      list: async () => {
+        reads++;
+        return [];
+      },
+    },
+  });
+  for (const args of [null, false, true, 0, 1, "", [], [1]]) {
+    const response = await dispatch(call("localapi_list_projects", args));
+    assert.equal(response.result.isError, true, JSON.stringify(args));
+    assert.match(response.result.content[0].text, /参数必须为对象/);
+  }
+  assert.equal(reads, 0);
+  assert.equal(
+    (
+      await dispatch({
+        id: 1,
+        method: "tools/call",
+        params: { name: "localapi_list_projects" },
+      })
+    ).result.isError,
+    undefined,
+  );
+  assert.equal(
+    (await dispatch(call("localapi_list_projects", {}))).result.isError,
+    undefined,
+  );
+  assert.equal(reads, 2);
+});
+
+test("MCP inherited property names are unknown arguments and cannot reach mutations", async () => {
+  let writes = 0;
+  const dispatch = createMCP({
+    store: {
+      ...store,
+      create: async () => {
+        writes++;
+        return { id: "created" };
+      },
+    },
+    write: true,
+  });
+  for (const key of [
+    "__proto__",
+    "constructor",
+    "toString",
+    "hasOwnProperty",
+  ]) {
+    const args = JSON.parse(
+      JSON.stringify({ name: "blocked" }).slice(0, -1) + ',"' + key + '":{}}',
+    );
+    const response = await dispatch(call("localapi_create_project", args));
+    assert.equal(response.result.isError, true, key);
+    assert.match(response.result.content[0].text, /未知参数/);
+  }
+  assert.equal(writes, 0);
+});

@@ -2372,7 +2372,11 @@ function bind() {
     mark();
     render();
   });
-  on("#db-type,#db-tls", "change", updateDatabaseFields);
+  on("#db-type,#db-tls", "change", () => {
+    if ($("#db-query").disabled) return;
+    $("#db-result").textContent = "";
+    updateDatabaseFields();
+  });
   on("#db-write", "change", (_, element) => {
     $("#db-query").textContent = element.checked
       ? "确认并执行写入"
@@ -2383,6 +2387,8 @@ function bind() {
     const target = $("#db-result"),
       button = $("#db-query"),
       type = $("#db-type").value;
+    if (button.disabled) return;
+    const connectionControls = [$("#db-type"), $("#db-tls")];
     const input = {
       type,
       host: $("#db-host").value,
@@ -2429,6 +2435,7 @@ function bind() {
     const queryMarker = {};
     target.activeQuery = queryMarker;
     button.disabled = true;
+    for (const control of connectionControls) control.disabled = true;
     target.textContent = input.allowWrite
       ? "正在执行写入，请勿重复提交…"
       : "正在查询…";
@@ -2450,6 +2457,7 @@ function bind() {
     } finally {
       if (button.isConnected && target.activeQuery === queryMarker) {
         button.disabled = false;
+        for (const control of connectionControls) control.disabled = false;
         $("#db-write").checked = false;
         button.textContent = "执行只读查询";
       }
