@@ -3,24 +3,85 @@ import { schemaChildMode } from "../public/schema-positions.js";
 export function prepareApipostModels(models, resource, projectName) {
   if (!Array.isArray(models) || models.length > 100)
     throw Error("Apipost模型最多100项");
-  const ids = new Map();
+  const ids = new Map(),
+    all = new Map(),
+    folders = [];
   for (const model of models) {
     if (
       !model ||
-      model.model_type !== "model" ||
-      !["0", ""].includes(String(model.parent_id ?? "0")) ||
+      !["model", "folder"].includes(model.model_type) ||
       typeof model.name !== "string" ||
       !model.name.trim() ||
       model.name.length > 200 ||
-      (typeof model.schema !== "boolean" &&
+      (model.model_type === "model" &&
+        typeof model.schema !== "boolean" &&
         (!model.schema ||
           typeof model.schema !== "object" ||
           Array.isArray(model.schema)))
     )
-      throw Error("Apipost仅支持完整平级模型定义");
+      throw Error("Apipost模型或目录定义不完整");
+    for (const value of [model.model_id, model.parent_id ?? "0"]) {
+      if (
+        typeof value !== "string" &&
+        !(typeof value === "number" && Number.isSafeInteger(value))
+      )
+        throw Error("Apipost模型ID必须为字符串或安全整数");
+    }
+    if (model.model_type === "folder" && model.schema !== undefined) {
+      const schema = model.schema;
+      if (
+        !schema ||
+        typeof schema !== "object" ||
+        Array.isArray(schema) ||
+        Object.keys(schema).some(
+          (key) => !["type", "properties"].includes(key),
+        ) ||
+        (schema.type !== undefined && schema.type !== "object") ||
+        (schema.properties !== undefined &&
+          (!schema.properties ||
+            typeof schema.properties !== "object" ||
+            Array.isArray(schema.properties) ||
+            Object.keys(schema.properties).length))
+      )
+        throw Error("模型目录包含非空Schema，需手工迁移");
+    }
     const id = String(model.model_id ?? "");
-    if (!id || ids.has(id)) throw Error("Apipost模型ID为空或重复");
-    ids.set(id, resource("model", id));
+    if (!id || id === "0" || id.length > 200 || all.has(id))
+      throw Error("Apipost模型ID为空、保留或重复");
+    if (
+      model.sort !== undefined &&
+      (typeof model.sort !== "number" || !Number.isFinite(model.sort))
+    )
+      throw Error("Apipost模型排序无效");
+    all.set(id, model);
+    if (model.model_type === "model") ids.set(id, resource("model", id));
+  }
+  const parent = (model) => String(model.parent_id ?? "0");
+  for (const [key, model] of all) {
+    const seen = new Set([key]);
+    let p = parent(model),
+      depth = model.model_type === "folder" ? 1 : 0;
+    while (p !== "0" && p !== "") {
+      if (seen.has(p)) throw Error("Apipost模型目录存在循环");
+      seen.add(p);
+      if (++depth > 20) throw Error("Apipost模型目录最多20层");
+      const node = all.get(p);
+      if (!node || node.model_type !== "folder")
+        throw Error("Apipost模型父目录不存在或不是目录");
+      p = parent(node);
+    }
+    if (model.model_type === "folder")
+      folders.push({
+        id: resource("model-folder", key),
+        name: model.name,
+        parentId: ["0", ""].includes(parent(model))
+          ? ""
+          : resource("model-folder", parent(model)),
+        ...(model.description
+          ? { description: String(model.description) }
+          : {}),
+        ...(model.sort !== undefined ? { sort: model.sort } : {}),
+      });
   }
   let nodes = 0;
   function convert(
@@ -126,7 +187,7 @@ export function prepareApipostModels(models, resource, projectName) {
   }
   const schemas = {},
     dictionary = [];
-  for (const model of models) {
+  for (const model of models.filter((m) => m.model_type === "model")) {
     const id = ids.get(String(model.model_id));
     const schema = convert(
       model.schema,
@@ -144,8 +205,12 @@ export function prepareApipostModels(models, resource, projectName) {
     dictionary.push({
       id,
       name: projectName + " / " + String(model.display_name || model.name),
+      ...(["0", ""].includes(parent(model))
+        ? {}
+        : { folderId: resource("model-folder", parent(model)) }),
+      ...(model.sort !== undefined ? { sort: model.sort } : {}),
       schema,
     });
   }
-  return { schemas, dictionary, rewrite: (schema) => convert(schema) };
+  return { schemas, dictionary, folders, rewrite: (schema) => convert(schema) };
 }

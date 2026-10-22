@@ -7,6 +7,11 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+env:
+  NPM_CONFIG_FETCH_TIMEOUT: "30000"
+  NPM_CONFIG_FETCH_RETRIES: "1"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "2000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
 jobs:
   core:
     strategy:

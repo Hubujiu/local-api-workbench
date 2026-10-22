@@ -1,3 +1,4 @@
+import { validateModelFolders } from "../public/model-folders.js";
 import { prepareApipostModels } from "./apipost-models.mjs";
 import { createHash } from "node:crypto";
 import { importApipost } from "./apipost-import.mjs";
@@ -393,11 +394,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     components.schemas[key] = schema;
   }
   const dictionary = mergeResources(project.dictionary, models.dictionary);
+  const modelFolders = mergeResources(project.modelFolders, models.folders);
+  validateModelFolders({ dictionary, modelFolders });
   return {
     ...legacy,
     metadata: {
       openapiComponents: components,
       dictionary,
+      ...(modelFolders.length ? { modelFolders } : {}),
       environments: mergeResources(project.environments, environments),
       servers: mergeResources(project.servers, servers),
       globalVariables: mergedGlobals,

@@ -1814,3 +1814,21 @@ dialog:has(#cookie-line) {
     padding: 16px;
   }
 }
+
+.model-folder {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 12px 0;
+  padding: 12px;
+}
+.model-folder > summary {
+  cursor: pointer;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.model-folder-content {
+  padding-left: 12px;
+}
+.model-folder-content .card {
+  margin-bottom: 8px;
+}

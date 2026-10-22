@@ -2046,9 +2046,21 @@ try {
   modern.apis[1].request.query.parameter = [];
   modern.models = [
     {
+      model_id: "browser-model-folder",
+      model_type: "folder",
+      name: "API Models",
+      parent_id: "0",
+    },
+    {
+      model_id: "browser-empty-folder",
+      model_type: "folder",
+      name: "Empty Model Group",
+      parent_id: "browser-model-folder",
+    },
+    {
       model_id: "browser-model",
       model_type: "model",
-      parent_id: "0",
+      parent_id: "browser-model-folder",
       name: "BrowserModel",
       schema: { type: "object", properties: { id: { const: 7 } } },
     },
@@ -2080,6 +2092,35 @@ try {
   await page
     .getByText("Fictional modern export / BrowserModel", { exact: true })
     .waitFor();
+  await page
+    .locator(".model-folder > summary")
+    .getByText("API Models", { exact: true })
+    .waitFor();
+  await page
+    .locator(".model-folder > summary")
+    .getByText("Empty Model Group", { exact: true })
+    .waitFor();
+  await page.getByText("空模型目录", { exact: true }).waitFor();
+  await page
+    .locator(".model-folder > summary")
+    .getByText("API Models", { exact: true })
+    .click();
+  assert.equal(
+    await page
+      .getByText("Fictional modern export / BrowserModel", { exact: true })
+      .isVisible(),
+    false,
+  );
+  await page
+    .locator(".model-folder > summary")
+    .getByText("API Models", { exact: true })
+    .click();
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  await page
+    .getByText("Fictional modern export / BrowserModel", { exact: true })
+    .waitFor();
+  await page.getByText("Empty Model Group", { exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-apipost-model.png" });
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [

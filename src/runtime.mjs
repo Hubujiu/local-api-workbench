@@ -1,3 +1,4 @@
+import { validateModelFolders } from "../public/model-folders.js";
 import { validateSharedScriptSettings } from "./shared-scripts.mjs";
 import { validateSharedAuthSettings } from "./shared-auth.mjs";
 import {
@@ -182,6 +183,7 @@ export class Store {
   }
   async save(p, { activity = false } = {}) {
     validateEnvironmentModel(p);
+    validateModelFolders(p);
     if (p.protocols !== undefined) {
       if (!Array.isArray(p.protocols) || p.protocols.length > 1000)
         throw Error("协议定义最多1000个");

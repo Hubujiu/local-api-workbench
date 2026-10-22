@@ -1,3 +1,4 @@
+import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { scriptStages } from "../public/shared-scripts.js";
 import { isModernApipost, importModernApipost } from "./apipost-modern.mjs";
@@ -1280,6 +1281,7 @@ export function restoreProject(document) {
     )
       throw Error("备份中的 " + key + " 格式无效");
   }
+  validateModelFolders(document);
   if (
     (document.runs || []).some(
       (run) =>

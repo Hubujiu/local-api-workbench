@@ -1,3 +1,4 @@
+import { modelCards } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
@@ -720,7 +721,7 @@ function renderPage() {
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
   if (page === "dictionary")
-    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${project.dictionary.map((d, i) => `<div class="card"><div class="row"><strong class="grow">${esc(d.name)}</strong><button data-edit-dictionary="${i}">编辑</button><button data-use-dictionary="${i}">应用到当前接口</button></div><pre>${esc(JSON.stringify(d.schema, null, 2))}</pre></div>`).join("") || '<div class="empty"><p>暂无数据模型</p></div>'}</div>`;
+    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div>${modelCards(project)}</div>`;
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],
