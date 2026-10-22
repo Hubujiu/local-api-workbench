@@ -1,3 +1,4 @@
+import { mcpSettingsPanel } from "./mcp-settings-view.js";
 import { globalParametersPanel } from "./global-parameters-view.js";
 import { functionPanel } from "./function-view.js";
 import { attributePanel } from "./attribute-view.js";
@@ -17,6 +18,8 @@ export function settingsPanel(
   project,
   active = "settings-basic",
   parameterFolder = "",
+  mcp = {},
+  projects = [],
 ) {
   let title = "基本设置",
     content = "";
@@ -68,10 +71,7 @@ export function settingsPanel(
     content = mockFieldPanel(project);
   } else if (active === "settings-mcp") {
     title = "MCP 连接";
-    content =
-      '<div class="card" id="settings-mcp"><h3>本地 MCP 服务</h3><button id="mcp-config" class="primary">配置本地 HTTP MCP 服务</button><p class="muted">默认关闭。项目与读写/执行权限需分别授权；仅在勾选保留授权后跨重启生效。</p><p>使用 stdio 模式启动，默认只读；必须显式授权项目。</p><pre>node src/mcp.mjs --project ' +
-      esc(project.id) +
-      '</pre><p class="muted">需要写入时加入 --write，需要执行请求时额外加入 --execute。不会自动更改你的 Agent 配置。</p></div>';
+    content = mcpSettingsPanel(project, projects, mcp);
   } else {
     content =
       '<div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="' +
@@ -81,9 +81,15 @@ export function settingsPanel(
   return (
     '<div class="page settings-content"><div class="page-head"><div><h1>' +
     title +
-    '</h1><span class="muted">项目配置 · ' +
-    esc(project.name) +
-    '</span></div><div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div></div>' +
+    '</h1><span class="muted">' +
+    (active === "settings-mcp"
+      ? "本机服务 · 项目授权独立配置"
+      : "项目配置 · " + esc(project.name)) +
+    "</span></div>" +
+    (active === "settings-mcp"
+      ? ""
+      : '<div class="toolbar"><button id="archive-project" class="danger">归档项目</button><button id="save" class="primary">保存配置</button></div>') +
+    "</div>" +
     content +
     "</div>"
   );

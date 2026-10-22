@@ -1,6 +1,6 @@
 {
-  "asOf": "2026-10-22T02:28:00Z",
-  "implementationCommit": "ade522f8cc4ba6e1d92718406a6ac778d627552c",
+  "asOf": "2026-10-22T06:24:22Z",
+  "implementationCommit": "b8add750f27623b826d96667e20af7c4889395bc",
   "counts": {
     "F": {
       "已实现": 37,
@@ -277,9 +277,9 @@
       "name": "数据字典",
       "status": "部分实现",
       "original": "文档/导航列出数据字典",
-      "current": "纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。",
+      "current": "纠正基线语义：参数说明/默认值/类型/示例/枚举字典，KV/JSON/常用 MySQL DDL 导入预览、临时捕获、内置项和复用；完整 DDL 语法不支持。Schema 模型独立保留。 DDL字面量与约束分离，ENUM括号/逗号和注释不再误判；不安全整数拒绝，表达式只保留备注，浏览器预览/保存/刷新验证通过。",
       "source": "S2",
-      "evidence": "src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs",
+      "evidence": "src/parameter-dictionary.mjs; public/dictionary-view.js; tests/parameter-dictionary.test.mjs; src/mysql-ddl.mjs; docs/ADR-DICTIONARY-DDL.md; tests/ui-smoke.mjs",
       "baselineStatus": "部分实现"
     },
     {
@@ -1023,13 +1023,13 @@
       "baselineStatus": "明确排除"
     }
   ],
-  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39710363952",
+  "verifiedWorkflow": "https://github.com/Hubujiu/local-api-workbench/actions/runs/39733528691",
   "baselineCommit": "d383014e2ab8d6d70d7ba7c88cdb8ba131f14249",
-  "note": "本对照针对上述363项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
+  "note": "本对照针对上述379项测试全绿检查点。后续改动需核对PR精确提交CI。原始98项基线不改写；补充项单列，不计算总体百分比；不代表隐藏行为、完整SDK或所有历史格式兼容。",
   "verification": {
-    "runId": 39710363952,
+    "runId": 39733528691,
     "conclusion": "success first attempt",
-    "coreTests": 363,
+    "coreTests": 379,
     "jobs": 10
   },
   "supplementalItems": [

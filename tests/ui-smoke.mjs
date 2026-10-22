@@ -1067,6 +1067,43 @@ try {
       .localapi,
   );
   await page.getByRole("button", { name: "关闭", exact: true }).click();
+  assert.equal(await page.locator("#save").count(), 0);
+  await page.locator("#mcp-reveal-config").click();
+  await page.waitForFunction(() =>
+    /Bearer [a-f0-9]{64}/.test(
+      document.querySelector("#mcp-inline-code").textContent,
+    ),
+  );
+  await page.locator('[data-mcp-preview-client="Codex"]').click();
+  assert(
+    (await page.locator("#mcp-inline-code").innerText()).includes(
+      "[mcp_servers.localapi]",
+    ),
+  );
+  await page.locator('[data-mcp-preview-client="Codex"]').press("ArrowRight");
+  assert.equal(
+    await page
+      .locator('[data-mcp-preview-client="Claude Code"]')
+      .getAttribute("aria-selected"),
+    "true",
+  );
+  await page.locator('[data-mcp-preview-client="VS Code"]').click();
+  assert(
+    JSON.parse(await page.locator("#mcp-inline-code").innerText()).servers
+      .localapi,
+  );
+  await page.locator("#mcp-reveal-config").click();
+  assert(
+    !(await page.locator("#mcp-inline-code").innerText()).match(
+      /Bearer [a-f0-9]{64}/,
+    ),
+  );
+  assert(await page.locator("#mcp-copy-config").isDisabled());
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-mcp-access-panel.png" });
+  await page.locator("#mcp-config").click();
+  await page.locator("#mcp-enabled").uncheck();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator("#mcp-config").click();
   assert(await page.locator("#mcp-enabled").isChecked());
   await page.locator("#mcp-enabled").uncheck();

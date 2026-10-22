@@ -1706,3 +1706,111 @@ dialog:has(#cookie-line) {
   max-height: 110px;
   overflow: auto;
 }
+
+.mcp-settings {
+  max-width: 1040px;
+}
+.mcp-service-card {
+  background: var(--top);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px;
+  margin: 18px 0;
+}
+.mcp-service-card .row {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.mcp-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 8px;
+}
+.mcp-state-dot.enabled {
+  background: var(--green);
+}
+.mcp-state-label {
+  border: 1px solid var(--line);
+  padding: 4px 9px;
+  border-radius: 5px;
+}
+.mcp-grants,
+.mcp-access-card {
+  background: var(--panel);
+  padding: 22px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.mcp-grants dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.mcp-grants dt {
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mcp-grants dd {
+  margin: 0;
+}
+.mcp-grants ul {
+  padding-left: 20px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.mcp-client-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.mcp-client-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  gap: 10px;
+}
+.mcp-client-tabs button {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 8px;
+  border-bottom: 2px solid transparent;
+}
+.mcp-client-tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+#mcp-inline-code {
+  min-height: 130px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 14px;
+  background: var(--bg);
+}
+.mcp-access-card > .row {
+  flex-wrap: wrap;
+}
+.mcp-access-card details {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.mcp-access-card details pre {
+  overflow: auto;
+}
+@media (max-width: 900px) {
+  .mcp-grants dl {
+    grid-template-columns: 1fr;
+  }
+  .mcp-service-card,
+  .mcp-grants,
+  .mcp-access-card {
+    padding: 16px;
+  }
+}

@@ -1,3 +1,4 @@
+import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
 import { inlineImageURI } from "./inline-image.js";
@@ -82,6 +83,8 @@ let opened = [],
   activeSession = null,
   sessionTimer = null,
   mcpState = { enabled: false, activities: [] },
+  updateMCPPanel = null,
+  mcpPollSequence = 0,
   helperOpen = false,
   bodyExpanded = false,
   responseLayout = "stacked",
@@ -693,6 +696,8 @@ function renderPage() {
       project,
       settingsSection,
       parameterScopes.get(project.id) || "",
+      mcpState,
+      projects,
     );
   if (page === "plans")
     return renderPlans({ project, planId, lastRun, busy, tab: planTab });
@@ -866,6 +871,15 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  const mcpPanel = $("#settings-mcp");
+  updateMCPPanel = mcpPanel
+    ? bindMCPSettings(mcpPanel, {
+        projects,
+        initial: mcpState,
+        loadConfig: () => api("/mcp/config"),
+        copy: (text) => navigator.clipboard.writeText(text),
+      })
+    : null;
   const visualizationFrame = $("#response-visualization");
   if (visualizationFrame) {
     try {
@@ -948,6 +962,9 @@ function bind() {
             ...document.querySelectorAll("[data-mcp-project]:checked"),
           ].map((e) => e.dataset.mcpProject),
         });
+        mcpPollSequence++;
+        mcpState = result;
+        updateMCPPanel?.(result);
         if (result.enabled) {
           setTimeout(() => showMCPClientConfiguration(result), 0);
         } else toast("MCP 已关闭，令牌已撤销");
@@ -3444,7 +3461,11 @@ async function pollSession() {
 async function refreshMCPActivity() {
   if (!token || document.hidden) return;
   try {
-    mcpState = await api("/mcp/config");
+    const poll = ++mcpPollSequence;
+    const nextState = await api("/mcp/config");
+    if (poll !== mcpPollSequence) return;
+    mcpState = nextState;
+    updateMCPPanel?.(mcpState);
     const running = (mcpState.activities || []).filter(
       (item) => item.status === "running",
     );
