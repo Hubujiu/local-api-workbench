@@ -2000,7 +2000,16 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-use-example="' + exampleIndex + '"]').click();
-  await page.locator("#send").waitFor();
+  // The URL bar exists in Mock mode too; wait for the asynchronous save and
+  // target transition, not merely for an already-visible Send button.
+  await page.waitForFunction((index) => {
+    const input = document.querySelector("#url");
+    return (
+      input &&
+      new URL(input.value, location.href).searchParams.get("example") ===
+        String(index)
+    );
+  }, exampleIndex);
   assert.equal(
     new URL(await page.locator("#url").inputValue()).searchParams.get(
       "example",
