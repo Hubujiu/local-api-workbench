@@ -15,7 +15,7 @@ const client = () =>
     { capabilities: {} },
   );
 const decode = (result) => {
-  assert.notEqual(result.isError, true);
+  assert.notEqual(result.isError, true, result.content?.[0]?.text);
   return JSON.parse(result.content[0].text);
 };
 
@@ -158,6 +158,95 @@ test(
       true,
     );
 
+    const invokeFlowTool = async (name, args) =>
+      decode(
+        await replacement.callTool({
+          name: "localapi_" + name,
+          arguments: { projectId: allowed.id, ...args },
+        }),
+      );
+    const defaultEnvironmentId = allowed.environments[0].id;
+    const alternate = await invokeFlowTool("create_environment", {
+      name: "SDK alternate environment",
+    });
+    await invokeFlowTool("switch_environment", {
+      environmentId: defaultEnvironmentId,
+    });
+    await invokeFlowTool("upsert_environment_variable", {
+      environmentId: defaultEnvironmentId,
+      key: "selection",
+      value: "default",
+    });
+    await invokeFlowTool("upsert_environment_variable", {
+      environmentId: alternate.id,
+      key: "selection",
+      value: "alternate",
+    });
+    const flow = await invokeFlowTool("create_execution_flow", {
+      plan: {
+        name: "SDK environment override",
+        environmentId: defaultEnvironmentId,
+        steps: [
+          {
+            request: {
+              ...allowed.requests[0],
+              headers: [{ key: "x-selection", value: "{{selection}}" }],
+              beforeScript: 'pm.environment.set("touched","yes");',
+            },
+          },
+        ],
+      },
+    });
+    const overridden = await invokeFlowTool("execute_flow", {
+      planId: flow.id,
+      environmentId: alternate.id,
+    });
+    assert.equal(overridden.status, "passed");
+    assert.equal(overridden.environmentId, alternate.id);
+    assert.equal(
+      overridden.results[0].request.headers.find(
+        (row) => row.key === "x-selection",
+      ).value,
+      "alternate",
+    );
+    const persistedOverride = await app.store.get(allowed.id);
+    assert.equal(persistedOverride.currentEnvironmentId, defaultEnvironmentId);
+    assert.equal(
+      persistedOverride.plans.find((plan) => plan.id === flow.id).environmentId,
+      defaultEnvironmentId,
+    );
+    assert.equal(
+      persistedOverride.environments.find((env) => env.id === alternate.id)
+        .variables.touched,
+      "yes",
+    );
+    assert.equal(
+      persistedOverride.environments.find(
+        (env) => env.id === defaultEnvironmentId,
+      ).variables.touched,
+      undefined,
+    );
+    const defaultRun = await invokeFlowTool("execute_flow", {
+      planId: flow.id,
+    });
+    assert.equal(defaultRun.environmentId, defaultEnvironmentId);
+    assert.equal(
+      defaultRun.results[0].request.headers.find(
+        (row) => row.key === "x-selection",
+      ).value,
+      "default",
+    );
+    const runCount = (await app.store.get(allowed.id)).runs.length;
+    const invalidEnvironment = await replacement.callTool({
+      name: "localapi_execute_flow",
+      arguments: {
+        projectId: allowed.id,
+        planId: flow.id,
+        environmentId: "missing-environment",
+      },
+    });
+    assert.equal(invalidEnvironment.isError, true);
+    assert.equal((await app.store.get(allowed.id)).runs.length, runCount);
     await configure({ enabled: false });
     await assert.rejects(replacement.listTools(), /403|unauthorized/i);
   },

@@ -14,6 +14,7 @@ import { Store, executeRequest } from "./runtime.mjs";
 import { importIntoProject, snapshotPlan, runPlan } from "./core.mjs";
 import {
   environmentVariables,
+  selectedEnvironment,
   debugEnvironment,
   resolveServiceRequest,
 } from "./environments.mjs";
@@ -157,7 +158,12 @@ export function createMCP({
       planId: str,
     });
     if (execute) {
-      addTool("execute_flow", "执行已有计划", { ...projectArg, planId: str });
+      addTool(
+        "execute_flow",
+        "执行已有计划，可临时指定环境而不改写计划默认值",
+        { ...projectArg, planId: str, environmentId: str },
+        ["projectId", "planId"],
+      );
       addTool(
         "execute_api",
         "执行已有HTTP接口并记录证据",
@@ -454,18 +460,18 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              const environmentId = selectedEnvironment(
+                p,
+                args.environmentId || plan.environmentId,
+              ).id;
               let completed = 0;
               output = await runPlan(
                 plan,
-                environmentVariables(p, plan.environmentId),
+                environmentVariables(p, environmentId),
                 executeRequest,
                 {
-                  ...scopedExecution(store, p, plan.environmentId),
-                  cookieSession: projectCookieSession(
-                    store,
-                    p,
-                    plan.environmentId,
-                  ),
+                  ...scopedExecution(store, p, environmentId),
+                  cookieSession: projectCookieSession(store, p, environmentId),
                   onStep: (step) =>
                     onProgress({
                       completed: ++completed,
@@ -475,9 +481,10 @@ export function createMCP({
                       stepStatus: step.status,
                     }),
                   prepareRequest: (request) =>
-                    resolveServiceRequest(p, request, plan.environmentId),
+                    resolveServiceRequest(p, request, environmentId),
                 },
               );
+              output.environmentId = environmentId;
               await store.append(p.id, "runs", { ...output, source: "mcp" });
               break;
             }
