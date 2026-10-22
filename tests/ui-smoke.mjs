@@ -1104,7 +1104,9 @@ try {
   await page.locator("#mcp-config").click();
   await page.locator("#mcp-enabled").uncheck();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator("#mcp-config").click();
+  await page.locator("#dialog").waitFor({ state: "visible" });
   assert(await page.locator("#mcp-enabled").isChecked());
   await page.locator("#mcp-enabled").uncheck();
   await page.locator("#dialog-save").click();
