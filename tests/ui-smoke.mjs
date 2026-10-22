@@ -2439,6 +2439,89 @@ try {
     })
     .screenshot({ path: "/tmp/local-api-model-folder-edit.png" });
 
+  const inferredExample = { id: 7, tags: ["a", "b"], active: true };
+  await page.locator("#add-dictionary").click();
+  await page.locator("#dict-name").fill("JSON Inferred Model");
+  await page.getByText("从 JSON 样例生成 Schema", { exact: true }).click();
+  const originalDraft = await page.locator("#modal-json").inputValue();
+  await page.locator("#model-json-sample").fill("{");
+  await page.locator("#infer-model-schema").click();
+  await page
+    .locator("#model-infer-error")
+    .getByText("JSON样例格式无效", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#modal-json").inputValue(), originalDraft);
+  await page
+    .locator("#model-json-sample")
+    .fill(JSON.stringify(inferredExample));
+  await page.locator("#infer-model-schema").click();
+  assert.deepEqual(
+    JSON.parse(await page.locator("#modal-json").inputValue()).example,
+    inferredExample,
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.getByText("JSON Inferred Model", { exact: true }).count(),
+    0,
+  );
+  await page.locator("#add-dictionary").click();
+  await page
+    .locator("#dict-name")
+    .fill("Fictional modern export / BrowserModel");
+  await page.getByText("从 JSON 样例生成 Schema", { exact: true }).click();
+  await page
+    .locator("#model-json-sample")
+    .fill(JSON.stringify(inferredExample));
+  await page.locator("#infer-model-schema").click();
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("模型名称重复，请使用不同名称", { exact: false })
+    .last()
+    .waitFor();
+  assert(await page.locator("#dialog").isVisible());
+  await page.locator("#dict-name").fill("JSON Inferred Model");
+  await page.locator("#dict-folder").selectOption(movedModelFolder);
+  await page.locator("#modal-json").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-model-json-preview.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const inferredSave = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      r.status() === 200 &&
+      r.url().includes("/api/projects/"),
+  );
+  await page.locator("#save-project").click();
+  const inferredProject = await (await inferredSave).json();
+  const inferredModel = inferredProject.dictionary.find(
+    (m) => m.name === "JSON Inferred Model",
+  );
+  assert.deepEqual(inferredModel.schema.example, inferredExample);
+  assert.equal(inferredModel.folderId, movedModelFolder);
+  await page.reload();
+  await page.locator('[data-page="dictionary"]').click();
+  const inferredCard = page
+    .locator(".card")
+    .filter({ has: page.getByText("JSON Inferred Model", { exact: true }) });
+  await inferredCard.locator("[data-use-dictionary]").click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="body"]').click();
+  await page.locator("#generate-body").click();
+  await page.waitForFunction(() => {
+    try {
+      return JSON.parse(document.querySelector("#body-code").value).id === 7;
+    } catch {
+      return false;
+    }
+  });
+  assert.deepEqual(
+    JSON.parse(await page.locator("#body-code").inputValue()),
+    inferredExample,
+  );
+
+  await saveAndWait("#save-project");
+
   const h2Project = await app.store.create("HTTP2 browser fixture");
   h2Project.requests = [
     normalizeRequest({

@@ -14,6 +14,15 @@ export function saveModel(project, index, input, newId) {
   )
     throw Error("模型名称须为1至500个字符");
   if (
+    dictionary.some(
+      (model, i) =>
+        i !== index &&
+        typeof model.name === "string" &&
+        model.name.trim() === input.name.trim(),
+    )
+  )
+    throw Error("模型名称重复，请使用不同名称");
+  if (
     typeof input.schema !== "boolean" &&
     (!input.schema ||
       typeof input.schema !== "object" ||

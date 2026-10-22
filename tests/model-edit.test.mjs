@@ -54,3 +54,30 @@ test("invalid model edits are atomic and new models can explicitly select a vali
   assert.equal(p.dictionary[0].folderId, "f");
   assert.equal(p.dictionary[0].schema, false);
 });
+
+test("duplicate model names are rejected atomically while editing the same model remains valid", () => {
+  const project = {
+    dictionary: [
+      { id: "first", name: "Example", schema: {} },
+      { id: "second", name: "Other", schema: {} },
+    ],
+  };
+  const before = structuredClone(project);
+  assert.throws(
+    () =>
+      saveModel(project, undefined, { name: " Example ", schema: {} }, "new"),
+    /名称重复/,
+  );
+  assert.throws(
+    () => saveModel(project, 1, { name: "Example", schema: {} }, "unused"),
+    /名称重复/,
+  );
+  assert.deepEqual(project, before);
+  saveModel(
+    project,
+    0,
+    { name: "Example", schema: { type: "string" } },
+    "unused",
+  );
+  assert.equal(project.dictionary[0].id, "first");
+});

@@ -1,3 +1,4 @@
+import { inferSchemaFromJSON } from "./schema-inference.js";
 import {
   saveModelFolder,
   removeEmptyModelFolder,
@@ -3158,7 +3159,7 @@ function editDictionary(index) {
   };
   modal(
     "数据模型",
-    `<label>名称</label><input id="dict-name" maxlength="500" value="${esc(d.name)}"><label>模型目录</label><select id="dict-folder"><option value="">根目录</option>${(project.modelFolders || []).map((folder) => `<option value="${esc(folder.id)}" ${d.folderId === folder.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, folder.id))}</option>`).join("")}</select><p class="muted">模型ID保持不变。修改关联组件后，引用该模型的后续数据生成将使用新Schema。</p>${jsonEditor(d.schema)}`,
+    `<label>名称</label><input id="dict-name" maxlength="500" value="${esc(d.name)}"><label>模型目录</label><select id="dict-folder"><option value="">根目录</option>${(project.modelFolders || []).map((folder) => `<option value="${esc(folder.id)}" ${d.folderId === folder.id ? "selected" : ""}>${esc(modelFolderPath(project.modelFolders, folder.id))}</option>`).join("")}</select><p class="muted">模型ID保持不变。修改关联组件后，引用该模型的后续数据生成将使用新Schema。</p><details><summary>从 JSON 样例生成 Schema</summary><p class="muted">仅推断类型和结构，不猜测必填、格式或范围。最多64KiB、2000节点、20层；混合数组保留anyOf。点击生成只替换下面的草稿，确认后才修改模型。XML/DDL样例不在此入口支持范围。</p><textarea id="model-json-sample" placeholder="粘贴JSON样例"></textarea><button type="button" id="infer-model-schema">生成预览</button><p id="model-infer-error" role="alert"></p></details>${jsonEditor(d.schema)}`,
     () => {
       saveModel(
         project,
@@ -3174,6 +3175,15 @@ function editDictionary(index) {
       render();
     },
   );
+  $("#infer-model-schema").onclick = () => {
+    try {
+      const schema = inferSchemaFromJSON($("#model-json-sample").value);
+      $("#modal-json").value = JSON.stringify(schema, null, 2);
+      $("#model-infer-error").textContent = "已生成草稿；请核对后确认保存。";
+    } catch (error) {
+      $("#model-infer-error").textContent = error.message;
+    }
+  };
 }
 async function send() {
   collect();
