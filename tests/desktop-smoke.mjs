@@ -1,3 +1,10 @@
+import http from "node:http";
+import {
+  createHmac,
+  generateKeyPairSync,
+  verify,
+  constants,
+} from "node:crypto";
 import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { DatabaseSync } from "node:sqlite";
@@ -14,6 +21,47 @@ database.exec(
 );
 database.close();
 const ntlmFixture = await startNtlmFixture();
+const jwtSecret = "fictional-desktop-jwt-secret-".repeat(3);
+const jwtRSA = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const jwtEC = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const jwtFixture = http.createServer((request, response) => {
+  try {
+    const [header, payload, signature] = (request.headers.authorization || "")
+      .slice(7)
+      .split(".");
+    const algorithm = JSON.parse(Buffer.from(header, "base64url")).alg;
+    const data = Buffer.from(header + "." + payload);
+    const valid =
+      algorithm === "HS256"
+        ? signature ===
+          createHmac("sha256", jwtSecret).update(data).digest("base64url")
+        : ["RS256", "PS256", "ES256"].includes(algorithm) &&
+          verify(
+            "sha256",
+            data,
+            {
+              key: algorithm === "ES256" ? jwtEC.publicKey : jwtRSA.publicKey,
+              ...(algorithm === "PS256"
+                ? { padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 32 }
+                : {}),
+              ...(algorithm === "ES256" ? { dsaEncoding: "ieee-p1363" } : {}),
+            },
+            Buffer.from(signature, "base64url"),
+          );
+    assert.equal(valid, true);
+    assert.equal(
+      JSON.parse(Buffer.from(payload, "base64url")).sub,
+      "packaged-fixture",
+    );
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ jwt: true, algorithm }));
+  } catch {
+    response.statusCode = 401;
+    response.end("invalid fixture signature");
+  }
+});
+await new Promise((resolve) => jwtFixture.listen(0, "127.0.0.1", resolve));
+
 let application,
   phase = "launch";
 const watchdog = setTimeout(() => {
@@ -113,6 +161,34 @@ try {
   assert.equal(ntlmResult.status, 200, JSON.stringify(ntlmResult));
   assert.equal(JSON.parse(ntlmResult.body).ntlm, true);
   assert.equal(ntlmFixture.stats.sockets.size, 1);
+  phase = "jwt";
+  console.log("DESKTOP_PHASE", phase);
+  await window
+    .locator("#url")
+    .fill("http://127.0.0.1:" + jwtFixture.address().port);
+  await window.locator("#auth-type").selectOption("jwt");
+  await window
+    .locator('[data-auth="payload"]')
+    .fill('{"sub":"packaged-fixture"}');
+  for (const algorithm of ["HS256", "RS256", "PS256", "ES256"]) {
+    const secret =
+      algorithm === "HS256"
+        ? jwtSecret
+        : (algorithm === "ES256" ? jwtEC : jwtRSA).privateKey.export({
+            type: "pkcs8",
+            format: "pem",
+          });
+    await window.locator('[data-auth="algorithm"]').selectOption(algorithm);
+    await window.locator('[data-auth="secret"]').fill(secret);
+    const reply = window.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    );
+    await window.locator("#send").click();
+    const result = await (await reply).json();
+    assert.equal(result.status, 200);
+    assert.deepEqual(JSON.parse(result.body), { jwt: true, algorithm });
+  }
+
   await window.locator("#auth-type").selectOption("none");
   await window.locator("#url").fill(packagedRequestURL);
   phase = "xml";
@@ -253,6 +329,8 @@ try {
     await application.close().catch(() => {});
   }
   await ntlmFixture.close();
+  jwtFixture.closeAllConnections();
+  await new Promise((resolve) => jwtFixture.close(resolve));
   clearTimeout(watchdog);
   await rm(root, {
     recursive: true,

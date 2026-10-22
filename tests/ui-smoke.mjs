@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
@@ -34,7 +35,33 @@ let uploadedMultipart,
   stdioChild,
   releaseMCP = () => {},
   mcpGate = Promise.resolve();
+const jwtFixtureSecret = "fictional-browser-jwt-secret-".repeat(3);
 const fixture = http.createServer(async (request, response) => {
+  if (request.url.startsWith("/jwt-auth")) {
+    const url = new URL(request.url, "http://fixture");
+    const token =
+      request.headers.authorization?.slice(7) ||
+      url.searchParams.get("signed") ||
+      "";
+    const [header, payload, signature] = token.split(".");
+    const expected = createHmac("sha256", jwtFixtureSecret)
+      .update(header + "." + payload)
+      .digest("base64url");
+    if (signature !== expected) {
+      response.statusCode = 401;
+      response.end("invalid signature");
+      return;
+    }
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        valid: true,
+        sub: JSON.parse(Buffer.from(payload, "base64url")).sub,
+        destination: url.searchParams.has("signed") ? "query" : "header",
+      }),
+    );
+    return;
+  }
   if (request.url.startsWith("/?query=")) {
     const query = new URL(request.url, "http://fixture.test");
     assert.equal(request.method, "GET");
@@ -1207,6 +1234,30 @@ try {
   assert(
     !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
   );
+  const beforeJWTURL = await page.locator("#url").inputValue();
+  await page.locator("#url").fill(fixtureURL + "/jwt-auth");
+  await page.locator("#auth-type").selectOption("jwt");
+  await page.locator('[data-auth="secret"]').fill(jwtFixtureSecret);
+  await page.locator('[data-auth="payload"]').fill('{"sub":"browser-fixture"}');
+  await page.locator('[data-auth="header"]').fill('{"kid":"fixture-key"}');
+  for (const destination of ["header", "queryParam"]) {
+    await page.locator('[data-auth="addTokenTo"]').selectOption(destination);
+    await page.locator('[data-auth="queryParamKey"]').fill("signed");
+    const jwtResponse = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    );
+    await page.locator("#send").click();
+    const jwtResult = await (await jwtResponse).json();
+    assert.equal(jwtResult.status, 200);
+    assert.deepEqual(JSON.parse(jwtResult.body), {
+      valid: true,
+      sub: "browser-fixture",
+      destination: destination === "header" ? "header" : "query",
+    });
+  }
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-jwt-auth.png" });
+  await page.locator("#url").fill(beforeJWTURL);
   await page.locator("#auth-type").selectOption("hawk");
   await page.locator('[data-auth="id"]').fill("hawk-fixture");
   await page.locator('[data-auth="key"]').fill("hawk-fixture-secret");

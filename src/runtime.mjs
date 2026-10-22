@@ -1,3 +1,4 @@
+import { jwtAuthorization } from "./jwt-auth.mjs";
 import { validateModelFolders } from "../public/model-folders.js";
 import { validateSharedScriptSettings } from "./shared-scripts.mjs";
 import { validateSharedAuthSettings } from "./shared-auth.mjs";
@@ -321,6 +322,11 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") u.searchParams.set(r.auth.key, r.auth.value);
     else headers[r.auth.key] = r.auth.value;
+  }
+  if (r.auth.type === "jwt") {
+    const jwt = await jwtAuthorization(r.auth);
+    if (jwt.in === "query") u.searchParams.set(jwt.key, jwt.value);
+    else headers[jwt.key] = jwt.value;
   }
   const activeCookies = r.cookies.filter((c) => c.enabled !== false && c.key);
   if (activeCookies.length)

@@ -23,6 +23,7 @@
     "@smithy/signature-v4": "5.7.4",
     "@xmldom/xmldom": "0.9.12",
     "hawk": "9.0.2",
+    "jose": "6.2.13",
     "js-md4": "0.3.2",
     "markdown-it": "15.0.3",
     "mongodb": "7.7.0",

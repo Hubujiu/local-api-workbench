@@ -1,3 +1,4 @@
+import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { randomUUID } from "node:crypto";
 const truth = (value) => value === true || value === 1 || value === "1";
 const checked = (value) => value === undefined || truth(value);
@@ -67,6 +68,7 @@ function rows(value = []) {
 function auth(value = { type: "noauth" }) {
   if (!value || value.type === "noauth" || value.type === "none")
     return { type: "none" };
+  if (value.type === "jwt") return importJwtConfig(value.jwt);
   if (value.type === "basic")
     return {
       type: "basic",

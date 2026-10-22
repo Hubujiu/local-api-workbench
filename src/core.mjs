@@ -1,3 +1,4 @@
+import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { scriptStages } from "../public/shared-scripts.js";
@@ -778,6 +779,7 @@ export function importDocument(doc) {
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
+      if (config.type === "jwt") return importJwtConfig(values);
       if (config.type === "bearer")
         return { type: "bearer", token: values.token || "" };
       if (config.type === "digest")
@@ -1051,6 +1053,7 @@ export function importCurl(source) {
 }
 export function exportOpenAPI(project) {
   const paths = Object.create(null);
+  const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
     let path;
     try {
@@ -1109,6 +1112,46 @@ export function exportOpenAPI(project) {
     }
     const original = structuredClone(r.openapiOperation || {});
     delete original.requestBody;
+    if (r.auth?.type === "jwt") {
+      const scheme =
+        r.auth.addTokenTo === "queryParam"
+          ? {
+              type: "apiKey",
+              in: "query",
+              name: r.auth.queryParamKey ?? "token",
+              description: "JWT; signing credentials are not exported",
+            }
+          : (r.auth.headerPrefix ?? "Bearer") === "Bearer"
+            ? { type: "http", scheme: "bearer", bearerFormat: "JWT" }
+            : {
+                type: "apiKey",
+                in: "header",
+                name: "Authorization",
+                description:
+                  "JWT with an explicit custom prefix; signing credentials are not exported",
+              };
+      components.securitySchemes ??= {};
+      if (
+        typeof components.securitySchemes !== "object" ||
+        Array.isArray(components.securitySchemes)
+      )
+        throw Error("OpenAPI securitySchemes 无效");
+      const name =
+        "localapi_jwt_" +
+        createHash("sha256")
+          .update(JSON.stringify(scheme))
+          .digest("hex")
+          .slice(0, 12);
+      if (
+        Object.hasOwn(components.securitySchemes, name) &&
+        JSON.stringify(components.securitySchemes[name]) !==
+          JSON.stringify(scheme)
+      )
+        throw Error("OpenAPI JWT认证方案冲突");
+      components.securitySchemes[name] = scheme;
+      original.security = [{ [name]: [] }];
+    }
+
     try {
       if (!r.url.includes("{{"))
         original.servers = [{ url: new URL(r.url).origin }];
@@ -1144,13 +1187,15 @@ export function exportOpenAPI(project) {
     openapi: "3.0.3",
     info: { title: project.name, version: "1.0.0" },
     paths,
-    ...(project.openapiComponents
-      ? { components: project.openapiComponents }
-      : {}),
+    ...(Object.keys(components).length ? { components } : {}),
   };
 }
 export function toCurl(input) {
   const r = normalizeRequest(input);
+  if (r.auth.type === "jwt")
+    throw Error(
+      "JWT需要本地生成签名；请使用原始请求/项目导出，不生成缺失认证的cURL。",
+    );
   if (r.auth.type === "ntlm")
     throw Error("NTLM导出不能保证相同v2限制，请使用原始请求/项目导出");
   if (r.auth.type === "edgegrid")

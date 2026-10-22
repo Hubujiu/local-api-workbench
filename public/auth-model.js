@@ -10,6 +10,7 @@ export const authTypes = [
   "hawk",
   "edgegrid",
   "apiKey",
+  "jwt",
 ];
 export function validateAuth(auth = {}) {
   if (!auth || typeof auth !== "object" || Array.isArray(auth))

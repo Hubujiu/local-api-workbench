@@ -42,3 +42,24 @@ test("unsupported auth fails closed rather than sending an unauthenticated reque
   for (const type of authTypes)
     assert.equal(normalizeRequest({ auth: { type } }).auth.type, type);
 });
+
+test("JWT authentication controls cover algorithms, destinations and explicit secret storage warning", () => {
+  const html = authPanel({
+    type: "jwt",
+    algorithm: "ES512",
+    payload: '{"x":"<script>"}',
+    secret: "<key>",
+    isSecretBase64Encoded: true,
+  });
+  assert.match(html, /<option selected>ES512<\/option>/);
+  assert.match(html, /data-auth="payload"/);
+  assert.match(html, /仅接受未加密PEM/);
+  assert.match(html, /value="Bearer"/);
+  assert.match(html, /明文写入项目/);
+  assert.equal(html.includes("<script>"), false);
+  assert.equal(html.includes("<key>"), false);
+  assert.match(
+    authPanel({ type: "jwt" }, { shared: true }),
+    /data-shared-auth="secret"/,
+  );
+});
