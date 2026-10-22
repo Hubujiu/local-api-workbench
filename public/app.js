@@ -527,7 +527,21 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table><thead><tr><th width="30"></th><th>参数名</th><th>参数值</th><th width="35"></th></tr></thead><tbody>${rows.map((p, i) => `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td>${key === "form" ? `<select data-field-type="${i}"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>` : ""}${p.type === "file" ? `<input type="file" data-field-file="${i}"><small>${esc(p.filename || "未选择文件")}</small>` : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`}</td><td><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></td></tr>`).join("")}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+  return `<table class="pairs-table"><thead><tr><th class="pair-enabled-heading"></th><th class="pair-name-heading">参数名</th><th>参数值</th><th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
+    .map((p, i) => {
+      const selector =
+        key === "form"
+          ? `<select data-field-type="${i}" aria-label="字段类型"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>`
+          : "";
+      const value =
+        p.type === "file"
+          ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
+          : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
+      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td><td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
+    })
+    .join(
+      "",
+    )}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
 }
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))

@@ -500,6 +500,62 @@ td button {
 .pair-actions {
   padding-top: 10px;
 }
+.pairs-table {
+  table-layout: fixed;
+}
+.pairs-table .pair-enabled-heading {
+  width: 30px;
+}
+.pairs-table .pair-name-heading {
+  width: 24%;
+}
+.pairs-table .pair-actions-heading {
+  width: 180px;
+}
+.pairs-table td {
+  padding: 5px 6px;
+}
+.pairs-table input,
+.pairs-table select {
+  min-width: 0;
+  padding: 5px 6px;
+}
+.pair-value,
+.pair-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.pair-value > input,
+.pair-file {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
+}
+.pair-value > select {
+  flex: 0 0 auto;
+  max-width: 76px;
+}
+.pair-file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pair-file small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pair-row-actions {
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+.pair-row-actions button {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  font-size: 12px;
+}
 .page {
   padding: 25px;
   overflow: auto;

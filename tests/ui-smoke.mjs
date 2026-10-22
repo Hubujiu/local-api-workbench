@@ -3870,6 +3870,47 @@ try {
     format: "binary",
   });
   assert.equal(formState.requests[0].form[1].schema, false);
+  for (const width of [1000, 1440]) {
+    await page.setViewportSize({ width, height: 760 });
+    const layout = await page
+      .locator('[data-pair="form:0:key"]')
+      .evaluate((input) => {
+        const row = input.closest("tr"),
+          buttons = [...row.querySelectorAll("button")].map((button) =>
+            button.getBoundingClientRect(),
+          ),
+          select = row.querySelector("select").getBoundingClientRect(),
+          value = row
+            .querySelector('[data-pair="form:0:value"]')
+            .getBoundingClientRect();
+        return {
+          height: row.getBoundingClientRect().height,
+          buttonSpread:
+            Math.max(...buttons.map((box) => box.top)) -
+            Math.min(...buttons.map((box) => box.top)),
+          valueOffset: Math.abs(select.top - value.top),
+          overflow:
+            row.closest("table").scrollWidth - row.closest("table").clientWidth,
+        };
+      });
+    assert.ok(
+      layout.height <= 64,
+      `parameter row is too tall at ${width}: ${JSON.stringify(layout)}`,
+    );
+    assert.ok(
+      layout.buttonSpread <= 2,
+      `parameter actions must share a row: ${JSON.stringify(layout)}`,
+    );
+    assert.ok(
+      layout.valueOffset <= 3,
+      `field type and value must align: ${JSON.stringify(layout)}`,
+    );
+    assert.ok(
+      layout.overflow <= 1,
+      `parameter table must not overflow: ${JSON.stringify(layout)}`,
+    );
+  }
+  await page.setViewportSize({ width: 1000, height: 760 });
   await page.screenshot({ path: "/tmp/local-api-form-schema.png" });
 
   assert.deepEqual(errors, []);
