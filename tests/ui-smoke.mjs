@@ -3679,6 +3679,21 @@ try {
     "only the confirmed write adds one request",
   );
   page.off("request", recordRedisHTTP);
+  const redisAppliedBounds = await page
+    .locator("#db-result")
+    .evaluate((node) => {
+      const at = node.textContent.indexOf('"applied": true');
+      const range = document.createRange();
+      range.setStart(node.firstChild, at);
+      range.setEnd(node.firstChild, at + 15);
+      const bounds = range.getBoundingClientRect();
+      return { top: bounds.top, bottom: bounds.bottom };
+    });
+  assert(
+    redisAppliedBounds.top >= 44 &&
+      redisAppliedBounds.bottom <= page.viewportSize().height - 25,
+    "Redis write acknowledgement is immediately visible above the footer",
+  );
   await page.screenshot({ path: "/tmp/local-api-redis-write.png" });
   await page.locator("#db-sql").fill('["GET","ui-fixture"]');
   await page.locator("#db-query").click();

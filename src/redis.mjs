@@ -368,12 +368,14 @@ async function executeRedis(input, command, writing) {
               !(conditional && frame.value === null && nullBulk)
             )
               throw Error("Redis SET确认响应无效");
-            Object.assign(result, {
+            return finish(null, {
               write: true,
               command: "SET",
               acknowledged: true,
               applied: frame.value === "OK",
               affectedKeys: frame.value === "OK" ? 1 : 0,
+              ...result,
+              limit: 1,
             });
           }
           return finish(null, result);

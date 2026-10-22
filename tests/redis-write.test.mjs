@@ -119,6 +119,7 @@ test("Redis writes wait for AUTH and SELECT and distinguish acknowledgement from
   assert.equal(result.acknowledged, true);
   assert.equal(result.applied, true);
   assert.equal(result.affectedKeys, 1);
+  assert.equal(result.limit, 1);
   assert.deepEqual(f.seen, [
     ["AUTH", "fixture", "fixture-only"],
     ["SELECT", "2"],
