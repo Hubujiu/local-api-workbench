@@ -114,3 +114,4 @@ try {
     new Promise((resolve) => target.close(resolve)),
   ]);
 }
+await import("./curl-bodies-integration.mjs");

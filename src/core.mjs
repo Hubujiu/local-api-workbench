@@ -1004,7 +1004,8 @@ export function importCurl(source) {
   let r = { headers: [], method: "GET" };
   let explicitMethod = false,
     proxyTunnel = false,
-    noProxy;
+    noProxy,
+    dataKind;
   const setURL = (value) => {
     if (r.url) throw Error("暂不支持一条cURL中的多个URL");
     r.url = value;
@@ -1019,17 +1020,51 @@ export function importCurl(source) {
       if (!r.method) throw Error("缺少 HTTP 方法");
     } else if (t === "-H" || t === "--header") {
       const h = clean(tokens[++i]);
-      if (!h || !h.includes(":")) throw Error("无效 Header");
+      if (!h || (!h.includes(":") && !h.endsWith(";")))
+        throw Error("无效 Header");
       const n = h.indexOf(":");
+      const key = n < 0 ? h.slice(0, -1) : h.slice(0, n);
+      const value = n < 0 ? "" : h.slice(n + 1).trim();
+      if (!key.trim()) throw Error("无效 Header");
       r.headers.push({
-        key: h.slice(0, n),
-        value: h.slice(n + 1).trim(),
-        enabled: true,
+        key,
+        value,
+        enabled: n < 0 || value !== "",
       });
-    } else if (["-d", "--data", "--data-raw"].includes(t)) {
-      r.body = clean(tokens[++i]);
-      if (t !== "--data-raw" && r.body?.startsWith("@"))
+    } else if (
+      [
+        "-d",
+        "--data",
+        "--data-ascii",
+        "--data-raw",
+        "--data-binary",
+        "--data-urlencode",
+        "--json",
+      ].includes(t)
+    ) {
+      let value = clean(tokens[++i]);
+      if (value === undefined) throw Error("缺少 cURL 请求体参数");
+      const kind = t === "--json" ? "json" : "data";
+      if (r.bodyType === "form-data" || (dataKind && dataKind !== kind))
+        throw Error("暂不支持混用不同 cURL 请求体类型");
+      if (t === "--data-urlencode") {
+        const equal = value.indexOf("=");
+        if (equal < 0 && value.includes("@"))
+          throw Error("不自动读取 cURL 文件，请使用文件选择器");
+        const encoded = encodeURIComponent(
+          equal < 0 ? value : value.slice(equal + 1),
+        )
+          .replace(
+            /[!'()*]/g,
+            (character) =>
+              "%" + character.charCodeAt(0).toString(16).toUpperCase(),
+          )
+          .replaceAll("%20", "+");
+        value = (equal > 0 ? value.slice(0, equal) + "=" : "") + encoded;
+      } else if (t !== "--data-raw" && value.startsWith("@"))
         throw Error("不自动读取 cURL 文件，请使用文件选择器");
+      r.body = (r.body ? r.body + (kind === "json" ? "" : "&") : "") + value;
+      dataKind = kind;
       r.bodyType = "raw";
       if (!explicitMethod) r.method = "POST";
     } else if (t === "--url") setURL(clean(tokens[++i]));
@@ -1054,6 +1089,7 @@ export function importCurl(source) {
     else if (t === "--max-time" || t === "-m")
       r.timeout = Number(tokens[++i]) * 1000;
     else if (t === "--form-string" || t === "--form" || t === "-F") {
+      if (dataKind) throw Error("暂不支持混用不同 cURL 请求体类型");
       const value = tokens[++i] || "",
         equal = value.indexOf("=");
       if (equal < 0) throw Error("无效表单参数");
@@ -1072,6 +1108,22 @@ export function importCurl(source) {
       throw Error(`不支持的 cURL 参数: ${t}`);
   }
   if (!r.url) throw Error("cURL 缺少 URL");
+  const defaultHeader = (key, value) => {
+    if (
+      !r.headers.some(
+        (header) => header.key.toLowerCase() === key.toLowerCase(),
+      )
+    )
+      r.headers.push({ key, value, enabled: true });
+  };
+  if (dataKind)
+    defaultHeader(
+      "Content-Type",
+      dataKind === "json"
+        ? "application/json"
+        : "application/x-www-form-urlencoded",
+    );
+  defaultHeader("Accept", dataKind === "json" ? "application/json" : "*/*");
   if (noProxy === "*") r.proxy = "";
   if (
     proxyTunnel &&
@@ -1296,8 +1348,11 @@ export function toCurl(input) {
   if (r.bodyType === "urlencoded")
     headers["content-type"] ??= "application/x-www-form-urlencoded";
   args.push(quote(url.href));
+  if (!Object.hasOwn(headers, "accept")) args.push("-H", quote("accept:"));
+  if (r.bodyType === "raw" && !Object.hasOwn(headers, "content-type"))
+    args.push("-H", quote("content-type:"));
   for (const [key, value] of Object.entries(headers))
-    args.push("-H", quote(key + ": " + value));
+    args.push("-H", quote(value === "" ? key + ";" : key + ": " + value));
   if (r.proxy) args.push("--proxy", quote(r.proxy));
   args.push("--max-time", String(r.timeout / 1000));
   if (r.bodyType === "form-data")

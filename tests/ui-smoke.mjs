@@ -1006,10 +1006,22 @@ try {
   await page.locator("#import").click();
   await page
     .locator("#import-text")
-    .fill(`curl -X GET '${app.url}/api/session'`);
+    .fill(`curl -X GET --data-urlencode 'q=中文 +值' '${app.url}/api/session'`);
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   assert((await page.locator("[data-request]").count()) === 3);
+  const importedCurl = (
+    await app.store.get(await page.locator("#project-select").inputValue())
+  ).requests.at(-1);
+  assert.equal(importedCurl.method, "GET");
+  assert.equal(importedCurl.body, "q=%E4%B8%AD%E6%96%87+%2B%E5%80%BC");
+  assert(
+    importedCurl.headers.some(
+      (header) =>
+        header.key.toLowerCase() === "content-type" &&
+        header.value === "application/x-www-form-urlencoded",
+    ),
+  );
   await page.locator(".response-body .empty").waitFor();
   assert(
     !(await page.locator(".response-body").innerText()).includes("script-done"),
