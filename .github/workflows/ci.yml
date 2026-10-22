@@ -37,15 +37,15 @@ jobs:
   browser:
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+      options: --shm-size=1g
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
-      - name: Use canonical signed Ubuntu archive
-        run: sudo --preserve-env=GITHUB_ACTIONS "$(command -v node)" scripts/ci-ubuntu-mirror.mjs
-      - run: npx playwright install --with-deps chromium
       - run: node tests/curl-http2.mjs
       - run: node tests/ui-smoke.mjs
         env:
