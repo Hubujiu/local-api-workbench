@@ -2026,3 +2026,8 @@ dialog:has(#cookie-line) {
     grid-template-columns: 1fr;
   }
 }
+
+.doc-literal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

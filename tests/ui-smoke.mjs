@@ -1,3 +1,4 @@
+import MarkdownIt from "markdown-it";
 import { createHmac, generateKeyPairSync, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { startNtlmFixture } from "./fixtures/ntlm-server.mjs";
@@ -4691,6 +4692,92 @@ try {
   assert.match(await page.locator(".response pre").innerText(), /changed/);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-script-form.png" });
+
+  await createFileTarget("Document form fields");
+  const privateUploadText = "DOC-UPLOAD-BYTES-DO-NOT-INLINE";
+  const privateUploadBase64 = Buffer.from(privateUploadText).toString("base64");
+  await page.locator('[data-field-file="0"]').setInputFiles({
+    name: "documentation-privacy.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from(privateUploadText),
+  });
+  await page.getByText("documentation-privacy.txt", { exact: false }).waitFor();
+  await page.locator('[data-add-pair="form"]').click();
+  await page.locator('[data-pair="form:1:key"]').fill("display|name");
+  await page
+    .locator('[data-pair="form:1:value"]')
+    .fill('<img src="' + fixtureURL + '/document-leak"> & literal');
+  await page.locator('[data-pair="form:1:enabled"]').uncheck();
+  await saveAndWait();
+  await page.locator('[data-page="docs"]').click();
+  const documentFormCard = page.locator("article.card").filter({
+    has: page.getByRole("heading", {
+      name: "Document form fields",
+      exact: true,
+    }),
+  });
+  const previewText = await documentFormCard.innerText();
+  assert(previewText.includes("documentation-privacy.txt"));
+  assert(previewText.includes("display|name"));
+  assert(previewText.includes("停用"));
+  assert(!previewText.includes(privateUploadText));
+  assert(!previewText.includes(privateUploadBase64));
+  assert.equal(await documentFormCard.locator("img").count(), 0);
+  await documentFormCard.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-document-form-preview.png" });
+  const htmlDocumentDownload = page.waitForEvent("download");
+  await page.locator("#export-docs").click();
+  await page.locator("#document-format").selectOption("html");
+  await page.locator("#dialog-save").click();
+  const htmlDocument = await readFile(
+    await (await htmlDocumentDownload).path(),
+    "utf8",
+  );
+  assert(!htmlDocument.includes(privateUploadText));
+  assert(!htmlDocument.includes(privateUploadBase64));
+  const documentPage = await browserContext.newPage();
+  const documentRequests = [],
+    documentErrors = [];
+  documentPage.on("request", (request) => documentRequests.push(request.url()));
+  documentPage.on("pageerror", (error) => documentErrors.push(error.message));
+  try {
+    await documentPage.setContent(htmlDocument);
+    const exportedForm = documentPage.locator("section").filter({
+      has: documentPage.getByRole("heading", {
+        name: "Document form fields",
+        exact: true,
+      }),
+    });
+    const exportedText = await exportedForm.innerText();
+    assert(exportedText.includes("documentation-privacy.txt"));
+    assert(exportedText.includes("display|name"));
+    assert(exportedText.includes("停用"));
+    assert.equal(await documentPage.locator("img,script").count(), 0);
+    assert.deepEqual(documentRequests, []);
+    assert.deepEqual(documentErrors, []);
+    await exportedForm.scrollIntoViewIfNeeded();
+    await documentPage.screenshot({
+      path: "/tmp/local-api-document-form-export.png",
+    });
+  } finally {
+    await documentPage.close();
+  }
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const markdownDocumentDownload = page.waitForEvent("download");
+  await page.locator("#export-docs").click();
+  await page.locator("#document-format").selectOption("markdown");
+  await page.locator("#dialog-save").click();
+  const markdownDocument = await readFile(
+    await (await markdownDocumentDownload).path(),
+    "utf8",
+  );
+  const renderedMarkdownDocument = new MarkdownIt().render(markdownDocument);
+  assert(renderedMarkdownDocument.includes("documentation-privacy.txt"));
+  assert(renderedMarkdownDocument.includes("display|name"));
+  assert(markdownDocument.includes("停用"));
+  assert(!markdownDocument.includes(privateUploadText));
+  assert(!markdownDocument.includes(privateUploadBase64));
+  await page.locator("#dialog").waitFor({ state: "hidden" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

@@ -50,7 +50,10 @@ import { renderPlans } from "./plan-view.js";
 import { resources, settingsSidebar } from "./resource-view.js";
 import { highlightJSON } from "./code-format.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
-import { exportDocumentation } from "./document-export.js";
+import {
+  exportDocumentation,
+  requestDocumentationHTML,
+} from "./document-export.js";
 import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
@@ -787,7 +790,7 @@ function renderPage() {
         .filter((r) => !r.deletedAt)
         .map(
           (r) =>
-            `<article class="card markdown"><div class="row"><span class="method ${r.method}">${r.method}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><p>${esc(r.description || "暂无描述")}</p>${r.query.length ? `<h4>Query 参数</h4><table>${r.query.map((p) => `<tr><td>${esc(p.key)}</td><td>${esc(p.value)}</td></tr>`).join("")}</table>` : ""}${r.bodyType !== "none" ? `<h4>请求体 · ${esc(r.bodyType)}</h4><pre>${esc(r.body)}</pre>` : ""}${r.examples.map((e) => `<h4>${esc(e.name)} · ${esc(e.status)}</h4><pre>${esc(e.body)}</pre>`).join("")}</article>`,
+            `<article class="card markdown"><div class="row"><span class="method ${esc(r.method)}">${esc(r.method)}</span><h3>${esc(r.name)}</h3></div><pre>${esc(r.url)}</pre><div class="markdown-content">${renderMarkdown(r.description || "暂无描述")}</div>${requestDocumentationHTML(r, 4)}</article>`,
         )
         .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
   }</div>`;
