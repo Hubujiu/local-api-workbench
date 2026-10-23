@@ -196,3 +196,30 @@ test("HTTP saves enforce case ownership atomically and groups survive restart an
   broken.caseFolders = [];
   await call("/api/restore", "POST", { document: broken }, false);
 });
+
+test("case evidence distinguishes missing response status from an unsent request", () => {
+  const p = project();
+  p.cases = [
+    {
+      id: "case",
+      name: "Case",
+      sourceRequestId: "api",
+      request: { method: "GET", url: "https://example.test" },
+    },
+  ];
+  const render = (result) =>
+    caseCards(
+      p,
+      "api",
+      new Map([["case", result]]),
+      false,
+      new Set(),
+      new Set(["case"]),
+    );
+  const interrupted = render({ outcome: "failed", error: "cancelled" });
+  assert.match(interrupted, /未取得HTTP响应/);
+  assert.doesNotMatch(interrupted, /未请求|未发送/);
+  const unsent = render({ outcome: "not-run" });
+  assert.match(unsent, /本批次未运行.*未发送/);
+  assert.match(render({ outcome: "passed", status: 200 }), /通过.*HTTP 200/);
+});

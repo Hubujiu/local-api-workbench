@@ -6297,6 +6297,11 @@ try {
     .getByText("已取消", { exact: false })
     .waitFor();
   releaseCaseBatchSlow();
+  const interruptedSummary = await page
+    .locator(`[data-case-result="${firstBatchCase.id}"] summary`)
+    .textContent();
+  assert.match(interruptedSummary, /未取得HTTP响应/);
+  assert.doesNotMatch(interruptedSummary, /未请求|未发送/);
   assert.match(
     await page
       .locator(`[data-case-result="${lastBatchCase.id}"] summary`)
