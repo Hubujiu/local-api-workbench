@@ -4669,6 +4669,26 @@ try {
     .fill(
       "pm.request.body.update({mode:'urlencoded',urlencoded:[{key:'tag',value:'first'},{key:'tag',value:'second'},{key:'skip',value:'hidden',disabled:true}]}); const form=pm.request.body.urlencoded; form.one('tag').value='changed'; form.add({key:'中文',value:'空 格&=+'}); pm.test('form-readers', () => pm.expect(form.toObject().tag).to.deep.equal(['first','changed']));",
     );
+  // The inline editor must be reachable without scrolling past long help text.
+  for (const stage of ["after", "before"]) {
+    await page.locator(`[data-param="${stage}"]`).click();
+    const visibleCodeHeight = await page
+      .locator("#script-code")
+      .evaluate((input) => {
+        const panel = input.closest(".request-panel");
+        panel.scrollTop = 0;
+        const a = input.getBoundingClientRect(),
+          b = panel.getBoundingClientRect();
+        return Math.max(
+          0,
+          Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top),
+        );
+      });
+    assert.ok(
+      visibleCodeHeight >= 100,
+      `${stage} inline script editor has ${visibleCodeHeight}px visible`,
+    );
+  }
   const originalFormScript = await page.locator("#script-code").inputValue();
   const editorSideEffects = [];
   const recordEditorSideEffect = (request) => {

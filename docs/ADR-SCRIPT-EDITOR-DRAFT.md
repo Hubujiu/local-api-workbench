@@ -22,3 +22,13 @@ input. Browser coverage includes all three dismissal routes, focus restoration,
 repeat opening, stage isolation, shortcut side-effect absence, applying a real
 form script and subsequent explicit save/send. Browser results require the
 exact-commit CI; this is not a full IDE or a new scripting permission.
+
+
+Inline editor visibility: CI screenshot review at 4279434 showed that long
+compatibility/help text pushed the entire inline textarea below the request
+panel at the exercised 1000px viewport. Place the existing mode selector,
+actions and source editor before the explanatory content. Keep all warnings,
+shared-script inheritance controls, sandbox limitations and operations present;
+mode changes retain their confirmation. Browser regression requires at least
+100px of the textarea visible at scrollTop=0 in both script stages. Expanded
+editing remains optional, with unchanged apply/cancel and no-send semantics.
