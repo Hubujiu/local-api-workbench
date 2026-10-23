@@ -2,6 +2,7 @@ import { replaceExactApipostTemplate } from "./apipost-template-replacement.mjs"
 import {
   parseApipostFunctionTemplate,
   isApipostBuiltinStage,
+  isApipostHashStage,
   apipostTemplateStages,
 } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
@@ -82,6 +83,7 @@ export async function resolveApipostFunctionTemplate(
   const code = `
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
     ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash"), __apipostString=String, __apipostConcat=Function.prototype.call.bind(String.prototype.concat), __apipostSubstr=Function.prototype.call.bind(String.prototype.substr);const __apipostPadStart=__apipostBuiltinLibrary.padStart, __apipostPadEnd=__apipostBuiltinLibrary.padEnd;const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber,encodeuricomponent:encodeURIComponent,decodeuricomponent:decodeURIComponent,concat:(value,text)=>__apipostConcat(__apipostString(value),text),lconcat:(value,text)=>__apipostConcat(text,__apipostString(value)),substr:(value,args)=>__apipostSubstr(__apipostString(value),args[0],args[1]),padstart:(value,args)=>__apipostPadStart(value,args[0],args[1]),padend:(value,args)=>__apipostPadEnd(value,args[0],args[1])});` : ""}
+    ${selected.some((fn) => isApipostHashStage(fn.name)) ? `const __apipostHashLibrary=require("crypto-js");` : ""}
     let output;
     ${name ? `try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); } catch(error) { output=${JSON.stringify(baseExpression)}; }` : `output=${Object.is(initial, -0) ? "-0" : JSON.stringify(initial)};`}
     ${check}
@@ -89,7 +91,7 @@ export async function resolveApipostFunctionTemplate(
       .slice(name ? 1 : 0)
       .map(
         (fn) =>
-          `{ const input=output;try{output=${fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
+          `{ const input=output;${isApipostHashStage(fn.name) ? "if(typeof input!=='string')throw Error('原版哈希加工链仅支持文本输入');" : ""}try{output=${isApipostHashStage(fn.name) ? `__apipostString(__apipostHashLibrary.${fn.name.toUpperCase()}(input))` : fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
       )
       .join("\n")}
     apt.setVar('functionTemplateResult', output);

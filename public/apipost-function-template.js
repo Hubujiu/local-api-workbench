@@ -1,4 +1,14 @@
+export const apipostHashStages = Object.freeze([
+  "md5",
+  "sha1",
+  "sha224",
+  "sha256",
+  "sha384",
+  "sha512",
+]);
+export const isApipostHashStage = (name) => apipostHashStages.includes(name);
 export const apipostBuiltinStages = Object.freeze([
+  ...apipostHashStages,
   "lower",
   "upper",
   "length",
@@ -99,6 +109,11 @@ export function parseApipostFunctionTemplate(value) {
         })
     : [];
   const pipeline = stages.map((stage) => stage.name);
+  if (
+    pipeline.some(isApipostHashStage) &&
+    (match || pipeline.some((name) => name.startsWith("fn_")))
+  )
+    throw Error("原版哈希加工链暂不支持与共享函数混用");
   const pipelineOptions = stages.some((stage) =>
     ["concat", "lconcat", "substr", "padstart", "padend"].includes(stage.name),
   )
