@@ -22,13 +22,24 @@ export function scriptFailureDetails(error) {
     result.scriptScope = error.scriptScope;
   const diagnostics = {};
   const source = error.scriptDiagnostics || {};
+  const metrics = error.activityMetrics || {};
   for (const [key, max] of Object.entries({
     activityBudgetMs: 250,
     fakerCalls: 1001,
     timerCount: 101,
     requestCount: 11,
+    compatibilityMs: 60000,
+    functionLibraryMs: 60000,
+    userScriptMs: 60000,
+    microtaskMs: 60000,
+    callbackMs: 60000,
+    promiseStateMs: 60000,
+    serializationMs: 60000,
   })) {
-    const value = source[key];
+    const value =
+      key.endsWith("Ms") && key !== "activityBudgetMs"
+        ? (metrics[key] ?? source[key])
+        : source[key];
     if (
       typeof value === "number" &&
       Number.isFinite(value) &&
@@ -38,6 +49,22 @@ export function scriptFailureDetails(error) {
     )
       diagnostics[key] = value;
   }
+  if (
+    [
+      "bootstrap",
+      "compatibility",
+      "function-library",
+      "user-script",
+      "microtasks",
+      "promise-state",
+      "pending-tasks",
+      "http-callback",
+      "timer-callback",
+      "serialization",
+    ].includes(error.activityOperation ?? source.activityOperation)
+  )
+    diagnostics.activityOperation =
+      error.activityOperation ?? source.activityOperation;
   const lastStage = error.lastWorkerStage ?? source.lastWorkerStage;
   if (stages.has(lastStage)) diagnostics.lastWorkerStage = lastStage;
   const elapsed = error.elapsedMs ?? source.elapsedMs;

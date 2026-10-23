@@ -127,3 +127,79 @@ test("diagnostics expose only known stages and finite bounded counters", async (
     {},
   );
 });
+
+test("activity phase measurements remain bounded data and do not replace execution limits", async () => {
+  const result = await runScript(
+    "await Promise.resolve();pm.test('ok',()=>pm.expect(1).to.equal(1));",
+    { request: { url: "http://example.test" } },
+  );
+  assert(result.tests.every((item) => item.passed));
+  assert.deepEqual(
+    Object.keys(result.activityMetrics).sort(),
+    [
+      "compatibilityMs",
+      "functionLibraryMs",
+      "userScriptMs",
+      "microtaskMs",
+      "callbackMs",
+      "promiseStateMs",
+      "serializationMs",
+    ].sort(),
+  );
+  for (const value of Object.values(result.activityMetrics))
+    assert(Number.isInteger(value) && value >= 0);
+  await assert.rejects(
+    runScript(
+      "while(true){}",
+      { request: { url: "http://example.test" } },
+      { activityBudgetMs: 20 },
+    ),
+    (error) => {
+      assert.equal(error.scriptDiagnostics.activityBudgetMs, 20);
+      assert.match(error.message, /interrupted|超时/);
+      assert(Number.isInteger(error.activityMetrics.compatibilityMs));
+      assert(
+        [
+          "compatibility",
+          "function-library",
+          "user-script",
+          "microtasks",
+          "promise-state",
+        ].includes(error.activityOperation),
+      );
+      return true;
+    },
+  );
+  const { scriptFailureDetails } = await import(
+    "../src/script-diagnostics.mjs"
+  );
+  assert.deepEqual(
+    scriptFailureDetails({
+      scriptDiagnostics: {
+        activityOperation: "user-script",
+        compatibilityMs: 12,
+        userScriptMs: 240,
+        microtaskMs: 0,
+      },
+    }),
+    {
+      scriptDiagnostics: {
+        compatibilityMs: 12,
+        userScriptMs: 240,
+        microtaskMs: 0,
+        activityOperation: "user-script",
+      },
+    },
+  );
+  assert.deepEqual(
+    scriptFailureDetails({
+      scriptDiagnostics: {
+        activityOperation: "/private/path",
+        compatibilityMs: Infinity,
+        userScriptMs: -1,
+        microtaskMs: "private",
+      },
+    }),
+    {},
+  );
+});

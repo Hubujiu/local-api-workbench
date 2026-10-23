@@ -229,6 +229,8 @@ export function runScript(
             ? Object.assign(Error(completedMessage.error), {
                 scriptStage: completedMessage.scriptStage,
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
+                activityOperation: completedMessage.activityOperation,
+                activityMetrics: completedMessage.activityMetrics,
               })
             : null,
           completedMessage.result,

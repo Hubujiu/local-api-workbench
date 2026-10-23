@@ -25,6 +25,25 @@ let scriptStage = "bootstrap",
   context,
   rootPromise,
   finalizing = false;
+let activityOperation = "bootstrap";
+const activityMetrics = {
+  compatibilityMs: 0,
+  functionLibraryMs: 0,
+  userScriptMs: 0,
+  microtaskMs: 0,
+  callbackMs: 0,
+  promiseStateMs: 0,
+  serializationMs: 0,
+};
+const measureActivity = (operation, metric, fn) => {
+  activityOperation = operation;
+  const started = Date.now();
+  try {
+    return fn();
+  } finally {
+    activityMetrics[metric] += Math.max(0, Date.now() - started);
+  }
+};
 const callbacks = new Map(),
   timers = new Map(),
   replies = [];
@@ -400,56 +419,65 @@ try {
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   deadline = Date.now() + workerData.activityBudgetMs;
-  run("pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;");
-  run(
-    "(" +
-      scriptCompatibilitySource +
-      ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable,executionContext:input.executionContext,maxTests:" +
-      workerData.assertionLimit +
-      "});",
-  );
+  measureActivity("compatibility", "compatibilityMs", () => {
+    const compatibilitySources = [];
+    const install = (code) => compatibilitySources.push(code);
+    install(
+      "pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;",
+    );
+    install(
+      "(" +
+        scriptCompatibilitySource +
+        ")({request,response,pm,apt,variables,localVariables,tests,parameterName,modifyPair,builtinVariable,executionContext:input.executionContext,maxTests:" +
+        workerData.assertionLimit +
+        "});",
+    );
 
-  run(
-    "const __installCollectionIterators = (" + collectionIteratorsSource + ");",
-  );
-  run("(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});");
-  run(
-    "(" +
-      headerEntriesSource +
-      ")({request,headers:pm.request.headers,requestFacade:pm.request,installIterators:__installCollectionIterators});",
-  );
-  run(
-    "const __formOperations = (" +
-      scriptFormBodySource +
-      ")({request,body:pm.request.body,installIterators:__installCollectionIterators});",
-  );
-  run(
-    "(" +
-      modernBodySource +
-      ")({request,pm,apt,forms:__formOperations,lodash:_});",
-  );
-  run(
-    "globalThis.__registerSchemaResponse = (" +
-      responseCompatibilitySource +
-      ")({response,pm,apt});",
-  );
-  run(
-    "const __readResponseMutation = (" +
-      responseMutationSource +
-      ")({response,pm,apt,previous:input.responseOriginals,wireResponse:input.responseWire}, (" +
-      responseMutationValidatorSource +
-      "));",
-  );
-  run(
-    'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;for(const key of ["setRequestHeader","setRequestQuery","removeRequestHeader","removeRequestQuery"])apt[key]=pm[key];}',
-  );
-  run(
-    "globalThis.csv2array = (()=>{const parse=" +
-      parseCSVRows.toString() +
-      ";return function csv2array(text){if(arguments.length!==1)throw Error('CSV仅支持单个文本参数');return parse(text);};})();",
-  );
+    install(
+      "const __installCollectionIterators = (" +
+        collectionIteratorsSource +
+        ");",
+    );
+    install(
+      "(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});",
+    );
+    install(
+      "(" +
+        headerEntriesSource +
+        ")({request,headers:pm.request.headers,requestFacade:pm.request,installIterators:__installCollectionIterators});",
+    );
+    install(
+      "const __formOperations = (" +
+        scriptFormBodySource +
+        ")({request,body:pm.request.body,installIterators:__installCollectionIterators});",
+    );
+    install(
+      "(" +
+        modernBodySource +
+        ")({request,pm,apt,forms:__formOperations,lodash:_});",
+    );
+    install(
+      "globalThis.__registerSchemaResponse = (" +
+        responseCompatibilitySource +
+        ")({response,pm,apt});",
+    );
+    install(
+      "const __readResponseMutation = (" +
+        responseMutationSource +
+        ")({response,pm,apt,previous:input.responseOriginals,wireResponse:input.responseWire}, (" +
+        responseMutationValidatorSource +
+        "));",
+    );
+    install(
+      'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;for(const key of ["setRequestHeader","setRequestQuery","removeRequestHeader","removeRequestQuery"])apt[key]=pm[key];}',
+    );
+    install(
+      "globalThis.csv2array = (()=>{const parse=" +
+        parseCSVRows.toString() +
+        ";return function csv2array(text){if(arguments.length!==1)throw Error('CSV仅支持单个文本参数');return parse(text);};})();",
+    );
 
-  run(`pm.sendRequest=((registerSchemaResponse)=>(config,callback)=>{
+    install(`pm.sendRequest=((registerSchemaResponse)=>(config,callback)=>{
     if(callback===undefined)return new Promise((resolve,reject)=>pm.sendRequest(config,(error,response)=>error?reject(error):resolve(response)));
     if(typeof callback !== 'function')throw Error('pm.sendRequest回调须为函数');
     const captured={...variables,...localVariables};
@@ -462,12 +490,14 @@ try {
       trackTask(result);
     });
   })(globalThis.__registerSchemaResponse);delete globalThis.__registerSchemaResponse;apt.sendRequest=pm.sendRequest;`);
-  run("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
-  run(
-    useURLFacade
-      ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
-      : "const __readURLFacade=null;",
-  );
+    install("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
+    install(
+      useURLFacade
+        ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
+        : "const __readURLFacade=null;",
+    );
+    run(compatibilitySources.join(";\n"));
+  });
   let remaining = deadline - Date.now();
   const bounded = (fn) => {
     if (remaining <= 0) throw Error("脚本执行超时");
@@ -479,13 +509,19 @@ try {
       remaining -= Date.now() - start;
     }
   };
+  const measuredBounded = (operation, metric, fn) =>
+    measureActivity(operation, metric, () => bounded(fn));
   scriptStage = "script";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   for (const [index, code] of [
     library,
     "(async()=>{\n" + workerData.code + "\n})()",
   ].entries()) {
-    const result = bounded(() => context.evalCode(code));
+    const result = measuredBounded(
+      index === 0 ? "function-library" : "user-script",
+      index === 0 ? "functionLibraryMs" : "userScriptMs",
+      () => context.evalCode(code),
+    );
     if (result.error) {
       const error = context.dump(result.error);
       result.error.dispose();
@@ -499,7 +535,7 @@ try {
   const drainJobs = () => {
     while (runtime.hasPendingJob()) {
       if (jobCount >= workerData.jobLimit) throw Error("脚本微任务最多10000次");
-      const result = bounded(() =>
+      const result = measuredBounded("microtasks", "microtaskMs", () =>
         runtime.executePendingJobs(
           Math.min(100, workerData.jobLimit - jobCount),
         ),
@@ -510,7 +546,9 @@ try {
       }
       jobCount += result.value;
     }
-    const rootState = bounded(() => context.getPromiseState(rootPromise));
+    const rootState = measuredBounded("promise-state", "promiseStateMs", () =>
+      context.getPromiseState(rootPromise),
+    );
     if (rootState.type === "fulfilled") rootState.value.dispose();
     else if (rootState.type === "rejected") {
       rootState.error.dispose();
@@ -549,7 +587,7 @@ try {
           message.response ? JSON.stringify(message.response) : "",
         );
       try {
-        const result = bounded(() =>
+        const result = measuredBounded("http-callback", "callbackMs", () =>
           context.callFunction(callback, context.undefined, error, response),
         );
         if (result.error) {
@@ -572,7 +610,7 @@ try {
       if (timer.due > now || !timers.has(id)) continue;
       timers.delete(id);
       try {
-        const result = bounded(() =>
+        const result = measuredBounded("timer-callback", "callbackMs", () =>
           context.callFunction(timer.callback, context.undefined),
         );
         if (result.error) {
@@ -588,12 +626,14 @@ try {
     }
     drainJobs();
   }
-  bounded(() =>
+  measuredBounded("pending-tasks", "promiseStateMs", () =>
     run("if(pendingTasks.size)throw Error('异步回调Promise未完成')"),
   );
   if (tracked.unhandledCount())
     throw Error("未处理的Promise拒绝: " + tracked.unhandledMessage());
-  const rootState = bounded(() => context.getPromiseState(rootPromise));
+  const rootState = measuredBounded("promise-state", "promiseStateMs", () =>
+    context.getPromiseState(rootPromise),
+  );
   if (rootState.type === "pending") throw Error("脚本Promise未完成");
   if (rootState.type === "fulfilled") rootState.value.dispose();
   else if (rootState.type === "rejected") {
@@ -605,8 +645,10 @@ try {
   scriptStage = "serialization";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   finalizing = true;
-  const output = context.evalCode(
-    "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
+  const output = measureActivity("serialization", "serializationMs", () =>
+    context.evalCode(
+      "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
+    ),
   );
   if (output.error) {
     output.error.dispose();
@@ -622,6 +664,7 @@ try {
     result: {
       ...JSON.parse(json),
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      activityMetrics: { ...activityMetrics },
       activityMs:
         workerData.activityBudgetMs -
         remaining +
@@ -633,6 +676,8 @@ try {
   outcome = {
     error: error.message,
     scriptStage,
+    activityOperation,
+    activityMetrics: { ...activityMetrics },
     scriptDiagnostics: {
       activityBudgetMs: workerData.activityBudgetMs,
       fakerCalls,
