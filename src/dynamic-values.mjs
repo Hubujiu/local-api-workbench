@@ -2,6 +2,7 @@ import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs
 import {
   validateApipostTemplateRequest,
   parseApipostFunctionTemplate,
+  apipostTemplateStages,
   isApipostFunctionSource,
   apipostFunctionSourceGroups,
 } from "../public/apipost-function-template.js";
@@ -38,6 +39,7 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
       spec.value,
       functions,
       apipostFunctionSourceGroups[spec.source],
+      variables,
     );
   }
   let value;
@@ -133,7 +135,7 @@ async function resolveDynamicRequestBase(
     (total, { spec }) =>
       total +
       (isApipostFunctionSource(spec.source)
-        ? 1 + (parseApipostFunctionTemplate(spec.value).pipeline?.length || 0)
+        ? apipostTemplateStages(parseApipostFunctionTemplate(spec.value)).length
         : 0) +
       (Array.isArray(spec.functions) ? spec.functions.length : 0),
     0,

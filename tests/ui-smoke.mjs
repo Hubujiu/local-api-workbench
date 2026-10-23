@@ -6610,6 +6610,24 @@ try {
     raw: "{{$function.fn_body(raw)|fn_after}}",
   };
   templateModern.apis.push(nativeBodyTemplateAPI);
+  templateModern.global.envs[0].env_var_list.shared = {
+    value: "env",
+    current_value: "env-pipeline",
+  };
+  const variableTemplateAPI = modernApipostFixture().apis[1];
+  variableTemplateAPI.target_id = "variable-template-api";
+  variableTemplateAPI.name = "Source variable pipeline";
+  variableTemplateAPI.method = "POST";
+  variableTemplateAPI.url = "/sdk-url/template-variable";
+  variableTemplateAPI.request.query.parameter = [
+    { key: "q", value: "{{shared|upper}}", is_checked: 1 },
+  ];
+  variableTemplateAPI.request.body = {
+    mode: "plain",
+    raw: "{{'raw-body'|upper}}",
+  };
+  templateModern.apis.push(variableTemplateAPI);
+
   templateModern.apis[1].method = "POST";
   templateModern.global.global_vars.literal = {
     value: "must-not-expand",
@@ -6913,6 +6931,101 @@ try {
     functions: [],
     format: "text",
   });
+
+  const variableTemplateRequest = templateProject.requests.find(
+    (r) => r.name === "Source variable pipeline",
+  );
+  assert(variableTemplateRequest);
+  await page.locator(`[data-request="${variableTemplateRequest.id}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page
+    .locator("#env")
+    .selectOption(
+      templateProject.environments.find((e) => e.name === "Imported").id,
+    );
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-dynamic-pair="query:0"]').click();
+  assert.equal(
+    await page.locator("#dynamic-value").inputValue(),
+    "{{shared|upper}}",
+  );
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify("ENV-PIPELINE"),
+  );
+  await page.locator("#dynamic-value").fill("{{shared|lower}}");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify("env-pipeline"),
+  );
+  await page.screenshot({ path: "/tmp/local-api-variable-pipeline.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-param="body"]').click();
+  if (
+    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
+  )
+    await page.locator("#toggle-parameter-helper").click();
+  await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
+  assert.equal(
+    await page.locator("#dynamic-value").inputValue(),
+    "{{'raw-body'|upper}}",
+  );
+  await page.locator("#dynamic-value").fill("{{'Edited-Literal'|lower}}");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify("edited-literal"),
+  );
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#save-project").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="apis"]').first().click();
+  await page.locator(`[data-request="${variableTemplateRequest.id}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page
+    .locator("#env")
+    .selectOption(
+      templateProject.environments.find((e) => e.name === "Imported").id,
+    );
+  const variableTemplateResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const variableTemplateResult = await (await variableTemplateResponse).json();
+  assert.equal(
+    variableTemplateResult.status,
+    200,
+    JSON.stringify(variableTemplateResult),
+  );
+  const variableTemplateEcho = JSON.parse(variableTemplateResult.body);
+  assert.equal(
+    new URL(variableTemplateEcho.url, "http://fixture").searchParams.get("q"),
+    "env-pipeline",
+  );
+  assert.equal(variableTemplateEcho.body, "edited-literal");
+  const variableTemplateSaved = (
+    await app.store.get(templateProjectId)
+  ).requests.find((r) => r.id === variableTemplateRequest.id);
+  assert.equal(
+    variableTemplateSaved.query[0].dynamic.value,
+    "{{shared|lower}}",
+  );
+  assert.equal(
+    variableTemplateSaved.bodyDynamic.apipost_body.value,
+    "{{'Edited-Literal'|lower}}",
+  );
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

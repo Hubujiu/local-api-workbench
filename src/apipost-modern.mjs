@@ -1,5 +1,8 @@
 import {
   parseApipostFunctionTemplate,
+  apipostTemplateStages,
+  isApipostBuiltinStage,
+  isApipostTemplateCandidate,
   validateApipostTemplateRequest,
 } from "../public/apipost-function-template.js";
 import { mergeApipostFunctions } from "./apipost-functions.mjs";
@@ -798,6 +801,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     ),
   };
   validateResources(settings);
+  let anyTemplates = false;
   for (const request of [
     ...ordinaryRequests,
     ...sampleCases.map((item) => item.request),
@@ -809,12 +813,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       ["form", "apipost-form-function"],
     ])
       for (const row of request[group] || []) {
-        if (typeof row.value !== "string" || !/\$function\./i.test(row.value))
-          continue;
+        if (!isApipostTemplateCandidate(row.value)) continue;
         const parsed = parseApipostFunctionTemplate(row.value);
         if (
-          !(global.custom_func || []).some(
-            (fn) => fn.func_name.toLowerCase() === parsed.name,
+          apipostTemplateStages(parsed).some(
+            (name) =>
+              !isApipostBuiltinStage(name) &&
+              !(global.custom_func || []).some(
+                (fn) => fn.func_name.toLowerCase() === name,
+              ),
           )
         )
           throw Error("Apipost函数模板引用不存在的来源函数");
@@ -826,14 +833,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         row.value = "";
         converted = true;
       }
-    if (
-      typeof request.body === "string" &&
-      /\$function\./i.test(request.body)
-    ) {
+    if (isApipostTemplateCandidate(request.body)) {
       const parsed = parseApipostFunctionTemplate(request.body);
       if (
-        !(global.custom_func || []).some(
-          (fn) => fn.func_name.toLowerCase() === parsed.name,
+        apipostTemplateStages(parsed).some(
+          (name) =>
+            !isApipostBuiltinStage(name) &&
+            !(global.custom_func || []).some(
+              (fn) => fn.func_name.toLowerCase() === name,
+            ),
         )
       )
         throw Error("Apipost正文模板引用不存在的来源函数");
@@ -849,12 +857,21 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       converted = true;
     }
     if (converted) {
+      anyTemplates = true;
       validateApipostTemplateRequest(request);
       request.importNotes.push(
-        "Query/Header/表单/完整正文原版函数模板为受限子集：原样文本参数、同步基本类型结果；函数抛错保留原模板。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
+        "Query/Header/表单/完整正文原版函数模板为受限子集：原样函数参数、单层变量或引号文本起始，有限基本类型结果；首函数抛错保留首段模板，后续抛错保留上一步值。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
       );
     }
   }
+  if (anyTemplates && empty(global.custom_func))
+    settings.functions = mergeApipostFunctions(
+      [],
+      settings.functions || [],
+      source.project_id,
+      source,
+      { parameterTemplates: true, scanTemplates: true },
+    );
   if (!empty(global.custom_func))
     for (const request of ordinaryRequests)
       request.importNotes.push(

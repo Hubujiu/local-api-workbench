@@ -2,6 +2,7 @@ import { replaceExactApipostTemplate } from "./apipost-template-replacement.mjs"
 import {
   parseApipostFunctionTemplate,
   isApipostBuiltinStage,
+  apipostTemplateStages,
 } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 import { runScript } from "./scripts.mjs";
@@ -9,15 +10,13 @@ export async function resolveApipostFunctionTemplate(
   expression,
   functions,
   group = "query",
+  variables = {},
 ) {
   if (!["query", "headers", "form", "body"].includes(group))
     throw Error("原版函数模板参数位置无效");
-  const {
-    name,
-    argument,
-    pipeline = [],
-  } = parseApipostFunctionTemplate(expression);
-  const selected = [name, ...pipeline].map((name) => {
+  const parsed = parseApipostFunctionTemplate(expression);
+  const { name, argument, pipeline = [] } = parsed;
+  const selected = apipostTemplateStages(parsed).map((name) => {
     if (isApipostBuiltinStage(name)) return { name, builtin: true };
     const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
     if (matches.length !== 1 || !matches[0].apipostSource)
@@ -36,6 +35,29 @@ export async function resolveApipostFunctionTemplate(
   const baseExpression = pipeline.length
     ? expression.slice(0, expression.indexOf("|")) + "}}"
     : expression;
+  let initial;
+  if (!name) {
+    if (parsed.variable) {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        variables,
+        parsed.variable,
+      );
+      if (descriptor && !Object.hasOwn(descriptor, "value"))
+        throw Error("原版加工链不读取访问器变量");
+      initial = descriptor?.value;
+      if (initial === undefined) initial = baseExpression;
+    } else initial = parsed.literal;
+    if (
+      (typeof initial !== "string" &&
+        typeof initial !== "number" &&
+        typeof initial !== "boolean" &&
+        initial !== null) ||
+      (typeof initial === "number" && !Number.isFinite(initial))
+    )
+      throw Error("原版加工链初值仅支持有限基本类型");
+    if (Buffer.byteLength(JSON.stringify(initial), "utf8") > 65536)
+      throw Error("原版加工链初值超过64KiB");
+  }
   // Source pipelines preserve the previous value after a synchronous stage error.
   // Async and budget failures remain errors; checks run outside those catch blocks.
   const check = `
@@ -48,11 +70,10 @@ export async function resolveApipostFunctionTemplate(
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
     ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash");const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber});` : ""}
     let output;
-    try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); }
-    catch(error) { output=${JSON.stringify(baseExpression)}; }
+    ${name ? `try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); } catch(error) { output=${JSON.stringify(baseExpression)}; }` : `output=${Object.is(initial, -0) ? "-0" : JSON.stringify(initial)};`}
     ${check}
     ${selected
-      .slice(1)
+      .slice(name ? 1 : 0)
       .map(
         (fn) =>
           `{ const input=output;try{output=${fn.builtin ? `__apipostBuiltins.${fn.name}(input)` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,

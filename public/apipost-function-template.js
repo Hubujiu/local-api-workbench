@@ -25,10 +25,27 @@ export function parseApipostFunctionTemplate(value) {
     /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*)*)\}\}$/.exec(
       value,
     );
-  if (!match)
-    throw Error("仅支持完整原版函数模板及白名单无参数加工链，不支持嵌套或拼接");
-  const pipeline = match[3]
-    ? match[3]
+  const variable =
+    !match &&
+    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*)+)\}\}$/.exec(
+      value,
+    );
+  const literal =
+    !match &&
+    !variable &&
+    /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*)+)\}\}$/.exec(value);
+  if (!match && !variable && !literal)
+    throw Error(
+      "仅支持完整函数、单层变量或引号文本及白名单无参数加工链，不支持嵌套或拼接",
+    );
+  if (
+    variable &&
+    ["__proto__", "prototype", "constructor"].includes(variable[1])
+  )
+    throw Error("原版加工链变量名称无效");
+  const suffix = match ? match[3] : variable ? variable[2] : literal[3];
+  const pipeline = suffix
+    ? suffix
         .slice(1)
         .split("|")
         .map((name) => name.toLowerCase())
@@ -40,13 +57,26 @@ export function parseApipostFunctionTemplate(value) {
     )
   )
     throw Error("原版加工链仅支持无参数fn_或lower/upper/length/number");
-  if (pipeline.length > 9) throw Error("每个原版函数模板最多10个函数阶段");
-  return {
-    name: match[1].toLowerCase(),
-    argument: match[2],
-    ...(pipeline.length ? { pipeline } : {}),
-  };
+  if (pipeline.length + (match ? 1 : 0) > 10)
+    throw Error("每个原版函数模板最多10个函数阶段");
+  return match
+    ? {
+        name: match[1].toLowerCase(),
+        argument: match[2],
+        ...(pipeline.length ? { pipeline } : {}),
+      }
+    : variable
+      ? { variable: variable[1], pipeline }
+      : { literal: literal[2], pipeline };
 }
+export const isApipostTemplateCandidate = (value) =>
+  typeof value === "string" &&
+  (/\$function\./i.test(value) || /\{\{[^{}]*\|/.test(value));
+export const apipostTemplateStages = (parsed) => [
+  ...(parsed.name ? [parsed.name] : []),
+  ...(parsed.pipeline || []),
+];
+
 export function validateApipostTemplateRequest(request) {
   const entries = [];
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
@@ -109,7 +139,7 @@ export function validateApipostTemplateRequest(request) {
     const parsed = parseApipostFunctionTemplate(row.dynamic.value);
     if (row.dynamic.functions?.length)
       throw Error("原版函数模板暂不支持额外加工链");
-    if (row.enabled !== false) count += 1 + (parsed.pipeline?.length || 0);
+    if (row.enabled !== false) count += apipostTemplateStages(parsed).length;
   }
   if (count > 20) throw Error("每个请求最多20次动态函数处理");
 }

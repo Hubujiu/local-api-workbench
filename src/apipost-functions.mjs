@@ -1,6 +1,8 @@
 import {
   parseApipostFunctionTemplate,
   isApipostBuiltinStage,
+  apipostTemplateStages,
+  isApipostTemplateCandidate,
 } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 export function mergeApipostFunctions(
@@ -8,7 +10,7 @@ export function mergeApipostFunctions(
   existing,
   projectId,
   document,
-  { parameterTemplates = false } = {},
+  { parameterTemplates = false, scanTemplates = false } = {},
 ) {
   if (!Array.isArray(rows) || rows.length > 100)
     throw Error("Apipost共享函数最多100项");
@@ -51,7 +53,7 @@ export function mergeApipostFunctions(
     });
   }
   validateResources({ functions: incoming });
-  if (incoming.length) {
+  if (incoming.length || scanTemplates) {
     const allowedRows = new Set(),
       allowedBodies = new Set();
     if (parameterTemplates && Array.isArray(document?.apis))
@@ -80,15 +82,18 @@ export function mergeApipostFunctions(
                 allowedRows.add(row);
         }
       }
+    const functionBodies = new Set(rows);
     const pending = [{ value: document, allowed: false }],
       seen = new Set();
     let nodes = 0;
     while (pending.length) {
       if (++nodes > 100000) throw Error("Apipost共享函数依赖检查超过范围");
-      const { value, allowed } = pending.pop();
+      const { value, allowed, opaque } = pending.pop();
       if (
         typeof value === "string" &&
-        (/\$function\./i.test(value) || /\|\s*fn_/i.test(value))
+        (/\$function\./i.test(value) ||
+          /\|\s*fn_/i.test(value) ||
+          (!opaque && isApipostTemplateCandidate(value)))
       ) {
         if (!allowed)
           throw Error(
@@ -96,7 +101,7 @@ export function mergeApipostFunctions(
           );
         const parsed = parseApipostFunctionTemplate(value);
         if (
-          [parsed.name, ...(parsed.pipeline || [])].some(
+          apipostTemplateStages(parsed).some(
             (name) => !isApipostBuiltinStage(name) && !names.has(name),
           )
         )
@@ -111,6 +116,7 @@ export function mergeApipostFunctions(
             throw Error("Apipost共享函数依赖检查超过范围");
           pending.push({
             value: value[key],
+            opaque: key === "func_body" && functionBodies.has(value),
             allowed:
               (key === "value" && allowedRows.has(value)) ||
               (key === "raw" && allowedBodies.has(value)),
