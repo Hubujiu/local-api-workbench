@@ -42,6 +42,13 @@ const receive = (message) => {
 parentPort.on("message", receive);
 try {
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
+  const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
+  const facadeBundle = useURLFacade
+    ? await readFile(
+        new URL("./vendor/url-sdk-facade.js", import.meta.url),
+        "utf8",
+      )
+    : "";
   const trustedLibraries = await readFile(
     new URL("./vendor/script-libraries.js", import.meta.url),
     "utf8",
@@ -372,6 +379,12 @@ try {
   run(setup);
   run("const __urlQueryTools = (" + urlQueryToolsSource + ")();");
   run(trustedLibraries);
+  if (useURLFacade)
+    run(
+      "const __urlFacadeFactory=(()=>{" +
+        facadeBundle +
+        ";return URLFacadeLibrary.installURLFacade;})();",
+    );
   const json5Source = context.newString(json5Library);
   context.setProp(context.global, "__json5Source", json5Source);
   json5Source.dispose();
@@ -450,6 +463,11 @@ try {
     });
   })(globalThis.__registerSchemaResponse);delete globalThis.__registerSchemaResponse;apt.sendRequest=pm.sendRequest;`);
   run("(" + ajaxCompatibilitySource + ")(pm.sendRequest);");
+  run(
+    useURLFacade
+      ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
+      : "const __readURLFacade=null;",
+  );
   let remaining = deadline - Date.now();
   const bounded = (fn) => {
     if (remaining <= 0) throw Error("脚本执行超时");
@@ -588,7 +606,7 @@ try {
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   finalizing = true;
   const output = context.evalCode(
-    "applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
+    "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
   );
   if (output.error) {
     output.error.dispose();

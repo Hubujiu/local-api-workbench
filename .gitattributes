@@ -5,3 +5,8 @@
 /src/vendor/url-sdk-host.js -text
 /src/vendor/url-sdk-manifest.json -text
 /src/vendor/URL-SDK-LICENSES.txt -text
+/src/vendor/url-sdk-facade.js -text
+/src/vendor/url-sdk-facade-manifest.json -text
+/src/script-url-facade.mjs text eol=lf
+/src/script-url-runtime.mjs text eol=lf
+/src/script-url-state.mjs text eol=lf

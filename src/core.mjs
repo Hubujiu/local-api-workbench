@@ -1,3 +1,5 @@
+import { normalizeScriptURLMode } from "../public/script-url-mode.js";
+import { validateQueryRuntime } from "./script-url-runtime.mjs";
 import { scriptFailureDetails } from "./script-diagnostics.mjs";
 import {
   normalizeCookieEncoding,
@@ -146,6 +148,9 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  const urlMode = normalizeScriptURLMode(r.scriptURLMode);
+  if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
+    throw Error("URL状态仅可用于SDK模式");
   if (r.queryAddEqual !== undefined && typeof r.queryAddEqual !== "boolean")
     throw Error("Query等号选项必须为布尔值");
   if (
@@ -258,6 +263,14 @@ export function normalizeRequest(r = {}) {
     extract: r.extract || [],
     before: r.before || [],
     scriptDialect: normalizeScriptDialect(r.scriptDialect),
+    ...(urlMode === "sdk"
+      ? {
+          scriptURLMode: "sdk",
+          ...(r.scriptURLRuntime !== undefined
+            ? { scriptURLRuntime: validateQueryRuntime(r.scriptURLRuntime) }
+            : {}),
+        }
+      : {}),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],
@@ -1232,6 +1245,8 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    if (normalizeScriptURLMode(r.scriptURLMode) === "sdk")
+      throw Error("OpenAPI暂不能无损表达SDK URL模式，请使用项目备份");
     if (
       normalizeCookieEncoding(r.cookieEncoding) !== "raw" &&
       (r.cookies || []).some((row) => row.enabled !== false && row.key)
@@ -1365,6 +1380,8 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  if (normalizeScriptURLMode(input.scriptURLMode) === "sdk")
+    throw Error("cURL暂不能无损表达SDK URL模式，请使用项目备份");
   const r = normalizeRequest(input);
   if (r.auth.type === "asap")
     throw Error(

@@ -46,6 +46,13 @@ const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
+  if (request.url.startsWith("/sdk-url/")) {
+    for await (const chunk of request) {
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ url: request.url }));
+    return;
+  }
   if (request.url.split("?")[0] === "/script-form-body") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -5256,6 +5263,82 @@ try {
   assert(markdownDocument.includes("停用"));
   assert(!markdownDocument.includes(privateUploadText));
   assert(!markdownDocument.includes(privateUploadBase64));
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("SDK URL mode fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("SDK URL object request");
+  await page
+    .locator("#url")
+    .fill(fixtureURL + "/sdk-url/{id}?raw=%2f+&x=1&x=2");
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-add-pair="query"]').click();
+  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-pair="query:0:value"]').fill("a+b");
+  await page.locator('[data-param="before"]').click();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#script-url-mode").selectOption("sdk");
+  assert.equal(await page.locator("#script-url-mode").inputValue(), "string");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#script-url-mode").selectOption("sdk");
+  await page.locator("#inherit-shared-scripts").uncheck();
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.request.url.variables.upsert({key:'id',value:'42'});pm.request.url.query.one('x').value='changed';",
+    );
+  await page.locator('[data-param="after"]').click();
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.test('SDK URL object',()=>{pm.expect(typeof pm.request.url).to.equal('object');pm.expect(pm.request.url.query.get('table')).to.equal('a+b');});",
+    );
+  await saveAndWait();
+  const sdkRequestId = await page
+    .locator("#tree [data-request]")
+    .filter({ hasText: "SDK URL object request" })
+    .getAttribute("data-request");
+  await page.reload();
+  await page.locator(`[data-request="${sdkRequestId}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="after"]').click();
+  assert.equal(await page.locator("#script-url-mode").inputValue(), "sdk");
+  const sdkReply = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const sdkResult = await (await sdkReply).json();
+  assert.equal(sdkResult.outcome, "passed", JSON.stringify(sdkResult));
+  assert.equal(
+    JSON.parse(sdkResult.body).url,
+    "/sdk-url/42?raw=%2f+&x=1&x=changed&table=a%2Bb",
+  );
+  assert(
+    sdkResult.assertions.some(
+      (item) => item.name === "SDK URL object" && item.passed,
+    ),
+  );
+  await page.setViewportSize({ width: 1328, height: 876 });
+  await page.screenshot({ path: "/tmp/local-api-sdk-url-mode.png" });
+  await page.locator("#export").click();
+  await page.locator("#export-format").selectOption("native");
+  const sdkDownload = page.waitForEvent("download");
+  await page.locator("#dialog-save").click();
+  const sdkBackup = JSON.parse(
+    await readFile(await (await sdkDownload).path(), "utf8"),
+  );
+  const sdkSaved = sdkBackup.requests.find(
+    (request) => request.id === sdkRequestId,
+  );
+  assert.equal(sdkSaved.scriptURLMode, "sdk");
+  assert.equal(sdkSaved.query[0].value, "a+b");
+  assert.equal(sdkSaved.scriptURLRuntime, undefined);
   await page.locator("#dialog").waitFor({ state: "hidden" });
 
   assert.deepEqual(errors, []);

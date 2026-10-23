@@ -1,4 +1,4 @@
-// Reviewed phase-boundary codec. Script URL mode is not wired to this yet.
+// Versioned phase-boundary codec shared by host and isolated SDK URL mode.
 // It accepts SDK toJSON output, not SDK instances and not arbitrary script objects.
 export function validateURLSnapshot(input) {
   const fail = (detail) => {

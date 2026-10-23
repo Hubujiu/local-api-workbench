@@ -202,6 +202,44 @@ try {
     .locator(".response-body")
     .getByText("packaged-script-ok", { exact: false })
     .waitFor();
+  phase = "sdk-url";
+  console.log("DESKTOP_PHASE", phase);
+  await window.locator('[data-param="after"]').click();
+  const sdkOriginalAfter = await window.locator("#script-code").inputValue();
+  window.once("dialog", (dialog) => dialog.accept());
+  await window.locator("#script-url-mode").selectOption("sdk");
+  await window
+    .locator("#script-code")
+    .fill(
+      "pm.test('packaged-sdk-url',()=>{pm.expect(typeof pm.request.url).to.equal('object');pm.expect(pm.request.url.query.get('packaged-sdk')).to.equal('one&two');});",
+    );
+  await window.locator('[data-param="before"]').click();
+  const sdkOriginalBefore = await window.locator("#script-code").inputValue();
+  await window
+    .locator("#script-code")
+    .fill("pm.request.url.query.upsert({key:'packaged-sdk',value:'one&two'});");
+  const sdkResponse = window.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await window.locator("#send").click();
+  const sdkPayload = await (await sdkResponse).json();
+  assert.equal(sdkPayload.outcome, "passed", JSON.stringify(sdkPayload));
+  assert.equal(
+    new URL(sdkPayload.request.url).searchParams.get("packaged-sdk"),
+    "one&two",
+  );
+  assert(
+    sdkPayload.assertions.some(
+      (item) => item.name === "packaged-sdk-url" && item.passed,
+    ),
+  );
+  await window.locator("#script-code").fill(sdkOriginalBefore);
+  window.once("dialog", (dialog) => dialog.accept());
+  await window.locator("#script-url-mode").selectOption("string");
+  await window.locator('[data-param="after"]').click();
+  await window.locator("#script-code").fill(sdkOriginalAfter);
   phase = "ntlm";
   await window.locator("#url").fill(ntlmFixture.url);
   await window.locator('[data-param="auth"]').click();

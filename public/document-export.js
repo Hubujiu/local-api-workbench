@@ -170,6 +170,10 @@ export function requestDocumentationHTML(request, headingLevel = 3) {
         : "",
     )
     .join("");
+  if (request.scriptURLMode === "sdk")
+    result =
+      "<p>SDK URL对象模式：脚本可修改URL集合；此处展示请求定义，不是执行后的请求。cURL/OpenAPI暂不支持，请使用项目备份。</p>" +
+      result;
   if (request.queryAddEqual === false)
     result =
       "<p>空值 Query 参数不添加等号；URL 中已有查询保持原样。</p>" + result;
@@ -229,6 +233,10 @@ function requestDocumentationMarkdown(request) {
         : "",
     )
     .join("");
+  if (request.scriptURLMode === "sdk")
+    result =
+      "SDK URL对象模式：脚本可修改URL集合；此处展示请求定义，不是执行后的请求。cURL/OpenAPI暂不支持，请使用项目备份。\n\n" +
+      result;
   if (request.queryAddEqual === false)
     result = "空值 Query 参数不添加等号；URL 中已有查询保持原样。\n\n" + result;
   if (["apipost", "apipost-name"].includes(request.cookieEncoding))

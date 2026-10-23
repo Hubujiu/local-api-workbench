@@ -1,3 +1,8 @@
+import { normalizeScriptURLMode } from "../public/script-url-mode.js";
+import {
+  initializeQueryRuntime,
+  validateQueryRuntime,
+} from "./script-url-runtime.mjs";
 import { validateResponseMutation } from "./script-response-mutation.mjs";
 import { compileTrackedQuickJS } from "./tracked-quickjs.mjs";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -45,6 +50,20 @@ export function runScript(
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
   normalizeScriptDialect(input.request?.scriptDialect);
+  const urlMode = normalizeScriptURLMode(input.request?.scriptURLMode);
+  if (input.request?.scriptURLRuntime !== undefined && urlMode !== "sdk")
+    throw Error("URL状态仅可用于SDK模式");
+  if (urlMode === "sdk")
+    input = {
+      ...input,
+      request: {
+        ...input.request,
+        scriptURLRuntime:
+          input.request.scriptURLRuntime !== undefined
+            ? validateQueryRuntime(input.request.scriptURLRuntime)
+            : initializeQueryRuntime(input.request),
+      },
+    };
   input = {
     ...input,
     executionContext: normalizeExecutionContext(input.executionContext),

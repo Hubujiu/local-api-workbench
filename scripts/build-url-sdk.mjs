@@ -156,3 +156,5 @@ await writeFile(
     2,
   ) + "\n",
 );
+
+await import("./build-url-facade.mjs");

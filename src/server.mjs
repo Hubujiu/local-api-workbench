@@ -625,12 +625,14 @@ export async function createApp({
             return json(res, 200, await previewFunction(b.function, b.value));
           }
           if (action === "curl" && req.method === "POST") {
-            const data = await body(req),
-              context = debugEnvironment(
-                p,
-                data.environmentId,
-                debugEnvironments,
-              );
+            const data = await body(req);
+            if (data.request?.scriptURLMode === "sdk")
+              throw Error("cURL暂不能无损表达SDK URL模式，请使用项目备份");
+            const context = debugEnvironment(
+              p,
+              data.environmentId,
+              debugEnvironments,
+            );
             return json(res, 200, {
               curl: toCurl(
                 resolveServiceRequest(

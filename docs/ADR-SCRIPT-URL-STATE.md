@@ -1,5 +1,9 @@
 # URL SDK phase-state boundary
 
+The opt-in integration contract that builds on this foundation is documented in
+[ADR-SCRIPT-URL-MODE.md](ADR-SCRIPT-URL-MODE.md). The original foundation scope
+below does not describe the entire integrated feature.
+
 This codec prepares the URL object integration; it does not enable a script URL
 mode. Existing scripts still receive strings. The request pipeline, dynamic
 providers, encoding-origin metadata and UI selection are not connected here.

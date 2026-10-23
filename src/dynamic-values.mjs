@@ -1,3 +1,5 @@
+import { resolveSDKURLRequest } from "./script-url-resolve.mjs";
+import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { randomInt } from "node:crypto";
 import { sampleProjectSchema } from "./mock-fields.mjs";
 import { previewFunction } from "./custom-functions.mjs";
@@ -57,7 +59,7 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
   }
   return bounded(value);
 }
-export async function resolveDynamicRequest(
+async function resolveDynamicRequestBase(
   request,
   variables,
   functions,
@@ -139,4 +141,21 @@ export async function resolveDynamicRequest(
   if (bodySpecs.length && resolved.body.length > 1024 * 1024)
     throw Error("动态Body超过1MiB");
   return resolved;
+}
+
+export async function resolveDynamicRequest(
+  request,
+  variables,
+  functions,
+  interpolate,
+) {
+  if (normalizeScriptURLMode(request.scriptURLMode) === "sdk")
+    return resolveSDKURLRequest(
+      request,
+      variables,
+      functions,
+      interpolate,
+      resolveDynamicRequestBase,
+    );
+  return resolveDynamicRequestBase(request, variables, functions, interpolate);
 }

@@ -1,5 +1,9 @@
 # Reviewed URL SDK foundation, not a shipped script URL mode
 
+The opt-in integration contract that builds on this foundation is documented in
+[ADR-SCRIPT-URL-MODE.md](ADR-SCRIPT-URL-MODE.md). The original foundation scope
+below does not describe the entire integrated feature.
+
 Existing scripts still receive a string at pm.request.url / apt.request.url.
 This change adds separately tested build assets only. It does not expose an
 object mode to scripts, alter requests, implement native project migration, or
