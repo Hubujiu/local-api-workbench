@@ -63,12 +63,27 @@ test("ambiguous control headers and unverified signed duplicate headers reject b
     await assert.rejects(executeRequest(request), /重复/);
     assert.throws(() => toCurl(request), /重复/);
   }
-  for (const type of ["aws", "hawk", "edgegrid"])
+  for (const type of ["aws", "edgegrid"])
     await assert.rejects(
       executeRequest({
         url: "http://127.0.0.1:1",
         headers: rows(),
         auth: { type },
+      }),
+      /重复/,
+    );
+});
+
+test("Hawk duplicate Host and Content-Type remain rejected as ambiguous signed inputs", async () => {
+  for (const key of ["Host", "Content-Type"])
+    await assert.rejects(
+      executeRequest({
+        url: "http://127.0.0.1:1",
+        auth: { type: "hawk", id: "fixture", key: "fixture" },
+        headers: [
+          { key, value: "one" },
+          { key: key.toLowerCase(), value: "two" },
+        ],
       }),
       /重复/,
     );

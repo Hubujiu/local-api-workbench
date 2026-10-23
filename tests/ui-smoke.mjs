@@ -1451,6 +1451,20 @@ try {
   await page.locator("#auth-type").selectOption("hawk");
   await page.locator('[data-auth="id"]').fill("hawk-fixture");
   await page.locator('[data-auth="key"]').fill("hawk-fixture-secret");
+  await page.locator('[data-param="headers"]').click();
+  const hawkHeaderStart = await page
+    .locator('[data-pair^="headers:"][data-pair$=":key"]')
+    .count();
+  for (const [offset, value] of ["first", "second"].entries()) {
+    await page.locator('[data-add-pair="headers"]').click();
+    await page
+      .locator(`[data-pair="headers:${hawkHeaderStart + offset}:key"]`)
+      .fill("X-Hawk-Repeat");
+    await page
+      .locator(`[data-pair="headers:${hawkHeaderStart + offset}:value"]`)
+      .fill(value);
+  }
+  await page.locator('[data-param="auth"]').click();
   const hawkResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -1460,6 +1474,16 @@ try {
   assert(
     !JSON.parse(hawkResult.body).authorization.includes("hawk-fixture-secret"),
   );
+  assert.deepEqual(hawkResult.request.headers["x-hawk-repeat"], [
+    "first",
+    "second",
+  ]);
+  await page.locator('[data-param="headers"]').click();
+  await page
+    .locator(`[data-remove-pair="headers:${hawkHeaderStart + 1}"]`)
+    .click();
+  await page.locator(`[data-remove-pair="headers:${hawkHeaderStart}"]`).click();
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("edgegrid");
   for (const [key, value] of Object.entries({
     clientToken: "fixture-client",

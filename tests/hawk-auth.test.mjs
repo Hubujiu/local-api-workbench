@@ -71,6 +71,7 @@ test("real outgoing Hawk request passes server MAC and payload validation", asyn
     key: "local-fixture-key",
     algorithm: "sha256",
   };
+  const observed = [];
   const server = http.createServer(async (req, res) => {
     try {
       const chunks = [];
@@ -83,6 +84,7 @@ test("real outgoing Hawk request passes server MAC and payload validation", asyn
         },
         { payload: Buffer.concat(chunks) },
       );
+      observed.push(req.headers["x-repeat"]);
       res.end("authenticated");
     } catch (error) {
       res.statusCode = 401;
@@ -91,15 +93,25 @@ test("real outgoing Hawk request passes server MAC and payload validation", asyn
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
-  const result = await executeRequest({
-    url: "http://127.0.0.1:" + server.address().port + "/signed",
-    method: "POST",
-    bodyType: "json",
-    body: '{"n":1}',
-    auth: { type: "hawk", ...credentials },
-  });
-  assert.equal(result.status, 200, result.body);
-  assert.equal(result.body, "authenticated");
+  for (const headers of [
+    [],
+    [
+      { key: "X-Repeat", value: "first" },
+      { key: "x-repeat", value: "second" },
+    ],
+  ]) {
+    const result = await executeRequest({
+      headers,
+      url: "http://127.0.0.1:" + server.address().port + "/signed",
+      method: "POST",
+      bodyType: "json",
+      body: '{"n":1}',
+      auth: { type: "hawk", ...credentials },
+    });
+    assert.equal(result.status, 200, result.body);
+    assert.equal(result.body, "authenticated");
+  }
+  assert.deepEqual(observed, [undefined, "first, second"]);
 });
 test("Hawk Postman import translates official field names and preserves payload-hash choice", async () => {
   const { importDocument, toCurl } = await import("../src/core.mjs");
