@@ -5,7 +5,7 @@ export function mergeApipostFunctions(
   existing,
   projectId,
   document,
-  { queryTemplates = false } = {},
+  { parameterTemplates = false } = {},
 ) {
   if (!Array.isArray(rows) || rows.length > 100)
     throw Error("Apipost共享函数最多100项");
@@ -50,14 +50,13 @@ export function mergeApipostFunctions(
   validateResources({ functions: incoming });
   if (incoming.length) {
     const allowedRows = new Set();
-    if (queryTemplates && Array.isArray(document?.apis))
+    if (parameterTemplates && Array.isArray(document?.apis))
       for (const api of document.apis)
-        if (
-          api.target_type === "api" &&
-          Array.isArray(api.request?.query?.parameter)
-        )
-          for (const row of api.request.query.parameter)
-            if (row && row.is_checked === 1) allowedRows.add(row);
+        if (api.target_type === "api")
+          for (const group of ["query", "header"])
+            if (Array.isArray(api.request?.[group]?.parameter))
+              for (const row of api.request[group].parameter)
+                if (row && row.is_checked === 1) allowedRows.add(row);
     const pending = [{ value: document, allowed: false }],
       seen = new Set();
     let nodes = 0;
@@ -70,7 +69,7 @@ export function mergeApipostFunctions(
       ) {
         if (!allowed)
           throw Error(
-            "Apipost共享函数参数模板仅支持启用的接口Query完整值；加工链暂不支持",
+            "Apipost共享函数参数模板仅支持启用的接口Query/Header完整值；加工链暂不支持",
           );
         const parsed = parseApipostFunctionTemplate(value);
         if (!names.has(parsed.name))

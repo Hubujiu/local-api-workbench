@@ -1,4 +1,7 @@
-import { validateApipostTemplateRequest } from "../public/apipost-function-template.js";
+import {
+  validateApipostTemplateRequest,
+  isApipostFunctionSource,
+} from "../public/apipost-function-template.js";
 import {
   isApipostDirectoryDocument,
   assembleApipostDirectory,
@@ -1274,9 +1277,9 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
     if (
-      (r.query || []).some(
+      [...(r.query || []), ...(r.headers || [])].some(
         (row) =>
-          row.enabled !== false && row.dynamic?.source === "apipost-function",
+          row.enabled !== false && isApipostFunctionSource(row.dynamic?.source),
       )
     )
       throw Error("OpenAPI不能表达原版函数模板，请使用项目备份");
@@ -1427,9 +1430,9 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   if (
-    (input.query || []).some(
+    [...(input.query || []), ...(input.headers || [])].some(
       (row) =>
-        row.enabled !== false && row.dynamic?.source === "apipost-function",
+        row.enabled !== false && isApipostFunctionSource(row.dynamic?.source),
     )
   )
     throw Error("cURL不能表达原版函数模板，请使用项目备份或已执行请求证据");

@@ -98,6 +98,13 @@ const fixture = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.url.startsWith("/sdk-url/template?")) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({ url: request.url, header: request.headers["x-test"] }),
+    );
+    return;
+  }
   if (request.url.startsWith("/sdk-url/")) {
     for await (const chunk of request) {
     }
@@ -6527,6 +6534,15 @@ try {
   templateModern.apis[1].url = "/sdk-url/template";
   templateModern.apis[1].name = "Source Query function";
   templateModern.apis[1].request.pre_tasks = [];
+  templateModern.global.custom_func.push({
+    func_id: "header-template-function",
+    project_id: templateModern.project_id,
+    func_name: "fn_header",
+    func_desc: "Header template",
+    func_body: 'return "Bearer "+text+"+/=%#?&";',
+  });
+  templateModern.apis[1].request.header.parameter[0].value =
+    "{{$function.fn_header(token)}}";
   templateModern.apis[1].request.query.parameter = [
     { key: "q", value: '{{$function.fn_WRAP("a,b")}}', is_checked: 1 },
   ];
@@ -6573,6 +6589,24 @@ try {
   await page.screenshot({ path: "/tmp/local-api-query-function-template.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-param="headers"]').click();
+  await page.locator('[data-dynamic-pair="headers:0"]').click();
+  assert.equal(
+    await page.locator("#dynamic-source").inputValue(),
+    "apipost-header-function",
+  );
+  await page.locator("#dynamic-value").fill("{{$function.fn_header(updated)}}");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify("Bearer updated+/=%#?&"),
+  );
+  await page.screenshot({
+    path: "/tmp/local-api-header-function-template.png",
+  });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6610,6 +6644,20 @@ try {
   assert.equal(
     JSON.parse(templateResult.body).url,
     "/sdk-url/template?q=%5B%22edited%22%5D",
+  );
+  assert.equal(JSON.parse(templateResult.body).header, "Bearer updated+/=%#?&");
+  assert.equal(
+    templateResult.request.headers["x-test"],
+    "Bearer updated+/=%#?&",
+  );
+  assert.deepEqual(
+    savedTemplateProject.requests.find((r) => r.id === templateRequest.id)
+      .headers[0].dynamic,
+    {
+      source: "apipost-header-function",
+      value: "{{$function.fn_header(updated)}}",
+      functions: [],
+    },
   );
 
   assert.deepEqual(errors, []);

@@ -1,5 +1,9 @@
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
-import { validateApipostTemplateRequest } from "../public/apipost-function-template.js";
+import {
+  validateApipostTemplateRequest,
+  isApipostFunctionSource,
+  apipostFunctionSourceGroups,
+} from "../public/apipost-function-template.js";
 import { finalBodyLiteral } from "./script-final-body.mjs";
 import { resolveSDKURLRequest } from "./script-url-resolve.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
@@ -9,7 +13,13 @@ import { previewFunction } from "./custom-functions.mjs";
 export async function resolveDynamicValue(spec, variables, functions = []) {
   if (
     !spec ||
-    !["fixed", "variable", "mock", "apipost-function"].includes(spec.source)
+    ![
+      "fixed",
+      "variable",
+      "mock",
+      "apipost-function",
+      "apipost-header-function",
+    ].includes(spec.source)
   )
     throw Error("动态值来源无效");
   const chain = spec.functions || [];
@@ -19,9 +29,13 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
     chain.some((name) => typeof name !== "string")
   )
     throw Error("动态值最多10个处理函数");
-  if (spec.source === "apipost-function") {
+  if (isApipostFunctionSource(spec.source)) {
     if (chain.length) throw Error("原版函数模板暂不支持额外加工链");
-    return resolveApipostFunctionTemplate(spec.value, functions);
+    return resolveApipostFunctionTemplate(
+      spec.value,
+      functions,
+      apipostFunctionSourceGroups[spec.source],
+    );
   }
   let value;
   if (spec.source === "variable") {
@@ -115,7 +129,7 @@ async function resolveDynamicRequestBase(
   const transforms = [...specs, ...bodySpecs].reduce(
     (total, { spec }) =>
       total +
-      (spec.source === "apipost-function" ? 1 : 0) +
+      (isApipostFunctionSource(spec.source) ? 1 : 0) +
       (Array.isArray(spec.functions) ? spec.functions.length : 0),
     0,
   );

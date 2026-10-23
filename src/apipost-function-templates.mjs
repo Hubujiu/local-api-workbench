@@ -1,7 +1,13 @@
 import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 import { runScript } from "./scripts.mjs";
-export async function resolveApipostFunctionTemplate(expression, functions) {
+export async function resolveApipostFunctionTemplate(
+  expression,
+  functions,
+  group = "query",
+) {
+  if (!["query", "headers"].includes(group))
+    throw Error("原版函数模板参数位置无效");
   const { name, argument } = parseApipostFunctionTemplate(expression);
   const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
   if (matches.length !== 1 || !matches[0].apipostSource)
@@ -34,9 +40,11 @@ export async function resolveApipostFunctionTemplate(expression, functions) {
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
     throw Error("原版函数模板结果超过64KiB");
   const text = typeof value === "string" ? value : JSON.stringify(value);
-  if (/[&#+%?=\r\n]/.test(text) || (text !== expression && text.includes("$")))
-    throw Error(
-      "原版Query函数结果包含尚未兼容的URL分隔符或替换符，不发送不等价请求",
-    );
+  if (
+    /[\r\n]/.test(text) ||
+    (group === "query" && /[&#+%?=]/.test(text)) ||
+    (text !== expression && text.includes("$"))
+  )
+    throw Error("原版函数结果包含尚未兼容的分隔符或替换符，不发送不等价请求");
   return value;
 }

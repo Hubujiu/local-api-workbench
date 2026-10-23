@@ -1,3 +1,10 @@
+export const apipostFunctionSourceGroups = Object.freeze({
+  "apipost-function": "query",
+  "apipost-header-function": "headers",
+});
+export const isApipostFunctionSource = (source) =>
+  typeof source === "string" &&
+  Object.hasOwn(apipostFunctionSourceGroups, source);
 export function parseApipostFunctionTemplate(value) {
   if (
     typeof value !== "string" ||
@@ -18,24 +25,26 @@ export function validateApipostTemplateRequest(request) {
     for (const row of request[group] || [])
       if (row?.dynamic) entries.push({ group, row });
   }
-  const bodyTemplate = Object.values(request.bodyDynamic || {}).some(
-    (spec) => spec?.source === "apipost-function",
+  const bodyTemplate = Object.values(request.bodyDynamic || {}).some((spec) =>
+    isApipostFunctionSource(spec?.source),
   );
   if (
     !bodyTemplate &&
-    !entries.some(({ row }) => row.dynamic.source === "apipost-function")
+    !entries.some(({ row }) => isApipostFunctionSource(row.dynamic.source))
   )
     return;
   if (
     entries.some(
       ({ group, row }) =>
-        group !== "query" ||
-        row.type === "file" ||
-        row.dynamic.source !== "apipost-function",
+        !isApipostFunctionSource(row.dynamic.source) ||
+        group !== apipostFunctionSourceGroups[row.dynamic.source] ||
+        row.type === "file",
     ) ||
     Object.keys(request.bodyDynamic || {}).length
   )
-    throw Error("原版函数模板暂仅支持Query文本，不能与其他动态值混用");
+    throw Error(
+      "原版函数模板暂仅支持Query/Header匹配位置文本，不能与其他动态值混用",
+    );
   if (
     (request.scriptURLMode && request.scriptURLMode !== "string") ||
     request.beforeScript?.trim() ||

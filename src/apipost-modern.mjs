@@ -762,7 +762,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
             project.settings?.functions || [],
             source.project_id,
             source,
-            { queryTemplates: true },
+            { parameterTemplates: true },
           ),
         }
       : {}),
@@ -788,35 +788,39 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     ...sampleCases.map((item) => item.request),
   ]) {
     let converted = false;
-    for (const row of request.query || []) {
-      if (typeof row.value !== "string" || !/\$function\./i.test(row.value))
-        continue;
-      const parsed = parseApipostFunctionTemplate(row.value);
-      if (
-        !(global.custom_func || []).some(
-          (fn) => fn.func_name.toLowerCase() === parsed.name,
+    for (const [group, dynamicSource] of [
+      ["query", "apipost-function"],
+      ["headers", "apipost-header-function"],
+    ])
+      for (const row of request[group] || []) {
+        if (typeof row.value !== "string" || !/\$function\./i.test(row.value))
+          continue;
+        const parsed = parseApipostFunctionTemplate(row.value);
+        if (
+          !(global.custom_func || []).some(
+            (fn) => fn.func_name.toLowerCase() === parsed.name,
+          )
         )
-      )
-        throw Error("Apipost函数模板引用不存在的来源函数");
-      row.dynamic = {
-        source: "apipost-function",
-        value: row.value,
-        functions: [],
-      };
-      row.value = "";
-      converted = true;
-    }
+          throw Error("Apipost函数模板引用不存在的来源函数");
+        row.dynamic = {
+          source: dynamicSource,
+          value: row.value,
+          functions: [],
+        };
+        row.value = "";
+        converted = true;
+      }
     if (converted) {
       validateApipostTemplateRequest(request);
       request.importNotes.push(
-        "Query原版函数模板为受限子集：原样文本参数、同步基本类型结果；函数抛错保留原模板。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
+        "Query/Header原版函数模板为受限子集：原样文本参数、同步基本类型结果；函数抛错保留原模板。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
       );
     }
   }
   if (!empty(global.custom_func))
     for (const request of ordinaryRequests)
       request.importNotes.push(
-        "原版共享函数仅支持沙箱脚本中的fn_调用；同步异常按来源语义返回text输入。仅启用的接口Query完整函数模板另有受限兼容；其他参数模板/加工链不兼容会拒绝，函数不在导入时执行，运行仍受原沙箱限制。",
+        "原版共享函数仅支持沙箱脚本中的fn_调用；同步异常按来源语义返回text输入。仅启用的接口Query/Header完整函数模板另有受限兼容；其他参数模板/加工链不兼容会拒绝，函数不在导入时执行，运行仍受原沙箱限制。",
       );
   const components = structuredClone(project.openapiComponents ?? {});
   components.schemas ??= {};

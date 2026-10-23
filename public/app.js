@@ -1,4 +1,8 @@
-import { parseApipostFunctionTemplate } from "./apipost-function-template.js";
+import {
+  parseApipostFunctionTemplate,
+  isApipostFunctionSource,
+  apipostFunctionSourceGroups,
+} from "./apipost-function-template.js";
 import { selectedDirectoryDocument } from "./apipost-directory-input.js";
 import { createCaseResultStore } from "./case-result-store.js";
 import { runCaseBatch, caseEvidence } from "./case-batch.js";
@@ -4342,11 +4346,12 @@ function editDynamicValue(group, index) {
   });
   modal(
     "动态参数值",
-    `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option><option value="mock">Mock样例</option><option value="apipost-function">原版函数模板（Query受限子集）</option></select><p>原版函数模板仅支持Query完整表达式，原样传入文本参数；同步抛错保留原模板。禁止前后置脚本、SDK模式及额外加工链，结果不再次插值。</p><label>输入值 / 变量名 / Mock表达式</label><textarea id="dynamic-value"></textarea><details><summary>Mock类型与种子</summary><p>支持 @cname()、@email()、@integer(min,max) 等有界表达式，不是完整Faker/Mock.js。种子留空每次重新生成；填写整数可复现。预览不代表下次随机结果。</p><select id="dynamic-mock-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option>${type}</option>`).join("")}</select><input id="dynamic-seed" type="number" placeholder="随机种子（可选）"></details>${group === "body" ? '<label>输出方式</label><select id="dynamic-format"><option value="json">JSON值（自动转义/引号）</option><option value="text">原始文本</option></select>' : ""}<label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
+    `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option><option value="mock">Mock样例</option><option value="apipost-function">原版函数模板（Query受限子集）</option><option value="apipost-header-function">原版函数模板（Header受限子集）</option></select><p>原版函数模板仅支持匹配位置的Query/Header完整表达式，原样传入文本参数；同步抛错保留原模板。禁止前后置脚本、SDK模式及额外加工链，结果不再次插值。</p><label>输入值 / 变量名 / Mock表达式</label><textarea id="dynamic-value"></textarea><details><summary>Mock类型与种子</summary><p>支持 @cname()、@email()、@integer(min,max) 等有界表达式，不是完整Faker/Mock.js。种子留空每次重新生成；填写整数可复现。预览不代表下次随机结果。</p><select id="dynamic-mock-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option>${type}</option>`).join("")}</select><input id="dynamic-seed" type="number" placeholder="随机种子（可选）"></details>${group === "body" ? '<label>输出方式</label><select id="dynamic-format"><option value="json">JSON值（自动转义/引号）</option><option value="text">原始文本</option></select>' : ""}<label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
     () => {
       const spec = read();
-      if (spec.source === "apipost-function") {
-        if (group !== "query") throw Error("原版函数模板暂仅支持Query");
+      if (isApipostFunctionSource(spec.source)) {
+        if (group !== apipostFunctionSourceGroups[spec.source])
+          throw Error("原版函数模板来源与参数位置不匹配");
         parseApipostFunctionTemplate(spec.value);
         if (spec.functions.length)
           throw Error("原版函数模板暂不支持额外加工链");
