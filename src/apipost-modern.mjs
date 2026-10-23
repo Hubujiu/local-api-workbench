@@ -115,34 +115,48 @@ function responseHeaderMap(value) {
   validateMockResponse({ status: 200, body: "", headers });
   return headers;
 }
-function singleScriptTask(value, phase) {
+function scriptTasks(value, phase) {
   if (empty(value)) return null;
-  const tasks = list(value, phase, 1);
-  if (!tasks.length) return null;
-  const task = tasks[0];
-  if (
-    !object(task) ||
-    Object.keys(task).some(
-      (k) => !["type", "id", "name", "enabled", "data"].includes(k),
-    ) ||
-    task.type !== "customScript" ||
-    task.enabled !== 1 ||
-    typeof task.data !== "string" ||
-    Buffer.byteLength(task.data, "utf8") > 65536
-  )
-    throw Error(
-      "Apipost " +
-        phase +
-        " 仅支持单个启用的自定义脚本（64 KiB）；其他任务语义不会丢弃",
-    );
-  safe(task.id);
-  safe(task.name);
+  const tasks = list(value, phase, 16);
+  const metadata = [];
+  for (const task of tasks) {
+    if (
+      !object(task) ||
+      Object.keys(task).some(
+        (k) => !["type", "id", "name", "enabled", "data"].includes(k),
+      ) ||
+      task.type !== "customScript" ||
+      task.enabled !== 1 ||
+      typeof task.data !== "string" ||
+      Buffer.byteLength(task.data, "utf8") > 65536
+    )
+      throw Error(
+        "Apipost " + phase + " 仅支持启用的自定义脚本；其他任务语义不会丢弃",
+      );
+    safe(task.id);
+    safe(task.name);
+    metadata.push({ id: task.id, name: task.name });
+  }
+  const provenance = JSON.stringify(metadata);
+  if (provenance.length > 1800)
+    throw Error("Apipost脚本任务标识/名称总长度超过导入说明上限");
+  // Preserve the existing one-block conversion exactly. Multiple blocks follow
+  // observed original order in a shared lexical scope, with newline boundaries.
+  const code =
+    tasks.length === 1
+      ? tasks[0].data
+      : tasks
+          .filter((task) => task.data && task.data !== "undefined")
+          .map((task) => "\n" + task.data.trim() + "\n")
+          .join("");
+  if (Buffer.byteLength(code, "utf8") > 65536)
+    throw Error("Apipost单阶段合并脚本超过64 KiB");
   return {
-    code: task.data,
+    code,
     note:
       phase +
-      " 脚本已转为 Apipost 8 子集，原任务标识/名称：" +
-      JSON.stringify({ id: task.id, name: task.name }),
+      " 脚本已按原顺序转为 Apipost 8 子集，原任务标识/名称：" +
+      provenance,
   };
 }
 export function importModernApipost(source, project, { sync = false } = {}) {
@@ -313,11 +327,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     }
     const beforeTask =
       node.target_type === "api"
-        ? singleScriptTask(request.pre_tasks, "前置")
+        ? scriptTasks(request.pre_tasks, "前置")
         : null;
     const afterTask =
       node.target_type === "api"
-        ? singleScriptTask(request.post_tasks, "后置")
+        ? scriptTasks(request.post_tasks, "后置")
         : null;
     let inheritedAuth = { type: "noauth" };
     for (const layer of ancestry)

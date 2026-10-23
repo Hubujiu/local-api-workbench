@@ -2829,6 +2829,24 @@ try {
       data: 'pm.test("imported response",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept"));',
     },
   ];
+  modern.apis[1].request.pre_tasks[0].data =
+    'const importedStage = "browser-kept"; // first block';
+  modern.apis[1].request.pre_tasks.push({
+    type: "customScript",
+    id: "browser-pre-second",
+    name: "Imported pre second",
+    enabled: 1,
+    data: 'apt.setRequestHeader("x-imported-task", importedStage);',
+  });
+  modern.apis[1].request.post_tasks.unshift({
+    type: "customScript",
+    id: "browser-post-first",
+    name: "Imported post first",
+    enabled: 1,
+    data: "const importedPayload = apt.response.json();",
+  });
+  modern.apis[1].request.post_tasks[1].data =
+    'pm.test("imported response",()=>pm.expect(importedPayload.importTask).to.equal("browser-kept"));';
   modern.apis[1].request.body.mode = "plain";
   modern.apis[1].request.body.raw = "browser plain + & = text";
   modern.apis[1].mock_ip_white_list_enable = -1;

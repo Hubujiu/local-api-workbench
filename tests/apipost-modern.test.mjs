@@ -649,7 +649,7 @@ test("single enabled modern script tasks preserve code and run only after explic
   assert.equal(failed.status, "failed");
 });
 
-test("modern task imports reject mixed multiple disabled inherited or unknown semantics atomically", () => {
+test("modern task imports reject mixed excessive disabled inherited or unknown semantics atomically", () => {
   const task = {
     type: "customScript",
     id: "task",
@@ -659,7 +659,22 @@ test("modern task imports reject mixed multiple disabled inherited or unknown se
   };
   for (const change of [
     (d) =>
-      d.apis[1].request.pre_tasks.push({ ...task }, { ...task, id: "other" }),
+      d.apis[1].request.pre_tasks.push(
+        ...Array.from({ length: 17 }, (_, i) => ({ ...task, id: String(i) })),
+      ),
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        { ...task, data: "中".repeat(11000) },
+        { ...task, id: "other", data: "中".repeat(11000) },
+      ),
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        ...Array.from({ length: 16 }, (_, i) => ({
+          ...task,
+          id: String(i),
+          name: "x".repeat(200),
+        })),
+      ),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: -1 }),
     (d) =>
       d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
@@ -690,4 +705,93 @@ test("empty modern task placeholders retain preexisting no-script import semanti
     assert.equal(p.requests[0].beforeScript, "");
     assert.equal(p.requests[0].afterScript, "");
   }
+});
+
+test("ordered modern custom-script blocks share lexical scope and preserve await ordering", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, stage: req.headers["x-script-stage"] });
+    res.setHeader("content-type", "application/json");
+    res.end('{"ok":true}');
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const url = "http://127.0.0.1:" + server.address().port;
+  const d = fixture(),
+    p = project();
+  d.global.envs[0].server_list[0].uri = url;
+  const task = (id, data) => ({
+    type: "customScript",
+    id,
+    name: id,
+    enabled: 1,
+    data,
+  });
+  d.apis[1].request.pre_tasks = [
+    task(
+      "one",
+      `const stage = []; await pm.sendRequest(${JSON.stringify(url + "/child")}); stage.push("one"); // trailing comment`,
+    ),
+    task(
+      "two",
+      'stage.push("two"); apt.setRequestHeader("x-script-stage",stage.join(","));',
+    ),
+  ];
+  d.apis[1].request.post_tasks = [
+    task("after-one", "const answer = apt.response.json();"),
+    task(
+      "after-two",
+      'pm.test("ordered after",()=>pm.expect(answer.ok).to.equal(true));',
+    ),
+  ];
+  importIntoProject(p, d);
+  const env = p.environments.find((e) => e.id !== "existing");
+  const run = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, p.requests[0], env.id) }] },
+    environmentVariables(p, env.id),
+    executeRequest,
+  );
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.deepEqual(
+    seen.map((x) => x.url),
+    ["/child", "/items/43?q=one"],
+  );
+  assert.equal(seen[1].stage, "one,two");
+  assert(
+    p.requests[0].importNotes.some(
+      (n) => n.includes("one") && n.includes("two"),
+    ),
+  );
+  const duplicate = fixture(),
+    p2 = project();
+  duplicate.apis[1].request.pre_tasks = [
+    task("one", "const collision=1;"),
+    task("two", "const collision=2;"),
+  ];
+  importIntoProject(p2, duplicate);
+  const bad = await runPlan(
+    {
+      steps: [
+        {
+          request: {
+            ...p2.requests[0],
+            url: url + "/must-not-send",
+            serviceId: undefined,
+          },
+        },
+      ],
+    },
+    {},
+    executeRequest,
+  );
+  assert.equal(bad.status, "failed");
+  assert.equal(
+    seen.length,
+    2,
+    "duplicate lexical declarations must not become separately scoped successful tasks",
+  );
 });
