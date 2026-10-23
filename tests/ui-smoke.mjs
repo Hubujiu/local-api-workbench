@@ -2921,6 +2921,14 @@ try {
     "browser-owner": "fixture-owner",
     "browser-hidden": 0,
   };
+  modern.global.describe_library = [
+    {
+      id: "browser-description",
+      project_id: modern.project_id,
+      key: "X-Test",
+      description: "导入请求头说明",
+    },
+  ];
   modern.global.codes = [
     {
       code_id: "browser-code",
@@ -3143,6 +3151,44 @@ try {
   await page.screenshot({ path: "/tmp/local-api-imported-attributes.png" });
   await page.locator("#env").selectOption({ label: "Imported" });
   await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="headers"]').click();
+  await page.locator('[data-define-pair="headers:0"]').click();
+  const originalParameterDescription = await page
+    .locator("#parameter-description")
+    .inputValue();
+  await page.locator("#description-choice").selectOption("0");
+  await page.locator("#apply-parameter-description").click();
+  assert.equal(
+    await page.locator("#parameter-description").inputValue(),
+    "导入请求头说明",
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator('[data-define-pair="headers:0"]').click();
+  assert.equal(
+    await page.locator("#parameter-description").inputValue(),
+    originalParameterDescription,
+  );
+  await page.locator("#description-choice").selectOption("0");
+  await page.locator("#apply-parameter-description").click();
+  await page.screenshot({
+    path: "/tmp/local-api-parameter-description-choice.png",
+  });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await saveAndWait();
+  const descriptionProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const describedHeader = descriptionProject.requests.find(
+    (request) => request.id === taskSourceRequest.id,
+  ).headers[0];
+  assert.equal(describedHeader.description, "导入请求头说明");
+  for (const field of ["key", "value", "required", "schema"])
+    assert.deepEqual(
+      describedHeader[field],
+      taskSourceRequest.headers[0][field],
+    );
+
   const modernResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -3194,6 +3240,35 @@ try {
     .getByText("导入业务错误说明", { exact: true })
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-error-codes.png" });
+  await page.locator('.rail [data-page="settings"]').click();
+  await page
+    .locator('[data-settings-anchor="resource-parameterDescriptions"]')
+    .click();
+  await page
+    .locator(".parameter-descriptions")
+    .getByText("X-Test", { exact: true })
+    .waitFor();
+  await page.locator("#new-parameter-description").click();
+  await page.locator("#description-library-key").fill("local_note");
+  await page.locator("#description-library-text").fill("本地维护");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-edit-parameter-description="1"]').click();
+  await page.locator("#description-library-text").fill("本地维护已编辑");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page
+    .locator(".parameter-descriptions")
+    .getByText("本地维护已编辑", { exact: true })
+    .waitFor();
+  await page.screenshot({
+    path: "/tmp/local-api-parameter-description-library.png",
+  });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator('[data-delete-parameter-description="1"]').click();
+  await page
+    .locator('[data-edit-parameter-description="1"]')
+    .waitFor({ state: "hidden" });
 
   await page.locator('[data-page="dictionary"]').click();
   await page
@@ -5706,6 +5781,10 @@ try {
   assert.deepEqual(
     restoredProject.settings.statusCodes,
     attributeProject.settings.statusCodes,
+  );
+  assert.deepEqual(
+    restoredProject.settings.parameterDescriptions,
+    attributeProject.settings.parameterDescriptions,
   );
   const restoredAttributeRequest = restoredProject.requests.find(
     (request) => request.id === taskSourceRequest.id,

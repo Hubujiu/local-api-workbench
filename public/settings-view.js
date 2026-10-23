@@ -1,3 +1,4 @@
+import { parameterDescriptionsPanel } from "./parameter-descriptions.js";
 import { mcpSettingsPanel } from "./mcp-settings-view.js";
 import { globalParametersPanel } from "./global-parameters-view.js";
 import { functionPanel } from "./function-view.js";
@@ -49,6 +50,9 @@ export function settingsPanel(
         )
         .join("") +
       environmentExtras(project);
+  } else if (active === "resource-parameterDescriptions") {
+    title = "参数说明库";
+    content = parameterDescriptionsPanel(project);
   } else if (active === "resource-functions") {
     title = "自定义函数";
     content = functionPanel(project);

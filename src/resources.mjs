@@ -1,3 +1,4 @@
+import { validateParameterDescriptions } from "../public/parameter-descriptions.js";
 import { validateAttributeDefinitions } from "../public/attribute-model.js";
 import { validateErrorCodes } from "./error-codes.mjs";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
@@ -28,6 +29,7 @@ export function validateResources(settings = {}) {
       throw Error("状态名称或颜色无效");
   validateAttributeDefinitions(settings.attributes || []);
   validateErrorCodes(settings.statusCodes || []);
+  validateParameterDescriptions(settings.parameterDescriptions || []);
   const functions = list("functions");
   unique(functions, "name");
   let bytes = 0;

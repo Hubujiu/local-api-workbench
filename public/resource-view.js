@@ -7,6 +7,11 @@ const esc = (value) =>
       ],
   );
 export const resources = {
+  parameterDescriptions: {
+    name: "参数说明库",
+    sample: [{ key: "account_id", description: "账户标识" }],
+    help: "仅在参数定义中明确选择后采用说明，不修改值或类型。",
+  },
   functions: {
     name: "自定义函数",
     sample: [{ name: "double", body: "return args[0] * 2;" }],
@@ -65,6 +70,7 @@ export function settingsSidebar(active = "settings-basic") {
       ["settings-mock", "Mock 服务"],
       ["settings-mock-fields", "智能 Mock 匹配"],
       ["resource-functions", "自定义函数"],
+      ["resource-parameterDescriptions", "参数说明库"],
       ["resource-statusCodes", "状态码字典"],
       ["resource-attributes", "接口属性"],
       ["resource-statuses", "接口状态"],

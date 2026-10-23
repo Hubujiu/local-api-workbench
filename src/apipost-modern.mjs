@@ -1,3 +1,4 @@
+import { mergeApipostDescriptions } from "./apipost-descriptions.mjs";
 import {
   prepareApipostAttributes,
   mergeApipostAttributes,
@@ -221,12 +222,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of [
-    "mock_custom_rules",
-    "db_link",
-    "describe_library",
-    "custom_func",
-  ])
+  for (const name of ["mock_custom_rules", "db_link", "custom_func"])
     reject(global[name], "global." + name);
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
@@ -648,6 +644,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const settings = {
     ...(project.settings ?? {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
+    parameterDescriptions: mergeApipostDescriptions(
+      empty(global.describe_library) ? [] : global.describe_library,
+      project.settings?.parameterDescriptions || [],
+      source.project_id,
+    ),
     attributes: mergeApipostAttributes(
       project.settings?.attributes || [],
       attributes.fields,

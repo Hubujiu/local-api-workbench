@@ -1,3 +1,7 @@
+import {
+  validateParameterDescriptions,
+  parameterDescriptionChoices,
+} from "./parameter-descriptions.js";
 import { importedScriptTasksHTML } from "./imported-script-tasks.js";
 import {
   scriptURLModeOptions,
@@ -1379,12 +1383,63 @@ function bind() {
     const [group, index] = element.dataset.dynamicPair.split(":");
     editDynamicValue(group, Number(index));
   });
+  function editParameterDescription(index) {
+    const existing = project.settings?.parameterDescriptions?.[index];
+    modal(
+      existing ? "编辑参数说明" : "新增参数说明",
+      `<label>参数名</label><input id="description-library-key" maxlength="200" value="${esc(existing?.key || "")}"><label>说明</label><textarea id="description-library-text" maxlength="8000">${esc(existing?.description || "")}</textarea><p class="muted">保存后可在参数定义中明确选择使用，不会自动覆盖现有参数。</p>`,
+      async () => {
+        const rows = structuredClone(
+          project.settings?.parameterDescriptions || [],
+        );
+        const entry = {
+          ...existing,
+          key: $("#description-library-key").value,
+          description: $("#description-library-text").value,
+        };
+        if (index === undefined) rows.push(entry);
+        else rows[index] = entry;
+        validateParameterDescriptions(rows);
+        project.settings ??= {};
+        const previous = project.settings.parameterDescriptions;
+        project.settings.parameterDescriptions = rows;
+        mark();
+        try {
+          await save();
+        } catch (error) {
+          project.settings.parameterDescriptions = previous;
+          mark();
+          throw error;
+        }
+      },
+    );
+  }
+  on("#new-parameter-description", "click", () => editParameterDescription());
+  on("[data-edit-parameter-description]", "click", (_, element) =>
+    editParameterDescription(Number(element.dataset.editParameterDescription)),
+  );
+  on("[data-delete-parameter-description]", "click", async (_, element) => {
+    if (!confirm("删除此参数说明？已经采用的接口说明不会改变。")) return;
+    const previous = project.settings.parameterDescriptions;
+    project.settings.parameterDescriptions = previous.filter(
+      (_, index) =>
+        index !== Number(element.dataset.deleteParameterDescription),
+    );
+    mark();
+    try {
+      await save();
+    } catch (error) {
+      project.settings.parameterDescriptions = previous;
+      mark();
+      throw error;
+    }
+  });
   on("[data-define-pair]", "click", (_, element) => {
     const [kind, index] = element.dataset.definePair.split(":"),
       parameter = request()[kind][Number(index)];
     modal(
       "参数定义",
-      `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}"><label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema ?? { type: "string" })}`,
+      `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}">${project.settings?.parameterDescriptions?.length ? parameterDescriptionChoices(project.settings.parameterDescriptions, parameter.key) : ""}<label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema ?? { type: "string" })}`,
       () => {
         parameter.description = $("#parameter-description").value;
         parameter.required = $("#parameter-required").checked;
@@ -1414,6 +1469,19 @@ function bind() {
         render();
       },
     );
+    if ($("#apply-parameter-description"))
+      $("#apply-parameter-description").onclick = () => {
+        const selected = $("#description-choice").value;
+        const entry =
+          selected === ""
+            ? undefined
+            : project.settings.parameterDescriptions[Number(selected)];
+        if (!entry) {
+          toast("请选择参数说明库条目");
+          return;
+        }
+        $("#parameter-description").value = entry.description;
+      };
   });
   on("#request-status", "change", (_, element) => {
     request().statusId = element.value;
