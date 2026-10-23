@@ -141,6 +141,7 @@ test("activity phase measurements remain bounded data and do not replace executi
     Object.keys(result.activityMetrics).sort(),
     [
       "compatibilityMs",
+      "fakerLoadMs",
       "functionLibraryMs",
       "userScriptMs",
       "microtaskMs",
@@ -203,6 +204,36 @@ test("activity phase measurements remain bounded data and do not replace executi
         microtaskMs: "private",
       },
     }),
+    {},
+  );
+});
+
+test("Faker cold-load timing is a bounded metric, not a new execution allowance", async () => {
+  const { scriptFailureDetails } = await import(
+    "../src/script-diagnostics.mjs"
+  );
+  await assert.rejects(
+    runScript(
+      'pm.variables.replaceIn("{{$randomCountryCode}}");throw Error("fixture");',
+      { variables: {} },
+    ),
+    (error) => {
+      assert.match(error.message, /fixture/);
+      const details = scriptFailureDetails(error).scriptDiagnostics;
+      assert.equal(details.fakerCalls, 1);
+      assert(
+        Number.isSafeInteger(details.fakerLoadMs) && details.fakerLoadMs >= 0,
+      );
+      assert.equal(details.activityBudgetMs, 250);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    scriptFailureDetails({ activityMetrics: { fakerLoadMs: Infinity } }),
+    {},
+  );
+  assert.deepEqual(
+    scriptFailureDetails({ activityMetrics: { fakerLoadMs: 60001 } }),
     {},
   );
 });

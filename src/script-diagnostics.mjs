@@ -29,6 +29,7 @@ export function scriptFailureDetails(error) {
     timerCount: 101,
     requestCount: 11,
     compatibilityMs: 60000,
+    fakerLoadMs: 60000,
     functionLibraryMs: 60000,
     userScriptMs: 60000,
     microtaskMs: 60000,

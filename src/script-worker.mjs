@@ -10,7 +10,7 @@ import {
   responseMutationValidatorSource,
 } from "./script-response-mutation.mjs";
 import { parseCSVRows } from "../public/csv-data.js";
-import { fakerVariable } from "./faker-variables.mjs";
+import { fakerVariable, fakerProviderLoadMs } from "./faker-variables.mjs";
 import { builtinVariableFactory } from "./builtin-variables.mjs";
 import { ajaxCompatibilitySource } from "./script-ajax.mjs";
 import { responseCompatibilitySource } from "./script-response.mjs";
@@ -679,7 +679,10 @@ try {
     result: {
       ...JSON.parse(json),
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
-      activityMetrics: { ...activityMetrics },
+      activityMetrics: {
+        ...activityMetrics,
+        fakerLoadMs: fakerProviderLoadMs(),
+      },
       activityMs:
         workerData.activityBudgetMs -
         remaining +
@@ -692,7 +695,7 @@ try {
     error: error.message,
     scriptStage,
     activityOperation,
-    activityMetrics: { ...activityMetrics },
+    activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
     scriptDiagnostics: {
       activityBudgetMs: workerData.activityBudgetMs,
       fakerCalls,

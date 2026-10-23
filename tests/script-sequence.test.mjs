@@ -137,6 +137,8 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
     /最多10/,
   );
   assert.equal(count, 10);
+  // Independent predeclared samples, not retries: every sample must satisfy
+  // the original assertion and the first mismatch still fails this test.
   for (const [code, pattern] of [
     [
       "for(let i=0;i<60;i++)await new Promise(resolve=>setTimeout(resolve,0));",
@@ -148,73 +150,84 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
     ],
     ['for(let i=0;i<600;i++)pm.test("pass",()=>{});', /最多1000条/],
   ])
-    await assert.rejects(
-      (async () => {
-        const started = performance.now();
-        try {
-          return await runScriptSequence(
-            [
-              { name: "a", code },
-              { name: "b", code },
-            ],
-            { variables: {} },
-          );
-        } catch (error) {
-          // Preserve the exact acceptance assertion below. Emit only bounded
-          // phase/counter evidence, never source, variables or request data.
-          t.diagnostic(
-            JSON.stringify({
-              case: pattern.source,
-              sequenceElapsedMs: Math.round(performance.now() - started),
-              ...scriptFailureDetails(error),
-            }),
-          );
-          if (pattern.source === "最多1000次" && !pattern.test(error.message)) {
-            // Fixed, no-network probes diagnose the failure; they never replace
-            // or relax the original rejection assertion, which still fails.
-            for (const [label, probe] of [
-              ["empty", ""],
+    for (
+      let sample = 0;
+      sample < (pattern.source === "最多1000次" ? 6 : 1);
+      sample++
+    )
+      await assert.rejects(
+        (async () => {
+          const started = performance.now();
+          try {
+            return await runScriptSequence(
               [
-                "faker-once",
-                'pm.variables.replaceIn("{{$randomCountryCode}}");',
+                { name: "a", code },
+                { name: "b", code },
               ],
-              [
-                "faker-600",
-                'for(let i=0;i<600;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
-              ],
-            ]) {
-              const probeStarted = performance.now();
-              let details;
-              try {
-                const result = await runScript(probe, { variables: {} });
-                details = {
-                  status: "returned",
-                  activityMs: result.activityMs,
-                  ...scriptFailureDetails({
-                    activityMetrics: result.activityMetrics,
-                    scriptDiagnostics: { fakerCalls: result.usage.fakerCalls },
+              { variables: {} },
+            );
+          } catch (error) {
+            // Preserve the exact acceptance assertion below. Emit only bounded
+            // phase/counter evidence, never source, variables or request data.
+            t.diagnostic(
+              JSON.stringify({
+                case: pattern.source,
+                sample,
+                sequenceElapsedMs: Math.round(performance.now() - started),
+                ...scriptFailureDetails(error),
+              }),
+            );
+            if (
+              pattern.source === "最多1000次" &&
+              !pattern.test(error.message)
+            ) {
+              // Fixed, no-network probes diagnose the failure; they never replace
+              // or relax the original rejection assertion, which still fails.
+              for (const [label, probe] of [
+                ["empty", ""],
+                [
+                  "faker-once",
+                  'pm.variables.replaceIn("{{$randomCountryCode}}");',
+                ],
+                [
+                  "faker-600",
+                  'for(let i=0;i<600;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
+                ],
+              ]) {
+                const probeStarted = performance.now();
+                let details;
+                try {
+                  const result = await runScript(probe, { variables: {} });
+                  details = {
+                    status: "returned",
+                    activityMs: result.activityMs,
+                    ...scriptFailureDetails({
+                      activityMetrics: result.activityMetrics,
+                      scriptDiagnostics: {
+                        fakerCalls: result.usage.fakerCalls,
+                      },
+                    }),
+                  };
+                } catch (probeError) {
+                  details = {
+                    status: "failed",
+                    ...scriptFailureDetails(probeError),
+                  };
+                }
+                t.diagnostic(
+                  JSON.stringify({
+                    probe: label,
+                    elapsedMs: Math.round(performance.now() - probeStarted),
+                    ...details,
                   }),
-                };
-              } catch (probeError) {
-                details = {
-                  status: "failed",
-                  ...scriptFailureDetails(probeError),
-                };
+                );
               }
-              t.diagnostic(
-                JSON.stringify({
-                  probe: label,
-                  elapsedMs: Math.round(performance.now() - probeStarted),
-                  ...details,
-                }),
-              );
             }
+            throw error;
           }
-          throw error;
-        }
-      })(),
-      pattern,
-    );
+        })(),
+        pattern,
+      );
   const logs = await runScriptSequence(
     [
       { name: "a", code: "for(let i=0;i<70;i++)console.log(i);" },

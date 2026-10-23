@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-let provider;
+let provider,
+  providerLoadMs = 0;
+export const fakerProviderLoadMs = () => providerLoadMs;
 // Explicit no-argument catalogue: user input never selects a module or property path.
 const catalogue = {
   $randomFirstName: ["person", "firstName"],
@@ -90,7 +92,15 @@ export const fakerVariableNames = Object.freeze(Object.keys(catalogue));
 export function fakerVariable(name) {
   if (!Object.hasOwn(catalogue, name)) return undefined;
   // Only the English locale is loaded, and only when a supported variable is used.
-  const faker = (provider ??= require("@faker-js/faker/locale/en").faker);
+  if (!provider) {
+    const started = performance.now();
+    try {
+      provider = require("@faker-js/faker/locale/en").faker;
+    } finally {
+      providerLoadMs = Math.max(0, Math.round(performance.now() - started));
+    }
+  }
+  const faker = provider;
   const [group, method, options] = catalogue[name];
   const result =
     options === undefined
