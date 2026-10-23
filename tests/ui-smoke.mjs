@@ -5676,6 +5676,58 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-openapi-url-query.png" });
 
+  // Restore the actual earlier imported project snapshot as a separate copy.
+  // Restoration must not execute imported scripts or overwrite its source.
+  const sourceBeforeRestore = await app.store.get(attributeProject.id);
+  let restoreExecutions = 0;
+  const countRestoreExecution = (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/execute"))
+      restoreExecutions++;
+  };
+  page.on("request", countRestoreExecution);
+  await page.locator("#import").click();
+  await page.locator("#import-mode").selectOption("restore");
+  await page.locator("#import-text").fill(JSON.stringify(attributeProject));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  page.off("request", countRestoreExecution);
+  assert.equal(restoreExecutions, 0);
+  const restoredProjectId = await page.locator("#project-select").inputValue();
+  assert.notEqual(restoredProjectId, attributeProject.id);
+  assert.equal(
+    await page.locator("#project-select option:checked").textContent(),
+    attributeProject.name + " · 恢复副本",
+  );
+  const restoredProject = await app.store.get(restoredProjectId);
+  assert.deepEqual(
+    restoredProject.settings.attributes,
+    attributeProject.settings.attributes,
+  );
+  assert.deepEqual(
+    restoredProject.settings.statusCodes,
+    attributeProject.settings.statusCodes,
+  );
+  const restoredAttributeRequest = restoredProject.requests.find(
+    (request) => request.id === taskSourceRequest.id,
+  );
+  assert.deepEqual(
+    restoredAttributeRequest.attributes,
+    attributeRequest.attributes,
+  );
+  assert.deepEqual(
+    restoredAttributeRequest.importedScriptTasks,
+    taskSourceRequest.importedScriptTasks,
+  );
+  const sourceAfterRestore = await app.store.get(attributeProject.id);
+  assert.deepEqual(sourceAfterRestore.requests, sourceBeforeRestore.requests);
+  assert.deepEqual(sourceAfterRestore.settings, sourceBeforeRestore.settings);
+  await page.locator('[data-page="docs"]').click();
+  await page
+    .locator(".error-code-document")
+    .getByText("0007", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-restored-modern-project.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

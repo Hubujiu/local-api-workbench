@@ -203,4 +203,17 @@ test("HTTP import and restart preserve attribute definitions and disabled values
     exported.requests[0].attributes[exported.settings.attributes[0].key],
     0,
   );
+  const copy = await call("/api/restore", "POST", { document: exported });
+  assert.notEqual(copy.id, p.id);
+  assert.deepEqual(copy.settings.attributes, exported.settings.attributes);
+  assert.deepEqual(
+    copy.requests[0].attributes,
+    exported.requests[0].attributes,
+  );
+  const original = await call("/api/projects/" + p.id);
+  assert.deepEqual(original.settings.attributes, exported.settings.attributes);
+  assert.deepEqual(
+    original.requests[0].attributes,
+    exported.requests[0].attributes,
+  );
 });
