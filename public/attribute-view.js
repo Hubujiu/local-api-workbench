@@ -9,11 +9,25 @@ const esc = (value) =>
   );
 export function attributeFields(fields, values = {}, dataName = "attribute") {
   return (fields || [])
+    .filter((field) => field.enabled !== false)
     .map((field, index) => {
       const value = values?.[field.key],
         id = dataName + "-" + index,
         attr =
-          ' id="' + id + '" data-' + dataName + '="' + esc(field.key) + '"';
+          ' id="' +
+          id +
+          '" data-' +
+          dataName +
+          '="' +
+          esc(field.key) +
+          '"' +
+          (field.description
+            ? ' title="' +
+              esc(field.description) +
+              '" aria-description="' +
+              esc(field.description) +
+              '"'
+            : "");
       let control;
       if (field.type === "boolean")
         control =
@@ -71,7 +85,9 @@ export function attributeFields(fields, values = {}, dataName = "attribute") {
     .join("");
 }
 export function attributeChooser(project) {
-  const fields = project.settings?.attributes || [];
+  const fields = (project.settings?.attributes || []).filter(
+    (field) => field.enabled !== false,
+  );
   return fields.length
     ? "<fieldset><legend>选择要公开的接口/文档属性（默认不包含）</legend>" +
         fields
@@ -91,6 +107,7 @@ function selectedAttributes(project, record, keys = []) {
   return (project.settings?.attributes || [])
     .filter(
       (field) =>
+        field.enabled !== false &&
         keys.includes(field.key) &&
         !["__proto__", "prototype", "constructor"].includes(field.key) &&
         Object.hasOwn(record.attributes || {}, field.key),

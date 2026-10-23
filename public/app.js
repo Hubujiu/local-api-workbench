@@ -3619,13 +3619,15 @@ function editAttributeDefinition(index) {
   };
   modal(
     existing ? "编辑接口属性" : "新增接口属性",
-    `<label>稳定标识</label><input id="attribute-key" value="${esc(existing?.key || "")}" ${existing ? "disabled" : ""}><label>显示名称</label><input id="attribute-label" value="${esc(existing?.label || "")}"><label>类型</label><select id="attribute-type">${attributeTypes.map((type) => `<option value="${type}" ${(existing?.type || "string") === type ? "selected" : ""}>${labels[type]}</option>`).join("")}</select><label>单选/多选选项（每行一个值，或 JSON 数组；其他类型忽略）</label><textarea id="attribute-options">${esc(JSON.stringify(existing?.options || [], null, 2))}</textarea><p class="muted">更改类型或删除选项时，会检查现有值，避免静默丢失数据。</p>`,
+    `<label>稳定标识</label><input id="attribute-key" value="${esc(existing?.key || "")}" ${existing ? "disabled" : ""}><label>显示名称</label><input id="attribute-label" value="${esc(existing?.label || "")}"><label>类型</label><select id="attribute-type">${attributeTypes.map((type) => `<option value="${type}" ${(existing?.type || "string") === type ? "selected" : ""}>${labels[type]}</option>`).join("")}</select><label><input id="attribute-enabled" type="checkbox" ${existing?.enabled !== false ? "checked" : ""}>在接口与文档中启用（停用保留已有值）</label><label>填写提示</label><textarea id="attribute-description" rows="2" maxlength="2000">${esc(existing?.description || "")}</textarea><label>单选/多选选项（每行一个值，或 JSON 数组；其他类型忽略）</label><textarea id="attribute-options">${esc(JSON.stringify(existing?.options || [], null, 2))}</textarea><p class="muted">更改类型或删除选项时，会检查现有值，避免静默丢失数据。</p>`,
     async () => {
       const type = $("#attribute-type").value;
       const field = {
         ...existing,
         key: $("#attribute-key").value.trim(),
         label: $("#attribute-label").value.trim(),
+        enabled: $("#attribute-enabled").checked,
+        description: $("#attribute-description").value,
         type,
       };
       if (["select", "multiselect"].includes(type)) {

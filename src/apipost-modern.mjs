@@ -1,3 +1,7 @@
+import {
+  prepareApipostAttributes,
+  mergeApipostAttributes,
+} from "./apipost-attributes.mjs";
 import { mergeApipostCodes } from "./apipost-codes.mjs";
 import { normalizeImportedScriptTasks } from "../public/imported-script-tasks.js";
 import { validateMockResponse } from "../public/response-example.js";
@@ -218,13 +222,17 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
   for (const name of [
-    "attributes",
     "mock_custom_rules",
     "db_link",
     "describe_library",
     "custom_func",
   ])
     reject(global[name], "global." + name);
+  const attributes = prepareApipostAttributes(
+    empty(global.attributes) ? [] : global.attributes,
+    resource,
+    source.project_id,
+  );
   const servers = list(global.servers ?? [], "servers", 100).map((s) => ({
     id: resource("server", s.server_id),
     name: safe(s.name),
@@ -285,7 +293,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     if (ids.has(id)) throw Error("Apipost资源ID重复");
     ids.set(id, node);
     reject(node.children, "嵌套资源");
-    reject(node.attribute_info, "接口属性");
+    if (node.target_type === "folder") reject(node.attribute_info, "目录属性");
     reject(node.tags, "接口标签");
     reject(node.ai_expect?.list, "AI条件Mock");
     if (node.mock_ip_white_list_enable && node.mock_ip_white_list_enable !== -1)
@@ -559,6 +567,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of [row.beforeTask, row.afterTask])
         if (task) request.importNotes.push(task.note);
     }
+    request.attributes = attributes.values(
+      empty(row.node.attribute_info) ? {} : row.node.attribute_info,
+    );
     request.url = row.url;
     request.serviceId = row.serviceId;
     request.queryAddEqual = row.queryAddEqual;
@@ -637,6 +648,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const settings = {
     ...(project.settings ?? {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
+    attributes: mergeApipostAttributes(
+      project.settings?.attributes || [],
+      attributes.fields,
+    ),
     statusCodes: mergeApipostCodes(
       empty(global.codes) ? [] : global.codes,
       project.settings?.statusCodes || [],

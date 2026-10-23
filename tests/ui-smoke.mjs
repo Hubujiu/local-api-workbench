@@ -2893,6 +2893,34 @@ try {
       data: 'pm.test("imported response",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept"));',
     },
   ];
+  modern.global.attributes = [
+    {
+      attribute_id: "browser-owner",
+      project_id: modern.project_id,
+      field_name: "Imported owner",
+      field_type: 1,
+      enable: 1,
+      tooltip: "仅用于导入验证",
+      sort: 1,
+      extra: [],
+      open_api_field: "",
+    },
+    {
+      attribute_id: "browser-hidden",
+      project_id: modern.project_id,
+      field_name: "Hidden metric",
+      field_type: 2,
+      enable: -1,
+      tooltip: "",
+      sort: 2,
+      extra: [],
+      open_api_field: "",
+    },
+  ];
+  modern.apis[1].attribute_info = {
+    "browser-owner": "fixture-owner",
+    "browser-hidden": 0,
+  };
   modern.global.codes = [
     {
       code_id: "browser-code",
@@ -3080,6 +3108,39 @@ try {
   await page.screenshot({
     path: "/tmp/local-api-imported-disabled-script.png",
   });
+  const ownerField = page.getByLabel("Imported owner", { exact: true });
+  assert.equal(await ownerField.inputValue(), "fixture-owner");
+  assert.equal(
+    await ownerField.getAttribute("aria-description"),
+    "仅用于导入验证",
+  );
+  assert.equal(
+    await page.getByLabel("Hidden metric", { exact: true }).count(),
+    0,
+  );
+  await ownerField.fill("edited-owner");
+  await saveAndWait();
+  const attributeProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const hiddenDefinition = attributeProject.settings.attributes.find(
+    (field) => field.label === "Hidden metric",
+  );
+  const ownerDefinition = attributeProject.settings.attributes.find(
+    (field) => field.label === "Imported owner",
+  );
+  const attributeRequest = attributeProject.requests.find(
+    (request) => request.id === taskSourceRequest.id,
+  );
+  assert.equal(attributeRequest.attributes[hiddenDefinition.key], 0);
+  assert.equal(
+    attributeRequest.attributes[ownerDefinition.key],
+    "edited-owner",
+  );
+  await page
+    .getByLabel("Imported owner", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/local-api-imported-attributes.png" });
   await page.locator("#env").selectOption({ label: "Imported" });
   await page.locator('[data-mode="debug"]').click();
   const modernResponse = page.waitForResponse(

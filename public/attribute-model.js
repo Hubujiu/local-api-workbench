@@ -38,6 +38,13 @@ export function validateAttributeDefinitions(fields = []) {
       !attributeTypes.includes(field.type)
     )
       throw Error("属性类型或名称无效");
+    if (field.enabled !== undefined && typeof field.enabled !== "boolean")
+      throw Error("属性启停须为布尔值");
+    if (
+      field.description !== undefined &&
+      (typeof field.description !== "string" || field.description.length > 2000)
+    )
+      throw Error("属性提示须为最多2000字符的文本");
     if (["select", "multiselect"].includes(field.type)) {
       const options = attributeOptions(field),
         values = new Set();
