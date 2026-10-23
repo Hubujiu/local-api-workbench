@@ -6297,6 +6297,18 @@ try {
     .getByText("已取消", { exact: false })
     .waitFor();
   releaseCaseBatchSlow();
+  assert.match(
+    await page
+      .locator(`[data-case-result="${lastBatchCase.id}"] summary`)
+      .textContent(),
+    /本批次未运行/,
+  );
+  assert.doesNotMatch(
+    await page
+      .locator(`[data-case-result="${lastBatchCase.id}"] summary`)
+      .textContent(),
+    /通过|200/,
+  );
   assert.deepEqual(caseBatchHits, ["slow"]);
   await page.screenshot({ path: "/tmp/local-api-case-batch-cancel.png" });
 

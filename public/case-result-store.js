@@ -11,6 +11,10 @@ export function createCaseResultStore() {
         throw Error("用例结果标识无效");
       bucket(projectId).set(caseId, { result, collapsed });
     },
+    clear(projectId, caseIds) {
+      const entries = bucket(projectId);
+      for (const id of caseIds) entries.delete(id);
+    },
     results(projectId) {
       return new Map(
         [...bucket(projectId)].map(([id, value]) => [id, value.result]),

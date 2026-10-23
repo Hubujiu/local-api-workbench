@@ -3181,6 +3181,7 @@ function bind() {
     )
       throw Error("单次运行须选择当前接口的1至100个不同用例");
     const environmentId = env();
+    caseResults.clear(projectId, ids);
     const batch = (caseBatch = {
       projectId,
       sourceRequestId: source,
@@ -3239,6 +3240,20 @@ function bind() {
         },
       );
       Object.assign(batch, summary);
+      const completedIds = new Set(summary.results.map((entry) => entry.id));
+      for (const item of items)
+        if (!completedIds.has(item.id))
+          caseResults.set(
+            projectId,
+            item.id,
+            {
+              outcome: "not-run",
+              reason: summary.cancelled
+                ? "本批次已取消，未发送此用例"
+                : "本批次已停止，未发送此用例",
+            },
+            { collapsed: true },
+          );
       for (const entry of summary.results)
         if (entry.error)
           caseResults.set(
@@ -3247,6 +3262,20 @@ function bind() {
             { outcome: "error", error: entry.error },
             { collapsed: true },
           );
+    } catch (error) {
+      batch.stoppedOnError = true;
+      for (const item of items)
+        if (!caseResults.results(projectId).has(item.id))
+          caseResults.set(
+            projectId,
+            item.id,
+            {
+              outcome: "not-run",
+              reason: "批次未完成启动或已中止，未记录此用例执行",
+            },
+            { collapsed: true },
+          );
+      throw error;
     } finally {
       batch.running = false;
       batch.currentName = undefined;

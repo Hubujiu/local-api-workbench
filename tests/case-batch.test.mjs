@@ -165,3 +165,18 @@ test("batch evidence budgets include JSON escaping for control characters", asyn
     new TextEncoder().encode(JSON.stringify(evidence)).byteLength <= 65536,
   );
 });
+
+test("starting a batch clears only selected evidence in its own project", async () => {
+  const { createCaseResultStore } = await import(
+    "../public/case-result-store.js"
+  );
+  const store = createCaseResultStore();
+  for (const project of ["a", "b"])
+    for (const id of ["selected", "other"])
+      store.set(project, id, { outcome: "passed" }, { collapsed: true });
+  store.clear("a", ["selected"]);
+  assert.equal(store.results("a").has("selected"), false);
+  assert.equal(store.collapsed("a").has("selected"), false);
+  assert.equal(store.results("a").has("other"), true);
+  assert.equal(store.results("b").has("selected"), true);
+});
