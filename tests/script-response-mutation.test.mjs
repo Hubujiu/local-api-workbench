@@ -1,3 +1,4 @@
+import { validateResponseMutation } from "../src/script-response-mutation.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runScript, runScriptSequence } from "../src/scripts.mjs";
@@ -246,4 +247,46 @@ test("real HTTP debug and persisted history keep failure status and raw body sep
   );
   assert.equal(result.results[0].response.status, 500);
   assert.deepEqual(result.results[0].scriptResponse, value.scriptResponse);
+});
+
+test("large ASCII originals validate within the unchanged VM budget and exact UTF-8 boundaries remain strict", async () => {
+  const body = "x".repeat(512 * 1024);
+  const out = await runScript('pm.response.setBody("small");', {
+    response: { ...wire(), body },
+  });
+  assert.equal(out.responseOriginals.body, body);
+  assert.equal(out.responseOverride.body, "small");
+  assert(out.activityMs <= 250);
+  for (const [limit, originals] of [
+    [65536, false],
+    [524288, true],
+  ]) {
+    const unicode = "中".repeat(Math.floor(limit / 3)) + "x".repeat(limit % 3);
+    assert.equal(
+      validateResponseMutation({ body: unicode }, true, originals).body,
+      unicode,
+    );
+    assert.throws(
+      () => validateResponseMutation({ body: unicode + "x" }, true, originals),
+      /KiB/,
+    );
+    assert.throws(
+      () =>
+        validateResponseMutation(
+          { body: "x".repeat(limit + 1) },
+          true,
+          originals,
+        ),
+      /KiB/,
+    );
+    assert.throws(
+      () =>
+        validateResponseMutation(
+          { body: "x".repeat(100) + String.fromCharCode(0xd800) },
+          true,
+          originals,
+        ),
+      /Unicode/,
+    );
+  }
 });

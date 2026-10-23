@@ -22,6 +22,16 @@ export function validateResponseMutation(
       if (typeof value.body !== "string")
         throw Error("响应正文须可序列化为文本");
       const limit = originals ? 512 * 1024 : 64 * 1024;
+      const sizeError = originals
+        ? "响应原值超过512KiB"
+        : "响应修改正文超过64KiB";
+      // UTF-8 cannot use fewer bytes than UTF-16 code units for valid Unicode.
+      // Reject definite excess before scanning, and keep common ASCII in native regex.
+      if (value.body.length > limit) throw Error(sizeError);
+      if (/^[\x00-\x7f]*$/.test(value.body)) {
+        result.body = value.body;
+        continue;
+      }
       let bytes = 0;
       for (let i = 0; i < value.body.length; i++) {
         const code = value.body.charCodeAt(i);
