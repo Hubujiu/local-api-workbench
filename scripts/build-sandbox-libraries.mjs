@@ -1,4 +1,5 @@
 import { build, transform } from "esbuild";
+import { draft7MetaPlugin } from "./precompile-schema-meta.mjs";
 import { createHash } from "node:crypto";
 import { quickJSURIRegex } from "./quickjs-uri-regex.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -43,6 +44,7 @@ for (const [file, expected] of [
 }
 const schemaBundle = await build({
   entryPoints: ["scripts/sandbox-schema-entry.mjs"],
+  plugins: [draft7MetaPlugin()],
   write: false,
   bundle: true,
   minify: false,

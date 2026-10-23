@@ -1,3 +1,7 @@
+import meta00 from "trusted-draft7-meta:00";
+import meta01 from "trusted-draft7-meta:01";
+import meta10 from "trusted-draft7-meta:10";
+import meta11 from "trusted-draft7-meta:11";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { formatNames } from "ajv-formats/dist/formats.js";
@@ -136,6 +140,37 @@ globalThis.__boundedJSONSchema = (schema, data, options = {}) => {
       ownProperties: true,
       addUsedSchema: false,
     });
+    // Keep Ajv self-validation enabled. Replace only compilation of its fixed
+    // built-in meta-schema, not validation of untrusted user schemas.
+    const originalValidateSchema = ajv.validateSchema;
+    const validateMeta = normalized.allErrors
+      ? normalized.verbose
+        ? meta11
+        : meta10
+      : normalized.verbose
+        ? meta01
+        : meta00;
+    if (ajv.opts.validateSchema !== true)
+      throw Error("Schema self-validation must remain enabled");
+    ajv.validateSchema = function (schema, throwOrLogError) {
+      if (typeof schema === "boolean") return true;
+      if (
+        !schema ||
+        typeof schema !== "object" ||
+        Array.isArray(schema) ||
+        (schema.$schema &&
+          ![
+            "http://json-schema.org/draft-07/schema",
+            "http://json-schema.org/draft-07/schema#",
+          ].includes(schema.$schema))
+      )
+        return originalValidateSchema.call(this, schema, throwOrLogError);
+      const valid = validateMeta(schema);
+      this.errors = validateMeta.errors;
+      if (!valid && throwOrLogError)
+        throw Error("schema is invalid: " + this.errorsText());
+      return valid;
+    };
     addFormats(ajv, { keywords: false });
     cache = { ajv, schemas: new Map() };
     caches.set(optionKey, cache);
