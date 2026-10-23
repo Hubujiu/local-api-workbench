@@ -4723,6 +4723,26 @@ try {
   assert(!previewText.includes(privateUploadText));
   assert(!previewText.includes(privateUploadBase64));
   assert.equal(await documentFormCard.locator("img").count(), 0);
+  const documentTable = documentFormCard.locator(".doc-table-scroll");
+  await documentTable.focus();
+  assert(
+    await documentTable.evaluate((node) => node.scrollWidth > node.clientWidth),
+  );
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(
+    (node) => node.scrollLeft > 0,
+    await documentTable.elementHandle(),
+  );
+  assert(await documentTable.evaluate((node) => node.scrollLeft > 0));
+  assert(
+    await documentFormCard
+      .locator("td:nth-child(4)")
+      .first()
+      .evaluate((node) => getComputedStyle(node).whiteSpace === "nowrap"),
+  );
+  await documentTable.evaluate((node) => {
+    node.scrollLeft = 0;
+  });
   await documentFormCard.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-document-form-preview.png" });
   const htmlDocumentDownload = page.waitForEvent("download");
@@ -4755,6 +4775,27 @@ try {
     assert.equal(await documentPage.locator("img,script").count(), 0);
     assert.deepEqual(documentRequests, []);
     assert.deepEqual(documentErrors, []);
+    await documentPage.setViewportSize({ width: 600, height: 800 });
+    const exportedTable = exportedForm.locator(".doc-table-scroll");
+    await exportedTable.focus();
+    assert(
+      await exportedTable.evaluate(
+        (node) => node.scrollWidth > node.clientWidth,
+      ),
+    );
+    await documentPage.keyboard.press("ArrowRight");
+    await documentPage.waitForFunction(
+      (node) => node.scrollLeft > 0,
+      await exportedTable.elementHandle(),
+    );
+    assert(
+      await documentPage.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    );
+    await exportedTable.evaluate((node) => {
+      node.scrollLeft = 0;
+    });
     await exportedForm.scrollIntoViewIfNeeded();
     await documentPage.screenshot({
       path: "/tmp/local-api-document-form-export.png",

@@ -77,7 +77,7 @@ function parameterRows(parameters, form = false) {
 function tableHTML(rows) {
   if (!rows.length) return '<p class="muted">无表单项</p>';
   return (
-    "<table><thead><tr>" +
+    '<div class="doc-table-scroll" role="region" aria-label="参数表，可横向滚动" tabindex="0"><table class="doc-parameter-table"><colgroup><col style="width:16%"><col style="width:34%"><col style="width:24%"><col style="width:8%"><col style="width:18%"></colgroup><thead><tr>' +
     columns.map((c) => "<th>" + escape(c) + "</th>").join("") +
     "</tr></thead><tbody>" +
     rows
@@ -92,7 +92,7 @@ function tableHTML(rows) {
           "</tr>",
       )
       .join("") +
-    "</tbody></table>"
+    "</tbody></table></div>"
   );
 }
 function tableMarkdown(rows) {
@@ -318,5 +318,5 @@ export function exportDocumentation(
           `<section id="request-${index}"><span class="method">${escape(request.method)}</span><h2>${escape(request.name)}</h2>${attributeHTML(project, request, options.attributeKeys)}<code>${escape(request.url)}</code><div class="markdown-content">${renderMarkdown(request.description)}</div>${requestDocumentationHTML(request)}</section>`,
       )
       .join("");
-  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escape(project.name)} · API 文档</title><style>body{font:14px/1.7 system-ui,sans-serif;color:#353129;background:#faf7ef;margin:0}header,main{max-width:1000px;margin:auto;padding:30px}nav{display:flex;flex-wrap:wrap;gap:12px}a{color:#8a6d37}section{background:white;border:1px solid #e8e2d5;border-radius:8px;padding:24px;margin:18px 0}h2{margin-top:0}.method{float:right;color:#35a58a;font-weight:bold}pre,code{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8f6f0;padding:12px;border-radius:4px;display:block}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;overflow-wrap:anywhere}.doc-literal{white-space:pre-wrap}</style><header><h1>${escape(project.name)}</h1><p>离线 API 文档 · Local API Workbench</p><nav>${requests.map((request, index) => `<a href="#request-${index}">${escape(request.name)}</a>`).join("")}</nav></header><main>${content}</main></html>`;
+  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escape(project.name)} · API 文档</title><style>body{font:14px/1.7 system-ui,sans-serif;color:#353129;background:#faf7ef;margin:0}header,main{max-width:1000px;margin:auto;padding:30px}nav{display:flex;flex-wrap:wrap;gap:12px}a{color:#8a6d37}section{background:white;border:1px solid #e8e2d5;border-radius:8px;padding:24px;margin:18px 0}h2{margin-top:0}.method{float:right;color:#35a58a;font-weight:bold}pre,code{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8f6f0;padding:12px;border-radius:4px;display:block}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;overflow-wrap:anywhere}.doc-literal{white-space:pre-wrap}.doc-table-scroll{max-width:100%;min-width:0;overflow-x:auto}.doc-table-scroll:focus-visible{outline:2px solid #8a6d37;outline-offset:2px}.doc-parameter-table{min-width:720px;table-layout:fixed}.doc-parameter-table th,.doc-parameter-table td:nth-child(4){white-space:nowrap}</style><header><h1>${escape(project.name)}</h1><p>离线 API 文档 · Local API Workbench</p><nav>${requests.map((request, index) => `<a href="#request-${index}">${escape(request.name)}</a>`).join("")}</nav></header><main>${content}</main></html>`;
 }

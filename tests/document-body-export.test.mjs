@@ -222,3 +222,13 @@ test("empty response definitions remain an explicit section in shared and export
     requestDocumentationHTML(source.requests[0], 4).includes("未配置响应结构"),
   );
 });
+
+test("document parameter tables expose a keyboard-focusable scroll region and bounded columns", () => {
+  const html = exportDocumentation(project(), "html");
+  assert.match(
+    html,
+    /class="doc-table-scroll" role="region" aria-label="参数表，可横向滚动" tabindex="0"/,
+  );
+  assert.match(html, /class="doc-parameter-table"/);
+  assert.match(html, /min-width:720px/);
+});
