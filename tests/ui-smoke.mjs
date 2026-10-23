@@ -2763,6 +2763,10 @@ try {
   const modern = modernApipostFixture();
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
+  modern.apis[1].response.example.push({
+    raw: "",
+    expect: { code: "204", content_type: "text", name: "Imported empty body" },
+  });
   modern.apis[1].request.query.parameter = [];
   modern.models = [
     {
@@ -2808,6 +2812,17 @@ try {
   assert.equal(modernResult.request.headers["x-test"], "current");
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-apipost-modern.png" });
+  await page.locator('[data-mode="mock"]').click();
+  assert.equal(await page.locator("[data-edit-example]").count(), 2);
+  await page.locator('[data-edit-example="1"]').click();
+  assert.equal(
+    await page.locator("#ex-name").inputValue(),
+    "Imported empty body",
+  );
+  assert.equal(await page.locator("#ex-status").inputValue(), "204");
+  assert.equal(await page.locator("#ex-body").inputValue(), "");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+
   await page.locator('[data-page="dictionary"]').click();
   await page
     .getByText("Fictional modern export / BrowserModel", { exact: true })

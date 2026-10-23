@@ -28,3 +28,20 @@ example / examples / default / const / enum 以及未知扩展中的对象属于
 依据：https://json-schema.org/understanding-json-schema/reference/annotations 和 https://json-schema.org/understanding-json-schema/structuring 。这是修正导入数据保真，不意味着已实现完整 Schema 求解或任意扩展词汇。独立回归先在旧实现出现两个失败，再验证修复；另有完整项目导入到样例生成的端到端断言。原生 Offline2 项目格式仍不包含在此兼容声明内。
 
 同一已知 Schema 位置表也用于可视化编辑器的本地引用保护。字面 example/default/enum/未知扩展中的 `$ref` 不再误阻止字段改名或删除；实际 `$defs`、组合、条件和依赖中的引用仍阻止产生悬空引用。编辑器与导入器共享位置表，原节点/深度限制保留。新增单元回归先失败，浏览器另验证含引用形状扩展数据的字段改名往返及数据不变。
+
+
+## Explicit empty response examples
+
+A modern response.example entry with raw:"" is an explicit empty example, not
+an absent payload. The bridge previously reused the legacy placeholder filter
+and silently dropped it. Preserve explicit empty strings for modern imports,
+retain whitespace exactly, and keep absent raw fields as definitions only.
+Legacy response sections retain their existing definition-only empty-string
+interpretation; the adapter opts in internally without changing legacy imports.
+
+The pinned ecosystem BaseResponseExample type in src/types/apis/response.ts
+represents raw as a string. This change preserves the provided interchange
+payload; it is not new evidence of a native Offline2 round trip. Red regression
+captures the lost 204 example; import -> Mock selection -> OpenAPI reimport
+preserves empty/whitespace bodies and does not mutate source input. Browser
+coverage inspects the imported empty example's name, status and blank editor.

@@ -93,7 +93,10 @@ function inheritedParameters(request) {
       (request.auth?.type && !["noauth", "none"].includes(request.auth.type)))
   );
 }
-export function importApipost(document) {
+export function importApipost(
+  document,
+  { preserveEmptyExamples = false } = {},
+) {
   const source = apipostDocument(document);
   if (!source) throw Error("不是支持的Apipost公共JSON格式");
   // Offline2 exports overlap with legacy `apis`, but carry different dependencies.
@@ -268,7 +271,10 @@ export function importApipost(document) {
         schema: responseSchema,
         content: { [contentType]: { schema: responseSchema } },
       });
-      if (definition.raw !== undefined && definition.raw !== "")
+      if (
+        definition.raw !== undefined &&
+        (preserveEmptyExamples || definition.raw !== "")
+      )
         examples.push({
           name: String(definition.expect?.name || name),
           status,

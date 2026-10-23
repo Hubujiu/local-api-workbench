@@ -214,3 +214,41 @@ test("modern import rejects conflicting initial variable definitions atomically"
   assert.throws(() => importIntoProject(p, fixture()), /初始定义冲突/);
   assert.deepEqual(p, before);
 });
+
+test("modern explicit empty response examples survive import, Mock selection and OpenAPI roundtrip", async () => {
+  const { selectMockResponse } = await import("../src/mock.mjs");
+  const { exportOpenAPI } = await import("../src/core.mjs");
+  const doc = fixture(),
+    p = project();
+  doc.apis[1].url = "https://fixture.example.test/empty";
+  doc.apis[1].response.example = [
+    {
+      raw: "",
+      expect: { code: "204", content_type: "text", name: "No content" },
+    },
+    {
+      raw: "  \n",
+      expect: { code: "200", content_type: "text", name: "Whitespace" },
+    },
+    { expect: { code: "404", content_type: "text", name: "Definition only" } },
+  ];
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(
+    p.requests[0].examples.map((x) => [x.name, x.status, x.body]),
+    [
+      ["No content", 204, ""],
+      ["Whitespace", 200, "  \n"],
+    ],
+  );
+  assert.equal(selectMockResponse(p.requests[0], {}).body, "");
+  const exported = exportOpenAPI(p),
+    roundtrip = importDocument(exported);
+  assert.ok(
+    roundtrip[0].examples.some((x) => x.status === 204 && x.body === ""),
+  );
+  assert.ok(
+    roundtrip[0].examples.some((x) => x.status === 200 && x.body === "  \n"),
+  );
+  assert.deepEqual(doc, before);
+});

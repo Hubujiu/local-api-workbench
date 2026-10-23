@@ -360,7 +360,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       },
     };
   });
-  const legacy = importApipost({ apis: mapped.map((x) => x.legacy) });
+  const legacy = importApipost(
+    { apis: mapped.map((x) => x.legacy) },
+    { preserveEmptyExamples: true },
+  );
   for (const request of legacy.requests) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,

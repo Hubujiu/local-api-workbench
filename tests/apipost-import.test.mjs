@@ -153,3 +153,26 @@ test("Offline2 export markers cannot silently enter the legacy importer", async 
     }
   }
 });
+
+test("legacy empty response sections retain their existing definition-only interpretation", () => {
+  const [request] = importDocument({
+    apis: [
+      {
+        target_type: "api",
+        target_id: "legacy-empty",
+        name: "Legacy",
+        method: "GET",
+        url: "https://fixture.example.test/empty",
+        request: {},
+        response: {
+          success: {
+            raw: "",
+            expect: { code: "204", contentType: "text", name: "Definition" },
+          },
+        },
+      },
+    ],
+  });
+  assert.equal(request.examples.length, 0);
+  assert.equal(request.responses[0].status, "204");
+});
