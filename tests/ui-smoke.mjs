@@ -6956,7 +6956,7 @@ try {
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify("ENV-PIPELINE"),
   );
-  await page.locator("#dynamic-value").fill("{{shared|lower}}");
+  await page.locator("#dynamic-value").fill("{{shared|lower()}}");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
@@ -7021,7 +7021,7 @@ try {
   ).requests.find((r) => r.id === variableTemplateRequest.id);
   assert.equal(
     variableTemplateSaved.query[0].dynamic.value,
-    "{{shared|lower}}",
+    "{{shared|lower()}}",
   );
   assert.equal(
     variableTemplateSaved.bodyDynamic.apipost_body.value,

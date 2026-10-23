@@ -22,18 +22,20 @@ export function parseApipostFunctionTemplate(value) {
   )
     throw Error("原版函数模板须为不超过64KiB的文本");
   const match =
-    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*)*)\}\}$/.exec(
+    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)*)\}\}$/.exec(
       value,
     );
   const variable =
     !match &&
-    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*)+)\}\}$/.exec(
+    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)+)\}\}$/.exec(
       value,
     );
   const literal =
     !match &&
     !variable &&
-    /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*)+)\}\}$/.exec(value);
+    /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)+)\}\}$/.exec(
+      value,
+    );
   if (!match && !variable && !literal)
     throw Error(
       "仅支持完整函数、单层变量或引号文本及白名单无参数加工链，不支持嵌套或拼接",
@@ -48,7 +50,7 @@ export function parseApipostFunctionTemplate(value) {
     ? suffix
         .slice(1)
         .split("|")
-        .map((name) => name.toLowerCase())
+        .map((name) => name.replace(/\(\)$/, "").toLowerCase())
     : [];
   if (
     pipeline.some(

@@ -160,3 +160,38 @@ test("modern custom pipelines import passively, preserve definitions and reach r
   assert.throws(() => importIntoProject(project, bad), /不存在/);
   assert.deepEqual(project, before);
 });
+
+test("empty parentheses in source pipeline stages preserve no-argument semantics", async () => {
+  for (const expression of [
+    "{{token|upper()|length()}}",
+    "{{'hello'|upper()|length()}}",
+    "{{$function.fn_seed(hello)|upper()|length()}}",
+  ]) {
+    assert.equal(
+      await resolveApipostFunctionTemplate(
+        expression,
+        [fn("fn_seed", "return text;")],
+        "body",
+        { token: "hello" },
+      ),
+      5,
+    );
+  }
+  assert.equal(
+    await resolveApipostFunctionTemplate(
+      "{{'hello'|fn_tail()|upper()}}",
+      [fn("fn_tail", 'return text+"!";')],
+      "body",
+    ),
+    "HELLO!",
+  );
+  for (const expression of [
+    "{{token|upper(arg)}}",
+    "{{token|upper(())}}",
+    "{{token|upper(}}",
+    "{{token|upper)}}",
+    "{{token|unknown()}}",
+    "{{token" + "|upper()".repeat(11) + "}}",
+  ])
+    assert.throws(() => parseApipostFunctionTemplate(expression));
+});
