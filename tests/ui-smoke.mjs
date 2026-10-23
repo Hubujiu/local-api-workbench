@@ -6643,7 +6643,7 @@ try {
   templateModern.apis[1].request.header.parameter[0].value =
     "{{$function.fn_header(token)}}";
   templateModern.apis[1].request.query.parameter = [
-    { key: "q", value: '{{$function.fn_WRAP("a,b")}}', is_checked: 1 },
+    { key: "q", value: '{{$function.fn_WRAP("a,b")|upper}}', is_checked: 1 },
   ];
   await page.locator("#new-project").click();
   await page.locator("#new-name").fill("Source Query function fixture");
@@ -6676,14 +6676,16 @@ try {
   );
   assert.equal(
     await page.locator("#dynamic-value").inputValue(),
-    '{{$function.fn_WRAP("a,b")}}',
+    '{{$function.fn_WRAP("a,b")|upper}}',
   );
-  await page.locator("#dynamic-value").fill('{{$function.fn_wrap("edited")}}');
+  await page
+    .locator("#dynamic-value")
+    .fill('{{$function.fn_wrap("edited")|upper}}');
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
       document.querySelector("#dynamic-result").textContent ===
-      JSON.stringify('["edited"]'),
+      JSON.stringify('["EDITED"]'),
   );
   await page.screenshot({ path: "/tmp/local-api-query-function-template.png" });
   await page.locator("#dialog-save").click();
@@ -6745,7 +6747,7 @@ try {
       .query[0].dynamic,
     {
       source: "apipost-function",
-      value: '{{$function.fn_wrap("edited")}}',
+      value: '{{$function.fn_wrap("edited")|upper}}',
       functions: [],
     },
   );
@@ -6762,11 +6764,11 @@ try {
   assert.equal(templateResult.status, 200, JSON.stringify(templateResult));
   assert.equal(
     new URL(templateResult.request.url).searchParams.get("q"),
-    '["edited"]',
+    '["EDITED"]',
   );
   assert.equal(
     JSON.parse(templateResult.body).url,
-    "/sdk-url/template?q=%5B%22edited%22%5D",
+    "/sdk-url/template?q=%5B%22EDITED%22%5D",
   );
   assert.equal(JSON.parse(templateResult.body).header, "Bearer updated+/=%#?&");
   assert.equal(

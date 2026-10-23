@@ -1,3 +1,11 @@
+export const apipostBuiltinStages = Object.freeze([
+  "lower",
+  "upper",
+  "length",
+  "number",
+]);
+export const isApipostBuiltinStage = (name) =>
+  apipostBuiltinStages.includes(name);
 export const apipostFunctionSourceGroups = Object.freeze({
   "apipost-function": "query",
   "apipost-header-function": "headers",
@@ -14,17 +22,24 @@ export function parseApipostFunctionTemplate(value) {
   )
     throw Error("原版函数模板须为不超过64KiB的文本");
   const match =
-    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|fn_[A-Za-z0-9_]+)*)\}\}$/.exec(
+    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*)*)\}\}$/.exec(
       value,
     );
   if (!match)
-    throw Error("仅支持完整原版函数模板及无参数fn_加工链，不支持嵌套或拼接");
+    throw Error("仅支持完整原版函数模板及白名单无参数加工链，不支持嵌套或拼接");
   const pipeline = match[3]
     ? match[3]
         .slice(1)
         .split("|")
         .map((name) => name.toLowerCase())
     : [];
+  if (
+    pipeline.some(
+      (name) =>
+        !/^fn_[A-Za-z0-9_]+$/.test(name) && !isApipostBuiltinStage(name),
+    )
+  )
+    throw Error("原版加工链仅支持无参数fn_或lower/upper/length/number");
   if (pipeline.length > 9) throw Error("每个原版函数模板最多10个函数阶段");
   return {
     name: match[1].toLowerCase(),

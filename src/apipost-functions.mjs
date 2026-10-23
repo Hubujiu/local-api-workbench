@@ -1,4 +1,7 @@
-import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
+import {
+  parseApipostFunctionTemplate,
+  isApipostBuiltinStage,
+} from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 export function mergeApipostFunctions(
   rows,
@@ -89,12 +92,12 @@ export function mergeApipostFunctions(
       ) {
         if (!allowed)
           throw Error(
-            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本或完整正文值；仅支持无参数fn_加工链",
+            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本或完整正文值；仅支持白名单无参数加工链",
           );
         const parsed = parseApipostFunctionTemplate(value);
         if (
           [parsed.name, ...(parsed.pipeline || [])].some(
-            (name) => !names.has(name),
+            (name) => !isApipostBuiltinStage(name) && !names.has(name),
           )
         )
           throw Error("Apipost函数模板引用不存在的来源函数");

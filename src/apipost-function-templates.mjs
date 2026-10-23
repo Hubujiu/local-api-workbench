@@ -1,5 +1,8 @@
 import { replaceExactApipostTemplate } from "./apipost-template-replacement.mjs";
-import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
+import {
+  parseApipostFunctionTemplate,
+  isApipostBuiltinStage,
+} from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 import { runScript } from "./scripts.mjs";
 export async function resolveApipostFunctionTemplate(
@@ -15,13 +18,20 @@ export async function resolveApipostFunctionTemplate(
     pipeline = [],
   } = parseApipostFunctionTemplate(expression);
   const selected = [name, ...pipeline].map((name) => {
+    if (isApipostBuiltinStage(name)) return { name, builtin: true };
     const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
     if (matches.length !== 1 || !matches[0].apipostSource)
       throw Error("原版函数模板必须引用唯一的已导入共享函数: " + name);
-    return matches[0];
+    return { name, fn: matches[0] };
   });
   validateResources({
-    functions: [...new Map(selected.map((fn) => [fn.name, fn])).values()],
+    functions: [
+      ...new Map(
+        selected
+          .filter((entry) => entry.fn)
+          .map((entry) => [entry.name, entry.fn]),
+      ).values(),
+    ],
   });
   const baseExpression = pipeline.length
     ? expression.slice(0, expression.indexOf("|")) + "}}"
@@ -36,15 +46,16 @@ export async function resolveApipostFunctionTemplate(
   `;
   const code = `
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
+    ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash");const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber});` : ""}
     let output;
-    try { output=(function(text){\n${selected[0].body}\n})(${JSON.stringify(argument)}); }
+    try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); }
     catch(error) { output=${JSON.stringify(baseExpression)}; }
     ${check}
     ${selected
       .slice(1)
       .map(
         (fn) =>
-          `{ const input=output;try{output=(function(text){\n${fn.body}\n})(input);}catch(error){output=input;} ${check} }`,
+          `{ const input=output;try{output=${fn.builtin ? `__apipostBuiltins.${fn.name}(input)` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
       )
       .join("\n")}
     apt.setVar('functionTemplateResult', output);
