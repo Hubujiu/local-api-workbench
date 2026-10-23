@@ -1292,6 +1292,11 @@ export function exportOpenAPI(project) {
       path = queryDefinition.pathURL.replace(/^\{\{[^}]+\}\}/, "") || "/";
     }
     paths[path] ??= {};
+    const method = r.method.toLowerCase();
+    if (Object.hasOwn(paths[path], method))
+      throw Error(
+        `OpenAPI存在重复操作 ${r.method.toUpperCase()} ${path}，无法同时表达，请使用项目备份`,
+      );
     const responses = Object.create(null);
     for (const response of r.responses || []) {
       if (!/^(default|[1-5](?:[0-9]{2}|XX))$/.test(String(response.status)))
@@ -1365,7 +1370,7 @@ export function exportOpenAPI(project) {
       if (!r.url.includes("{{"))
         original.servers = [{ url: new URL(r.url).origin }];
     } catch {}
-    paths[path][r.method.toLowerCase()] = {
+    paths[path][method] = {
       ...original,
       ...(r.sourceOperationId ? { operationId: r.sourceOperationId } : {}),
       summary: r.name,
