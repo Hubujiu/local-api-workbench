@@ -5,6 +5,7 @@ export const apipostBuiltinStages = Object.freeze([
   "number",
   "concat",
   "lconcat",
+  "substr",
 ]);
 export const isApipostBuiltinStage = (name) =>
   apipostBuiltinStages.includes(name);
@@ -63,13 +64,27 @@ export function parseApipostFunctionTemplate(value) {
           if (["concat", "lconcat"].includes(name)) {
             if (argument.includes(","))
               throw Error("拼接加工链仅支持一个原文参数");
+          } else if (name === "substr") {
+            const parts = argument.split(",");
+            if (
+              parts.length > 2 ||
+              parts.some(
+                (part) =>
+                  part.trim() &&
+                  (!/^-?\d+$/.test(part.trim()) ||
+                    Math.abs(Number(part)) > 65536),
+              )
+            )
+              throw Error(
+                "截取加工链仅支持两个绝对值不超过65536的十进制整数参数",
+              );
           } else if (argument) throw Error("此原版加工链阶段暂不支持参数");
           return { name, argument };
         })
     : [];
   const pipeline = stages.map((stage) => stage.name);
   const pipelineOptions = stages.some((stage) =>
-    ["concat", "lconcat"].includes(stage.name),
+    ["concat", "lconcat", "substr"].includes(stage.name),
   )
     ? { pipelineArguments: stages.map((stage) => stage.argument) }
     : {};
