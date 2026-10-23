@@ -115,6 +115,36 @@ function responseHeaderMap(value) {
   validateMockResponse({ status: 200, body: "", headers });
   return headers;
 }
+function singleScriptTask(value, phase) {
+  if (value === undefined) return null;
+  const tasks = list(value, phase, 1);
+  if (!tasks.length) return null;
+  const task = tasks[0];
+  if (
+    !object(task) ||
+    Object.keys(task).some(
+      (k) => !["type", "id", "name", "enabled", "data"].includes(k),
+    ) ||
+    task.type !== "customScript" ||
+    task.enabled !== 1 ||
+    typeof task.data !== "string" ||
+    Buffer.byteLength(task.data, "utf8") > 65536
+  )
+    throw Error(
+      "Apipost " +
+        phase +
+        " 仅支持单个启用的自定义脚本（64 KiB）；其他任务语义不会丢弃",
+    );
+  safe(task.id);
+  safe(task.name);
+  return {
+    code: task.data,
+    note:
+      phase +
+      " 脚本已转为 Apipost 8 子集，原任务标识/名称：" +
+      JSON.stringify({ id: task.id, name: task.name }),
+  };
+}
 export function importModernApipost(source, project, { sync = false } = {}) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
   if (!isModernApipost(source)) throw Error("Apipost现代JSON结构不完整");
@@ -274,15 +304,21 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     reject(request.body?.raw_parameter, "Body参数树");
     const ancestry = chain(node);
     for (const layer of ancestry) {
-      for (const task of [
-        "pre_tasks",
-        "post_tasks",
-        "script",
-        "pre_script",
-        "test",
-      ])
+      for (const task of ["script", "pre_script", "test"])
         reject(layer[task], task);
+      if (layer !== request || node.target_type !== "api") {
+        reject(layer.pre_tasks, "继承前置任务");
+        reject(layer.post_tasks, "继承后置任务");
+      }
     }
+    const beforeTask =
+      node.target_type === "api"
+        ? singleScriptTask(request.pre_tasks, "前置")
+        : null;
+    const afterTask =
+      node.target_type === "api"
+        ? singleScriptTask(request.post_tasks, "后置")
+        : null;
     let inheritedAuth = { type: "noauth" };
     for (const layer of ancestry)
       if (layer.auth && layer.auth.type !== "inherit")
@@ -396,6 +432,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       cookieEncoding,
       responseDelays,
       responseHeaders,
+      beforeTask,
+      afterTask,
       legacy: {
         ...node,
         url: serviceId ? "https://migration.invalid" + url : url,
@@ -432,6 +470,16 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
     );
+    if (row.beforeTask || row.afterTask) {
+      request.scriptDialect = "apipost8";
+      request.beforeScript = row.beforeTask?.code || "";
+      request.afterScript = row.afterTask?.code || "";
+      request.importNotes.push(
+        "导入不执行脚本；运行前请审核。仅兼容现有 Apipost 8 脚本子集，不是完整 SDK 或任务列表往返迁移。",
+      );
+      for (const task of [row.beforeTask, row.afterTask])
+        if (task) request.importNotes.push(task.note);
+    }
     request.url = row.url;
     request.serviceId = row.serviceId;
     request.queryAddEqual = row.queryAddEqual;

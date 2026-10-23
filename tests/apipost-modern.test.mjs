@@ -578,3 +578,103 @@ test("modern response header controls, duplicates and unsupported row semantics 
   assert.throws(() => importIntoProject(p, doc), /响应头|响应示例头/);
   assert.deepEqual(p, before);
 });
+
+test("single enabled modern script tasks preserve code and run only after explicit execution", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.headers["x-import-task"]);
+    res.setHeader("content-type", "application/json");
+    res.end('{"ok":true}');
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const d = fixture(),
+    p = project();
+  d.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  const before =
+    'apt.setRequestHeader("x-import-task", "kept"); apt.variables.set("stage", "before");';
+  const after =
+    'pm.test("imported after", ()=>{ pm.expect(apt.response.json().ok).to.equal(true); pm.expect(apt.variables.get("stage")).to.equal("before"); });';
+  d.apis[1].request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "pre-id",
+      name: "Before name",
+      enabled: 1,
+      data: before,
+    },
+  ];
+  d.apis[1].request.post_tasks = [
+    {
+      type: "customScript",
+      id: "post-id",
+      name: "After name",
+      enabled: 1,
+      data: after,
+    },
+  ];
+  const original = structuredClone(d);
+  importIntoProject(p, d);
+  assert.deepEqual(d, original);
+  assert.deepEqual(seen, []);
+  const request = p.requests[0];
+  assert.equal(request.beforeScript, before);
+  assert.equal(request.afterScript, after);
+  assert.equal(request.scriptDialect, "apipost8");
+  assert(
+    request.importNotes.some(
+      (n) => n.includes("pre-id") && n.includes("Before name"),
+    ),
+  );
+  const environment = p.environments.find((e) => e.id !== "existing");
+  const result = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, request, environment.id) }] },
+    environmentVariables(p, environment.id),
+    executeRequest,
+  );
+  assert.equal(result.status, "passed", JSON.stringify(result));
+  assert.deepEqual(seen, ["kept"]);
+  request.afterScript =
+    'pm.test("imported failure",()=>pm.expect(1).to.equal(2));';
+  const failed = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, request, environment.id) }] },
+    environmentVariables(p, environment.id),
+    executeRequest,
+  );
+  assert.equal(failed.status, "failed");
+});
+
+test("modern task imports reject mixed multiple disabled inherited or unknown semantics atomically", () => {
+  const task = {
+    type: "customScript",
+    id: "task",
+    name: "Script",
+    enabled: 1,
+    data: 'pm.test("x",()=>{});',
+  };
+  for (const change of [
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ ...task }, { ...task, id: "other" }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: -1 }),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, unknown: true }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, data: { code: "x" } }),
+    (d) => (d.apis[0].request.pre_tasks = [task]),
+    (d) => (d.global.global_param.pre_tasks = [task]),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ ...task, data: "x".repeat(65537) }),
+  ]) {
+    const d = fixture(),
+      p = project(),
+      original = structuredClone(p);
+    change(d);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, original);
+  }
+});

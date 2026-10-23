@@ -203,7 +203,12 @@ const fixture = http.createServer(async (request, response) => {
   } else if (request.url === "/auth") {
     response.setHeader("content-type", "application/json");
     response.end(
-      JSON.stringify({ authorization: request.headers.authorization }),
+      JSON.stringify({
+        authorization: request.headers.authorization,
+        ...(request.headers["x-imported-task"]
+          ? { importTask: request.headers["x-imported-task"] }
+          : {}),
+      }),
     );
   } else if (request.url === "/token") {
     for await (const _chunk of request) {
@@ -2806,6 +2811,24 @@ try {
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
   modern.apis[1].method = "POST";
+  modern.apis[1].request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "browser-pre",
+      name: "Imported pre",
+      enabled: 1,
+      data: 'apt.setRequestHeader("x-imported-task", "browser-kept");',
+    },
+  ];
+  modern.apis[1].request.post_tasks = [
+    {
+      type: "customScript",
+      id: "browser-post",
+      name: "Imported post",
+      enabled: 1,
+      data: 'pm.test("imported response",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept"));',
+    },
+  ];
   modern.apis[1].request.body.mode = "plain";
   modern.apis[1].request.body.raw = "browser plain + & = text";
   modern.apis[1].mock_ip_white_list_enable = -1;
@@ -2867,6 +2890,13 @@ try {
   const modernResult = await (await modernResponse).json();
   assert.equal(modernResult.status, 200, JSON.stringify(modernResult));
   assert.equal(modernResult.request.headers["x-test"], "current");
+  assert.equal(modernResult.request.headers["x-imported-task"], "browser-kept");
+  assert(
+    modernResult.assertions.some(
+      (a) => a.name === "imported response" && a.passed,
+    ),
+    JSON.stringify(modernResult.assertions),
+  );
   assert.equal(modernResult.request.body, "browser plain + & = text");
   assert.equal(modernResult.request.headers["content-type"], "text/plain");
   assert.deepEqual(modernResult.request.headers["x-imported-repeat"], [
