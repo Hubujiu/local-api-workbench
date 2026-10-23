@@ -60,6 +60,7 @@ const fixture = http.createServer(async (request, response) => {
         repeatedHeader: request.headers["x-wire-repeat"],
         removed: request.headers["x-remove"] ?? null,
         readerDisabled: request.headers["x-reader-disabled"] ?? null,
+        removedMember: request.headers["x-remove-member"] ?? null,
       }),
     );
     return;
@@ -4791,7 +4792,7 @@ try {
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.variables.set('browser+&=%query','中文');pm.request.addQueryParams('batch=a%2Bb&batch={{browser+&=%query}}');apt.request.addQueryParams([{key:'hidden-batch',value:'x',disabled:true},{key:'removed-batch',value:'x'}]);pm.request.removeQueryParams([{key:'removed-batch'}]);\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
-    "pm.request.headers.add({key:'x-reader-disabled',value:'not sent',disabled:true});pm.request.headers.add({key:'x-live-entry',value:'before'});const headerContext={value:'live',seen:0};pm.request.headers.each(function(e){this.seen++;return false;},headerContext);pm.request.headers.find(e=>e.key==='x-live-entry').value=headerContext.value;pm.request.headers.add({key:'X-Wire-Repeat',value:'first'});pm.request.headers.add({key:'x-wire-repeat',value:'before upsert'});pm.request.headers.upsert({key:'X-Wire-Repeat',value:'second'});\n" +
+    "pm.request.headers.add({key:'x-reader-disabled',value:'not sent',disabled:true});pm.request.headers.add({key:'x-live-entry',value:'before'});const headerContext={value:'live',seen:0};pm.request.headers.each(function(e){this.seen++;return false;},headerContext);pm.request.headers.find(e=>e.key==='x-live-entry').value=headerContext.value;pm.request.headers.add({key:'X-Wire-Repeat',value:'first'});pm.request.headers.add({key:'x-wire-repeat',value:'before upsert'});pm.request.headers.upsert({key:'X-Wire-Repeat',value:'second'});pm.request.headers.add({key:'x-remove-member',value:'first'});const removable=pm.request.headers.one('x-remove-member');pm.request.headers.add({key:'x-remove-member',value:'second'});pm.request.headers.remove(removable);pm.request.headers.remove(function(e){return e.key===this.name;},{name:'x-remove-member'});\n" +
     "pm.test('registration-count', () => {pm.expect(pm.test.index()).to.equal(2);pm.expect(headerContext.seen).to.equal(1);pm.expect(pm.request.headers.filter(e=>e.key==='x-live-entry').length).to.equal(1);pm.expect(pm.request.headers.map(e=>e.key).includes('x-live-entry')).to.equal(true);pm.expect(pm.request.headers.reduce((n)=>n+1,0)).to.equal(pm.request.headers.count());pm.expect(pm.request.getHeaders({enabled:true,ignoreCase:true})['x-helper']).to.equal('null');pm.expect(pm.request.getHeaders()['x-reader-disabled']).to.equal('not sent');pm.expect(apt.request.getHeaders({enabled:true})['x-reader-disabled']).to.equal(undefined);pm.expect(pm.request.headers.get('X-READER-DISABLED')).to.equal('not sent');pm.expect(pm.request.headers.has('x-reader-disabled','not sent')).to.equal(true);pm.expect(pm.request.headers.toObject()['x-reader-disabled']).to.equal('not sent');pm.expect(pm.request.headers.toObject(true)['x-reader-disabled']).to.equal(undefined);});\n" +
     originalFormScript.replaceAll("; ", ";\n") +
     "\npm.setRequestBody({modern:'body'},undefined,false);pm.setRequestBody('temporary',1);pm.removeRequestBody('temporary');";
@@ -4864,6 +4865,7 @@ try {
   assert.equal(scriptFormWire.helper, "null");
   assert.equal(scriptFormWire.removed, null);
   assert.equal(scriptFormWire.readerDisabled, null);
+  assert.equal(scriptFormWire.removedMember, null);
   assert.equal(
     new URL(scriptFormWire.url, fixtureURL).searchParams.get("shortcut"),
     "false",

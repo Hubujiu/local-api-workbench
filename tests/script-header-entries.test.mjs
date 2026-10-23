@@ -198,3 +198,32 @@ test("Header upsert edits only the last duplicate in place and preserves disable
   );
   assert.equal(result.request.headers[2].enabled, false);
 });
+
+test("Header removal accepts member identity or bounded predicate and indexOf chooses last duplicate", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers,first=h.idx(0),last=h.idx(1);
+    pm.test('index',()=>{pm.expect(h.indexOf('X-ONE')).to.equal(1);pm.expect(h.indexOf(first)).to.equal(0);pm.expect(h.indexOf({key:'X-One'})).to.equal(-1);pm.expect(h.indexOf('missing')).to.equal(-1);});
+    h.remove(first);
+    pm.test('identity removal',()=>{pm.expect(h.count()).to.equal(2);pm.expect(h.one('x-one')).to.equal(last);pm.expect(h.indexOf(first)).to.equal(-1);});
+    h.remove(function(e){pm.expect(this).to.equal(h);return e.disabled;});
+    pm.test('predicate removal',()=>pm.expect(h.toObject()).to.deep.equal({'x-one':'second'}));
+    h.add({key:'other',value:'keep'});
+    h.remove(function(e){return e.key===this.name;},{name:'x-one'});
+    pm.test('explicit context',()=>pm.expect(h.toObject()).to.deep.equal({other:'keep'}));
+    h.remove(first);pm.expect(h.count()).to.equal(1);
+    pm.expect(()=>h.remove(()=>{throw Error('predicate sentinel')})).to.throw('predicate sentinel');
+    pm.test('failed selection',()=>pm.expect(h.count()).to.equal(1));
+    try{first.value='stale';throw Error('accepted');}catch(e){if(e.message==='accepted')throw e;}
+  `,
+    input(),
+  );
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+  assert.deepEqual(
+    result.request.headers.map((x) => x.key),
+    ["other"],
+  );
+});

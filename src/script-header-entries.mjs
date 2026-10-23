@@ -193,6 +193,34 @@ function installHeaderEntries({
     request.headers = rows;
     return true;
   };
+  headers.indexOf = (item) => {
+    const target = typeof item === "string" ? headers.one(item) : item;
+    return read().map(entry).indexOf(target);
+  };
+  headers.remove = (selector, context) => {
+    if (typeof selector === "string") {
+      name(selector);
+      if (["__proto__", "prototype", "constructor"].includes(selector))
+        throw Error("Invalid parameter name");
+    } else if (
+      typeof selector !== "function" &&
+      (!selector || typeof selector !== "object")
+    )
+      throw Error("Header移除需要名称、活动项或函数");
+    const rows = [...read()],
+      views = rows.map(entry),
+      selected = new Set();
+    for (let i = 0; i < rows.length; i++) {
+      const matches =
+        typeof selector === "string"
+          ? rows[i].key.toLowerCase() === selector.toLowerCase()
+          : typeof selector === "function"
+            ? Reflect.apply(selector, context || headers, [views[i], i, views])
+            : cache.get(rows[i]) === selector;
+      if (matches) selected.add(rows[i]);
+    }
+    request.headers = read().filter((row) => !selected.has(row));
+  };
   headers.get = (key) => headers.one(key)?.value;
   headers.has = function (item, value) {
     const withValue = arguments.length > 1;

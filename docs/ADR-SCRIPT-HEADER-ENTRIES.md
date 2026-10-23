@@ -94,3 +94,22 @@ introduce Header.system or arbitrary upstream properties.
 Fixed verification covers return values, duplicate identity/order, disabled state,
 invalid patches and actual repeated-header HTTP. Browser fixture upserts the last
 duplicate then checks both wire values; packaged fixture checks stable identity.
+
+
+## Member selection and removal
+
+indexOf(name) locates the last case-insensitive match, while indexOf(member)
+uses actual live identity; missing/removed members return -1. remove retains
+literal-name removal and additionally accepts a live member or function predicate
+with explicit context (default Header collection). Selection traverses a snapshot
+and only removes selected identities from the then-current collection. A callback
+exception prevents this removal pass; it does not roll back unrelated mutations
+the callback itself deliberately performed. Removed members stay unwritable.
+Unknown plain objects are not structurally matched. Non-callable shorthand rules
+and all generic upstream mutation-during-iteration semantics remain unsupported.
+No file deletion, network access or budget change is introduced.
+
+Tests distinguish duplicate identities, last-index lookup, default/explicit
+callback context, thrown selection and stale writes. Browser executes member and
+predicate removal and verifies the header is absent from the actual HTTP request;
+packaged fixtures check member removal and missing index.
