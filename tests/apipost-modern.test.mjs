@@ -252,3 +252,19 @@ test("modern explicit empty response examples survive import, Mock selection and
   );
   assert.deepEqual(doc, before);
 });
+
+test("modern disabled numeric Mock allowlist flag is not mistaken for enabled access control", () => {
+  const doc = fixture(),
+    p = project();
+  doc.apis[1].mock_ip_white_list_enable = -1;
+  importIntoProject(p, doc);
+  assert.equal(p.requests.length, 1);
+  for (const enabled of [1, true, "-1", 2]) {
+    const invalid = fixture(),
+      target = project(),
+      before = structuredClone(target);
+    invalid.apis[1].mock_ip_white_list_enable = enabled;
+    assert.throws(() => importIntoProject(target, invalid), /IP白名单/);
+    assert.deepEqual(target, before);
+  }
+});

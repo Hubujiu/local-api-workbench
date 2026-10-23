@@ -2763,6 +2763,7 @@ try {
   const modern = modernApipostFixture();
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
+  modern.apis[1].mock_ip_white_list_enable = -1;
   modern.apis[1].response.example.push({
     raw: "",
     expect: { code: "204", content_type: "text", name: "Imported empty body" },

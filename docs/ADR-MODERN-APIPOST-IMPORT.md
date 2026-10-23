@@ -11,7 +11,12 @@ Support complete modern envelopes, HTTP APIs/folders, wrapped parameter arrays, 
 
 Fixed acceptance before implementation: relative path + service/variable construction against real loopback fixture; wrapped headers/query/restful and response examples; namespace collision checks and environment/global conflict atomicity; inheritance and unsupported dependency rejection; no source URL contacted on import; real browser import/selection and project persistence. Public-source read-only probes may add interoperability evidence but are not a substitute for exact native Offline2 validation.
 
-Read-only public-source probe: the pinned go-blog export imports 10 HTTP APIs, 3 folders, 2 environments, 1 service and 4 lifecycle marks. No source endpoint was contacted. The pinned exchangeapp export is rejected because it enables an unsupported Mock IP allowlist, demonstrating that this is not blanket permissive conversion. The source files are not redistributed or executed.
+Read-only public-source probe: the pinned go-blog export imports 10 HTTP APIs, 3 folders, 2 environments, 1 service and 4 lifecycle marks. No source endpoint was contacted. Correction: the earlier exchangeapp rejection was misdiagnosed. Its numeric
+mock_ip_white_list_enable values are -1, meaning disabled, not enabled. The
+importer's JavaScript truthiness check incorrectly rejected that state. A later
+fix accepts this explicit disabled sentinel; enabled/unknown truthy values
+still reject atomically. This correction alone is not a claim that the complete
+export imports or that its other dependencies are supported. The source files are not redistributed or executed.
 
 Imported examples retain their schema and body. Original Mock activation and automatic response checking are NOT automatically enabled, and this semantic boundary is displayed in every imported API's notes. This is an explicitly limited interchange adapter, not a lossless native clone.
 
@@ -45,3 +50,23 @@ payload; it is not new evidence of a native Offline2 round trip. Red regression
 captures the lost 204 example; import -> Mock selection -> OpenAPI reimport
 preserves empty/whitespace bodies and does not mutate source input. Browser
 coverage inspects the imported empty example's name, status and blank editor.
+
+
+## Disabled Mock IP allowlist sentinel
+
+Static original Offline2 work.asar evidence: 4887.8e0ecb4ad32e.js writes 1 when
+the toggle is checked and -1 when unchecked; 5919.ae45ed6901e7.js and
+index-0d1d8198fa5a.js initialize the flag to -1. The pinned public exchangeapp
+export uses -1 on nine API records. No original application code was executed.
+The previous truthiness test mistook that disabled sentinel for active access
+control. Accept numeric -1 without enabling Mock or changing network policy;
+retain rejection of 1, true, string "-1" and other unknown truthy states. Existing
+absent/falsy handling is unchanged. Red/green regressions verify import and
+atomic rejection; browser import exercises the same disabled state.
+
+After the fix, a read-only import probe of that exact pinned exchangeapp export
+succeeded with 9 HTTP APIs, 0 folders and 2 environments. No imported endpoint
+was contacted and no imported script was executed. The source payload is not
+redistributed; automated regression uses the fictional fixture. This supports
+that specific interchange import only, not original-app execution or native
+project-directory parity.

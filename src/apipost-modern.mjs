@@ -189,7 +189,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     reject(node.attribute_info, "接口属性");
     reject(node.tags, "接口标签");
     reject(node.ai_expect?.list, "AI条件Mock");
-    if (node.mock_ip_white_list_enable)
+    if (node.mock_ip_white_list_enable && node.mock_ip_white_list_enable !== -1)
       throw Error("Apipost Mock IP白名单需手工迁移");
   }
   const chain = (node) => {
