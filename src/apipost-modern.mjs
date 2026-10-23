@@ -428,9 +428,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       }
       return values;
     };
+    const groupedOrigin = ids.get(
+      samples.byNode.get(String(node.target_id))?.originAPIId,
+    );
     for (const layer of ancestry.slice(0, -1)) {
       reject(layer.body?.parameter, "继承Body参数");
-      reject(layer.body?.raw, "继承原始Body");
+      // The source adapter inherits body parameter rows, not an API's raw body.
+      // Keep that raw body on the ordinary API; the sample retains its own body.
+      if (layer !== groupedOrigin?.request)
+        reject(layer.body?.raw, "继承原始Body");
     }
     const cookieFlag = request.cookie?.cookie_encode;
     if (cookieFlag !== undefined && ![0, -1, 1].includes(cookieFlag))

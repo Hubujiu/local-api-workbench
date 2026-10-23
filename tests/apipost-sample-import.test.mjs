@@ -402,8 +402,14 @@ function groupedFixture() {
 }
 test("sample groups preserve hierarchy and grouped requests include API ancestry while roots do not", async (t) => {
   const received = [];
-  const server = http.createServer((req, res) => {
-    received.push({ url: req.url, headers: req.headers });
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    received.push({
+      url: req.url,
+      headers: req.headers,
+      body: Buffer.concat(chunks).toString(),
+    });
     res.end("ok");
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -412,6 +418,10 @@ test("sample groups preserve hierarchy and grouped requests include API ancestry
     await new Promise((r) => server.close(r));
   });
   const source = groupedFixture();
+  source.apis[1].request.body = {
+    mode: "plain",
+    raw: "API body must not become sample body",
+  };
   source.global.envs[0].server_list[0].uri =
     "http://127.0.0.1:" + server.address().port;
   source.global.global_param.pre_tasks = [
@@ -447,6 +457,8 @@ test("sample groups preserve hierarchy and grouped requests include API ancestry
   assert.equal(folder.sourceRequestId, p.requests[0].id);
   const grouped = p.cases.find((c) => c.name === "Grouped case");
   assert.equal(grouped.folderId, folder.id);
+  assert.equal(grouped.request.body, "sample-body");
+  assert.equal(p.requests[0].body, "API body must not become sample body");
   assert.deepEqual(
     grouped.request.importedScriptTasks.before.map((t) => t.origin.scope),
     ["project", "folder", "request", "sample"],
@@ -465,6 +477,10 @@ test("sample groups preserve hierarchy and grouped requests include API ancestry
   assert.equal(received[0].headers["x-test"], undefined);
   assert.equal(received[1].headers["x-chain"], "gfa");
   assert.equal(received[1].headers["x-test"], "current");
+  assert.deepEqual(
+    received.map((item) => item.body),
+    ["sample-body", "sample-body"],
+  );
   assert.match(received[1].url, /q=one/);
 });
 test("empty sample groups survive import and invalid group graphs or collisions are atomic", () => {
@@ -486,7 +502,12 @@ test("empty sample groups survive import and invalid group graphs or collisions 
     (s) => (s.samples[0].request = {}),
     (s) => (s.samples[0].sort = Infinity),
     (s) =>
-      (s.apis[1].request.body = { mode: "raw", raw: "not silently inherited" }),
+      (s.apis[1].request.body = {
+        mode: "formdata",
+        parameter: [
+          { key: "origin", value: "not silently discarded", is_checked: 1 },
+        ],
+      }),
   ]) {
     const s = groupedFixture(),
       p = destination(),

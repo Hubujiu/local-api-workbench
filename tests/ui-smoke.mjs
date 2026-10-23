@@ -5937,6 +5937,7 @@ try {
   const groupedSource = modernApipostFixture();
   groupedSource.global.envs[0].server_list[0].uri = fixtureURL;
   groupedSource.apis[1].request.query.parameter = [];
+  groupedSource.apis[1].request.body = { mode: "plain", raw: "API-only body" };
   groupedSource.apis[1].request.pre_tasks = [
     {
       type: "customScript",
@@ -6019,6 +6020,7 @@ try {
     "group-inherited",
   );
   assert.equal(groupedResult.request.headers["x-test"], "current");
+  assert.equal(groupedResult.request.body, "grouped sample");
   assert.equal(JSON.parse(groupedResult.body).importTask, "group-inherited");
   await page
     .locator(`[data-run-case="${importedGroupedCase.id}"]:not([disabled])`)
