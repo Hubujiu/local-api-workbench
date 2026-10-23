@@ -25,7 +25,7 @@ metadata stays intact, and saved definitions are not changed by execution.
 Bounds: 1000 rows, 1KiB nonempty key without NUL/CR/LF, 64KiB text value,
 8KiB description and 256KiB total. Text must be well-formed Unicode. Updates
 accept text values and explicit boolean states; conflicting enabled/disabled
-values reject. Runtime HTTP header validation still applies. Existing add and shortcut behaviour is not redefined; upsert is corrected below, and this is not complete PropertyList
+values reject. Runtime HTTP header validation still applies. Existing shortcut behaviour is not redefined; add/upsert are corrected below, and this is not complete PropertyList
 compatibility. VM/network/time budgets remain unchanged.
 
 Red regressions establish missing methods; tests verify identity, duplicate
@@ -113,3 +113,14 @@ Tests distinguish duplicate identities, last-index lookup, default/explicit
 callback context, thrown selection and stale writes. Browser executes member and
 predicate removal and verifies the header is absent from the actual HTTP request;
 packaged fixtures check member removal and missing index.
+
+
+## Validated additions
+
+add now shares the bounded item normalization used by upsert. Text description
+is retained instead of discarded; existing scalar-to-string conversion remains.
+Unknown own keys, invalid state types/conflicts and oversized text are rejected
+before appending. In particular an invalid addition cannot leave an oversized
+row behind when a user catches the error. Existing duplicates are retained and
+add keeps its undefined return value. Native strings, Header.system, rich
+Description objects and all upstream construction variants are not implemented.

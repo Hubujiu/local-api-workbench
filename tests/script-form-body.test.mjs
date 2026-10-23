@@ -358,3 +358,33 @@ test("form collection iterators keep live entries, context, snapshots and mode i
     assert.equal(result.request.body, "replacement");
   }
 });
+
+test("form membership, index and removal use live identity without removing sibling duplicates", async () => {
+  for (const mode of ["urlencoded", "formdata"]) {
+    const result = await runScript(
+      `
+      const body=pm.request.body;
+      body.update({mode:'${mode}',${mode}:[{key:'tag',value:'first'},{key:'tag',value:'last'},{key:'keep',value:'yes'}]});
+      const form=body.${mode},first=form.idx(0),last=form.idx(1);
+      pm.test('identity readers',()=>{pm.expect(form.has(first)).to.equal(true);pm.expect(form.has(first,'first')).to.equal(true);pm.expect(form.has(first,'last')).to.equal(false);pm.expect(form.has({key:'tag'})).to.equal(false);pm.expect(form.indexOf('tag')).to.equal(1);pm.expect(form.indexOf(first)).to.equal(0);});
+      form.remove(first);
+      pm.test('one removed',()=>{pm.expect(form.get('tag')).to.equal('last');pm.expect(form.one('tag')).to.equal(last);pm.expect(form.has(first)).to.equal(false);pm.expect(form.indexOf(first)).to.equal(-1);});
+      form.remove(function(e){pm.expect(this).to.equal(form);return e.key==='tag';});
+      form.add({key:'off',value:'hidden',disabled:true});
+      form.remove(function(e){return e.key===this.name;},{name:'off'});
+      pm.expect(()=>form.remove(()=>{throw Error('selection failed');})).to.throw('selection failed');
+      pm.test('retained',()=>pm.expect(form.toObject()).to.deep.equal({keep:'yes'}));
+      try{last.value='stale';throw Error('accepted');}catch(e){if(e.message==='accepted')throw e;}
+    `,
+      { request: {} },
+    );
+    assert.ok(
+      result.tests.every((x) => x.passed),
+      JSON.stringify(result.tests),
+    );
+    assert.deepEqual(
+      result.request.form.map((x) => [x.key, x.value]),
+      [["keep", "yes"]],
+    );
+  }
+});

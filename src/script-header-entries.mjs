@@ -145,7 +145,7 @@ function installHeaderEntries({
       if (rows[i].key.toLowerCase() === key.toLowerCase())
         return entry(rows[i]);
   };
-  headers.upsert = (item) => {
+  const normalizedItem = (item) => {
     if (
       !item ||
       typeof item !== "object" ||
@@ -172,11 +172,9 @@ function installHeaderEntries({
       patch.disabled === patch.enabled
     )
       throw Error("Header启用状态冲突");
-    const found = headers.one(patch.key);
-    if (found) {
-      found.update(patch);
-      return false;
-    }
+    return patch;
+  };
+  const appendItem = (patch) => {
     const row = {
       key: patch.key,
       value: patch.value,
@@ -191,6 +189,16 @@ function installHeaderEntries({
     const rows = [...read(), row];
     inspect(rows);
     request.headers = rows;
+  };
+  headers.add = (item) => appendItem(normalizedItem(item));
+  headers.upsert = (item) => {
+    const patch = normalizedItem(item),
+      found = headers.one(patch.key);
+    if (found) {
+      found.update(patch);
+      return false;
+    }
+    appendItem(patch);
     return true;
   };
   headers.indexOf = (item) => {

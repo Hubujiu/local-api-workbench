@@ -211,13 +211,23 @@ function installScriptFormBody({ request, body, installIterators }) {
       get(name) {
         return this.one(name)?.value;
       },
-      has(name, value) {
-        const { views } = read();
-        key(name, mode);
-        return views.some(
-          (row) =>
-            row.key === name && (arguments.length < 2 || row.value === value),
-        );
+      has(item, value) {
+        const { rows, views } = read(),
+          withValue = arguments.length > 1;
+        if (typeof item === "string") key(item, mode);
+        return rows.some((row, i) => {
+          const matches =
+            typeof item === "string"
+              ? row.key === item
+              : item !== null &&
+                typeof item === "object" &&
+                wrappers.get(row) === item;
+          return matches && (!withValue || views[i].value === value);
+        });
+      },
+      indexOf(item) {
+        const target = typeof item === "string" ? list.one(item) : item;
+        return read().rows.map(entry).indexOf(target);
       },
       idx(index) {
         if (!Number.isInteger(index)) throw Error("表单索引必须是整数");
@@ -252,10 +262,26 @@ function installScriptFormBody({ request, body, installIterators }) {
         commit([...rows, textRow(item, mode)]);
         return true;
       },
-      remove(name) {
-        const { rows } = read();
-        key(name, mode);
-        commit(rows.filter((row) => row.key !== name));
+      remove(selector, context) {
+        if (typeof selector === "string") key(selector, mode);
+        else if (
+          typeof selector !== "function" &&
+          (!selector || typeof selector !== "object")
+        )
+          throw Error("表单移除需要名称、活动项或函数");
+        const rows = [...read().rows],
+          views = rows.map(entry),
+          selected = new Set();
+        for (let i = 0; i < rows.length; i++) {
+          const matches =
+            typeof selector === "string"
+              ? rows[i].key === selector
+              : typeof selector === "function"
+                ? Reflect.apply(selector, context || list, [views[i], i, views])
+                : wrappers.get(rows[i]) === selector;
+          if (matches) selected.add(rows[i]);
+        }
+        commit(read().rows.filter((row) => !selected.has(row)));
       },
       clear() {
         active();

@@ -227,3 +227,21 @@ test("Header removal accepts member identity or bounded predicate and indexOf ch
     ["other"],
   );
 });
+
+test("Header add preserves bounded descriptions and rejects invalid additions atomically", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers;
+    h.add({key:'Described',value:false,description:'retained',disabled:true});
+    pm.test('metadata',()=>{pm.expect(h.one('Described').description).to.equal('retained');pm.expect(h.get('Described')).to.equal('false');pm.expect(h.one('Described').disabled).to.equal(true);});
+    for(const item of [{key:'bad',value:'x',unknown:1},{key:'bad',value:'x',[Symbol('hidden')]:1},Object.defineProperty({key:'bad',value:'x'},'hidden',{value:1}),{key:'bad',disabled:'false'},{key:'bad',value:'x'.repeat(65537)},{key:'bad',description:'x'.repeat(8193)}])pm.expect(()=>h.add(item)).to.throw();
+    pm.test('atomic',()=>pm.expect(h.count()).to.equal(4));
+  `,
+    input(),
+  );
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+  assert.equal(result.request.headers.at(-1).description, "retained");
+});
