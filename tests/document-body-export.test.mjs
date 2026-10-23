@@ -206,3 +206,19 @@ test("documentation preserves empty body versus a single newline and preview use
   assert(!preview.includes("SECRET-UPLOAD-BYTES"));
   assert.throws(() => requestDocumentationHTML(form, 0), /标题层级/);
 });
+
+test("empty response definitions remain an explicit section in shared and exported documentation", async () => {
+  const source = project();
+  source.requests[0].responses = [];
+  for (const format of ["html", "markdown"]) {
+    const output = exportDocumentation(source, format);
+    assert(output.includes("响应定义"));
+    assert(output.includes("未配置响应结构"));
+  }
+  const { requestDocumentationHTML } = await import(
+    "../public/document-export.js"
+  );
+  assert(
+    requestDocumentationHTML(source.requests[0], 4).includes("未配置响应结构"),
+  );
+});

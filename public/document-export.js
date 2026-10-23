@@ -184,12 +184,11 @@ export function requestDocumentationHTML(request, headingLevel = 3) {
       escape(JSON.stringify(request.schema, null, 2)) +
       "</pre>";
   const definitions = documentationResponses(request);
-  if (Array.isArray(definitions) ? definitions.length : definitions)
-    result +=
-      heading("响应定义") +
-      "<pre>" +
-      escape(JSON.stringify(definitions, null, 2)) +
-      "</pre>";
+  result +=
+    heading("响应定义") +
+    ((Array.isArray(definitions) ? definitions.length : definitions)
+      ? "<pre>" + escape(JSON.stringify(definitions, null, 2)) + "</pre>"
+      : '<p class="muted">未配置响应结构</p>');
   for (const example of request.examples || []) {
     result += heading((example.name ?? "") + " · " + (example.status ?? ""));
     const description = exampleDescription(request, example);
@@ -237,11 +236,11 @@ function requestDocumentationMarkdown(request) {
       codeBlock(JSON.stringify(request.schema, null, 2), "json") +
       "\n";
   const definitions = documentationResponses(request);
-  if (Array.isArray(definitions) ? definitions.length : definitions)
-    result +=
-      "### 响应定义\n\n" +
-      codeBlock(JSON.stringify(definitions, null, 2), "json") +
-      "\n";
+  result +=
+    "### 响应定义\n\n" +
+    ((Array.isArray(definitions) ? definitions.length : definitions)
+      ? codeBlock(JSON.stringify(definitions, null, 2), "json") + "\n"
+      : "未配置响应结构\n\n");
   for (const example of request.examples || []) {
     result +=
       "### " +
