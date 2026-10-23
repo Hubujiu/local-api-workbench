@@ -1,5 +1,5 @@
 // Serialized into the existing isolated VM. No URL host binding or new authority.
-function installQueryBatch({ request, pm }) {
+function installQueryBatch({ request, pm, urlTools }) {
   const bytes = (text, limit, label) => {
     if (typeof text !== "string") throw Error(label + "必须为文本");
     let size = 0;
@@ -22,21 +22,11 @@ function installQueryBatch({ request, pm }) {
     if (!size || key.includes("\0")) throw Error("查询参数名不能为空或包含NUL");
     return size;
   };
-  const parts = () => {
-    const raw = String(request.url || ""),
-      hash = raw.indexOf("#");
-    const base = hash < 0 ? raw : raw.slice(0, hash),
-      fragment = hash < 0 ? "" : raw.slice(hash);
-    const at = base.indexOf("?");
-    return { raw, base, fragment, at, query: at < 0 ? "" : base.slice(at + 1) };
-  };
+  const parts = () => urlTools.splitURL(request.url);
   const inspect = (rows, raw) => {
     if (!Array.isArray(rows)) throw Error("查询参数必须为数组");
-    const hash = raw.indexOf("#"),
-      base = hash < 0 ? raw : raw.slice(0, hash),
-      at = base.indexOf("?");
-    const query = at < 0 ? "" : base.slice(at + 1);
-    const rawCount = query ? query.split("&").length : 0;
+    const query = urlTools.splitURL(raw).query;
+    const rawCount = query ? urlTools.splitQuery(query).length : 0;
     if (rows.length + rawCount > 1000) throw Error("查询参数合计最多1000项");
     let size = bytes(raw, 65536, "URL");
     for (const row of rows) {
@@ -114,20 +104,7 @@ function installQueryBatch({ request, pm }) {
     );
     const current = parts();
     const rows = (request.query || []).filter((row) => !names.has(row.key));
-    const rawRows = current.query ? current.query.split("&") : [];
-    const kept = rawRows.filter((row) => {
-      try {
-        return !names.has(decode(row.split("=")[0]));
-      } catch {
-        return true;
-      }
-    });
-    const raw =
-      kept.length === rawRows.length
-        ? current.raw
-        : current.base.slice(0, current.at) +
-          (kept.length ? "?" + kept.join("&") : "") +
-          current.fragment;
+    const raw = urlTools.remove(current.raw, names);
     inspect(rows, raw);
     request.query = rows;
     request.url = raw;

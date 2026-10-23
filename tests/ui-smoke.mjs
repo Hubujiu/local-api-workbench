@@ -4658,7 +4658,9 @@ try {
   await page.locator("#add-request").click();
   await page.locator("#request-name").fill("Script form body");
   await page.locator("#method").selectOption("POST");
-  await page.locator("#url").fill(fixtureURL + "/script-form-body");
+  await page
+    .locator("#url")
+    .fill("{{browser?host#part}}/script-form-body?drop=1#{{browser#fragment}}");
   await page.locator('[data-param="before"]').click();
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#script-dialect").selectOption("apipost8");
@@ -4706,6 +4708,9 @@ try {
   }
   const expandedFormScript =
     "// 扩展编辑器应用后仍需手动保存和发送\n" +
+    "pm.variables.set('browser?host#part'," +
+    JSON.stringify(fixtureURL) +
+    ");pm.variables.set('browser#fragment','ignored');pm.request.removeQueryParams('drop');\n" +
     "apt.setRequestHeader('x-helper',null);pm.setRequestHeader('x-remove',1);pm.removeRequestHeader('X-REMOVE');\n" +
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.request.addQueryParams('batch=a%2Bb&batch=%E4%B8%AD%E6%96%87');apt.request.addQueryParams([{key:'hidden-batch',value:'x',disabled:true},{key:'removed-batch',value:'x'}]);pm.request.removeQueryParams([{key:'removed-batch'}]);\n" +
@@ -4761,6 +4766,10 @@ try {
     JSON.stringify(scriptFormResult),
   );
   const scriptFormWire = JSON.parse(scriptFormResult.body);
+  assert.equal(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.has("drop"),
+    false,
+  );
   assert.deepEqual(
     new URL(scriptFormWire.url, fixtureURL).searchParams.getAll("batch"),
     ["a+b", "中文"],

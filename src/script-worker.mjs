@@ -1,3 +1,4 @@
+import { urlQueryToolsSource } from "./script-url-query.mjs";
 import { queryBatchSource } from "./script-query-batch.mjs";
 import { modernBodySource } from "./script-modern-body.mjs";
 import { scriptFormBodySource } from "./script-form-body.mjs";
@@ -253,17 +254,7 @@ try {
       if (!remove) request[group].push({ ...existing, key: name, value: String(value ?? ''), enabled: true });
     };
     const removeURLQuery = name => {
-      const raw = String(request.url || '');
-      const hashAt = raw.indexOf('#');
-      const fragment = hashAt < 0 ? '' : raw.slice(hashAt);
-      const base = hashAt < 0 ? raw : raw.slice(0, hashAt);
-      const at = base.indexOf('?');
-      if (at < 0) return;
-      const query = base.slice(at + 1).split('&').filter(pair => {
-        const key = pair.split('=')[0].split('+').join(' ');
-        try { return decodeURIComponent(key) !== name; } catch { return true; }
-      }).join('&');
-      request.url = base.slice(0, at) + (query ? '?' + query : '') + fragment;
+      request.url = __urlQueryTools.remove(request.url, [name]);
     };
     const modifyBody = (name, value, remove = false) => {
       parameterName(name);
@@ -374,6 +365,7 @@ try {
   };
   parentPort.postMessage({ kind: "stage", stage: "bootstrap" });
   run(setup);
+  run("const __urlQueryTools = (" + urlQueryToolsSource + ")();");
   run(trustedLibraries);
   const json5Source = context.newString(json5Library);
   context.setProp(context.global, "__json5Source", json5Source);
@@ -399,7 +391,7 @@ try {
       "});",
   );
 
-  run("(" + queryBatchSource + ")({request,pm});");
+  run("(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});");
   run(
     "const __formOperations = (" +
       scriptFormBodySource +
