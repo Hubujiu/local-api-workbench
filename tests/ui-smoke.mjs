@@ -6524,6 +6524,7 @@ try {
 
   const templateModern = structuredClone(nativeModern);
   templateModern.name = "Query template fixture";
+  templateModern.apis[1].url = "/sdk-url/template";
   templateModern.apis[1].name = "Source Query function";
   templateModern.apis[1].request.pre_tasks = [];
   templateModern.apis[1].request.query.parameter = [
@@ -6605,6 +6606,10 @@ try {
   assert.equal(
     new URL(templateResult.request.url).searchParams.get("q"),
     '["edited"]',
+  );
+  assert.equal(
+    JSON.parse(templateResult.body).url,
+    "/sdk-url/template?q=%5B%22edited%22%5D",
   );
 
   assert.deepEqual(errors, []);
