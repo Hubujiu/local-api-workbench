@@ -1,3 +1,4 @@
+import { sdkCurlDefinition } from "./script-url-export.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { validateQueryRuntime } from "./script-url-runtime.mjs";
 import { scriptFailureDetails } from "./script-diagnostics.mjs";
@@ -1380,9 +1381,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
-  if (normalizeScriptURLMode(input.scriptURLMode) === "sdk")
-    throw Error("cURL暂不能无损表达SDK URL模式，请使用项目备份");
-  const r = normalizeRequest(input);
+  const r = normalizeRequest(sdkCurlDefinition(input));
   if (r.auth.type === "asap")
     throw Error(
       "ASAP需要逐次签名，请使用原始请求/项目导出，不生成缺失认证的cURL。",

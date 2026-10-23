@@ -1,3 +1,8 @@
+import {
+  assertSDKCurlDefinition,
+  sdkCurlDefinition,
+} from "./script-url-export.mjs";
+import { applySharedScripts } from "./shared-scripts.mjs";
 import { DatabaseSessions } from "./database-sessions.mjs";
 import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
@@ -626,8 +631,11 @@ export async function createApp({
           }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req);
-            if (data.request?.scriptURLMode === "sdk")
-              throw Error("cURL暂不能无损表达SDK URL模式，请使用项目备份");
+            const exportRequest =
+              data.request?.scriptURLMode === "sdk"
+                ? applySharedScripts(p, data.request)
+                : data.request;
+            assertSDKCurlDefinition(exportRequest);
             const context = debugEnvironment(
               p,
               data.environmentId,
@@ -637,11 +645,16 @@ export async function createApp({
               curl: toCurl(
                 resolveServiceRequest(
                   p,
-                  await resolveDynamicRequest(
-                    applySharedAuth(p, applyGlobalParameters(p, data.request)),
-                    context.variables,
-                    p.settings?.functions || [],
-                    interpolate,
+                  sdkCurlDefinition(
+                    await resolveDynamicRequest(
+                      applySharedAuth(
+                        p,
+                        applyGlobalParameters(p, exportRequest),
+                      ),
+                      context.variables,
+                      p.settings?.functions || [],
+                      interpolate,
+                    ),
                   ),
                   context.environment.id,
                 ),

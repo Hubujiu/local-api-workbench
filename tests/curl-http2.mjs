@@ -115,3 +115,5 @@ try {
   ]);
 }
 await import("./curl-bodies-integration.mjs");
+
+await import("./script-url-curl-integration.mjs");

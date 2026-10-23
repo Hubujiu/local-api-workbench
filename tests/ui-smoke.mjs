@@ -5373,6 +5373,19 @@ try {
   assert.equal(sdkSaved.query[0].value, "a+b");
   assert.equal(sdkSaved.scriptURLRuntime, undefined);
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  // Export the definition without executing its earlier mutation script.
+  await page.locator('[data-param="before"]').click();
+  await page.locator("#script-code").fill("");
+  await page.locator("#url").fill(fixtureURL + "/sdk-url/42?raw=%2f+&x=1&x=2");
+  await page.locator("#curl").click();
+  await page.locator("#curl-output").waitFor();
+  assert.ok(
+    (await page.locator("#curl-output").inputValue()).includes(
+      "/sdk-url/42?raw=%2f+&x=1&x=2&table=a%2Bb",
+    ),
+  );
+  await page.screenshot({ path: "/tmp/local-api-sdk-url-curl.png" });
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

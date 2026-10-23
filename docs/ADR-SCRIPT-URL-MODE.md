@@ -49,8 +49,9 @@ rebuilt in CI and protected from checkout line-ending conversion.
 
 This remains a bounded SDK subset, not full Postman or Apipost compatibility.
 Function-valued variables, arbitrary SDK extensions, external secret resolvers
-and state exceeding 64 KiB are rejected. cURL and OpenAPI exports currently reject
-SDK URL mode rather than silently emit a request with different semantics. Native
+and state exceeding 64 KiB are rejected. OpenAPI export still rejects SDK URL mode.
+Script-free cURL definition export follows the narrower rules in
+[ADR-SDK-CURL-DEFINITION.md](ADR-SDK-CURL-DEFINITION.md). Native
 project JSON preserves the mode and source data; HTML/Markdown describe the mode
 and distinguish definitions from executed requests.
 

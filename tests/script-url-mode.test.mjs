@@ -61,13 +61,13 @@ test("URL object mode is explicit and survives request/plan JSON snapshots witho
   );
 });
 
-test("unsupported text exports reject URL object semantics rather than silently changing the request", () => {
+test("SDK definition cURL is available while OpenAPI remains explicitly unsupported", () => {
   const request = {
     url: "https://example.test/{id}",
     scriptURLMode: "sdk",
     path: [{ key: "id", value: "42" }],
   };
-  assert.throws(() => toCurl(request), /cURL.*SDK URL/);
+  assert.ok(toCurl(request).includes("https://example.test/42"));
   assert.throws(
     () => exportOpenAPI({ name: "Fixture", requests: [request] }),
     /OpenAPI.*SDK URL/,
