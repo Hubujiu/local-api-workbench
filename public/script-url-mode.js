@@ -4,7 +4,7 @@ export function normalizeScriptURLMode(value = "string") {
   return value;
 }
 export const scriptURLModeNotice =
-  "SDK URL模式将本请求及共享脚本中的 pm.request.url / apt.request.url 改为可变Url对象，而非字符串。原URL查询保留原编码，Query表格项仍按表单编码；Path整段 {name} 转为SDK路径变量。状态最多64KiB，不支持函数值或外部变量解析器；cURL仅支持无前置脚本或操作的请求定义；OpenAPI仅支持无前置处理、无Path变量/运行时状态的静态URL定义，且Query名称须唯一；其余请使用项目备份。";
+  "SDK URL模式将本请求及共享脚本中的 pm.request.url / apt.request.url 改为可变Url对象，而非字符串。原URL查询保留原编码，Query表格项仍按表单编码；Path整段 {name} 转为SDK路径变量。状态最多64KiB，不支持函数值或外部变量解析器；cURL仅支持无前置脚本或操作的请求定义；OpenAPI仅支持无前置处理、无运行时状态的静态URL定义；Path须为一一对应的完整命名段，Query名称须唯一；其余请使用项目备份。";
 export function scriptURLModeOptions(value) {
   const mode = normalizeScriptURLMode(value);
   return `<option value="string" ${mode === "string" ? "selected" : ""}>原有 URL 字符串</option><option value="sdk" ${mode === "sdk" ? "selected" : ""}>SDK URL 对象（有界子集）</option>`;

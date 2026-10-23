@@ -5997,6 +5997,29 @@ try {
   );
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-sdk-openapi-definition.png" });
+  await page.locator("#url").fill(fixtureURL + "/items/{id}?q=one+two&empty=");
+  await page.locator('[data-param="path"]').click();
+  await page.locator('[data-add-pair="path"]').click();
+  await page.locator('[data-pair="path:0:key"]').fill("id");
+  await page.locator('[data-pair="path:0:value"]').fill("42");
+  await saveAndWait();
+  await page.locator("#export").click();
+  await page.locator("#export-format").selectOption("openapi");
+  const sdkPathDownload = page.waitForEvent("download");
+  await page.locator("#dialog-save").click();
+  const sdkPathDocument = JSON.parse(
+    await readFile(await (await sdkPathDownload).path(), "utf8"),
+  );
+  const sdkPathParameters = sdkPathDocument.paths["/items/{id}"].get.parameters;
+  assert.deepEqual(
+    sdkPathParameters.filter((p) => p.in === "query"),
+    sdkDefinitionDocument.paths["/items"].get.parameters,
+  );
+  assert.equal(sdkPathParameters.find((p) => p.in === "path").name, "id");
+  assert.equal(sdkPathParameters.find((p) => p.in === "path").example, "42");
+  assert.equal(sdkPathParameters.find((p) => p.in === "path").required, true);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-sdk-openapi-path.png" });
 
   // Restore the actual earlier imported project snapshot as a separate copy.
   // Restoration must not execute imported scripts or overwrite its source.

@@ -61,16 +61,30 @@ test("URL object mode is explicit and survives request/plan JSON snapshots witho
   );
 });
 
-test("SDK Path definitions remain unsupported in OpenAPI while cURL renders them", () => {
+test("SDK Path definitions export placeholders while cURL renders concrete examples", () => {
   const request = {
     url: "https://example.test/{id}",
     scriptURLMode: "sdk",
     path: [{ key: "id", value: "42" }],
   };
   assert.ok(toCurl(request).includes("https://example.test/42"));
-  assert.throws(
-    () => exportOpenAPI({ name: "Fixture", requests: [request] }),
-    /OpenAPI.*SDK URL/,
+  const exported = exportOpenAPI({
+    name: "Fixture",
+    requests: [
+      {
+        ...request,
+        method: "GET",
+        query: [],
+        headers: [],
+        cookies: [],
+        responses: [],
+        examples: [],
+      },
+    ],
+  });
+  assert.equal(
+    exported.paths["/{id}"].get.parameters.find((p) => p.in === "path").example,
+    "42",
   );
   assert.match(requestDocumentationHTML(request), /SDK URL对象模式/);
   assert.match(
