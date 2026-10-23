@@ -5938,6 +5938,7 @@ try {
   groupedSource.global.envs[0].server_list[0].uri = fixtureURL;
   groupedSource.global.global_param.header.parameter = [
     { key: "X-Inherited", value: "global-kept", is_checked: 1 },
+    { key: "X-System", value: "system-kept", is_checked: 0, is_system: 1 },
   ];
   groupedSource.apis[0].request.header = {
     parameter: [
@@ -6033,6 +6034,7 @@ try {
   assert.equal(groupedResult.request.headers["x-test"], "current");
   assert.equal(groupedResult.request.body, "grouped sample");
   assert.equal(groupedResult.request.headers["x-inherited"], "global-kept");
+  assert.equal(groupedResult.request.headers["x-system"], "system-kept");
   assert.equal(JSON.parse(groupedResult.body).importTask, "group-inherited");
   await page
     .locator(`[data-run-case="${importedGroupedCase.id}"]:not([disabled])`)

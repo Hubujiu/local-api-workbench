@@ -416,7 +416,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         key === "header" ? row.key.toLowerCase() : row.key;
       let values = [];
       for (const layer of ancestry) {
-        const rows = parameterRows(layer[key], key);
+        const rows = parameterRows(layer[key], key).map((row) => {
+          const flag = row?.is_system;
+          const inheritedSystem =
+            layer !== request &&
+            ["number", "string", "boolean"].includes(typeof flag) &&
+            Number.isFinite(Number(flag)) &&
+            Math.trunc(Number(flag)) > 0;
+          return inheritedSystem ? { ...row, is_checked: 1 } : row;
+        });
         for (const row of rows)
           if (!object(row) || typeof row.key !== "string")
             throw Error("Apipost参数无效");
