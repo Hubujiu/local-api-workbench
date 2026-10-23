@@ -6790,6 +6790,10 @@ try {
     await page.locator("#body-code").inputValue(),
     "{{@value:apipost_body}}",
   );
+  if (
+    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
+  )
+    await page.locator("#toggle-parameter-helper").click();
   await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
   assert.equal(
     await page.locator("#dynamic-source").inputValue(),
