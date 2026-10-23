@@ -1,3 +1,4 @@
+import { assertionCounts } from "./assertion-state.js";
 import { createScriptDraft, applyScriptDraft } from "./script-draft.js";
 import { mockURL, mockDebugTarget } from "./mock-target.js";
 import { editResponseExample } from "./response-example.js";
@@ -673,6 +674,11 @@ function responseContent() {
     return typeof response.visualization === "string"
       ? '<p class="muted">隔离静态预览：不执行脚本、不加载外部资源、不打开链接。可用 apt.visualizer.set(template, data)。</p><iframe id="response-visualization" title="响应可视化" sandbox="" referrerpolicy="no-referrer"></iframe>'
       : '<div class="notice">后置脚本调用 apt.visualizer.set(template, data) 后在此预览；支持 Handlebars 表格、列表；采用内置样式。</div>';
+  if (responseTab === "assertions") {
+    const assertions = response.assertions || [];
+    const counts = assertionCounts(assertions);
+    return `${response.error ? `<div class="notice failed">${esc(response.error)}</div>` : ""}<p class="assertion-counts">通过 ${counts.passed} · 失败 ${counts.failed} · 跳过 ${counts.skipped}（跳过项未执行，不计为通过）</p><pre>${esc(JSON.stringify(assertions, null, 2))}</pre>`;
+  }
   let v =
     responseTab === "body"
       ? response.body

@@ -1,3 +1,4 @@
+import { assertionState } from "./assertion-state.js";
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -212,9 +213,17 @@ function renderStepEvidence(step) {
           .map(
             (assertion) =>
               '<div class="' +
-              (assertion.passed ? "success" : "failed") +
+              (assertionState(assertion) === "skipped"
+                ? "muted"
+                : assertion.passed
+                  ? "success"
+                  : "failed") +
               '">' +
-              (assertion.passed ? "✓ " : "× ") +
+              (assertionState(assertion) === "skipped"
+                ? "跳过 · "
+                : assertion.passed
+                  ? "✓ "
+                  : "× ") +
               esc(
                 assertion.phase === "before"
                   ? "前置 · "

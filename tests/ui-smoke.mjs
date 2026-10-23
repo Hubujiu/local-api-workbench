@@ -4700,6 +4700,8 @@ try {
   }
   const expandedFormScript =
     "// 扩展编辑器应用后仍需手动保存和发送\n" +
+    "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
+    "pm.test('registration-count', () => pm.expect(pm.test.index()).to.equal(2));\n" +
     originalFormScript.replaceAll("; ", ";\n");
   await page.locator("#expand-script").click();
   await page.locator("#expanded-script-code").fill(expandedFormScript);
@@ -4767,6 +4769,17 @@ try {
   assert.match(await page.locator(".response pre").innerText(), /changed/);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-script-form.png" });
+  assert(
+    scriptFormResult.assertions.some(
+      (item) => item.name === "pending form check" && item.skipped === true,
+    ),
+  );
+  await page.locator('[data-response="assertions"]').click();
+  assert.match(
+    await page.locator(".assertion-counts").innerText(),
+    /通过 2 · 失败 0 · 跳过 1/,
+  );
+  await page.screenshot({ path: "/tmp/local-api-skipped-assertion.png" });
 
   await createFileTarget("Document form fields");
   const privateUploadText = "DOC-UPLOAD-BYTES-DO-NOT-INLINE";

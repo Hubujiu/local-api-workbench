@@ -260,6 +260,12 @@ function installScriptCompatibility({
     if (tests.length >= maxTests) throw Error("脚本断言最多1000条");
     return originalTest(name, fn);
   };
+  pm.test.skip = (name) => {
+    if (tests.length >= maxTests) throw Error("脚本断言最多1000条");
+    tests.push({ name: String(name), passed: true, skipped: true });
+    return pm;
+  };
+  pm.test.index = () => tests.length;
   apt.test = pm.test;
   apt.assert = (expression) => {
     if (tests.length >= maxTests) throw Error("脚本断言最多1000条");
