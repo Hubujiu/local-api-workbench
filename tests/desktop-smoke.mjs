@@ -1,3 +1,4 @@
+import { desktopScriptProbes } from "./fixtures/desktop-script-probes.mjs";
 import http from "node:http";
 import {
   createHmac,
@@ -89,6 +90,7 @@ const jwtFixture = http.createServer(async (request, response) => {
 });
 await new Promise((resolve) => jwtFixture.listen(0, "127.0.0.1", resolve));
 
+let capturedScriptFailure = false;
 let application,
   phase = "launch";
 const watchdog = setTimeout(() => {
@@ -170,6 +172,56 @@ try {
   );
   await window.locator("#send").click();
   const scriptPayload = await (await scriptResponse).json();
+  if (scriptPayload.outcome !== "passed") {
+    console.error(
+      "DESKTOP_ORIGINAL_SCRIPT_FAILURE",
+      JSON.stringify(scriptPayload),
+    );
+    const original = await window.locator("#script-code").inputValue();
+    await window
+      .screenshot({ path: "dist/desktop-failure.png" })
+      .then(() => {
+        capturedScriptFailure = true;
+      })
+      .catch(() => {});
+    phase = "script-diagnostics";
+    try {
+      for (const probe of desktopScriptProbes(original)) {
+        await window.locator("#send:not([disabled])").waitFor();
+        await window.locator("#script-code").fill(probe.code);
+        const reply = window.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            response.url().endsWith("/execute"),
+        );
+        await window.locator("#send").click();
+        const result = await (await reply).json();
+        console.error(
+          "DESKTOP_SCRIPT_PROBE",
+          JSON.stringify({
+            name: probe.name,
+            outcome: result.outcome,
+            error: result.error,
+            stage: result.scriptStage,
+            diagnostics: result.scriptDiagnostics,
+            logs: result.logs,
+            assertions: result.assertions?.map((a) => ({
+              name: a.name,
+              passed: a.passed,
+            })),
+          }),
+        );
+      }
+    } catch (probeError) {
+      console.error("DESKTOP_SCRIPT_PROBE_FAILED", String(probeError));
+    } finally {
+      await window
+        .locator("#script-code")
+        .fill(original)
+        .catch(() => {});
+      phase = "script";
+    }
+  }
   assert.equal(scriptPayload.outcome, "passed", JSON.stringify(scriptPayload));
   assert.equal(scriptPayload.extracted.packagedPrivate, undefined);
   assert(
@@ -516,9 +568,10 @@ try {
         )
         .catch(() => "unavailable"),
     );
-    await window
-      ?.screenshot({ path: "dist/desktop-failure.png" })
-      .catch(() => {});
+    if (!capturedScriptFailure)
+      await window
+        ?.screenshot({ path: "dist/desktop-failure.png" })
+        .catch(() => {});
     if (window)
       console.error(
         "DESKTOP_FAILURE_STATE",
