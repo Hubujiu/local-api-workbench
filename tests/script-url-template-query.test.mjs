@@ -55,7 +55,7 @@ test("literal query changes preserve unusual variable names through actual inter
         request: {
           url: "http://{{host?x}}:{{port#x}}/p?drop=old&q={{value&x}}#{{frag#x}}",
           beforeScript:
-            "pm.removeRequestQuery('drop');pm.setRequestQuery('safe','中文');",
+            "pm.removeRequestQuery('drop');pm.setRequestQuery('safe','中文');pm.request.addQueryParams('added={{value&x}}&encoded=a%2Bb');",
         },
       },
     ],
@@ -70,5 +70,31 @@ test("literal query changes preserve unusual variable names through actual inter
   assert.equal(url.searchParams.has("drop"), false);
   assert.equal(url.searchParams.get("q"), "kept");
   assert.equal(url.searchParams.get("safe"), "中文");
+  assert.equal(url.searchParams.get("added"), "kept");
+  assert.equal(url.searchParams.get("encoded"), "a+b");
   assert.deepEqual(plan, saved);
+});
+
+test("encoded query additions preserve interpolation names and decode only literal spans", async () => {
+  for (const dialect of ["legacy", "apipost8"]) {
+    const result = await runScript(
+      "pm.request.addQueryParams('q={{v+&=%x}}&q=prefix+{{v+&=%x}}%2Btail&{{key=+&%name}}=literal');",
+      {
+        variables: {},
+        request: {
+          scriptDialect: dialect,
+          url: "http://localhost/",
+          query: [],
+        },
+      },
+    );
+    assert.deepEqual(
+      result.request.query.map(({ key, value }) => [key, value]),
+      [
+        ["q", "{{v+&=%x}}"],
+        ["q", "prefix {{v+&=%x}}+tail"],
+        ["{{key=+&%name}}", "literal"],
+      ],
+    );
+  }
 });

@@ -35,6 +35,19 @@ function createURLQueryTools() {
     result.push(query.slice(start));
     return result;
   };
+  const pairBoundary = (row) => positions(row, "=", true);
+  const decodeComponent = (value) => {
+    const tokens = /{{[^{}]*}}/g;
+    let result = "",
+      start = 0,
+      token;
+    const decode = (text) => decodeURIComponent(text.replace(/\+/g, " "));
+    while ((token = tokens.exec(value))) {
+      result += decode(value.slice(start, token.index)) + token[0];
+      start = token.index + token[0].length;
+    }
+    return result + decode(value.slice(start));
+  };
   const remove = (value, names) => {
     const url = splitURL(value);
     if (url.at < 0) return url.raw;
@@ -56,7 +69,13 @@ function createURLQueryTools() {
       url.fragment
     );
   };
-  return Object.freeze({ splitURL, splitQuery, remove });
+  return Object.freeze({
+    splitURL,
+    splitQuery,
+    pairBoundary,
+    decodeComponent,
+    remove,
+  });
 }
 export const urlQueryToolsSource = createURLQueryTools.toString();
 export const urlQueryTools = createURLQueryTools();

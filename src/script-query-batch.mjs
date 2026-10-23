@@ -43,7 +43,7 @@ function installQueryBatch({ request, pm, urlTools }) {
       if (size > 65536) throw Error("查询参数和URL合计超过64KiB");
     }
   };
-  const decode = (value) => decodeURIComponent(value.replace(/\+/g, " "));
+  const decode = urlTools.decodeComponent;
   pm.request.addQueryParams = (input) => {
     let source;
     if (typeof input === "string") {
@@ -52,8 +52,8 @@ function installQueryBatch({ request, pm, urlTools }) {
       source =
         input === ""
           ? []
-          : input.split("&").map((item) => {
-              const at = item.indexOf("=");
+          : urlTools.splitQuery(input).map((item) => {
+              const at = urlTools.pairBoundary(item);
               if (at < 0)
                 throw Error(
                   "查询字符串仅支持明确的key=value项，不支持无等号标记",

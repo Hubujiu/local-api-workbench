@@ -20,8 +20,13 @@ same token-aware boundaries. Unbalanced braces are not invented into tokens.
 
 The scanner does not normalize the URL, decode template values, contact hosts,
 or implement a complete URL object SDK. Existing phase budgets and query-size
-limits are unchanged. Direct encoded-string additions retain their stricter
-key=value contract described in ADR-SCRIPT-QUERY-BATCH.md.
+limits are unchanged. Encoded-string additions now reuse the scanner for
+row/key-value boundaries
+and preserve tokens during component decoding. Literal spans retain strict
+percent/plus decoding and key=value requirements. This permits a value such as
+{{value+&=%name}} without treating its name as query syntax or malformed escapes.
+A red regression and actual HTTP verify expansion occurs later exactly as other
+structured query values do; saved plans are not changed.
 
 Tests first reproduce failed removals with ?/#/& inside variable names, then
 verify exact retained URI text and real interpolation/HTTP with an unchanged

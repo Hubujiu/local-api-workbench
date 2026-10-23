@@ -15,7 +15,11 @@ This does not claim a complete URL SDK or raw query byte-for-byte preservation.
   may carry disabled and description metadata. Existing entries and duplicates
   retain their order; new entries append. Disabled entries remain stored but are
   not sent. Strings decode percent escapes and plus once before the existing
-  request sender encodes structured query values.
+  request sender encodes structured query values. Balanced {{...}} interpolation
+  names remain opaque while splitting rows/key-value boundaries and decoding;
+  &, =, + and % inside such names are not delimiters or escape sequences.
+  Literal spans still use strict percent decoding. Expansion happens later in
+  the normal execution pipeline, not inside the batch helper.
 - Flag-only strings, empty names, malformed UTF-8 escapes, unsupported object
   fields and nontext values fail explicitly rather than silently converting a
   flag to an equals pair or changing arbitrary values. The full vendor null/flag

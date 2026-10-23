@@ -25,6 +25,8 @@ test("batch validation is atomic and rejects ambiguous flag-only and malformed e
     "flag",
     "?q=1",
     "q=%FF",
+    "q={{v+&=%x}}%FF",
+    "q={{v+&=%x}}&flag",
     [
       { key: "good", value: "x" },
       { key: "bad", value: {} },
