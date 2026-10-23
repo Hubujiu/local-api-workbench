@@ -304,7 +304,7 @@ test("HTTP import, restart, explicit case execution and local restore preserve s
     return r.json();
   };
   const p = await call("/api/projects", "POST", { name: "Sample import" }),
-    source = sampleFixture();
+    source = groupedFixture();
   source.global.envs[0].server_list[0].uri =
     "http://127.0.0.1:" + fixture.address().port;
   const imported = await call("/api/projects/" + p.id + "/import", "POST", {
@@ -339,6 +339,7 @@ test("HTTP import, restart, explicit case execution and local restore preserve s
   }
   assert.equal(executions, 2);
   assert.deepEqual(copy.cases, imported.cases);
+  assert.deepEqual(copy.caseFolders, imported.caseFolders);
   assert.notEqual(copy.id, p.id);
 });
 
@@ -367,5 +368,131 @@ test("sample array and record accessors are rejected without invocation", () => 
     assert.throws(() => importIntoProject(p, source));
     assert.equal(calls, 0);
     assert.deepEqual(p, before);
+  }
+});
+
+function groupedFixture() {
+  const source = sampleFixture();
+  source.samples.unshift(
+    {
+      sample_id: "group",
+      parent_id: "0",
+      target_id: "api",
+      project_id: "fixture",
+      type: "sample_group",
+      name: "Imported group",
+      sort: 1,
+    },
+    {
+      sample_id: "empty",
+      parent_id: "group",
+      target_id: "api",
+      project_id: "fixture",
+      type: "sample_group",
+      name: "Empty group",
+      sort: 2,
+    },
+  );
+  const grouped = structuredClone(source.samples[2]);
+  grouped.sample_id = "grouped";
+  grouped.name = "Grouped case";
+  grouped.parent_id = "group";
+  source.samples.push(grouped);
+  return source;
+}
+test("sample groups preserve hierarchy and grouped requests include API ancestry while roots do not", async (t) => {
+  const received = [];
+  const server = http.createServer((req, res) => {
+    received.push({ url: req.url, headers: req.headers });
+    res.end("ok");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const source = groupedFixture();
+  source.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  source.global.global_param.pre_tasks = [
+    script("project", "const chainGlobal = 'g';"),
+  ];
+  source.apis[0].request.pre_tasks = [
+    script("folder", "const chainFolder = 'f';"),
+  ];
+  source.apis[1].request.pre_tasks = [script("api", "const chainAPI = 'a';")];
+  source.samples[2].request.pre_tasks = [
+    script(
+      "root",
+      "pm.setRequestHeader('x-chain', chainGlobal + chainFolder);",
+    ),
+  ];
+  source.samples[3].request.pre_tasks = [
+    script(
+      "grouped",
+      "pm.setRequestHeader('x-chain', chainGlobal + chainFolder + chainAPI);",
+    ),
+  ];
+  const before = structuredClone(source),
+    p = destination();
+  importIntoProject(p, source);
+  assert.deepEqual(source, before);
+  assert.equal(p.requests.length, 1);
+  assert.equal(p.caseFolders.length, 2);
+  assert.equal(p.cases.length, 2);
+  assert.equal(received.length, 0);
+  const folder = p.caseFolders.find((f) => f.name === "Imported group"),
+    empty = p.caseFolders.find((f) => f.name === "Empty group");
+  assert.equal(empty.parentId, folder.id);
+  assert.equal(folder.sourceRequestId, p.requests[0].id);
+  const grouped = p.cases.find((c) => c.name === "Grouped case");
+  assert.equal(grouped.folderId, folder.id);
+  assert.deepEqual(
+    grouped.request.importedScriptTasks.before.map((t) => t.origin.scope),
+    ["project", "folder", "request", "sample"],
+  );
+  assert.equal(grouped.request.importedScriptTasks.before[2].origin.id, "api");
+  for (const item of p.cases) {
+    const env = p.environments[0];
+    const result = await runPlan(
+      { steps: [{ request: resolveServiceRequest(p, item.request, env.id) }] },
+      environmentVariables(p, env.id),
+      executeRequest,
+    );
+    assert.equal(result.status, "passed", JSON.stringify(result));
+  }
+  assert.equal(received[0].headers["x-chain"], "gf");
+  assert.equal(received[0].headers["x-test"], undefined);
+  assert.equal(received[1].headers["x-chain"], "gfa");
+  assert.equal(received[1].headers["x-test"], "current");
+  assert.match(received[1].url, /q=one/);
+});
+test("empty sample groups survive import and invalid group graphs or collisions are atomic", () => {
+  const source = groupedFixture();
+  source.samples = source.samples.slice(0, 2);
+  const p = destination();
+  importIntoProject(p, source);
+  assert.equal(p.cases, undefined);
+  assert.equal(p.caseFolders.length, 2);
+  assert.equal(p.caseFolders[0].sourceRequestId, p.requests[0].id);
+  const before = structuredClone(p);
+  assert.throws(() => importIntoProject(p, source));
+  assert.deepEqual(p, before);
+  for (const change of [
+    (s) => (s.samples[0].parent_id = "empty"),
+    (s) => (s.samples[1].target_id = "other"),
+    (s) => (s.samples[3].parent_id = "root-sample"),
+    (s) => (s.samples[0].url = "/unexpected"),
+    (s) => (s.samples[0].request = {}),
+    (s) => (s.samples[0].sort = Infinity),
+    (s) =>
+      (s.apis[1].request.body = { mode: "raw", raw: "not silently inherited" }),
+  ]) {
+    const s = groupedFixture(),
+      p = destination(),
+      old = structuredClone(p);
+    change(s);
+    assert.throws(() => importIntoProject(p, s));
+    assert.deepEqual(p, old);
   }
 });

@@ -9,3 +9,5 @@ The interface-case panel supports creating, renaming and moving folders, selecti
 Project save and native backup restoration validate the same graph. Case edits retain their membership, and invalid save/restore attempts must leave persisted state unchanged. This model is the prerequisite for preserving imported sample groups; it does not by itself enable modern Apipost sample-group import or claim the source application's live inheritance behavior.
 
 Verification covers empty nested groups, stable ownership, graph failures, atomic edits/deletions, HTTP persistence and restart, backup restore, and a browser flow moving an existing imported root sample into a nested group without altering its request snapshot. Existing root sample import remains unchanged and continues to reject sample groups until a separately verified converter is available.
+
+Modern source-group conversion is specified separately in [ADR-APIPOST-SAMPLE-GROUP-IMPORT.md](ADR-APIPOST-SAMPLE-GROUP-IMPORT.md); the organizational model itself does not recalculate execution inheritance.

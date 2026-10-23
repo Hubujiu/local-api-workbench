@@ -304,6 +304,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       throw Error("Apipost Mock IP白名单需手工迁移");
   }
   const chain = (node) => {
+    const sample = samples.byNode.get(String(node.target_id));
     const result = [];
     const seen = new Set();
     while (node) {
@@ -317,6 +318,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       if (!node || node.target_type !== "folder")
         throw Error("Apipost目录引用不存在");
     }
+    if (sample?.folderId)
+      result.splice(
+        result.length - 1,
+        0,
+        ids.get(sample.originAPIId).request ?? {},
+      );
     return [global.global_param ?? {}, ...result];
   };
   const taskOwners = new Map(nodes.map((node) => [node.request, node]));
@@ -618,7 +625,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           )
             task.origin = { scope: "sample", id: sample.sampleId };
       request.importNotes.push(
-        "根级样例已转换为独立接口用例快照；不执行导入脚本。显式服务绑定在运行时使用所选环境地址，目录与项目参数/脚本仅保留导入时快照。",
+        "样例已转换为独立接口用例快照；不执行导入脚本。显式服务绑定在运行时使用所选环境地址，继承参数/脚本仅保留导入时快照；分组移动不会重新计算继承。",
       );
       sampleCases.push({ ...sample, request });
     } else ordinaryRequests.push(request);
@@ -631,7 +638,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       )
     )
       request.importNotes.push(
-        "根级样例已导入为关联此接口的独立用例快照；运行前请选择导入环境。本次不支持样例分组或自动化测试树。",
+        "根级样例及组内样例已导入为关联此接口的独立用例快照；运行前请选择导入环境。样例分组层级已保留，自动化测试树暂不支持。",
       );
   const mergeResources = (old = [], items = []) => {
     const result = structuredClone(old);
@@ -711,6 +718,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   return {
     ...legacy,
     samples: sampleCases,
+    caseFolders: samples.folders,
     metadata: {
       openapiComponents: components,
       dictionary,

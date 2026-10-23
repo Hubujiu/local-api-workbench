@@ -1,5 +1,9 @@
 # Root-level modern sample import
 
+Historical scope: group support is specified separately in
+[ADR-APIPOST-SAMPLE-GROUP-IMPORT.md](ADR-APIPOST-SAMPLE-GROUP-IMPORT.md).
+The root-only inheritance rules below remain unchanged.
+
 The original modern export has a separate samples array. Root samples reference
 an API by target_id and use sample_id for their own identity. Static original
 collection assembly maps these records to sample nodes; the request adapter's

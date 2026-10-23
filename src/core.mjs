@@ -1720,14 +1720,16 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
-  const importedRequestIds = modern?.samples?.length
-    ? new Map(requests.map((request) => [request.sourceOperationId, id()]))
-    : null;
+  const importedRequestIds =
+    modern?.samples?.length || modern?.caseFolders?.length
+      ? new Map(requests.map((request) => [request.sourceOperationId, id()]))
+      : null;
   const importedCases = (modern?.samples || []).map((sample) =>
     snapshotCase({
       id: sample.id,
       name: sample.name,
       sourceRequestId: importedRequestIds.get(sample.sourceOperationId),
+      ...(sample.folderId ? { folderId: sample.folderId } : {}),
       request: sample.request,
       functions: [],
     }),
@@ -1745,6 +1747,25 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       caseIds.add(item.id);
     }
   }
+  const importedCaseFolders = (modern?.caseFolders || []).map(
+    ({ sourceOperationId, ...folder }) => ({
+      ...folder,
+      sourceRequestId: importedRequestIds.get(sourceOperationId),
+    }),
+  );
+  if (importedCaseFolders.length || importedCases.length)
+    validateCaseFolders({
+      ...project,
+      requests: [
+        ...project.requests,
+        ...requests.map((request) => ({
+          ...request,
+          id: importedRequestIds.get(request.sourceOperationId),
+        })),
+      ],
+      cases: [...(project.cases || []), ...importedCases],
+      caseFolders: [...(project.caseFolders || []), ...importedCaseFolders],
+    });
   const output = [];
   for (const request of requests) {
     const index = sync
@@ -1770,6 +1791,11 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   if (modern) Object.assign(project, modern.metadata);
   if (importedCases.length)
     project.cases = [...(project.cases || []), ...importedCases];
+  if (importedCaseFolders.length)
+    project.caseFolders = [
+      ...(project.caseFolders || []),
+      ...importedCaseFolders,
+    ];
   if (components) project.openapiComponents = mergedComponents;
   if (legacy)
     project.folders = [

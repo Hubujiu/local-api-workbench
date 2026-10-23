@@ -5924,6 +5924,107 @@ try {
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-restored-modern-project.png" });
 
+  // Independent grouped-source fixture; no mutation of earlier validation inputs.
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("Imported sample groups fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator("#project-select option:checked").textContent(),
+    "Imported sample groups fixture",
+  );
+  await page.locator('.rail [data-page="apis"]').click();
+  const groupedSource = modernApipostFixture();
+  groupedSource.global.envs[0].server_list[0].uri = fixtureURL;
+  groupedSource.apis[1].request.query.parameter = [];
+  groupedSource.apis[1].request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "api-marker",
+      name: "API marker",
+      enabled: 1,
+      data: 'const sourceAPIMarker = "group-inherited";',
+    },
+  ];
+  groupedSource.samples = [
+    {
+      sample_id: "group",
+      parent_id: "0",
+      target_id: "api",
+      type: "sample_group",
+      name: "Imported sample group",
+    },
+    {
+      sample_id: "empty",
+      parent_id: "group",
+      target_id: "api",
+      type: "sample_group",
+      name: "Imported empty child",
+    },
+    {
+      sample_id: "grouped-case",
+      parent_id: "group",
+      target_id: "api",
+      name: "Imported grouped case",
+      type: "sample",
+      method: "POST",
+      url: "/auth",
+      request: {
+        auth: { type: "noauth" },
+        body: { mode: "plain", raw: "grouped sample" },
+        header: { parameter: [] },
+        query: { parameter: [] },
+        cookie: { parameter: [] },
+        restful: { parameter: [] },
+        pre_tasks: [
+          {
+            type: "customScript",
+            id: "sample-marker",
+            name: "Sample marker",
+            enabled: 1,
+            data: 'pm.setRequestHeader("x-imported-task", sourceAPIMarker);',
+          },
+        ],
+        post_tasks: [],
+      },
+      response: { example: [] },
+    },
+  ];
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(JSON.stringify(groupedSource));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const importedGroupProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const importedGroup = importedGroupProject.caseFolders.find(
+    (f) => f.name === "Imported sample group",
+  );
+  const importedGroupedCase = importedGroupProject.cases[0];
+  assert.equal(importedGroupedCase.folderId, importedGroup.id);
+  await page.locator("#env").selectOption({ label: "Imported" });
+  await page.locator('[data-mode="cases"]').click();
+  await page
+    .locator(`[data-case-folder="${importedGroup.id}"]`)
+    .getByText("Imported empty child", { exact: true })
+    .waitFor();
+  const groupedExecution = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator(`[data-run-case="${importedGroupedCase.id}"]`).click();
+  const groupedResult = await (await groupedExecution).json();
+  assert.equal(groupedResult.outcome, "passed", JSON.stringify(groupedResult));
+  assert.equal(
+    groupedResult.request.headers["x-imported-task"],
+    "group-inherited",
+  );
+  assert.equal(groupedResult.request.headers["x-test"], "current");
+  assert.equal(JSON.parse(groupedResult.body).importTask, "group-inherited");
+  await page
+    .locator(`[data-run-case="${importedGroupedCase.id}"]:not([disabled])`)
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-imported-sample-groups.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
