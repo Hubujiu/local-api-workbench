@@ -8,6 +8,8 @@ export const apipostBuiltinStages = Object.freeze([
   "substr",
   "padstart",
   "padend",
+  "encodeuricomponent",
+  "decodeuricomponent",
 ]);
 export const isApipostBuiltinStage = (name) =>
   apipostBuiltinStages.includes(name);
