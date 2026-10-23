@@ -4661,6 +4661,81 @@ try {
     .fill(
       "pm.request.body.update({mode:'urlencoded',urlencoded:[{key:'tag',value:'first'},{key:'tag',value:'second'},{key:'skip',value:'hidden',disabled:true}]}); const form=pm.request.body.urlencoded; form.one('tag').value='changed'; form.add({key:'中文',value:'空 格&=+'}); pm.test('form-readers', () => pm.expect(form.toObject().tag).to.deep.equal(['first','changed']));",
     );
+  const originalFormScript = await page.locator("#script-code").inputValue();
+  const editorSideEffects = [];
+  const recordEditorSideEffect = (request) => {
+    if (
+      ["POST", "PUT"].includes(request.method()) &&
+      /\/projects\//.test(request.url())
+    )
+      editorSideEffects.push(request.url());
+  };
+  page.on("request", recordEditorSideEffect);
+  for (const dismiss of ["Escape", "取消", "关闭"]) {
+    await page.locator("#expand-script").click();
+    assert.equal(
+      await page.locator("#expanded-script-code").inputValue(),
+      originalFormScript,
+    );
+    await page
+      .locator("#expanded-script-code")
+      .fill("throw Error('discarded draft')");
+    await page.keyboard.press("Control+Enter");
+    await page.keyboard.press("Control+s");
+    if (dismiss === "Escape") await page.keyboard.press("Escape");
+    else
+      await page
+        .locator("#dialog")
+        .getByRole("button", { name: dismiss, exact: true })
+        .click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(
+      await page.locator("#script-code").inputValue(),
+      originalFormScript,
+    );
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.id),
+      "expand-script",
+    );
+  }
+  const expandedFormScript =
+    "// 扩展编辑器应用后仍需手动保存和发送\n" +
+    originalFormScript.replaceAll("; ", ";\n");
+  await page.locator("#expand-script").click();
+  await page.locator("#expanded-script-code").fill(expandedFormScript);
+  const expandedBounds = await page
+    .locator("#expanded-script-code")
+    .boundingBox();
+  assert(expandedBounds.height > 250);
+  assert(expandedBounds.width > 600);
+  await page.screenshot({ path: "/tmp/local-api-expanded-script.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator("#script-code").inputValue(),
+    expandedFormScript,
+  );
+  await page.locator("#expand-script").click();
+  assert.equal(
+    await page.locator("#expanded-script-code").inputValue(),
+    expandedFormScript,
+  );
+  await page.keyboard.press("Escape");
+  await page.locator('[data-param="after"]').click();
+  await page.locator("#expand-script").click();
+  assert.equal(await page.locator("#expanded-script-code").inputValue(), "");
+  await page
+    .locator("#expanded-script-code")
+    .fill("throw Error('not applied')");
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#script-code").inputValue(), "");
+  await page.locator('[data-param="before"]').click();
+  assert.equal(
+    await page.locator("#script-code").inputValue(),
+    expandedFormScript,
+  );
+  assert.deepEqual(editorSideEffects, []);
+  page.off("request", recordEditorSideEffect);
   await saveAndWait();
   const scriptFormReply = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
@@ -4740,8 +4815,16 @@ try {
       .first()
       .evaluate((node) => getComputedStyle(node).whiteSpace === "nowrap"),
   );
-  await documentTable.evaluate((node) => {
-    node.scrollLeft = 0;
+  await documentTable.evaluate(async (node) => {
+    let previous = -1,
+      stable = 0;
+    for (let frame = 0; stable < 4 && frame < 120; frame++) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      stable = node.scrollLeft === previous ? stable + 1 : 0;
+      previous = node.scrollLeft;
+    }
+    if (stable < 4) throw Error("Table scrolling did not settle");
+    node.scrollTo({ left: 0, behavior: "instant" });
   });
   await documentFormCard.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-document-form-preview.png" });
@@ -4793,8 +4876,16 @@ try {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     );
-    await exportedTable.evaluate((node) => {
-      node.scrollLeft = 0;
+    await exportedTable.evaluate(async (node) => {
+      let previous = -1,
+        stable = 0;
+      for (let frame = 0; stable < 4 && frame < 120; frame++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        stable = node.scrollLeft === previous ? stable + 1 : 0;
+        previous = node.scrollLeft;
+      }
+      if (stable < 4) throw Error("Table scrolling did not settle");
+      node.scrollTo({ left: 0, behavior: "instant" });
     });
     await exportedForm.scrollIntoViewIfNeeded();
     await documentPage.screenshot({

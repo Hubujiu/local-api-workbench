@@ -2049,3 +2049,38 @@ dialog:has(#cookie-line) {
 .doc-parameter-table td:nth-child(4) {
   white-space: nowrap;
 }
+
+#dialog[open]:has(#expanded-script-code) {
+  width: min(1100px, 92vw);
+  height: min(800px, 88vh);
+}
+#dialog:has(#expanded-script-code) > form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+#dialog:has(#expanded-script-code) #dialog-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+#dialog-content #expanded-script-code {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  font-family: ui-monospace, monospace;
+  line-height: 1.6;
+  tab-size: 2;
+}
+#dialog:has(#expanded-script-code) header,
+#dialog:has(#expanded-script-code) footer {
+  flex-shrink: 0;
+}
+.script-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
