@@ -393,7 +393,11 @@ try {
   );
 
   run("(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});");
-  run("(" + headerEntriesSource + ")({request,headers:pm.request.headers});");
+  run(
+    "(" +
+      headerEntriesSource +
+      ")({request,headers:pm.request.headers,requestFacade:pm.request});",
+  );
   run(
     "const __formOperations = (" +
       scriptFormBodySource +

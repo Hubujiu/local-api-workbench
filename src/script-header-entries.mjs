@@ -1,5 +1,5 @@
 // Runs inside the existing VM; entries only mutate the request's header rows.
-function installHeaderEntries({ request, headers }) {
+function installHeaderEntries({ request, headers, requestFacade }) {
   const bytes = (value, limit) => {
     if (typeof value !== "string" || value.length > limit)
       throw Error("Header文本类型或长度无效");
@@ -184,9 +184,26 @@ function installHeaderEntries({ request, headers }) {
     return entry(read()[index]);
   };
   headers.all = () => read().map(entry);
-  headers.each = (fn) => {
-    if (typeof fn !== "function") throw Error("Header each需要函数");
-    read().map(entry).forEach(fn);
+  const callback = (fn, context) => {
+    if (typeof fn !== "function") throw Error("Header迭代需要函数");
+    return (...args) => Reflect.apply(fn, context, args);
   };
+  headers.each = (fn, context) => {
+    const invoke = callback(fn, context || requestFacade),
+      rows = read().map(entry);
+    for (let i = 0; i < rows.length; i++)
+      if (invoke(rows[i], i, rows) === false) break;
+  };
+  headers.map = (fn, context) =>
+    read()
+      .map(entry)
+      .map(callback(fn, context || headers));
+  headers.filter = (fn, context) =>
+    read().map(entry).filter(callback(fn, context));
+  headers.find = (fn, context) => read().map(entry).find(callback(fn, context));
+  headers.reduce = (fn, initial, context) =>
+    read()
+      .map(entry)
+      .reduce(callback(fn, context || headers), initial);
 }
 export const headerEntriesSource = installHeaderEntries.toString();

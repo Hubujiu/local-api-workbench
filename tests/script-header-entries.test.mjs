@@ -122,3 +122,53 @@ test("Header object output keeps an existing prototype-like name as literal data
     JSON.stringify(result.tests),
   );
 });
+
+test("Header iterators honor context, early stop, live identity and explicit reduction", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers, context={prefix:'seen:',keys:[]};
+    h.each(function(e,i){this.keys.push(this.prefix+e.key);return false;},context);
+    pm.test('stop and context',()=>pm.expect(context.keys).to.deep.equal(['seen:X-One']));
+    h.each(function(e){pm.expect(this).to.equal(pm.request);return false;});
+    const names=h.map(function(e,i){pm.expect(this).to.equal(h);return i+':'+e.key;});
+    pm.test('map',()=>pm.expect(names).to.deep.equal(['0:X-One','1:x-one','2:Off']));
+    const selected=h.filter(function(e){return e.key.startsWith(this.prefix);},{prefix:'x-'});
+    pm.test('filter identity',()=>pm.expect(selected[0]).to.equal(h.idx(1)));
+    selected[0].value='filtered';
+    pm.test('find',()=>pm.expect(h.find(e=>e.disabled)).to.equal(h.idx(2)));
+    pm.test('missing',()=>pm.expect(h.find(e=>false)).to.equal(undefined));
+    const joined=h.reduce(function(acc,e){pm.expect(this).to.equal(h);return acc+e.value+'|';},'');
+    pm.test('reduce',()=>pm.expect(joined).to.equal('first|filtered|hidden|'));
+    for(const method of ['each','map','filter','find','reduce']) {
+      try { h[method]('key'); throw Error('accepted'); } catch(e) { if(e.message==='accepted')throw e; }
+    }
+  `,
+    input(),
+  );
+  assert.equal(result.tests.length, 6);
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+  assert.equal(result.request.headers[1].value, "filtered");
+});
+
+test("Header iterator snapshot excludes additions and callback errors remain failures", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers;
+    const keys=h.map(function(e,i){if(i===0)h.add({key:'Later',value:'new'});return e.key;});
+    pm.test('snapshot',()=>pm.expect(keys).to.deep.equal(['X-One','x-one','Off']));
+    pm.test('added',()=>pm.expect(h.count()).to.equal(4));
+  `,
+    input(),
+  );
+  assert.ok(result.tests.every((x) => x.passed));
+  await assert.rejects(
+    runScript(
+      `pm.request.headers.map(()=>{throw Error('iterator sentinel');});`,
+      input(),
+    ),
+    /iterator sentinel/,
+  );
+});

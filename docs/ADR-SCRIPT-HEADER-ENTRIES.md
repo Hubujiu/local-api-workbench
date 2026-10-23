@@ -57,3 +57,23 @@ an enabled-only request-level read is wanted.
 Regression first shows disabled reads, value membership and toObject differing;
 then verifies corrected semantics, live-member identity, detached output and
 unchanged on-wire disabled filtering.
+
+
+## Bounded collection iteration
+
+Function-only each/map/filter/find/reduce run within the same VM and existing
+budget. Explicit callback context is supported. each defaults to the request
+facade and stops on exactly false; map/reduce default to the Header collection.
+filter/find use the supplied context. Callbacks receive live entries, index and a
+new snapshot array; reduce additionally receives an explicit initial accumulator.
+Additions during traversal do not extend that snapshot. Selected entries remain
+live, but modifying the returned array does not change membership. Exceptions
+propagate rather than turning into successful results.
+
+Static PropertyList reference establishes callback context, early termination
+through its forEach, and collection iterator methods. This implementation does
+not accept Lodash predicate shorthands, claim mutation-during-iteration equivalence,
+or implement omitted-initial reduce inference. Existing header validation and
+stale-entry protection remain unchanged. Regression first reproduces ignored
+context and missing methods; browser and packaged fixtures exercise traversal
+and a selected entry's actual mutation without replacing existing wire assertions.
