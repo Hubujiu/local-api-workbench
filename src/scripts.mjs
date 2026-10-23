@@ -209,6 +209,7 @@ export function runScript(
           completedMessage.error
             ? Object.assign(Error(completedMessage.error), {
                 scriptStage: completedMessage.scriptStage,
+                scriptDiagnostics: completedMessage.scriptDiagnostics,
               })
             : null,
           completedMessage.result,

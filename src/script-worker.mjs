@@ -30,7 +30,8 @@ const callbacks = new Map(),
   replies = [];
 let wake,
   timerCount = 0,
-  requestCount = 0;
+  requestCount = 0,
+  fakerCalls = 0;
 const receive = (message) => {
   if (message.kind === "http") {
     replies.push(message);
@@ -131,15 +132,17 @@ try {
   scheduleTimer.dispose();
   cancelTimer.dispose();
 
-  let fakerCalls = 0;
   const fakerFunction = context.newFunction("__fakerVariable", (keyHandle) => {
     if (++fakerCalls > workerData.fakerLimit)
       return { error: context.newError("Faker变量最多1000次") };
     try {
       const value = fakerVariable(context.getString(keyHandle));
-      return value === undefined
-        ? context.undefined
-        : context.newString(JSON.stringify(value));
+      if (value === undefined) return context.undefined;
+      if (typeof value === "string") return context.newString(value);
+      if (typeof value === "number") return context.newNumber(value);
+      if (typeof value === "boolean")
+        return value ? context.true : context.false;
+      throw Error("Faker变量必须返回基础值");
     } catch (error) {
       return { error: context.newError(error.message) };
     }
@@ -157,7 +160,7 @@ try {
         task.then(()=>pendingTasks.delete(task),error=>{pendingTasks.delete(task);throw error;});
       }
     };
-    const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now(),((generate)=>key=>{const raw=generate(key);return raw===undefined?undefined:JSON.parse(raw);})(__fakerVariable));
+    const builtinVariable=(${builtinVariableFactory.toString()})(n=>JSON.parse(__randomBytes(n)),()=>Date.now(),__fakerVariable);
     delete globalThis.__fakerVariable;
     ((schedule,cancel)=>{
     globalThis.setTimeout=(callback,delay=0,...args)=>{
@@ -609,7 +612,16 @@ try {
     },
   };
 } catch (error) {
-  outcome = { error: error.message, scriptStage };
+  outcome = {
+    error: error.message,
+    scriptStage,
+    scriptDiagnostics: {
+      activityBudgetMs: workerData.activityBudgetMs,
+      fakerCalls,
+      timerCount,
+      requestCount,
+    },
+  };
 } finally {
   parentPort.off("message", receive);
   for (const callback of callbacks.values()) callback.dispose();

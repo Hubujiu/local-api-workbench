@@ -80,3 +80,37 @@ test("browser builtin catalogue exactly matches runtime supported names", async 
     browser.builtinVariableNames.length,
   );
 });
+
+test("Faker bridge preserves primitive types for the fixed catalogue and reports bounded failure counters", async () => {
+  const { fakerVariableNames, fakerVariable } = await import(
+    "../src/faker-variables.mjs"
+  );
+  const expected = Object.fromEntries(
+    fakerVariableNames.map((name) => [name, typeof fakerVariable(name)]),
+  );
+  const result = await runScript(
+    'apt.setVar("types",Object.fromEntries(' +
+      JSON.stringify(fakerVariableNames) +
+      ".map(name=>[name,typeof builtinVariable(name)])));",
+    { variables: {} },
+  );
+  assert.deepEqual(result.variables.types, expected);
+  assert.equal(result.usage.fakerCalls, fakerVariableNames.length);
+  await assert.rejects(
+    runScript(
+      'for(let i=0;i<4;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
+      { variables: {} },
+      { fakerLimit: 3 },
+    ),
+    (error) => {
+      assert.match(error.message, /最多1000次/);
+      assert.deepEqual(error.scriptDiagnostics, {
+        activityBudgetMs: 250,
+        fakerCalls: 4,
+        timerCount: 0,
+        requestCount: 0,
+      });
+      return true;
+    },
+  );
+});
