@@ -330,6 +330,12 @@ try {
       },
       expect: actual => ({ to: { equal: expected => { if (actual !== expected) throw Error('Expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual)); } } })
     };
+    for (const key of ['setRequestHeader', 'setRequestQuery']) {
+      const legacy = apt[key];
+      pm[key] = (name, value) => legacy(name, String(value));
+    }
+    pm.removeRequestHeader = apt.removeRequestHeader;
+    pm.removeRequestQuery = apt.removeRequestQuery;
     const visualizer = {
       set: (template, data) => {
         if (!response) throw Error('响应可视化仅支持后置脚本');
@@ -404,7 +410,7 @@ try {
       "));",
   );
   run(
-    'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;}',
+    'if(request.scriptDialect==="apipost8"){apt.variables=pm.variables;apt.info=pm.info;apt.response=pm.response;for(const key of ["setRequestHeader","setRequestQuery","removeRequestHeader","removeRequestQuery"])apt[key]=pm[key];}',
   );
   run(
     "globalThis.csv2array = (()=>{const parse=" +

@@ -46,7 +46,7 @@ const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
-  if (request.url === "/script-form-body") {
+  if (request.url.split("?")[0] === "/script-form-body") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     response.writeHead(200, { "content-type": "application/json" });
@@ -54,6 +54,9 @@ const fixture = http.createServer(async (request, response) => {
       JSON.stringify({
         pairs: [...new URLSearchParams(Buffer.concat(chunks).toString())],
         contentType: request.headers["content-type"],
+        url: request.url,
+        helper: request.headers["x-helper"],
+        removed: request.headers["x-remove"] ?? null,
       }),
     );
     return;
@@ -4656,6 +4659,8 @@ try {
   await page.locator("#method").selectOption("POST");
   await page.locator("#url").fill(fixtureURL + "/script-form-body");
   await page.locator('[data-param="before"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#script-dialect").selectOption("apipost8");
   await page
     .locator("#script-code")
     .fill(
@@ -4700,6 +4705,8 @@ try {
   }
   const expandedFormScript =
     "// 扩展编辑器应用后仍需手动保存和发送\n" +
+    "apt.setRequestHeader('x-helper',null);pm.setRequestHeader('x-remove',1);pm.removeRequestHeader('X-REMOVE');\n" +
+    "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
     "pm.test('registration-count', () => pm.expect(pm.test.index()).to.equal(2));\n" +
     originalFormScript.replaceAll("; ", ";\n");
@@ -4750,6 +4757,17 @@ try {
     JSON.stringify(scriptFormResult),
   );
   const scriptFormWire = JSON.parse(scriptFormResult.body);
+  assert.equal(scriptFormWire.helper, "null");
+  assert.equal(scriptFormWire.removed, null);
+  assert.equal(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.get("shortcut"),
+    "false",
+  );
+  assert.equal(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.has("gone"),
+    false,
+  );
+
   assert.deepEqual(scriptFormWire.pairs, [
     ["tag", "first"],
     ["tag", "changed"],

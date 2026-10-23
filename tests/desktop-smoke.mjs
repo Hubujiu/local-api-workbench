@@ -137,7 +137,8 @@ try {
   await window
     .locator("#script-code")
     .fill(
-      'pm.test.skip("packaged-pending",()=>{throw Error("not executed")});pm.test("packaged-test-index",()=>pm.expect(pm.test.index()).to.equal(2));' +
+      'apt.setRequestHeader("x-packaged-shortcut",null);pm.setRequestQuery("packaged-shortcut",false);pm.removeRequestQuery("packaged-shortcut");pm.removeRequestHeader("x-packaged-shortcut");' +
+        'pm.test.skip("packaged-pending",()=>{throw Error("not executed")});pm.test("packaged-test-index",()=>pm.expect(pm.test.index()).to.equal(2));' +
         'pm.test("packaged-json5",()=>pm.expect(require("json5").parse("{unquoted:1,}").unquoted).to.equal(1));' +
         'pm.test("packaged-schema",()=>pm.response.to.have.jsonSchema({type:"object",properties:{message:{type:"string"}},required:["message"]}));' +
         'apt.variables.set("packagedPrivate","local"); apt.test("packaged-dialect",()=>{apt.expect(apt.response.json()).to.deep.equal(pm.response.json());apt.expect(typeof apt.response.headers.get).to.equal("function");});await Promise.resolve();pm.test("packaged-utilities",()=>{pm.expect(_.sum([1,2,3])).to.equal(6);pm.expect(apt.environment.getName()).to.be.a("string").and.not.empty;pm.expect(pm.environment.id).to.be.a("string").and.not.empty;pm.expect(apt.info.eventName).to.equal("test");pm.expect(apt.info.iteration).to.equal(0);pm.expect(apt.info.iterationCount).to.equal(1);pm.expect(pm.iterationData.toObject()).to.deep.equal({});pm.expect(csv2array("name,age")[0]).to.deep.equal(["name","age"]);apt.expect(xml2Json("<a>ok</a>").a).to.equal("ok");pm.expect(moment.utc("2024-02-28").add(1,"day").format("YYYY-MM-DD")).to.equal("2024-02-29");pm.expect(uuid.validate(uuid.v4())).to.equal(true)});console.log("packaged-script-ok"); pm.test("packaged-crypto",()=>pm.expect(CryptoJS.SHA256("abc").toString()).to.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));' +
