@@ -344,3 +344,41 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
   );
   assert.deepEqual(doc, original);
 });
+
+test("modern plain text body mode preserves literal bytes and media type over HTTP", async (t) => {
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        body: Buffer.concat(chunks).toString(),
+        type: req.headers["content-type"],
+      }),
+    );
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  doc.apis[1].method = "POST";
+  doc.apis[1].request.body = {
+    mode: "plain",
+    raw: "literal + & = 中文\nsecond line",
+    parameter: [],
+  };
+  const original = structuredClone(doc);
+  importIntoProject(p, doc);
+  const env = p.environments.find((x) => x.id !== "existing");
+  const request = interpolate(
+    resolveServiceRequest(p, p.requests[0], env.id),
+    environmentVariables(p, env.id),
+  );
+  assert.equal(request.bodyType, "raw");
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.body, doc.apis[1].request.body.raw);
+  assert.equal(wire.type, "text/plain");
+  assert.deepEqual(doc, original);
+});

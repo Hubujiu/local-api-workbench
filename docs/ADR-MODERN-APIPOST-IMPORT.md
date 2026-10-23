@@ -97,3 +97,13 @@ disabled duplicate. End-to-end import/interpolation/HTTP verifies both active
 headers and duplicate query values survive with unchanged source input; browser
 import also verifies the constructed duplicate header values. Combined row
 limits still apply through the existing legacy parameter conversion.
+
+
+Modern RequestBodyContentType in the pinned ecosystem src/types/apis/request.ts
+includes plain, whereas the legacy adapter calls the same text/plain form text.
+Map the modern spelling to the existing text import path rather than reject a
+nonempty plain-text request. Preserve literal bytes and existing explicit
+Content-Type precedence. The existing empty-body and JSON rules are unchanged;
+this alias does not imply support for every binary or native body representation.
+A red regression followed by real HTTP checks text bytes and text/plain, and the
+browser modern import exercises the plain body as a POST request.

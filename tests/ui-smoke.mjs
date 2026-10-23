@@ -2765,6 +2765,9 @@ try {
   const modern = modernApipostFixture();
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
+  modern.apis[1].method = "POST";
+  modern.apis[1].request.body.mode = "plain";
+  modern.apis[1].request.body.raw = "browser plain + & = text";
   modern.apis[1].mock_ip_white_list_enable = -1;
   modern.apis[1].request.header.parameter.push(
     { key: "X-Imported-Repeat", value: "first", is_checked: 1 },
@@ -2818,6 +2821,8 @@ try {
   const modernResult = await (await modernResponse).json();
   assert.equal(modernResult.status, 200, JSON.stringify(modernResult));
   assert.equal(modernResult.request.headers["x-test"], "current");
+  assert.equal(modernResult.request.body, "browser plain + & = text");
+  assert.equal(modernResult.request.headers["content-type"], "text/plain");
   assert.deepEqual(modernResult.request.headers["x-imported-repeat"], [
     "first",
     "second",

@@ -356,6 +356,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
                 description: node.description ?? "",
                 body: {
                   ...request.body,
+                  mode:
+                    request.body?.mode === "plain"
+                      ? "text"
+                      : request.body?.mode,
                   raw_schema: models.rewrite(request.body?.raw_schema ?? {}),
                 },
                 header: merge("header"),
