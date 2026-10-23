@@ -98,3 +98,51 @@ test("encoded query additions preserve interpolation names and decode only liter
     );
   }
 });
+
+test("removing template-named query keys decodes literal spans but never percent or plus inside tokens", async () => {
+  for (const scriptDialect of ["legacy", "apipost8"]) {
+    const url =
+      "http://localhost/p?prefix+{{key%+&=}}%2Btail=drop&encoded=a%2Bb&bad%zz=keep#fragment";
+    for (const method of [
+      "pm.removeRequestQuery",
+      "pm.request.removeQueryParams",
+    ]) {
+      const result = await runScript(`${method}('prefix {{key%+&=}}+tail');`, {
+        variables: {},
+        request: { scriptDialect, url, query: [] },
+      });
+      assert.equal(
+        result.request.url,
+        "http://localhost/p?encoded=a%2Bb&bad%zz=keep#fragment",
+      );
+    }
+  }
+});
+
+test("template-named query removal happens before resolution and actual HTTP", async (t) => {
+  const http = await import("node:http");
+  const { runPlan } = await import("../src/core.mjs");
+  const { executeRequest } = await import("../src/runtime.mjs");
+  const server = http.createServer((req, res) => res.end(req.url));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const result = await runPlan(
+    {
+      steps: [
+        {
+          request: {
+            url:
+              "http://127.0.0.1:" +
+              server.address().port +
+              "/?{{missing%+&=}}=drop&keep=a%2Bb",
+            beforeScript: 'pm.request.removeQueryParams("{{missing%+&=}}");',
+          },
+        },
+      ],
+    },
+    {},
+    executeRequest,
+  );
+  assert.equal(result.status, "passed", JSON.stringify(result));
+  assert.equal(result.results[0].response.body, "/?keep=a%2Bb");
+});

@@ -33,3 +33,13 @@ verify exact retained URI text and real interpolation/HTTP with an unchanged
 saved plan. Browser coverage uses request-local variables containing delimiters
 and verifies the removed parameter is absent on the wire; packaged runtimes also
 exercise the same token-aware operations. Exact-head CI remains required.
+
+Removal now shares the token-aware component decoder used by query additions.
+Previously it split around balanced interpolation tokens correctly but then
+called decodeURIComponent over the entire key. A percent sign inside a valid
+template name could throw, and a plus inside the token could become a space,
+preventing an exact literal name from being removed. Only literal spans now use
+percent/plus decoding; token text remains opaque. Invalid escapes outside tokens
+still leave the original row untouched. Both compatibility dialects and removal
+entry points have regressions; a real loopback request proves the removed token
+is not subsequently resolved and untouched encoded fields retain their spelling.

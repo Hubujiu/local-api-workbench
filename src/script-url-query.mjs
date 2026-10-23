@@ -57,7 +57,7 @@ function createURLQueryTools() {
       const at = positions(row, "=", true);
       const key = at < 0 ? row : row.slice(0, at);
       try {
-        return !selected.has(decodeURIComponent(key.replace(/\+/g, " ")));
+        return !selected.has(decodeComponent(key));
       } catch {
         return true;
       }
