@@ -2988,6 +2988,33 @@ try {
     .getByText("现代Apipost JSON有限互操作", { exact: false })
     .waitFor();
   assert.equal(await page.locator("#url").inputValue(), "/auth");
+  const importNotice = page.getByRole("region", { name: "导入兼容性提示" });
+  const noticeLayout = await importNotice.evaluate((element) => ({
+    height: element.clientHeight,
+    content: element.scrollHeight,
+    viewport: innerHeight,
+    rootFont: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    overflow: getComputedStyle(element).overflowY,
+  }));
+  assert.ok(noticeLayout.height > 0, JSON.stringify(noticeLayout));
+  assert.ok(
+    noticeLayout.height <=
+      Math.min(18 * noticeLayout.rootFont, 0.35 * noticeLayout.viewport) + 1,
+    JSON.stringify(noticeLayout),
+  );
+  assert.ok(
+    noticeLayout.content > noticeLayout.height,
+    JSON.stringify(noticeLayout),
+  );
+  assert.equal(noticeLayout.overflow, "auto");
+  await importNotice.focus();
+  await page.keyboard.press("PageDown");
+  await page.waitForFunction(
+    () => document.querySelector(".import-notes").scrollTop > 0,
+  );
+  await importNotice.evaluate((element) => {
+    element.scrollTop = 0;
+  });
   await page.locator(".imported-script-tasks > summary").click();
   await page
     .locator(".import-notes")

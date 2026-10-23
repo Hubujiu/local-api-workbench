@@ -2129,6 +2129,16 @@ dialog:has(#cookie-line) {
   max-width: 100%;
 }
 
+.import-notes {
+  max-height: min(18rem, 35vh);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+}
+.import-notes:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .imported-script-tasks {
   margin: 10px 0;
 }
