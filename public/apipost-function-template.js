@@ -13,11 +13,24 @@ export function parseApipostFunctionTemplate(value) {
     new TextEncoder().encode(value).length > 65536
   )
     throw Error("原版函数模板须为不超过64KiB的文本");
-  const match = /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)\}\}$/.exec(
-    value,
-  );
-  if (!match) throw Error("仅支持完整的原版函数模板，不支持嵌套、拼接或加工链");
-  return { name: match[1].toLowerCase(), argument: match[2] };
+  const match =
+    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|fn_[A-Za-z0-9_]+)*)\}\}$/.exec(
+      value,
+    );
+  if (!match)
+    throw Error("仅支持完整原版函数模板及无参数fn_加工链，不支持嵌套或拼接");
+  const pipeline = match[3]
+    ? match[3]
+        .slice(1)
+        .split("|")
+        .map((name) => name.toLowerCase())
+    : [];
+  if (pipeline.length > 9) throw Error("每个原版函数模板最多10个函数阶段");
+  return {
+    name: match[1].toLowerCase(),
+    argument: match[2],
+    ...(pipeline.length ? { pipeline } : {}),
+  };
 }
 export function validateApipostTemplateRequest(request) {
   const entries = [];
@@ -78,10 +91,10 @@ export function validateApipostTemplateRequest(request) {
     throw Error("原版函数模板暂不支持SDK URL模式或前后置脚本/操作组合");
   let count = 0;
   for (const { row } of entries) {
-    parseApipostFunctionTemplate(row.dynamic.value);
+    const parsed = parseApipostFunctionTemplate(row.dynamic.value);
     if (row.dynamic.functions?.length)
       throw Error("原版函数模板暂不支持额外加工链");
-    if (row.enabled !== false) count++;
+    if (row.enabled !== false) count += 1 + (parsed.pipeline?.length || 0);
   }
   if (count > 20) throw Error("每个请求最多20次动态函数处理");
 }

@@ -6592,6 +6592,13 @@ try {
     func_body:
       'return JSON.stringify({input:text,literal:"{{literal}}",price:"$5"});',
   });
+  templateModern.global.custom_func.push({
+    func_id: "body-pipeline-function",
+    project_id: templateModern.project_id,
+    func_name: "fn_after",
+    func_desc: "Body pipeline",
+    func_body: 'return text.replace("updated-json","updated-chain");',
+  });
   const nativeBodyTemplateAPI = modernApipostFixture().apis[1];
   nativeBodyTemplateAPI.target_id = "body-template-api";
   nativeBodyTemplateAPI.name = "Source raw body function";
@@ -6600,7 +6607,7 @@ try {
   nativeBodyTemplateAPI.request.query.parameter = [];
   nativeBodyTemplateAPI.request.body = {
     mode: "json",
-    raw: "{{$function.fn_body(raw)}}",
+    raw: "{{$function.fn_body(raw)|fn_after}}",
   };
   templateModern.apis.push(nativeBodyTemplateAPI);
   templateModern.apis[1].method = "POST";
@@ -6843,14 +6850,14 @@ try {
   assert.equal(await page.locator("#dynamic-format").isDisabled(), true);
   await page
     .locator("#dynamic-value")
-    .fill("{{$function.fn_body(updated-json)}}");
+    .fill("{{$function.fn_body(updated-json)|fn_after}}");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify(
         JSON.stringify({
-          input: "updated-json",
+          input: "updated-chain",
           literal: "{{literal}}",
           price: "$5",
         }),
@@ -6886,7 +6893,7 @@ try {
   assert.equal(
     JSON.parse(bodyTemplateResult.body).body,
     JSON.stringify({
-      input: "updated-json",
+      input: "updated-chain",
       literal: "{{literal}}",
       price: "$5",
     }),
@@ -6900,7 +6907,7 @@ try {
   ).requests.find((r) => r.id === bodyTemplateRequest.id);
   assert.deepEqual(savedBodyTemplate.bodyDynamic.apipost_body, {
     source: "apipost-body-function",
-    value: "{{$function.fn_body(updated-json)}}",
+    value: "{{$function.fn_body(updated-json)|fn_after}}",
     functions: [],
     format: "text",
   });

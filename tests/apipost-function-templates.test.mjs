@@ -270,7 +270,7 @@ test("Query template budgets, disabled values, VM authority and editor preservat
     resolveDynamicValue(spec(input), {}, [fn('return "中".repeat(30000);')]),
   );
   for (const bad of [
-    "{{$function.fn_wrap(a)|fn_wrap}}",
+    "{{$function.fn_wrap(a)|fn_wrap(arg)}}",
     "{{$function.fn_wrap({{a}})}}",
     "prefix " + input,
   ])

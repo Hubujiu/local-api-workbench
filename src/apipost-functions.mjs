@@ -89,10 +89,14 @@ export function mergeApipostFunctions(
       ) {
         if (!allowed)
           throw Error(
-            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本或完整正文值；加工链暂不支持",
+            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本或完整正文值；仅支持无参数fn_加工链",
           );
         const parsed = parseApipostFunctionTemplate(value);
-        if (!names.has(parsed.name))
+        if (
+          [parsed.name, ...(parsed.pipeline || [])].some(
+            (name) => !names.has(name),
+          )
+        )
           throw Error("Apipost函数模板引用不存在的来源函数");
       }
       if (value && typeof value === "object") {

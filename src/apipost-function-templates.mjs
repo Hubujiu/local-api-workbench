@@ -9,21 +9,44 @@ export async function resolveApipostFunctionTemplate(
 ) {
   if (!["query", "headers", "form", "body"].includes(group))
     throw Error("原版函数模板参数位置无效");
-  const { name, argument } = parseApipostFunctionTemplate(expression);
-  const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
-  if (matches.length !== 1 || !matches[0].apipostSource)
-    throw Error("原版函数模板必须引用唯一的已导入共享函数: " + name);
-  const fn = matches[0];
-  validateResources({ functions: [fn] });
-  // Deliberately do not use the direct-script wrapper, which catches to input text.
-  // Template calls have a different synchronous-error fallback and are not awaited.
-  const code = `
-    let output;
-    try { output=(function(text){\n${fn.body}\n})(${JSON.stringify(argument)}); }
-    catch(error) { output=${JSON.stringify(expression)}; }
-    if (!['string','number','boolean'].includes(typeof output) && output !== null)
+  const {
+    name,
+    argument,
+    pipeline = [],
+  } = parseApipostFunctionTemplate(expression);
+  const selected = [name, ...pipeline].map((name) => {
+    const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
+    if (matches.length !== 1 || !matches[0].apipostSource)
+      throw Error("原版函数模板必须引用唯一的已导入共享函数: " + name);
+    return matches[0];
+  });
+  validateResources({
+    functions: [...new Map(selected.map((fn) => [fn.name, fn])).values()],
+  });
+  const baseExpression = pipeline.length
+    ? expression.slice(0, expression.indexOf("|")) + "}}"
+    : expression;
+  // Source pipelines preserve the previous value after a synchronous stage error.
+  // Async and budget failures remain errors; checks run outside those catch blocks.
+  const check = `
+    if (typeof output !== 'string' && typeof output !== 'number' && typeof output !== 'boolean' && output !== null)
       throw Error('原版函数模板暂仅支持同步基本类型结果');
-    if (typeof output === 'number' && !Number.isFinite(output)) throw Error('原版函数模板结果必须有限');
+    if (typeof output === 'number' && !__apipostFinite(output)) throw Error('原版函数模板结果必须有限');
+    { const serialized=__apipostStringify(output);let bytes=0;for(let i=0;i<serialized.length;i++){const cp=__apipostCharCode(serialized,i);if(cp>=55296 && cp<=56319){bytes+=4;i++;}else bytes+=cp<=127?1:cp<=2047?2:3;if(bytes>65536)throw Error('原版函数模板结果超过64KiB');} }
+  `;
+  const code = `
+    const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
+    let output;
+    try { output=(function(text){\n${selected[0].body}\n})(${JSON.stringify(argument)}); }
+    catch(error) { output=${JSON.stringify(baseExpression)}; }
+    ${check}
+    ${selected
+      .slice(1)
+      .map(
+        (fn) =>
+          `{ const input=output;try{output=(function(text){\n${fn.body}\n})(input);}catch(error){output=input;} ${check} }`,
+      )
+      .join("\n")}
     apt.setVar('functionTemplateResult', output);
   `;
   const result = await runScript(
