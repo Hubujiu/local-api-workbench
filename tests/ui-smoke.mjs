@@ -6382,6 +6382,24 @@ try {
   nativeModern.global.envs[0].server_list[0].uri = fixtureURL;
   nativeModern.apis[1].url = "/auth";
   nativeModern.apis[1].request.query.parameter = [];
+  nativeModern.global.custom_func = [
+    {
+      func_id: "native-function",
+      project_id: nativeModern.project_id,
+      func_name: "fn_wrap",
+      func_desc: "Imported function",
+      func_body: 'return "["+text+"]";',
+    },
+  ];
+  nativeModern.apis[1].request.pre_tasks = [
+    {
+      id: "native-function-call",
+      type: "customScript",
+      name: "Named function call",
+      enabled: 1,
+      data: 'pm.setRequestHeader("X-Native-Function", fn_wrap("native"));',
+    },
+  ];
   const nativeFiles = nativeDirectoryFixture(nativeModern);
   for (const file of nativeFiles.files) {
     const filePath = path.join(nativeImportRoot, file.path);
@@ -6459,6 +6477,11 @@ try {
   const nativeResult = await (await nativeResponse).json();
   assert.equal(nativeResult.status, 200, JSON.stringify(nativeResult));
   assert.equal(nativeResult.request.headers["x-test"], "current");
+  assert.equal(nativeResult.request.headers["x-native-function"], "[native]");
+  assert.equal(
+    nativeProject.settings.functions[0].apipostSource.id,
+    "native-function",
+  );
   assert.equal(nativeExecutions, 1);
   page.off("request", countNativeExecution);
   for (const file of nativeFiles.files)
@@ -6467,6 +6490,37 @@ try {
       file.text,
     );
   await page.screenshot({ path: "/tmp/local-api-native-json-subset.png" });
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-settings-anchor="resource-functions"]').click();
+  await page.locator("[data-edit-function]").first().click();
+  await page
+    .locator("#dialog-content")
+    .getByText("原版共享函数模式", { exact: false })
+    .waitFor();
+  await page.locator("#function-body").fill('return "<"+text+">";');
+  await page.locator("#function-input").fill('"edit"');
+  await page.locator("#test-function").click();
+  await page
+    .locator("#function-result")
+    .getByText("<edit>", { exact: false })
+    .waitFor();
+  await page.screenshot({
+    path: "/tmp/local-api-imported-function-editor.png",
+  });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const editedImportedFunction = (await app.store.get(nativeProjectId)).settings
+    .functions[0];
+  assert.equal(editedImportedFunction.body, 'return "<"+text+">";');
+  assert.deepEqual(
+    editedImportedFunction.apipostSource,
+    nativeProject.settings.functions[0].apipostSource,
+  );
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

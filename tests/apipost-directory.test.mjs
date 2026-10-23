@@ -148,7 +148,7 @@ test("native JSON subset imports atomically and preserves environment resolution
   bad.files.find((f) => f.path === "settings/custom_funcs.json").text =
     '[{"func_name":"unsupported","func_body":"return text;"}]';
   const before = structuredClone(p);
-  assert.throws(() => importIntoProject(p, bad), /custom_func/);
+  assert.throws(() => importIntoProject(p, bad), /共享函数/);
   assert.deepEqual(p, before);
 });
 

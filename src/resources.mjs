@@ -42,6 +42,30 @@ export function validateResources(settings = {}) {
       (fn.kind !== undefined && !["transform", "script"].includes(fn.kind))
     )
       throw Error("函数定义无效");
+    if (fn.apipostSource !== undefined) {
+      const origin = fn.apipostSource;
+      if (
+        fn.kind !== "transform" ||
+        !/^fn_[A-Za-z0-9_]+$/.test(fn.name) ||
+        fn.name.length > 200 ||
+        !origin ||
+        typeof origin !== "object" ||
+        Array.isArray(origin) ||
+        Object.keys(origin).some(
+          (k) => !["projectId", "id", "description"].includes(k),
+        ) ||
+        typeof origin.projectId !== "string" ||
+        !origin.projectId ||
+        origin.projectId.length > 200 ||
+        (origin.id !== undefined &&
+          (typeof origin.id !== "string" ||
+            !origin.id ||
+            origin.id.length > 200)) ||
+        typeof origin.description !== "string" ||
+        origin.description.length > 8000
+      )
+        throw Error("Apipost共享函数来源或名称无效");
+    }
     bytes += Buffer.byteLength(fn.body);
   }
   if (bytes > 256000) throw Error("共享函数总大小超过256KB");

@@ -4235,6 +4235,7 @@ function editFunction(index) {
   const existing = project.settings?.functions?.[index];
   let tested = "";
   const read = () => ({
+    ...(existing || {}),
     name: $("#function-name").value.trim(),
     kind: existing?.kind || (existing ? "script" : "transform"),
     body: $("#function-body").value,
@@ -4243,7 +4244,7 @@ function editFunction(index) {
     JSON.stringify([read(), $("#function-input").value]);
   modal(
     existing ? "编辑自定义函数" : "新建自定义函数",
-    `<label>函数名称</label><input id="function-name" value="${esc(existing?.name || "")}" ${existing ? "disabled" : ""}><label>函数主体（${existing && existing.kind !== "transform" ? "args 数组" : "text 输入值"}）</label><textarea id="function-body"></textarea><label>测试输入（JSON）</label><textarea id="function-input">"示例"</textarea><button id="test-function" type="button">测试函数</button><pre id="function-result">尚未测试</pre>`,
+    `${existing?.apipostSource ? '<p class="notice">原版共享函数模式：可在脚本中直接调用fn_名称；同步异常返回text输入，不代表函数全部语义兼容。来源元数据会保留。</p>' : ""}<label>函数名称</label><input id="function-name" value="${esc(existing?.name || "")}" ${existing ? "disabled" : ""}><label>函数主体（${existing && existing.kind !== "transform" ? "args 数组" : "text 输入值"}）</label><textarea id="function-body"></textarea><label>测试输入（JSON）</label><textarea id="function-input">"示例"</textarea><button id="test-function" type="button">测试函数</button><pre id="function-result">尚未测试</pre>`,
     async () => {
       const fn = read();
       if (!tested || tested !== fingerprint())

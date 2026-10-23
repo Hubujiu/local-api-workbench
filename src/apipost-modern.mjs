@@ -1,3 +1,4 @@
+import { mergeApipostFunctions } from "./apipost-functions.mjs";
 import { prepareModernSamples } from "./apipost-samples.mjs";
 import { mergeApipostDescriptions } from "./apipost-descriptions.mjs";
 import {
@@ -222,7 +223,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of ["mock_custom_rules", "db_link", "custom_func"])
+  for (const name of ["mock_custom_rules", "db_link"])
     reject(global[name], "global." + name);
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
@@ -750,6 +751,16 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   });
   const settings = {
     ...(project.settings ?? {}),
+    ...(!empty(global.custom_func) || project.settings?.functions !== undefined
+      ? {
+          functions: mergeApipostFunctions(
+            empty(global.custom_func) ? [] : global.custom_func,
+            project.settings?.functions || [],
+            source.project_id,
+            source,
+          ),
+        }
+      : {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
     parameterDescriptions: mergeApipostDescriptions(
       empty(global.describe_library) ? [] : global.describe_library,
@@ -767,6 +778,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     ),
   };
   validateResources(settings);
+  if (!empty(global.custom_func))
+    for (const request of ordinaryRequests)
+      request.importNotes.push(
+        "原版共享函数仅支持沙箱脚本中的fn_调用；同步异常按来源语义返回text输入。参数模板/加工链不兼容会拒绝，函数不在导入时执行，运行仍受原沙箱限制。",
+      );
   const components = structuredClone(project.openapiComponents ?? {});
   components.schemas ??= {};
   for (const [key, schema] of Object.entries(models.schemas)) {

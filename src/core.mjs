@@ -1738,6 +1738,13 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     modern?.samples?.length || modern?.caseFolders?.length
       ? new Map(requests.map((request) => [request.sourceOperationId, id()]))
       : null;
+  const sampleFunctions = modern?.metadata?.settings?.functions || [];
+  if (
+    (modern?.samples?.length || 0) *
+      Buffer.byteLength(JSON.stringify(sampleFunctions)) >
+    4 * 1024 * 1024
+  )
+    throw Error("导入用例函数快照合计最多4MiB，请分批导入或简化函数库");
   const importedCases = (modern?.samples || []).map((sample) =>
     snapshotCase({
       id: sample.id,
@@ -1745,7 +1752,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       sourceRequestId: importedRequestIds.get(sample.sourceOperationId),
       ...(sample.folderId ? { folderId: sample.folderId } : {}),
       request: sample.request,
-      functions: [],
+      functions: sampleFunctions,
     }),
   );
   if (importedCases.length) {

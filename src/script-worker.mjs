@@ -375,15 +375,24 @@ try {
   const library =
     "const utils=Object.create(null);\n" +
     (workerData.input.functions || [])
-      .map(
-        (fn) =>
-          "utils[" +
-          JSON.stringify(fn.name) +
-          (fn.kind === "transform"
-            ? "]=(text,...rest)=>{const args=[text,...rest];\n"
-            : "]=(...args)=>{\n") +
-          fn.body +
-          "\n};",
+      .map((fn) =>
+        fn.apipostSource
+          ? "function " +
+            fn.name +
+            "(text) { try {\n" +
+            fn.body +
+            "\n} catch(e) { return text; } } utils[" +
+            JSON.stringify(fn.name) +
+            "] = " +
+            fn.name +
+            ";"
+          : "utils[" +
+            JSON.stringify(fn.name) +
+            (fn.kind === "transform"
+              ? "]=(text,...rest)=>{const args=[text,...rest];\n"
+              : "]=(...args)=>{\n") +
+            fn.body +
+            "\n};",
       )
       .join("\n");
   const run = (code) => {
