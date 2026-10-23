@@ -280,14 +280,23 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     if (queryFlag !== undefined && ![0, -1, 1].includes(queryFlag))
       throw Error("Apipost Query等号选项无效");
     const queryAddEqual = queryFlag === undefined || queryFlag === 1;
-    const response = {};
+    const response = {},
+      responseDelays = [];
     for (const [index, item] of list(
       node.response?.example ?? [],
       "response.example",
     ).entries()) {
       if (!object(item) || !object(item.expect))
         throw Error("Apipost响应示例无效");
-      if (item.expect.sleep) throw Error("Apipost响应延迟需手工迁移");
+      const delay = item.expect.sleep;
+      if (
+        delay !== undefined &&
+        (!Number.isInteger(delay) || delay < 0 || delay > 5000)
+      )
+        throw Error("Apipost响应延迟须为0至5000毫秒整数");
+      if (item.raw === undefined && delay > 0)
+        throw Error("Apipost响应延迟需要明确示例正文");
+      if (item.raw !== undefined) responseDelays.push(delay);
       reject(item.headers, "响应示例头");
       response["example" + index] = {
         ...item,
@@ -343,6 +352,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       url,
       serviceId,
       queryAddEqual,
+      responseDelays,
       legacy: {
         ...node,
         url: serviceId ? "https://migration.invalid" + url : url,
@@ -382,6 +392,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     request.url = row.url;
     request.serviceId = row.serviceId;
     request.queryAddEqual = row.queryAddEqual;
+    if (row.responseDelays.length !== request.examples.length)
+      throw Error("Apipost响应延迟与示例映射不一致");
+    row.responseDelays.forEach((delay, index) => {
+      if (delay !== undefined) request.examples[index].delayMs = delay;
+    });
+    if (row.responseDelays.some((delay) => delay > 0))
+      request.importNotes.push(
+        "响应示例延迟已保留（最多5000ms）；OpenAPI不承载Mock延迟，请用项目备份保留。",
+      );
     request.httpVersion = row.node.protocol === "http/2" ? "2" : "1.1";
     request.statusId = row.node.mark_id
       ? resource("mark", row.node.mark_id)

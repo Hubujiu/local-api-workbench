@@ -105,3 +105,23 @@ Content-Type precedence. The existing empty-body and JSON rules are unchanged;
 this alias does not imply support for every binary or native body representation.
 A red regression followed by real HTTP checks text bytes and text/plain, and the
 browser modern import exercises the plain body as a POST request.
+
+
+## Bounded response-example delays
+
+Original Offline2 work.asar chunks 4959.fdf01f04cb8d.js and
+5658.b952f110e2a1.js bind response expect.sleep to controls explicitly labelled
+ms. Map this field to the existing response example delayMs, without executing
+the original application. Absent remains absent; explicit integers 0–5000 are
+preserved, including empty-body examples. Negative/fractional/non-numeric or
+larger values reject atomically instead of being clamped. A positive delay on
+a definition without an explicit raw example rejects because there is no runnable
+example to carry it. Legacy import semantics are unchanged.
+
+The conversion validates a one-to-one executable-example/delay mapping after the
+legacy shape adapter. Project save/load and Mock selection preserve timing;
+actual local Mock HTTP verifies the imported response still waits. Browser import
+opens the example editor and checks its exact delay. This does not enable Mock
+automatically, add original rule/branch support or raise the existing 5000ms cap.
+OpenAPI does not carry Mock timing; import notes explicitly recommend project
+backup when this metadata must be retained.

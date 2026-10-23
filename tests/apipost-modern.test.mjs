@@ -394,3 +394,73 @@ test("modern plain text body mode preserves literal bytes and media type over HT
   assert.equal(wire.type, "text/plain");
   assert.deepEqual(doc, original);
 });
+
+test("modern response delays preserve milliseconds through import, persistence and real Mock HTTP", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "modern-delay-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((r) => app.server.close(r));
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  });
+  const p = await app.store.create("Delayed imported example"),
+    doc = fixture();
+  doc.apis[1].response.example[0].expect.sleep = 80;
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.equal(p.requests[0].examples[0].delayMs, 80);
+  assert.ok(
+    p.requests[0].importNotes.some(
+      (x) => x.includes("OpenAPI") && x.includes("延迟"),
+    ),
+  );
+  await app.store.save(p);
+  const saved = await app.store.get(p.id);
+  assert.equal(saved.requests[0].examples[0].delayMs, 80);
+  const start = performance.now();
+  const response = await fetch(
+    app.url + "/mock/" + p.id + "/" + p.requests[0].id,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), '{"ok":true}');
+  assert.ok(
+    performance.now() - start >= 60,
+    "configured 80ms Mock delay must not be discarded",
+  );
+  assert.deepEqual(doc, before);
+});
+
+test("modern response delay limits and definition-only delays reject atomically", () => {
+  for (const delay of [-1, 5001, 1.5, "80", null, false]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].response.example[0].expect.sleep = delay;
+    assert.throws(() => importIntoProject(p, doc), /延迟/);
+    assert.deepEqual(p, before);
+  }
+  const doc = fixture(),
+    p = project(),
+    before = structuredClone(p);
+  delete doc.apis[1].response.example[0].raw;
+  doc.apis[1].response.example[0].expect.sleep = 1;
+  assert.throws(() => importIntoProject(p, doc), /延迟/);
+  assert.deepEqual(p, before);
+  for (const delay of [0, 5000]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].response.example[0].raw = "";
+    doc.apis[1].response.example[0].expect.sleep = delay;
+    importIntoProject(p, doc);
+    assert.equal(p.requests[0].examples[0].delayMs, delay);
+    assert.equal(p.requests[0].examples[0].body, "");
+  }
+});

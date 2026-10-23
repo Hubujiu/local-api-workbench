@@ -2801,7 +2801,12 @@ try {
   );
   modern.apis[1].response.example.push({
     raw: "",
-    expect: { code: "204", content_type: "text", name: "Imported empty body" },
+    expect: {
+      code: "204",
+      content_type: "text",
+      name: "Imported empty body",
+      sleep: 80,
+    },
   });
   modern.apis[1].request.query.parameter = [];
   modern.models = [
@@ -2863,6 +2868,8 @@ try {
   );
   assert.equal(await page.locator("#ex-status").inputValue(), "204");
   assert.equal(await page.locator("#ex-body").inputValue(), "");
+  assert.equal(await page.locator("#ex-delay").inputValue(), "80");
+  await page.screenshot({ path: "/tmp/local-api-imported-example-delay.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   await page.locator('[data-page="dictionary"]').click();
