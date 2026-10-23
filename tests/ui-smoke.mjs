@@ -3304,6 +3304,7 @@ try {
   ]);
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.reload();
+  await page.locator(`[data-request="${taskSourceRequest.id}"]`).click();
   await page.locator('[data-mode="cases"]').click();
   await page
     .locator(
