@@ -209,3 +209,31 @@ test("native subset retains model and sample group links through existing atomic
   assert.equal(p.cases[0].sourceRequestId, p.requests[0].id);
   assert.equal(p.cases[0].folderId, p.caseFolders[0].id);
 });
+
+test("cancelled directory selection stops before reading remaining files", async () => {
+  const { selectedDirectoryDocument } = await import(
+    "../public/apipost-directory-input.js"
+  );
+  let stop = false,
+    reads = 0;
+  const files = nativeDirectoryFixture().files.map((f) => ({
+    webkitRelativePath: "root/" + f.path,
+    size: Buffer.byteLength(f.text),
+    arrayBuffer: async () => {
+      reads++;
+      stop = true;
+      return new TextEncoder().encode(f.text).buffer;
+    },
+  }));
+  await assert.rejects(
+    () => selectedDirectoryDocument(files, { shouldStop: () => stop }),
+    /已取消/,
+  );
+  assert.equal(reads, 1);
+  reads = 0;
+  await assert.rejects(
+    () => selectedDirectoryDocument(files, { shouldStop: () => true }),
+    /已取消/,
+  );
+  assert.equal(reads, 0);
+});

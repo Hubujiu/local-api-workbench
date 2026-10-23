@@ -20,7 +20,10 @@ export function allowedDirectoryPath(path) {
       ))
   );
 }
-export async function selectedDirectoryDocument(selection) {
+export async function selectedDirectoryDocument(
+  selection,
+  { shouldStop = () => false } = {},
+) {
   const files = Array.from(selection || []);
   if (!files.length || files.length > 5000)
     throw Error("请选择原版项目目录，最多5000个JSON文件");
@@ -48,7 +51,9 @@ export async function selectedDirectoryDocument(selection) {
     throw Error("请选择含project.json的项目目录，不是上一级数据目录");
   const result = [];
   for (const { file, path } of entries) {
+    if (shouldStop()) throw Error("目录读取已取消");
     const bytes = await file.arrayBuffer();
+    if (shouldStop()) throw Error("目录读取已取消");
     if (bytes.byteLength !== file.size)
       throw Error("读取期间目录文件发生变化，请重新选择");
     let text;
