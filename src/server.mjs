@@ -717,6 +717,9 @@ export async function createApp({
                 subrequests: result.subrequests,
                 visualization: result.visualization,
                 scriptResponse: result.scriptResponse,
+                scriptStage: result.scriptStage,
+                scriptScope: result.scriptScope,
+                scriptDiagnostics: result.scriptDiagnostics,
                 error: result.error,
               });
             } finally {

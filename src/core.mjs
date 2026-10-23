@@ -1,3 +1,4 @@
+import { scriptFailureDetails } from "./script-diagnostics.mjs";
 import {
   normalizeCookieEncoding,
   requestCookieHeader,
@@ -643,8 +644,7 @@ export async function runPlan(
       scopes.environment = committedScopes.environment;
       scopes.globals = committedScopes.globals;
       record.error = error.message;
-      if (error.scriptStage) record.scriptStage = error.scriptStage;
-      if (error.scriptScope) record.scriptScope = error.scriptScope;
+      Object.assign(record, scriptFailureDetails(error));
       if (!record.request) {
         record.request = structuredClone(step.request);
         record.requestUnresolved = true;
