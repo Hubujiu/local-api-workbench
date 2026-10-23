@@ -68,12 +68,15 @@ function installScriptFormBody({ request, body }) {
     });
     return { rows, views };
   };
+  const checkTextFields = (item) => {
+    for (const name of Reflect.ownKeys(item))
+      if (!["key", "value", "type", "disabled", "description"].includes(name))
+        throw Error("脚本表单不支持字段: " + String(name));
+  };
   const textRow = (item, mode, previous) => {
     if (!item || typeof item !== "object" || Array.isArray(item))
       throw Error("表单项需要key/value对象");
-    for (const name of Object.keys(item))
-      if (!["key", "value", "type", "disabled", "description"].includes(name))
-        throw Error("脚本表单不支持字段: " + name);
+    checkTextFields(item);
     key(item.key, mode);
     if (item.type !== undefined && item.type !== "text")
       throw Error("脚本只能新增文本字段，文件须在界面选择");
@@ -143,7 +146,10 @@ function installScriptFormBody({ request, body }) {
         if (!patch || typeof patch !== "object" || Array.isArray(patch))
           throw Error("表单项update需要对象");
         if (row.type === "file") throw Error("已选择文件的集合记录只读");
-        replace(row, { ...view(), ...patch });
+        checkTextFields(patch);
+        const next = view();
+        for (const name of Reflect.ownKeys(patch)) next[name] = patch[name];
+        replace(row, next);
       };
       const proxy = new Proxy(Object.create(null), {
         get(_, name) {
@@ -280,7 +286,7 @@ function installScriptFormBody({ request, body }) {
       return result;
     }
     const mode = value.mode;
-    if (Object.keys(value).some((name) => !["mode", mode].includes(name)))
+    if (Reflect.ownKeys(value).some((name) => !["mode", mode].includes(name)))
       throw Error("脚本表单更新只支持mode与表单列表");
     const source = value[mode] === undefined ? [] : value[mode];
     if (!Array.isArray(source) || source.length > 1000)

@@ -296,3 +296,36 @@ test("live form entries retain identity through upsert, reject stale writes and 
   );
   assert.equal(out.request.form[0].value, "replacement");
 });
+
+test("form updates reject hidden unknown fields without partial changes", async () => {
+  for (const mode of ["urlencoded", "formdata"]) {
+    const result = await runScript(
+      `
+      const body=pm.request.body;
+      body.update({mode:'${mode}',${mode}:[{key:'keep',value:'yes'}]});
+      const form=body.${mode}, entry=form.one('keep');
+      const unknowns=[{[Symbol('hidden')]:'x'},Object.defineProperty({},'hidden',{value:'x'})];
+      for(const hidden of unknowns) {
+        const item=Object.defineProperties({key:'bad',value:'changed'},Object.getOwnPropertyDescriptors(hidden));
+        pm.expect(()=>form.add(item)).to.throw();
+        item.key='keep';pm.expect(()=>form.upsert(item)).to.throw();
+        const patch=Object.defineProperties({value:'changed'},Object.getOwnPropertyDescriptors(hidden));
+        pm.expect(()=>entry.update(patch)).to.throw();
+        const replacement=Object.defineProperties({mode:'${mode}',${mode}:[{key:'new',value:'new'}]},Object.getOwnPropertyDescriptors(hidden));
+        pm.expect(()=>body.update(replacement)).to.throw();
+      }
+      pm.test('unchanged',()=>pm.expect(form.toObject()).to.deep.equal({keep:'yes'}));
+      pm.test('identity',()=>pm.expect(form.one('keep')).to.equal(entry));
+      entry.update(Object.defineProperty({},'value',{value:'known hidden value'}));
+      pm.test('known field',()=>pm.expect(entry.value).to.equal('known hidden value'));
+    `,
+      { request: {} },
+    );
+    assert.ok(
+      result.tests.every((x) => x.passed),
+      JSON.stringify(result.tests),
+    );
+    assert.equal(result.request.form.length, 1);
+    assert.equal(result.request.form[0].value, "known hidden value");
+  }
+});
