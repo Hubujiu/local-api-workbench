@@ -980,3 +980,104 @@ test("inherited system rows remain effective without activating disabled request
     false,
   );
 });
+
+test("modern form bodies inherit bounded ancestor text rows without replacing their body mode", async (t) => {
+  const received = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    received.push({
+      body: Buffer.concat(chunks).toString(),
+      type: req.headers["content-type"],
+    });
+    res.end("ok");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  for (const mode of ["urlencoded", "form-data"]) {
+    const d = fixture(),
+      p = project();
+    d.global.envs[0].server_list[0].uri =
+      "http://127.0.0.1:" + server.address().port;
+    d.apis[1].method = "POST";
+    d.global.global_param.body.parameter = [
+      { key: "shared", value: "global", is_checked: 1 },
+      { key: "system", value: "system-value", is_checked: 0, is_system: 1 },
+    ];
+    d.apis[0].request.body = {
+      parameter: [{ key: "shared", value: "folder", is_checked: 1 }],
+    };
+    d.apis[1].request.body = {
+      mode,
+      parameter: [
+        { key: "shared", value: "disabled-child", is_checked: 0 },
+        { key: "own", value: "a+b & c", is_checked: 1 },
+      ],
+    };
+    const before = structuredClone(d);
+    importIntoProject(p, d);
+    assert.deepEqual(d, before);
+    assert.equal(p.requests[0].bodyType, mode);
+    const env = p.environments.find((e) => e.id !== "existing");
+    const r = interpolate(
+      resolveServiceRequest(p, p.requests[0], env.id),
+      environmentVariables(p, env.id),
+    );
+    assert.equal((await executeRequest(r)).status, 200);
+  }
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(received[0].body)), {
+    system: "system-value",
+    shared: "folder",
+    own: "a+b & c",
+  });
+  assert.match(received[1].type, /multipart\/form-data; boundary=/);
+  for (const v of [
+    'name="shared"',
+    'name="system"',
+    'name="own"',
+    "folder",
+    "system-value",
+    "a+b & c",
+  ])
+    assert(received[1].body.includes(v));
+  assert.doesNotMatch(JSON.stringify(received), /disabled-child/);
+});
+
+test("unsupported inherited form dependencies reject atomically rather than disappearing", () => {
+  for (const change of [
+    (d) => {
+      d.apis = [];
+      d.global.global_param.body.parameter = [
+        { key: "empty", value: "x", is_checked: 1 },
+      ];
+    },
+    (d) => {
+      d.apis = [d.apis[0]];
+      d.apis[0].request.body = {
+        parameter: [{ key: "empty", value: "x", is_checked: 1 }],
+      };
+    },
+    (d) => {
+      d.apis[1].request.body = { mode: "urlencoded", parameter: [] };
+      d.global.global_param.body.parameter = [
+        { key: "file", value: "/private/file", type: "file", is_checked: 1 },
+      ];
+    },
+    (d) => {
+      d.apis[1].request.body = { mode: "json", raw: "{}" };
+      d.global.global_param.body.parameter = [
+        { key: "form", value: "x", is_checked: 1 },
+      ];
+    },
+  ]) {
+    const d = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    change(d);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, before);
+  }
+});

@@ -46,6 +46,19 @@ const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
+  if (request.url === "/imported-form") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        fields: Object.fromEntries(
+          new URLSearchParams(Buffer.concat(chunks).toString()),
+        ),
+      }),
+    );
+    return;
+  }
   if (request.url.split("?")[0] === "/final-body") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -5956,6 +5969,38 @@ try {
       data: 'const sourceAPIMarker = "group-inherited";',
     },
   ];
+  groupedSource.apis.push(
+    {
+      target_id: "form-folder",
+      target_type: "folder",
+      name: "Imported form defaults",
+      parent_id: "0",
+      request: {
+        body: {
+          parameter: [{ key: "shared", value: "folder form", is_checked: 1 }],
+        },
+      },
+    },
+    {
+      target_id: "form-api",
+      target_type: "api",
+      name: "Imported form request",
+      parent_id: "form-folder",
+      method: "POST",
+      url: "/imported-form",
+      request: {
+        auth: { type: "noauth" },
+        body: {
+          mode: "urlencoded",
+          parameter: [
+            { key: "shared", value: "disabled", is_checked: 0 },
+            { key: "own", value: "a+b & c", is_checked: 1 },
+          ],
+        },
+      },
+      response: { example: [] },
+    },
+  );
   groupedSource.samples = [
     {
       sample_id: "group",
@@ -6015,6 +6060,9 @@ try {
   );
   const importedGroupedCase = importedGroupProject.cases[0];
   assert.equal(importedGroupedCase.folderId, importedGroup.id);
+  await page
+    .locator(`[data-request="${importedGroupedCase.sourceRequestId}"]`)
+    .click();
   await page.locator("#env").selectOption({ label: "Imported" });
   await page.locator('[data-mode="cases"]').click();
   await page
@@ -6040,6 +6088,28 @@ try {
     .locator(`[data-run-case="${importedGroupedCase.id}"]:not([disabled])`)
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-sample-groups.png" });
+
+  const importedForm = importedGroupProject.requests.find(
+    (r) => r.sourceOperationId === "apipost:form-api",
+  );
+  await page.locator(`[data-request="${importedForm.id}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  const formExecution = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const importedFormResult = await (await formExecution).json();
+  assert.equal(
+    importedFormResult.outcome,
+    "passed",
+    JSON.stringify(importedFormResult),
+  );
+  assert.deepEqual(JSON.parse(importedFormResult.body).fields, {
+    shared: "folder form",
+    own: "a+b & c",
+  });
+  await page.locator("#send:not([disabled])").waitFor();
+  await page.screenshot({ path: "/tmp/local-api-imported-form-defaults.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

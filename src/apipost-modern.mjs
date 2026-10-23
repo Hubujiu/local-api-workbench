@@ -340,6 +340,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     throw Error(
       "Apipost空项目脚本任务尚不能保留为可编辑继承定义，不会丢弃来源",
     );
+  if (
+    !nodes.some((node) => node.target_type === "api") &&
+    !empty(global.global_param?.body?.parameter)
+  )
+    throw Error("Apipost空项目表单参数尚不能保留，不会丢弃来源");
   const mapped = nodes.map((node) => {
     const request = node.request ?? {};
     if (!object(request)) throw Error("Apipost请求无效");
@@ -448,11 +453,29 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       }
       return values;
     };
+    const inheritedForm =
+      node.target_type === "api" &&
+      ["form-data", "urlencoded"].includes(request.body?.mode);
+    if (
+      node.target_type === "folder" &&
+      !empty(request.body?.parameter) &&
+      !inheritedByAPI.has(request)
+    )
+      throw Error("Apipost空目录表单参数尚不能保留，不会丢弃来源");
     const groupedOrigin = ids.get(
       samples.byNode.get(String(node.target_id))?.originAPIId,
     );
     for (const layer of ancestry.slice(0, -1)) {
-      reject(layer.body?.parameter, "继承Body参数");
+      if (node.target_type === "api" && !inheritedForm)
+        reject(layer.body?.parameter, "非表单请求继承Body参数");
+      if (inheritedForm)
+        for (const field of parameterRows(layer.body, "继承Body")) {
+          if (
+            field?.type !== undefined &&
+            String(field.type).toLowerCase() !== "text"
+          )
+            throw Error("继承表单目前仅支持文本字段，文件须手工选择");
+        }
       // The source adapter inherits body parameter rows, not an API's raw body.
       // Keep that raw body on the ordinary API; the sample retains its own body.
       if (layer !== groupedOrigin?.request)
@@ -564,6 +587,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
                     request.body?.mode === "plain"
                       ? "text"
                       : request.body?.mode,
+                  ...(inheritedForm ? { parameter: merge("body") } : {}),
                   raw_schema: models.rewrite(request.body?.raw_schema ?? {}),
                 },
                 header: merge("header"),
