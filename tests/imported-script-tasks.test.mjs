@@ -69,3 +69,28 @@ test("task provenance validates states, total source size and array/object shape
   assert.throws(() => normalizeImportedScriptTasks(objectGetter));
   assert.equal(called, false);
 });
+
+test("inert task scope origins survive validation and render escaped without accessor execution", () => {
+  const value = source();
+  value.before[0].origin = { scope: "folder", id: "<source>" };
+  assert.deepEqual(normalizeImportedScriptTasks(value), value);
+  assert.match(importedScriptTasksHTML(value), /目录:&lt;source&gt;/);
+  for (const origin of [
+    { scope: "unknown", id: "x" },
+    { scope: "folder", id: "" },
+    { scope: "folder", id: "x", extra: true },
+  ]) {
+    value.before[0].origin = origin;
+    assert.throws(() => normalizeImportedScriptTasks(value));
+  }
+  let called = false;
+  value.before[0].origin = {
+    scope: "folder",
+    get id() {
+      called = true;
+      return "x";
+    },
+  };
+  assert.throws(() => normalizeImportedScriptTasks(value));
+  assert.equal(called, false);
+});

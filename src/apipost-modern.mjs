@@ -116,7 +116,7 @@ function responseHeaderMap(value) {
   validateMockResponse({ status: 200, body: "", headers });
   return headers;
 }
-function scriptTasks(value, phase) {
+function scriptTasks(value, phase, internalOrigins = false) {
   if (empty(value)) return null;
   const tasks = list(value, phase, 16);
   const metadata = [];
@@ -124,7 +124,15 @@ function scriptTasks(value, phase) {
     if (
       !object(task) ||
       Object.keys(task).some(
-        (k) => !["type", "id", "name", "enabled", "data"].includes(k),
+        (k) =>
+          ![
+            "type",
+            "id",
+            "name",
+            "enabled",
+            "data",
+            ...(internalOrigins ? ["origin"] : []),
+          ].includes(k),
       ) ||
       task.type !== "customScript" ||
       ![1, 0, -1].includes(task.enabled) ||
@@ -299,6 +307,20 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     }
     return [global.global_param ?? {}, ...result];
   };
+  const taskOwners = new Map(nodes.map((node) => [node.request, node]));
+  const inheritedByAPI = new Set();
+  for (const node of nodes)
+    if (node.target_type === "api")
+      for (const layer of chain(node)) inheritedByAPI.add(layer);
+  if (
+    !nodes.some((node) => node.target_type === "api") &&
+    ["pre_tasks", "post_tasks"].some(
+      (phase) => !empty(global.global_param?.[phase]),
+    )
+  )
+    throw Error(
+      "Apipost空项目脚本任务尚不能保留为可编辑继承定义，不会丢弃来源",
+    );
   const mapped = nodes.map((node) => {
     const request = node.request ?? {};
     if (!object(request)) throw Error("Apipost请求无效");
@@ -330,19 +352,42 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     for (const layer of ancestry) {
       for (const task of ["script", "pre_script", "test"])
         reject(layer[task], task);
-      if (layer !== request || node.target_type !== "api") {
-        reject(layer.pre_tasks, "继承前置任务");
-        reject(layer.post_tasks, "继承后置任务");
-      }
+      // Validate every source layer before deriving a flattened execution snapshot.
+      scriptTasks(layer.pre_tasks, "前置");
+      scriptTasks(layer.post_tasks, "后置");
     }
-    const beforeTask =
-      node.target_type === "api"
-        ? scriptTasks(request.pre_tasks, "前置")
-        : null;
-    const afterTask =
-      node.target_type === "api"
-        ? scriptTasks(request.post_tasks, "后置")
-        : null;
+    const inheritedTasks = ["pre_tasks", "post_tasks"].some((phase) =>
+      ancestry.slice(0, -1).some((layer) => !empty(layer[phase])),
+    );
+    if (
+      node.target_type === "folder" &&
+      ["pre_tasks", "post_tasks"].some((phase) => !empty(request[phase])) &&
+      !inheritedByAPI.has(request)
+    )
+      throw Error(
+        "Apipost空目录脚本任务尚不能保留为可编辑继承定义，不会丢弃来源",
+      );
+    const mergedTasks = (phase, label) => {
+      if (node.target_type !== "api") return null;
+      if (!inheritedTasks) return scriptTasks(request[phase], label);
+      const combined = [];
+      for (const layer of ancestry) {
+        const parsed = scriptTasks(layer[phase], label);
+        if (!parsed) continue;
+        const owner = taskOwners.get(layer);
+        const origin =
+          layer === global.global_param
+            ? { scope: "project", id: source.project_id }
+            : {
+                scope: owner.target_type === "folder" ? "folder" : "request",
+                id: String(owner.target_id),
+              };
+        for (const task of parsed.source) combined.push({ ...task, origin });
+      }
+      return scriptTasks(combined, label, true);
+    };
+    const beforeTask = mergedTasks("pre_tasks", "前置");
+    const afterTask = mergedTasks("post_tasks", "后置");
     let inheritedAuth = { type: "noauth" };
     for (const layer of ancestry)
       if (layer.auth && layer.auth.type !== "inherit")
@@ -458,6 +503,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       responseHeaders,
       beforeTask,
       afterTask,
+      inheritedTasks,
       legacy: {
         ...node,
         url: serviceId ? "https://migration.invalid" + url : url,
@@ -506,6 +552,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       request.importNotes.push(
         "导入不执行脚本；运行前请审核。仅兼容现有 Apipost 8 脚本子集，不是完整 SDK 或任务列表往返迁移。",
       );
+      if (row.inheritedTasks)
+        request.importNotes.push(
+          "项目和目录脚本按项目→祖先目录→接口顺序展开为导入时快照；后续目录编辑不会更新此快照。原作用域来源仅供只读核对。",
+        );
       for (const task of [row.beforeTask, row.afterTask])
         if (task) request.importNotes.push(task.note);
     }

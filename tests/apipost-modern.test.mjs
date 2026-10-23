@@ -649,7 +649,7 @@ test("single enabled modern script tasks preserve code and run only after explic
   assert.equal(failed.status, "failed");
 });
 
-test("modern task imports reject mixed excessive inherited or unknown semantics atomically", () => {
+test("modern task imports reject mixed excessive or unknown semantics atomically", () => {
   const task = {
     type: "customScript",
     id: "task",
@@ -680,8 +680,8 @@ test("modern task imports reject mixed excessive inherited or unknown semantics 
       d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, unknown: true }),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, data: { code: "x" } }),
-    (d) => (d.apis[0].request.pre_tasks = [task]),
-    (d) => (d.global.global_param.pre_tasks = [task]),
+    (d) => (d.apis[0].request.pre_tasks = [{ ...task, type: "database" }]),
+    (d) => (d.global.global_param.pre_tasks = [{ ...task, enabled: 2 }]),
     (d) =>
       d.apis[1].request.pre_tasks.push({ ...task, data: "x".repeat(65537) }),
   ]) {

@@ -2893,8 +2893,26 @@ try {
       data: 'pm.test("imported response",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept"));',
     },
   ];
+  modern.global.global_param.pre_tasks = [
+    {
+      type: "customScript",
+      id: "browser-global",
+      name: "Imported global source",
+      enabled: 1,
+      data: 'const inheritedPrefix = "browser";',
+    },
+  ];
+  modern.apis[0].request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "browser-folder",
+      name: "Imported folder source",
+      enabled: 1,
+      data: 'const inheritedSuffix = "kept";',
+    },
+  ];
   modern.apis[1].request.pre_tasks[0].data =
-    'const importedStage = "browser-kept"; // first block';
+    'const importedStage = inheritedPrefix + "-" + inheritedSuffix; // first block';
   modern.apis[1].request.pre_tasks.push({
     type: "customScript",
     id: "browser-pre-second",
@@ -2971,6 +2989,18 @@ try {
     .waitFor();
   assert.equal(await page.locator("#url").inputValue(), "/auth");
   await page.locator(".imported-script-tasks > summary").click();
+  await page
+    .locator(".import-notes")
+    .getByText("导入时快照", { exact: false })
+    .waitFor();
+  await page
+    .locator(".imported-script-tasks summary")
+    .filter({ hasText: "Imported global source" })
+    .waitFor();
+  await page
+    .locator(".imported-script-tasks summary")
+    .filter({ hasText: "Imported folder source" })
+    .waitFor();
   await page
     .locator(".imported-script-tasks summary")
     .filter({ hasText: "Disabled browser source" })

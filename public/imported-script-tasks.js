@@ -39,7 +39,7 @@ export function normalizeImportedScriptTasks(value) {
         throw Error("原始脚本任务数组不能包含空洞或访问器");
     let total = 0;
     result[phase] = value[phase].map((task) => {
-      plain(task, ["type", "id", "name", "enabled", "data"]);
+      plain(task, ["type", "id", "name", "enabled", "data", "origin"]);
       if (
         task.type !== "customScript" ||
         ![1, 0, -1].includes(task.enabled) ||
@@ -54,6 +54,18 @@ export function normalizeImportedScriptTasks(value) {
           ["__proto__", "prototype", "constructor"].includes(task[key])
         )
           throw Error("原始脚本任务标识或名称无效");
+      let origin;
+      if (task.origin !== undefined) {
+        plain(task.origin, ["scope", "id"]);
+        if (
+          !["project", "folder", "request"].includes(task.origin.scope) ||
+          typeof task.origin.id !== "string" ||
+          !task.origin.id.trim() ||
+          task.origin.id.length > 200
+        )
+          throw Error("原始脚本任务作用域来源无效");
+        origin = { scope: task.origin.scope, id: task.origin.id };
+      }
       total += bytes(task.data);
       if (total > 65536) throw Error("原始脚本任务每阶段源码合计最多64KiB");
       return {
@@ -62,6 +74,7 @@ export function normalizeImportedScriptTasks(value) {
         name: task.name,
         enabled: task.enabled,
         data: task.data,
+        ...(origin ? { origin } : {}),
       };
     });
   }
@@ -80,5 +93,5 @@ const escape = (text) =>
 export function importedScriptTasksHTML(value) {
   if (value === undefined) return "";
   const source = normalizeImportedScriptTasks(value);
-  return `<details class="imported-script-tasks"><summary>原始脚本任务来源（只读）</summary><p>此处保留导入时的名称、启停状态和源码，不参与执行。执行以当前前/后执行脚本为准；修改编辑器不会回写原始来源。停用源码不会自动启用。</p>${["before", "after"].flatMap((phase) => source[phase].map((task) => `<details><summary>${phase === "before" ? "前置" : "后置"} · ${escape(task.name)} · ${task.enabled === 1 ? "原始启用" : "原始停用"}</summary><pre>${escape(task.data)}</pre></details>`)).join("")}</details>`;
+  return `<details class="imported-script-tasks"><summary>原始脚本任务来源（只读）</summary><p>此处保留导入时的名称、启停状态和源码，不参与执行。执行以当前前/后执行脚本为准；修改编辑器不会回写原始来源。停用源码不会自动启用。</p>${["before", "after"].flatMap((phase) => source[phase].map((task) => `<details><summary>${phase === "before" ? "前置" : "后置"} · ${escape(task.name)}${task.origin ? ` · ${{ project: "项目", folder: "目录", request: "接口" }[task.origin.scope]}:${escape(task.origin.id)}` : ""} · ${task.enabled === 1 ? "原始启用" : "原始停用"}</summary><pre>${escape(task.data)}</pre></details>`)).join("")}</details>`;
 }
