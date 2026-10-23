@@ -4709,7 +4709,8 @@ try {
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
     "pm.test('registration-count', () => pm.expect(pm.test.index()).to.equal(2));\n" +
-    originalFormScript.replaceAll("; ", ";\n");
+    originalFormScript.replaceAll("; ", ";\n") +
+    "\npm.setRequestBody({modern:'body'},undefined,false);pm.setRequestBody('temporary',1);pm.removeRequestBody('temporary');";
   await page.locator("#expand-script").click();
   await page.locator("#expanded-script-code").fill(expandedFormScript);
   const expandedBounds = await page
@@ -4772,6 +4773,7 @@ try {
     ["tag", "first"],
     ["tag", "changed"],
     ["中文", "空 格&=+"],
+    ["modern", "body"],
   ]);
   assert.match(
     scriptFormWire.contentType,

@@ -292,6 +292,36 @@ function installScriptFormBody({ request, body }) {
     request.form = rows;
     generation++;
   };
+  return {
+    replaceValues(values, clear = true) {
+      const mode =
+        request.bodyType === "form-data" ? "formdata" : request.bodyType;
+      if (!["formdata", "urlencoded"].includes(mode))
+        throw Error("需要表单模式");
+      if (!values || typeof values !== "object" || Array.isArray(values))
+        throw Error("表单替换需要文本值对象");
+      const entries = Object.entries(values);
+      if (entries.length > 1000) throw Error("脚本表单最多1000项");
+      const old = request.form || [];
+      const names = new Set(entries.map(([name]) => name));
+      const kept = clear ? [] : old.filter((row) => !names.has(row.key));
+      const added = entries.map(([name, value]) => {
+        if (
+          !clear &&
+          old.some((row) => row.key === name && row.type === "file")
+        )
+          throw Error("不能用文本覆盖已选择的文件字段");
+        return textRow(
+          { key: name, value, disabled: false },
+          mode,
+          clear ? undefined : old.find((row) => row.key === name),
+        );
+      });
+      const candidate = [...kept, ...added];
+      inspect(candidate, mode);
+      request.form = candidate;
+    },
+  };
 }
 
 export const scriptFormBodySource = installScriptFormBody.toString();

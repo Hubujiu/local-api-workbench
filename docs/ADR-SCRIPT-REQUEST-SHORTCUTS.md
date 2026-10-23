@@ -18,9 +18,9 @@ PropertyList or URL SDK. Invalid/reserved names remain rejected.
 
 No new HTTP, credential, filesystem or module authority is introduced. Mutations
 remain per-execution copies and do not rewrite saved request definitions. The
-modern setRequestBody helper is deliberately not claimed here: its vendor
-raw/form/path semantics differ from the existing legacy helper. Use the already
-supported pm.request.body.update and form collection APIs for that contract.
+modern body shortcuts have a separate bounded raw/form/JSON-path contract in
+ADR-SCRIPT-MODERN-BODY.md; they do not simply alias the legacy literal-key helper.
+pm.request.body.update and the text form collections retain their own contract.
 
 Tests cover both dialects, scalar stringification, removals and a real HTTP
 request with unchanged saved plan. Browser coverage sends actual modified

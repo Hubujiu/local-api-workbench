@@ -1,3 +1,4 @@
+import { modernBodySource } from "./script-modern-body.mjs";
 import { scriptFormBodySource } from "./script-form-body.mjs";
 import {
   responseMutationSource,
@@ -397,7 +398,16 @@ try {
       "});",
   );
 
-  run("(" + scriptFormBodySource + ")({request,body:pm.request.body});");
+  run(
+    "const __formOperations = (" +
+      scriptFormBodySource +
+      ")({request,body:pm.request.body});",
+  );
+  run(
+    "(" +
+      modernBodySource +
+      ")({request,pm,apt,forms:__formOperations,lodash:_});",
+  );
   run(
     "globalThis.__registerSchemaResponse = (" +
       responseCompatibilitySource +

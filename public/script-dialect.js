@@ -9,4 +9,4 @@ export function scriptDialectOptions(value) {
   return `<option value="legacy" ${selected === "legacy" ? "selected" : ""}>原有兼容模式（JSON属性 / 环境变量）</option><option value="apipost8" ${selected === "apipost8" ? "selected" : ""}>Apipost 8 子集（JSON方法 / 请求变量）</option>`;
 }
 export const scriptDialectNotice =
-  "切换会改变本请求及其共享脚本中的 apt.response.json、headers、cookies 和 apt.variables 语义；Apipost 8 子集使用 json()、集合读取方法和请求局部变量。pm API 不变，不代表完整 SDK 兼容。";
+  "切换会改变本请求及其共享脚本中的 apt.response.json、headers、cookies 、apt.variables 和请求快捷方法语义；Apipost 8 子集使用 json()、集合读取方法和请求局部变量；请求快捷方法采用现代值转换与 JSON 路径语义。pm API 不随模式切换，不代表完整 SDK 兼容。";
