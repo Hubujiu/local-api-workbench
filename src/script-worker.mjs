@@ -1,3 +1,4 @@
+import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
 import { queryBatchSource } from "./script-query-batch.mjs";
 import { modernBodySource } from "./script-modern-body.mjs";
@@ -392,6 +393,7 @@ try {
   );
 
   run("(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});");
+  run("(" + headerEntriesSource + ")({request,headers:pm.request.headers});");
   run(
     "const __formOperations = (" +
       scriptFormBodySource +

@@ -56,6 +56,7 @@ const fixture = http.createServer(async (request, response) => {
         contentType: request.headers["content-type"],
         url: request.url,
         helper: request.headers["x-helper"],
+        liveHeader: request.headers["x-live-entry"],
         removed: request.headers["x-remove"] ?? null,
         readerDisabled: request.headers["x-reader-disabled"] ?? null,
       }),
@@ -4751,7 +4752,7 @@ try {
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.variables.set('browser+&=%query','中文');pm.request.addQueryParams('batch=a%2Bb&batch={{browser+&=%query}}');apt.request.addQueryParams([{key:'hidden-batch',value:'x',disabled:true},{key:'removed-batch',value:'x'}]);pm.request.removeQueryParams([{key:'removed-batch'}]);\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
-    "pm.request.headers.add({key:'x-reader-disabled',value:'not sent',disabled:true});\n" +
+    "pm.request.headers.add({key:'x-reader-disabled',value:'not sent',disabled:true});pm.request.headers.add({key:'x-live-entry',value:'before'});pm.request.headers.one('X-LIVE-ENTRY').value='live';\n" +
     "pm.test('registration-count', () => {pm.expect(pm.test.index()).to.equal(2);pm.expect(pm.request.getHeaders({enabled:true,ignoreCase:true})['x-helper']).to.equal('null');pm.expect(pm.request.getHeaders()['x-reader-disabled']).to.equal('not sent');pm.expect(apt.request.getHeaders({enabled:true})['x-reader-disabled']).to.equal(undefined);});\n" +
     originalFormScript.replaceAll("; ", ";\n") +
     "\npm.setRequestBody({modern:'body'},undefined,false);pm.setRequestBody('temporary',1);pm.removeRequestBody('temporary');";
@@ -4802,6 +4803,7 @@ try {
     JSON.stringify(scriptFormResult),
   );
   const scriptFormWire = JSON.parse(scriptFormResult.body);
+  assert.equal(scriptFormWire.liveHeader, "live");
   assert.equal(
     new URL(scriptFormWire.url, fixtureURL).searchParams.has("drop"),
     false,
