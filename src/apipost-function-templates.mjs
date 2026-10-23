@@ -26,7 +26,9 @@ export async function resolveApipostFunctionTemplate(
         argument:
           name === "substr"
             ? [0, 1].map((i) => Number(raw.split(",")[i] || 0))
-            : raw,
+            : ["padstart", "padend"].includes(name)
+              ? [Number(raw.split(",")[0] || 0), raw.split(",")[1] || ""]
+              : raw,
       };
     }
     const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
@@ -79,7 +81,7 @@ export async function resolveApipostFunctionTemplate(
   `;
   const code = `
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
-    ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash"), __apipostString=String, __apipostConcat=Function.prototype.call.bind(String.prototype.concat), __apipostSubstr=Function.prototype.call.bind(String.prototype.substr);const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber,concat:(value,text)=>__apipostConcat(__apipostString(value),text),lconcat:(value,text)=>__apipostConcat(text,__apipostString(value)),substr:(value,args)=>__apipostSubstr(__apipostString(value),args[0],args[1])});` : ""}
+    ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash"), __apipostString=String, __apipostConcat=Function.prototype.call.bind(String.prototype.concat), __apipostSubstr=Function.prototype.call.bind(String.prototype.substr);const __apipostPadStart=__apipostBuiltinLibrary.padStart, __apipostPadEnd=__apipostBuiltinLibrary.padEnd;const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber,concat:(value,text)=>__apipostConcat(__apipostString(value),text),lconcat:(value,text)=>__apipostConcat(text,__apipostString(value)),substr:(value,args)=>__apipostSubstr(__apipostString(value),args[0],args[1]),padstart:(value,args)=>__apipostPadStart(value,args[0],args[1]),padend:(value,args)=>__apipostPadEnd(value,args[0],args[1])});` : ""}
     let output;
     ${name ? `try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); } catch(error) { output=${JSON.stringify(baseExpression)}; }` : `output=${Object.is(initial, -0) ? "-0" : JSON.stringify(initial)};`}
     ${check}
