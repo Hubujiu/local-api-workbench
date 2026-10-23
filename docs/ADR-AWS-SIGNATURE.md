@@ -9,6 +9,35 @@ This is request signing only, not SigV4a, streaming chunk signatures, presigned 
 Validation uses published Smithy fixed-date request and session-token signatures, binary payload/duplicate-query checks, and actual local HTTP/browser requests. No AWS account or live cloud resource is contacted.
 
 Sources:
+
 - https://github.com/smithy-lang/smithy-typescript/tree/main/packages/signature-v4
 - https://raw.githubusercontent.com/smithy-lang/smithy-typescript/main/packages/signature-v4/src/SignatureV4.spec.ts
 - https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv.html
+
+## Repeated ordinary headers
+
+The AWS canonical request guidance specifies trimming boundary whitespace,
+collapsing sequential whitespace and joining multi-value headers with commas:
+https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+
+Repeated enabled ordinary request rows now retain their order and produce one
+normalized comma-joined wire field for SigV4. The exact merged field is both
+signed and sent, including HTTP/2, avoiding a transport-specific comma/space
+rewrite after signing. Stored request rows remain unchanged. Single-valued
+headers retain the prior wire handling. The authentication panel explicitly
+explains the merge; this is not a promise of separate repeated raw wire lines.
+
+Framing/authentication singleton protections remain. Repeated Cookie/Set-Cookie
+are rejected rather than applying comma-list semantics to cookies. Repeated
+x-amz-date, x-amz-security-token and x-amz-content-sha256 are also rejected before
+traffic; the signer still owns its generated date/token/payload-hash values.
+EdgeGrid repeated headers remain unverified and rejected. No credential provider,
+network access, certificate policy or execution limit is broadened.
+
+Fixed tests use an independent HMAC derivation from actual received HTTP/1 and
+HTTP/2 headers/payload, without calling the production signer for verification.
+They check ordered whitespace normalization, disabled-row omission, signed
+payload hash and unchanged source requests. Existing published Smithy vectors
+are unchanged. Browser CI edits two duplicate rows, sends them and checks the
+actual fixture's echoed merged field, then removes the temporary rows. No AWS
+account or public resource is contacted.

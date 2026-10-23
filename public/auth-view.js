@@ -195,7 +195,7 @@ export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
       '<p class="notice">对最终URL与表单参数签名。优先使用HTTPS；可使用已有凭据；OOB/PIN流程可请求临时令牌、打开服务授权页并用验证码交换访问令牌。服务必须支持OOB，端点和Consumer凭据需填明确值。RSA-SHA1仅兼容旧服务，非新系统推荐算法；RSA私钥仅在本机签名，不发送私钥。保存接口/步骤会把填写的凭据写入本地项目文件，请勿提交真实密钥到Git。PLAINTEXT尚不支持。</p>';
   if (type === "aws")
     html +=
-      '<p class="notice">AWS Signature V4使用明确填写的凭据与region/service，不读取系统AWS配置或自动登录。对最终请求体计算SHA256；S3使用对应路径规则。优先使用HTTPS。</p>';
+      '<p class="notice">AWS Signature V4使用明确填写的凭据与region/service，不读取系统AWS配置或自动登录。对最终请求体计算SHA256；S3使用对应路径规则。重复的普通请求头按顺序规范化空白并以逗号合并后签名发送；Cookie及签名控制头不接受重复。优先使用HTTPS。</p>';
   if (type === "edgegrid")
     html +=
       '<p class="notice">EdgeGrid EG1-HMAC-SHA256；仅使用明确填写的凭据，不读取.edgerc。timestamp格式YYYYMMDDTHH:mm:ss+0000，留空自动生成。headersToSign为按顺序逗号分隔的Header名，POST默认对前131072字节计算Hash，不截断发送内容。</p>';

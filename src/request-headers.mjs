@@ -29,9 +29,19 @@ export function requestHeaderMap(rows = [], authType = "none") {
     validateHeaderName(key);
     validateHeaderValue(key, value);
     if (Object.hasOwn(headers, key)) {
-      if (singleton.has(key))
+      if (
+        singleton.has(key) ||
+        (authType === "aws" &&
+          [
+            "x-amz-date",
+            "x-amz-security-token",
+            "x-amz-content-sha256",
+            "cookie",
+            "set-cookie",
+          ].includes(key))
+      )
         throw Error("不允许重复的控制/单值请求头: " + key);
-      if (["aws", "edgegrid"].includes(authType))
+      if (authType === "edgegrid")
         throw Error("此签名认证的重复请求头尚未验证，请明确合并值");
       if (Array.isArray(headers[key])) headers[key].push(value);
       else headers[key] = [headers[key], value];

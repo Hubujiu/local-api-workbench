@@ -63,7 +63,7 @@ test("ambiguous control headers and unverified signed duplicate headers reject b
     await assert.rejects(executeRequest(request), /重复/);
     assert.throws(() => toCurl(request), /重复/);
   }
-  for (const type of ["aws", "edgegrid"])
+  for (const type of ["edgegrid"])
     await assert.rejects(
       executeRequest({
         url: "http://127.0.0.1:1",

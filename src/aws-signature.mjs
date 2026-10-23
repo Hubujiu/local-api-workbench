@@ -44,7 +44,11 @@ export async function awsSignatureHeaders(
   const wireHeaders = Object.fromEntries(
     Object.entries(headers).map(([key, value]) => [
       key.toLowerCase(),
-      String(value),
+      Array.isArray(value)
+        ? value
+            .map((item) => String(item).trim().replace(/\s+/g, " "))
+            .join(",")
+        : String(value),
     ]),
   );
   wireHeaders.host ||= target.host;

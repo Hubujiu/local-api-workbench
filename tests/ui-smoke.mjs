@@ -205,6 +205,9 @@ const fixture = http.createServer(async (request, response) => {
     response.end(
       JSON.stringify({
         authorization: request.headers.authorization,
+        ...(request.headers["x-aws-repeat"]
+          ? { awsRepeat: request.headers["x-aws-repeat"] }
+          : {}),
         ...(request.headers["x-imported-task"]
           ? { importTask: request.headers["x-imported-task"] }
           : {}),
@@ -1359,6 +1362,20 @@ try {
     service: "execute-api",
   }))
     await page.locator('[data-auth="' + key + '"]').fill(value);
+  await page.locator('[data-param="headers"]').click();
+  const awsHeaderStart = await page
+    .locator('[data-pair^="headers:"][data-pair$=":key"]')
+    .count();
+  for (const [offset, value] of [" first  value ", " second "].entries()) {
+    await page.locator('[data-add-pair="headers"]').click();
+    await page
+      .locator(`[data-pair="headers:${awsHeaderStart + offset}:key"]`)
+      .fill("X-AWS-Repeat");
+    await page
+      .locator(`[data-pair="headers:${awsHeaderStart + offset}:value"]`)
+      .fill(value);
+  }
+  await page.locator('[data-param="auth"]').click();
   const awsResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -1368,6 +1385,18 @@ try {
   assert(
     !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
   );
+  assert.equal(awsResult.status, 200);
+  assert.equal(JSON.parse(awsResult.body).awsRepeat, "first value,second");
+  assert.equal(awsResult.request.headers["x-aws-repeat"], "first value,second");
+  await page.locator("#send:not([disabled])").waitFor();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-aws-repeat.png" });
+  await page.locator('[data-param="headers"]').click();
+  await page
+    .locator(`[data-remove-pair="headers:${awsHeaderStart + 1}"]`)
+    .click();
+  await page.locator(`[data-remove-pair="headers:${awsHeaderStart}"]`).click();
+  await page.locator('[data-param="auth"]').click();
   const beforeJWTRequest = await page
     .locator(".tab.selected [data-open-tab]")
     .getAttribute("data-open-tab");
