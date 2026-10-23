@@ -138,6 +138,7 @@ try {
     .locator("#script-code")
     .fill(
       'apt.Visualizing("<p>{{marker}}</p>",{marker:"packaged-visualizing"});' +
+        'pm.request.addQueryParams("packaged-batch=a%2Bb");apt.request.removeQueryParams([{key:"packaged-batch"}]);' +
         'apt.setRequestHeader("x-packaged-shortcut",null);pm.setRequestQuery("packaged-shortcut",false);pm.removeRequestQuery("packaged-shortcut");pm.removeRequestHeader("x-packaged-shortcut");' +
         'pm.test.skip("packaged-pending",()=>{throw Error("not executed")});pm.test("packaged-test-index",()=>pm.expect(pm.test.index()).to.equal(2));' +
         'pm.test("packaged-json5",()=>pm.expect(require("json5").parse("{unquoted:1,}").unquoted).to.equal(1));' +

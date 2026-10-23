@@ -4707,6 +4707,7 @@ try {
     "// 扩展编辑器应用后仍需手动保存和发送\n" +
     "apt.setRequestHeader('x-helper',null);pm.setRequestHeader('x-remove',1);pm.removeRequestHeader('X-REMOVE');\n" +
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
+    "pm.request.addQueryParams('batch=a%2Bb&batch=%E4%B8%AD%E6%96%87');apt.request.addQueryParams([{key:'hidden-batch',value:'x',disabled:true},{key:'removed-batch',value:'x'}]);pm.request.removeQueryParams([{key:'removed-batch'}]);\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
     "pm.test('registration-count', () => pm.expect(pm.test.index()).to.equal(2));\n" +
     originalFormScript.replaceAll("; ", ";\n") +
@@ -4758,6 +4759,19 @@ try {
     JSON.stringify(scriptFormResult),
   );
   const scriptFormWire = JSON.parse(scriptFormResult.body);
+  assert.deepEqual(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.getAll("batch"),
+    ["a+b", "中文"],
+  );
+  assert.equal(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.has("hidden-batch"),
+    false,
+  );
+  assert.equal(
+    new URL(scriptFormWire.url, fixtureURL).searchParams.has("removed-batch"),
+    false,
+  );
+
   assert.equal(scriptFormWire.helper, "null");
   assert.equal(scriptFormWire.removed, null);
   assert.equal(

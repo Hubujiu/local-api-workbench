@@ -1,3 +1,4 @@
+import { queryBatchSource } from "./script-query-batch.mjs";
 import { modernBodySource } from "./script-modern-body.mjs";
 import { scriptFormBodySource } from "./script-form-body.mjs";
 import {
@@ -398,6 +399,7 @@ try {
       "});",
   );
 
+  run("(" + queryBatchSource + ")({request,pm});");
   run(
     "const __formOperations = (" +
       scriptFormBodySource +
