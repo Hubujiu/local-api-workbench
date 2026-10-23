@@ -1,3 +1,4 @@
+import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
 import MarkdownIt from "markdown-it";
 import { createHmac, generateKeyPairSync, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -18,7 +19,7 @@ import http from "node:http";
 import http2 from "node:http2";
 import net from "node:net";
 import { createRequire } from "node:module";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -33,6 +34,9 @@ try {
   } = require("/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright"));
 }
 const root = await mkdtemp(path.join(os.tmpdir(), "local-api-ui-"));
+const nativeImportRoot = await mkdtemp(
+  path.join(os.tmpdir(), "apipost-json-directory-"),
+);
 const app = await createApp({ root, port: 0 });
 const ntlmFixture = await startNtlmFixture();
 let oauth1Starts = 0,
@@ -6374,6 +6378,96 @@ try {
   });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
+  const nativeModern = modernApipostFixture();
+  nativeModern.global.envs[0].server_list[0].uri = fixtureURL;
+  nativeModern.apis[1].url = "/auth";
+  nativeModern.apis[1].request.query.parameter = [];
+  const nativeFiles = nativeDirectoryFixture(nativeModern);
+  for (const file of nativeFiles.files) {
+    const filePath = path.join(nativeImportRoot, file.path);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, file.text);
+  }
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("Native JSON subset fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const nativeProjectId = await page.locator("#project-select").inputValue();
+  let nativeExecutions = 0,
+    nativeImports = 0;
+  const countNativeExecution = (req) => {
+    if (req.method() === "POST" && req.url().endsWith("/execute"))
+      nativeExecutions++;
+    if (req.method() === "POST" && req.url().endsWith("/import"))
+      nativeImports++;
+  };
+  page.on("request", countNativeExecution);
+  await page.locator("#import").click();
+  await page.locator("#import-mode").selectOption("apipost-directory");
+  await page.locator("#import-directory").setInputFiles(nativeImportRoot);
+  const beforeNativeCancelled = await app.store.get(nativeProjectId);
+  await page.evaluate(() => {
+    window.nativeOriginalArrayBuffer = File.prototype.arrayBuffer;
+    window.nativeReadStarted = false;
+    File.prototype.arrayBuffer = async function () {
+      if (!window.nativeReadStarted) {
+        window.nativeReadStarted = true;
+        await new Promise((resolve) => {
+          window.releaseNativeRead = resolve;
+        });
+      }
+      return window.nativeOriginalArrayBuffer.call(this);
+    };
+  });
+  await page.locator("#dialog-save").click();
+  await page.waitForFunction(() => window.nativeReadStarted === true);
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.evaluate(() => window.releaseNativeRead());
+  await page.waitForFunction(
+    () => document.querySelector("#dialog-save").disabled === false,
+  );
+  await page.evaluate(() => {
+    File.prototype.arrayBuffer = window.nativeOriginalArrayBuffer;
+    delete window.nativeOriginalArrayBuffer;
+    delete window.nativeReadStarted;
+    delete window.releaseNativeRead;
+  });
+  assert.equal(nativeImports, 0);
+  assert.deepEqual(
+    (await app.store.get(nativeProjectId)).requests,
+    beforeNativeCancelled.requests,
+  );
+  await page.locator("#import").click();
+  await page.locator("#import-mode").selectOption("apipost-directory");
+  await page.locator("#import-directory").setInputFiles(nativeImportRoot);
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(nativeExecutions, 0);
+  assert.equal(nativeImports, 1);
+  const nativeProject = await app.store.get(nativeProjectId);
+  const nativeRequest = nativeProject.requests.find((r) => r.url === "/auth");
+  assert(nativeRequest);
+  assert.match(nativeRequest.importNotes.join("\n"), /原版目录JSON子集/);
+  const nativeEnv = nativeProject.environments.find(
+    (e) => e.name === "Imported",
+  );
+  await page.locator("#env").selectOption(nativeEnv.id);
+  const nativeResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const nativeResult = await (await nativeResponse).json();
+  assert.equal(nativeResult.status, 200, JSON.stringify(nativeResult));
+  assert.equal(nativeResult.request.headers["x-test"], "current");
+  assert.equal(nativeExecutions, 1);
+  page.off("request", countNativeExecution);
+  for (const file of nativeFiles.files)
+    assert.equal(
+      await readFile(path.join(nativeImportRoot, file.path), "utf8"),
+      file.text,
+    );
+  await page.screenshot({ path: "/tmp/local-api-native-json-subset.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
@@ -6406,4 +6500,5 @@ try {
   await new Promise((resolve) => fixture.close(resolve));
   await new Promise((r) => app.server.close(r));
   await rm(root, { recursive: true, force: true });
+  await rm(nativeImportRoot, { recursive: true, force: true });
 }

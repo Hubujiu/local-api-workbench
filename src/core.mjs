@@ -1,3 +1,7 @@
+import {
+  isApipostDirectoryDocument,
+  assembleApipostDirectory,
+} from "./apipost-directory.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
 import {
@@ -735,6 +739,8 @@ export function importDocument(doc) {
     }
   }
   if (!doc || typeof doc !== "object") throw Error("无法识别导入格式");
+  if (isApipostDirectoryDocument(doc))
+    throw Error("原版目录须使用完整项目导入以保留环境及资源");
   if (doc.openapi || doc.swagger) {
     doc = resolveLocalReferences(doc);
     const base =
@@ -1691,6 +1697,8 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
+  const fromDirectory = isApipostDirectoryDocument(original);
+  if (fromDirectory) original = assembleApipostDirectory(original);
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
     ? importModernApipost(source, project, { sync })
@@ -1699,6 +1707,12 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const requests = legacy
     ? legacy.requests.map(normalizeRequest)
     : importDocument(document);
+  if (fromDirectory)
+    for (const request of requests)
+      request.importNotes = [
+        ...(request.importNotes || []),
+        "原版目录JSON子集（实验性）：仅按已核对的静态文件结构组装，不代表完整原生迁移或原版运行验证；未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。",
+      ];
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
   if (components) {

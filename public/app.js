@@ -1,3 +1,4 @@
+import { selectedDirectoryDocument } from "./apipost-directory-input.js";
 import { createCaseResultStore } from "./case-result-store.js";
 import { runCaseBatch, caseEvidence } from "./case-batch.js";
 import { moveSelectedCases, deleteSelectedCases } from "./case-selection.js";
@@ -2214,15 +2215,28 @@ function bind() {
   on("#import", "click", () =>
     modal(
       "导入接口",
-      `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost旧版/现代JSON（有限兼容）。现代JSON同时导入环境、服务和全局变量，遇到未支持资源会拒绝；请选择导入环境后再发送。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea>`,
+      `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost旧版/现代JSON（有限兼容）。现代JSON同时导入环境、服务和全局变量，遇到未支持资源会拒绝；请选择导入环境后再发送。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option><option value="apipost-directory">原版目录JSON子集（实验性，非完整迁移）</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea><label>仅原版目录模式使用：选择含 project.json 的目录，未知文件会拒绝</label><input id="import-directory" type="file" webkitdirectory multiple aria-label="原版项目目录">`,
       async () => {
         if (dirty) {
           if (!confirm("当前有未保存修改，先保存再导入？"))
             throw Error("导入已取消，修改仍保留");
           await save();
         }
+        const targetProjectId = project.id,
+          importRevision = modalRevision;
         const f = $("#import-file").files[0],
-          document = f ? await f.text() : $("#import-text").value;
+          document =
+            $("#import-mode").value === "apipost-directory"
+              ? await selectedDirectoryDocument($("#import-directory").files)
+              : f
+                ? await f.text()
+                : $("#import-text").value;
+        if (
+          project.id !== targetProjectId ||
+          modalRevision !== importRevision ||
+          !$("#dialog").open
+        )
+          throw Error("导入已取消或目标项目已变化");
         if ($("#import-mode").value === "restore") {
           const restored = await api("/restore", "POST", { document });
           projects = await api("/projects");
