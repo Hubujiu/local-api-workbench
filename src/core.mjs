@@ -1,3 +1,4 @@
+import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
   appendResponseExamples,
@@ -1391,11 +1392,7 @@ export function toCurl(input) {
     (item) => item.enabled !== false && item.key,
   ))
     url.searchParams.append(parameter.key, parameter.value);
-  const headers = Object.fromEntries(
-    r.headers
-      .filter((item) => item.enabled !== false && item.key)
-      .map((item) => [item.key.toLowerCase(), item.value]),
-  );
+  const headers = requestHeaderMap(r.headers, r.auth.type);
   const args = [
     "curl",
     "--disable",
@@ -1435,8 +1432,9 @@ export function toCurl(input) {
   if (!Object.hasOwn(headers, "accept")) args.push("-H", quote("accept:"));
   if (r.bodyType === "raw" && !Object.hasOwn(headers, "content-type"))
     args.push("-H", quote("content-type:"));
-  for (const [key, value] of Object.entries(headers))
-    args.push("-H", quote(value === "" ? key + ";" : key + ": " + value));
+  for (const [key, values] of Object.entries(headers))
+    for (const value of Array.isArray(values) ? values : [values])
+      args.push("-H", quote(value === "" ? key + ";" : key + ": " + value));
   if (r.proxy) args.push("--proxy", quote(r.proxy));
   args.push("--max-time", String(r.timeout / 1000));
   if (r.bodyType === "form-data")

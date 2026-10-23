@@ -83,7 +83,7 @@ test("live Header changes reach HTTP without changing saved request definitions"
     result = await runPlan(plan, {}, executeRequest);
   assert.equal(result.status, "passed", JSON.stringify(result));
   const body = JSON.parse(result.results[0].response.body);
-  assert.equal(body["x-one"], "wire");
+  assert.equal(body["x-one"], "first, wire");
   assert.equal(body.off, "hidden");
   assert.deepEqual(plan, saved);
 });

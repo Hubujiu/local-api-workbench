@@ -19,6 +19,7 @@ const server = http.createServer((q, r) => {
         method: q.method,
         contentType: q.headers["content-type"] ?? null,
         accept: q.headers.accept ?? null,
+        repeated: q.headers["x-repeat"] ?? null,
       }),
     ),
   );
@@ -98,6 +99,23 @@ try {
       "exported fixed fixture",
     );
   }
+  const duplicateRequest = {
+    url: origin + "/duplicate-headers",
+    headers: [
+      { key: "X-Repeat", value: "first" },
+      { key: "x-repeat", value: "second" },
+      { key: "X-Repeat", value: "disabled", enabled: false },
+    ],
+  };
+  const duplicateWire = JSON.parse(
+    (await executeRequest(duplicateRequest)).body,
+  );
+  const duplicateCurl = await exec("sh", ["-c", toCurl(duplicateRequest)], {
+    timeout: 5000,
+    maxBuffer: 262144,
+  });
+  assert.equal(duplicateWire.repeated, "first, second");
+  assert.deepEqual(JSON.parse(duplicateCurl.stdout), duplicateWire);
   console.log("CURL_LITERAL_BODY_IMPORT_AND_EXPORT_PASSED");
 } finally {
   server.closeAllConnections();

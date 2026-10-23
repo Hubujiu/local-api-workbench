@@ -1,3 +1,4 @@
+import { requestHeaderMap } from "./request-headers.mjs";
 import { asapAuthorization } from "./asap-auth.mjs";
 import { jwtAuthorization } from "./jwt-auth.mjs";
 import { validateModelFolders } from "../public/model-folders.js";
@@ -305,11 +306,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
   for (const p of r.query.filter((p) => p.enabled !== false && p.key))
     u.searchParams.append(p.key, String(p.value ?? ""));
-  const headers = Object.create(null);
-  for (const h of r.headers.filter((h) => h.enabled !== false && h.key)) {
-    if (/[\r\n]/.test(h.key + String(h.value))) throw Error("非法请求头");
-    headers[h.key.toLowerCase()] = String(h.value ?? "");
-  }
+  const headers = requestHeaderMap(r.headers, r.auth.type);
   if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
