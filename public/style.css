@@ -2148,3 +2148,21 @@ dialog:has(#cookie-line) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.case-selection {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.case-selection label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.case-selection input[type="checkbox"],
+input[data-select-case] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}

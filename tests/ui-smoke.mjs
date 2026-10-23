@@ -3340,6 +3340,64 @@ try {
     sampleRequestBeforeGroup,
   );
   await page.screenshot({ path: "/tmp/local-api-case-groups.png" });
+  await page.locator("#new-interface-case").click();
+  await page.locator("#case-name").fill("Batch second case");
+  await page.locator("#case-folder").selectOption(childCaseGroup);
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/cases") &&
+        r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const beforeCaseBatch = await app.store.get(taskSourceProject.id);
+  const secondCase = beforeCaseBatch.cases.find(
+    (c) => c.name === "Batch second case",
+  );
+  await page.locator("#select-all-cases").check();
+  assert.equal(await page.locator("[data-select-case]:checked").count(), 2);
+  await page.locator("#move-selected-cases").click();
+  await page.locator("#case-move-target").selectOption(rootCaseGroup);
+  await saveAndWait("#dialog-save");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const afterCaseMove = await app.store.get(taskSourceProject.id);
+  for (const item of [importedSample, secondCase]) {
+    const moved = afterCaseMove.cases.find((c) => c.id === item.id);
+    assert.equal(moved.folderId, rootCaseGroup);
+    assert.deepEqual(moved.request, item.request);
+  }
+  await page.screenshot({ path: "/tmp/local-api-case-bulk-move.png" });
+  await page.reload();
+  await page.locator(`[data-request="${taskSourceRequest.id}"]`).click();
+  await page.locator('[data-mode="cases"]').click();
+  await page.locator(`[data-select-case="${secondCase.id}"]`).check();
+  assert.equal(
+    await page.locator("#select-all-cases").evaluate((el) => el.indeterminate),
+    true,
+  );
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.locator("#delete-selected-cases").click();
+  assert.deepEqual(
+    (await app.store.get(taskSourceProject.id)).cases,
+    afterCaseMove.cases,
+  );
+  const beforeCaseDelete = await app.store.get(taskSourceProject.id);
+  page.once("dialog", (dialog) => dialog.accept());
+  await saveAndWait("#delete-selected-cases");
+  const afterCaseDelete = await app.store.get(taskSourceProject.id);
+  assert.equal(
+    afterCaseDelete.cases.some((c) => c.id === secondCase.id),
+    false,
+  );
+  assert.deepEqual(
+    afterCaseDelete.cases.find((c) => c.id === importedSample.id),
+    afterCaseMove.cases.find((c) => c.id === importedSample.id),
+  );
+  assert.deepEqual(afterCaseDelete.caseFolders, beforeCaseDelete.caseFolders);
+  assert.deepEqual(afterCaseDelete.history, beforeCaseDelete.history);
 
   await page.locator('[data-mode="mock"]').click();
   assert.equal(await page.locator("[data-edit-example]").count(), 2);

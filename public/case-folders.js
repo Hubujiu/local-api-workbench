@@ -112,6 +112,7 @@ export function caseCards(
   sourceRequestId,
   results = new Map(),
   busy = false,
+  selected = new Set(),
 ) {
   const folders = validateCaseFolders(project).filter(
       (f) => f.sourceRequestId === sourceRequestId,
@@ -133,7 +134,7 @@ export function caseCards(
       ordered(cases.filter((c) => (c.folderId || "") === id))
         .map(
           (c) =>
-            `<div class="card"><div class="row"><strong class="grow">${esc(c.name)}</strong><button data-run-case="${esc(c.id)}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${esc(c.id)}">编辑快照</button><button data-delete-case="${esc(c.id)}" class="danger">删除</button></div><p class="subtle">${esc(c.request.method)} ${esc(c.request.url)}</p>${results.has(c.id) ? `<pre>${esc(JSON.stringify(results.get(c.id), null, 2))}</pre>` : ""}</div>`,
+            `<div class="card"><div class="row"><input type="checkbox" data-select-case="${esc(c.id)}" aria-label="选择用例 ${esc(c.name)}" ${selected.has(c.id) ? "checked" : ""} ${busy ? "disabled" : ""}><strong class="grow">${esc(c.name)}</strong><button data-run-case="${esc(c.id)}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${esc(c.id)}">编辑快照</button><button data-delete-case="${esc(c.id)}" class="danger">删除</button></div><p class="subtle">${esc(c.request.method)} ${esc(c.request.url)}</p>${results.has(c.id) ? `<pre>${esc(JSON.stringify(results.get(c.id), null, 2))}</pre>` : ""}</div>`,
         )
         .join("") +
       ordered(folders.filter((f) => (f.parentId || "") === id))
