@@ -94,6 +94,7 @@ function installHeaderEntries({ request, headers }) {
         if (key === "then") return undefined;
         if (key === "update") return update;
         if (key === "toJSON") return () => view(row);
+        if (key === "valueOf") return () => view(row).value;
         if (key === "toString")
           return () => row.key + ": " + String(row.value ?? "");
         const values = view(row);
@@ -138,6 +139,45 @@ function installHeaderEntries({ request, headers }) {
     for (let i = rows.length - 1; i >= 0; i--)
       if (rows[i].key.toLowerCase() === key.toLowerCase())
         return entry(rows[i]);
+  };
+  headers.get = (key) => headers.one(key)?.value;
+  headers.has = function (item, value) {
+    const withValue = arguments.length > 1;
+    if (typeof item === "string") name(item);
+    return read().some((row) => {
+      const matches =
+        typeof item === "string"
+          ? row.key.toLowerCase() === item.toLowerCase()
+          : item !== null &&
+            typeof item === "object" &&
+            cache.get(row) === item;
+      return matches && (!withValue || view(row).value === value);
+    });
+  };
+  headers.toObject = (
+    excludeDisabled = false,
+    caseSensitive = false,
+    multiValue = false,
+    sanitizeKeys = false,
+  ) => {
+    if (
+      [excludeDisabled, caseSensitive, multiValue, sanitizeKeys].some(
+        (value) => typeof value !== "boolean",
+      )
+    )
+      throw Error("Header对象转换选项必须为布尔值");
+    const result = new Map();
+    for (const row of read()) {
+      if (excludeDisabled && row.enabled === false) continue;
+      const key = caseSensitive ? row.key : row.key.toLowerCase(),
+        value = view(row).value;
+      if (result.has(key)) {
+        const prior = result.get(key);
+        if (Array.isArray(prior)) prior.push(value);
+        else result.set(key, [prior, value]);
+      } else result.set(key, value);
+    }
+    return Object.fromEntries(result);
   };
   headers.idx = (index) => {
     if (!Number.isInteger(index)) throw Error("Header索引必须为整数");

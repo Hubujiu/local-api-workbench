@@ -87,3 +87,38 @@ test("live Header changes reach HTTP without changing saved request definitions"
   assert.equal(body.off, "hidden");
   assert.deepEqual(plan, saved);
 });
+
+test("Header readers include disabled members and retain duplicate/case options without exposing mutable snapshots", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers;
+    pm.test('disabled member',()=>{pm.expect(h.get('OFF')).to.equal('hidden');pm.expect(h.has('off')).to.equal(true);pm.expect(h.one('OFF').valueOf()).to.equal('hidden');});
+    pm.test('membership',()=>{pm.expect(h.has('x-one','first')).to.equal(true);pm.expect(h.has('X-ONE','second')).to.equal(true);pm.expect(h.has('x-one','absent')).to.equal(false);pm.expect(h.has(h.idx(0))).to.equal(true);pm.expect(h.has({key:'X-One',value:'first'})).to.equal(false);});
+    pm.test('object options',()=>{pm.expect(h.toObject()).to.deep.equal({'x-one':['first','second'],off:'hidden'});pm.expect(h.toObject(true)).to.deep.equal({'x-one':['first','second']});pm.expect(h.toObject(false,true)).to.deep.equal({'X-One':'first','x-one':'second',Off:'hidden'});});
+    const copy=h.toObject();copy['x-one'][0]='not live';pm.test('detached',()=>pm.expect(h.idx(0).value).to.equal('first'));
+    const removed=h.one('off');h.remove('off');pm.test('removed identity',()=>pm.expect(h.has(removed)).to.equal(false));
+  `,
+    input(),
+  );
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+});
+
+test("Header object output keeps an existing prototype-like name as literal data", async () => {
+  const result = await runScript(
+    "const obj=pm.request.headers.toObject();pm.test('literal key',()=>{pm.expect(Object.getPrototypeOf(obj)).to.equal(Object.prototype);pm.expect(Object.hasOwn(obj,'__proto__')).to.equal(true);pm.expect(obj.__proto__).to.equal('literal');});",
+    {
+      variables: {},
+      request: {
+        url: "http://localhost/",
+        headers: [{ key: "__proto__", value: "literal" }],
+      },
+    },
+  );
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+});

@@ -11,7 +11,8 @@ including disabled rows; idx uses integer indexes and missing entries return
 undefined. all returns a new array of live entries, and each traverses a snapshot
 of those entries. Entries support key/value/description/disabled assignment and
 update. An enabled boolean alias preserves access to the prior snapshot field.
-get/has/toObject and detached getHeaders retain their existing contracts.
+get/has/toObject now follow the bounded collection reader contract below;
+getHeaders(options) remains the separate detached request-level reader.
 
 This deliberately corrects all/each mutation semantics: editing a returned entry
 now changes the current request. Editing the returned array does not reorder or
@@ -33,3 +34,26 @@ lookup, live edits, metadata preservation, atomic rejection, stale references an
 real HTTP. Browser and packaged runtime fixtures exercise the live mutation while
 retaining prior shortcut/null-header and disabled-header checks. Exact-head CI is
 required before marking the change verified.
+
+
+## Collection reader semantics
+
+Static PropertyList/Header reference also establishes that get returns the last
+matching member value even when disabled, has can match any duplicate value or
+a member's actual identity, and Header.valueOf returns its value. The previous
+facade incorrectly skipped disabled entries and ignored the optional has value.
+Correct these readers; wire transmission still excludes disabled rows.
+
+HeaderList.toObject defaults to lowercase keys and includes disabled members.
+Boolean excludeDisabled/caseSensitive/multiValue/sanitizeKeys positional options
+are accepted. Header permits multiple values intrinsically, so repeated keys
+remain arrays even when multiValue is false. Returned objects/arrays are detached
+and prototype-like names remain own data properties. Existing nonempty-name and
+size validation still applies; permissive truthy option coercions and all generic
+PropertyList behaviours are not claimed. This intentionally replaces the old
+filtered/case-preserving last-value snapshot. Use getHeaders({enabled:true}) when
+an enabled-only request-level read is wanted.
+
+Regression first shows disabled reads, value membership and toObject differing;
+then verifies corrected semantics, live-member identity, detached output and
+unchanged on-wire disabled filtering.
