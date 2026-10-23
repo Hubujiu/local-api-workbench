@@ -8,6 +8,9 @@ test("script errors retain execution stage without replacing semantic error mess
     (error) => {
       assert.match(error.message, /不允许/);
       assert.equal(error.scriptStage, "script");
+      assert.equal(Number.isSafeInteger(error.elapsedMs), true);
+      assert.ok(error.elapsedMs >= 0);
+      assert.equal(typeof error.lastWorkerStage, "string");
       return true;
     },
   );

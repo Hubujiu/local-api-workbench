@@ -1,3 +1,4 @@
+import { scriptFailureDetails } from "../src/script-diagnostics.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -148,13 +149,70 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
     ['for(let i=0;i<600;i++)pm.test("pass",()=>{});', /最多1000条/],
   ])
     await assert.rejects(
-      runScriptSequence(
-        [
-          { name: "a", code },
-          { name: "b", code },
-        ],
-        { variables: {} },
-      ),
+      (async () => {
+        const started = performance.now();
+        try {
+          return await runScriptSequence(
+            [
+              { name: "a", code },
+              { name: "b", code },
+            ],
+            { variables: {} },
+          );
+        } catch (error) {
+          // Preserve the exact acceptance assertion below. Emit only bounded
+          // phase/counter evidence, never source, variables or request data.
+          t.diagnostic(
+            JSON.stringify({
+              case: pattern.source,
+              sequenceElapsedMs: Math.round(performance.now() - started),
+              ...scriptFailureDetails(error),
+            }),
+          );
+          if (pattern.source === "最多1000次" && !pattern.test(error.message)) {
+            // Fixed, no-network probes diagnose the failure; they never replace
+            // or relax the original rejection assertion, which still fails.
+            for (const [label, probe] of [
+              ["empty", ""],
+              [
+                "faker-once",
+                'pm.variables.replaceIn("{{$randomCountryCode}}");',
+              ],
+              [
+                "faker-600",
+                'for(let i=0;i<600;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
+              ],
+            ]) {
+              const probeStarted = performance.now();
+              let details;
+              try {
+                const result = await runScript(probe, { variables: {} });
+                details = {
+                  status: "returned",
+                  activityMs: result.activityMs,
+                  ...scriptFailureDetails({
+                    activityMetrics: result.activityMetrics,
+                    scriptDiagnostics: { fakerCalls: result.usage.fakerCalls },
+                  }),
+                };
+              } catch (probeError) {
+                details = {
+                  status: "failed",
+                  ...scriptFailureDetails(probeError),
+                };
+              }
+              t.diagnostic(
+                JSON.stringify({
+                  probe: label,
+                  elapsedMs: Math.round(performance.now() - probeStarted),
+                  ...details,
+                }),
+              );
+            }
+          }
+          throw error;
+        }
+      })(),
       pattern,
     );
   const logs = await runScriptSequence(

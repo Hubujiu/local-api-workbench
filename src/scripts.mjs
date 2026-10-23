@@ -112,6 +112,8 @@ export function runScript(
       controller.abort();
       if (terminate) await worker.terminate();
       if (error) {
+        error.elapsedMs ??= Math.round(performance.now() - startedAt);
+        error.lastWorkerStage ??= lastWorkerStage;
         for (const record of networkRequests)
           if (record.status === "running") {
             record.status = "interrupted";
