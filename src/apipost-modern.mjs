@@ -116,7 +116,7 @@ function responseHeaderMap(value) {
   return headers;
 }
 function singleScriptTask(value, phase) {
-  if (value === undefined) return null;
+  if (empty(value)) return null;
   const tasks = list(value, phase, 1);
   if (!tasks.length) return null;
   const task = tasks[0];

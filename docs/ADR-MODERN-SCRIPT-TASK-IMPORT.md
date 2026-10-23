@@ -28,7 +28,8 @@ Multiple tasks, disabled tasks, mixed task types, unknown fields, nonstring code
 code above 64 KiB UTF-8 and inherited/global/folder tasks reject atomically.
 There is no concatenation that might change lexical scope, ordering, await
 semantics or per-task isolation. Legacy script fields still reject. Empty task
-lists leave existing default dialect behavior unchanged.
+lists and previously accepted empty placeholders (null, empty string/object)
+leave existing default dialect behavior unchanged.
 
 Fixed tests use synthetic envelopes and owned loopback HTTP: exact code and
 source preservation, zero requests during import, request-header mutation,

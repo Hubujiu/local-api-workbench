@@ -678,3 +678,16 @@ test("modern task imports reject mixed multiple disabled inherited or unknown se
     assert.deepEqual(p, original);
   }
 });
+
+test("empty modern task placeholders retain preexisting no-script import semantics", () => {
+  for (const value of [undefined, null, "", {}, []]) {
+    const d = fixture(),
+      p = project();
+    d.apis[1].request.pre_tasks = value;
+    d.apis[1].request.post_tasks = value;
+    importIntoProject(p, d);
+    assert.equal(p.requests[0].scriptDialect, "legacy");
+    assert.equal(p.requests[0].beforeScript, "");
+    assert.equal(p.requests[0].afterScript, "");
+  }
+});
