@@ -1,3 +1,4 @@
+import { validateCaseFolders } from "../public/case-folders.js";
 import { requestCookieHeader } from "./request-cookies.mjs";
 import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
@@ -189,6 +190,7 @@ export class Store {
   async save(p, { activity = false } = {}) {
     validateEnvironmentModel(p);
     validateModelFolders(p);
+    validateCaseFolders(p);
     if (p.protocols !== undefined) {
       if (!Array.isArray(p.protocols) || p.protocols.length > 1000)
         throw Error("协议定义最多1000个");

@@ -1,3 +1,4 @@
+import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
 import {
   openAPIURLQuery,
@@ -1541,6 +1542,7 @@ export function restoreProject(document) {
       throw Error("备份中的 " + key + " 格式无效");
   }
   validateModelFolders(document);
+  validateCaseFolders(document);
   if (
     (document.runs || []).some(
       (run) =>

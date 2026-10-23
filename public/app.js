@@ -1,4 +1,10 @@
 import {
+  caseCards,
+  caseFolderPath,
+  saveCaseFolder,
+  removeEmptyCaseFolder,
+} from "./case-folders.js";
+import {
   validateParameterDescriptions,
   parameterDescriptionChoices,
 } from "./parameter-descriptions.js";
@@ -724,16 +730,7 @@ function modePanel(r) {
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">指定示例时直接返回该示例；否则按顺序匹配规则，不匹配时返回首个示例；没有示例时按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。切换调试会先保存当前改动；指定示例会停用请求中同名 example 参数，其他全局参数与脚本仍会执行。HTML 响应隔离展示，不运行页面脚本；禁止 Set-Cookie 等修改浏览器状态的头。</p><input class="mock-url" readonly value="${esc(mockURL(location.origin, project.id, r.id))}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${esc(e.status)}</strong><button data-use-example="${i}">调试此示例</button><button data-edit-example="${i}">编辑</button><button data-delete-example="${i}">删除</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
-    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="create-case">从当前接口创建执行计划</button>${
-      (project.cases || [])
-        .filter((item) => item.sourceRequestId === r.id)
-        .map(
-          (item) =>
-            `<div class="card"><div class="row"><strong class="grow">${esc(item.name)}</strong><button data-run-case="${item.id}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${item.id}">编辑快照</button><button data-delete-case="${item.id}" class="danger">删除</button></div><p class="subtle">${esc(item.request.method)} ${esc(item.request.url)}</p>${caseResults.has(item.id) ? `<pre>${esc(JSON.stringify(caseResults.get(item.id), null, 2))}</pre>` : ""}</div>`,
-        )
-        .join("") ||
-      '<div class="notice">尚无用例。可分别验证成功、参数缺失和认证失败等场景。</div>'
-    }</div>`;
+    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="new-case-folder">＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseCards(project, r.id, caseResults, busy)}</div>`;
   return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><p class="muted">按时长模式限定1至60秒，仍受请求上限约束；先到时长或请求上限即停止，不保证持续到指定秒数。到时会中断尚未完成的请求和脚本，并保留记录。</p><div class="row load-controls"><label>模式 <select id="load-mode" ${busy ? "disabled" : ""}><option value="count" ${loadOptions.get(project.id + ":" + r.id)?.mode !== "duration" ? "selected" : ""}>按请求数</option><option value="duration" ${loadOptions.get(project.id + ":" + r.id)?.mode === "duration" ? "selected" : ""}>按持续时长</option></select></label><label>时长（秒，仅时长模式） <input id="load-duration" type="number" min="1" max="60" value="${esc(loadOptions.get(project.id + ":" + r.id)?.durationSeconds ?? 10)}" ${busy ? "disabled" : ""}></label><label>请求数 / 上限 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="load-data-panel"><label for="load-data">参数化数据（UTF-8 CSV，可选）</label><p class="muted">首行为变量名，后续行依次循环供 {{变量名}} 使用，仅覆盖本次运行。最多64 KiB、100行、50列；数据只保留在当前页面会话，不保存到项目。</p><textarea id="load-data" rows="4" spellcheck="false" ${busy ? "disabled" : ""} placeholder="id,name&#10;1,示例">${esc(loadOptions.get(project.id + ":" + r.id)?.dataCSV ?? "")}</textarea><label>导入 CSV <input id="load-data-file" type="file" accept=".csv,text/csv" ${busy ? "disabled" : ""}></label></div>${
     loadResult
       ? `<div class="grid-stats">${[
@@ -2987,13 +2984,24 @@ function bind() {
     const source = item?.sourceRequestId || current;
     modal(
       item ? "编辑接口用例" : "新建接口用例",
-      `<label>用例名称</label><input id="case-name" value="${esc(item?.name || "新用例")}"><label>独立请求快照</label>${jsonEditor(item?.request || request())}`,
+      `<label>用例名称</label><input id="case-name" value="${esc(item?.name || "新用例")}"><label>分组</label><select id="case-folder"><option value="">根目录</option>${(
+        project.caseFolders || []
+      )
+        .filter((f) => f.sourceRequestId === source)
+        .map(
+          (f) =>
+            `<option value="${esc(f.id)}" ${item?.folderId === f.id ? "selected" : ""}>${esc(caseFolderPath(project.caseFolders, f.id))}</option>`,
+        )
+        .join(
+          "",
+        )}</select><label>独立请求快照</label>${jsonEditor(item?.request || request())}`,
       async () => {
         if (dirty) await save();
         const result = await api("/projects/" + project.id + "/cases", "POST", {
           id: item?.id,
           name: $("#case-name").value,
           sourceRequestId: source,
+          folderId: $("#case-folder").value,
           request: JSON.parse($("#modal-json").value),
           functions: item?.functions,
           createdAt: item?.createdAt,
@@ -3003,6 +3011,54 @@ function bind() {
       },
     );
   }
+  function editCaseFolder(id) {
+    const folder = (project.caseFolders || []).find((f) => f.id === id);
+    const source = folder?.sourceRequestId || current;
+    modal(
+      folder ? "编辑用例分组" : "新建用例分组",
+      `<label>名称</label><input id="case-folder-name" maxlength="200" value="${esc(folder?.name || "")}"><label>父分组</label><select id="case-folder-parent"><option value="">根目录</option>${(
+        project.caseFolders || []
+      )
+        .filter((f) => f.sourceRequestId === source && f.id !== id)
+        .map(
+          (f) =>
+            `<option value="${esc(f.id)}" ${folder?.parentId === f.id ? "selected" : ""}>${esc(caseFolderPath(project.caseFolders, f.id))}</option>`,
+        )
+        .join(
+          "",
+        )}</select><p class="muted">仅组织用例，不改变请求快照。只能删除空分组。</p>`,
+      async () => {
+        saveCaseFolder(
+          project,
+          id,
+          {
+            name: $("#case-folder-name").value,
+            sourceRequestId: source,
+            parentId: $("#case-folder-parent").value,
+          },
+          uid(),
+        );
+        mark();
+        await save();
+        render();
+      },
+    );
+  }
+  on("#new-case-folder", "click", () => editCaseFolder());
+  on("[data-edit-case-folder]", "click", (event, element) => {
+    event.preventDefault();
+    event.stopPropagation();
+    editCaseFolder(element.dataset.editCaseFolder);
+  });
+  on("[data-delete-case-folder]", "click", async (event, element) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm("删除这个空用例分组？不会删除任何用例。")) return;
+    removeEmptyCaseFolder(project, element.dataset.deleteCaseFolder);
+    mark();
+    await save();
+    render();
+  });
   on("#new-interface-case", "click", () => editInterfaceCase());
   on("[data-edit-case]", "click", (_, e) =>
     editInterfaceCase(e.dataset.editCase),

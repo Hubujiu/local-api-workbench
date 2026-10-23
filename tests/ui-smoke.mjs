@@ -3275,6 +3275,58 @@ try {
     .locator(`[data-run-case="${importedSample.id}"]:not([disabled])`)
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-root-sample.png" });
+  const sampleRequestBeforeGroup = structuredClone(importedSample.request);
+  async function addSampleGroup(name, parent = "") {
+    await page.locator("#new-case-folder").click();
+    await page.locator("#case-folder-name").fill(name);
+    await page.locator("#case-folder-parent").selectOption(parent);
+    await saveAndWait("#dialog-save");
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    return (await app.store.get(taskSourceProject.id)).caseFolders.find(
+      (f) => f.name === name,
+    ).id;
+  }
+  const rootCaseGroup = await addSampleGroup("Browser case group");
+  const childCaseGroup = await addSampleGroup(
+    "Nested empty group",
+    rootCaseGroup,
+  );
+  await page.locator(`[data-edit-case="${importedSample.id}"]`).click();
+  await page.locator("#case-folder").selectOption(childCaseGroup);
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/cases") &&
+        r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.reload();
+  await page.locator('[data-mode="cases"]').click();
+  await page
+    .locator(
+      `[data-case-folder="${rootCaseGroup}"] [data-case-folder="${childCaseGroup}"] [data-run-case="${importedSample.id}"]`,
+    )
+    .waitFor();
+  assert.equal(
+    await page
+      .locator(`[data-delete-case-folder="${childCaseGroup}"]`)
+      .isDisabled(),
+    true,
+  );
+  const groupedProject = await app.store.get(taskSourceProject.id);
+  assert.equal(
+    groupedProject.cases.find((c) => c.id === importedSample.id).folderId,
+    childCaseGroup,
+  );
+  assert.deepEqual(
+    groupedProject.cases.find((c) => c.id === importedSample.id).request,
+    sampleRequestBeforeGroup,
+  );
+  await page.screenshot({ path: "/tmp/local-api-case-groups.png" });
+
   await page.locator('[data-mode="mock"]').click();
   assert.equal(await page.locator("[data-edit-example]").count(), 2);
   await page.locator('[data-edit-example="1"]').click();
