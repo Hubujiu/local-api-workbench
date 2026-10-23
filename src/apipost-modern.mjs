@@ -419,8 +419,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     const merge = (key) => {
       const name = (row) =>
         key === "header" ? row.key.toLowerCase() : row.key;
-      let values = [];
-      for (const layer of ancestry) {
+      const active = (row) =>
+        row.is_checked === undefined ||
+        row.is_checked === true ||
+        row.is_checked === 1 ||
+        row.is_checked === "1";
+      const layers = ancestry.map((layer) => {
         const rows = parameterRows(layer[key], key).map((row) => {
           const flag = row?.is_system;
           const inheritedSystem =
@@ -433,19 +437,30 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         for (const row of rows)
           if (!object(row) || typeof row.key !== "string")
             throw Error("Apipost参数无效");
+        return rows;
+      });
+      // The original adapter folds active duplicates once an ancestor contributes
+      // this parameter kind. Preserve source data by refusing ambiguous imports
+      // rather than silently sending a different set of rows or deleting rows.
+      if (layers.slice(0, -1).some((rows) => rows.some(active)))
+        for (const rows of layers) {
+          const seen = new Set();
+          for (const row of rows.filter(active)) {
+            const identity = name(row);
+            if (seen.has(identity))
+              throw Error(
+                "Apipost继承存在重复参数（" +
+                  key +
+                  "），原版会折叠同名行；请先消除重复后导入，不会自动改写来源",
+              );
+            seen.add(identity);
+          }
+        }
+      let values = [];
+      for (const rows of layers) {
         // Disabled child rows remain editable source data, but do not mask an
         // enabled ancestor's value. Absent flags keep legacy import defaults.
-        const overridden = new Set(
-          rows
-            .filter(
-              (row) =>
-                row.is_checked === undefined ||
-                row.is_checked === true ||
-                row.is_checked === 1 ||
-                row.is_checked === "1",
-            )
-            .map(name),
-        );
+        const overridden = new Set(rows.filter(active).map(name));
         values = [
           ...values.filter((row) => !overridden.has(name(row))),
           ...rows,

@@ -6333,6 +6333,47 @@ try {
   assert.equal(await page.locator("#case-batch-status").count(), 0);
   assert.deepEqual(caseBatchHits, ["slow"]);
 
+  const rejectedImportProjectId = await page
+    .locator("#project-select")
+    .inputValue();
+  const beforeDuplicateImport = await app.store.get(rejectedImportProjectId);
+  const duplicateInheritance = modernApipostFixture();
+  duplicateInheritance.global.envs[0].server_list[0].uri = fixtureURL;
+  duplicateInheritance.global.global_param.query = {
+    parameter: [{ key: "parent", value: "retained", is_checked: 1 }],
+  };
+  duplicateInheritance.apis[1].request.query.parameter = [
+    { key: "repeat", value: "one", is_checked: 1 },
+    { key: "repeat", value: "two", is_checked: 1 },
+  ];
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(JSON.stringify(duplicateInheritance));
+  await page.locator("#dialog-save").click();
+  await page
+    .locator("#toast")
+    .getByText("Apipost继承存在重复参数", { exact: false })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  const afterDuplicateImport = await app.store.get(rejectedImportProjectId);
+  assert.deepEqual(
+    afterDuplicateImport.requests,
+    beforeDuplicateImport.requests,
+  );
+  assert.deepEqual(
+    afterDuplicateImport.environments,
+    beforeDuplicateImport.environments,
+  );
+  assert.deepEqual(
+    afterDuplicateImport.settings,
+    beforeDuplicateImport.settings,
+  );
+  assert.deepEqual(afterDuplicateImport.cases, beforeDuplicateImport.cases);
+  assert.deepEqual(caseBatchHits, ["slow"]);
+  await page.screenshot({
+    path: "/tmp/local-api-inherited-duplicate-rejection.png",
+  });
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

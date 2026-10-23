@@ -291,7 +291,7 @@ test("modern omit-equals numeric sentinel preserves the explicit request setting
   }
 });
 
-test("modern inheritance replaces parent name groups without losing duplicate child parameters", async (t) => {
+test("modern requests without active inherited rows preserve duplicate parameters", async (t) => {
   const server = http.createServer((req, res) => {
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ url: req.url, header: req.headers["x-repeat"] }));
@@ -302,21 +302,16 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
     p = project();
   doc.global.envs[0].server_list[0].uri =
     "http://127.0.0.1:" + server.address().port;
-  doc.global.global_param.header.parameter = [
-    { key: "X-Repeat", value: "global", is_checked: 1 },
-  ];
-  doc.apis[0].request.header = {
-    parameter: [{ key: "X-Repeat", value: "folder", is_checked: 1 }],
-  };
+  doc.global.global_param.header.parameter = [];
+  doc.global.global_param.query = { parameter: [] };
+  doc.apis[0].request.header = { parameter: [] };
   doc.apis[1].request.header.parameter = [
     { key: "X-Repeat", value: "first", is_checked: 1 },
     { key: "x-repeat", value: "second", is_checked: 1 },
     { key: "X-Repeat", value: "hidden", is_checked: -1 },
   ];
   doc.apis[1].request.query.query_add_equal = -1;
-  doc.apis[0].request.query = {
-    parameter: [{ key: "q", value: "parent", is_checked: 1 }],
-  };
+  doc.apis[0].request.query = { parameter: [] };
   doc.apis[1].request.query.parameter = [
     { key: "q", value: "first", is_checked: 1 },
     { key: "middle", value: "keep", is_checked: 1 },
@@ -1080,4 +1075,63 @@ test("unsupported inherited form dependencies reject atomically rather than disa
     assert.throws(() => importIntoProject(p, d));
     assert.deepEqual(p, before);
   }
+});
+
+test("modern inherited duplicate parameters reject atomically instead of guessing source deduplication", () => {
+  for (const key of ["header", "query", "cookie", "body"]) {
+    const d = fixture();
+    if (key === "body")
+      d.apis[1].request.body = { mode: "urlencoded", parameter: [] };
+    d.global.global_param[key] = {
+      parameter: [{ key: "inherited", value: "yes", is_checked: 1 }],
+    };
+    const rows = [
+      { key: "duplicate", value: "first", is_checked: 1 },
+      {
+        key: key === "header" ? "Duplicate" : "duplicate",
+        value: "second",
+        is_checked: 1,
+      },
+    ];
+    d.apis[1].request[key] = { ...d.apis[1].request[key], parameter: rows };
+    const p = project(),
+      before = structuredClone(p),
+      source = structuredClone(d);
+    assert.throws(() => importIntoProject(p, d), /继承.*重复参数/);
+    assert.deepEqual(p, before);
+    assert.deepEqual(d, source);
+  }
+});
+
+test("inheritance duplicate guard covers ancestor duplicates but permits inactive rows and case-sensitive query keys", () => {
+  const d = fixture();
+  d.global.global_param.query = {
+    parameter: [
+      { key: "inherited", value: "one", is_checked: 1 },
+      { key: "inherited", value: "two", is_checked: 1 },
+    ],
+  };
+  assert.throws(() => importIntoProject(project(), d), /继承.*重复参数/);
+  d.global.global_param.query.parameter[1].is_checked = 0;
+  d.apis[1].request.query.parameter = [
+    { key: "q", value: "lower", is_checked: 1 },
+    { key: "Q", value: "upper", is_checked: 1 },
+    { key: "q", value: "inactive", is_checked: 0 },
+  ];
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(
+    p.requests[0].query
+      .filter((x) => x.enabled !== false)
+      .map((x) => [x.key, x.value]),
+    [
+      ["inherited", "one"],
+      ["q", "lower"],
+      ["Q", "upper"],
+    ],
+  );
+  assert.equal(
+    p.requests[0].query.find((x) => x.value === "inactive").enabled,
+    false,
+  );
 });
