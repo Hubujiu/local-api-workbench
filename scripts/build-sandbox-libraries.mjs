@@ -91,3 +91,6 @@ await writeFile(
   "src/vendor/THIRD-PARTY-LICENSES.txt",
   notices.join("\n\n---\n\n"),
 );
+
+// Rebuild the reviewed, separately scoped URL adapter with the other trusted assets.
+await import("./build-url-sdk.mjs");
