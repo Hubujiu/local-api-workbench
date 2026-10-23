@@ -41,3 +41,11 @@ payload hash and unchanged source requests. Existing published Smithy vectors
 are unchanged. Browser CI edits two duplicate rows, sends them and checks the
 actual fixture's echoed merged field, then removes the temporary rows. No AWS
 account or public resource is contacted.
+
+Screenshot review found that the first AWS browser fixture reused a tab with a
+response-specific asynchronous post-script from an earlier scenario. The wire
+header and signature checks succeeded but the overall script outcome was failed.
+The authentication fixture now saves, clears and later restores those unrelated
+scripts, and explicitly requires a passed outcome with no error in addition to
+its wire-header assertions. This isolates the intended acceptance case rather
+than suppressing an application error or relaxing script failure behavior.

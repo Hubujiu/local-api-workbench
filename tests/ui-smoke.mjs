@@ -1354,6 +1354,14 @@ try {
   );
   assert(!rsaResult.body.includes("PRIVATE KEY"));
   await page.locator('[data-auth="privateKey"]').fill("");
+  // Isolate authentication from response-specific scripts on this reused tab.
+  const awsSavedScripts = {};
+  for (const phase of ["before", "after"]) {
+    await page.locator(`[data-param="${phase}"]`).click();
+    awsSavedScripts[phase] = await page.locator("#script-code").inputValue();
+    await page.locator("#script-code").fill("");
+  }
+  await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("aws");
   for (const [key, value] of Object.entries({
     accessKey: "fixture-access",
@@ -1386,6 +1394,8 @@ try {
     !JSON.parse(awsResult.body).authorization.includes("fixture-aws-secret"),
   );
   assert.equal(awsResult.status, 200);
+  assert.equal(awsResult.outcome, "passed", JSON.stringify(awsResult));
+  assert.equal(awsResult.error, undefined);
   assert.equal(JSON.parse(awsResult.body).awsRepeat, "first value,second");
   assert.equal(awsResult.request.headers["x-aws-repeat"], "first value,second");
   await page.locator("#send:not([disabled])").waitFor();
@@ -1396,6 +1406,11 @@ try {
     .locator(`[data-remove-pair="headers:${awsHeaderStart + 1}"]`)
     .click();
   await page.locator(`[data-remove-pair="headers:${awsHeaderStart}"]`).click();
+  await page.locator('[data-param="auth"]').click();
+  for (const phase of ["before", "after"]) {
+    await page.locator(`[data-param="${phase}"]`).click();
+    await page.locator("#script-code").fill(awsSavedScripts[phase]);
+  }
   await page.locator('[data-param="auth"]').click();
   const beforeJWTRequest = await page
     .locator(".tab.selected [data-open-tab]")
