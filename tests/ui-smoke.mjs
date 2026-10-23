@@ -4972,6 +4972,34 @@ try {
     "%E4%B8%AD%E6%96%87=%E7%A9%BA%20%E6%A0%BC%2B",
   );
   await page.locator("#send:not([disabled])").waitFor();
+  const cookieViewport = page.viewportSize();
+  for (const width of [800, cookieViewport.width]) {
+    await page.setViewportSize({ width, height: cookieViewport.height });
+    const layout = await page.locator(".cookie-toolbar").evaluate((toolbar) => {
+      const manager = toolbar
+        .querySelector(".cookie-manager-row")
+        .getBoundingClientRect();
+      const field = toolbar
+        .querySelector(".cookie-encoding-field")
+        .getBoundingClientRect();
+      const select = toolbar.querySelector("select").getBoundingClientRect();
+      const bounds = toolbar.getBoundingClientRect();
+      return {
+        managerBottom: manager.bottom,
+        fieldTop: field.top,
+        selectRight: select.right,
+        right: bounds.right,
+        scroll: toolbar.scrollWidth,
+        width: toolbar.clientWidth,
+      };
+    });
+    assert.ok(
+      layout.fieldTop >= layout.managerBottom + 7,
+      JSON.stringify(layout),
+    );
+    assert.ok(layout.selectRight <= layout.right + 1, JSON.stringify(layout));
+    assert.ok(layout.scroll <= layout.width + 1, JSON.stringify(layout));
+  }
   await page.screenshot({ path: "/tmp/local-api-cookie-encoding.png" });
 
   await createFileTarget("Document form fields");

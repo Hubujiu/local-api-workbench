@@ -2084,3 +2084,22 @@ dialog:has(#cookie-line) {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+.cookie-toolbar {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.cookie-manager-row,
+.cookie-encoding-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.cookie-encoding-field select {
+  min-width: 0;
+  max-width: 100%;
+}
