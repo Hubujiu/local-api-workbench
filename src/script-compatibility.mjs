@@ -182,6 +182,48 @@ function installScriptCompatibility({
     addHeader: (item) => headerList.add(item),
     removeHeader: (name) => headerList.remove(name),
   };
+  pm.request.getHeaders = (options = {}) => {
+    options ??= {};
+    if (
+      typeof options !== "object" ||
+      Array.isArray(options) ||
+      Object.entries(options).some(
+        ([key, value]) =>
+          !["enabled", "ignoreCase", "multiValue", "sanitizeKeys"].includes(
+            key,
+          ) || typeof value !== "boolean",
+      )
+    )
+      throw Error(
+        "Header选项只接受enabled/ignoreCase/multiValue/sanitizeKeys布尔值",
+      );
+    const rows = headerRows();
+    if (rows.length > 1000) throw Error("Header读取最多1000项");
+    const result = new Map();
+    let size = 0;
+    for (const row of rows) {
+      if (
+        (options.enabled && row.enabled === false) ||
+        (options.sanitizeKeys && !row.key)
+      )
+        continue;
+      const key = String(row.key ?? "");
+      if (utf8Size(key) > 1024) throw Error("Header名称超过1KiB限制");
+      const encoded = JSON.stringify(row.value === undefined ? "" : row.value);
+      if (typeof encoded !== "string" || utf8Size(encoded) > 65536)
+        throw Error("Header值超过64KiB限制或不能序列化");
+      size += utf8Size(key) + utf8Size(encoded);
+      if (size > 262144) throw Error("Header读取合计超过256KiB限制");
+      const name = options.ignoreCase ? key.toLowerCase() : key;
+      const value = JSON.parse(encoded);
+      if (result.has(name)) {
+        const previous = result.get(name);
+        if (Array.isArray(previous)) previous.push(value);
+        else result.set(name, [previous, value]);
+      } else result.set(name, value);
+    }
+    return Object.fromEntries(result);
+  };
   Object.defineProperties(request, {
     request_headers: { get: headerObject },
     request_querys: {

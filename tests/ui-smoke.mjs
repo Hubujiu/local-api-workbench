@@ -57,6 +57,7 @@ const fixture = http.createServer(async (request, response) => {
         url: request.url,
         helper: request.headers["x-helper"],
         removed: request.headers["x-remove"] ?? null,
+        readerDisabled: request.headers["x-reader-disabled"] ?? null,
       }),
     );
     return;
@@ -4709,7 +4710,8 @@ try {
     "pm.setRequestQuery('shortcut',false);pm.setRequestQuery('gone',1);pm.removeRequestQuery('gone');\n" +
     "pm.request.addQueryParams('batch=a%2Bb&batch=%E4%B8%AD%E6%96%87');apt.request.addQueryParams([{key:'hidden-batch',value:'x',disabled:true},{key:'removed-batch',value:'x'}]);pm.request.removeQueryParams([{key:'removed-batch'}]);\n" +
     "pm.test.skip('pending form check', () => {throw Error('must not execute')});\n" +
-    "pm.test('registration-count', () => pm.expect(pm.test.index()).to.equal(2));\n" +
+    "pm.request.headers.add({key:'x-reader-disabled',value:'not sent',disabled:true});\n" +
+    "pm.test('registration-count', () => {pm.expect(pm.test.index()).to.equal(2);pm.expect(pm.request.getHeaders({enabled:true,ignoreCase:true})['x-helper']).to.equal('null');pm.expect(pm.request.getHeaders()['x-reader-disabled']).to.equal('not sent');pm.expect(apt.request.getHeaders({enabled:true})['x-reader-disabled']).to.equal(undefined);});\n" +
     originalFormScript.replaceAll("; ", ";\n") +
     "\npm.setRequestBody({modern:'body'},undefined,false);pm.setRequestBody('temporary',1);pm.removeRequestBody('temporary');";
   await page.locator("#expand-script").click();
@@ -4774,6 +4776,7 @@ try {
 
   assert.equal(scriptFormWire.helper, "null");
   assert.equal(scriptFormWire.removed, null);
+  assert.equal(scriptFormWire.readerDisabled, null);
   assert.equal(
     new URL(scriptFormWire.url, fixtureURL).searchParams.get("shortcut"),
     "false",
