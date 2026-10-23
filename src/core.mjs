@@ -1,3 +1,7 @@
+import {
+  openAPIURLQuery,
+  openAPIEmptyQueryValue,
+} from "./openapi-url-query.mjs";
 import { normalizeImportedScriptTasks } from "../public/imported-script-tasks.js";
 import { sdkCurlDefinition } from "./script-url-export.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
@@ -783,6 +787,7 @@ export function importDocument(doc) {
               .filter((p) => p.in === "query")
               .map((p) => ({
                 key: p.name,
+                ...openAPIEmptyQueryValue(p.allowEmptyValue),
                 schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
@@ -1275,13 +1280,16 @@ export function exportOpenAPI(project) {
       r.openapiExampleBindingsVersion !== 1
     )
       throw Error("响应示例绑定版本暂不支持");
+    const queryDefinition = openAPIURLQuery(r);
     let path;
     try {
-      path = new URL(r.url.replace(/\{\{[^}]+\}\}/g, "localhost")).pathname
+      path = new URL(
+        queryDefinition.pathURL.replace(/\{\{[^}]+\}\}/g, "localhost"),
+      ).pathname
         .replaceAll("%7B", "{")
         .replaceAll("%7D", "}");
     } catch {
-      path = r.url.replace(/^\{\{[^}]+\}\}/, "") || "/";
+      path = queryDefinition.pathURL.replace(/^\{\{[^}]+\}\}/, "") || "/";
     }
     paths[path] ??= {};
     const responses = Object.create(null);
@@ -1364,7 +1372,7 @@ export function exportOpenAPI(project) {
       description: r.description,
       tags: r.folder ? [r.folder] : [],
       parameters: [
-        ["query", r.query],
+        ["query", queryDefinition.query],
         ["path", r.path],
         ["header", r.headers],
         ["cookie", r.cookies],
@@ -1378,6 +1386,9 @@ export function exportOpenAPI(project) {
             description: parameter.description || "",
             schema: parameter.schema ?? { type: "string" },
             example: parameter.value,
+            ...(location === "query"
+              ? openAPIEmptyQueryValue(parameter.allowEmptyValue)
+              : {}),
           })),
       ),
       responses,

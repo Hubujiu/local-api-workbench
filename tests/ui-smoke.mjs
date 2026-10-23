@@ -5494,6 +5494,39 @@ try {
   );
   await page.screenshot({ path: "/tmp/local-api-final-body.png" });
 
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("OpenAPI URL query fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Literal URL query definition");
+  await page.locator("#url").fill(fixtureURL + "/items?q=one+two&empty=");
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-add-pair="query"]').click();
+  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-pair="query:0:value"]').fill("a+b");
+  await saveAndWait();
+  await page.locator("#export").click();
+  await page.locator("#export-format").selectOption("openapi");
+  const queryDefinitionDownload = page.waitForEvent("download");
+  await page.locator("#dialog-save").click();
+  const queryDefinitionDocument = JSON.parse(
+    await readFile(await (await queryDefinitionDownload).path(), "utf8"),
+  );
+  assert.deepEqual(
+    queryDefinitionDocument.paths["/items"].get.parameters
+      .filter((item) => item.in === "query")
+      .map((item) => [item.name, item.example]),
+    [
+      ["q", "one two"],
+      ["empty", ""],
+      ["table", "a+b"],
+    ],
+  );
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-openapi-url-query.png" });
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
