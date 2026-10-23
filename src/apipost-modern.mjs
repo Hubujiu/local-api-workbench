@@ -1,3 +1,4 @@
+import { validateMockResponse } from "../public/response-example.js";
 import { variableRows } from "../public/variable-definitions.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { prepareApipostModels } from "./apipost-models.mjs";
@@ -77,6 +78,42 @@ function parameterRows(value, label) {
   if (value === undefined) return [];
   if (!object(value)) throw Error("Apipost现代参数包装无效: " + label);
   return list(value.parameter ?? [], label);
+}
+function responseHeaderMap(value) {
+  if (empty(value)) return {};
+  const names = new Set(),
+    entries = [];
+  for (const row of list(value, "响应示例头", 100)) {
+    if (
+      !object(row) ||
+      Object.keys(row).some(
+        (k) =>
+          ![
+            "key",
+            "value",
+            "is_checked",
+            "param_id",
+            "description",
+            "field_type",
+            "not_null",
+          ].includes(k),
+      ) ||
+      row.is_checked !== 1 ||
+      (row.description !== undefined && row.description !== "") ||
+      (row.field_type !== undefined && row.field_type !== "String") ||
+      (row.not_null !== undefined && ![-1, 0].includes(row.not_null)) ||
+      typeof row.key !== "string" ||
+      typeof row.value !== "string"
+    )
+      throw Error("Apipost响应示例头仅支持启用的普通文本行；其他语义不会丢弃");
+    const name = row.key.toLowerCase();
+    if (names.has(name)) throw Error("Apipost响应头名称重复");
+    names.add(name);
+    entries.push([name, row.value]);
+  }
+  const headers = Object.fromEntries(entries);
+  validateMockResponse({ status: 200, body: "", headers });
+  return headers;
 }
 export function importModernApipost(source, project, { sync = false } = {}) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
@@ -281,7 +318,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       throw Error("Apipost Query等号选项无效");
     const queryAddEqual = queryFlag === undefined || queryFlag === 1;
     const response = {},
-      responseDelays = [];
+      responseDelays = [],
+      responseHeaders = [];
     for (const [index, item] of list(
       node.response?.example ?? [],
       "response.example",
@@ -297,7 +335,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       if (item.raw === undefined && delay > 0)
         throw Error("Apipost响应延迟需要明确示例正文");
       if (item.raw !== undefined) responseDelays.push(delay);
-      reject(item.headers, "响应示例头");
+      const exampleHeaders = responseHeaderMap(item.headers);
+      if (item.raw === undefined && Object.keys(exampleHeaders).length)
+        throw Error("Apipost响应示例头需要明确示例正文");
+      if (item.raw !== undefined) responseHeaders.push(exampleHeaders);
       response["example" + index] = {
         ...item,
         expect: {
@@ -354,6 +395,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       queryAddEqual,
       cookieEncoding,
       responseDelays,
+      responseHeaders,
       legacy: {
         ...node,
         url: serviceId ? "https://migration.invalid" + url : url,
@@ -398,6 +440,17 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       throw Error("Apipost响应延迟与示例映射不一致");
     row.responseDelays.forEach((delay, index) => {
       if (delay !== undefined) request.examples[index].delayMs = delay;
+    });
+    if (row.responseHeaders.length !== request.examples.length)
+      throw Error("Apipost响应示例头映射不一致");
+    row.responseHeaders.forEach((headers, index) => {
+      request.examples[index].headers = {
+        ...request.examples[index].headers,
+        ...headers,
+      };
+      validateMockResponse(request.examples[index], {
+        allowInformational: true,
+      });
     });
     if (row.responseDelays.some((delay) => delay > 0))
       request.importNotes.push(

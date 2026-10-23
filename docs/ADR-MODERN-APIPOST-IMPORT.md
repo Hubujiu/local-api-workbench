@@ -131,3 +131,26 @@ truthy flag: absent/1 encodes names and values using the observed avoid-double-
 encoding rule, -1/0 encodes only names. Existing Workbench defaults remain raw.
 Unknown flag values reject atomically. See ADR-COOKIE-PARAMETER-ENCODING.md for
 primary static evidence, exact scope and the OpenAPI export limitation.
+
+
+## Plain response-example headers
+
+Static Offline2 work.asar 5658.b952f110e2a1.js binds the response example headers
+array to the shared Header editor; index-0d1d8198fa5a.js modules 278322/663311
+expose checked key/value rows. Import a bounded subset of enabled plain text
+rows with is_checked=1. Normalize names case-insensitively and reject duplicate
+names before constructing the response object. Explicit Content-Type overrides
+the format-derived default. Existing Mock header validation enforces name/value,
+count/byte limits and rejects transport or isolation overrides such as
+Content-Length, Set-Cookie and CSP. No safety header is bypassed.
+
+Disabled rows, nonempty descriptions, non-string field types, required-field
+constraints and unknown row semantics currently reject atomically rather than
+being discarded. Headers on a definition without explicit example raw content
+also reject. This is not a complete response-header-table/schema migration.
+The header values are literal, not a new templating or script execution surface.
+Legacy import behavior is unchanged.
+
+Fixed evidence: import to real local Mock HTTP with a custom header and explicit
+Content-Type, source immutability, atomic invalid/unsupported cases, and browser
+import opening the example editor with the exact retained header JSON.

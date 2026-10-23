@@ -500,3 +500,81 @@ test("modern Cookie encoding maps enabled, disabled and absent flags to actual w
     assert.deepEqual(p, before);
   }
 });
+
+test("modern plain response headers survive import and real Mock HTTP", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "modern-response-headers-")),
+    app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((r) => app.server.close(r));
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  });
+  const p = await app.store.create("Imported response headers"),
+    doc = fixture();
+  doc.apis[1].response.example[0].headers = [
+    { key: "X-Imported", value: "literal+value", is_checked: 1 },
+    { key: "Content-Type", value: "application/custom+json", is_checked: 1 },
+  ];
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  await app.store.save(p);
+  assert.deepEqual(p.requests[0].examples[0].headers, {
+    "content-type": "application/custom+json",
+    "x-imported": "literal+value",
+  });
+  const response = await fetch(
+    app.url + "/mock/" + p.id + "/" + p.requests[0].id,
+  );
+  assert.equal(response.headers.get("x-imported"), "literal+value");
+  assert.equal(response.headers.get("content-type"), "application/custom+json");
+  assert.equal(await response.text(), '{"ok":true}');
+  assert.deepEqual(doc, before);
+});
+test("modern response header controls, duplicates and unsupported row semantics reject atomically", () => {
+  for (const headers of [
+    [{ key: "Set-Cookie", value: "x=1", is_checked: 1 }],
+    [{ key: "Content-Length", value: "10", is_checked: 1 }],
+    [
+      { key: "X", value: "1", is_checked: 1 },
+      { key: "x", value: "2", is_checked: 1 },
+    ],
+    [{ key: "X", value: "bad\r\nline", is_checked: 1 }],
+    [{ key: "X", value: "1", is_checked: -1 }],
+    [
+      {
+        key: "X",
+        value: "1",
+        is_checked: 1,
+        description: "cannot silently discard",
+      },
+    ],
+    { X: "not the supported row array" },
+  ]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].response.example[0].headers = headers;
+    assert.throws(
+      () => importIntoProject(p, doc),
+      /响应头|响应示例头|隔离头|传输控制头/,
+    );
+    assert.deepEqual(p, before);
+  }
+  const doc = fixture(),
+    p = project(),
+    before = structuredClone(p);
+  delete doc.apis[1].response.example[0].raw;
+  doc.apis[1].response.example[0].headers = [
+    { key: "X", value: "1", is_checked: 1 },
+  ];
+  assert.throws(() => importIntoProject(p, doc), /响应头|响应示例头/);
+  assert.deepEqual(p, before);
+});

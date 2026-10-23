@@ -2802,6 +2802,7 @@ try {
   );
   modern.apis[1].response.example.push({
     raw: "",
+    headers: [{ key: "X-Imported-Example", value: "kept", is_checked: 1 }],
     expect: {
       code: "204",
       content_type: "text",
@@ -2870,6 +2871,12 @@ try {
   assert.equal(await page.locator("#ex-status").inputValue(), "204");
   assert.equal(await page.locator("#ex-body").inputValue(), "");
   assert.equal(await page.locator("#ex-delay").inputValue(), "80");
+  assert.equal(
+    JSON.parse(await page.locator("#ex-headers").inputValue())[
+      "x-imported-example"
+    ],
+    "kept",
+  );
   await page.screenshot({ path: "/tmp/local-api-imported-example-delay.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
