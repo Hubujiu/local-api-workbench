@@ -53,3 +53,12 @@ Integration must preserve disabled rows and dynamic specifications while avoidin
 double evaluation of generated values. A new explicit compatibility choice and
 real HTTP/export/browser evidence remain required; foundation tests alone do not
 constitute delivery of that integration.
+
+## Cross-platform byte preservation
+
+The source subtree and generated URL assets disable Git text conversion through
+narrow .gitattributes rules. Their manifests authenticate exact bytes, including
+upstream license line endings. Windows automatic LF-to-CRLF checkout conversion
+otherwise changes the bundle digest. Hash checks remain strict: neither the
+build nor tests normalize bytes or accept alternate digests. Other repository
+files retain their existing checkout behavior.

@@ -1,0 +1,7 @@
+# Preserve reviewed URL SDK source and generated asset bytes on every platform.
+# Their manifests intentionally hash exact bytes, not normalized text.
+/scripts/vendor/postman-url-sdk/** -text
+/src/vendor/url-sdk.js -text
+/src/vendor/url-sdk-host.js -text
+/src/vendor/url-sdk-manifest.json -text
+/src/vendor/URL-SDK-LICENSES.txt -text
