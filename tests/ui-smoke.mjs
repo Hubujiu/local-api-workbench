@@ -100,6 +100,7 @@ const fixture = http.createServer(async (request, response) => {
 
   if (
     request.url.startsWith("/sdk-url/template?") ||
+    request.url.split("?")[0] === "/sdk-url/template-variable" ||
     request.url === "/sdk-url/template-body"
   ) {
     const chunks = [];
