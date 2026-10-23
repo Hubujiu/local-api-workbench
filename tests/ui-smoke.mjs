@@ -2893,6 +2893,14 @@ try {
       data: 'pm.test("imported response",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept"));',
     },
   ];
+  modern.global.codes = [
+    {
+      code_id: "browser-code",
+      project_id: modern.project_id,
+      code_number: "0007",
+      code_msg: "导入业务错误说明",
+    },
+  ];
   modern.global.global_param.pre_tasks = [
     {
       type: "customScript",
@@ -3047,6 +3055,11 @@ try {
   const taskSourceProject = await app.store.get(
     await page.locator("#project-select").inputValue(),
   );
+  const importedCode = taskSourceProject.settings.statusCodes.find(
+    (item) => item.code === "0007",
+  );
+  assert.equal(importedCode.label, "导入业务错误说明");
+  assert.notEqual(importedCode.httpHint, true);
   const taskSourceRequest = taskSourceProject.requests.find((request) =>
     request.importedScriptTasks?.before.some(
       (task) => task.id === "browser-disabled",
@@ -3110,6 +3123,16 @@ try {
   );
   await page.screenshot({ path: "/tmp/local-api-imported-example-delay.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator('[data-page="docs"]').click();
+  await page
+    .locator(".error-code-document")
+    .getByText("0007", { exact: true })
+    .waitFor();
+  await page
+    .locator(".error-code-document")
+    .getByText("导入业务错误说明", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-imported-error-codes.png" });
 
   await page.locator('[data-page="dictionary"]').click();
   await page

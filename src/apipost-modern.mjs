@@ -1,3 +1,4 @@
+import { mergeApipostCodes } from "./apipost-codes.mjs";
 import { normalizeImportedScriptTasks } from "../public/imported-script-tasks.js";
 import { validateMockResponse } from "../public/response-example.js";
 import { variableRows } from "../public/variable-definitions.js";
@@ -217,7 +218,6 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
   for (const name of [
-    "codes",
     "attributes",
     "mock_custom_rules",
     "db_link",
@@ -637,6 +637,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const settings = {
     ...(project.settings ?? {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
+    statusCodes: mergeApipostCodes(
+      empty(global.codes) ? [] : global.codes,
+      project.settings?.statusCodes || [],
+      source.project_id,
+    ),
   };
   validateResources(settings);
   const components = structuredClone(project.openapiComponents ?? {});
