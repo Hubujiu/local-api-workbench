@@ -2128,3 +2128,13 @@ dialog:has(#cookie-line) {
   min-width: 0;
   max-width: 100%;
 }
+
+.imported-script-tasks {
+  margin: 10px 0;
+}
+.imported-script-tasks pre {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

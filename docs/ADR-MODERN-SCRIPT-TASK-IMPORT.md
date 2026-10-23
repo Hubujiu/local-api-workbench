@@ -1,8 +1,12 @@
 # Ordered modern script-task import
 
+Disabled-source preservation and the readonly provenance view are specified in
+[ADR-IMPORTED-SCRIPT-TASK-SOURCE.md](ADR-IMPORTED-SCRIPT-TASK-SOURCE.md).
+
 Modern exchange envelopes previously rejected every nonempty task list. This
-adapter now accepts up to 16 enabled `customScript` tasks in each request's
-`pre_tasks` or `post_tasks`, with string `id`, `name` and `data`, and `enabled: 1`.
+adapter accepts up to 16 request-local `customScript` tasks per phase, with
+string `id`, `name` and `data`. Only `enabled: 1` enters the executable program;
+explicit disabled states are retained as source under the provenance ADR above.
 Single-block code is retained byte-for-byte as beforeScript/afterScript.
 Multiple blocks follow the original request-local assembly behavior described
 below. Task ID and name
@@ -26,7 +30,7 @@ and display that compatibility warning. No host API, arbitrary npm loading,
 network permission, VM limit or execution budget is expanded. Import itself
 never evaluates a script; user-triggered execution uses the normal pipeline.
 
-Disabled tasks, mixed task types, unknown fields, nonstring code, more than 16
+Mixed task types, unknown fields, nonstring code, more than 16
 blocks per phase, code above 64 KiB UTF-8 per assembled phase and
 inherited/global/folder tasks reject atomically. Task identity/name provenance
 must fit 1800 characters per phase, so normalization cannot truncate it from

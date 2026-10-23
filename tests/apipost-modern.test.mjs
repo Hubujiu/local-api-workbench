@@ -649,7 +649,7 @@ test("single enabled modern script tasks preserve code and run only after explic
   assert.equal(failed.status, "failed");
 });
 
-test("modern task imports reject mixed excessive disabled inherited or unknown semantics atomically", () => {
+test("modern task imports reject mixed excessive inherited or unknown semantics atomically", () => {
   const task = {
     type: "customScript",
     id: "task",
@@ -675,7 +675,7 @@ test("modern task imports reject mixed excessive disabled inherited or unknown s
           name: "x".repeat(200),
         })),
       ),
-    (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: -1 }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: 2 }),
     (d) =>
       d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, unknown: true }),
@@ -794,4 +794,65 @@ test("ordered modern custom-script blocks share lexical scope and preserve await
     2,
     "duplicate lexical declarations must not become separately scoped successful tasks",
   );
+});
+
+test("disabled modern custom scripts survive native backup without entering the executable program", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.headers["x-active"]);
+    res.setHeader("content-type", "application/json");
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const source = fixture(),
+    p = project();
+  source.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  source.apis[1].request.pre_tasks = [
+    {
+      id: "off",
+      name: "Disabled source",
+      type: "customScript",
+      enabled: -1,
+      data: "throw Error('disabled must never execute')",
+    },
+    {
+      id: "on",
+      name: "Active",
+      type: "customScript",
+      enabled: 1,
+      data: "apt.setRequestHeader('x-active','yes')",
+    },
+    {
+      id: "zero",
+      name: "Disabled zero",
+      type: "customScript",
+      enabled: 0,
+      data: "const invalid syntax = ;",
+    },
+  ];
+  const original = structuredClone(source);
+  importIntoProject(p, source);
+  assert.deepEqual(source, original);
+  const request = p.requests[0];
+  assert.equal(request.beforeScript, source.apis[1].request.pre_tasks[1].data);
+  assert.deepEqual(
+    request.importedScriptTasks.before,
+    source.apis[1].request.pre_tasks,
+  );
+  const restored = importDocument(JSON.stringify({ requests: [request] }))[0];
+  assert.deepEqual(restored.importedScriptTasks, request.importedScriptTasks);
+  const env = p.environments.find((item) => item.id !== "existing");
+  const run = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, restored, env.id) }] },
+    environmentVariables(p, env.id),
+    executeRequest,
+  );
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.deepEqual(seen, ["yes"]);
 });

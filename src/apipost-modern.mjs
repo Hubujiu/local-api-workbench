@@ -1,3 +1,4 @@
+import { normalizeImportedScriptTasks } from "../public/imported-script-tasks.js";
 import { validateMockResponse } from "../public/response-example.js";
 import { variableRows } from "../public/variable-definitions.js";
 import { validateModelFolders } from "../public/model-folders.js";
@@ -126,26 +127,34 @@ function scriptTasks(value, phase) {
         (k) => !["type", "id", "name", "enabled", "data"].includes(k),
       ) ||
       task.type !== "customScript" ||
-      task.enabled !== 1 ||
+      ![1, 0, -1].includes(task.enabled) ||
       typeof task.data !== "string" ||
       Buffer.byteLength(task.data, "utf8") > 65536
     )
       throw Error(
-        "Apipost " + phase + " 仅支持启用的自定义脚本；其他任务语义不会丢弃",
+        "Apipost " +
+          phase +
+          " 仅支持自定义脚本及明确启停状态；其他任务语义不会丢弃",
       );
     safe(task.id);
     safe(task.name);
-    metadata.push({ id: task.id, name: task.name });
+    metadata.push({ id: task.id, name: task.name, enabled: task.enabled });
   }
+  const source = normalizeImportedScriptTasks({
+    version: 1,
+    before: tasks,
+    after: [],
+  }).before;
+  const active = tasks.filter((task) => task.enabled === 1);
   const provenance = JSON.stringify(metadata);
   if (provenance.length > 1800)
     throw Error("Apipost脚本任务标识/名称总长度超过导入说明上限");
   // Preserve the existing one-block conversion exactly. Multiple blocks follow
   // observed original order in a shared lexical scope, with newline boundaries.
   const code =
-    tasks.length === 1
-      ? tasks[0].data
-      : tasks
+    active.length === 1
+      ? active[0].data
+      : active
           .filter((task) => task.data && task.data !== "undefined")
           .map((task) => "\n" + task.data.trim() + "\n")
           .join("");
@@ -153,9 +162,10 @@ function scriptTasks(value, phase) {
     throw Error("Apipost单阶段合并脚本超过64 KiB");
   return {
     code,
+    source,
     note:
       phase +
-      " 脚本已按原顺序转为 Apipost 8 子集，原任务标识/名称：" +
+      " 已启用脚本按原顺序转换；停用源码仅保留、不执行。原任务标识/名称/状态：" +
       provenance,
   };
 }
@@ -486,6 +496,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     );
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
+      request.importedScriptTasks = normalizeImportedScriptTasks({
+        version: 1,
+        before: row.beforeTask?.source || [],
+        after: row.afterTask?.source || [],
+      });
       request.beforeScript = row.beforeTask?.code || "";
       request.afterScript = row.afterTask?.code || "";
       request.importNotes.push(

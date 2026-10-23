@@ -1,3 +1,4 @@
+import { normalizeImportedScriptTasks } from "../public/imported-script-tasks.js";
 import { sdkCurlDefinition } from "./script-url-export.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { validateQueryRuntime } from "./script-url-runtime.mjs";
@@ -272,6 +273,13 @@ export function normalizeRequest(r = {}) {
             : {}),
         }
       : {}),
+    ...(r.importedScriptTasks === undefined
+      ? {}
+      : {
+          importedScriptTasks: normalizeImportedScriptTasks(
+            r.importedScriptTasks,
+          ),
+        }),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],

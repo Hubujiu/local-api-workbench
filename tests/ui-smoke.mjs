@@ -2911,6 +2911,13 @@ try {
   });
   modern.apis[1].request.post_tasks[1].data =
     'pm.test("imported response",()=>pm.expect(importedPayload.importTask).to.equal("browser-kept"));';
+  modern.apis[1].request.pre_tasks.splice(1, 0, {
+    type: "customScript",
+    id: "browser-disabled",
+    name: "Disabled browser source",
+    enabled: -1,
+    data: "throw Error('disabled browser source must not execute')",
+  });
   modern.apis[1].request.body.mode = "plain";
   modern.apis[1].request.body.raw = "browser plain + & = text";
   modern.apis[1].mock_ip_white_list_enable = -1;
@@ -2963,6 +2970,46 @@ try {
     .getByText("现代Apipost JSON有限互操作", { exact: false })
     .waitFor();
   assert.equal(await page.locator("#url").inputValue(), "/auth");
+  await page.locator(".imported-script-tasks > summary").click();
+  await page
+    .locator(".imported-script-tasks summary")
+    .filter({ hasText: "Disabled browser source" })
+    .click();
+  await page
+    .locator(".imported-script-tasks pre")
+    .filter({
+      hasText: "throw Error('disabled browser source must not execute')",
+    })
+    .waitFor();
+  assert.equal(
+    await page
+      .locator(".imported-script-tasks textarea, .imported-script-tasks button")
+      .count(),
+    0,
+  );
+  const taskSourceProject = await app.store.get(
+    await page.locator("#project-select").inputValue(),
+  );
+  const taskSourceRequest = taskSourceProject.requests.find((request) =>
+    request.importedScriptTasks?.before.some(
+      (task) => task.id === "browser-disabled",
+    ),
+  );
+  assert.equal(
+    taskSourceRequest.importedScriptTasks.before.find(
+      (task) => task.id === "browser-disabled",
+    ).enabled,
+    -1,
+  );
+  assert.equal(
+    taskSourceRequest.importedScriptTasks.before.find(
+      (task) => task.id === "browser-disabled",
+    ).data,
+    "throw Error('disabled browser source must not execute')",
+  );
+  await page.screenshot({
+    path: "/tmp/local-api-imported-disabled-script.png",
+  });
   await page.locator("#env").selectOption({ label: "Imported" });
   await page.locator('[data-mode="debug"]').click();
   const modernResponse = page.waitForResponse(
@@ -2971,6 +3018,7 @@ try {
   await page.locator("#send").click();
   const modernResult = await (await modernResponse).json();
   assert.equal(modernResult.status, 200, JSON.stringify(modernResult));
+  assert.equal(modernResult.outcome, "passed", JSON.stringify(modernResult));
   assert.equal(modernResult.request.headers["x-test"], "current");
   assert.equal(modernResult.request.headers["x-imported-task"], "browser-kept");
   assert(
