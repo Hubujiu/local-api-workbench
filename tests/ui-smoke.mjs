@@ -5324,7 +5324,40 @@ try {
       (item) => item.name === "SDK URL object" && item.passed,
     ),
   );
-  await page.setViewportSize({ width: 1328, height: 876 });
+  for (const width of [800, 1328]) {
+    await page.setViewportSize({ width, height: 876 });
+    const layout = await page
+      .locator(".script-mode-controls")
+      .evaluate((group) => {
+        const fields = [...group.querySelectorAll("label")].map((field) => {
+          const box = field.getBoundingClientRect();
+          const select = field.querySelector("select").getBoundingClientRect();
+          return {
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            selectLeft: select.left,
+            selectRight: select.right,
+          };
+        });
+        return { fields, width: group.clientWidth, scroll: group.scrollWidth };
+      });
+    assert.equal(layout.fields.length, 2);
+    const [first, second] = layout.fields;
+    assert.ok(
+      second.left >= first.right + 11 || second.top >= first.bottom + 11,
+      JSON.stringify(layout),
+    );
+    for (const field of layout.fields) {
+      assert.ok(
+        field.selectLeft >= field.left - 1 &&
+          field.selectRight <= field.right + 1,
+        JSON.stringify(layout),
+      );
+    }
+    assert.ok(layout.scroll <= layout.width + 1, JSON.stringify(layout));
+  }
   await page.screenshot({ path: "/tmp/local-api-sdk-url-mode.png" });
   await page.locator("#export").click();
   await page.locator("#export-format").selectOption("native");
