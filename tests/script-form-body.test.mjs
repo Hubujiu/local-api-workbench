@@ -329,3 +329,32 @@ test("form updates reject hidden unknown fields without partial changes", async 
     assert.equal(result.request.form[0].value, "known hidden value");
   }
 });
+
+test("form collection iterators keep live entries, context, snapshots and mode invalidation", async () => {
+  for (const mode of ["urlencoded", "formdata"]) {
+    const result = await runScript(
+      `
+      const body=pm.request.body;
+      body.update({mode:'${mode}',${mode}:[{key:'tag',value:'one'},{key:'tag',value:'two',disabled:true}]});
+      const form=body.${mode},ctx={seen:0,value:'changed'};
+      form.each(function(e){this.seen++;return false;},ctx);
+      form.each(function(e){pm.expect(this).to.equal(body);return false;});
+      form.find(e=>!e.disabled).value=ctx.value;
+      const selected=form.filter(function(e){return e.disabled===this.disabled;},{disabled:true});
+      pm.test('selection',()=>{pm.expect(selected[0]).to.equal(form.idx(1));pm.expect(ctx.seen).to.equal(1);});
+      const mapped=form.map(function(e,i){pm.expect(this).to.equal(form);if(i===0)form.add({key:'later',value:'three'});return e.value;});
+      pm.test('snapshot',()=>pm.expect(mapped).to.deep.equal(['changed','two']));
+      pm.test('reduction',()=>pm.expect(form.reduce(function(n,e){pm.expect(this).to.equal(form);return n+1;},0)).to.equal(3));
+      for(const method of ['each','map','filter','find','reduce'])pm.expect(()=>form[method]('key')).to.throw();
+      body.update({mode:'raw',raw:'replacement'});
+      for(const method of ['each','map','filter','find','reduce'])pm.expect(()=>form[method](()=>true,0)).to.throw();
+    `,
+      { request: {} },
+    );
+    assert.ok(
+      result.tests.every((x) => x.passed),
+      JSON.stringify(result.tests),
+    );
+    assert.equal(result.request.body, "replacement");
+  }
+});

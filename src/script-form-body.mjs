@@ -1,5 +1,5 @@
 // Serialized into QuickJS. Only text operations and opaque selected-file metadata.
-function installScriptFormBody({ request, body }) {
+function installScriptFormBody({ request, body, installIterators }) {
   const own = (object, key) =>
     Object.prototype.hasOwnProperty.call(object, key);
   const bytes = (text, limit, label) => {
@@ -201,7 +201,7 @@ function installScriptFormBody({ request, body }) {
       wrappers.set(row, proxy);
       return proxy;
     };
-    return {
+    const list = {
       count: () => read().rows.length,
       all: () => read().rows.map(entry),
       one(name) {
@@ -222,10 +222,6 @@ function installScriptFormBody({ request, body }) {
       idx(index) {
         if (!Number.isInteger(index)) throw Error("表单索引必须是整数");
         return entry(read().rows[index]);
-      },
-      each(fn) {
-        if (typeof fn !== "function") throw Error("each需要函数");
-        read().rows.map(entry).forEach(fn);
       },
       toObject(excludeDisabled = false) {
         if (typeof excludeDisabled !== "boolean" || arguments.length > 1)
@@ -266,6 +262,12 @@ function installScriptFormBody({ request, body }) {
         request.form = [];
       },
     };
+    installIterators({
+      collection: list,
+      read: () => read().rows.map(entry),
+      parent: body,
+    });
+    return list;
   };
   const lists = new Map();
   for (const mode of ["urlencoded", "formdata"])

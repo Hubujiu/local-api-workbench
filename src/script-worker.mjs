@@ -1,3 +1,4 @@
+import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
 import { queryBatchSource } from "./script-query-batch.mjs";
@@ -392,16 +393,19 @@ try {
       "});",
   );
 
+  run(
+    "const __installCollectionIterators = (" + collectionIteratorsSource + ");",
+  );
   run("(" + queryBatchSource + ")({request,pm,urlTools:__urlQueryTools});");
   run(
     "(" +
       headerEntriesSource +
-      ")({request,headers:pm.request.headers,requestFacade:pm.request});",
+      ")({request,headers:pm.request.headers,requestFacade:pm.request,installIterators:__installCollectionIterators});",
   );
   run(
     "const __formOperations = (" +
       scriptFormBodySource +
-      ")({request,body:pm.request.body});",
+      ")({request,body:pm.request.body,installIterators:__installCollectionIterators});",
   );
   run(
     "(" +

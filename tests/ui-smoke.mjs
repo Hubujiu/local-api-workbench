@@ -4723,7 +4723,7 @@ try {
   await page
     .locator("#script-code")
     .fill(
-      "pm.request.body.update({mode:'urlencoded',urlencoded:[{key:'tag',value:'first'},{key:'tag',value:'second'},{key:'skip',value:'hidden',disabled:true}]}); const form=pm.request.body.urlencoded; form.one('tag').value='changed'; form.add({key:'中文',value:'空 格&=+'}); pm.test('form-readers', () => pm.expect(form.toObject().tag).to.deep.equal(['first','changed']));",
+      "pm.request.body.update({mode:'urlencoded',urlencoded:[{key:'tag',value:'first'},{key:'tag',value:'second'},{key:'skip',value:'hidden',disabled:true}]}); const form=pm.request.body.urlencoded; const formContext={value:'changed',seen:0};form.each(function(e){this.seen++;return false;},formContext);form.find(e=>e.key==='tag'&&e.value==='second').value=formContext.value; form.add({key:'中文',value:'空 格&=+'}); pm.test('form-readers', () => {pm.expect(form.toObject().tag).to.deep.equal(['first','changed']);pm.expect(formContext.seen).to.equal(1);pm.expect(form.filter(e=>e.key==='tag').map(e=>e.value)).to.deep.equal(['first','changed']);pm.expect(form.map(e=>e.key).length).to.equal(form.count());pm.expect(form.reduce(n=>n+1,0)).to.equal(form.count());});",
     );
   // The inline editor must be reachable without scrolling past long help text.
   for (const stage of ["after", "before"]) {
