@@ -556,7 +556,9 @@ function paramPanel(r) {
     return (
       (param === "cookies"
         ? '<button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span>'
-        : "") + pairs(r[param], param)
+        : param === "query"
+          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制下方参数表的空值；URL 内已有查询保持原样。</p>`
+          : "") + pairs(r[param], param)
     );
   if (param === "body")
     return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>${
@@ -1648,6 +1650,10 @@ function bind() {
     editableParameters()[kind].splice(Number(index), 1);
     mark();
     render();
+  });
+  on("#query-add-equal", "change", (_, element) => {
+    request().queryAddEqual = element.checked;
+    mark();
   });
   on("#inherit-global-parameters", "change", (_, element) => {
     request().inheritGlobalParameters = element.checked;

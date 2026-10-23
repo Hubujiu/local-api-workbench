@@ -269,21 +269,25 @@ test("modern disabled numeric Mock allowlist flag is not mistaken for enabled ac
   }
 });
 
-test("modern omit-equals numeric sentinel cannot silently change an empty query flag", () => {
-  const doc = fixture();
-  doc.apis[1].request.query.query_add_equal = -1;
-  doc.apis[1].request.query.parameter = [
-    { key: "flag", value: "", is_checked: 1 },
-  ];
-  const p = project(),
-    before = structuredClone(p);
-  assert.throws(() => importIntoProject(p, doc), /省略等号/);
-  assert.deepEqual(p, before);
-  for (const value of ["value", 0, false]) {
-    doc.apis[1].request.query.parameter[0].value = value;
-    const target = project();
-    importIntoProject(target, doc);
-    assert.equal(target.requests[0].query[0].value, value);
+test("modern omit-equals numeric sentinel preserves the explicit request setting", () => {
+  for (const flag of [-1, 0]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].request.query.query_add_equal = flag;
+    doc.apis[1].request.query.parameter = [
+      { key: "flag", value: "", is_checked: 1 },
+    ];
+    importIntoProject(p, doc);
+    assert.equal(p.requests[0].queryAddEqual, false);
+    assert.equal(p.requests[0].query[0].value, "");
+  }
+  for (const flag of [false, "-1", 2, null]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].request.query.query_add_equal = flag;
+    assert.throws(() => importIntoProject(p, doc), /等号/);
+    assert.deepEqual(p, before);
   }
 });
 
@@ -309,6 +313,7 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
     { key: "x-repeat", value: "second", is_checked: 1 },
     { key: "X-Repeat", value: "hidden", is_checked: -1 },
   ];
+  doc.apis[1].request.query.query_add_equal = -1;
   doc.apis[0].request.query = {
     parameter: [{ key: "q", value: "parent", is_checked: 1 }],
   };
@@ -317,6 +322,11 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
     { key: "middle", value: "keep", is_checked: 1 },
     { key: "q", value: "second", is_checked: 1 },
   ];
+  doc.apis[1].request.query.parameter.push({
+    key: "flag",
+    value: "",
+    is_checked: 1,
+  });
   const original = structuredClone(doc);
   importIntoProject(p, doc);
   assert.deepEqual(
@@ -329,6 +339,7 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
       ["q", "first"],
       ["middle", "keep"],
       ["q", "second"],
+      ["flag", ""],
     ],
   );
   const env = p.environments.find((x) => x.id !== "existing");
@@ -338,6 +349,7 @@ test("modern inheritance replaces parent name groups without losing duplicate ch
   );
   const wire = JSON.parse((await executeRequest(request)).body);
   assert.equal(wire.header, "first, second");
+  assert(wire.url.endsWith("&flag"), wire.url);
   assert.deepEqual(
     new URL(wire.url, "http://localhost").searchParams.getAll("q"),
     ["first", "second"],

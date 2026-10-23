@@ -1,3 +1,4 @@
+import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import { asapAuthorization } from "./asap-auth.mjs";
 import { jwtAuthorization } from "./jwt-auth.mjs";
@@ -304,8 +305,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (!["http:", "https:"].includes(u.protocol))
     throw Error("仅支持 HTTP/HTTPS");
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
-  for (const p of r.query.filter((p) => p.enabled !== false && p.key))
-    u.searchParams.append(p.key, String(p.value ?? ""));
+  appendRequestQuery(u, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
   if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
@@ -318,14 +318,14 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         "base64",
       );
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") u.searchParams.set(r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setURLQuery(u, r.auth.key, r.auth.value);
     else headers[r.auth.key] = r.auth.value;
   }
   if (r.auth.type === "asap")
     headers.authorization = (await asapAuthorization(r.auth)).value;
   if (r.auth.type === "jwt") {
     const jwt = await jwtAuthorization(r.auth);
-    if (jwt.in === "query") u.searchParams.set(jwt.key, jwt.value);
+    if (jwt.in === "query") setURLQuery(u, jwt.key, jwt.value);
     else headers[jwt.key] = jwt.value;
   }
   const activeCookies = r.cookies.filter((c) => c.enabled !== false && c.key);

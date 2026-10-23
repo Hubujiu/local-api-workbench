@@ -72,13 +72,11 @@ that specific interchange import only, not original-app execution or native
 project-directory parity.
 
 
-The original query-equals toggle also uses 1/-1 (work.asar
-3201.883b408594fa.js). Until flag-only structured query serialization is
-implemented, query_add_equal=-1 with an empty value must reject atomically
-rather than silently send flag= instead of flag. Keep the previously recognized
-0 sentinel, but do not confuse the legitimate nonempty textual values of 0 and
-false with an empty parameter. Nonempty values retain their existing import
-behaviour. This is a data-loss guard, not a claim that omit-equals is supported.
+The original query-equals toggle uses 1/-1 (work.asar
+3201.883b408594fa.js). The earlier data-loss guard rejected -1 with empty values
+rather than send flag= instead of flag. That temporary guard is superseded by
+the explicit queryAddEqual request setting in ADR-QUERY-EQUALS.md: modern -1/0
+map to false, 1/absent to true, and unknown values reject atomically.
 
 
 ## Duplicate parameters within inheritance layers

@@ -116,6 +116,22 @@ try {
   });
   assert.equal(duplicateWire.repeated, "first, second");
   assert.deepEqual(JSON.parse(duplicateCurl.stdout), duplicateWire);
+  const flagRequest = {
+    url: origin + "/?literalFlag",
+    queryAddEqual: false,
+    query: [
+      { key: "flag", value: "" },
+      { key: "zero", value: 0 },
+    ],
+    auth: { type: "apiKey", in: "query", key: "token", value: "a+b" },
+  };
+  const flagWire = JSON.parse((await executeRequest(flagRequest)).body);
+  const flagCurl = await exec("sh", ["-c", toCurl(flagRequest)], {
+    timeout: 5000,
+    maxBuffer: 262144,
+  });
+  assert.equal(flagWire.url, "/?literalFlag&flag&zero=0&token=a%2Bb");
+  assert.deepEqual(JSON.parse(flagCurl.stdout), flagWire);
   console.log("CURL_LITERAL_BODY_IMPORT_AND_EXPORT_PASSED");
 } finally {
   server.closeAllConnections();

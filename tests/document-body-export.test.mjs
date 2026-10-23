@@ -232,3 +232,19 @@ test("document parameter tables expose a keyboard-focusable scroll region and bo
   assert.match(html, /class="doc-parameter-table"/);
   assert.match(html, /min-width:720px/);
 });
+
+test("HTML and Markdown documents disclose nondefault empty Query equals behaviour", () => {
+  const source = project();
+  source.requests[0].queryAddEqual = false;
+  for (const format of ["html", "markdown"])
+    assert.match(
+      exportDocumentation(source, format),
+      /空值 Query 参数不添加等号/,
+    );
+  delete source.requests[0].queryAddEqual;
+  for (const format of ["html", "markdown"])
+    assert.doesNotMatch(
+      exportDocumentation(source, format),
+      /空值 Query 参数不添加等号/,
+    );
+});

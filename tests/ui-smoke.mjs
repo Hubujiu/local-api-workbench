@@ -4905,6 +4905,42 @@ try {
   );
   await page.screenshot({ path: "/tmp/local-api-skipped-assertion.png" });
 
+  await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Query flag options");
+  await page.locator("#method").selectOption("POST");
+  await page.locator("#url").fill(fixtureURL + "/script-form-body");
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-add-pair="query"]').click();
+  await page.locator('[data-pair="query:0:key"]').fill("flag");
+  await page.locator("#query-add-equal").uncheck();
+  await saveAndWait();
+  const flagRequestId = await page
+    .locator("#tree [data-request]")
+    .filter({ hasText: "Query flag options" })
+    .getAttribute("data-request");
+  await page.reload();
+  await page.locator(`[data-request="${flagRequestId}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="query"]').click();
+  assert.equal(await page.locator("#query-add-equal").isChecked(), false);
+  for (const addEqual of [false, true]) {
+    await page.locator("#query-add-equal").setChecked(addEqual);
+    const reply = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+    );
+    await page.locator("#send").click();
+    const result = await (await reply).json();
+    assert.equal(result.status, 200, JSON.stringify(result));
+    assert.equal(
+      JSON.parse(result.body).url,
+      "/script-form-body?flag" + (addEqual ? "=" : ""),
+    );
+    await page.locator("#send:not([disabled])").waitFor();
+  }
+  await saveAndWait();
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-query-equals.png" });
+
   await createFileTarget("Document form fields");
   const privateUploadText = "DOC-UPLOAD-BYTES-DO-NOT-INLINE";
   const privateUploadBase64 = Buffer.from(privateUploadText).toString("base64");

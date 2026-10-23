@@ -170,6 +170,9 @@ export function requestDocumentationHTML(request, headingLevel = 3) {
         : "",
     )
     .join("");
+  if (request.queryAddEqual === false)
+    result =
+      "<p>空值 Query 参数不添加等号；URL 中已有查询保持原样。</p>" + result;
   const type = request.bodyType ?? "none";
   if (type !== "none")
     result +=
@@ -220,6 +223,8 @@ function requestDocumentationMarkdown(request) {
         : "",
     )
     .join("");
+  if (request.queryAddEqual === false)
+    result = "空值 Query 参数不添加等号；URL 中已有查询保持原样。\n\n" + result;
   const type = request.bodyType ?? "none";
   if (type !== "none")
     result +=

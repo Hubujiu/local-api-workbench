@@ -1,3 +1,4 @@
+import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
@@ -140,6 +141,8 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  if (r.queryAddEqual !== undefined && typeof r.queryAddEqual !== "boolean")
+    throw Error("Query等号选项必须为布尔值");
   if (
     r.openapiExampleBindingsVersion !== undefined &&
     r.openapiExampleBindingsVersion !== 1
@@ -231,6 +234,7 @@ export function normalizeRequest(r = {}) {
     method,
     url,
     query: r.query || [],
+    queryAddEqual: r.queryAddEqual !== false,
     headers: r.headers || [],
     path: r.path || [],
     cookies: r.cookies || [],
@@ -1223,6 +1227,10 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    if (r.queryAddEqual === false)
+      throw Error(
+        "OpenAPI不能无损表达空Query省略等号配置，请使用项目备份或cURL导出",
+      );
     if (
       r.openapiExampleBindingsVersion !== undefined &&
       r.openapiExampleBindingsVersion !== 1
@@ -1388,10 +1396,7 @@ export function toCurl(input) {
       encodeURIComponent(parameter.value),
     );
   const url = new URL(raw);
-  for (const parameter of r.query.filter(
-    (item) => item.enabled !== false && item.key,
-  ))
-    url.searchParams.append(parameter.key, parameter.value);
+  appendRequestQuery(url, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
   const args = [
     "curl",
@@ -1415,7 +1420,7 @@ export function toCurl(input) {
   if (["bearer", "oauth2"].includes(r.auth.type))
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") url.searchParams.set(r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   const activeCookies = r.cookies.filter(

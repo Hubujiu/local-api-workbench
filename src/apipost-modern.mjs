@@ -276,13 +276,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       parameterRows(request.cookie, "cookie").length
     )
       throw Error("Apipost Cookie编码选项需手工迁移");
-    if (
-      [0, -1].includes(request.query?.query_add_equal) &&
-      parameterRows(request.query, "query").some(
-        (row) => String(row.value ?? "") === "",
-      )
-    )
-      throw Error("Apipost省略等号查询参数需手工迁移");
+    const queryFlag = request.query?.query_add_equal;
+    if (queryFlag !== undefined && ![0, -1, 1].includes(queryFlag))
+      throw Error("Apipost Query等号选项无效");
+    const queryAddEqual = queryFlag === undefined || queryFlag === 1;
     const response = {};
     for (const [index, item] of list(
       node.response?.example ?? [],
@@ -345,6 +342,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       node,
       url,
       serviceId,
+      queryAddEqual,
       legacy: {
         ...node,
         url: serviceId ? "https://migration.invalid" + url : url,
@@ -383,6 +381,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     );
     request.url = row.url;
     request.serviceId = row.serviceId;
+    request.queryAddEqual = row.queryAddEqual;
     request.httpVersion = row.node.protocol === "http/2" ? "2" : "1.1";
     request.statusId = row.node.mark_id
       ? resource("mark", row.node.mark_id)
