@@ -53,10 +53,26 @@ export function mergeApipostFunctions(
     if (parameterTemplates && Array.isArray(document?.apis))
       for (const api of document.apis)
         if (api.target_type === "api")
-          for (const group of ["query", "header"])
+          for (const group of ["query", "header", "body"]) {
+            if (
+              group === "body" &&
+              !["urlencoded", "form-data"].includes(api.request?.body?.mode)
+            )
+              continue;
             if (Array.isArray(api.request?.[group]?.parameter))
               for (const row of api.request[group].parameter)
-                if (row && row.is_checked === 1) allowedRows.add(row);
+                if (
+                  row &&
+                  row.is_checked === 1 &&
+                  String(row.type).toLowerCase() !== "file" &&
+                  !(
+                    group === "body" &&
+                    api.request.body.mode === "form-data" &&
+                    String(row.field_type).toLowerCase() === "file"
+                  )
+                )
+                  allowedRows.add(row);
+          }
     const pending = [{ value: document, allowed: false }],
       seen = new Set();
     let nodes = 0;
@@ -69,7 +85,7 @@ export function mergeApipostFunctions(
       ) {
         if (!allowed)
           throw Error(
-            "Apipost共享函数参数模板仅支持启用的接口Query/Header完整值；加工链暂不支持",
+            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本完整值；加工链暂不支持",
           );
         const parsed = parseApipostFunctionTemplate(value);
         if (!names.has(parsed.name))

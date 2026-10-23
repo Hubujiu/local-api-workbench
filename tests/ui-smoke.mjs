@@ -99,9 +99,16 @@ const fixture = http.createServer(async (request, response) => {
   }
 
   if (request.url.startsWith("/sdk-url/template?")) {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
-      JSON.stringify({ url: request.url, header: request.headers["x-test"] }),
+      JSON.stringify({
+        url: request.url,
+        header: request.headers["x-test"],
+        body: Buffer.concat(chunks).toString(),
+        contentType: request.headers["content-type"],
+      }),
     );
     return;
   }
@@ -6534,6 +6541,29 @@ try {
   templateModern.apis[1].url = "/sdk-url/template";
   templateModern.apis[1].name = "Source Query function";
   templateModern.apis[1].request.pre_tasks = [];
+  templateModern.apis[1].method = "POST";
+  templateModern.global.global_vars.literal = {
+    value: "must-not-expand",
+    current_value: "must-not-expand",
+  };
+  templateModern.global.custom_func.push({
+    func_id: "form-template-function",
+    project_id: templateModern.project_id,
+    func_name: "fn_form",
+    func_desc: "Text form template",
+    func_body: 'return text+" &+=#%\\n{{literal}}";',
+  });
+  templateModern.apis[1].request.body = {
+    mode: "urlencoded",
+    parameter: [
+      {
+        key: "payload",
+        value: "{{$function.fn_form(raw)}}",
+        is_checked: 1,
+        field_type: "String",
+      },
+    ],
+  };
   templateModern.global.custom_func.push({
     func_id: "header-template-function",
     project_id: templateModern.project_id,
@@ -6607,6 +6637,30 @@ try {
   });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('[data-param="body"]').click();
+  assert.equal(
+    await page
+      .locator('input[name="body-type"][value="urlencoded"]')
+      .isChecked(),
+    true,
+  );
+  await page.locator('[data-dynamic-pair="form:0"]').click();
+  assert.equal(
+    await page.locator("#dynamic-source").inputValue(),
+    "apipost-form-function",
+  );
+  await page
+    .locator("#dynamic-value")
+    .fill("{{$function.fn_form(updated-body)}}");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify("updated-body &+=#%\n{{literal}}"),
+  );
+  await page.screenshot({ path: "/tmp/local-api-form-function-template.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6658,6 +6712,49 @@ try {
       value: "{{$function.fn_header(updated)}}",
       functions: [],
     },
+  );
+
+  const expectedTemplateForm = "updated-body &+=#%\n{{literal}}";
+  assert.equal(
+    new URLSearchParams(JSON.parse(templateResult.body).body).get("payload"),
+    expectedTemplateForm,
+  );
+  assert.match(
+    JSON.parse(templateResult.body).contentType,
+    /application\/x-www-form-urlencoded/,
+  );
+  assert.deepEqual(
+    savedTemplateProject.requests.find((r) => r.id === templateRequest.id)
+      .form[0].dynamic,
+    {
+      source: "apipost-form-function",
+      value: "{{$function.fn_form(updated-body)}}",
+      functions: [],
+    },
+  );
+  await page.locator('[data-param="body"]').click();
+  await page.locator('input[name="body-type"][value="form-data"]').check();
+  const multipartTemplateResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const multipartTemplateResult = await (
+    await multipartTemplateResponse
+  ).json();
+  assert.equal(
+    multipartTemplateResult.status,
+    200,
+    JSON.stringify(multipartTemplateResult),
+  );
+  const receivedMultipartTemplate = JSON.parse(multipartTemplateResult.body);
+  assert.match(
+    receivedMultipartTemplate.contentType,
+    /multipart\/form-data; boundary=/,
+  );
+  assert(
+    receivedMultipartTemplate.body.includes(
+      'name="payload"\r\n\r\n' + expectedTemplateForm + "\r\n",
+    ),
   );
 
   assert.deepEqual(errors, []);

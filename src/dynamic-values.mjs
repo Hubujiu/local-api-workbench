@@ -19,6 +19,7 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
       "mock",
       "apipost-function",
       "apipost-header-function",
+      "apipost-form-function",
     ].includes(spec.source)
   )
     throw Error("动态值来源无效");

@@ -1,6 +1,7 @@
 export const apipostFunctionSourceGroups = Object.freeze({
   "apipost-function": "query",
   "apipost-header-function": "headers",
+  "apipost-form-function": "form",
 });
 export const isApipostFunctionSource = (source) =>
   typeof source === "string" &&
@@ -43,8 +44,15 @@ export function validateApipostTemplateRequest(request) {
     Object.keys(request.bodyDynamic || {}).length
   )
     throw Error(
-      "原版函数模板暂仅支持Query/Header匹配位置文本，不能与其他动态值混用",
+      "原版函数模板暂仅支持Query/Header/表单匹配位置文本，不能与其他动态值混用",
     );
+  if (
+    entries.some(
+      ({ group, row }) => group === "form" && row.enabled !== false,
+    ) &&
+    !["urlencoded", "form-data"].includes(request.bodyType)
+  )
+    throw Error("原版表单函数模板仅支持urlencoded或form-data文本字段");
   if (
     (request.scriptURLMode && request.scriptURLMode !== "string") ||
     request.beforeScript?.trim() ||

@@ -491,8 +491,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       if (inheritedForm)
         for (const field of parameterRows(layer.body, "继承Body")) {
           if (
-            field?.type !== undefined &&
-            String(field.type).toLowerCase() !== "text"
+            (field?.type !== undefined &&
+              String(field.type).toLowerCase() !== "text") ||
+            (request.body?.mode === "form-data" &&
+              String(field?.field_type).toLowerCase() === "file")
           )
             throw Error("继承表单目前仅支持文本字段，文件须手工选择");
         }
@@ -501,6 +503,19 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       if (layer !== groupedOrigin?.request)
         reject(layer.body?.raw, "继承原始Body");
     }
+    const formParameters = inheritedForm
+      ? merge("body").map((field) => {
+          if (request.body.mode !== "form-data") return field;
+          reject(field.content_type, "表单分项Content-Type");
+          if (
+            String(field.field_type).toLowerCase() !== "file" &&
+            String(field.type).toLowerCase() !== "file"
+          )
+            return field;
+          reject(field.file_base64, "内嵌文件内容");
+          return { ...field, type: "file" };
+        })
+      : undefined;
     const cookieFlag = request.cookie?.cookie_encode;
     if (cookieFlag !== undefined && ![0, -1, 1].includes(cookieFlag))
       throw Error("Apipost Cookie编码选项无效");
@@ -607,7 +622,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
                     request.body?.mode === "plain"
                       ? "text"
                       : request.body?.mode,
-                  ...(inheritedForm ? { parameter: merge("body") } : {}),
+                  ...(inheritedForm ? { parameter: formParameters } : {}),
                   raw_schema: models.rewrite(request.body?.raw_schema ?? {}),
                 },
                 header: merge("header"),
@@ -791,6 +806,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     for (const [group, dynamicSource] of [
       ["query", "apipost-function"],
       ["headers", "apipost-header-function"],
+      ["form", "apipost-form-function"],
     ])
       for (const row of request[group] || []) {
         if (typeof row.value !== "string" || !/\$function\./i.test(row.value))
@@ -813,14 +829,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     if (converted) {
       validateApipostTemplateRequest(request);
       request.importNotes.push(
-        "Query/Header原版函数模板为受限子集：原样文本参数、同步基本类型结果；函数抛错保留原模板。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
+        "Query/Header/表单原版函数模板为受限子集：原样文本参数、同步基本类型结果；函数抛错保留原模板。禁止脚本/SDK模式及其他动态值组合，结果不再次插值。",
       );
     }
   }
   if (!empty(global.custom_func))
     for (const request of ordinaryRequests)
       request.importNotes.push(
-        "原版共享函数仅支持沙箱脚本中的fn_调用；同步异常按来源语义返回text输入。仅启用的接口Query/Header完整函数模板另有受限兼容；其他参数模板/加工链不兼容会拒绝，函数不在导入时执行，运行仍受原沙箱限制。",
+        "原版共享函数仅支持沙箱脚本中的fn_调用；同步异常按来源语义返回text输入。仅启用的接口Query/Header/表单文本完整函数模板另有受限兼容；其他参数模板/加工链不兼容会拒绝，函数不在导入时执行，运行仍受原沙箱限制。",
       );
   const components = structuredClone(project.openapiComponents ?? {});
   components.schemas ??= {};

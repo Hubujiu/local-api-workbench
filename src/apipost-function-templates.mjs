@@ -6,7 +6,7 @@ export async function resolveApipostFunctionTemplate(
   functions,
   group = "query",
 ) {
-  if (!["query", "headers"].includes(group))
+  if (!["query", "headers", "form"].includes(group))
     throw Error("原版函数模板参数位置无效");
   const { name, argument } = parseApipostFunctionTemplate(expression);
   const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
@@ -41,7 +41,7 @@ export async function resolveApipostFunctionTemplate(
     throw Error("原版函数模板结果超过64KiB");
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (
-    /[\r\n]/.test(text) ||
+    (group !== "form" && /[\r\n]/.test(text)) ||
     (group === "query" && /[&#+%?=]/.test(text)) ||
     (text !== expression && text.includes("$"))
   )
