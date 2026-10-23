@@ -1,3 +1,4 @@
+import { sdkOpenAPIDefinition } from "./script-url-openapi.mjs";
 import {
   validateApipostTemplateRequest,
   isApipostFunctionSource,
@@ -1275,7 +1276,8 @@ export function importCurl(source) {
 export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
-  for (const r of project.requests.filter((r) => !r.deletedAt)) {
+  for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    const r = sdkOpenAPIDefinition(project, source);
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),
@@ -1286,8 +1288,6 @@ export function exportOpenAPI(project) {
       )
     )
       throw Error("OpenAPI不能表达原版函数模板，请使用项目备份");
-    if (normalizeScriptURLMode(r.scriptURLMode) === "sdk")
-      throw Error("OpenAPI暂不能无损表达SDK URL模式，请使用项目备份");
     if (
       normalizeCookieEncoding(r.cookieEncoding) !== "raw" &&
       (r.cookies || []).some((row) => row.enabled !== false && row.key)

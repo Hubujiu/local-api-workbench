@@ -61,7 +61,7 @@ test("URL object mode is explicit and survives request/plan JSON snapshots witho
   );
 });
 
-test("SDK definition cURL is available while OpenAPI remains explicitly unsupported", () => {
+test("SDK Path definitions remain unsupported in OpenAPI while cURL renders them", () => {
   const request = {
     url: "https://example.test/{id}",
     scriptURLMode: "sdk",

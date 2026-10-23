@@ -34,3 +34,7 @@ selected-environment and service-binding export through the authenticated API;
 inherited-script rejection before an undefined provider can run; input immutability;
 and the real browser cURL dialog for a script-free SDK definition. Tests never
 execute shell commands derived from third-party or user-supplied fixtures.
+
+The later static OpenAPI subset is documented in
+[ADR-SDK-OPENAPI-DEFINITION.md](ADR-SDK-OPENAPI-DEFINITION.md). The original
+blanket OpenAPI restriction above remains applicable outside that bounded subset.

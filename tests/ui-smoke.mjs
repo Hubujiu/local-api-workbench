@@ -5980,6 +5980,23 @@ try {
   );
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-openapi-url-query.png" });
+  await page.locator('[data-param="before"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#script-url-mode").selectOption("sdk");
+  await saveAndWait();
+  await page.locator("#export").click();
+  await page.locator("#export-format").selectOption("openapi");
+  const sdkDefinitionDownload = page.waitForEvent("download");
+  await page.locator("#dialog-save").click();
+  const sdkDefinitionDocument = JSON.parse(
+    await readFile(await (await sdkDefinitionDownload).path(), "utf8"),
+  );
+  assert.deepEqual(
+    sdkDefinitionDocument.paths["/items"].get.parameters,
+    queryDefinitionDocument.paths["/items"].get.parameters,
+  );
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-sdk-openapi-definition.png" });
 
   // Restore the actual earlier imported project snapshot as a separate copy.
   // Restoration must not execute imported scripts or overwrite its source.
