@@ -3,6 +3,8 @@ export const apipostBuiltinStages = Object.freeze([
   "upper",
   "length",
   "number",
+  "concat",
+  "lconcat",
 ]);
 export const isApipostBuiltinStage = (name) =>
   apipostBuiltinStages.includes(name);
@@ -22,23 +24,23 @@ export function parseApipostFunctionTemplate(value) {
   )
     throw Error("原版函数模板须为不超过64KiB的文本");
   const match =
-    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)*)\}\}$/.exec(
+    /^\{\{\$function\.(fn_[A-Za-z0-9_]+)\(([^(){}|]*)\)((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)*)\}\}$/.exec(
       value,
     );
   const variable =
     !match &&
-    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)+)\}\}$/.exec(
+    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)+)\}\}$/.exec(
       value,
     );
   const literal =
     !match &&
     !variable &&
-    /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\(\))?)+)\}\}$/.exec(
+    /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)+)\}\}$/.exec(
       value,
     );
   if (!match && !variable && !literal)
     throw Error(
-      "仅支持完整函数、单层变量或引号文本及白名单无参数加工链，不支持嵌套或拼接",
+      "仅支持完整函数、单层变量或引号文本及白名单加工链，不支持嵌套或拼接",
     );
   if (
     variable &&
@@ -46,19 +48,31 @@ export function parseApipostFunctionTemplate(value) {
   )
     throw Error("原版加工链变量名称无效");
   const suffix = match ? match[3] : variable ? variable[2] : literal[3];
-  const pipeline = suffix
+  const stages = suffix
     ? suffix
         .slice(1)
         .split("|")
-        .map((name) => name.replace(/\(\)$/, "").toLowerCase())
+        .map((stage) => {
+          const match = /^([A-Za-z_][A-Za-z0-9_]*)(?:\(([^(){}|]*)\))?$/.exec(
+            stage,
+          );
+          const name = match[1].toLowerCase();
+          const argument = (match[2] || "").trim();
+          if (!/^fn_[A-Za-z0-9_]+$/.test(name) && !isApipostBuiltinStage(name))
+            throw Error("原版加工链包含不支持的函数");
+          if (["concat", "lconcat"].includes(name)) {
+            if (argument.includes(","))
+              throw Error("拼接加工链仅支持一个原文参数");
+          } else if (argument) throw Error("此原版加工链阶段暂不支持参数");
+          return { name, argument };
+        })
     : [];
-  if (
-    pipeline.some(
-      (name) =>
-        !/^fn_[A-Za-z0-9_]+$/.test(name) && !isApipostBuiltinStage(name),
-    )
+  const pipeline = stages.map((stage) => stage.name);
+  const pipelineOptions = stages.some((stage) =>
+    ["concat", "lconcat"].includes(stage.name),
   )
-    throw Error("原版加工链仅支持无参数fn_或lower/upper/length/number");
+    ? { pipelineArguments: stages.map((stage) => stage.argument) }
+    : {};
   if (pipeline.length + (match ? 1 : 0) > 10)
     throw Error("每个原版函数模板最多10个函数阶段");
   return match
@@ -66,10 +80,11 @@ export function parseApipostFunctionTemplate(value) {
         name: match[1].toLowerCase(),
         argument: match[2],
         ...(pipeline.length ? { pipeline } : {}),
+        ...pipelineOptions,
       }
     : variable
-      ? { variable: variable[1], pipeline }
-      : { literal: literal[2], pipeline };
+      ? { variable: variable[1], pipeline, ...pipelineOptions }
+      : { literal: literal[2], pipeline, ...pipelineOptions };
 }
 export const isApipostTemplateCandidate = (value) =>
   typeof value === "string" &&

@@ -100,7 +100,10 @@ test("modern variable and literal pipelines import without a function registry a
   };
   doc.apis[1].request.query.parameter[0].value = "{{shared|upper}}";
   doc.apis[1].method = "POST";
-  doc.apis[1].request.body = { mode: "raw", raw: "{{'raw\\ntext'|upper}}" };
+  doc.apis[1].request.body = {
+    mode: "raw",
+    raw: "{{'raw\\ntext'|upper|concat(-tail)}}",
+  };
   const p = {
     requests: [],
     folders: [],
@@ -123,7 +126,7 @@ test("modern variable and literal pipelines import without a function registry a
     executeRequest,
   );
   assert.equal(r.status, "passed", JSON.stringify(r));
-  assert.deepEqual(seen, { q: "ENV-VALUE", body: "RAW\\NTEXT" });
+  assert.deepEqual(seen, { q: "ENV-VALUE", body: "RAW\\NTEXT-tail" });
   for (const extra of [
     "prefix {{shared|upper}}",
     "{{shared.path|upper}}",

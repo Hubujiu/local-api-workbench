@@ -6976,12 +6976,14 @@ try {
     await page.locator("#dynamic-value").inputValue(),
     "{{'raw-body'|upper}}",
   );
-  await page.locator("#dynamic-value").fill("{{'Edited-Literal'|lower}}");
+  await page
+    .locator("#dynamic-value")
+    .fill("{{'Edited-Literal'|lower|concat(-tail)}}");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
       document.querySelector("#dynamic-result").textContent ===
-      JSON.stringify("edited-literal"),
+      JSON.stringify("edited-literal-tail"),
   );
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -7015,7 +7017,7 @@ try {
     new URL(variableTemplateEcho.url, "http://fixture").searchParams.get("q"),
     "env-pipeline",
   );
-  assert.equal(variableTemplateEcho.body, "edited-literal");
+  assert.equal(variableTemplateEcho.body, "edited-literal-tail");
   const variableTemplateSaved = (
     await app.store.get(templateProjectId)
   ).requests.find((r) => r.id === variableTemplateRequest.id);
@@ -7025,7 +7027,7 @@ try {
   );
   assert.equal(
     variableTemplateSaved.bodyDynamic.apipost_body.value,
-    "{{'Edited-Literal'|lower}}",
+    "{{'Edited-Literal'|lower|concat(-tail)}}",
   );
 
   assert.deepEqual(errors, []);
