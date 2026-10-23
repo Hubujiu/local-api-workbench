@@ -2103,3 +2103,11 @@ dialog:has(#cookie-line) {
   min-width: 0;
   max-width: 100%;
 }
+
+.load-controls {
+  flex-wrap: wrap;
+  align-items: end;
+}
+.load-controls label {
+  min-width: 0;
+}

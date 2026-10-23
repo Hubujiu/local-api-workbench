@@ -38,7 +38,7 @@ test("load runs the actual script and dynamic pipeline with isolated variable sc
   });
   const url = "http://127.0.0.1:" + fixture.address().port,
     project = await app.store.create("load pipeline");
-  const invoke = async (request, concurrency = 1) => {
+  const invoke = async (request, concurrency = 1, timing = {}) => {
     const response = await fetch(
       app.url + "/api/projects/" + project.id + "/load",
       {
@@ -49,6 +49,7 @@ test("load runs the actual script and dynamic pipeline with isolated variable sc
         },
         body: JSON.stringify({
           request,
+          ...timing,
           count: 2,
           concurrency,
           runId: "pipeline-load",
@@ -58,6 +59,15 @@ test("load runs the actual script and dynamic pipeline with isolated variable sc
     assert.equal(response.status, 200);
     return response.json();
   };
+  const duration = await invoke({ url: url + "/main" }, 1, {
+    mode: "duration",
+    durationSeconds: 60,
+  });
+  assert.equal(duration.mode, "duration");
+  assert.equal(duration.durationSeconds, 60);
+  assert.equal(duration.stopReason, "count-limit");
+  assert.equal(duration.count, 2);
+  received.length = 0;
   const failed = await invoke({
     url: url + "/main",
     afterScript: 'pm.test("must fail",()=>pm.expect(1).to.equal(2));',

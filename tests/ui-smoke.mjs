@@ -995,6 +995,14 @@ try {
   await page
     .getByText("压测CSV变量名为空、重复或无效", { exact: true })
     .waitFor();
+  await page.locator("#load-data").fill("");
+  await page.locator("#load-mode").selectOption("duration");
+  await page.locator("#load-duration").fill("0");
+  await page.locator("#load-run").click();
+  await page
+    .getByText("压测持续时长须为1至60秒整数", { exact: true })
+    .waitFor();
+  await page.locator("#load-duration").fill("60");
   const csv = "loadFixture\nfirst\nsecond";
   await page.locator("#load-data-file").setInputFiles({
     name: "data.csv",
@@ -1008,6 +1016,8 @@ try {
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-mode="load"]').click();
   assert.equal(await page.locator("#load-data").inputValue(), csv);
+  assert.equal(await page.locator("#load-mode").inputValue(), "duration");
+  assert.equal(await page.locator("#load-duration").inputValue(), "60");
   page.once("dialog", (dialog) => {
     assert.match(dialog.message(), /有权/);
     dialog.accept();
@@ -1020,6 +1030,10 @@ try {
   await page.locator("#load-run").click();
   const loadPayload = await (await loadResponse).json();
   assert.equal(loadPayload.passed, 2, JSON.stringify(loadPayload));
+  assert.equal(loadPayload.mode, "duration");
+  assert.equal(loadPayload.stopReason, "count-limit");
+  assert.equal(loadPayload.cancelled, false);
+  await page.getByText("达到请求上限", { exact: true }).waitFor();
   assert.equal(loadPayload.scriptRequests, 2);
   assert.equal(loadPayload.mainRequests, 2);
   assert.equal(loadPayload.variableIsolation, "per-request");

@@ -816,6 +816,8 @@ export async function createApp({
                     p,
                     context.environment.id,
                   ).inspect(),
+                  mode: b.mode,
+                  durationSeconds: b.durationSeconds,
                   dataCSV: b.dataCSV,
                   count: b.count,
                   concurrency: b.concurrency,
