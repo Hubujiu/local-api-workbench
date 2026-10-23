@@ -6627,6 +6627,15 @@ try {
     mode: "plain",
     raw: "{{'raw-body'|upper}}",
   };
+  variableTemplateAPI.request.post_tasks = [
+    {
+      type: "customScript",
+      id: "template-after",
+      name: "Template response",
+      enabled: 1,
+      data: 'pm.test("template after response",()=>pm.expect(pm.response.json().body).to.equal("8dd8333be20d188016c5787119161b084e4abc30b2ef808b34763d8bb3ee17fb"));',
+    },
+  ];
   templateModern.apis.push(variableTemplateAPI);
 
   templateModern.apis[1].method = "POST";
@@ -7015,6 +7024,17 @@ try {
     variableTemplateResult.status,
     200,
     JSON.stringify(variableTemplateResult),
+  );
+  assert.equal(
+    variableTemplateResult.outcome,
+    "passed",
+    JSON.stringify(variableTemplateResult),
+  );
+  assert(
+    variableTemplateResult.assertions.some(
+      (a) => a.name === "template after response" && a.passed,
+    ),
+    JSON.stringify(variableTemplateResult.assertions),
   );
   const variableTemplateEcho = JSON.parse(variableTemplateResult.body);
   assert.equal(

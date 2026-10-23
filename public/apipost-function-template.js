@@ -190,13 +190,11 @@ export function validateApipostTemplateRequest(request) {
   if (
     (request.scriptURLMode && request.scriptURLMode !== "string") ||
     request.beforeScript?.trim() ||
-    request.afterScript?.trim() ||
     request.sharedBeforeScripts?.length ||
-    request.sharedAfterScripts?.length ||
     request.before?.length ||
     request.after?.length
   )
-    throw Error("原版函数模板暂不支持SDK URL模式或前后置脚本/操作组合");
+    throw Error("原版函数模板暂不支持SDK URL模式或前置脚本或声明式操作组合");
   let count = 0;
   for (const { row } of entries) {
     const parsed = parseApipostFunctionTemplate(row.dynamic.value);
