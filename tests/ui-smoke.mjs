@@ -45,7 +45,29 @@ const jwtFixtureSecret = "fictional-browser-jwt-secret-".repeat(3);
 const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
+const caseBatchHits = [];
+let releaseCaseBatchSlow, signalCaseBatchSlow;
+const caseBatchSlowSeen = new Promise((resolve) => {
+  signalCaseBatchSlow = resolve;
+});
 const fixture = http.createServer(async (request, response) => {
+  if (request.url.startsWith("/case-batch/")) {
+    const name = request.url.split("/").at(-1);
+    caseBatchHits.push(name);
+    if (name === "slow")
+      await new Promise((resolve) => {
+        releaseCaseBatchSlow = resolve;
+        signalCaseBatchSlow();
+      });
+    if (!response.destroyed) {
+      response.writeHead(name === "failure" ? 500 : 200, {
+        "content-type": "application/json",
+      });
+      response.end(JSON.stringify({ name }));
+    }
+    return;
+  }
+
   if (request.url === "/imported-form") {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -6169,6 +6191,131 @@ try {
   await page.locator("#send:not([disabled])").waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-form-defaults.png" });
 
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("Case batch execution fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Batch execution source");
+  await page.locator("#url").fill(fixtureURL + "/case-batch/first");
+  await saveAndWait();
+  const batchProjectId = await page.locator("#project-select").inputValue();
+  const batchSource = (await app.store.get(batchProjectId)).requests.find(
+    (r) => r.name === "Batch execution source",
+  );
+  await page.locator('[data-mode="cases"]').click();
+  async function createBatchCase(name, endpoint) {
+    await page.locator("#new-interface-case").click();
+    await page.locator("#case-name").fill(name);
+    await page.locator("#modal-json").fill(
+      JSON.stringify({
+        ...batchSource,
+        url: fixtureURL + "/case-batch/" + endpoint,
+        method: "GET",
+        bodyType: "none",
+        body: "",
+        scripts: { before: "", after: "" },
+        assertions: [{ target: "status", op: "eq", value: 200 }],
+      }),
+    );
+    await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.request().method() === "POST" &&
+          r.url().endsWith("/cases") &&
+          r.status() === 200,
+      ),
+      page.locator("#dialog-save").click(),
+    ]);
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+  }
+  await createBatchCase("Batch first", "first");
+  await createBatchCase("Batch failure", "failure");
+  await createBatchCase("Batch last", "last");
+  const batchBefore = await app.store.get(batchProjectId);
+  await page.locator("#run-all-cases").click();
+  await page
+    .locator("#case-batch-status")
+    .getByText("已完成 3 / 3 · 通过 2 · 未通过 1", { exact: true })
+    .waitFor();
+  assert.deepEqual(caseBatchHits, ["first", "failure", "last"]);
+  assert.deepEqual(
+    (await app.store.get(batchProjectId)).cases,
+    batchBefore.cases,
+  );
+  assert.equal(await page.locator("[data-case-result]").count(), 3);
+  const failureCase = batchBefore.cases.find((c) => c.name === "Batch failure");
+  assert.match(
+    await page
+      .locator(`[data-case-result="${failureCase.id}"] summary`)
+      .textContent(),
+    /未通过.*500/,
+  );
+  await page.screenshot({ path: "/tmp/local-api-case-batch-results.png" });
+  const firstBatchCase = batchBefore.cases.find(
+      (c) => c.name === "Batch first",
+    ),
+    lastBatchCase = batchBefore.cases.find((c) => c.name === "Batch last");
+  await page.locator(`[data-edit-case="${firstBatchCase.id}"]`).click();
+  const cancelRequest = JSON.parse(
+    await page.locator("#modal-json").inputValue(),
+  );
+  cancelRequest.url = fixtureURL + "/case-batch/slow";
+  await page.locator("#modal-json").fill(JSON.stringify(cancelRequest));
+  await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/cases") &&
+        r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.locator(`[data-select-case="${firstBatchCase.id}"]`).check();
+  await page.locator(`[data-select-case="${lastBatchCase.id}"]`).check();
+  caseBatchHits.length = 0;
+  await page.locator("#run-selected-cases").click();
+  let slowTimer;
+  try {
+    await Promise.race([
+      caseBatchSlowSeen,
+      new Promise((_, reject) => {
+        slowTimer = setTimeout(
+          () => reject(Error("Batch slow fixture did not start")),
+          30000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(slowTimer);
+  }
+  await page.locator("#cancel").click();
+  await page
+    .locator("#case-batch-status")
+    .getByText("已取消", { exact: false })
+    .waitFor();
+  releaseCaseBatchSlow();
+  assert.deepEqual(caseBatchHits, ["slow"]);
+  await page.screenshot({ path: "/tmp/local-api-case-batch-cancel.png" });
+
+  const batchBackup = await app.store.get(batchProjectId);
+  await page.locator("#import").click();
+  await page.locator("#import-mode").selectOption("restore");
+  await page.locator("#import-text").fill(JSON.stringify(batchBackup));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.notEqual(
+    await page.locator("#project-select").inputValue(),
+    batchProjectId,
+  );
+  await page.locator(`[data-request="${batchSource.id}"]`).click();
+  await page.locator('[data-mode="cases"]').click();
+  assert.equal(await page.locator("[data-case-result]").count(), 0);
+  assert.equal(await page.locator("#case-batch-status").count(), 0);
+  assert.deepEqual(caseBatchHits, ["slow"]);
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
@@ -6182,6 +6329,7 @@ try {
   );
   throw error;
 } finally {
+  releaseCaseBatchSlow?.();
   releaseMCP();
   stdioChild?.kill();
   await page.context().tracing.stop({ path: "/tmp/local-api-trace.zip" });

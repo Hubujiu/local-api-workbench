@@ -113,6 +113,7 @@ export function caseCards(
   results = new Map(),
   busy = false,
   selected = new Set(),
+  collapsedResults = new Set(),
 ) {
   const folders = validateCaseFolders(project).filter(
       (f) => f.sourceRequestId === sourceRequestId,
@@ -134,7 +135,7 @@ export function caseCards(
       ordered(cases.filter((c) => (c.folderId || "") === id))
         .map(
           (c) =>
-            `<div class="card"><div class="row"><input type="checkbox" data-select-case="${esc(c.id)}" aria-label="选择用例 ${esc(c.name)}" ${selected.has(c.id) ? "checked" : ""} ${busy ? "disabled" : ""}><strong class="grow">${esc(c.name)}</strong><button data-run-case="${esc(c.id)}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${esc(c.id)}">编辑快照</button><button data-delete-case="${esc(c.id)}" class="danger">删除</button></div><p class="subtle">${esc(c.request.method)} ${esc(c.request.url)}</p>${results.has(c.id) ? `<pre>${esc(JSON.stringify(results.get(c.id), null, 2))}</pre>` : ""}</div>`,
+            `<div class="card"><div class="row"><input type="checkbox" data-select-case="${esc(c.id)}" aria-label="选择用例 ${esc(c.name)}" ${selected.has(c.id) ? "checked" : ""} ${busy ? "disabled" : ""}><strong class="grow">${esc(c.name)}</strong><button data-run-case="${esc(c.id)}" ${busy ? "disabled" : ""}>运行用例</button><button data-edit-case="${esc(c.id)}" ${busy ? "disabled" : ""}>编辑快照</button><button data-delete-case="${esc(c.id)}" class="danger" ${busy ? "disabled" : ""}>删除</button></div><p class="subtle">${esc(c.request.method)} ${esc(c.request.url)}</p>${results.has(c.id) ? (collapsedResults.has(c.id) ? `<details class="case-result" data-case-result="${esc(c.id)}"><summary>${results.get(c.id)?.outcome === "passed" ? "通过" : results.get(c.id)?.outcome === "error" ? "调用错误" : "未通过"} · HTTP ${esc(results.get(c.id)?.status ?? "未请求")}${results.get(c.id)?.evidenceTruncated ? " · 摘要" : ""}</summary><pre>${esc(JSON.stringify(results.get(c.id), null, 2))}</pre></details>` : `<pre>${esc(JSON.stringify(results.get(c.id), null, 2))}</pre>`) : ""}</div>`,
         )
         .join("") +
       ordered(folders.filter((f) => (f.parentId || "") === id))
@@ -149,4 +150,29 @@ export function caseCards(
     group("") ||
     '<div class="notice">尚无用例。可分别验证成功、参数缺失和认证失败等场景。</div>'
   );
+}
+
+export function caseRunOrder(project, sourceRequestId) {
+  const folders = validateCaseFolders(project).filter(
+    (f) => f.sourceRequestId === sourceRequestId,
+  );
+  const cases = (project.cases || []).filter(
+    (c) => c.sourceRequestId === sourceRequestId,
+  );
+  const ordered = (values) =>
+    values
+      .map((item, index) => ({ item, index }))
+      .sort(
+        (a, b) =>
+          (a.item.sort ?? a.index) - (b.item.sort ?? b.index) ||
+          a.index - b.index,
+      )
+      .map((x) => x.item);
+  const group = (id) => [
+    ...ordered(cases.filter((c) => (c.folderId || "") === id)),
+    ...ordered(folders.filter((f) => (f.parentId || "") === id)).flatMap((f) =>
+      group(f.id),
+    ),
+  ];
+  return group("");
 }

@@ -1,6 +1,9 @@
+import { createCaseResultStore } from "./case-result-store.js";
+import { runCaseBatch, caseEvidence } from "./case-batch.js";
 import { moveSelectedCases, deleteSelectedCases } from "./case-selection.js";
 import {
   caseCards,
+  caseRunOrder,
   caseFolderPath,
   saveCaseFolder,
   removeEmptyCaseFolder,
@@ -89,8 +92,9 @@ const $ = (s) => document.querySelector(s),
     );
 const uid = () => crypto.randomUUID();
 const responses = new Map();
-const caseResults = new Map();
+const caseResults = createCaseResultStore();
 const caseSelections = new Map();
+let caseBatch = null;
 function selectedInterfaceCases() {
   const key = project.id + ":" + current;
   const eligible = new Set(
@@ -107,7 +111,7 @@ function selectedInterfaceCases() {
 function caseSelectionToolbar() {
   const selected = selectedInterfaceCases(),
     all = (project.cases || []).filter((c) => c.sourceRequestId === current);
-  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div>`;
+  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
 }
 const temporaryParameters = new Map();
 const collapsedFolders = new Set();
@@ -750,7 +754,7 @@ function modePanel(r) {
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">指定示例时直接返回该示例；否则按顺序匹配规则，不匹配时返回首个示例；没有示例时按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。切换调试会先保存当前改动；指定示例会停用请求中同名 example 参数，其他全局参数与脚本仍会执行。HTML 响应隔离展示，不运行页面脚本；禁止 Set-Cookie 等修改浏览器状态的头。</p><input class="mock-url" readonly value="${esc(mockURL(location.origin, project.id, r.id))}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${esc(e.status)}</strong><button data-use-example="${i}">调试此示例</button><button data-edit-example="${i}">编辑</button><button data-delete-example="${i}">删除</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
   if (mode === "cases")
-    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary">＋ 新建接口用例</button><button id="new-case-folder">＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseSelectionToolbar()}${caseCards(project, r.id, caseResults, busy, selectedInterfaceCases())}</div>`;
+    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary" ${busy ? "disabled" : ""}>＋ 新建接口用例</button><button id="new-case-folder" ${busy ? "disabled" : ""}>＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseSelectionToolbar()}${caseCards(project, r.id, caseResults.results(project.id), busy, selectedInterfaceCases(), caseResults.collapsed(project.id))}</div>`;
   return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><p class="muted">按时长模式限定1至60秒，仍受请求上限约束；先到时长或请求上限即停止，不保证持续到指定秒数。到时会中断尚未完成的请求和脚本，并保留记录。</p><div class="row load-controls"><label>模式 <select id="load-mode" ${busy ? "disabled" : ""}><option value="count" ${loadOptions.get(project.id + ":" + r.id)?.mode !== "duration" ? "selected" : ""}>按请求数</option><option value="duration" ${loadOptions.get(project.id + ":" + r.id)?.mode === "duration" ? "selected" : ""}>按持续时长</option></select></label><label>时长（秒，仅时长模式） <input id="load-duration" type="number" min="1" max="60" value="${esc(loadOptions.get(project.id + ":" + r.id)?.durationSeconds ?? 10)}" ${busy ? "disabled" : ""}></label><label>请求数 / 上限 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="load-data-panel"><label for="load-data">参数化数据（UTF-8 CSV，可选）</label><p class="muted">首行为变量名，后续行依次循环供 {{变量名}} 使用，仅覆盖本次运行。最多64 KiB、100行、50列；数据只保留在当前页面会话，不保存到项目。</p><textarea id="load-data" rows="4" spellcheck="false" ${busy ? "disabled" : ""} placeholder="id,name&#10;1,示例">${esc(loadOptions.get(project.id + ":" + r.id)?.dataCSV ?? "")}</textarea><label>导入 CSV <input id="load-data-file" type="file" accept=".csv,text/csv" ${busy ? "disabled" : ""}></label></div>${
     loadResult
       ? `<div class="grid-stats">${[
@@ -2177,7 +2181,10 @@ function bind() {
     save();
   });
   on("#send", "click", send);
-  on("#cancel", "click", () => api("/cancel", "POST", { id: runId }));
+  on("#cancel", "click", () => {
+    if (caseBatch?.running) caseBatch.cancelRequested = true;
+    return runId ? api("/cancel", "POST", { id: runId }) : undefined;
+  });
   on("#download-response-binary", "click", () => {
     const bytes = Uint8Array.from(atob(response.rawBodyBase64), (character) =>
       character.charCodeAt(0),
@@ -3155,6 +3162,107 @@ function bind() {
     await save();
     render();
   });
+  async function runInterfaceCaseBatch(ids) {
+    if (busy || saving) throw Error("请等待当前操作结束");
+    const projectId = project.id,
+      source = current;
+    if (dirty) await save();
+    if (dirty || project.id !== projectId || current !== source)
+      throw Error("当前接口已变化，请重新选择用例");
+    const selected = new Set(ids),
+      items = caseRunOrder(project, source).filter((item) =>
+        selected.has(item.id),
+      );
+    if (
+      selected.size !== ids.length ||
+      items.length !== ids.length ||
+      !items.length ||
+      items.length > 100
+    )
+      throw Error("单次运行须选择当前接口的1至100个不同用例");
+    const environmentId = env();
+    const batch = (caseBatch = {
+      projectId,
+      sourceRequestId: source,
+      running: true,
+      cancelRequested: false,
+      total: items.length,
+      completed: 0,
+      passed: 0,
+      failed: 0,
+    });
+    busy = true;
+    runId = null;
+    render();
+    try {
+      const summary = await runCaseBatch(
+        items,
+        async (item) => {
+          runId = uid();
+          const result = await api(
+            "/projects/" + projectId + "/execute",
+            "POST",
+            {
+              request: {
+                ...item.request,
+                name: item.name,
+                serviceSnapshot: true,
+              },
+              functions: item.functions,
+              environmentId,
+              runId,
+            },
+          );
+          const evidence = caseEvidence(result);
+          caseResults.set(projectId, item.id, evidence, { collapsed: true });
+          const latest = await api("/projects/" + projectId);
+          if (project.id === projectId) {
+            project.history = latest.history;
+            const adoption = adoptVariableWrites(
+              project,
+              latest,
+              result.variableWrites,
+            );
+            if (adoption === "none") project.revision = latest.revision;
+            if (adoption === "conflict")
+              toast("变量已保存，但项目还有其他变更；请重新加载并检查后再保存");
+          }
+          runId = null;
+          return evidence;
+        },
+        {
+          shouldStop: () => batch.cancelRequested,
+          onProgress: (progress) => {
+            Object.assign(batch, progress);
+            render();
+          },
+        },
+      );
+      Object.assign(batch, summary);
+      for (const entry of summary.results)
+        if (entry.error)
+          caseResults.set(
+            projectId,
+            entry.id,
+            { outcome: "error", error: entry.error },
+            { collapsed: true },
+          );
+    } finally {
+      batch.running = false;
+      batch.currentName = undefined;
+      busy = false;
+      runId = null;
+      render();
+    }
+  }
+  on("#run-selected-cases", "click", () =>
+    runInterfaceCaseBatch([...selectedInterfaceCases()]),
+  );
+  on("#run-all-cases", "click", () =>
+    runInterfaceCaseBatch(
+      caseRunOrder(project, current).map((item) => item.id),
+    ),
+  );
   on("[data-run-case]", "click", async (_, e) => {
     const item = project.cases.find(
       (candidate) => candidate.id === e.dataset.runCase,
@@ -3171,7 +3279,7 @@ function bind() {
         environmentId,
         runId,
       });
-      caseResults.set(item.id, result);
+      caseResults.set(project.id, item.id, result);
       const latest = await api("/projects/" + project.id);
       project.history = latest.history;
       const adoption = adoptVariableWrites(
