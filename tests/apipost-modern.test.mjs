@@ -268,3 +268,21 @@ test("modern disabled numeric Mock allowlist flag is not mistaken for enabled ac
     assert.deepEqual(target, before);
   }
 });
+
+test("modern omit-equals numeric sentinel cannot silently change an empty query flag", () => {
+  const doc = fixture();
+  doc.apis[1].request.query.query_add_equal = -1;
+  doc.apis[1].request.query.parameter = [
+    { key: "flag", value: "", is_checked: 1 },
+  ];
+  const p = project(),
+    before = structuredClone(p);
+  assert.throws(() => importIntoProject(p, doc), /省略等号/);
+  assert.deepEqual(p, before);
+  for (const value of ["value", 0, false]) {
+    doc.apis[1].request.query.parameter[0].value = value;
+    const target = project();
+    importIntoProject(target, doc);
+    assert.equal(target.requests[0].query[0].value, value);
+  }
+});

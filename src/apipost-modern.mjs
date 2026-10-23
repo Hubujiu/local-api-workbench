@@ -270,8 +270,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     )
       throw Error("Apipost Cookie编码选项需手工迁移");
     if (
-      request.query?.query_add_equal === 0 &&
-      parameterRows(request.query, "query").some((row) => !row.value)
+      [0, -1].includes(request.query?.query_add_equal) &&
+      parameterRows(request.query, "query").some(
+        (row) => String(row.value ?? "") === "",
+      )
     )
       throw Error("Apipost省略等号查询参数需手工迁移");
     const response = {};

@@ -70,3 +70,12 @@ was contacted and no imported script was executed. The source payload is not
 redistributed; automated regression uses the fictional fixture. This supports
 that specific interchange import only, not original-app execution or native
 project-directory parity.
+
+
+The original query-equals toggle also uses 1/-1 (work.asar
+3201.883b408594fa.js). Until flag-only structured query serialization is
+implemented, query_add_equal=-1 with an empty value must reject atomically
+rather than silently send flag= instead of flag. Keep the previously recognized
+0 sentinel, but do not confuse the legitimate nonempty textual values of 0 and
+false with an empty parameter. Nonempty values retain their existing import
+behaviour. This is a data-loss guard, not a claim that omit-equals is supported.
