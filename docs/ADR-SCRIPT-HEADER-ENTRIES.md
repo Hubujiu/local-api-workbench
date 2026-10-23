@@ -17,7 +17,8 @@ This deliberately corrects all/each mutation semantics: editing a returned entry
 now changes the current request. Editing the returned array does not reorder or
 remove collection members. Unknown properties, deletion, prototype changes and
 freezing are rejected. Removed/replaced entries cannot modify their replacements;
-updates validate a complete candidate before mutating. Unexposed request-row
+updates validate a complete candidate before mutating. Unknown nonenumerable
+and Symbol properties also reject rather than silently becoming no-ops. Unexposed request-row
 metadata stays intact, and saved definitions are not changed by execution.
 
 Bounds: 1000 rows, 1KiB nonempty key without NUL/CR/LF, 64KiB text value,

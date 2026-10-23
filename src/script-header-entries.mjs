@@ -60,7 +60,7 @@ function installHeaderEntries({ request, headers }) {
         !patch ||
         typeof patch !== "object" ||
         Array.isArray(patch) ||
-        Object.keys(patch).some(
+        Reflect.ownKeys(patch).some(
           (k) =>
             !["key", "value", "disabled", "enabled", "description"].includes(k),
         )

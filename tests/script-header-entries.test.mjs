@@ -44,7 +44,7 @@ test("Header live updates are atomic and removed entries cannot mutate replaceme
   const result = await runScript(
     `
     const h=pm.request.headers, entry=h.one('x-one');
-    for(const patch of [{value:'x'.repeat(65537)}, {disabled:'yes'}, {unknown:'x'}, {value:String.fromCharCode(0xd800)}]) {
+    for(const patch of [{value:'x'.repeat(65537)}, {disabled:'yes'}, {unknown:'x'}, {[Symbol('unknown')]:'x'}, Object.defineProperty({},'hidden',{value:'x'}), {value:String.fromCharCode(0xd800)}]) {
       try {entry.update(patch);throw Error('accepted');} catch(e) {if(e.message==='accepted')throw e;}
     }
     pm.test('unchanged',()=>pm.expect(entry.value).to.equal('second'));
