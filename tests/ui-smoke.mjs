@@ -5492,12 +5492,20 @@ try {
     finalBodyEcho.signature,
     createHmac("sha256", "fixture-key").update("{{literal}}+&").digest("hex"),
   );
+  await page.locator("#send:not([disabled])").waitFor({ state: "visible" });
   await page.screenshot({ path: "/tmp/local-api-final-body.png" });
+  // Sending uses an execution snapshot, not a save. Persist before switching
+  // projects so the unsaved-change confirmation cannot cancel the switch.
+  await saveAndWait();
 
   await page.locator("#new-project").click();
   await page.locator("#new-name").fill("OpenAPI URL query fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await page.locator("#project-select option:checked").textContent(),
+    "OpenAPI URL query fixture",
+  );
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator("#add-request").click();
   await page.locator("#request-name").fill("Literal URL query definition");
