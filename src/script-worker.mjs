@@ -345,6 +345,7 @@ try {
     };
     apt.visualizer = visualizer;
     pm.visualizer = visualizer;
+    pm.Visualizing = apt.Visualizing = visualizer.set;
   `;
   const library =
     "const utils=Object.create(null);\n" +

@@ -23,3 +23,7 @@ The frame has deny-by-default CSP. The only resource exception is this app's fix
 `tests/script-visualizer.test.mjs` verifies actual QuickJS Handlebars rendering/escaping, shared-stage persistence and clear, object/AST rejection, pre-request rejection, UTF-8 bounds and forbidden prototype traversal.
 
 `tests/ui-smoke.mjs` exercises actual HTTP→post-script→response-tab flow; checks table data, escaped markup, absence of scripts/images/frames/styles/meta, empty sandbox, denied parent-document access and no adversarial fixture requests. It checks the fixed stylesheet and captures local-api-response-visualizer.png. Current commit CI determines whether this verification has completed; code existence is not a green result.
+
+## 原版大小写别名
+
+官方 Offline2 2.0.0 send.asar/index.js 的静态兼容层（解码字符 33593000 附近）将 pm.Visualizing 绑定为 pm.visualizer.set，现代 apt 引用同一 pm。现在两个兼容模式均提供 pm.Visualizing / apt.Visualizing，直接引用同一个受限渲染函数，不引入第二套渲染器，不改变后置限制、模板/数据配额或隔离 iframe。旧 visualizer.set/clear 保留。回归覆盖函数身份、覆盖前一次结果、字面标记转义、前置和超限拒绝；浏览器和三平台成品包实际使用该别名验证，结果以对应提交 CI 为准。

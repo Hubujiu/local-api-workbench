@@ -877,7 +877,7 @@ try {
     .fill(
       'pm.environment.set("uiSaved","persisted"); pm.globals.set("uiGlobal",0); pm.test("payload", () => pm.expect(pm.response.code).to.equal(200)); apt.assert("response.raw.status === 200"); postman.setEnvironmentVariable("legacyFromUI",response.json.message); console.log("script-done");' +
         `pm.sendRequest(${JSON.stringify(fixtureURL + "/token")},(error,reply)=>{if(error)throw error;pm.environment.set('scriptHTTPFromUI',reply.json().access_token);pm.test('scriptHTTPStatus',()=>pm.expect(reply.code).to.equal(200));pm.test('scriptHTTPSchema',()=>pm.expect(reply).to.have.jsonSchema({type:'object',properties:{access_token:{type:'string'}},required:['access_token']}));});` +
-        `apt.visualizer.set(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});` +
+        `apt.Visualizing(${JSON.stringify(visualizationTemplate)}, {title: "响应结果", rows: [{name:"消息",value:pm.response.json().message},{name:"转义",value:"<b>不是HTML</b>"}]});` +
         'pm.test("JSON5 helper",()=>pm.expect(JSON5.parse("{unquoted:1,}").unquoted).to.equal(1));' +
         'pm.test("JSON Schema response",()=>pm.response.to.have.jsonSchema({type:"object",properties:{message:{type:"string"}},required:["message"]}));pm.test("JSON Schema negative",()=>pm.expect({message:2}).not.to.have.jsonSchema({type:"object",properties:{message:{type:"string"}},required:["message"]}));' +
         'apt.variables.set("dialectPrivate","local");pm.test("Apipost8 JSON",()=>pm.expect(apt.response.json().message).to.equal(pm.response.json().message));' +

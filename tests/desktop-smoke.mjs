@@ -137,7 +137,8 @@ try {
   await window
     .locator("#script-code")
     .fill(
-      'apt.setRequestHeader("x-packaged-shortcut",null);pm.setRequestQuery("packaged-shortcut",false);pm.removeRequestQuery("packaged-shortcut");pm.removeRequestHeader("x-packaged-shortcut");' +
+      'apt.Visualizing("<p>{{marker}}</p>",{marker:"packaged-visualizing"});' +
+        'apt.setRequestHeader("x-packaged-shortcut",null);pm.setRequestQuery("packaged-shortcut",false);pm.removeRequestQuery("packaged-shortcut");pm.removeRequestHeader("x-packaged-shortcut");' +
         'pm.test.skip("packaged-pending",()=>{throw Error("not executed")});pm.test("packaged-test-index",()=>pm.expect(pm.test.index()).to.equal(2));' +
         'pm.test("packaged-json5",()=>pm.expect(require("json5").parse("{unquoted:1,}").unquoted).to.equal(1));' +
         'pm.test("packaged-schema",()=>pm.response.to.have.jsonSchema({type:"object",properties:{message:{type:"string"}},required:["message"]}));' +
@@ -167,6 +168,7 @@ try {
   );
 
   assert.equal(scriptPayload.status, 200);
+  assert.equal(scriptPayload.visualization, "<p>packaged-visualizing</p>");
   assert(
     scriptPayload.assertions.some(
       (item) => item.name === "packaged-form-body" && item.passed,

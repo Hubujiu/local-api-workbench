@@ -55,3 +55,34 @@ test("visualizer rejects ASTs, pre-request use and oversized input without expos
     runScript('apt.visualizer.set("{{constructor.constructor}}", {});', input),
   );
 });
+
+test("capitalized Visualizing alias reuses the isolated visualizer in both dialects", async () => {
+  for (const scriptDialect of ["legacy", "apipost8"]) {
+    const result = await runScript(
+      `
+      if(pm.Visualizing!==pm.visualizer.set || apt.Visualizing!==pm.Visualizing)throw Error('alias mismatch');
+      pm.Visualizing('<p>{{v}}</p>', {v:'first'});
+      apt.Visualizing('<p>{{v}}</p>', {v:'<script>literal</script>'});
+    `,
+      { ...input, request: { scriptDialect } },
+    );
+    assert.equal(
+      result.visualization,
+      "<p>&lt;script&gt;literal&lt;/script&gt;</p>",
+    );
+    await assert.rejects(
+      runScript("pm.Visualizing('x',{})", {
+        variables: {},
+        request: { scriptDialect },
+      }),
+      /后置/,
+    );
+    await assert.rejects(
+      runScript("apt.Visualizing('中'.repeat(22000),{})", {
+        ...input,
+        request: { scriptDialect },
+      }),
+      /大小/,
+    );
+  }
+});
