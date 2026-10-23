@@ -5385,25 +5385,33 @@ try {
       (item) => item.name === "SDK URL object" && item.passed,
     ),
   );
+  // The execute response precedes the app's project refresh and final render.
+  // Wait for that lifecycle, then select and measure the live DOM in one turn.
+  await page.locator("#send:not([disabled])").waitFor({ state: "visible" });
   for (const width of [800, 1328]) {
     await page.setViewportSize({ width, height: 876 });
-    const layout = await page
-      .locator(".script-mode-controls")
-      .evaluate((group) => {
-        const fields = [...group.querySelectorAll("label")].map((field) => {
-          const box = field.getBoundingClientRect();
-          const select = field.querySelector("select").getBoundingClientRect();
-          return {
-            left: box.left,
-            right: box.right,
-            top: box.top,
-            bottom: box.bottom,
-            selectLeft: select.left,
-            selectRight: select.right,
-          };
-        });
-        return { fields, width: group.clientWidth, scroll: group.scrollWidth };
+    const layout = await page.evaluate(() => {
+      const groups = document.querySelectorAll(".script-mode-controls");
+      if (groups.length !== 1)
+        throw Error(
+          "Expected exactly one script mode control group after completed request",
+        );
+      const group = groups[0];
+      const fields = [...group.querySelectorAll("label")].map((field) => {
+        const box = field.getBoundingClientRect();
+        const select = field.querySelector("select").getBoundingClientRect();
+        return {
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+          selectLeft: select.left,
+          selectRight: select.right,
+        };
       });
+      return { fields, width: group.clientWidth, scroll: group.scrollWidth };
+    });
+    assert.ok(layout.width > 0, JSON.stringify(layout));
     assert.equal(layout.fields.length, 2);
     const [first, second] = layout.fields;
     assert.ok(
