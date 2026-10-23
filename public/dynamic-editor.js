@@ -1,3 +1,4 @@
+import { parseApipostFunctionTemplate } from "./apipost-function-template.js";
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -10,11 +11,13 @@ export function dynamicEditor(spec) {
   const source = spec?.source || "fixed";
   const select = (key, values, value) =>
     `<select data-dynamic-field="${key}">${values.map((v) => `<option ${v === value ? "selected" : ""}>${v}</option>`).join("")}</select>`;
-  return `<details class="step-dynamic"><summary>动态值${spec ? " · 已配置" : ""}</summary><label><input type="checkbox" data-dynamic-enabled ${spec ? "checked" : ""}>启用动态值</label><label>来源${select("source", ["fixed", "variable", "mock"], source)}</label><label>固定JSON / 变量名 / Mock表达式<textarea data-dynamic-field="value" spellcheck="false">${esc(source === "fixed" ? JSON.stringify(spec?.value ?? null) : spec?.value || "")}</textarea></label><label>依次处理函数（逗号分隔）<input data-dynamic-field="functions" value="${esc((spec?.functions || []).join(","))}"></label><div data-dynamic-mock ${source === "mock" ? "" : "hidden"}><label>Mock类型${select("type", ["string", "integer", "number", "boolean", "object", "array"], spec?.type || "string")}</label><label>Mock种子（可选）<input type="number" data-dynamic-field="seed" value="${esc(spec?.seed ?? "")}"></label></div><p class="muted">发送时读取前置脚本后的变量；这里只配置，不执行预览。文件字段不支持动态文本。取消不修改快照。</p></details>`;
+  return `<details class="step-dynamic"><summary>动态值${spec ? " · 已配置" : ""}</summary><label><input type="checkbox" data-dynamic-enabled ${spec ? "checked" : ""}>启用动态值</label><label>来源${select("source", ["fixed", "variable", "mock", "apipost-function"], source)}</label><label>固定JSON / 变量名 / Mock表达式<textarea data-dynamic-field="value" spellcheck="false">${esc(source === "fixed" ? JSON.stringify(spec?.value ?? null) : spec?.value || "")}</textarea></label><label>依次处理函数（逗号分隔）<input data-dynamic-field="functions" value="${esc((spec?.functions || []).join(","))}"></label><div data-dynamic-mock ${source === "mock" ? "" : "hidden"}><label>Mock类型${select("type", ["string", "integer", "number", "boolean", "object", "array"], spec?.type || "string")}</label><label>Mock种子（可选）<input type="number" data-dynamic-field="seed" value="${esc(spec?.seed ?? "")}"></label></div><p class="muted">发送时读取前置脚本后的变量；这里只配置，不执行预览。文件字段不支持动态文本。apipost-function仅支持无脚本的Query完整模板，原样传入文本参数；同步抛错保留原模板，不支持加工链。取消不修改快照。</p></details>`;
 }
 export function parseDynamicEdits(fields, previous = {}) {
   if (!fields.enabled) return null;
-  if (!["fixed", "variable", "mock"].includes(fields.source))
+  if (
+    !["fixed", "variable", "mock", "apipost-function"].includes(fields.source)
+  )
     throw Error("动态值来源无效");
   let value = fields.value;
   if (fields.source === "fixed") {
@@ -40,6 +43,10 @@ export function parseDynamicEdits(fields, previous = {}) {
     .map((x) => x.trim())
     .filter(Boolean);
   if (functions.length > 10) throw Error("动态值最多10个处理函数");
+  if (fields.source === "apipost-function") {
+    parseApipostFunctionTemplate(value);
+    if (functions.length) throw Error("原版函数模板暂不支持额外加工链");
+  }
   const next = {
     ...structuredClone(previous),
     source: fields.source,

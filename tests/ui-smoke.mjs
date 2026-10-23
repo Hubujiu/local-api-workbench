@@ -6522,6 +6522,90 @@ try {
     nativeProject.settings.functions[0].apipostSource,
   );
 
+  const templateModern = structuredClone(nativeModern);
+  templateModern.name = "Query template fixture";
+  templateModern.apis[1].name = "Source Query function";
+  templateModern.apis[1].request.pre_tasks = [];
+  templateModern.apis[1].request.query.parameter = [
+    { key: "q", value: '{{$function.fn_WRAP("a,b")}}', is_checked: 1 },
+  ];
+  await page.locator("#new-project").click();
+  await page.locator("#new-name").fill("Source Query function fixture");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const templateProjectId = await page.locator("#project-select").inputValue();
+  await page.locator('[data-page="apis"]').first().click();
+  await page.locator("#import").click();
+  await page.locator("#import-text").fill(JSON.stringify(templateModern));
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const templateProject = await app.store.get(templateProjectId);
+  const templateRequest = templateProject.requests.find(
+    (r) => r.name === "Source Query function",
+  );
+  assert(templateRequest);
+  assert.equal(templateRequest.query[0].dynamic.source, "apipost-function");
+  await page.locator(`[data-request="${templateRequest.id}"]`).click();
+  await page
+    .locator("#env")
+    .selectOption(
+      templateProject.environments.find((e) => e.name === "Imported").id,
+    );
+  await page.locator('[data-param="query"]').click();
+  await page.locator('[data-dynamic-pair="query:0"]').click();
+  assert.equal(
+    await page.locator("#dynamic-source").inputValue(),
+    "apipost-function",
+  );
+  assert.equal(
+    await page.locator("#dynamic-value").inputValue(),
+    '{{$function.fn_WRAP("a,b")}}',
+  );
+  await page.locator("#dynamic-value").fill('{{$function.fn_wrap("edited")}}');
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify('["edited"]'),
+  );
+  await page.screenshot({ path: "/tmp/local-api-query-function-template.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#save-project").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="apis"]').first().click();
+  await page.locator(`[data-request="${templateRequest.id}"]`).click();
+  const savedTemplateProject = await app.store.get(templateProjectId);
+  assert.deepEqual(
+    savedTemplateProject.requests.find((r) => r.id === templateRequest.id)
+      .query[0].dynamic,
+    {
+      source: "apipost-function",
+      value: '{{$function.fn_wrap("edited")}}',
+      functions: [],
+    },
+  );
+  await page
+    .locator("#env")
+    .selectOption(
+      templateProject.environments.find((e) => e.name === "Imported").id,
+    );
+  const templateResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const templateResult = await (await templateResponse).json();
+  assert.equal(templateResult.status, 200, JSON.stringify(templateResult));
+  assert.equal(
+    new URL(templateResult.request.url).searchParams.get("q"),
+    '["edited"]',
+  );
+
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

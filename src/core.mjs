@@ -1,3 +1,4 @@
+import { validateApipostTemplateRequest } from "../public/apipost-function-template.js";
 import {
   isApipostDirectoryDocument,
   assembleApipostDirectory,
@@ -160,6 +161,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
     throw Error("URL状态仅可用于SDK模式");
@@ -449,6 +451,7 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
+      validateApipostTemplateRequest(step.request);
       const executeOperation = async (operation, budget) => {
         if (operation.type !== "database")
           return applyOperation(operation, vars);
@@ -1270,6 +1273,13 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    if (
+      (r.query || []).some(
+        (row) =>
+          row.enabled !== false && row.dynamic?.source === "apipost-function",
+      )
+    )
+      throw Error("OpenAPI不能表达原版函数模板，请使用项目备份");
     if (normalizeScriptURLMode(r.scriptURLMode) === "sdk")
       throw Error("OpenAPI暂不能无损表达SDK URL模式，请使用项目备份");
     if (
@@ -1416,6 +1426,13 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  if (
+    (input.query || []).some(
+      (row) =>
+        row.enabled !== false && row.dynamic?.source === "apipost-function",
+    )
+  )
+    throw Error("cURL不能表达原版函数模板，请使用项目备份或已执行请求证据");
   const r = normalizeRequest(sdkCurlDefinition(input));
   if (r.auth.type === "asap")
     throw Error(

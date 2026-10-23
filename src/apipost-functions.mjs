@@ -1,5 +1,12 @@
+import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
-export function mergeApipostFunctions(rows, existing, projectId, document) {
+export function mergeApipostFunctions(
+  rows,
+  existing,
+  projectId,
+  document,
+  { queryTemplates = false } = {},
+) {
   if (!Array.isArray(rows) || rows.length > 100)
     throw Error("Apipost共享函数最多100项");
   const incoming = [],
@@ -42,19 +49,33 @@ export function mergeApipostFunctions(rows, existing, projectId, document) {
   }
   validateResources({ functions: incoming });
   if (incoming.length) {
-    const pending = [document],
+    const allowedRows = new Set();
+    if (queryTemplates && Array.isArray(document?.apis))
+      for (const api of document.apis)
+        if (
+          api.target_type === "api" &&
+          Array.isArray(api.request?.query?.parameter)
+        )
+          for (const row of api.request.query.parameter)
+            if (row && row.is_checked === 1) allowedRows.add(row);
+    const pending = [{ value: document, allowed: false }],
       seen = new Set();
     let nodes = 0;
     while (pending.length) {
       if (++nodes > 100000) throw Error("Apipost共享函数依赖检查超过范围");
-      const value = pending.pop();
+      const { value, allowed } = pending.pop();
       if (
         typeof value === "string" &&
         (/\$function\./i.test(value) || /\|\s*fn_/i.test(value))
-      )
-        throw Error(
-          "Apipost共享函数参数模板和加工链尚未支持；仅支持脚本中的fn_调用",
-        );
+      ) {
+        if (!allowed)
+          throw Error(
+            "Apipost共享函数参数模板仅支持启用的接口Query完整值；加工链暂不支持",
+          );
+        const parsed = parseApipostFunctionTemplate(value);
+        if (!names.has(parsed.name))
+          throw Error("Apipost函数模板引用不存在的来源函数");
+      }
       if (value && typeof value === "object") {
         if (seen.has(value)) throw Error("Apipost共享函数依赖包含循环");
         seen.add(value);
@@ -62,7 +83,10 @@ export function mergeApipostFunctions(rows, existing, projectId, document) {
           if (!Object.hasOwn(value, key)) continue;
           if (nodes + pending.length >= 100000)
             throw Error("Apipost共享函数依赖检查超过范围");
-          pending.push(value[key]);
+          pending.push({
+            value: value[key],
+            allowed: key === "value" && allowedRows.has(value),
+          });
         }
       }
     }

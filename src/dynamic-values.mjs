@@ -1,3 +1,5 @@
+import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
+import { validateApipostTemplateRequest } from "../public/apipost-function-template.js";
 import { finalBodyLiteral } from "./script-final-body.mjs";
 import { resolveSDKURLRequest } from "./script-url-resolve.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
@@ -5,7 +7,10 @@ import { randomInt } from "node:crypto";
 import { sampleProjectSchema } from "./mock-fields.mjs";
 import { previewFunction } from "./custom-functions.mjs";
 export async function resolveDynamicValue(spec, variables, functions = []) {
-  if (!spec || !["fixed", "variable", "mock"].includes(spec.source))
+  if (
+    !spec ||
+    !["fixed", "variable", "mock", "apipost-function"].includes(spec.source)
+  )
     throw Error("动态值来源无效");
   const chain = spec.functions || [];
   if (
@@ -14,6 +19,10 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
     chain.some((name) => typeof name !== "string")
   )
     throw Error("动态值最多10个处理函数");
+  if (spec.source === "apipost-function") {
+    if (chain.length) throw Error("原版函数模板暂不支持额外加工链");
+    return resolveApipostFunctionTemplate(spec.value, functions);
+  }
   let value;
   if (spec.source === "variable") {
     if (
@@ -67,6 +76,7 @@ async function resolveDynamicRequestBase(
   interpolate,
   literalBody,
 ) {
+  validateApipostTemplateRequest(request);
   const clone = structuredClone(request),
     specs = [];
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
@@ -104,7 +114,9 @@ async function resolveDynamicRequestBase(
     throw Error("每个请求最多100个动态值");
   const transforms = [...specs, ...bodySpecs].reduce(
     (total, { spec }) =>
-      total + (Array.isArray(spec.functions) ? spec.functions.length : 0),
+      total +
+      (spec.source === "apipost-function" ? 1 : 0) +
+      (Array.isArray(spec.functions) ? spec.functions.length : 0),
     0,
   );
   if (transforms > 20) throw Error("每个请求最多20次动态函数处理");
@@ -157,6 +169,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  validateApipostTemplateRequest(request);
   const literalBody = finalBodyLiteral(finalBody, request);
   const resolve = (request, variables, functions, interpolate) =>
     resolveDynamicRequestBase(
