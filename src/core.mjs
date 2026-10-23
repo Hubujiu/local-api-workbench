@@ -1,3 +1,7 @@
+import {
+  normalizeCookieEncoding,
+  requestCookieHeader,
+} from "./request-cookies.mjs";
 import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
@@ -238,6 +242,7 @@ export function normalizeRequest(r = {}) {
     headers: r.headers || [],
     path: r.path || [],
     cookies: r.cookies || [],
+    cookieEncoding: normalizeCookieEncoding(r.cookieEncoding),
     auth: { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
     body:
@@ -1227,6 +1232,13 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
+    if (
+      normalizeCookieEncoding(r.cookieEncoding) !== "raw" &&
+      (r.cookies || []).some((row) => row.enabled !== false && row.key)
+    )
+      throw Error(
+        "OpenAPI不能无损表达Cookie编码策略，请使用项目备份或cURL导出",
+      );
     if (r.queryAddEqual === false)
       throw Error(
         "OpenAPI不能无损表达空Query省略等号配置，请使用项目备份或cURL导出",
@@ -1423,13 +1435,8 @@ export function toCurl(input) {
     if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
-  const activeCookies = r.cookies.filter(
-    (item) => item.enabled !== false && item.key,
-  );
-  if (activeCookies.length)
-    headers.cookie = activeCookies
-      .map((item) => item.key + "=" + item.value)
-      .join("; ");
+  const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
+  if (cookieHeader !== undefined) headers.cookie = cookieHeader;
   if (r.bodyType === "json") headers["content-type"] ??= "application/json";
   if (r.bodyType === "urlencoded")
     headers["content-type"] ??= "application/x-www-form-urlencoded";

@@ -248,3 +248,19 @@ test("HTML and Markdown documents disclose nondefault empty Query equals behavio
       /空值 Query 参数不添加等号/,
     );
 });
+
+test("HTML and Markdown disclose nondefault Cookie parameter encoding", () => {
+  const source = project();
+  source.requests[0].cookieEncoding = "apipost";
+  for (const format of ["html", "markdown"])
+    assert.match(
+      exportDocumentation(source, format),
+      /Cookie参数编码：名称和值避免重复编码/,
+    );
+  source.requests[0].cookieEncoding = "apipost-name";
+  for (const format of ["html", "markdown"])
+    assert.match(
+      exportDocumentation(source, format),
+      /Cookie参数编码：仅名称避免重复编码/,
+    );
+});

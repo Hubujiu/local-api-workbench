@@ -20,6 +20,7 @@ const server = http.createServer((q, r) => {
         contentType: q.headers["content-type"] ?? null,
         accept: q.headers.accept ?? null,
         repeated: q.headers["x-repeat"] ?? null,
+        cookie: q.headers.cookie ?? null,
       }),
     ),
   );
@@ -132,6 +133,24 @@ try {
   });
   assert.equal(flagWire.url, "/?literalFlag&flag&zero=0&token=a%2Bb");
   assert.deepEqual(JSON.parse(flagCurl.stdout), flagWire);
+  const cookieRequest = {
+    url: origin + "/cookie-encoding",
+    cookieEncoding: "apipost",
+    cookies: [
+      { key: "中文", value: "空 格+" },
+      { key: "escaped", value: "a%20b" },
+    ],
+  };
+  const cookieWire = JSON.parse((await executeRequest(cookieRequest)).body);
+  const cookieCurl = await exec("sh", ["-c", toCurl(cookieRequest)], {
+    timeout: 5000,
+    maxBuffer: 262144,
+  });
+  assert.equal(
+    cookieWire.cookie,
+    "%E4%B8%AD%E6%96%87=%E7%A9%BA%20%E6%A0%BC%2B; escaped=a%20b",
+  );
+  assert.deepEqual(JSON.parse(cookieCurl.stdout), cookieWire);
   console.log("CURL_LITERAL_BODY_IMPORT_AND_EXPORT_PASSED");
 } finally {
   server.closeAllConnections();

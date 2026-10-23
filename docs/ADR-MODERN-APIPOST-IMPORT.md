@@ -125,3 +125,9 @@ opens the example editor and checks its exact delay. This does not enable Mock
 automatically, add original rule/branch support or raise the existing 5000ms cap.
 OpenAPI does not carry Mock timing; import notes explicitly recommend project
 backup when this metadata must be retained.
+
+Cookie encoding now maps the original value flag instead of rejecting every
+truthy flag: absent/1 encodes names and values using the observed avoid-double-
+encoding rule, -1/0 encodes only names. Existing Workbench defaults remain raw.
+Unknown flag values reject atomically. See ADR-COOKIE-PARAMETER-ENCODING.md for
+primary static evidence, exact scope and the OpenAPI export limitation.

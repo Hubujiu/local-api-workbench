@@ -271,11 +271,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       reject(layer.body?.parameter, "继承Body参数");
       reject(layer.body?.raw, "继承原始Body");
     }
-    if (
-      request.cookie?.cookie_encode &&
-      parameterRows(request.cookie, "cookie").length
-    )
-      throw Error("Apipost Cookie编码选项需手工迁移");
+    const cookieFlag = request.cookie?.cookie_encode;
+    if (cookieFlag !== undefined && ![0, -1, 1].includes(cookieFlag))
+      throw Error("Apipost Cookie编码选项无效");
+    const cookieEncoding =
+      cookieFlag === undefined || cookieFlag === 1 ? "apipost" : "apipost-name";
     const queryFlag = request.query?.query_add_equal;
     if (queryFlag !== undefined && ![0, -1, 1].includes(queryFlag))
       throw Error("Apipost Query等号选项无效");
@@ -352,6 +352,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       url,
       serviceId,
       queryAddEqual,
+      cookieEncoding,
       responseDelays,
       legacy: {
         ...node,
@@ -392,6 +393,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     request.url = row.url;
     request.serviceId = row.serviceId;
     request.queryAddEqual = row.queryAddEqual;
+    request.cookieEncoding = row.cookieEncoding;
     if (row.responseDelays.length !== request.examples.length)
       throw Error("Apipost响应延迟与示例映射不一致");
     row.responseDelays.forEach((delay, index) => {

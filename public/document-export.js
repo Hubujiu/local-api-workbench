@@ -173,6 +173,12 @@ export function requestDocumentationHTML(request, headingLevel = 3) {
   if (request.queryAddEqual === false)
     result =
       "<p>空值 Query 参数不添加等号；URL 中已有查询保持原样。</p>" + result;
+  if (["apipost", "apipost-name"].includes(request.cookieEncoding))
+    result =
+      "<p>Cookie参数编码：" +
+      (request.cookieEncoding === "apipost" ? "名称和值" : "仅名称") +
+      "避免重复编码；不改写显式Cookie请求头或Cookie管理器内容。</p>" +
+      result;
   const type = request.bodyType ?? "none";
   if (type !== "none")
     result +=
@@ -225,6 +231,12 @@ function requestDocumentationMarkdown(request) {
     .join("");
   if (request.queryAddEqual === false)
     result = "空值 Query 参数不添加等号；URL 中已有查询保持原样。\n\n" + result;
+  if (["apipost", "apipost-name"].includes(request.cookieEncoding))
+    result =
+      "Cookie参数编码：" +
+      (request.cookieEncoding === "apipost" ? "名称和值" : "仅名称") +
+      "避免重复编码；不改写显式Cookie请求头或Cookie管理器内容。\n\n" +
+      result;
   const type = request.bodyType ?? "none";
   if (type !== "none")
     result +=

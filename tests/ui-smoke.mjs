@@ -60,6 +60,7 @@ const fixture = http.createServer(async (request, response) => {
         repeatedHeader: request.headers["x-wire-repeat"],
         removed: request.headers["x-remove"] ?? null,
         readerDisabled: request.headers["x-reader-disabled"] ?? null,
+        cookie: request.headers.cookie ?? null,
         removedMember: request.headers["x-remove-member"] ?? null,
       }),
     );
@@ -4949,6 +4950,29 @@ try {
   await saveAndWait();
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-query-equals.png" });
+  await page.locator('[data-param="cookies"]').click();
+  await page.locator("#cookie-encoding").selectOption("apipost");
+  await page.locator('[data-add-pair="cookies"]').click();
+  await page.locator('[data-pair="cookies:0:key"]').fill("中文");
+  await page.locator('[data-pair="cookies:0:value"]').fill("空 格+");
+  await saveAndWait();
+  await page.reload();
+  await page.locator(`[data-request="${flagRequestId}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="cookies"]').click();
+  assert.equal(await page.locator("#cookie-encoding").inputValue(), "apipost");
+  const cookieReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const cookieResult = await (await cookieReply).json();
+  assert.equal(cookieResult.status, 200, JSON.stringify(cookieResult));
+  assert.equal(
+    JSON.parse(cookieResult.body).cookie,
+    "%E4%B8%AD%E6%96%87=%E7%A9%BA%20%E6%A0%BC%2B",
+  );
+  await page.locator("#send:not([disabled])").waitFor();
+  await page.screenshot({ path: "/tmp/local-api-cookie-encoding.png" });
 
   await createFileTarget("Document form fields");
   const privateUploadText = "DOC-UPLOAD-BYTES-DO-NOT-INLINE";

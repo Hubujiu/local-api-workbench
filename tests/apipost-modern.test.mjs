@@ -464,3 +464,39 @@ test("modern response delay limits and definition-only delays reject atomically"
     assert.equal(p.requests[0].examples[0].body, "");
   }
 });
+
+test("modern Cookie encoding maps enabled, disabled and absent flags to actual wire semantics", async (t) => {
+  const server = http.createServer((req, res) =>
+    res.end(req.headers.cookie ?? ""),
+  );
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => server.close(r)));
+  for (const flag of [undefined, 1, -1, 0]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].url = "http://127.0.0.1:" + server.address().port + "/cookie";
+    doc.apis[1].request.cookie = {
+      parameter: [{ key: "space key", value: "a+b", is_checked: 1 }],
+    };
+    if (flag !== undefined) doc.apis[1].request.cookie.cookie_encode = flag;
+    importIntoProject(p, doc);
+    const encoded = flag === undefined || flag === 1;
+    assert.equal(
+      p.requests[0].cookieEncoding,
+      encoded ? "apipost" : "apipost-name",
+    );
+    assert.equal(
+      (await executeRequest(interpolate(p.requests[0], { shared: "fixture" })))
+        .body,
+      encoded ? "space%20key=a%2Bb" : "space%20key=a+b",
+    );
+  }
+  for (const flag of [true, false, null, "-1", 2]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].request.cookie.cookie_encode = flag;
+    assert.throws(() => importIntoProject(p, doc), /Cookie编码/);
+    assert.deepEqual(p, before);
+  }
+});

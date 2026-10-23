@@ -555,7 +555,18 @@ function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
       (param === "cookies"
-        ? '<button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span>'
+        ? `<button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span><label>参数表 Cookie 编码<select id="cookie-encoding">${[
+            ["raw", "保持原值"],
+            ["apipost", "名称和值：避免重复编码"],
+            ["apipost-name", "仅名称：避免重复编码"],
+          ]
+            .map(
+              ([value, label]) =>
+                `<option value="${value}" ${(r.cookieEncoding || "raw") === value ? "selected" : ""}>${label}</option>`,
+            )
+            .join(
+              "",
+            )}</select></label><p class="muted">只作用于下方参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
         : param === "query"
           ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制下方参数表的空值；URL 内已有查询保持原样。</p>`
           : "") + pairs(r[param], param)
@@ -1650,6 +1661,10 @@ function bind() {
     editableParameters()[kind].splice(Number(index), 1);
     mark();
     render();
+  });
+  on("#cookie-encoding", "change", (_, element) => {
+    request().cookieEncoding = element.value;
+    mark();
   });
   on("#query-add-equal", "change", (_, element) => {
     request().queryAddEqual = element.checked;

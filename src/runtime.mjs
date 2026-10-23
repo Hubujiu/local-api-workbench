@@ -1,3 +1,4 @@
+import { requestCookieHeader } from "./request-cookies.mjs";
 import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import { asapAuthorization } from "./asap-auth.mjs";
@@ -328,9 +329,8 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     if (jwt.in === "query") setURLQuery(u, jwt.key, jwt.value);
     else headers[jwt.key] = jwt.value;
   }
-  const activeCookies = r.cookies.filter((c) => c.enabled !== false && c.key);
-  if (activeCookies.length)
-    headers.cookie = activeCookies.map((c) => `${c.key}=${c.value}`).join("; ");
+  const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
+  if (cookieHeader !== undefined) headers.cookie = cookieHeader;
   if (cookieSession) {
     const managed = await cookieSession.header(u.href);
     if (managed !== null) {
