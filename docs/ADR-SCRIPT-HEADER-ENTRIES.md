@@ -25,8 +25,7 @@ metadata stays intact, and saved definitions are not changed by execution.
 Bounds: 1000 rows, 1KiB nonempty key without NUL/CR/LF, 64KiB text value,
 8KiB description and 256KiB total. Text must be well-formed Unicode. Updates
 accept text values and explicit boolean states; conflicting enabled/disabled
-values reject. Runtime HTTP header validation still applies. Existing add/upsert
-and shortcut behaviour is not redefined, and this is not complete PropertyList
+values reject. Runtime HTTP header validation still applies. Existing add and shortcut behaviour is not redefined; upsert is corrected below, and this is not complete PropertyList
 compatibility. VM/network/time budgets remain unchanged.
 
 Red regressions establish missing methods; tests verify identity, duplicate
@@ -77,3 +76,21 @@ or implement omitted-initial reduce inference. Existing header validation and
 stale-entry protection remain unchanged. Regression first reproduces ignored
 context and missing methods; browser and packaged fixtures exercise traversal
 and a selected entry's actual mutation without replacing existing wire assertions.
+
+
+## Last-member upsert
+
+Static PropertyList.upsert selects one(key), updates that member in place and
+returns false; insertion returns true. The old facade removed every matching
+header, re-appended one replacement, lost member identity and re-enabled disabled
+members. The bounded replacement edits only the last case-insensitive match,
+preserving other duplicates, order, metadata, identity and an omitted disabled
+state. Explicit state remains validated. Missing value becomes empty text and
+existing scalar/string coercion is retained. New rows validate the entire
+candidate before publication. Unknown own keys (including hidden/Symbol keys)
+reject atomically, reserved-name restrictions stay unchanged, and this does not
+introduce Header.system or arbitrary upstream properties.
+
+Fixed verification covers return values, duplicate identity/order, disabled state,
+invalid patches and actual repeated-header HTTP. Browser fixture upserts the last
+duplicate then checks both wire values; packaged fixture checks stable identity.

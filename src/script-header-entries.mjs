@@ -145,6 +145,54 @@ function installHeaderEntries({
       if (rows[i].key.toLowerCase() === key.toLowerCase())
         return entry(rows[i]);
   };
+  headers.upsert = (item) => {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      Array.isArray(item) ||
+      Reflect.ownKeys(item).some(
+        (k) =>
+          !["key", "value", "description", "disabled", "enabled"].includes(k),
+      )
+    )
+      throw Error("Header更新字段无效");
+    name(item.key);
+    if (["__proto__", "prototype", "constructor"].includes(item.key))
+      throw Error("Invalid parameter name");
+    const patch = Object.fromEntries(
+      Reflect.ownKeys(item).map((k) => [k, item[k]]),
+    );
+    patch.value = String(patch.value ?? "");
+    for (const key of ["disabled", "enabled"])
+      if (Object.hasOwn(patch, key) && typeof patch[key] !== "boolean")
+        throw Error("Header启用状态必须为布尔值");
+    if (
+      Object.hasOwn(patch, "disabled") &&
+      Object.hasOwn(patch, "enabled") &&
+      patch.disabled === patch.enabled
+    )
+      throw Error("Header启用状态冲突");
+    const found = headers.one(patch.key);
+    if (found) {
+      found.update(patch);
+      return false;
+    }
+    const row = {
+      key: patch.key,
+      value: patch.value,
+      enabled:
+        patch.disabled !== undefined
+          ? !patch.disabled
+          : patch.enabled !== false,
+      ...(Object.hasOwn(patch, "description")
+        ? { description: patch.description }
+        : {}),
+    };
+    const rows = [...read(), row];
+    inspect(rows);
+    request.headers = rows;
+    return true;
+  };
   headers.get = (key) => headers.one(key)?.value;
   headers.has = function (item, value) {
     const withValue = arguments.length > 1;

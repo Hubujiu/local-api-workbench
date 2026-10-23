@@ -74,7 +74,7 @@ test("live Header changes reach HTTP without changing saved request definitions"
           ...input().request,
           url: "http://127.0.0.1:" + server.address().port,
           beforeScript:
-            "pm.request.headers.one('X-ONE').value='wire';pm.request.headers.idx(2).disabled=false;",
+            "pm.request.headers.one('X-ONE').value='wire';pm.request.headers.upsert({key:'x-one',value:'wire'});pm.request.headers.idx(2).disabled=false;",
         },
       },
     ],
@@ -171,4 +171,30 @@ test("Header iterator snapshot excludes additions and callback errors remain fai
     ),
     /iterator sentinel/,
   );
+});
+
+test("Header upsert edits only the last duplicate in place and preserves disabled state", async () => {
+  const result = await runScript(
+    `
+    const h=pm.request.headers,first=h.idx(0),last=h.idx(1),off=h.one('Off');
+    pm.test('updated result',()=>pm.expect(h.upsert({key:'X-ONE',value:'updated'})).to.equal(false));
+    pm.test('duplicate identity',()=>{pm.expect(h.count()).to.equal(3);pm.expect(h.idx(0)).to.equal(first);pm.expect(h.idx(1)).to.equal(last);pm.expect(first.value).to.equal('first');pm.expect(last.value).to.equal('updated');});
+    h.upsert({key:'OFF',value:'still hidden'});
+    pm.test('disabled identity',()=>{pm.expect(h.one('off')).to.equal(off);pm.expect(off.disabled).to.equal(true);});
+    pm.test('added result',()=>pm.expect(h.upsert({key:'New',value:0,disabled:true})).to.equal(true));
+    pm.test('new scalar',()=>{pm.expect(h.get('New')).to.equal('0');pm.expect(h.one('New').disabled).to.equal(true);});
+    for(const item of [{key:'X-ONE',value:'bad',unknown:true},{key:'X-ONE',value:'bad',[Symbol('hidden')]:true},Object.defineProperty({key:'X-ONE',value:'bad'},'hidden',{value:1}),{key:'X-ONE',value:'x'.repeat(65537)}])pm.expect(()=>h.upsert(item)).to.throw();
+    pm.test('atomic',()=>pm.expect(last.value).to.equal('updated'));
+  `,
+    input(),
+  );
+  assert.ok(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+  assert.deepEqual(
+    result.request.headers.map((x) => x.value),
+    ["first", "updated", "still hidden", "0"],
+  );
+  assert.equal(result.request.headers[2].enabled, false);
 });
