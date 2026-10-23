@@ -58,7 +58,12 @@ export function mergeApipostFunctions(rows, existing, projectId, document) {
       if (value && typeof value === "object") {
         if (seen.has(value)) throw Error("Apipost共享函数依赖包含循环");
         seen.add(value);
-        pending.push(...Object.values(value));
+        for (const key in value) {
+          if (!Object.hasOwn(value, key)) continue;
+          if (nodes + pending.length >= 100000)
+            throw Error("Apipost共享函数依赖检查超过范围");
+          pending.push(value[key]);
+        }
       }
     }
   }

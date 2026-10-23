@@ -242,3 +242,40 @@ test("source function case snapshot expansion is bounded before target mutation"
   assert.throws(() => importIntoProject(p, d), /函数快照.*4MiB/);
   assert.deepEqual(p, before);
 });
+
+test("source dependency scan rejects wide inputs with the explicit node budget before mutation", () => {
+  const existing = [{ name: "local", body: "return args[0];" }],
+    before = structuredClone(existing);
+  assert.throws(
+    () =>
+      mergeApipostFunctions(
+        source("return text;"),
+        existing,
+        "p",
+        Array(200000).fill(null),
+      ),
+    (error) =>
+      error.message === "Apipost共享函数依赖检查超过范围" &&
+      !(error instanceof RangeError),
+  );
+  assert.deepEqual(existing, before);
+  assert.equal(
+    mergeApipostFunctions(
+      source("return text;"),
+      [],
+      "p",
+      Array(99999).fill(null),
+    ).length,
+    1,
+  );
+  assert.throws(
+    () =>
+      mergeApipostFunctions(
+        source("return text;"),
+        [],
+        "p",
+        Array(100000).fill(null),
+      ),
+    /依赖检查超过范围/,
+  );
+});
