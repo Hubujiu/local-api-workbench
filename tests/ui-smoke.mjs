@@ -2921,6 +2921,46 @@ try {
     "browser-owner": "fixture-owner",
     "browser-hidden": 0,
   };
+  modern.samples = [
+    {
+      sample_id: "browser-sample",
+      parent_id: "0",
+      target_id: "api",
+      project_id: modern.project_id,
+      name: "Imported root sample",
+      type: "sample",
+      method: "POST",
+      url: "/auth",
+      protocol: "http/1.1",
+      request: {
+        auth: { type: "noauth" },
+        body: { mode: "plain", raw: "browser sample body" },
+        header: { parameter: [] },
+        query: { parameter: [] },
+        cookie: { parameter: [] },
+        restful: { parameter: [] },
+        pre_tasks: [
+          {
+            type: "customScript",
+            id: "sample-pre",
+            name: "Sample pre",
+            enabled: 1,
+            data: 'apt.setRequestHeader("x-imported-task",inheritedPrefix+"-"+inheritedSuffix+"-sample");',
+          },
+        ],
+        post_tasks: [
+          {
+            type: "customScript",
+            id: "sample-post",
+            name: "Sample post",
+            enabled: 1,
+            data: 'pm.test("sample imported",()=>pm.expect(apt.response.json().importTask).to.equal("browser-kept-sample"));',
+          },
+        ],
+      },
+      response: { example: [] },
+    },
+  ];
   modern.global.describe_library = [
     {
       id: "browser-description",
@@ -3212,6 +3252,29 @@ try {
   ]);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-apipost-modern.png" });
+  const importedSample = taskSourceProject.cases.find(
+    (item) => item.name === "Imported root sample",
+  );
+  assert.equal(importedSample.sourceRequestId, taskSourceRequest.id);
+  await page.locator('[data-mode="cases"]').click();
+  const sampleResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await page.locator(`[data-run-case="${importedSample.id}"]`).click();
+  const sampleResult = await (await sampleResponse).json();
+  assert.equal(sampleResult.outcome, "passed", JSON.stringify(sampleResult));
+  assert.equal(sampleResult.request.body, "browser sample body");
+  assert.equal(
+    sampleResult.request.headers["x-imported-task"],
+    "browser-kept-sample",
+  );
+  assert.equal(sampleResult.request.headers["x-test"], undefined);
+  await page
+    .locator(`[data-run-case="${importedSample.id}"]:not([disabled])`)
+    .waitFor();
+  await page.screenshot({ path: "/tmp/local-api-imported-root-sample.png" });
   await page.locator('[data-mode="mock"]').click();
   assert.equal(await page.locator("[data-edit-example]").count(), 2);
   await page.locator('[data-edit-example="1"]').click();
@@ -5786,6 +5849,7 @@ try {
     restoredProject.settings.parameterDescriptions,
     attributeProject.settings.parameterDescriptions,
   );
+  assert.deepEqual(restoredProject.cases, attributeProject.cases);
   const restoredAttributeRequest = restoredProject.requests.find(
     (request) => request.id === taskSourceRequest.id,
   );

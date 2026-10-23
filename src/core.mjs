@@ -1,3 +1,4 @@
+import { snapshotCase } from "./cases.mjs";
 import {
   openAPIURLQuery,
   openAPIEmptyQueryValue,
@@ -1717,6 +1718,31 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
+  const importedRequestIds = modern?.samples?.length
+    ? new Map(requests.map((request) => [request.sourceOperationId, id()]))
+    : null;
+  const importedCases = (modern?.samples || []).map((sample) =>
+    snapshotCase({
+      id: sample.id,
+      name: sample.name,
+      sourceRequestId: importedRequestIds.get(sample.sourceOperationId),
+      request: sample.request,
+      functions: [],
+    }),
+  );
+  if (importedCases.length) {
+    if (
+      !Array.isArray(project.cases || []) ||
+      (project.cases || []).length + importedCases.length > 1000
+    )
+      throw Error("用例最多1000个");
+    const caseIds = new Set((project.cases || []).map((item) => item.id));
+    for (const item of importedCases) {
+      if (caseIds.has(item.id))
+        throw Error("Apipost样例用例标识冲突，请导入新项目");
+      caseIds.add(item.id);
+    }
+  }
   const output = [];
   for (const request of requests) {
     const index = sync
@@ -1730,13 +1756,18 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       : -1;
     const value = {
       ...request,
-      id: index >= 0 ? project.requests[index].id : id(),
+      id:
+        index >= 0
+          ? project.requests[index].id
+          : importedRequestIds?.get(request.sourceOperationId) || id(),
     };
     if (index >= 0) project.requests[index] = value;
     else project.requests.push(value);
     output.push(value);
   }
   if (modern) Object.assign(project, modern.metadata);
+  if (importedCases.length)
+    project.cases = [...(project.cases || []), ...importedCases];
   if (components) project.openapiComponents = mergedComponents;
   if (legacy)
     project.folders = [

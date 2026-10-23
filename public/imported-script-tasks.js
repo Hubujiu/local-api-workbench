@@ -58,7 +58,9 @@ export function normalizeImportedScriptTasks(value) {
       if (task.origin !== undefined) {
         plain(task.origin, ["scope", "id"]);
         if (
-          !["project", "folder", "request"].includes(task.origin.scope) ||
+          !["project", "folder", "request", "sample"].includes(
+            task.origin.scope,
+          ) ||
           typeof task.origin.id !== "string" ||
           !task.origin.id.trim() ||
           task.origin.id.length > 200
@@ -93,5 +95,5 @@ const escape = (text) =>
 export function importedScriptTasksHTML(value) {
   if (value === undefined) return "";
   const source = normalizeImportedScriptTasks(value);
-  return `<details class="imported-script-tasks"><summary>原始脚本任务来源（只读）</summary><p>此处保留导入时的名称、启停状态和源码，不参与执行。执行以当前前/后执行脚本为准；修改编辑器不会回写原始来源。停用源码不会自动启用。</p>${["before", "after"].flatMap((phase) => source[phase].map((task) => `<details><summary>${phase === "before" ? "前置" : "后置"} · ${escape(task.name)}${task.origin ? ` · ${{ project: "项目", folder: "目录", request: "接口" }[task.origin.scope]}:${escape(task.origin.id)}` : ""} · ${task.enabled === 1 ? "原始启用" : "原始停用"}</summary><pre>${escape(task.data)}</pre></details>`)).join("")}</details>`;
+  return `<details class="imported-script-tasks"><summary>原始脚本任务来源（只读）</summary><p>此处保留导入时的名称、启停状态和源码，不参与执行。执行以当前前/后执行脚本为准；修改编辑器不会回写原始来源。停用源码不会自动启用。</p>${["before", "after"].flatMap((phase) => source[phase].map((task) => `<details><summary>${phase === "before" ? "前置" : "后置"} · ${escape(task.name)}${task.origin ? ` · ${{ project: "项目", folder: "目录", request: "接口", sample: "用例" }[task.origin.scope]}:${escape(task.origin.id)}` : ""} · ${task.enabled === 1 ? "原始启用" : "原始停用"}</summary><pre>${escape(task.data)}</pre></details>`)).join("")}</details>`;
 }

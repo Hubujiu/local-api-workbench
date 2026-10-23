@@ -1,3 +1,4 @@
+import { prepareModernSamples } from "./apipost-samples.mjs";
 import { mergeApipostDescriptions } from "./apipost-descriptions.mjs";
 import {
   prepareApipostAttributes,
@@ -203,8 +204,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const prefix = "apipost-" + digest(safe(source.project_id));
   const resource = (kind, id) =>
     prefix + "-" + kind + "-" + digest(safe(String(id)));
-  for (const name of ["samples", "automated_testings"])
-    reject(source[name], name);
+  for (const name of ["automated_testings"]) reject(source[name], name);
   const models = prepareApipostModels(source.models, resource, source.name);
   const global = source.global;
   const knownGlobal = new Set([
@@ -280,7 +280,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     color: mark.color,
   }));
   const marks = new Set((global.marks ?? []).map((m) => String(m.mark_id)));
-  const nodes = list(source.apis, "apis");
+  const apiNodes = list(source.apis, "apis");
+  const samples = prepareModernSamples(
+    source.samples,
+    apiNodes,
+    source.project_id,
+    global.servers || [],
+    resource,
+  );
+  const nodes = [...apiNodes, ...samples.nodes];
   const ids = new Map();
   for (const node of nodes) {
     if (!object(node) || !["api", "folder"].includes(node.target_type))
@@ -540,6 +548,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     { apis: mapped.map((x) => x.legacy) },
     { preserveEmptyExamples: true },
   );
+  const sampleCases = [],
+    ordinaryRequests = [];
   for (const request of legacy.requests) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
@@ -597,7 +607,32 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     request.importNotes.push(
       "现代Apipost JSON有限互操作；不代表原生目录已验证。请选择导入环境后再发送；Mock开关和原版响应自动校验不自动启用。",
     );
+    const sample = samples.byNode.get(String(row.node.target_id));
+    if (sample) {
+      request.sourceOperationId = "apipost-sample:" + sample.sampleId;
+      for (const phase of ["before", "after"])
+        for (const task of request.importedScriptTasks?.[phase] || [])
+          if (
+            task.origin?.scope === "request" &&
+            task.origin.id === String(row.node.target_id)
+          )
+            task.origin = { scope: "sample", id: sample.sampleId };
+      request.importNotes.push(
+        "根级样例已转换为独立接口用例快照；不执行导入脚本。显式服务绑定在运行时使用所选环境地址，目录与项目参数/脚本仅保留导入时快照。",
+      );
+      sampleCases.push({ ...sample, request });
+    } else ordinaryRequests.push(request);
   }
+  legacy.requests = ordinaryRequests;
+  for (const request of ordinaryRequests)
+    if (
+      sampleCases.some(
+        (sample) => sample.sourceOperationId === request.sourceOperationId,
+      )
+    )
+      request.importNotes.push(
+        "根级样例已导入为关联此接口的独立用例快照；运行前请选择导入环境。本次不支持样例分组或自动化测试树。",
+      );
   const mergeResources = (old = [], items = []) => {
     const result = structuredClone(old);
     for (const item of items) {
@@ -675,6 +710,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   validateModelFolders({ dictionary, modelFolders });
   return {
     ...legacy,
+    samples: sampleCases,
     metadata: {
       openapiComponents: components,
       dictionary,
