@@ -1,3 +1,4 @@
+import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
@@ -457,6 +458,11 @@ try {
         ")({request,pm,apt,forms:__formOperations,lodash:_});",
     );
     install(
+      "const __readFinalBody=(" +
+        finalBodySource +
+        ")({request,response,pm,apt,previous:input.finalBody});",
+    );
+    install(
       "globalThis.__registerSchemaResponse = (" +
         responseCompatibilitySource +
         ")({response,pm,apt});",
@@ -647,7 +653,7 @@ try {
   finalizing = true;
   const output = measureActivity("serialization", "serializationMs", () =>
     context.evalCode(
-      "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, ...__readResponseMutation()})",
+      "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, finalBody:__readFinalBody(), ...__readResponseMutation()})",
     ),
   );
   if (output.error) {

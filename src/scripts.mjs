@@ -1,3 +1,4 @@
+import { finalBodyLiteral } from "./script-final-body.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import {
   initializeQueryRuntime,
@@ -49,6 +50,8 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  if (input.finalBody !== undefined)
+    finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
   const urlMode = normalizeScriptURLMode(input.request?.scriptURLMode);
   if (input.request?.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -332,6 +335,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       "localVariables",
       "request",
       "visualization",
+      "finalBody",
     ])
       state[key] = result[key];
     if (performance.now() > deadline || remaining < 0)
@@ -347,6 +351,7 @@ export async function runScriptSequence(stages, input, options = {}) {
           localVariables: state.localVariables,
           request: state.request,
           visualization: state.visualization,
+          finalBody: state.finalBody,
           responseOverride: state.responseOverride,
           responseOriginals: state.responseOriginals,
           logs,
@@ -367,6 +372,7 @@ export async function runScriptSequence(stages, input, options = {}) {
     scopes: state.scopes,
     localVariables: state.localVariables || {},
     request: state.request,
+    ...(state.finalBody === undefined ? {} : { finalBody: state.finalBody }),
     visualization: state.visualization ?? null,
     responseOverride: state.responseOverride,
     responseOriginals: state.responseOriginals,

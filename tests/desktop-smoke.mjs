@@ -24,7 +24,20 @@ const ntlmFixture = await startNtlmFixture();
 const jwtSecret = "fictional-desktop-jwt-secret-".repeat(3);
 const jwtRSA = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwtEC = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-const jwtFixture = http.createServer((request, response) => {
+const jwtFixture = http.createServer(async (request, response) => {
+  if (request.url.split("?")[0] === "/final-body") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        body: Buffer.concat(chunks).toString(),
+        signature: request.headers["x-final-signature"],
+      }),
+    );
+    return;
+  }
+
   try {
     const [header, payload, signature] = (request.headers.authorization || "")
       .slice(7)
@@ -240,6 +253,52 @@ try {
   await window.locator("#script-url-mode").selectOption("string");
   await window.locator('[data-param="after"]').click();
   await window.locator("#script-code").fill(sdkOriginalAfter);
+  phase = "final-body";
+  console.log("DESKTOP_PHASE", phase);
+  const beforeFinalBody = await window
+    .locator(".tab.selected [data-open-tab]")
+    .getAttribute("data-open-tab");
+  await window.getByRole("button", { name: "新建接口", exact: true }).click();
+  await window.locator("#request-name").fill("Final body packaged fixture");
+  await window.locator("#method").selectOption("POST");
+  await window
+    .locator("#url")
+    .fill("http://127.0.0.1:" + jwtFixture.address().port + "/final-body");
+  await window.locator('[data-param="body"]').click();
+  await window.locator('input[name="body-type"][value="raw"]').check();
+  await window.locator("#raw-format").selectOption("raw");
+  await window.locator("#body-code").fill("{{payload}}");
+  await window.locator('[data-param="before"]').click();
+  await window
+    .locator("#script-code")
+    .fill(
+      "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
+    );
+  await window.locator('[data-param="after"]').click();
+  await window
+    .locator("#script-code")
+    .fill(
+      "pm.test('final-body-wire',()=>{pm.expect(pm.response.json().body).to.equal('{{literal}}+&');pm.expect(typeof pm.getFinalRequestRawBody).to.equal('undefined');});",
+    );
+  const finalBodyResponse = window.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await window.locator("#send").click();
+  const finalBodyPayload = await (await finalBodyResponse).json();
+  assert.equal(
+    finalBodyPayload.outcome,
+    "passed",
+    JSON.stringify(finalBodyPayload),
+  );
+  const finalBodyEcho = JSON.parse(finalBodyPayload.body);
+  assert.equal(finalBodyEcho.body, "{{literal}}+&");
+  assert.equal(
+    finalBodyEcho.signature,
+    createHmac("sha256", "fixture-key").update("{{literal}}+&").digest("hex"),
+  );
+  await window.locator('[data-open-tab="' + beforeFinalBody + '"]').click();
   phase = "ntlm";
   await window.locator("#url").fill(ntlmFixture.url);
   await window.locator('[data-param="auth"]').click();

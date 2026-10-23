@@ -46,6 +46,19 @@ const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
+  if (request.url.split("?")[0] === "/final-body") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        body: Buffer.concat(chunks).toString(),
+        signature: request.headers["x-final-signature"],
+      }),
+    );
+    return;
+  }
+
   if (request.url.startsWith("/sdk-url/")) {
     for await (const chunk of request) {
     }
@@ -5386,6 +5399,44 @@ try {
   );
   await page.screenshot({ path: "/tmp/local-api-sdk-url-curl.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
+
+  await page.locator("#method").selectOption("POST");
+  await page.locator("#url").fill(fixtureURL + "/final-body");
+  await page.locator('[data-param="body"]').click();
+  await page.locator('input[name="body-type"][value="raw"]').check();
+  await page.locator("#raw-format").selectOption("raw");
+  await page.locator("#body-code").fill("{{payload}}");
+  await page.locator('[data-param="before"]').click();
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
+    );
+  await page.locator('[data-param="after"]').click();
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.test('final-body-wire',()=>{pm.expect(pm.response.json().body).to.equal('{{literal}}+&');pm.expect(typeof pm.getFinalRequestRawBody).to.equal('undefined');});",
+    );
+  const finalBodyResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const finalBodyPayload = await (await finalBodyResponse).json();
+  assert.equal(
+    finalBodyPayload.outcome,
+    "passed",
+    JSON.stringify(finalBodyPayload),
+  );
+  const finalBodyEcho = JSON.parse(finalBodyPayload.body);
+  assert.equal(finalBodyEcho.body, "{{literal}}+&");
+  assert.equal(
+    finalBodyEcho.signature,
+    createHmac("sha256", "fixture-key").update("{{literal}}+&").digest("hex"),
+  );
+  await page.screenshot({ path: "/tmp/local-api-final-body.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

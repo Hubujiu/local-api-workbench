@@ -494,7 +494,8 @@ export async function runPlan(
       }
       applyLegacyVariables(scopes, beforeOperations, vars);
       const localVariables = {};
-      let configuredRequest = structuredClone(step.request);
+      let configuredRequest = structuredClone(step.request),
+        finalizedBody;
       const beforeStages = scriptStages(configuredRequest, "before");
       if (beforeStages.length) {
         scriptPhase = "before";
@@ -535,6 +536,7 @@ export async function runPlan(
         replaceVariables(vars, effectiveScopes(scopes));
         replaceVariables(localVariables, scripted.localVariables || {});
         configuredRequest = normalizeRequest(scripted.request);
+        finalizedBody = scripted.finalBody;
       }
       await commitScopes();
       record.request = await resolveDynamicRequest(
@@ -545,6 +547,7 @@ export async function runPlan(
         },
         snapshot.functions || [],
         interpolate,
+        finalizedBody,
       );
       if (prepareRequest) record.request = prepareRequest(record.request);
       record.response = await execute(record.request, signal, {

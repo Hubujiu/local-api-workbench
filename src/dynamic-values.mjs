@@ -1,3 +1,4 @@
+import { finalBodyLiteral } from "./script-final-body.mjs";
 import { resolveSDKURLRequest } from "./script-url-resolve.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { randomInt } from "node:crypto";
@@ -64,6 +65,7 @@ async function resolveDynamicRequestBase(
   variables,
   functions,
   interpolate,
+  literalBody,
 ) {
   const clone = structuredClone(request),
     specs = [];
@@ -80,9 +82,13 @@ async function resolveDynamicRequestBase(
   }
   const body = String(clone.body || "");
   const definitions = clone.bodyDynamic || {};
-  const parts = body.split(/(\{\{@value:[A-Za-z0-9_-]{1,100}\}\})/g);
+  const parts =
+    literalBody === undefined
+      ? body.split(/(\{\{@value:[A-Za-z0-9_-]{1,100}\}\})/g)
+      : [literalBody];
   const bodySpecs = [];
   for (const [index, part] of parts.entries()) {
+    if (literalBody !== undefined) continue;
     const match = /^\{\{@value:([A-Za-z0-9_-]{1,100})\}\}$/.exec(part);
     if (!match) continue;
     if (!Object.hasOwn(definitions, match[1]))
@@ -126,7 +132,8 @@ async function resolveDynamicRequestBase(
   for (const [index, part] of parts.entries()) {
     const dynamic = bodySpecs.find((item) => item.index === index);
     if (!dynamic) {
-      parts[index] = interpolate(part, variables);
+      parts[index] =
+        literalBody === undefined ? interpolate(part, variables) : part;
       continue;
     }
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
@@ -148,14 +155,24 @@ export async function resolveDynamicRequest(
   variables,
   functions,
   interpolate,
+  finalBody,
 ) {
+  const literalBody = finalBodyLiteral(finalBody, request);
+  const resolve = (request, variables, functions, interpolate) =>
+    resolveDynamicRequestBase(
+      request,
+      variables,
+      functions,
+      interpolate,
+      literalBody,
+    );
   if (normalizeScriptURLMode(request.scriptURLMode) === "sdk")
     return resolveSDKURLRequest(
       request,
       variables,
       functions,
       interpolate,
-      resolveDynamicRequestBase,
+      resolve,
     );
-  return resolveDynamicRequestBase(request, variables, functions, interpolate);
+  return resolve(request, variables, functions, interpolate);
 }
