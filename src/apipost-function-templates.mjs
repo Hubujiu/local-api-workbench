@@ -33,5 +33,10 @@ export async function resolveApipostFunctionTemplate(expression, functions) {
     throw Error("原版函数模板暂仅支持有限同步基本类型结果");
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
     throw Error("原版函数模板结果超过64KiB");
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  if (/[&#+%?=\r\n]/.test(text) || (text !== expression && text.includes("$")))
+    throw Error(
+      "原版Query函数结果包含尚未兼容的URL分隔符或替换符，不发送不等价请求",
+    );
   return value;
 }

@@ -138,6 +138,12 @@ async function resolveDynamicRequestBase(
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (
+      spec.source === "apipost-function" &&
+      value === "" &&
+      request.queryAddEqual === false
+    )
+      throw Error("原版Query函数空结果与省略等号组合尚未兼容");
     resolved[group][index].value =
       typeof value === "string" ? value : JSON.stringify(value);
   }

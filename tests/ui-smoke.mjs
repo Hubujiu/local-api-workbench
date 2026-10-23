@@ -6546,6 +6546,7 @@ try {
   assert(templateRequest);
   assert.equal(templateRequest.query[0].dynamic.source, "apipost-function");
   await page.locator(`[data-request="${templateRequest.id}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
   await page
     .locator("#env")
     .selectOption(

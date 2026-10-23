@@ -278,3 +278,40 @@ test("Query template budgets, disabled values, VM authority and editor preservat
       resolveDynamicValue(spec(bad), {}, [fn("return text;")]),
     );
 });
+
+test("Query template results refuse ambiguous URL substitution and empty-equal semantics", async () => {
+  const input = "{{$function.fn_wrap(x)}}";
+  for (const output of [
+    "a&other=b",
+    "#fragment",
+    "%2f",
+    "a+b",
+    "a=b",
+    "?q",
+    "$&",
+    "$'",
+    "line\nnext",
+  ])
+    await assert.rejects(
+      resolveDynamicValue(spec(input), {}, [
+        fn("return " + JSON.stringify(output) + ";"),
+      ]),
+      /分隔符或替换符/,
+    );
+  await assert.rejects(
+    resolveDynamicRequest(
+      { queryAddEqual: false, query: [{ key: "q", dynamic: spec(input) }] },
+      {},
+      [fn('return "";')],
+      interpolate,
+    ),
+    /省略等号/,
+  );
+  const r = await resolveDynamicRequest(
+    { queryAddEqual: true, query: [{ key: "q", dynamic: spec(input) }] },
+    {},
+    [fn('return "";')],
+    interpolate,
+  );
+  assert.equal(r.query[0].value, "");
+});
