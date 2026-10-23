@@ -1277,6 +1277,9 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const r of project.requests.filter((r) => !r.deletedAt)) {
     if (
+      Object.values(r.bodyDynamic || {}).some((spec) =>
+        isApipostFunctionSource(spec?.source),
+      ) ||
       [...(r.query || []), ...(r.headers || []), ...(r.form || [])].some(
         (row) =>
           row.enabled !== false && isApipostFunctionSource(row.dynamic?.source),
@@ -1430,6 +1433,9 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   if (
+    Object.values(input.bodyDynamic || {}).some((spec) =>
+      isApipostFunctionSource(spec?.source),
+    ) ||
     [
       ...(input.query || []),
       ...(input.headers || []),

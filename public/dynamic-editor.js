@@ -14,7 +14,7 @@ export function dynamicEditor(spec) {
   const source = spec?.source || "fixed";
   const select = (key, values, value) =>
     `<select data-dynamic-field="${key}">${values.map((v) => `<option ${v === value ? "selected" : ""}>${v}</option>`).join("")}</select>`;
-  return `<details class="step-dynamic"><summary>动态值${spec ? " · 已配置" : ""}</summary><label><input type="checkbox" data-dynamic-enabled ${spec ? "checked" : ""}>启用动态值</label><label>来源${select("source", ["fixed", "variable", "mock", "apipost-function", "apipost-header-function", "apipost-form-function"], source)}</label><label>固定JSON / 变量名 / Mock表达式<textarea data-dynamic-field="value" spellcheck="false">${esc(source === "fixed" ? JSON.stringify(spec?.value ?? null) : spec?.value || "")}</textarea></label><label>依次处理函数（逗号分隔）<input data-dynamic-field="functions" value="${esc((spec?.functions || []).join(","))}"></label><div data-dynamic-mock ${source === "mock" ? "" : "hidden"}><label>Mock类型${select("type", ["string", "integer", "number", "boolean", "object", "array"], spec?.type || "string")}</label><label>Mock种子（可选）<input type="number" data-dynamic-field="seed" value="${esc(spec?.seed ?? "")}"></label></div><p class="muted">发送时读取前置脚本后的变量；这里只配置，不执行预览。文件字段不支持动态文本。apipost-function用于Query，apipost-header-function用于Header，apipost-form-function用于表单文本；仅支持无脚本的完整模板，原样传入文本参数；同步抛错保留原模板，不支持加工链。取消不修改快照。</p></details>`;
+  return `<details class="step-dynamic"><summary>动态值${spec ? " · 已配置" : ""}</summary><label><input type="checkbox" data-dynamic-enabled ${spec ? "checked" : ""}>启用动态值</label><label>来源${select("source", ["fixed", "variable", "mock", "apipost-function", "apipost-header-function", "apipost-form-function", "apipost-body-function"], source)}</label><label>固定JSON / 变量名 / Mock表达式<textarea data-dynamic-field="value" spellcheck="false">${esc(source === "fixed" ? JSON.stringify(spec?.value ?? null) : spec?.value || "")}</textarea></label><label>依次处理函数（逗号分隔）<input data-dynamic-field="functions" value="${esc((spec?.functions || []).join(","))}"></label><div data-dynamic-mock ${source === "mock" ? "" : "hidden"}><label>Mock类型${select("type", ["string", "integer", "number", "boolean", "object", "array"], spec?.type || "string")}</label><label>Mock种子（可选）<input type="number" data-dynamic-field="seed" value="${esc(spec?.seed ?? "")}"></label></div><p class="muted">发送时读取前置脚本后的变量；这里只配置，不执行预览。文件字段不支持动态文本。apipost-function用于Query，apipost-header-function用于Header，apipost-form-function用于表单文本，apipost-body-function用于完整raw/JSON正文且须选择text原文输出；仅支持无脚本的完整模板，原样传入文本参数；同步抛错保留原模板，不支持加工链。取消不修改快照。</p></details>`;
 }
 export function parseDynamicEdits(fields, previous = {}) {
   if (!fields.enabled) return null;
@@ -26,6 +26,7 @@ export function parseDynamicEdits(fields, previous = {}) {
       "apipost-function",
       "apipost-header-function",
       "apipost-form-function",
+      "apipost-body-function",
     ].includes(fields.source)
   )
     throw Error("动态值来源无效");

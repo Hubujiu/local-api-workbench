@@ -38,12 +38,20 @@ test("Header source functions retain header literals without adopting Query URL 
     ]),
     expression,
   );
-  for (const value of ["line\r\nInjected: yes", "$&", "$'"])
+  for (const value of ["line\r\nInjected: yes"])
     await assert.rejects(
       resolveDynamicValue(spec(expression), {}, [
         fn("return " + JSON.stringify(value) + ";"),
       ]),
     );
+  assert.equal(
+    await resolveDynamicValue(spec(expression), {}, [fn('return "$&";')]),
+    expression,
+  );
+  assert.equal(
+    await resolveDynamicValue(spec(expression), {}, [fn('return "$5";')]),
+    "$5",
+  );
   await assert.rejects(
     resolveDynamicRequest(
       { query: [{ key: "q", dynamic: spec(expression) }] },

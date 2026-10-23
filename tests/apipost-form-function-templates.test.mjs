@@ -59,9 +59,9 @@ test("form templates preserve literal body characters and stay out of files and 
     ),
     /表单/,
   );
-  await assert.rejects(
-    resolveDynamicValue(spec, {}, [fn('return "$&";')]),
-    /替换符/,
+  assert.equal(
+    await resolveDynamicValue(spec, {}, [fn('return "$&";')]),
+    expression,
   );
 });
 test("modern text-form templates preserve literal values over real urlencoded and multipart HTTP", async (t) => {

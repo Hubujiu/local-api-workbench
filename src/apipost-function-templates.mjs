@@ -1,3 +1,4 @@
+import { replaceExactApipostTemplate } from "./apipost-template-replacement.mjs";
 import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 import { runScript } from "./scripts.mjs";
@@ -6,7 +7,7 @@ export async function resolveApipostFunctionTemplate(
   functions,
   group = "query",
 ) {
-  if (!["query", "headers", "form"].includes(group))
+  if (!["query", "headers", "form", "body"].includes(group))
     throw Error("原版函数模板参数位置无效");
   const { name, argument } = parseApipostFunctionTemplate(expression);
   const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
@@ -30,7 +31,7 @@ export async function resolveApipostFunctionTemplate(
     { functions: [], variables: {} },
     { requestLimit: 0, timerLimit: 0, jobLimit: 0 },
   );
-  const value = result.variables.functionTemplateResult;
+  let value = result.variables.functionTemplateResult;
   if (
     (!["string", "number", "boolean"].includes(typeof value) &&
       value !== null) ||
@@ -39,11 +40,13 @@ export async function resolveApipostFunctionTemplate(
     throw Error("原版函数模板暂仅支持有限同步基本类型结果");
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
     throw Error("原版函数模板结果超过64KiB");
+  if (group !== "query" && typeof value === "string" && value !== expression)
+    value = replaceExactApipostTemplate(expression, value);
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (
-    (group !== "form" && /[\r\n]/.test(text)) ||
+    (["query", "headers"].includes(group) && /[\r\n]/.test(text)) ||
     (group === "query" && /[&#+%?=]/.test(text)) ||
-    (text !== expression && text.includes("$"))
+    (group === "query" && text !== expression && text.includes("$"))
   )
     throw Error("原版函数结果包含尚未兼容的分隔符或替换符，不发送不等价请求");
   return value;

@@ -20,6 +20,7 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
       "apipost-function",
       "apipost-header-function",
       "apipost-form-function",
+      "apipost-body-function",
     ].includes(spec.source)
   )
     throw Error("动态值来源无效");
@@ -191,6 +192,13 @@ export async function resolveDynamicRequest(
   finalBody,
 ) {
   validateApipostTemplateRequest(request);
+  if (
+    finalBody !== undefined &&
+    Object.values(request.bodyDynamic || {}).some(
+      (spec) => spec?.source === "apipost-body-function",
+    )
+  )
+    throw Error("原版正文函数模板不支持脚本最终正文覆盖");
   const literalBody = finalBodyLiteral(finalBody, request);
   const resolve = (request, variables, functions, interpolate) =>
     resolveDynamicRequestBase(

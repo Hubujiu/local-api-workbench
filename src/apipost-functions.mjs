@@ -49,30 +49,34 @@ export function mergeApipostFunctions(
   }
   validateResources({ functions: incoming });
   if (incoming.length) {
-    const allowedRows = new Set();
+    const allowedRows = new Set(),
+      allowedBodies = new Set();
     if (parameterTemplates && Array.isArray(document?.apis))
-      for (const api of document.apis)
-        if (api.target_type === "api")
-          for (const group of ["query", "header", "body"]) {
-            if (
-              group === "body" &&
-              !["urlencoded", "form-data"].includes(api.request?.body?.mode)
-            )
-              continue;
-            if (Array.isArray(api.request?.[group]?.parameter))
-              for (const row of api.request[group].parameter)
-                if (
-                  row &&
-                  row.is_checked === 1 &&
-                  String(row.type).toLowerCase() !== "file" &&
-                  !(
-                    group === "body" &&
-                    api.request.body.mode === "form-data" &&
-                    String(row.field_type).toLowerCase() === "file"
-                  )
+      for (const api of document.apis) {
+        if (api.target_type !== "api") continue;
+        if (["raw", "json", "plain", "text"].includes(api.request?.body?.mode))
+          allowedBodies.add(api.request.body);
+        for (const group of ["query", "header", "body"]) {
+          if (
+            group === "body" &&
+            !["urlencoded", "form-data"].includes(api.request?.body?.mode)
+          )
+            continue;
+          if (Array.isArray(api.request?.[group]?.parameter))
+            for (const row of api.request[group].parameter)
+              if (
+                row &&
+                row.is_checked === 1 &&
+                String(row.type).toLowerCase() !== "file" &&
+                !(
+                  group === "body" &&
+                  api.request.body.mode === "form-data" &&
+                  String(row.field_type).toLowerCase() === "file"
                 )
-                  allowedRows.add(row);
-          }
+              )
+                allowedRows.add(row);
+        }
+      }
     const pending = [{ value: document, allowed: false }],
       seen = new Set();
     let nodes = 0;
@@ -85,7 +89,7 @@ export function mergeApipostFunctions(
       ) {
         if (!allowed)
           throw Error(
-            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本完整值；加工链暂不支持",
+            "Apipost共享函数参数模板仅支持启用的接口Query/Header/表单文本或完整正文值；加工链暂不支持",
           );
         const parsed = parseApipostFunctionTemplate(value);
         if (!names.has(parsed.name))
@@ -100,7 +104,9 @@ export function mergeApipostFunctions(
             throw Error("Apipost共享函数依赖检查超过范围");
           pending.push({
             value: value[key],
-            allowed: key === "value" && allowedRows.has(value),
+            allowed:
+              (key === "value" && allowedRows.has(value)) ||
+              (key === "raw" && allowedBodies.has(value)),
           });
         }
       }

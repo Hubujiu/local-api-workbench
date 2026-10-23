@@ -2,6 +2,7 @@ export const apipostFunctionSourceGroups = Object.freeze({
   "apipost-function": "query",
   "apipost-header-function": "headers",
   "apipost-form-function": "form",
+  "apipost-body-function": "body",
 });
 export const isApipostFunctionSource = (source) =>
   typeof source === "string" &&
@@ -26,25 +27,37 @@ export function validateApipostTemplateRequest(request) {
     for (const row of request[group] || [])
       if (row?.dynamic) entries.push({ group, row });
   }
-  const bodyTemplate = Object.values(request.bodyDynamic || {}).some((spec) =>
-    isApipostFunctionSource(spec?.source),
-  );
+  const definitions = Object.entries(request.bodyDynamic || {});
   if (
-    !bodyTemplate &&
-    !entries.some(({ row }) => isApipostFunctionSource(row.dynamic.source))
+    !entries.some(({ row }) => isApipostFunctionSource(row.dynamic.source)) &&
+    !definitions.some(([, spec]) => isApipostFunctionSource(spec?.source))
   )
     return;
+  if (definitions.length) {
+    const [key, spec] = definitions[0];
+    if (
+      definitions.length !== 1 ||
+      spec?.source !== "apipost-body-function" ||
+      spec.format !== "text" ||
+      !/^[A-Za-z0-9_-]{1,100}$/.test(key) ||
+      !["raw", "json"].includes(request.bodyType) ||
+      request.body !== "{{@value:" + key + "}}"
+    )
+      throw Error(
+        "原版函数模板仅支持Query/Header/表单或raw/json完整正文；正文须为单个原文输出模板",
+      );
+    entries.push({ group: "body", row: { dynamic: spec } });
+  }
   if (
     entries.some(
       ({ group, row }) =>
         !isApipostFunctionSource(row.dynamic.source) ||
         group !== apipostFunctionSourceGroups[row.dynamic.source] ||
         row.type === "file",
-    ) ||
-    Object.keys(request.bodyDynamic || {}).length
+    )
   )
     throw Error(
-      "原版函数模板暂仅支持Query/Header/表单匹配位置文本，不能与其他动态值混用",
+      "原版函数模板暂仅支持Query/Header/表单/正文匹配位置文本，不能与其他动态值混用",
     );
   if (
     entries.some(

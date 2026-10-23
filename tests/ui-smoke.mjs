@@ -98,7 +98,10 @@ const fixture = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url.startsWith("/sdk-url/template?")) {
+  if (
+    request.url.startsWith("/sdk-url/template?") ||
+    request.url === "/sdk-url/template-body"
+  ) {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     response.writeHead(200, { "content-type": "application/json" });
@@ -6541,6 +6544,25 @@ try {
   templateModern.apis[1].url = "/sdk-url/template";
   templateModern.apis[1].name = "Source Query function";
   templateModern.apis[1].request.pre_tasks = [];
+  templateModern.global.custom_func.push({
+    func_id: "body-template-function",
+    project_id: templateModern.project_id,
+    func_name: "fn_body",
+    func_desc: "Whole body template",
+    func_body:
+      'return JSON.stringify({input:text,literal:"{{literal}}",price:"$5"});',
+  });
+  const nativeBodyTemplateAPI = modernApipostFixture().apis[1];
+  nativeBodyTemplateAPI.target_id = "body-template-api";
+  nativeBodyTemplateAPI.name = "Source raw body function";
+  nativeBodyTemplateAPI.url = "/sdk-url/template-body";
+  nativeBodyTemplateAPI.method = "POST";
+  nativeBodyTemplateAPI.request.query.parameter = [];
+  nativeBodyTemplateAPI.request.body = {
+    mode: "json",
+    raw: "{{$function.fn_body(raw)}}",
+  };
+  templateModern.apis.push(nativeBodyTemplateAPI);
   templateModern.apis[1].method = "POST";
   templateModern.global.global_vars.literal = {
     value: "must-not-expand",
@@ -6756,6 +6778,88 @@ try {
       'name="payload"\r\n\r\n' + expectedTemplateForm + "\r\n",
     ),
   );
+
+  const bodyTemplateRequest = templateProject.requests.find(
+    (r) => r.name === "Source raw body function",
+  );
+  assert(bodyTemplateRequest);
+  await page.locator(`[data-request="${bodyTemplateRequest.id}"]`).click();
+  await page.locator('[data-mode="debug"]').click();
+  await page.locator('[data-param="body"]').click();
+  assert.equal(
+    await page.locator("#body-code").inputValue(),
+    "{{@value:apipost_body}}",
+  );
+  await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
+  assert.equal(
+    await page.locator("#dynamic-source").inputValue(),
+    "apipost-body-function",
+  );
+  assert.equal(await page.locator("#dynamic-format").inputValue(), "text");
+  assert.equal(await page.locator("#dynamic-format").isDisabled(), true);
+  await page
+    .locator("#dynamic-value")
+    .fill("{{$function.fn_body(updated-json)}}");
+  await page.locator("#dynamic-preview").click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#dynamic-result").textContent ===
+      JSON.stringify(
+        JSON.stringify({
+          input: "updated-json",
+          literal: "{{literal}}",
+          price: "$5",
+        }),
+      ),
+  );
+  await page.screenshot({ path: "/tmp/local-api-body-function-template.png" });
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#save-project").click(),
+  ]);
+  await page.reload();
+  await page.locator('[data-page="apis"]').first().click();
+  await page.locator(`[data-request="${bodyTemplateRequest.id}"]`).click();
+  await page
+    .locator("#env")
+    .selectOption(
+      templateProject.environments.find((e) => e.name === "Imported").id,
+    );
+  const bodyTemplateResponse = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const bodyTemplateResult = await (await bodyTemplateResponse).json();
+  assert.equal(
+    bodyTemplateResult.status,
+    200,
+    JSON.stringify(bodyTemplateResult),
+  );
+  assert.equal(
+    JSON.parse(bodyTemplateResult.body).body,
+    JSON.stringify({
+      input: "updated-json",
+      literal: "{{literal}}",
+      price: "$5",
+    }),
+  );
+  assert.match(
+    JSON.parse(bodyTemplateResult.body).contentType,
+    /application\/json/,
+  );
+  const savedBodyTemplate = (
+    await app.store.get(templateProjectId)
+  ).requests.find((r) => r.id === bodyTemplateRequest.id);
+  assert.deepEqual(savedBodyTemplate.bodyDynamic.apipost_body, {
+    source: "apipost-body-function",
+    value: "{{$function.fn_body(updated-json)}}",
+    functions: [],
+    format: "text",
+  });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
