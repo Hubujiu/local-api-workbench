@@ -79,3 +79,21 @@ rather than silently send flag= instead of flag. Keep the previously recognized
 0 sentinel, but do not confuse the legitimate nonempty textual values of 0 and
 false with an empty parameter. Nonempty values retain their existing import
 behaviour. This is a data-loss guard, not a claim that omit-equals is supported.
+
+
+## Duplicate parameters within inheritance layers
+
+The previous flattening Map silently retained only the last row of each name,
+including when that last row was disabled. Preserve all rows and their ordering
+within a layer. A child layer replaces the entire parent name group; unrelated
+parent rows remain before child rows, matching the workbench's existing shared
+parameter contract. Header names compare case-insensitively; Query/Cookie names
+remain case-sensitive. Disabled child rows remain stored and still mask that
+parent group, but are excluded from wire transmission. This is the documented
+interchange flattening rule, not proof of every original inheritance behaviour.
+
+Red regression demonstrates two active header values being lost behind one
+disabled duplicate. End-to-end import/interpolation/HTTP verifies both active
+headers and duplicate query values survive with unchanged source input; browser
+import also verifies the constructed duplicate header values. Combined row
+limits still apply through the existing legacy parameter conversion.

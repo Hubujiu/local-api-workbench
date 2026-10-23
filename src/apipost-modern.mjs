@@ -251,14 +251,21 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       if (layer.auth && layer.auth.type !== "inherit")
         inheritedAuth = layer.auth;
     const merge = (key) => {
-      const values = new Map();
-      for (const layer of ancestry)
-        for (const row of parameterRows(layer[key], key)) {
+      const name = (row) =>
+        key === "header" ? row.key.toLowerCase() : row.key;
+      let values = [];
+      for (const layer of ancestry) {
+        const rows = parameterRows(layer[key], key);
+        for (const row of rows)
           if (!object(row) || typeof row.key !== "string")
             throw Error("Apipost参数无效");
-          values.set(key === "header" ? row.key.toLowerCase() : row.key, row);
-        }
-      return [...values.values()];
+        const overridden = new Set(rows.map(name));
+        values = [
+          ...values.filter((row) => !overridden.has(name(row))),
+          ...rows,
+        ];
+      }
+      return values;
     };
     for (const layer of ancestry.slice(0, -1)) {
       reject(layer.body?.parameter, "继承Body参数");

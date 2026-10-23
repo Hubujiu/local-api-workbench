@@ -286,3 +286,61 @@ test("modern omit-equals numeric sentinel cannot silently change an empty query 
     assert.equal(target.requests[0].query[0].value, value);
   }
 });
+
+test("modern inheritance replaces parent name groups without losing duplicate child parameters", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ url: req.url, header: req.headers["x-repeat"] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  doc.global.global_param.header.parameter = [
+    { key: "X-Repeat", value: "global", is_checked: 1 },
+  ];
+  doc.apis[0].request.header = {
+    parameter: [{ key: "X-Repeat", value: "folder", is_checked: 1 }],
+  };
+  doc.apis[1].request.header.parameter = [
+    { key: "X-Repeat", value: "first", is_checked: 1 },
+    { key: "x-repeat", value: "second", is_checked: 1 },
+    { key: "X-Repeat", value: "hidden", is_checked: -1 },
+  ];
+  doc.apis[0].request.query = {
+    parameter: [{ key: "q", value: "parent", is_checked: 1 }],
+  };
+  doc.apis[1].request.query.parameter = [
+    { key: "q", value: "first", is_checked: 1 },
+    { key: "middle", value: "keep", is_checked: 1 },
+    { key: "q", value: "second", is_checked: 1 },
+  ];
+  const original = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(
+    p.requests[0].headers.map((x) => x.value),
+    ["first", "second", "hidden"],
+  );
+  assert.deepEqual(
+    p.requests[0].query.map((x) => [x.key, x.value]),
+    [
+      ["q", "first"],
+      ["middle", "keep"],
+      ["q", "second"],
+    ],
+  );
+  const env = p.environments.find((x) => x.id !== "existing");
+  const request = interpolate(
+    resolveServiceRequest(p, p.requests[0], env.id),
+    environmentVariables(p, env.id),
+  );
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.header, "first, second");
+  assert.deepEqual(
+    new URL(wire.url, "http://localhost").searchParams.getAll("q"),
+    ["first", "second"],
+  );
+  assert.deepEqual(doc, original);
+});

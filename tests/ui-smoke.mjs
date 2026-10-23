@@ -2766,6 +2766,11 @@ try {
   modern.global.envs[0].server_list[0].uri = fixtureURL;
   modern.apis[1].url = "/auth";
   modern.apis[1].mock_ip_white_list_enable = -1;
+  modern.apis[1].request.header.parameter.push(
+    { key: "X-Imported-Repeat", value: "first", is_checked: 1 },
+    { key: "x-imported-repeat", value: "second", is_checked: 1 },
+    { key: "X-Imported-Repeat", value: "hidden", is_checked: -1 },
+  );
   modern.apis[1].response.example.push({
     raw: "",
     expect: { code: "204", content_type: "text", name: "Imported empty body" },
@@ -2813,6 +2818,10 @@ try {
   const modernResult = await (await modernResponse).json();
   assert.equal(modernResult.status, 200, JSON.stringify(modernResult));
   assert.equal(modernResult.request.headers["x-test"], "current");
+  assert.deepEqual(modernResult.request.headers["x-imported-repeat"], [
+    "first",
+    "second",
+  ]);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-apipost-modern.png" });
   await page.locator('[data-mode="mock"]').click();
