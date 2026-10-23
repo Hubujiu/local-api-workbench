@@ -420,7 +420,19 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         for (const row of rows)
           if (!object(row) || typeof row.key !== "string")
             throw Error("Apipost参数无效");
-        const overridden = new Set(rows.map(name));
+        // Disabled child rows remain editable source data, but do not mask an
+        // enabled ancestor's value. Absent flags keep legacy import defaults.
+        const overridden = new Set(
+          rows
+            .filter(
+              (row) =>
+                row.is_checked === undefined ||
+                row.is_checked === true ||
+                row.is_checked === 1 ||
+                row.is_checked === "1",
+            )
+            .map(name),
+        );
         values = [
           ...values.filter((row) => !overridden.has(name(row))),
           ...rows,

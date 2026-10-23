@@ -856,3 +856,69 @@ test("disabled modern custom scripts survive native backup without entering the 
   assert.equal(run.status, "passed", JSON.stringify(run));
   assert.deepEqual(seen, ["yes"]);
 });
+
+test("disabled modern child parameters do not suppress active ancestor values on the wire", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ url: req.url, headers: req.headers }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  for (const key of ["header", "query", "cookie"]) {
+    doc.global.global_param[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-Inherited" : "inherited",
+          value: "global",
+          is_checked: 1,
+        },
+      ],
+    };
+    doc.apis[0].request[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "x-inherited" : "inherited",
+          value: "folder-disabled",
+          is_checked: -1,
+        },
+      ],
+    };
+    doc.apis[1].request[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-INHERITED" : "inherited",
+          value: "request-disabled",
+          is_checked: 0,
+        },
+      ],
+    };
+  }
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(doc, before);
+  const env = p.environments.find((x) => x.id !== "existing"),
+    request = interpolate(
+      resolveServiceRequest(p, p.requests[0], env.id),
+      environmentVariables(p, env.id),
+    );
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.headers["x-inherited"], "global");
+  assert.equal(
+    new URL(wire.url, "http://localhost").searchParams.get("inherited"),
+    "global",
+  );
+  assert.match(wire.headers.cookie, /inherited=global/);
+  assert.doesNotMatch(JSON.stringify(wire), /folder-disabled|request-disabled/);
+  assert(
+    p.requests[0].headers.some(
+      (row) => row.value === "request-disabled" && row.enabled === false,
+    ),
+  );
+});

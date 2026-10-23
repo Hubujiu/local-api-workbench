@@ -5936,6 +5936,14 @@ try {
   await page.locator('.rail [data-page="apis"]').click();
   const groupedSource = modernApipostFixture();
   groupedSource.global.envs[0].server_list[0].uri = fixtureURL;
+  groupedSource.global.global_param.header.parameter = [
+    { key: "X-Inherited", value: "global-kept", is_checked: 1 },
+  ];
+  groupedSource.apis[0].request.header = {
+    parameter: [
+      { key: "x-inherited", value: "folder-disabled", is_checked: -1 },
+    ],
+  };
   groupedSource.apis[1].request.query.parameter = [];
   groupedSource.apis[1].request.body = { mode: "plain", raw: "API-only body" };
   groupedSource.apis[1].request.pre_tasks = [
@@ -5992,6 +6000,9 @@ try {
     },
   ];
   await page.locator("#import").click();
+  groupedSource.samples[2].request.header.parameter = [
+    { key: "X-INHERITED", value: "sample-disabled", is_checked: 0 },
+  ];
   await page.locator("#import-text").fill(JSON.stringify(groupedSource));
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6021,6 +6032,7 @@ try {
   );
   assert.equal(groupedResult.request.headers["x-test"], "current");
   assert.equal(groupedResult.request.body, "grouped sample");
+  assert.equal(groupedResult.request.headers["x-inherited"], "global-kept");
   assert.equal(JSON.parse(groupedResult.body).importTask, "group-inherited");
   await page
     .locator(`[data-run-case="${importedGroupedCase.id}"]:not([disabled])`)
