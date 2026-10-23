@@ -3,6 +3,7 @@ import {
   parseApipostFunctionTemplate,
   isApipostBuiltinStage,
   isApipostHashStage,
+  isApipostBase64Stage,
   apipostTemplateStages,
 } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
@@ -80,18 +81,40 @@ export async function resolveApipostFunctionTemplate(
     if (typeof output === 'number' && !__apipostFinite(output)) throw Error('原版函数模板结果必须有限');
     { const serialized=__apipostStringify(output);let bytes=0;for(let i=0;i<serialized.length;i++){const cp=__apipostCharCode(serialized,i);if(cp>=55296 && cp<=56319){bytes+=4;i++;}else bytes+=cp<=127?1:cp<=2047?2:3;if(bytes>65536)throw Error('原版函数模板结果超过64KiB');} }
   `;
+  const base64Code = selected.some((fn) => isApipostBase64Stage(fn.name))
+    ? String.raw`
+    const __apipostEncodingLibrary=require("crypto-js");
+    const __apipostBase64=(input,decode)=>{
+      if(typeof input!=="string")throw Error("原版Base64加工链仅支持文本输入");
+      try {
+        const enc=__apipostEncodingLibrary.enc;
+        if(!decode)return enc.Base64.stringify(enc.Utf8.parse(input));
+        const normalized=input.replace(/[\t\r\n ]/g,"").replace(/-/g,"+").replace(/_/g,"/");
+        if(!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized))throw Error("alphabet");
+        const bare=normalized.replace(/=+$/,"");
+        if(bare.length%4===1)throw Error("length");
+        const padded=bare+"=".repeat((4-bare.length%4)%4);
+        const bytes=enc.Base64.parse(padded);
+        if(enc.Base64.stringify(bytes)!==padded)throw Error("padding bits");
+        return enc.Utf8.stringify(bytes);
+      }catch(error){throw Error("原版Base64仅支持有效Unicode文本和有效UTF-8编码结果");}
+    };
+  `
+    : "";
   const code = `
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
     ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash"), __apipostString=String, __apipostConcat=Function.prototype.call.bind(String.prototype.concat), __apipostSubstr=Function.prototype.call.bind(String.prototype.substr);const __apipostPadStart=__apipostBuiltinLibrary.padStart, __apipostPadEnd=__apipostBuiltinLibrary.padEnd;const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber,encodeuricomponent:encodeURIComponent,decodeuricomponent:decodeURIComponent,concat:(value,text)=>__apipostConcat(__apipostString(value),text),lconcat:(value,text)=>__apipostConcat(text,__apipostString(value)),substr:(value,args)=>__apipostSubstr(__apipostString(value),args[0],args[1]),padstart:(value,args)=>__apipostPadStart(value,args[0],args[1]),padend:(value,args)=>__apipostPadEnd(value,args[0],args[1])});` : ""}
     ${selected.some((fn) => isApipostHashStage(fn.name)) ? `const __apipostHashLibrary=require("crypto-js");` : ""}
+    ${base64Code}
     let output;
     ${name ? `try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); } catch(error) { output=${JSON.stringify(baseExpression)}; }` : `output=${Object.is(initial, -0) ? "-0" : JSON.stringify(initial)};`}
     ${check}
     ${selected
       .slice(name ? 1 : 0)
-      .map(
-        (fn) =>
-          `{ const input=output;${isApipostHashStage(fn.name) ? "if(typeof input!=='string')throw Error('原版哈希加工链仅支持文本输入');" : ""}try{output=${isApipostHashStage(fn.name) ? `__apipostString(__apipostHashLibrary.${fn.name.toUpperCase()}(input))` : fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
+      .map((fn) =>
+        isApipostBase64Stage(fn.name)
+          ? `{ output=__apipostBase64(output,${fn.name === "unbase64"}); ${check} }`
+          : `{ const input=output;${isApipostHashStage(fn.name) ? "if(typeof input!=='string')throw Error('原版哈希加工链仅支持文本输入');" : ""}try{output=${isApipostHashStage(fn.name) ? `__apipostString(__apipostHashLibrary.${fn.name.toUpperCase()}(input))` : fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
       )
       .join("\n")}
     apt.setVar('functionTemplateResult', output);

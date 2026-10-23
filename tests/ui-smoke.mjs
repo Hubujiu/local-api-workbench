@@ -6633,7 +6633,7 @@ try {
       id: "template-after",
       name: "Template response",
       enabled: 1,
-      data: 'pm.test("template after response",()=>pm.expect(pm.response.json().body).to.equal("8dd8333be20d188016c5787119161b084e4abc30b2ef808b34763d8bb3ee17fb"));',
+      data: 'pm.test("template after response",()=>pm.expect(pm.response.json().body).to.equal("OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg=="));',
     },
   ];
   templateModern.apis.push(variableTemplateAPI);
@@ -6988,14 +6988,14 @@ try {
   await page
     .locator("#dynamic-value")
     .fill(
-      "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256}}",
+      "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}",
     );
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify(
-        "8dd8333be20d188016c5787119161b084e4abc30b2ef808b34763d8bb3ee17fb",
+        "OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==",
       ),
   );
   await page.locator("#dialog-save").click();
@@ -7043,7 +7043,7 @@ try {
   );
   assert.equal(
     variableTemplateEcho.body,
-    "8dd8333be20d188016c5787119161b084e4abc30b2ef808b34763d8bb3ee17fb",
+    "OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==",
   );
   const variableTemplateSaved = (
     await app.store.get(templateProjectId)
@@ -7054,7 +7054,7 @@ try {
   );
   assert.equal(
     variableTemplateSaved.bodyDynamic.apipost_body.value,
-    "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256}}",
+    "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}",
   );
 
   assert.deepEqual(errors, []);

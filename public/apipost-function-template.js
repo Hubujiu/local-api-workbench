@@ -7,8 +7,12 @@ export const apipostHashStages = Object.freeze([
   "sha512",
 ]);
 export const isApipostHashStage = (name) => apipostHashStages.includes(name);
+export const isApipostBase64Stage = (name) =>
+  ["base64", "unbase64"].includes(name);
 export const apipostBuiltinStages = Object.freeze([
   ...apipostHashStages,
+  "base64",
+  "unbase64",
   "lower",
   "upper",
   "length",
@@ -110,10 +114,12 @@ export function parseApipostFunctionTemplate(value) {
     : [];
   const pipeline = stages.map((stage) => stage.name);
   if (
-    pipeline.some(isApipostHashStage) &&
+    pipeline.some(
+      (name) => isApipostHashStage(name) || isApipostBase64Stage(name),
+    ) &&
     (match || pipeline.some((name) => name.startsWith("fn_")))
   )
-    throw Error("原版哈希加工链暂不支持与共享函数混用");
+    throw Error("原版哈希/Base64加工链暂不支持与共享函数混用");
   const pipelineOptions = stages.some((stage) =>
     ["concat", "lconcat", "substr", "padstart", "padend"].includes(stage.name),
   )
