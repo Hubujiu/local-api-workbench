@@ -1,13 +1,13 @@
 import {
   mkdir,
   writeFile,
-  rename,
   readFile,
   readdir,
   stat,
   rm,
 } from "node:fs/promises";
 import path from "node:path";
+import { renameProgress } from "./rename-progress.mjs";
 import { randomUUID } from "node:crypto";
 const folder = (root) => path.join(root, ".mcp-activities");
 const live = (pid) => {
@@ -112,7 +112,7 @@ export class MCPActivity {
           temporary = file + "." + randomUUID() + ".tmp";
         try {
           await writeFile(temporary, content, { mode: 0o600 });
-          await rename(temporary, file);
+          await renameProgress(temporary, file);
         } finally {
           await rm(temporary, { force: true }).catch(() => {});
         }

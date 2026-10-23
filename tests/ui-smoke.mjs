@@ -4707,7 +4707,7 @@ try {
   await page
     .locator('[data-pair="form:1:value"]')
     .fill('<img src="' + fixtureURL + '/document-leak"> & literal');
-  await page.locator('[data-pair="form:1:enabled"]').uncheck();
+  await page.locator('[data-pair-enabled="form:1"]').uncheck();
   await saveAndWait();
   await page.locator('[data-page="docs"]').click();
   const documentFormCard = page.locator("article.card").filter({
