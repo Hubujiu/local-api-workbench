@@ -45,6 +45,19 @@ const asapPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const asapNonces = new Set();
 let responseMutationLeaks = 0;
 const fixture = http.createServer(async (request, response) => {
+  if (request.url === "/script-form-body") {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        pairs: [...new URLSearchParams(Buffer.concat(chunks).toString())],
+        contentType: request.headers["content-type"],
+      }),
+    );
+    return;
+  }
+
   if (request.url === "/script-response-wire") {
     response.writeHead(500, { "content-type": "application/json" });
     response.end('{"wire":true}');
@@ -4636,6 +4649,48 @@ try {
   assert.equal(responseMutationLeaks, 0);
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-response-mutation.png" });
+
+  await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Script form body");
+  await page.locator("#method").selectOption("POST");
+  await page.locator("#url").fill(fixtureURL + "/script-form-body");
+  await page.locator('[data-param="before"]').click();
+  await page
+    .locator("#script-code")
+    .fill(
+      "pm.request.body.update({mode:'urlencoded',urlencoded:[{key:'tag',value:'first'},{key:'tag',value:'second'},{key:'skip',value:'hidden',disabled:true}]}); const form=pm.request.body.urlencoded; form.one('tag').value='changed'; form.add({key:'中文',value:'空 格&=+'}); pm.test('form-readers', () => pm.expect(form.toObject().tag).to.deep.equal(['first','changed']));",
+    );
+  await saveAndWait();
+  const scriptFormReply = page.waitForResponse(
+    (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
+  );
+  await page.locator("#send").click();
+  const scriptFormResult = await (await scriptFormReply).json();
+  assert.equal(
+    scriptFormResult.outcome,
+    "passed",
+    JSON.stringify(scriptFormResult),
+  );
+  const scriptFormWire = JSON.parse(scriptFormResult.body);
+  assert.deepEqual(scriptFormWire.pairs, [
+    ["tag", "first"],
+    ["tag", "changed"],
+    ["中文", "空 格&=+"],
+  ]);
+  assert.match(
+    scriptFormWire.contentType,
+    /application\/x-www-form-urlencoded/,
+  );
+  assert(
+    scriptFormResult.assertions.some(
+      (x) => x.name === "form-readers" && x.passed,
+    ),
+  );
+  await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
+  await page.locator('[data-response="body"]').click();
+  assert.match(await page.locator(".response pre").innerText(), /changed/);
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.screenshot({ path: "/tmp/local-api-script-form.png" });
 
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");

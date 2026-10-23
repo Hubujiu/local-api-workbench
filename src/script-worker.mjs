@@ -1,3 +1,4 @@
+import { scriptFormBodySource } from "./script-form-body.mjs";
 import {
   responseMutationSource,
   responseMutationValidatorSource,
@@ -389,6 +390,7 @@ try {
       "});",
   );
 
+  run("(" + scriptFormBodySource + ")({request,body:pm.request.body});");
   run(
     "globalThis.__registerSchemaResponse = (" +
       responseCompatibilitySource +
