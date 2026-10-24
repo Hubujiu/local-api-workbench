@@ -6626,6 +6626,11 @@ try {
   variableTemplateAPI.url = "/sdk-url/template-variable";
   variableTemplateAPI.request.query.parameter = [
     { key: "q", value: "{{shared|upper}}", is_checked: 1 },
+    {
+      key: "date",
+      value: "{{'2024-02-29T23:30:00Z'|format(YYYYMMDD,+02:00)}}",
+      is_checked: 1,
+    },
   ];
   variableTemplateAPI.request.body = {
     mode: "plain",
@@ -7057,6 +7062,12 @@ try {
   assert.equal(
     variableTemplateEcho.body,
     "OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==",
+  );
+  assert.equal(
+    new URL(variableTemplateEcho.url, "http://fixture").searchParams.get(
+      "date",
+    ),
+    "20240301",
   );
   const variableTemplateSaved = (
     await app.store.get(templateProjectId)

@@ -13,6 +13,7 @@ export const apipostBuiltinStages = Object.freeze([
   ...apipostHashStages,
   "base64",
   "unbase64",
+  "format",
   "lower",
   "upper",
   "length",
@@ -113,6 +114,22 @@ export function parseApipostFunctionTemplate(value) {
               throw Error(
                 "填充加工链长度须为0到4096的整数且填充原文最多64字节",
               );
+          } else if (name === "format") {
+            const parts = argument.split(","),
+              pattern = parts[0] || "YYYY-MM-DD HH:mm:ss",
+              offset = (parts[1] || "+00:00").trim() || "+00:00";
+            if (
+              parts.length > 2 ||
+              pattern.length > 256 ||
+              pattern.replace(
+                /\[[^\[\]]*\]|YYYY|YY|SSS|MM|DD|HH|mm|ss|ZZ|Z|M|D|H|m|s|[-/: .T]/g,
+                "",
+              ) ||
+              !/^[+-](?:0[0-9]|1[0-4]):00$/.test(offset)
+            )
+              throw Error(
+                "日期加工链仅支持数值日期格式及-14:00至+14:00整小时时区",
+              );
           } else if (argument) throw Error("此原版加工链阶段暂不支持参数");
           return { name, argument };
         })
@@ -120,13 +137,18 @@ export function parseApipostFunctionTemplate(value) {
   const pipeline = stages.map((stage) => stage.name);
   if (
     pipeline.some(
-      (name) => isApipostHashStage(name) || isApipostBase64Stage(name),
+      (name) =>
+        isApipostHashStage(name) ||
+        isApipostBase64Stage(name) ||
+        name === "format",
     ) &&
     (match || pipeline.some((name) => name.startsWith("fn_")))
   )
-    throw Error("原版哈希/Base64加工链暂不支持与共享函数混用");
+    throw Error("原版哈希/Base64/日期加工链暂不支持与共享函数混用");
   const pipelineOptions = stages.some((stage) =>
-    ["concat", "lconcat", "substr", "padstart", "padend"].includes(stage.name),
+    ["concat", "lconcat", "substr", "padstart", "padend", "format"].includes(
+      stage.name,
+    ),
   )
     ? { pipelineArguments: stages.map((stage) => stage.argument) }
     : {};

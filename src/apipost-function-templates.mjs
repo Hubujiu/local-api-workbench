@@ -26,11 +26,16 @@ export async function resolveApipostFunctionTemplate(
         name,
         builtin: true,
         argument:
-          name === "substr"
-            ? [0, 1].map((i) => Number(raw.split(",")[i] || 0))
-            : ["padstart", "padend"].includes(name)
-              ? [Number(raw.split(",")[0] || 0), raw.split(",")[1] || ""]
-              : raw,
+          name === "format"
+            ? [
+                raw.split(",")[0] || "YYYY-MM-DD HH:mm:ss",
+                Number((raw.split(",")[1] || "+00:00").split(":")[0]) * 60,
+              ]
+            : name === "substr"
+              ? [0, 1].map((i) => Number(raw.split(",")[i] || 0))
+              : ["padstart", "padend"].includes(name)
+                ? [Number(raw.split(",")[0] || 0), raw.split(",")[1] || ""]
+                : raw,
       };
     }
     const matches = functions.filter((fn) => fn.name?.toLowerCase() === name);
@@ -108,20 +113,34 @@ export async function resolveApipostFunctionTemplate(
     };
   `
     : "";
+  const dateCode = selected.some((fn) => fn.name === "format")
+    ? String.raw`
+    const __apipostMoment=require("moment");
+    const __apipostDateFormat=(input,args)=>{
+      if(typeof input!=="string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(input))throw Error("日期加工链仅支持带显式时区的ISO时间");
+      const date=new Date(input);
+      if(!__apipostMoment.parseZone(input,__apipostMoment.ISO_8601,true).isValid() || !Number.isFinite(date.getTime()))throw Error("日期加工链ISO时间无效");
+      return __apipostMoment.utc(date).utcOffset(args[1]).format(args[0]);
+    };
+  `
+    : "";
   const code = `
     const __apipostStringify=JSON.stringify.bind(JSON), __apipostFinite=Number.isFinite, __apipostCharCode=Function.prototype.call.bind(String.prototype.charCodeAt);
     ${selected.some((fn) => fn.builtin) ? `const __apipostBuiltinLibrary=require("lodash"), __apipostString=String, __apipostConcat=Function.prototype.call.bind(String.prototype.concat), __apipostSubstr=Function.prototype.call.bind(String.prototype.substr);const __apipostPadStart=__apipostBuiltinLibrary.padStart, __apipostPadEnd=__apipostBuiltinLibrary.padEnd;const __apipostBuiltins=Object.freeze({lower:__apipostBuiltinLibrary.toLower,upper:__apipostBuiltinLibrary.toUpper,length:__apipostBuiltinLibrary.size,number:__apipostBuiltinLibrary.toNumber,encodeuricomponent:encodeURIComponent,decodeuricomponent:decodeURIComponent,concat:(value,text)=>__apipostConcat(__apipostString(value),text),lconcat:(value,text)=>__apipostConcat(text,__apipostString(value)),substr:(value,args)=>__apipostSubstr(__apipostString(value),args[0],args[1]),padstart:(value,args)=>__apipostPadStart(value,args[0],args[1]),padend:(value,args)=>__apipostPadEnd(value,args[0],args[1])});` : ""}
     ${selected.some((fn) => isApipostHashStage(fn.name)) ? `const __apipostHashLibrary=require("crypto-js");` : ""}
     ${base64Code}
+    ${dateCode}
     let output;
     ${name ? `try { output=(function(text){\n${selected[0].fn.body}\n})(${JSON.stringify(argument)}); } catch(error) { output=${JSON.stringify(baseExpression)}; }` : `output=${Object.is(initial, -0) ? "-0" : JSON.stringify(initial)};`}
     ${check}
     ${selected
       .slice(name ? 1 : 0)
       .map((fn) =>
-        isApipostBase64Stage(fn.name)
-          ? `{ output=__apipostBase64(output,${fn.name === "unbase64"}); ${check} }`
-          : `{ const input=output;${isApipostHashStage(fn.name) ? "if(typeof input!=='string')throw Error('原版哈希加工链仅支持文本输入');" : ""}try{output=${isApipostHashStage(fn.name) ? `__apipostString(__apipostHashLibrary.${fn.name.toUpperCase()}(input))` : fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
+        fn.name === "format"
+          ? `{ output=__apipostDateFormat(output,${JSON.stringify(fn.argument)}); ${check} }`
+          : isApipostBase64Stage(fn.name)
+            ? `{ output=__apipostBase64(output,${fn.name === "unbase64"}); ${check} }`
+            : `{ const input=output;${isApipostHashStage(fn.name) ? "if(typeof input!=='string')throw Error('原版哈希加工链仅支持文本输入');" : ""}try{output=${isApipostHashStage(fn.name) ? `__apipostString(__apipostHashLibrary.${fn.name.toUpperCase()}(input))` : fn.builtin ? `__apipostBuiltins.${fn.name}(input,${JSON.stringify(fn.argument)})` : `(function(text){\n${fn.fn.body}\n})(input)`};}catch(error){output=input;} ${check} }`,
       )
       .join("\n")}
     apt.setVar('functionTemplateResult', output);
