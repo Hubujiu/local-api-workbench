@@ -1,4 +1,6 @@
-import { normalizeGrpcDefinitions, validateProtocolRuns } from "./grpc.mjs";
+import { normalizeGrpcDefinitions } from "./grpc.mjs";
+import { validateProtocolRuns } from "./protocol-evidence.mjs";
+import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { requestCookieHeader } from "./request-cookies.mjs";
 import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
@@ -208,6 +210,10 @@ export class Store {
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,
+      );
+    if (p.settings?.socketioDefinitions !== undefined)
+      p.settings.socketioDefinitions = normalizeSocketIODefinitions(
+        p.settings.socketioDefinitions,
       );
     validateProtocolRuns(p.protocolRuns ?? []);
     validateResources(p.settings || {});

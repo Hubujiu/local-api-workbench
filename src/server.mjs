@@ -1,3 +1,4 @@
+import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { reflectGrpc } from "./grpc-reflection.mjs";
 import {
@@ -76,6 +77,7 @@ export async function createApp({
   const store = new Store(path.resolve(root));
   await store.init();
   const protocolSessions = new ProtocolSessions();
+  const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
   const databaseSessions = new DatabaseSessions();
@@ -572,6 +574,152 @@ export async function createApp({
               return json(res, 200, { deleted: true });
             }
           }
+          if (action === "socketio-definitions") {
+            const definitions = p.settings.socketioDefinitions || [];
+            if (req.method === "GET") return json(res, 200, definitions);
+            if (req.method === "POST") {
+              const definition = normalizeSocketIODefinition(await body(req));
+              const next = definitions.slice(),
+                index = next.findIndex((x) => x.id === definition.id);
+              if (index < 0) next.push(definition);
+              else next[index] = definition;
+              p.settings.socketioDefinitions = next;
+              await store.save(p);
+              return json(res, 200, {
+                definition,
+                projectRevision: p.revision,
+              });
+            }
+            if (req.method === "DELETE") {
+              const { id: definitionId } = await body(req);
+              if (!definitions.some((x) => x.id === definitionId))
+                throw Error("Socket.IO定义不存在");
+              p.settings.socketioDefinitions = definitions.filter(
+                (x) => x.id !== definitionId,
+              );
+              await store.save(p);
+              return json(res, 200, { deleted: true });
+            }
+          }
+          if (action === "socketio-runs" && req.method === "GET")
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter((x) => x.type === "socketio"),
+            );
+          if (action === "socketio-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (req.method === "GET")
+              return json(
+                res,
+                200,
+                sessionId
+                  ? socketioSessions.snapshot(p.id, sessionId)
+                  : socketioSessions.list(p.id),
+              );
+            if (req.method === "POST") {
+              const data = await body(req);
+              if (!sessionId) {
+                if (
+                  Object.keys(data).some(
+                    (k) =>
+                      ![
+                        "definitionId",
+                        "auth",
+                        "query",
+                        "headers",
+                        "tls",
+                        "connectTimeoutMs",
+                        "transport",
+                      ].includes(k),
+                  )
+                )
+                  throw Error("Socket.IO连接字段无效，目标须通过定义保存");
+                const definition = (p.settings.socketioDefinitions || []).find(
+                  (x) => x.id === data.definitionId,
+                );
+                if (!definition) throw Error("Socket.IO定义不存在");
+                const { definitionId, ...input } = data;
+                return json(
+                  res,
+                  200,
+                  socketioSessions.start(p.id, { ...definition, ...input }),
+                );
+              }
+              if (operation === "send")
+                return json(
+                  res,
+                  200,
+                  await socketioSessions.send(p.id, sessionId, data),
+                );
+              if (operation === "ack")
+                return json(
+                  res,
+                  200,
+                  socketioSessions.acknowledge(p.id, sessionId, data),
+                );
+              if (operation === "watch") {
+                if (Object.keys(data).some((k) => k !== "events"))
+                  throw Error("Socket.IO监听字段无效");
+                return json(
+                  res,
+                  200,
+                  socketioSessions.watch(p.id, sessionId, data.events),
+                );
+              }
+              if (operation === "stop") {
+                if (Object.keys(data).length)
+                  throw Error("Socket.IO停止不接受额外字段");
+                const session = socketioSessions.get(p.id, sessionId),
+                  result = socketioSessions.stop(p.id, sessionId);
+                if (session.recordSaved)
+                  return json(res, 200, {
+                    ...result,
+                    recordSaved: true,
+                    recordId: sessionId,
+                  });
+                session.recordPromise ||= (async () => {
+                  const record = {
+                    id: sessionId,
+                    type: "socketio",
+                    createdAt: result.createdAt,
+                    definition: result.definition,
+                    result,
+                    source: "manual",
+                    status:
+                      result.state === "error" ||
+                      result.events.some((x) =>
+                        ["ack-timeout", "disconnected"].includes(x.direction),
+                      )
+                        ? "failed"
+                        : result.connected
+                          ? "passed"
+                          : "cancelled",
+                  };
+                  try {
+                    await store.append(p.id, "protocolRuns", record);
+                    session.recordSaved = true;
+                    return {
+                      ...result,
+                      recordSaved: true,
+                      recordId: sessionId,
+                    };
+                  } catch (error) {
+                    return {
+                      ...result,
+                      recordSaved: false,
+                      recordId: null,
+                      persistenceError: error.message,
+                    };
+                  }
+                })();
+                const recorded = await session.recordPromise;
+                if (!session.recordSaved) session.recordPromise = null;
+                return json(res, 200, recorded);
+              }
+            }
+          }
           if (action === "grpc-runs" && req.method === "GET")
             return json(
               res,
@@ -1061,6 +1209,7 @@ export async function createApp({
   });
   server.on("close", () => {
     protocolSessions.close();
+    socketioSessions.close();
     oauth.close();
     oauth1.close();
     databaseSessions.close();

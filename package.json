@@ -33,6 +33,7 @@
     "pg": "8.16.3",
     "protobufjs": "7.6.6",
     "quickjs-emscripten": "0.31.0",
+    "socket.io-client": "4.8.4",
     "tough-cookie": "6.0.2",
     "xpath": "0.0.35",
     "yaml": "2.9.1"
@@ -52,6 +53,7 @@
     "moment": "2.31.0",
     "postman-url-encoder": "3.0.8",
     "prettier": "3.6.2",
+    "socket.io": "4.8.4",
     "uuid": "14.0.3"
   }
 }
