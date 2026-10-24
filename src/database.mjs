@@ -39,33 +39,8 @@ export function querySQLite(filename, sql, parameters = []) {
   }
 }
 export async function querySQLiteBounded(filename, sql, parameters = []) {
-  const { Worker } = await import("node:worker_threads");
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL("./database-worker.mjs", import.meta.url),
-      {
-        workerData: { filename, sql, parameters },
-        resourceLimits: { maxOldGenerationSizeMb: 64 },
-      },
-    );
-    const timer = setTimeout(() => {
-      worker.terminate();
-      reject(Error("数据库查询超过 2 秒，已终止"));
-    }, 2000);
-    worker.once("message", (message) => {
-      clearTimeout(timer);
-      worker.terminate();
-      message.error ? reject(Error(message.error)) : resolve(message.result);
-    });
-    worker.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    worker.once("exit", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) reject(Error("数据库查询进程已退出"));
-    });
-  });
+  const { runSQLiteProcess } = await import("./database-process.mjs");
+  return runSQLiteProcess({ filename, sql, parameters, mode: "read" });
 }
 
 // Opt-in DML path; existing query functions remain read-only.
@@ -189,35 +164,6 @@ export function mutateSQLite(filename, sql, parameters = []) {
   }
 }
 export async function mutateSQLiteBounded(filename, sql, parameters = []) {
-  const { Worker } = await import("node:worker_threads");
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL("./database-worker.mjs", import.meta.url),
-      {
-        workerData: { filename, sql, parameters, mode: "write" },
-        resourceLimits: { maxOldGenerationSizeMb: 64 },
-      },
-    );
-    let message, workerError;
-    const timer = setTimeout(() => worker.terminate(), 2000);
-    worker.once("message", (value) => {
-      message = value;
-      clearTimeout(timer);
-    });
-    worker.once("error", (error) => {
-      workerError = error;
-    });
-    worker.once("exit", () => {
-      clearTimeout(timer);
-      if (message?.error) reject(Error(message.error));
-      else if (message?.result) resolve(message.result);
-      else
-        reject(
-          Error(
-            "数据库写入结果未确认，请先查询数据，不要直接重试" +
-              (workerError ? ": " + workerError.message : ""),
-          ),
-        );
-    });
-  });
+  const { runSQLiteProcess } = await import("./database-process.mjs");
+  return runSQLiteProcess({ filename, sql, parameters, mode: "write" });
 }

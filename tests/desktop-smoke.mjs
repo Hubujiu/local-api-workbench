@@ -537,6 +537,25 @@ try {
   } finally {
     writtenDatabase.close();
   }
+  phase = "database-native-timeout";
+  console.log("DESKTOP_PHASE", phase);
+  await window.locator("#db-params").fill("[]");
+  await window
+    .locator("#db-sql")
+    .fill(
+      "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1000000000) SELECT sum(x) FROM n",
+    );
+  await window.locator("#db-query").click();
+  await window
+    .locator("#db-result")
+    .getByText("执行进程已终止", { exact: false })
+    .waitFor();
+  await window.locator("#db-sql").fill("SELECT id FROM fixture WHERE id=43");
+  await window.locator("#db-query").click();
+  await window
+    .locator("#db-result")
+    .getByText("43", { exact: false })
+    .waitFor();
   const settings = await application.evaluate(({ BrowserWindow }) => {
     const preferences =
       BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();

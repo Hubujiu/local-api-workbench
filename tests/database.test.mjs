@@ -21,7 +21,7 @@ test("database reads use parameters and refuse writes", async (t) => {
   assert.throws(() => querySQLite(file, "DELETE FROM users"), /只读/);
   assert.throws(() => querySQLite(file, "SELECT load_extension('bad')"));
 });
-test("bounded worker returns database result", async (t) => {
+test("bounded process returns database result", async (t) => {
   const { querySQLiteBounded } = await import("../src/database.mjs");
   const dir = await mkdtemp(path.join(os.tmpdir(), "local-db-worker-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
