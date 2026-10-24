@@ -100,9 +100,9 @@ function compilePattern(pattern) {
     return tokens;
   });
 }
-function matchCompiled(patterns, name, budget) {
+function matchCompiled(patterns, name, budget, utf16 = false) {
   if (typeof name !== "string" || name.length > 200) return false;
-  const chars = [...name];
+  const chars = utf16 ? name.split("") : [...name];
   return patterns.some((tokens) => {
     let previous = new Uint8Array(chars.length + 1);
     previous[0] = 1;
@@ -203,7 +203,7 @@ function expression(source) {
   return { name, args };
 }
 function nativeWildcardPattern(pattern) {
-  if (pattern.length > 100 || !/^[A-Za-z0-9_.*{},-]+$/.test(pattern))
+  if (pattern.length > 100 || !/^[A-Za-z0-9_.*?{},-]+$/.test(pattern))
     return false;
   let valid = true;
   const remaining = pattern.replace(/\{([^{}]*)\}/g, (_match, body) => {
@@ -214,7 +214,8 @@ function nativeWildcardPattern(pattern) {
   if (!valid || /[{},]/.test(remaining)) return false;
   return alternatives(pattern).every(
     (value) =>
-      /^[A-Za-z_*][A-Za-z0-9_.*-]{0,99}$/.test(value) && !value.includes("**"),
+      /^[A-Za-z_*?][A-Za-z0-9_.*?-]{0,99}$/.test(value) &&
+      !value.includes("**"),
   );
 }
 export function normalizeMockFieldRules(rules = []) {
@@ -246,7 +247,7 @@ export function normalizeMockFieldRules(rules = []) {
         !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确或单星号/候选项字段及双整数参数的integer/natural规则",
+          "Apipost自定义Mock暂仅支持精确或星号/问号/候选项字段及双整数参数的integer/natural规则",
         );
       const values = rule.mock
         .slice(rule.mock.indexOf("(") + 1, -1)
@@ -562,6 +563,7 @@ export function createFieldSampler(settings = {}) {
           rule.compiled,
           rule.ignoreCase ? name.toLowerCase() : name,
           budget,
+          rule.apipostSource?.matchType === "wildcard",
         )
       ) {
         if (

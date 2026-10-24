@@ -68,7 +68,7 @@ test("bounded native numeric Mock rules import passively with exact names, types
 });
 test("unsupported native Mock rules fail atomically rather than silently changing semantics", () => {
   for (const extra of [
-    { match_type: "wildcard", match_rule: "count?" },
+    { match_type: "wildcard", match_rule: "count[ab]" },
     { mock_type: 2 },
     { field_type: "string" },
     { match_rule: "count*" },
@@ -107,7 +107,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     rule({
       mock_custom_rule_id: "total",
       match_type: "wildcard",
-      match_rule: "{total*,sum}",
+      match_rule: "{total*,su?}",
       mock_rule_content: "@natural(3,3)",
     }),
   ];
@@ -118,6 +118,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       count: { type: "integer" },
       explicit: { type: "integer", example: 99 },
       totalCount: { type: "integer" },
+      sum: { type: "integer" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -142,12 +143,14 @@ test("native numeric rules retain ordering, source identity and explicit example
     count: 7,
     explicit: 99,
     totalCount: 3,
+    sum: 3,
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
     count: 7,
     explicit: 99,
     totalCount: 3,
+    sum: 3,
     Count: 3,
   });
   const conflict = structuredClone(doc);
@@ -187,7 +190,7 @@ test("native star-only wildcard rules preserve path and dot-name boundaries", ()
   importIntoProject(q, all);
   assert.equal(createFieldSampler(q.settings)("😀", { type: "integer" }), 7);
   for (const match_rule of [
-    "a?",
+    "a[ab]",
     "[ab]",
     "{a,{b,c}}",
     "**",
@@ -235,4 +238,32 @@ test("native bounded brace alternatives expand in order without admitting ranges
     assert.throws(() => importIntoProject(target, bad));
     assert.deepEqual(target, before);
   }
+});
+
+test("native question wildcards count UTF-16 units without changing Local API glob semantics", async () => {
+  const { matchesFieldPattern } = await import("../src/mock-fields.mjs");
+  const sampler = (pattern) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ match_type: "wildcard", match_rule: pattern }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  const one = sampler("?"),
+    two = sampler("??"),
+    mixed = sampler("{item_?,name??}");
+  assert.equal(one("中", { type: "integer" }), 7);
+  assert.equal(one("😀", { type: "integer" }), undefined);
+  assert.equal(two("😀", { type: "integer" }), 7);
+  assert.equal(mixed("item_中", { type: "integer" }), 7);
+  assert.equal(mixed("item_😀", { type: "integer" }), undefined);
+  assert.equal(mixed("name😀", { type: "integer" }), 7);
+  assert.equal(two(".x", { type: "integer" }), undefined);
+  assert.equal(two("a/", { type: "integer" }), undefined);
+  assert(
+    matchesFieldPattern("?", "😀"),
+    "existing Local API globs still use Unicode code points",
+  );
 });
