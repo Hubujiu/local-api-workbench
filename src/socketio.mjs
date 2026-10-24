@@ -1,3 +1,4 @@
+import { legacySocket } from "./socketio-legacy.mjs";
 import { BoundedPolling, BoundedWebSocket } from "./socketio-polling.mjs";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { io } from "socket.io-client";
@@ -104,7 +105,16 @@ export function normalizeSocketIODefinition(input) {
   if (
     !plain(input) ||
     Object.keys(input).some(
-      (k) => !["id", "name", "url", "path", "events", "transport"].includes(k),
+      (k) =>
+        ![
+          "id",
+          "name",
+          "url",
+          "path",
+          "events",
+          "transport",
+          "version",
+        ].includes(k),
     )
   )
     throw Error("Socket.IO定义不保存认证信息或额外字段");
@@ -113,6 +123,10 @@ export function normalizeSocketIODefinition(input) {
     !["websocket", "polling", "auto"].includes(input.transport)
   )
     throw Error("Socket.IO传输类型无效");
+  if (input.version !== undefined && ![2, 4].includes(input.version))
+    throw Error("Socket.IO版本须为2或4");
+  if (input.version === 2 && input.transport && input.transport !== "websocket")
+    throw Error("Socket.IO v2暂仅支持WebSocket传输");
   const id = input.id || randomUUID();
   if (typeof id !== "string" || !/^[A-Za-z0-9_.-]{1,200}$/.test(id))
     throw Error("Socket.IO定义ID无效");
@@ -121,6 +135,7 @@ export function normalizeSocketIODefinition(input) {
     name: String(input.name || "Socket.IO").slice(0, 200),
     ...urlDefinition(input),
     events: eventFilter(input.events),
+    ...(input.version !== undefined ? { version: input.version } : {}),
     ...(input.transport !== undefined ? { transport: input.transport } : {}),
   };
 }
@@ -149,13 +164,14 @@ function connection(input) {
           "tls",
           "connectTimeoutMs",
           "transport",
+          "version",
         ].includes(k),
     )
   )
     throw Error("Socket.IO连接字段无效");
   const definition = normalizeSocketIODefinition(
     Object.fromEntries(
-      ["id", "name", "url", "path", "events", "transport"]
+      ["id", "name", "url", "path", "events", "transport", "version"]
         .filter((k) => input[k] !== undefined)
         .map((k) => [k, input[k]]),
     ),
@@ -170,6 +186,8 @@ function connection(input) {
   if (!plain(auth) || Buffer.byteLength(JSON.stringify(auth)) > 8192)
     throw Error("Socket.IO认证信息无效或超过8KiB");
   jsonData(auth);
+  if (definition.version === 2 && Object.keys(auth).length)
+    throw Error("Socket.IO v2不支持v4 auth，请显式使用query或headers认证");
   const query = input.query ?? {},
     headers = input.headers ?? {};
   for (const [obj, label] of [
@@ -353,7 +371,10 @@ export class SocketIOSessions {
       ).length >= 5
     )
       throw Error("最多同时打开5个Socket.IO会话，保留50个会话记录");
-    const socket = io(definition.url, options);
+    const socket =
+      definition.version === 2
+        ? legacySocket(definition.url, options)
+        : io(definition.url, options);
     const s = {
       id: randomUUID(),
       projectId,
