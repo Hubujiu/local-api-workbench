@@ -56,7 +56,7 @@ test("native date generators use epoch-to-clock bounds and limited numeric forma
 test("native date formatting follows system timezone including non-hour offsets and DST", async () => {
   const { spawnSync } = await import("node:child_process");
   const module = new URL("../src/apipost-mock-dates.mjs", import.meta.url).href;
-  const code = `import { sampleApipostMockDate, sampleApipostMockNow } from ${JSON.stringify(module)}; console.log(JSON.stringify([sampleApipostMockDate("yyyy-MM-dd HH:mm:ss",()=>0,()=>0),sampleApipostMockDate("yyyy-MM-dd HH:mm:ss",()=>0.5,()=>2*Date.UTC(2024,6,1,12)),sampleApipostMockNow(["","yyyy-MM-dd HH:mm:ss"],()=>Date.UTC(2024,6,3,12)),sampleApipostMockNow(["week","yyyy-MM-dd HH:mm:ss"],()=>Date.UTC(2024,6,3,12))]));`;
+  const code = `import { sampleApipostMockDate, sampleApipostMockNow, sampleApipostIsoTimestamp } from ${JSON.stringify(module)}; console.log(JSON.stringify([sampleApipostMockDate("yyyy-MM-dd HH:mm:ss",()=>0,()=>0),sampleApipostMockDate("yyyy-MM-dd HH:mm:ss",()=>0.5,()=>2*Date.UTC(2024,6,1,12)),sampleApipostMockNow(["","yyyy-MM-dd HH:mm:ss"],()=>Date.UTC(2024,6,3,12)),sampleApipostMockNow(["week","yyyy-MM-dd HH:mm:ss"],()=>Date.UTC(2024,6,3,12)),sampleApipostIsoTimestamp(()=>Date.UTC(2024,6,3,12,4,5,7))]));`;
   for (const [TZ, expected] of [
     [
       "UTC",
@@ -106,7 +106,10 @@ test("native date formatting follows system timezone including non-hour offsets 
       },
     );
     assert.equal(child.status, 0, child.stderr);
-    assert.deepEqual(JSON.parse(child.stdout), expected);
+    assert.deepEqual(JSON.parse(child.stdout), [
+      ...expected,
+      "2024-07-03T12:04:05.007Z",
+    ]);
   }
   const own = createFieldSampler(
     {
@@ -161,6 +164,12 @@ test("imported date rules survive storage and produce formatted strings through 
     match_rule: "stamp",
     mock_rule_content: '@now("second","T")',
   });
+  doc.global.mock_custom_rules.push({
+    ...doc.global.mock_custom_rules[0],
+    mock_custom_rule_id: "iso",
+    match_rule: "iso",
+    mock_rule_content: "@isoTimestamp()",
+  });
   importIntoProject(p, doc);
   const schema = {
     type: "object",
@@ -168,6 +177,7 @@ test("imported date rules survive storage and produce formatted strings through 
       created: { type: "string" },
       updated: { type: "string" },
       stamp: { type: "string" },
+      iso: { type: "string" },
     },
   };
   p.requests = [
@@ -189,6 +199,10 @@ test("imported date rules survive storage and produce formatted strings through 
   assert.equal(response.status, 200);
   const body = await response.json();
   assert([yearBefore, String(new Date().getFullYear())].includes(body.updated));
+  assert.equal(new Date(body.iso).toISOString(), body.iso);
+  assert(
+    Date.parse(body.iso) >= clockBefore && Date.parse(body.iso) <= Date.now(),
+  );
   assert.match(body.stamp, /^\d+$/);
   assert.equal(Number(body.stamp) % 1000, 0);
   assert(Number(body.stamp) >= Math.floor(clockBefore / 1000) * 1000);
@@ -288,4 +302,16 @@ test("native date tokens preserve original twelve-hour, millisecond and timestam
     '@now("days")',
   ])
     assert.throws(() => createFieldSampler(settings(mock)));
+});
+
+test("native isoTimestamp is current UTC time rather than random local datetime", () => {
+  const clock = Date.UTC(2024, 6, 3, 12, 4, 5, 7);
+  for (const expression of ["@isoTimestamp", "@isoTimestamp()"]) {
+    const value = createFieldSampler(settings(expression), {
+      now: () => clock,
+    })("created", { type: "string" });
+    assert.equal(value, "2024-07-03T12:04:05.007Z");
+  }
+  for (const expression of ['@isoTimestamp("yyyy")', "@isoTimestamp(1)"])
+    assert.throws(() => createFieldSampler(settings(expression)));
 });

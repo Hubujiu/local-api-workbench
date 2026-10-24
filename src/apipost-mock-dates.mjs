@@ -141,3 +141,7 @@ export function sampleApipostMockNow(args, now = Date.now) {
   if (unit === "week") date.setDate(date.getDate() - date.getDay());
   return formatDate(date, format);
 }
+
+export function sampleApipostIsoTimestamp(now = Date.now) {
+  return new Date(readClock(now)).toISOString();
+}

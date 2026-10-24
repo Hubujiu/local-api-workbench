@@ -1,4 +1,5 @@
 import {
+  sampleApipostIsoTimestamp,
   parseApipostMockDate,
   parseApipostMockNow,
   sampleApipostMockNow,
@@ -238,7 +239,7 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime|now|guid|uuid)(?:\(([\s\S]*)\))?$/.exec(
+    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime|now|guid|uuid|isoTimestamp)(?:\(([\s\S]*)\))?$/.exec(
       value,
     );
   let args;
@@ -249,6 +250,11 @@ function nativeStringExpression(value) {
     if (!Array.isArray(args) || args.length)
       throw Error("原版UUID Mock不支持参数");
     return { name: "uuid", args: [] };
+  }
+  if (match && match[1] === "isoTimestamp") {
+    if (!Array.isArray(args) || args.length)
+      throw Error("原版isoTimestamp Mock不支持参数");
+    return { name: "native-iso-timestamp", args: [] };
   }
   if (match && match[1] === "now")
     return { name: "native-now", args: parseApipostMockNow(args) };
@@ -734,6 +740,8 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
   };
   const generateNative = (spec, schema) => {
     switch (spec.name) {
+      case "native-iso-timestamp":
+        return sampleApipostIsoTimestamp(now);
       case "native-now":
         return sampleApipostMockNow(spec.args, now);
       case "native-date":
