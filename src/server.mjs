@@ -1,3 +1,4 @@
+import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
@@ -336,9 +337,15 @@ export async function createApp({
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)
           return json(res, 403, { error: "Session token required" });
-        if (u.pathname === "/api/protocol-sessions" && req.method === "POST")
-          return json(res, 200, protocolSessions.start(await body(req)));
+        if (u.pathname === "/api/protocol-sessions" && req.method === "POST") {
+          const input = await body(req);
+          if (input.projectId !== undefined)
+            throw Error("项目会话请使用项目专属入口");
+          return json(res, 200, protocolSessions.start(input));
+        }
         if (parts[1] === "protocol-sessions" && parts[2]) {
+          if (protocolSessions.get(parts[2]).projectId)
+            throw Error("项目会话不能通过全局入口访问");
           if (req.method === "GET")
             return json(res, 200, protocolSessions.snapshot(parts[2]));
           const data = await body(req);
@@ -851,6 +858,100 @@ export async function createApp({
                 recordSaved: true,
               });
             });
+          }
+          if (action === "protocol-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (!sessionId && req.method === "POST") {
+              const input = await body(req);
+              if (
+                [
+                  "duration",
+                  "maxEvents",
+                  "maxMessages",
+                  "runId",
+                  "projectId",
+                ].some((key) => input[key] !== undefined)
+              )
+                throw Error("交互协议会话使用固定生命周期，不接受单次捕获选项");
+              const prepared = prepareWireExecution(p, input),
+                result = protocolSessions.start(prepared.request),
+                session = protocolSessions.get(result.id);
+              session.projectId = p.id;
+              session.definition = prepared.definition;
+              return json(res, 200, {
+                ...protocolSessions.snapshot(session.id),
+                projectId: p.id,
+                recordSaved: false,
+              });
+            }
+            const session = protocolSessions.get(sessionId);
+            if (session.projectId !== p.id)
+              throw Error("协议会话不存在或不属于此项目");
+            if (req.method === "GET" && !operation)
+              return json(res, 200, {
+                ...protocolSessions.snapshot(sessionId),
+                projectId: p.id,
+                recordSaved: session.recordSaved === true,
+                ...(session.recordSaved ? { recordId: sessionId } : {}),
+              });
+            if (req.method !== "POST") throw Error("协议会话操作无效");
+            const input = await body(req);
+            if (operation === "send") {
+              if (Object.keys(input).some((key) => key !== "message"))
+                throw Error("协议会话发送字段无效");
+              const message =
+                input.message !== undefined
+                  ? input.message
+                  : (session.definition.message ?? "");
+              return json(res, 200, {
+                ...protocolSessions.send(sessionId, message),
+                projectId: p.id,
+              });
+            }
+            if (operation === "stop") {
+              if (Object.keys(input).length)
+                throw Error("协议停止不接受额外字段");
+              protocolSessions.stop(sessionId);
+              session.finalSnapshot ??= protocolSessions.snapshot(sessionId);
+              if (session.recordSaved)
+                return json(res, 200, {
+                  ...session.finalSnapshot,
+                  projectId: p.id,
+                  recordSaved: true,
+                  recordId: sessionId,
+                });
+              const pending = (session.recordPromise ??= (async () => {
+                try {
+                  const recordId = await finalizeWireSession(
+                    store,
+                    p.id,
+                    session,
+                    session.finalSnapshot,
+                  );
+                  session.recordSaved = true;
+                  return {
+                    ...session.finalSnapshot,
+                    projectId: p.id,
+                    recordSaved: true,
+                    recordId,
+                  };
+                } catch (error) {
+                  return {
+                    ...session.finalSnapshot,
+                    projectId: p.id,
+                    recordSaved: false,
+                    recordId: null,
+                    persistenceError: String(error.message).slice(0, 500),
+                  };
+                }
+              })());
+              const result = await pending;
+              if (!result.recordSaved && session.recordPromise === pending)
+                session.recordPromise = null;
+              return json(res, 200, result);
+            }
+            throw Error("未知协议会话操作");
           }
           if (action === "protocol-runs" && req.method === "GET") {
             const type = u.searchParams.get("type");

@@ -383,10 +383,11 @@ export function createMCP({
           switch (params.name) {
             case "localapi_list_protocol_runs":
               output = (p.protocolRuns || []).map(
-                ({ id, runId, type, status, createdAt, durationMs }) => ({
+                ({ id, runId, type, mode, status, createdAt, durationMs }) => ({
                   id,
                   runId,
                   type,
+                  ...(mode ? { mode } : {}),
                   status,
                   createdAt,
                   ...(durationMs !== undefined ? { durationMs } : {}),

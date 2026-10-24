@@ -6,7 +6,7 @@ import {
   validSSEHandshake,
   sseEventText,
 } from "./sse-parser.mjs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import net from "node:net";
 
 /** Bounded interactive connections. No connection starts without a UI/API action. */
@@ -20,33 +20,48 @@ export class ProtocolSessions {
     return session;
   }
   snapshot(id) {
-    const {
-      id: sessionId,
-      type,
-      state,
-      events,
-      createdAt,
-      error,
-    } = this.get(id);
-    return {
-      id: sessionId,
-      type,
-      state,
-      events,
-      createdAt,
-      ...(error ? { error } : {}),
-    };
+    const session = this.get(id);
+    return structuredClone({
+      id: session.id,
+      type: session.type,
+      state: session.state,
+      events: session.events,
+      createdAt: session.createdAt,
+      finishedAt: session.finishedAt,
+      closeReason: session.closeReason,
+      totalEvents: session.totalEvents,
+      droppedEvents: Math.max(0, session.totalEvents - session.events.length),
+      dataBytes: session.bytes,
+      overflow: session.overflow === true,
+      ...(session.error ? { error: session.error } : {}),
+    });
+  }
+  finish(session, reason) {
+    if (!session.finishedAt) {
+      session.finishedAt = new Date().toISOString();
+      session.closeReason = reason;
+    }
+    clearTimeout(session.deadline);
   }
   event(session, direction, data) {
-    const text = String(data);
-    session.bytes += Buffer.byteLength(text);
-    if (session.bytes > 8 * 1024 * 1024) {
+    const text = String(data).toWellFormed(),
+      bytes = Buffer.byteLength(text);
+    if (session.bytes + bytes > 8 * 1024 * 1024) {
+      session.overflow = true;
       throw Error("会话数据超过 8 MiB");
     }
+    session.bytes += bytes;
+    session.totalEvents++;
+    let preview = text.slice(0, 100000);
+    const last = preview.charCodeAt(preview.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) preview = preview.slice(0, -1);
     session.events.push({
       id: randomUUID(),
       direction,
-      data: text.slice(0, 100000),
+      data: preview,
+      dataBytes: bytes,
+      dataHash: createHash("sha256").update(text).digest("hex"),
+      truncated: text.length > 100000,
       at: new Date().toISOString(),
     });
     session.events = session.events.slice(-200);
@@ -76,10 +91,14 @@ export class ProtocolSessions {
       state: "connecting",
       events: [],
       bytes: 0,
+      totalEvents: 0,
       createdAt: new Date().toISOString(),
     };
     this.sessions.set(session.id, session);
-    session.deadline = setTimeout(() => this.stop(session.id), 15 * 60 * 1000);
+    session.deadline = setTimeout(
+      () => this.stop(session.id, "deadline"),
+      15 * 60 * 1000,
+    );
     session.expiry = setTimeout(
       () => {
         this.stop(session.id);
@@ -88,7 +107,7 @@ export class ProtocolSessions {
       60 * 60 * 1000,
     );
     const failed = (error) => {
-      if (session.state === "closed") return;
+      if (session.finishedAt || session.state === "closed") return;
       session.state = "error";
       session.error = String(error.message || error).slice(0, 1000);
       try {
@@ -98,7 +117,7 @@ export class ProtocolSessions {
       session.socket?.terminate?.();
       session.socket?.close?.();
       session.controller?.abort();
-      clearTimeout(session.deadline);
+      this.finish(session, "error");
     };
     try {
       if (type === "websocket") {
@@ -129,7 +148,7 @@ export class ProtocolSessions {
         );
         socket.once("close", () => {
           if (session.state !== "error") session.state = "closed";
-          clearTimeout(session.deadline);
+          this.finish(session, session.state === "error" ? "error" : "remote");
           session.socket = null;
         });
       } else if (type === "tcp") {
@@ -184,7 +203,8 @@ export class ProtocolSessions {
         socket.on("error", failed);
         socket.on("close", () => {
           if (session.state !== "error") session.state = "closed";
-          clearTimeout(session.deadline);
+          this.finish(session, session.state === "error" ? "error" : "remote");
+          session.socket = null;
         });
       } else {
         if (!["http:", "https:"].includes(new URL(input.url).protocol))
@@ -198,9 +218,14 @@ export class ProtocolSessions {
           });
           if (!validSSEHandshake(response))
             throw Error("SSE 握手失败: " + response.status);
+          if (session.state !== "connecting") {
+            session.controller.abort();
+            return;
+          }
           session.state = "open";
           const parser = boundedSSEParser(
             (event) => {
+              if (session.state !== "open") return;
               const text = sseEventText(event);
               this.event(session, "received", text);
               const recorded = session.events.at(-1);
@@ -215,7 +240,7 @@ export class ProtocolSessions {
           );
           for await (const chunk of response.body) parser.feed(chunk);
           parser.finish();
-          this.stop(session.id);
+          this.stop(session.id, "remote");
         })().catch(failed);
       }
     } catch (error) {
@@ -237,13 +262,14 @@ export class ProtocolSessions {
     recorded.encoding = payload.binary ? "base64" : "utf8";
     recorded.sendState = "queued";
     const complete = (error) => {
+      if (session.state !== "open") return;
       recorded.sendState = error ? "failed" : "written";
       if (error) {
         session.state = "error";
         session.error = "协议发送失败，远端结果未确认，不会自动重试";
         session.socket?.destroy?.();
         session.socket?.terminate?.();
-        clearTimeout(session.deadline);
+        this.finish(session, "error");
       }
     };
     if (session.type === "websocket")
@@ -251,11 +277,11 @@ export class ProtocolSessions {
     else session.socket.write(payload.buffer, complete);
     return this.snapshot(id);
   }
-  stop(id) {
+  stop(id, reason = "manual") {
     const session = this.sessions.get(id);
     if (!session) return;
-    session.state = "closed";
-    clearTimeout(session.deadline);
+    if (session.state !== "error") session.state = "closed";
+    this.finish(session, session.state === "error" ? "error" : reason);
     session.socket?.destroy?.();
     session.socket?.terminate?.();
     session.socket?.close?.();

@@ -19,7 +19,7 @@ const canonical = (value) =>
         )
       : item,
   );
-const digest = (value) =>
+export const protocolEvidenceHash = (value) =>
   createHash("sha256").update(canonical(value)).digest("hex");
 const text = (value, max = 1048576) =>
   typeof value === "string" && value.isWellFormed() && value.length <= max;
@@ -87,7 +87,11 @@ export function prepareWireExecution(project, input) {
     ...options,
     type,
     ...(type === "tcp"
-      ? { host: definition.url, port: definition.port }
+      ? {
+          host: definition.url,
+          port: definition.port,
+          receiveEncoding: definition.receiveEncoding,
+        }
       : { url: definition.url }),
     ...(type !== "sse" ? { message: definition.message } : {}),
   };
@@ -105,7 +109,7 @@ export function prepareWireExecution(project, input) {
   }
   return {
     definition,
-    definitionHash: digest(definition),
+    definitionHash: protocolEvidenceHash(definition),
     options,
     request,
     requestHash:
@@ -153,7 +157,7 @@ export function makeWireRecord(
           ? "partial"
           : "completed",
     result: evidence,
-    resultHash: digest(evidence),
+    resultHash: protocolEvidenceHash(evidence),
     ...(error || cancelled
       ? {
           error: String(error?.message || error || "协议调用已取消").slice(
@@ -198,13 +202,13 @@ export function validateWireRecord(record) {
     record.durationMs < 0
   )
     throw Error("通用协议执行记录格式无效");
-  if (digest(record.result) !== record.resultHash)
+  if (protocolEvidenceHash(record.result) !== record.resultHash)
     throw Error("协议响应哈希不一致");
   const definition = normalizeProtocol(record.definition);
   if (
     definition.type !== record.type ||
     canonical(definition) !== canonical(record.definition) ||
-    digest(definition) !== record.definitionHash
+    protocolEvidenceHash(definition) !== record.definitionHash
   )
     throw Error("协议执行定义或哈希不一致");
   const requestHash =
