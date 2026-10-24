@@ -6692,6 +6692,8 @@ try {
   );
 
   for (const expression of ["@timestamp()", "@randomInt()"]) {
+    await page.locator('.rail [data-page="settings"]').click();
+    await page.locator('[data-settings-anchor="settings-mock-fields"]').click();
     await page
       .locator(
         `[data-edit-mock-field="${nativeProject.settings.mockFieldRules[0].id}"]`,
