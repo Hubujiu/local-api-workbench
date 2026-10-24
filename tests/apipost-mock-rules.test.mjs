@@ -268,6 +268,11 @@ test("native numeric rules retain ordering, source identity and explicit example
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
   }
+  current.settings.mockFieldRules.find(
+    (rule) => rule.pattern === "label",
+  ).mock = '@string("Q")';
+  await app.store.save(current);
+  assert.equal((await (await fetch(p.requests[0].url)).json()).label, "Q");
   const conflict = structuredClone(doc);
   conflict.global.mock_custom_rules[0].mock_rule_content = "@natural(9,9)";
   const before = structuredClone(restored);
@@ -696,6 +701,35 @@ test("native guid and uuid use effective UUIDv4 overrides, not the shadowed base
     '@uuid("seed")',
     "@guid(null)",
     "@uuid({})",
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native string no-count overloads emit one character, not base Mock.js default lengths", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  for (const expression of ["@string", "@string()"]) {
+    const sample = make(expression);
+    for (let i = 0; i < 32; i++)
+      assert.match(sample("count", { type: "string" }), /^[A-Za-z0-9]$/);
+  }
+  assert.equal(make('@string("X")')("count", { type: "string" }), "X");
+  const literal = make('@string("lower")');
+  for (let i = 0; i < 16; i++)
+    assert.match(literal("count", { type: "string" }), /^[lower]$/);
+  for (const expression of [
+    '@string("")',
+    '@string("@word")',
+    '@string("😀")',
+    "@string(3)",
+    "@string(null)",
   ])
     assert.throws(() => make(expression));
 });

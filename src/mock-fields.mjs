@@ -340,11 +340,18 @@ function nativeStringExpression(value) {
       );
     return { name: "native-pick", args: args[0] };
   }
+  if (match?.[1] === "string" && Array.isArray(args) && !args.length)
+    return {
+      name: "native-pick",
+      args: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split(
+        "",
+      ),
+    };
   if (
     typeof value !== "string" ||
     value.length > 200 ||
     !Array.isArray(args) ||
-    ![2, 3].includes(args.length) ||
+    ![1, 2, 3].includes(args.length) ||
     typeof args[0] !== "string" ||
     args[0].length < 1 ||
     args[0].length > 64 ||
@@ -357,8 +364,10 @@ function nativeStringExpression(value) {
     args[1] > (args[2] ?? args[1])
   )
     throw Error(
-      "原版string仅支持显式ASCII字符池及0到64整数长度，参数须使用JSON字面量",
+      "原版string仅支持无参数或ASCII字符池与可选0到64整数长度，参数须使用JSON字面量",
     );
+  if (args.length === 1)
+    return { name: "native-pick", args: args[0].split("") };
   return {
     name: "native-string",
     args: [args[0], args[1], args[2] ?? args[1]],

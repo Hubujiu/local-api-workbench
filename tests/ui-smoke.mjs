@@ -6673,8 +6673,8 @@ try {
     )
     .click();
   assert.equal(await page.locator("#mock-field-type").inputValue(), "string");
-  await page.locator("#mock-field-value").fill("@uuid()");
-  await page.screenshot({ path: "/tmp/local-api-native-uuid.png" });
+  await page.locator("#mock-field-value").fill("@string()");
+  await page.screenshot({ path: "/tmp/local-api-native-string-overloads.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6685,7 +6685,7 @@ try {
   await page.reload();
   const editedStringRule = (await app.store.get(nativeProjectId)).settings
     .mockFieldRules[2];
-  assert.equal(editedStringRule.mock, "@uuid()");
+  assert.equal(editedStringRule.mock, "@string()");
   assert.deepEqual(
     editedStringRule.apipostSource,
     nativeProject.settings.mockFieldRules[2].apipostSource,
