@@ -68,7 +68,7 @@ test("bounded native numeric Mock rules import passively with exact names, types
 });
 test("unsupported native Mock rules fail atomically rather than silently changing semantics", () => {
   for (const extra of [
-    { match_type: "wildcard", match_rule: "count[ab]" },
+    { match_type: "wildcard", match_rule: "count[[:digit:]]" },
     { mock_type: 2 },
     { field_type: "string" },
     { match_rule: "count*" },
@@ -107,7 +107,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     rule({
       mock_custom_rule_id: "total",
       match_type: "wildcard",
-      match_rule: "{total*,su?}",
+      match_rule: "{total*,su?,item_[0-9]}",
       mock_rule_content: "@natural(3,3)",
     }),
   ];
@@ -119,6 +119,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       explicit: { type: "integer", example: 99 },
       totalCount: { type: "integer" },
       sum: { type: "integer" },
+      item_5: { type: "integer" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -144,6 +145,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     explicit: 99,
     totalCount: 3,
     sum: 3,
+    item_5: 3,
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -151,6 +153,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     explicit: 99,
     totalCount: 3,
     sum: 3,
+    item_5: 3,
     Count: 3,
   });
   const conflict = structuredClone(doc);
@@ -190,8 +193,8 @@ test("native star-only wildcard rules preserve path and dot-name boundaries", ()
   importIntoProject(q, all);
   assert.equal(createFieldSampler(q.settings)("😀", { type: "integer" }), 7);
   for (const match_rule of [
-    "a[ab]",
-    "[ab]",
+    "a[^ab]",
+    "[[:digit:]]",
     "{a,{b,c}}",
     "**",
     "a/**",
@@ -266,4 +269,49 @@ test("native question wildcards count UTF-16 units without changing Local API gl
     matchesFieldPattern("?", "😀"),
     "existing Local API globs still use Unicode code points",
   );
+});
+
+test("native bounded ASCII classes preserve ranges, negation and UTF-16 matching", () => {
+  const sampler = (pattern) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ match_type: "wildcard", match_rule: pattern, match_case: 1 }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  const digits = sampler("item_[0-9]"),
+    letters = sampler("{[abc],[!0-9]}");
+  assert.equal(digits("item_5", { type: "integer" }), 7);
+  assert.equal(digits("item_٥", { type: "integer" }), undefined);
+  assert.equal(letters("b", { type: "integer" }), 7);
+  assert.equal(letters("中", { type: "integer" }), 7);
+  assert.equal(letters("7", { type: "integer" }), undefined);
+  assert.equal(letters("😀", { type: "integer" }), undefined);
+  assert.equal(sampler("[!a][!a]")("😀", { type: "integer" }), 7);
+  assert.equal(sampler("[!a]")(".", { type: "integer" }), undefined);
+  for (const pattern of ["[a-z]", "[A-Z]"])
+    assert.equal(
+      sampler(pattern)(pattern === "[a-z]" ? "m" : "M", { type: "integer" }),
+      7,
+    );
+  for (const match_rule of [
+    "[z-a]",
+    "[A-z]",
+    "[[:digit:]]",
+    "[^a]",
+    "[.]",
+    "[a,b]",
+    "[]",
+    "[a-]",
+    "[\\\\a]",
+    "[a[b]]",
+  ]) {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ match_type: "wildcard", match_rule }),
+    ];
+    assert.throws(() => importIntoProject(project(), doc));
+  }
 });

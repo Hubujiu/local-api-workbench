@@ -202,11 +202,21 @@ function expression(source) {
     throw Error("不支持的Mock日期格式");
   return { name, args };
 }
+function maskNativeClasses(value) {
+  let valid = true;
+  const masked = value.replace(/\[([^\[\]]*)\]/g, (_match, body) => {
+    if (!/^!?([A-Za-z0-9_]+|[a-z]-[a-z]|[A-Z]-[A-Z]|[0-9]-[0-9])$/.test(body))
+      valid = false;
+    return "x";
+  });
+  return valid ? masked : "";
+}
 function nativeWildcardPattern(pattern) {
-  if (pattern.length > 100 || !/^[A-Za-z0-9_.*?{},-]+$/.test(pattern))
+  const masked = maskNativeClasses(pattern);
+  if (pattern.length > 100 || !/^[A-Za-z0-9_.*?{},-]+$/.test(masked))
     return false;
   let valid = true;
-  const remaining = pattern.replace(/\{([^{}]*)\}/g, (_match, body) => {
+  const remaining = masked.replace(/\{([^{}]*)\}/g, (_match, body) => {
     const parts = body.split(",");
     if (parts.length < 2 || parts.some((part) => !part)) valid = false;
     return "x";
@@ -214,7 +224,7 @@ function nativeWildcardPattern(pattern) {
   if (!valid || /[{},]/.test(remaining)) return false;
   return alternatives(pattern).every(
     (value) =>
-      /^[A-Za-z_*?][A-Za-z0-9_.*?-]{0,99}$/.test(value) &&
+      /^[A-Za-z_*?][A-Za-z0-9_.*?-]{0,99}$/.test(maskNativeClasses(value)) &&
       !value.includes("**"),
   );
 }
@@ -247,7 +257,7 @@ export function normalizeMockFieldRules(rules = []) {
         !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确或星号/问号/候选项字段及双整数参数的integer/natural规则",
+          "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及双整数参数的integer/natural规则",
         );
       const values = rule.mock
         .slice(rule.mock.indexOf("(") + 1, -1)
