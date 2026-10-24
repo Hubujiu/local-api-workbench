@@ -250,6 +250,24 @@ test("native numeric rules retain ordering, source identity and explicit example
   const actualFloat = actualResponse.price;
   assert(actualFloat > 3 && actualFloat < 4);
   assert.match(String(actualFloat), /^3\.[0-9][1-9]$/);
+  for (const expression of ["@guid()", "@uuid"]) {
+    current.settings.mockFieldRules.find(
+      (rule) => rule.pattern === "label",
+    ).mock = expression;
+    await app.store.save(current);
+    assert.equal(
+      (await app.store.get(p.id)).settings.mockFieldRules.find(
+        (rule) => rule.pattern === "label",
+      ).mock,
+      expression,
+    );
+    const response = await fetch(p.requests[0].url);
+    assert.equal(response.status, 200);
+    assert.match(
+      (await response.json()).label,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  }
   const conflict = structuredClone(doc);
   conflict.global.mock_custom_rules[0].mock_rule_content = "@natural(9,9)";
   const before = structuredClone(restored);
@@ -642,6 +660,42 @@ test("native title sentence and paragraph composition retains capitalization and
     "@title(-1)",
     "@sentence(1.5)",
     "@title(1,2,3)",
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native guid and uuid use effective UUIDv4 overrides, not the shadowed base guid", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  for (const expression of ["@guid", "@guid()", "@uuid", "@uuid()"]) {
+    const a = make(expression),
+      b = make(expression);
+    for (let i = 0; i < 32; i++) {
+      const result = a("count", { type: "string" });
+      assert.match(
+        result,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.equal(
+        result,
+        b("count", { type: "string" }),
+        "seeded fixture output is deterministic, not secure identity generation",
+      );
+    }
+    assert.equal(a("count", { type: "integer" }), undefined);
+  }
+  for (const expression of [
+    "@guid(1)",
+    '@uuid("seed")',
+    "@guid(null)",
+    "@uuid({})",
   ])
     assert.throws(() => make(expression));
 });

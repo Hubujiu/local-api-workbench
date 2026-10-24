@@ -238,13 +238,18 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime|now)(?:\(([\s\S]*)\))?$/.exec(
+    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime|now|guid|uuid)(?:\(([\s\S]*)\))?$/.exec(
       value,
     );
   let args;
   try {
     args = match && JSON.parse("[" + (match[2] ?? "") + "]");
   } catch {}
+  if (match && ["guid", "uuid"].includes(match[1])) {
+    if (!Array.isArray(args) || args.length)
+      throw Error("原版UUID Mock不支持参数");
+    return { name: "uuid", args: [] };
+  }
   if (match && match[1] === "now")
     return { name: "native-now", args: parseApipostMockNow(args) };
   if (match && ["date", "time", "datetime"].includes(match[1]))
