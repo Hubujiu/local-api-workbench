@@ -40,7 +40,7 @@ test("raw-body templates occupy the whole body and insert function output litera
     { body: "prefix " + request.body },
     { bodyType: "binary" },
     { bodyDynamic: { apipost_body: { ...spec, format: "json" } } },
-    { beforeScript: 'apt.setVar("bad",1);' },
+    { before: [{ type: "wait", ms: 1 }] },
   ])
     await assert.rejects(
       resolveDynamicRequest(

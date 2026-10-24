@@ -79,10 +79,8 @@ test("template shared after-scripts preserve ordered state and failed assertion 
   );
 });
 
-test("after-script support does not enable pre-scripts or declarative operation combinations", () => {
+test("script support does not enable declarative operation or SDK combinations", () => {
   for (const extra of [
-    { beforeScript: "apt.setVar('x',1)" },
-    { sharedBeforeScripts: [{ name: "project", code: "1" }] },
     { before: [{ type: "wait", ms: 1 }] },
     { after: [{ type: "wait", ms: 1 }] },
     { scriptURLMode: "sdk" },

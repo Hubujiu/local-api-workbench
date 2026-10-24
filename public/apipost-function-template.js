@@ -195,12 +195,10 @@ export function validateApipostTemplateRequest(request) {
     throw Error("原版表单函数模板仅支持urlencoded或form-data文本字段");
   if (
     (request.scriptURLMode && request.scriptURLMode !== "string") ||
-    request.beforeScript?.trim() ||
-    request.sharedBeforeScripts?.length ||
     request.before?.length ||
     request.after?.length
   )
-    throw Error("原版函数模板暂不支持SDK URL模式或前置脚本或声明式操作组合");
+    throw Error("原版函数模板暂不支持SDK URL模式或声明式操作组合");
   let count = 0;
   for (const { row } of entries) {
     const parsed = parseApipostFunctionTemplate(row.dynamic.value);

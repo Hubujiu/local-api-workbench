@@ -61,18 +61,19 @@ test("Header source functions retain header literals without adopting Query URL 
     ),
     /Header|位置|参数/,
   );
-  await assert.rejects(
-    resolveDynamicRequest(
-      {
-        headers: [{ key: "x", dynamic: spec(expression) }],
-        beforeScript: 'apt.setVar("side",1);',
-      },
-      {},
-      [fn("return text;")],
-      interpolate,
-    ),
-    /脚本/,
+  const variables = {};
+  const withBefore = await resolveDynamicRequest(
+    {
+      headers: [{ key: "x", dynamic: spec(expression) }],
+      beforeScript: 'apt.setVar("side",1);',
+    },
+    variables,
+    [fn("return text;")],
+    interpolate,
   );
+  assert.equal(withBefore.headers[0].value, "abc");
+  assert.equal(withBefore.beforeScript, 'apt.setVar("side",1);');
+  assert.deepEqual(variables, {}); // Resolution preserves script source; only execution runs it.
 });
 test("modern Header templates import without execution and reach actual HTTP unchanged", async (t) => {
   const http = await import("node:http");

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { sdkOpenAPIDefinition } from "./script-url-openapi.mjs";
 import {
   validateApipostTemplateRequest,
@@ -523,6 +524,18 @@ export async function runPlan(
         finalizedBody;
       const beforeStages = scriptStages(configuredRequest, "before");
       if (beforeStages.length) {
+        const templateRequest =
+          ["query", "headers", "path", "cookies", "form"].some((group) =>
+            (configuredRequest[group] || []).some((row) =>
+              isApipostFunctionSource(row.dynamic?.source),
+            ),
+          ) ||
+          Object.values(configuredRequest.bodyDynamic || {}).some((spec) =>
+            isApipostFunctionSource(spec?.source),
+          );
+        const templateSnapshot = templateRequest
+          ? structuredClone(configuredRequest)
+          : null;
         scriptPhase = "before";
         const scripted = await (
           configuredRequest.sharedBeforeScripts?.length
@@ -560,6 +573,14 @@ export async function runPlan(
         scopes = createScopes(scripted.variables, scripted.scopes);
         replaceVariables(vars, effectiveScopes(scopes));
         replaceVariables(localVariables, scripted.localVariables || {});
+        if (
+          templateSnapshot &&
+          (!isDeepStrictEqual(templateSnapshot, scripted.request) ||
+            scripted.finalBody !== undefined)
+        )
+          throw Error(
+            "原版模板前置脚本暂仅允许变量修改，不支持请求修改或最终正文覆盖",
+          );
         configuredRequest = normalizeRequest(scripted.request);
         finalizedBody = scripted.finalBody;
       }

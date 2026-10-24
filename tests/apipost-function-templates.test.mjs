@@ -70,7 +70,7 @@ test("query function templates resolve once and reject unverified combinations b
   );
   assert.equal(resolved.query[0].value, "{{untouched}}");
   for (const change of [
-    { beforeScript: 'apt.setVar("bad",1);' },
+    { beforeScript: 'apt.setRequestQuery("q","override");' },
     { scriptURLMode: "sdk" },
     { bodyDynamic: { x: { source: "fixed", value: "x", format: "text" } } },
     { headers: [{ key: "h", dynamic: { source: "fixed", value: 1 } }] },
@@ -125,11 +125,11 @@ test("modern import maps only exact enabled API Query templates atomically witho
     (x) =>
       (x.apis[1].request.pre_tasks = [
         {
-          type: "customScript",
+          type: "wait",
           id: "s",
-          name: "s",
+          name: "unsupported task",
           enabled: 1,
-          data: 'console.log("not run");',
+          data: "1",
         },
       ]),
   ]) {

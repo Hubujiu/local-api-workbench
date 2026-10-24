@@ -6627,6 +6627,15 @@ try {
     mode: "plain",
     raw: "{{'raw-body'|upper}}",
   };
+  variableTemplateAPI.request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "template-before",
+      name: "Template variable",
+      enabled: 1,
+      data: 'apt.setVar("shared","pre-pipeline");',
+    },
+  ];
   variableTemplateAPI.request.post_tasks = [
     {
       type: "customScript",
@@ -7039,7 +7048,7 @@ try {
   const variableTemplateEcho = JSON.parse(variableTemplateResult.body);
   assert.equal(
     new URL(variableTemplateEcho.url, "http://fixture").searchParams.get("q"),
-    "env-pipeline",
+    "pre-pipeline",
   );
   assert.equal(
     variableTemplateEcho.body,
