@@ -133,3 +133,14 @@ export function databaseParameters(values = [], provider) {
     return result;
   });
 }
+
+export function databaseQueryError(error) {
+  if (error?.code === "ER_DUP_FIELDNAME") {
+    const failure = new Error("数据库结果包含重复列名，请使用唯一别名", {
+      cause: error,
+    });
+    failure.code = error.code;
+    return failure;
+  }
+  return error;
+}

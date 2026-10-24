@@ -1,5 +1,9 @@
 import { postgresValueTypes } from "./postgres-values.mjs";
-import { databaseParameters, databaseRows } from "./database-values.mjs";
+import {
+  databaseParameters,
+  databaseRows,
+  databaseQueryError,
+} from "./database-values.mjs";
 import { queryClickHouse } from "./clickhouse.mjs";
 import { queryMongo } from "./mongodb.mjs";
 import { queryRedis } from "./redis.mjs";
@@ -9,7 +13,10 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
   if (input.type === "redis") return queryRedis(input);
   if (input.type === "mongodb") return queryMongo(input);
   const { type, sql } = input;
-  const parameters = databaseParameters(input.parameters ?? [], type);
+  const parameters = databaseParameters(
+    input.parameters === undefined ? [] : input.parameters,
+    type,
+  );
   if (!["postgres", "mysql"].includes(type)) throw Error("数据库类型无效");
   if (
     typeof sql !== "string" ||
@@ -65,6 +72,8 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
       );
       rows = result;
       columns = fields.map((field) => field.name);
+    } catch (error) {
+      throw databaseQueryError(error);
     } finally {
       connection.destroy();
     }

@@ -178,3 +178,34 @@ test("SQLite HTTP read/write and project database operations retain exact values
   assert.equal(saved.runs[0].variables.exact.id, "9007199254740993");
   assert.deepEqual(saved.runs[0].variables.exact.payload, parameters[1]);
 });
+
+test("database duplicate-column errors retain provider cause and malformed parameter lists never connect", async () => {
+  const { databaseQueryError } = await import("../src/database-values.mjs");
+  const original = Object.assign(new Error("Duplicate column name"), {
+    code: "ER_DUP_FIELDNAME",
+  });
+  const mapped = databaseQueryError(original);
+  assert.match(mapped.message, /重复列/);
+  assert.equal(mapped.code, "ER_DUP_FIELDNAME");
+  assert.equal(mapped.cause, original);
+  const other = Object.assign(new Error("denied"), {
+    code: "ER_ACCESS_DENIED_ERROR",
+  });
+  assert.equal(databaseQueryError(other), other);
+  const { queryRemoteDatabase } = await import("../src/remote-database.mjs");
+  let connected = false;
+  await assert.rejects(
+    queryRemoteDatabase(
+      { type: "postgres", sql: "SELECT 1", parameters: null },
+      {
+        Client: class {
+          constructor() {
+            connected = true;
+          }
+        },
+      },
+    ),
+    /参数/,
+  );
+  assert.equal(connected, false);
+});
