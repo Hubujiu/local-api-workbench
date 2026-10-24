@@ -1,3 +1,5 @@
+import { postgresValueTypes } from "./postgres-values.mjs";
+import { databaseParameters, databaseRows } from "./database-values.mjs";
 import { queryClickHouse } from "./clickhouse.mjs";
 import { queryMongo } from "./mongodb.mjs";
 import { queryRedis } from "./redis.mjs";
@@ -6,7 +8,8 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
   if (input.type === "clickhouse") return queryClickHouse(input);
   if (input.type === "redis") return queryRedis(input);
   if (input.type === "mongodb") return queryMongo(input);
-  const { type, sql, parameters = [] } = input;
+  const { type, sql } = input;
+  const parameters = databaseParameters(input.parameters ?? [], type);
   if (!["postgres", "mysql"].includes(type)) throw Error("数据库类型无效");
   if (
     typeof sql !== "string" ||
@@ -22,6 +25,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
     const { Client } = dependencies.Client ? dependencies : await import("pg");
     const client = new Client({
       ...config,
+      types: postgresValueTypes,
       connectionTimeoutMillis: 3000,
       statement_timeout: 2000,
       query_timeout: 3000,
@@ -30,6 +34,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
       await client.connect();
       await client.query("BEGIN READ ONLY");
       const result = await client.query({
+        rowMode: "array",
         text: boundedSQL,
         values: parameters,
         queryMode: "extended",
@@ -45,11 +50,16 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
       ...config,
       connectTimeout: 3000,
       multipleStatements: false,
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+      decimalNumbers: false,
+      dateStrings: true,
+      rowsAsArray: true,
     });
     try {
       await connection.query("SET TRANSACTION READ ONLY");
       await connection.query("START TRANSACTION");
-      const [result, fields] = await connection.query(
+      const [result, fields] = await connection.execute(
         { sql: boundedSQL, timeout: 2000 },
         parameters,
       );
@@ -59,12 +69,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
       connection.destroy();
     }
   }
-  return {
-    columns,
-    rows: rows.slice(0, 1000),
-    truncated: rows.length > 1000,
-    limit: 1000,
-  };
+  return databaseRows(columns, rows);
 }
 
 export function remoteConnectionConfig(input) {

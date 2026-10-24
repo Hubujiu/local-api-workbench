@@ -1,3 +1,4 @@
+import { databaseParameters } from "./database-values.mjs";
 import { remoteConnectionConfig } from "./remote-database.mjs";
 
 // Conservative subset, not a complete PostgreSQL parser. Parameter binding is
@@ -69,6 +70,7 @@ export async function mutatePostgres(input, dependencies = {}) {
     Buffer.byteLength(JSON.stringify(parameters)) > 1024 * 1024
   )
     throw Error("绑定参数必须是数组，最多1000项、1MiB");
+  const boundParameters = databaseParameters(parameters, "postgres");
   const { Client } = dependencies.Client ? dependencies : await import("pg");
   const client = new Client({
     ...remoteConnectionConfig(input),
@@ -87,7 +89,7 @@ export async function mutatePostgres(input, dependencies = {}) {
     // cannot accumulate in node-postgres memory. Extended mode forbids batches.
     const result = await client.query({
       text: `WITH localapi_written AS (${sql} RETURNING 1) SELECT count(*)::text AS affected_rows FROM localapi_written`,
-      values: parameters,
+      values: boundParameters,
       queryMode: "extended",
     });
     const count = result.rows?.[0]?.affected_rows;

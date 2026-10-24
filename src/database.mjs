@@ -1,3 +1,8 @@
+import {
+  databaseColumns,
+  databaseParameters,
+  databaseRow,
+} from "./database-values.mjs";
 import { DatabaseSync } from "node:sqlite";
 export function querySQLite(filename, sql, parameters = []) {
   if (typeof filename !== "string" || !filename.trim())
@@ -5,28 +10,28 @@ export function querySQLite(filename, sql, parameters = []) {
   if (typeof sql !== "string" || sql.length > 50000) throw Error("SQL 无效");
   if (!/^\s*(SELECT\b|WITH\b|EXPLAIN\b)/i.test(sql))
     throw Error("仅支持只读 SELECT / WITH / EXPLAIN 查询");
+  parameters = databaseParameters(parameters, "sqlite");
   const db = new DatabaseSync(filename, {
     readOnly: true,
     allowExtension: false,
   });
   try {
     const statement = db.prepare(sql);
+    statement.setReadBigInts(true);
     const columns = statement.columns().map((c) => c.name),
       rows = [];
+    databaseColumns(columns);
+    let bytes = Buffer.byteLength(JSON.stringify(columns)) + 100;
     let truncated = false;
     for (const row of statement.iterate(...parameters)) {
       if (rows.length >= 1000) {
         truncated = true;
         break;
       }
-      rows.push(
-        Object.fromEntries(
-          Object.entries(row).map(([k, v]) => [
-            k,
-            typeof v === "bigint" ? String(v) : v,
-          ]),
-        ),
-      );
+      const value = databaseRow(row, columns);
+      bytes += Buffer.byteLength(JSON.stringify(value)) + 1;
+      if (bytes > 1024 * 1024) throw Error("数据库结果超过1MiB");
+      rows.push(value);
     }
     return { columns, rows, truncated, limit: 1000 };
   } finally {
@@ -72,6 +77,7 @@ export function mutateSQLite(filename, sql, parameters = []) {
   )
     throw Error("写入仅支持单条 INSERT / UPDATE / DELETE（不支持REPLACE）");
   if (!Array.isArray(parameters)) throw Error("绑定参数必须是数组");
+  parameters = databaseParameters(parameters, "sqlite");
   const words = [];
   let quote = "",
     comment = "",
@@ -146,24 +152,14 @@ export function mutateSQLite(filename, sql, parameters = []) {
     const statement = db.prepare(sql),
       columns = statement.columns().map((c) => c.name),
       rows = [];
+    statement.setReadBigInts(true);
+    databaseColumns(columns);
     let info,
       bytes = 0;
     if (columns.length) {
       for (const row of statement.iterate(...parameters)) {
         if (rows.length >= 1000) throw Error("写入返回结果超过1000行，已回滚");
-        const converted = Object.fromEntries(
-          Object.entries(row).map(([key, value]) => [
-            key,
-            typeof value === "bigint"
-              ? String(value)
-              : value instanceof Uint8Array
-                ? {
-                    type: "blob",
-                    base64: Buffer.from(value).toString("base64"),
-                  }
-                : value,
-          ]),
-        );
+        const converted = databaseRow(row, columns);
         bytes += Buffer.byteLength(JSON.stringify(converted));
         if (bytes > 1024 * 1024) throw Error("写入结果超过1MiB，已回滚");
         rows.push(converted);

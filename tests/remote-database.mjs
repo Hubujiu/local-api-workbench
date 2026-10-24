@@ -172,3 +172,102 @@ try {
   }
 }
 console.log("REAL_DATABASE_FIXTURES_PASS");
+
+// Real-service value fidelity, not just successful connection or row counts.
+const exactParameters = [
+  { type: "int64", value: "9007199254740993" },
+  "123456789012345678.123456789012",
+  { type: "blob", base64: "AAH/" },
+];
+const pgValues = await queryRemoteDatabase({
+  ...common,
+  type: "postgres",
+  port: 5432,
+  sql: `SELECT $1::bigint AS wide, $2::numeric(30,12) AS precise, $3::bytea AS payload,
+    TIMESTAMP '2026-10-24 12:34:56.123456' AS moment, DATE '2026-10-24' AS day,
+    '{"id":9007199254740993,"small":7}'::jsonb AS document,
+    ARRAY[1.234567890123456789::numeric] AS decimals`,
+  parameters: exactParameters,
+});
+assert.equal(pgValues.rows[0].wide, "9007199254740993");
+assert.equal(pgValues.rows[0].precise, "123456789012345678.123456789012");
+assert.deepEqual(pgValues.rows[0].payload, { type: "blob", base64: "AAH/" });
+assert.equal(pgValues.rows[0].moment, "2026-10-24 12:34:56.123456");
+assert.equal(pgValues.rows[0].day, "2026-10-24");
+assert.deepEqual(pgValues.rows[0].document, {
+  id: "9007199254740993",
+  small: 7,
+});
+assert.deepEqual(pgValues.rows[0].decimals, ["1.234567890123456789"]);
+const mysqlValues = await queryRemoteDatabase({
+  ...common,
+  type: "mysql",
+  port: 3306,
+  sql: `SELECT CAST(? AS SIGNED) AS wide, CAST(? AS DECIMAL(30,12)) AS precise,
+    CAST(? AS BINARY) AS payload, CAST('2026-10-24 12:34:56.123456' AS DATETIME(6)) AS moment,
+    CAST('2026-10-24' AS DATE) AS day, CAST('{"id":9007199254740993,"small":7}' AS JSON) AS document,
+    CAST('18446744073709551615' AS UNSIGNED) AS unsigned_wide`,
+  parameters: exactParameters,
+});
+assert.equal(mysqlValues.rows[0].wide, "9007199254740993");
+assert.equal(mysqlValues.rows[0].precise, "123456789012345678.123456789012");
+assert.deepEqual(mysqlValues.rows[0].payload, { type: "blob", base64: "AAH/" });
+assert.equal(mysqlValues.rows[0].moment, "2026-10-24 12:34:56.123456");
+assert.equal(mysqlValues.rows[0].day, "2026-10-24");
+assert.deepEqual(mysqlValues.rows[0].document, {
+  id: "9007199254740993",
+  small: 7,
+});
+assert.equal(mysqlValues.rows[0].unsigned_wide, "18446744073709551615");
+for (const type of ["postgres", "mysql"]) {
+  await assert.rejects(
+    queryRemoteDatabase({
+      ...common,
+      type,
+      sql: "SELECT 1 AS duplicate, 2 AS duplicate",
+    }),
+    /重复列/,
+  );
+  const special = await queryRemoteDatabase({
+    ...common,
+    type,
+    sql: "SELECT 1 AS __proto__",
+  });
+  assert.equal(Object.hasOwn(special.rows[0], "__proto__"), true);
+  assert.equal(special.rows[0].__proto__, 1);
+  assert.equal(Object.getPrototypeOf(special.rows[0]), Object.prototype);
+}
+assert.deepEqual(JSON.parse(JSON.stringify(pgValues)), pgValues);
+assert.deepEqual(JSON.parse(JSON.stringify(mysqlValues)), mysqlValues);
+console.log(
+  "PostgreSQL/MySQL exact integer, decimal, binary, temporal and JSON value contracts passed",
+);
+
+const typesSetup = new Client({ ...common, port: 5432 });
+await typesSetup.connect();
+const typedTable = "localapi_values_" + process.pid;
+try {
+  await typesSetup.query(
+    `CREATE TABLE ${typedTable}(wide bigint, payload bytea)`,
+  );
+  const { mutatePostgres } = await import("../src/postgres-write.mjs");
+  const write = await mutatePostgres({
+    ...common,
+    type: "postgres",
+    allowWrite: true,
+    sql: `INSERT INTO ${typedTable}(wide,payload) VALUES($1,$2)`,
+    parameters: [exactParameters[0], exactParameters[2]],
+  });
+  assert.equal(write.committed, true);
+  const restored = await queryRemoteDatabase({
+    ...common,
+    type: "postgres",
+    sql: `SELECT * FROM ${typedTable}`,
+  });
+  assert.deepEqual(restored.rows, [
+    { wide: "9007199254740993", payload: { type: "blob", base64: "AAH/" } },
+  ]);
+} finally {
+  await typesSetup.query(`DROP TABLE IF EXISTS ${typedTable}`);
+  await typesSetup.end();
+}
