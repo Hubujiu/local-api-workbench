@@ -1,3 +1,4 @@
+import { openDatabaseSSH } from "./database-ssh.mjs";
 import { databaseParameters } from "./database-values.mjs";
 import { remoteConnectionConfig } from "./remote-database.mjs";
 
@@ -72,64 +73,72 @@ export async function mutatePostgres(input, dependencies = {}) {
     throw Error("绑定参数必须是数组，最多1000项、1MiB");
   const boundParameters = databaseParameters(parameters, "postgres");
   const { Client } = dependencies.Client ? dependencies : await import("pg");
-  const client = new Client({
-    ...remoteConnectionConfig(input),
-    connectionTimeoutMillis: 3000,
-    statement_timeout: 2000,
-    query_timeout: 3000,
-  });
-  client.on?.("error", () => {}); // Active operations report connection errors through their promises.
-  let begun = false,
-    committing = false;
+  const tunnel = await openDatabaseSSH(input);
   try {
-    await client.connect();
-    await client.query("BEGIN READ WRITE");
-    begun = true;
-    // PostgreSQL counts RETURNING rows on the server; arbitrary row payloads
-    // cannot accumulate in node-postgres memory. Extended mode forbids batches.
-    const result = await client.query({
-      text: `WITH localapi_written AS (${sql} RETURNING 1) SELECT count(*)::text AS affected_rows FROM localapi_written`,
-      values: boundParameters,
-      queryMode: "extended",
+    const client = new Client({
+      ...remoteConnectionConfig(input),
+      ...(tunnel ? { stream: tunnel.stream } : {}),
+      connectionTimeoutMillis: 3000,
+      statement_timeout: 2000,
+      query_timeout: 3000,
     });
-    const count = result.rows?.[0]?.affected_rows;
-    if (
-      result.rows?.length !== 1 ||
-      typeof count !== "string" ||
-      !/^\d+$/.test(count) ||
-      !Number.isSafeInteger(Number(count))
-    )
-      throw Error("无法验证写入影响行数");
-    const affectedRows = Number(count);
-    if (affectedRows > 1000) throw Error("写入目标行数超过1000行");
-    committing = true;
-    await client.query("COMMIT");
-    begun = false;
-    return {
-      columns: [],
-      rows: [],
-      affectedRows,
-      committed: true,
-      truncated: false,
-      limit: 1000,
-    };
-  } catch (error) {
-    if (committing)
-      throw Error(
-        "提交结果未确认，请先查询数据，不要盲目重试：" + error.message,
-      );
-    if (begun) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
+    client.on?.("error", () => {}); // Active operations report connection errors through their promises.
+    let begun = false,
+      committing = false;
+    try {
+      await client.connect();
+      await client.query("BEGIN READ WRITE");
+      begun = true;
+      // PostgreSQL counts RETURNING rows on the server; arbitrary row payloads
+      // cannot accumulate in node-postgres memory. Extended mode forbids batches.
+      const result = await client.query({
+        text: `WITH localapi_written AS (${sql} RETURNING 1) SELECT count(*)::text AS affected_rows FROM localapi_written`,
+        values: boundParameters,
+        queryMode: "extended",
+      });
+      const count = result.rows?.[0]?.affected_rows;
+      if (
+        result.rows?.length !== 1 ||
+        typeof count !== "string" ||
+        !/^\d+$/.test(count) ||
+        !Number.isSafeInteger(Number(count))
+      )
+        throw Error("无法验证写入影响行数");
+      const affectedRows = Number(count);
+      if (affectedRows > 1000) throw Error("写入目标行数超过1000行");
+      committing = true;
+      await client.query("COMMIT");
+      begun = false;
+      return {
+        columns: [],
+        rows: [],
+        affectedRows,
+        committed: true,
+        truncated: false,
+        limit: 1000,
+      };
+    } catch (error) {
+      if (committing)
         throw Error(
-          "写入失败且未收到回滚确认，连接将关闭；请先核实数据和触发器副作用，不要盲目重试",
+          "提交结果未确认，请先查询数据，不要盲目重试：" + error.message,
+        );
+      if (begun) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          throw Error(
+            "写入失败且未收到回滚确认，连接将关闭；请先核实数据和触发器副作用，不要盲目重试",
+          );
+        }
+        throw Error(
+          "写入事务已回滚（不包含序列与外部副作用）：" + error.message,
         );
       }
-      throw Error("写入事务已回滚（不包含序列与外部副作用）：" + error.message);
+      throw error;
+    } finally {
+      await client.end().catch(() => {});
     }
-    throw error;
   } finally {
-    await client.end().catch(() => {});
+    tunnel?.close();
   }
 }

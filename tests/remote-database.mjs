@@ -280,3 +280,8 @@ try {
   await typesSetup.query(`DROP TABLE IF EXISTS ${typedTable}`);
   await typesSetup.end();
 }
+
+const { verifySSHDatabaseFlows } = await import(
+  "./ssh-database-integration.mjs"
+);
+await verifySSHDatabaseFlows(common);

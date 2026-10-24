@@ -1,3 +1,4 @@
+import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
 import { querySQLiteBounded } from "./database.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
@@ -53,6 +54,11 @@ export class DatabaseSessions {
     if (input.ssl !== undefined && typeof input.ssl !== "boolean")
       throw Error("TLS选项必须为布尔值");
     config.ssl = input.ssl === true;
+    if (input.ssh !== undefined) {
+      if (!["postgres", "mysql"].includes(type))
+        throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL");
+      config.ssh = databaseSSHConfig(input.ssh);
+    }
     if (Buffer.byteLength(JSON.stringify(config)) > 131072)
       throw Error("连接配置最多128KiB");
     const id = randomUUID();
