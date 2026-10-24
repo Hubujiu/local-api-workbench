@@ -1,3 +1,4 @@
+import { executeWireFlow } from "../src/wire-plan.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
 import { executeGrpc } from "../src/grpc.mjs";
 import { recordPlanRun } from "../src/plan-evidence.mjs";
@@ -38,6 +39,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       {
         ...scopedExecution(store, project, environmentId),
         executeGrpc,
+        executeProtocol: executeWireFlow,
         executeSocketIO: (input, signal) =>
           executeSocketIOFlow(input, signal, { projectId: project.id }),
         cookieSession: projectCookieSession(store, project, environmentId),

@@ -1,3 +1,4 @@
+import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
@@ -114,6 +115,18 @@ export async function createApp({
     controllers.set(runId, controller);
     return { runId, controller };
   };
+  let wireActive = 0;
+  const withWireSlot = async (operation) => {
+    if (wireActive >= 5) throw Error("最多同时执行5个通用协议调用");
+    wireActive++;
+    try {
+      return await operation();
+    } finally {
+      wireActive--;
+    }
+  };
+  const executePlanWire = (input, signal) =>
+    withWireSlot(() => executeWireFlow(input, signal));
   let grpcActive = 0;
   const withGrpcTask = async (candidate, operation) => {
     const runId = candidate || id();
@@ -231,6 +244,7 @@ export async function createApp({
           ...mcp,
           debugEnvironments,
           grpcExecutor: executePlanGrpc,
+          protocolExecutor: executePlanWire,
           socketioExecutor: (projectId, input, signal) =>
             executeSocketIOFlow(input, signal, {
               projectId,
@@ -866,7 +880,9 @@ export async function createApp({
             let result, error;
             try {
               try {
-                result = await fn(prepared.request, controller.signal);
+                result = await withWireSlot(() =>
+                  fn(prepared.request, controller.signal),
+                );
               } catch (failure) {
                 error = failure;
               }
@@ -1192,6 +1208,8 @@ export async function createApp({
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
                 grpcCredentials: b.grpcCredentials,
+                executeProtocol: executePlanWire,
+                protocolCredentials: b.protocolCredentials,
                 executeSocketIO: (input, signal) =>
                   executeSocketIOFlow(input, signal, {
                     projectId: p.id,

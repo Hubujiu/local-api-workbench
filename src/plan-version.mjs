@@ -1,3 +1,4 @@
+import { freezeWireStep } from "./wire-plan.mjs";
 import { freezeSocketIOStep } from "./socketio-plan.mjs";
 import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
@@ -7,6 +8,7 @@ export function versionPlan(previous, input, source = "manual", project) {
     input = {
       ...input,
       steps: input.steps.map((step) => {
+        if (step.type === "protocol") return freezeWireStep(project, step);
         if (step.type === "grpc") return freezeGrpcStep(project, step);
         if (step.type === "socketio") return freezeSocketIOStep(project, step);
         const oldStep = previous?.steps?.find(

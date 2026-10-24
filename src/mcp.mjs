@@ -1,3 +1,4 @@
+import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
@@ -37,6 +38,7 @@ export function createMCP({
   debugEnvironments = new Map(),
   onProgress = () => {},
   grpcExecutor = executeGrpc,
+  protocolExecutor = executeWireFlow,
   socketioExecutor,
 }) {
   const allowed = new Set(projects);
@@ -49,6 +51,17 @@ export function createMCP({
           sessions: socketioSessions,
           projectId,
         });
+  };
+  let protocolActive = 0;
+  const executePlanProtocol = async (input, signal) => {
+    if (!write || !execute) throw Error("协议计划执行未授权");
+    if (protocolActive >= 5) throw Error("最多同时执行5个通用协议调用");
+    protocolActive++;
+    try {
+      return await protocolExecutor(input, signal);
+    } finally {
+      protocolActive--;
+    }
   };
   let grpcActive = 0;
   const executePlanGrpc = async (input, signal) => {
@@ -140,6 +153,7 @@ export function createMCP({
               projectId: { type: "string" },
               planId: { type: "string" },
               grpcCredentials: { type: "object" },
+              protocolCredentials: { type: "object" },
               socketioCredentials: { type: "object" },
             },
           ],
@@ -159,6 +173,7 @@ export function createMCP({
             "coverMode",
             "apiScripts",
             "grpcCredentials",
+            "protocolCredentials",
             "socketioCredentials",
           ].includes(k),
       ),
@@ -648,6 +663,8 @@ export function createMCP({
                   ...scopedExecution(store, p, environmentId),
                   executeGrpc: executePlanGrpc,
                   grpcCredentials: args.grpcCredentials,
+                  executeProtocol: executePlanProtocol,
+                  protocolCredentials: args.protocolCredentials,
                   executeSocketIO: (input, signal) =>
                     executePlanSocketIO(p.id, input, signal),
                   socketioCredentials: args.socketioCredentials,

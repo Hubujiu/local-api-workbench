@@ -1,3 +1,4 @@
+import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
   socketioPlanCredentials,
@@ -402,19 +403,26 @@ export function snapshotPlan(plan) {
               name: s.name || s.socketio?.definition?.name || "Socket.IO",
               enabled: s.enabled !== false,
             }
-          : {
-              id: s.id || id(),
-              name: s.name || s.request?.name || "步骤",
-              enabled: s.enabled !== false,
-              request: {
-                ...normalizeRequest(structuredClone(s.request)),
-                serviceSnapshot: true,
-                parametersSnapshot: true,
-                authSnapshot: true,
-                sharedScriptsSnapshot: true,
+          : s.type === "protocol"
+            ? {
+                ...snapshotWireStep(s),
+                id: s.id || id(),
+                name: s.name || s.protocol?.definition?.name || "协议",
+                enabled: s.enabled !== false,
+              }
+            : {
+                id: s.id || id(),
+                name: s.name || s.request?.name || "步骤",
+                enabled: s.enabled !== false,
+                request: {
+                  ...normalizeRequest(structuredClone(s.request)),
+                  serviceSnapshot: true,
+                  parametersSnapshot: true,
+                  authSnapshot: true,
+                  sharedScriptsSnapshot: true,
+                },
+                expectedStatus: s.expectedStatus,
               },
-              expectedStatus: s.expectedStatus,
-            },
     ),
   };
 }
@@ -435,17 +443,20 @@ export async function runPlan(
     grpcCredentials,
     executeSocketIO,
     socketioCredentials,
+    executeProtocol,
+    protocolCredentials,
   } = {},
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
+  const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
   for (const step of snapshot.steps)
-    if (!["grpc", "socketio"].includes(step.type))
+    if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
@@ -492,12 +503,18 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
-      if (["grpc", "socketio"].includes(step.type)) {
+      if (["grpc", "socketio", "protocol"].includes(step.type)) {
         const isGrpc = step.type === "grpc";
         const validated = isGrpc
           ? snapshotGrpcStep(step)
-          : snapshotSocketIOStep(step);
-        const executor = isGrpc ? executeGrpc : executeSocketIO;
+          : step.type === "protocol"
+            ? snapshotWireStep(step)
+            : snapshotSocketIOStep(step);
+        const executor = isGrpc
+          ? executeGrpc
+          : step.type === "protocol"
+            ? executeProtocol
+            : executeSocketIO;
         if (!executor) throw Error("此执行入口未授权" + step.type + "调用");
         record.type = step.type;
         record[step.type] = structuredClone(validated[step.type]);
@@ -508,6 +525,17 @@ export async function runPlan(
           request = {
             ...grpcPlanRequest(validated, messages),
             ...credentials.get(step.id),
+          };
+        } else if (step.type === "protocol") {
+          const message =
+            validated.protocol.message === undefined
+              ? undefined
+              : interpolate(validated.protocol.message, vars);
+          if (message !== undefined) record.protocol.message = message;
+          request = {
+            ...validated.protocol,
+            ...(message !== undefined ? { message } : {}),
+            ...wireCredentials.get(step.id),
           };
         } else {
           const commands = interpolate(validated.socketio.commands, vars);
@@ -521,13 +549,20 @@ export async function runPlan(
         const result = await executor(request, signal);
         if (isGrpc)
           record.grpcResult = { ...result, metadata: [], trailers: [] };
+        else if (step.type === "protocol") record.protocolResult = result;
         else record.socketioResult = result;
         const protocolStatus = isGrpc ? result.status.code : result.status;
         const evidence = {
           status: protocolStatus,
           duration: result.durationMs,
           headers: {},
-          body: JSON.stringify(isGrpc ? result.messages : result.results),
+          body: JSON.stringify(
+            isGrpc
+              ? result.messages
+              : step.type === "protocol"
+                ? result.result
+                : result.results,
+          ),
         };
         record.assertions = evaluateAssertions(evidence, validated.assertions);
         record.status =
@@ -808,7 +843,7 @@ export async function runPlan(
       scopes.globals = committedScopes.globals;
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
-      if (["grpc", "socketio"].includes(step.type)) {
+      if (["grpc", "socketio", "protocol"].includes(step.type)) {
         record.type = step.type;
         record[step.type] ||= structuredClone(step[step.type]);
       } else if (!record.request) {
