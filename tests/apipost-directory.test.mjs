@@ -237,3 +237,103 @@ test("cancelled directory selection stops before reading remaining files", async
   );
   assert.equal(reads, 0);
 });
+
+test("synthetic native directory templates retain shared functions and scope scripts through real HTTP", async (t) => {
+  const http = await import("node:http");
+  const { importIntoProject, runPlan } = await import("../src/core.mjs");
+  const { modernApipostFixture } = await import(
+    "./fixtures/apipost-modern.mjs"
+  );
+  const { environmentVariables, resolveServiceRequest } = await import(
+    "../src/environments.mjs"
+  );
+  const { executeRequest } = await import("../src/runtime.mjs");
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const row = {
+      header: req.headers["x-test"],
+      body: Buffer.concat(chunks).toString(),
+    };
+    seen.push(row);
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(row));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const source = modernApipostFixture();
+  source.global.envs[0].server_list[0].uri = `http://127.0.0.1:${server.address().port}`;
+  source.global.custom_func = [
+    {
+      func_id: "wrap",
+      func_name: "fn_wrap",
+      func_body: 'return "["+text+"]";',
+    },
+  ];
+  const api = source.apis[1];
+  api.method = "POST";
+  api.request.header.parameter[0].value = "Bearer {{token.value|upper}}!";
+  api.request.body = {
+    mode: "plain",
+    raw: "prefix:{{$function.fn_wrap(raw)|upper}}:suffix",
+  };
+  api.request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "before",
+      name: "Set token",
+      enabled: 1,
+      data: 'apt.setVar("token",{value:"actual"});',
+    },
+  ];
+  api.request.post_tasks = [
+    {
+      type: "customScript",
+      id: "after",
+      name: "Verify body",
+      enabled: 1,
+      data: 'pm.test("directory body",()=>pm.expect(pm.response.json().body).to.equal("prefix:[RAW]:suffix"));',
+    },
+  ];
+  const document = nativeDirectoryFixture(source),
+    original = structuredClone(document);
+  const project = {
+    requests: [],
+    folders: [],
+    environments: [],
+    servers: [],
+    settings: { statuses: [] },
+    globalVariables: {},
+  };
+  importIntoProject(project, document);
+  assert.equal(seen.length, 0, "import must not execute functions or scripts");
+  const env = project.environments[0].id;
+  const run = await runPlan(
+    {
+      functions: project.settings.functions,
+      steps: [
+        { request: resolveServiceRequest(project, project.requests[0], env) },
+      ],
+    },
+    environmentVariables(project, env),
+    executeRequest,
+  );
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.deepEqual(seen, [
+    { header: "Bearer ACTUAL!", body: "prefix:[RAW]:suffix" },
+  ]);
+  assert.deepEqual(document, original);
+  const before = structuredClone(project),
+    bad = structuredClone(document);
+  const file = bad.files.find((file) => file.path === "apis/api.json");
+  const record = JSON.parse(file.text);
+  record.data.request.body.raw = "{{token.value|upper}} {{token.value|lower}}";
+  file.text = JSON.stringify(record);
+  assert.throws(() => importIntoProject(project, bad), /表达式|模板/);
+  assert.deepEqual(
+    project,
+    before,
+    "unsupported directory content must roll back atomically",
+  );
+});
