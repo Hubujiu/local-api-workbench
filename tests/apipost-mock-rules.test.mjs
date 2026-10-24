@@ -107,7 +107,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     rule({
       mock_custom_rule_id: "total",
       match_type: "wildcard",
-      match_rule: "total*",
+      match_rule: "{total*,sum}",
       mock_rule_content: "@natural(3,3)",
     }),
   ];
@@ -189,7 +189,7 @@ test("native star-only wildcard rules preserve path and dot-name boundaries", ()
   for (const match_rule of [
     "a?",
     "[ab]",
-    "{a,b}",
+    "{a,{b,c}}",
     "**",
     "a/**",
     "!count",
@@ -200,5 +200,39 @@ test("native star-only wildcard rules preserve path and dot-name boundaries", ()
       rule({ match_type: "wildcard", match_rule }),
     ];
     assert.throws(() => importIntoProject(project(), bad));
+  }
+});
+
+test("native bounded brace alternatives expand in order without admitting ranges or nested globs", () => {
+  const doc = modernApipostFixture();
+  doc.global.mock_custom_rules = [
+    rule({ match_type: "wildcard", match_rule: "{id,num,*count}" }),
+  ];
+  const p = project();
+  importIntoProject(p, doc);
+  const sample = createFieldSampler(p.settings);
+  for (const name of ["id", "NUM", "count", "total_count"])
+    assert.equal(sample(name, { type: "integer" }), 7);
+  for (const name of [".id", "folder/id", "number"])
+    assert.equal(sample(name, { type: "integer" }), undefined);
+  for (const match_rule of [
+    "{id}",
+    "{1..3}",
+    "{,id}",
+    "{id,}",
+    "{a,{b,c}}",
+    "{a,b},c",
+    "{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}",
+    "{.id,num}",
+    "*{*,id}",
+  ]) {
+    const bad = modernApipostFixture();
+    bad.global.mock_custom_rules = [
+      rule({ match_type: "wildcard", match_rule }),
+    ];
+    const target = project(),
+      before = structuredClone(target);
+    assert.throws(() => importIntoProject(target, bad));
+    assert.deepEqual(target, before);
   }
 });

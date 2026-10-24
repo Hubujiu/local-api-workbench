@@ -202,6 +202,21 @@ function expression(source) {
     throw Error("不支持的Mock日期格式");
   return { name, args };
 }
+function nativeWildcardPattern(pattern) {
+  if (pattern.length > 100 || !/^[A-Za-z0-9_.*{},-]+$/.test(pattern))
+    return false;
+  let valid = true;
+  const remaining = pattern.replace(/\{([^{}]*)\}/g, (_match, body) => {
+    const parts = body.split(",");
+    if (parts.length < 2 || parts.some((part) => !part)) valid = false;
+    return "x";
+  });
+  if (!valid || /[{},]/.test(remaining)) return false;
+  return alternatives(pattern).every(
+    (value) =>
+      /^[A-Za-z_*][A-Za-z0-9_.*-]{0,99}$/.test(value) && !value.includes("**"),
+  );
+}
 export function normalizeMockFieldRules(rules = []) {
   if (!Array.isArray(rules) || rules.length > 100)
     throw Error("字段Mock规则最多100条");
@@ -225,14 +240,13 @@ export function normalizeMockFieldRules(rules = []) {
         typeof rule.pattern !== "string" ||
         (source.matchType !== undefined && source.matchType !== "wildcard") ||
         !(source.matchType === "wildcard"
-          ? /^[A-Za-z_*][A-Za-z0-9_.*-]{0,99}$/.test(rule.pattern) &&
-            !rule.pattern.includes("**")
+          ? nativeWildcardPattern(rule.pattern)
           : /^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern)) ||
         typeof rule.mock !== "string" ||
         !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确或单星号字段及双整数参数的integer/natural规则",
+          "Apipost自定义Mock暂仅支持精确或单星号/候选项字段及双整数参数的integer/natural规则",
         );
       const values = rule.mock
         .slice(rule.mock.indexOf("(") + 1, -1)

@@ -6474,7 +6474,7 @@ try {
     mock_custom_rule_id: "total",
     field_type: "number",
     match_type: "wildcard",
-    match_rule: "total*",
+    match_rule: "{total*,sum}",
     match_case: 1,
     mock_type: 1,
     mock_rule_content: "@integer(3,3)",
@@ -6638,9 +6638,11 @@ try {
       `[data-edit-mock-field="${nativeProject.settings.mockFieldRules[1].id}"]`,
     )
     .click();
-  await page.getByText("字段名（仅支持单星号）", { exact: true }).waitFor();
-  await page.locator("#mock-field-pattern").fill("*total");
-  await page.screenshot({ path: "/tmp/local-api-native-star-mock.png" });
+  await page
+    .getByText("字段名（单星号/花括号候选项）", { exact: true })
+    .waitFor();
+  await page.locator("#mock-field-pattern").fill("{*total,sum}");
+  await page.screenshot({ path: "/tmp/local-api-native-brace-mock.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6650,7 +6652,7 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   const editedStarRule = (await app.store.get(nativeProjectId)).settings
     .mockFieldRules[1];
-  assert.equal(editedStarRule.pattern, "*total");
+  assert.equal(editedStarRule.pattern, "{*total,sum}");
   assert.equal(editedStarRule.apipostSource.matchType, "wildcard");
 
   const templateModern = structuredClone(nativeModern);
