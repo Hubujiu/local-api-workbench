@@ -7,7 +7,7 @@ export function runSQLiteProcess(input) {
     const child = fork(
       new URL("./database-process-entry.mjs", import.meta.url),
       {
-        execArgv: ["--max-old-space-size=64"],
+        execArgv: ["--max-old-space-size=16"],
         env: {
           ...process.env,
           NODE_OPTIONS: "",

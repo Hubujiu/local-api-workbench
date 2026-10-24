@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, fork } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -119,3 +119,66 @@ test("SQLite process errors settle and subsequent independent operations work", 
     7,
   );
 });
+
+for (const disconnect of [false, true]) {
+  test(
+    `SQLite supervisor terminates native work when ${disconnect ? "parent channel is lost" : "parent deadline enforcement is absent"}`,
+    { timeout: 8000 },
+    async (t) => {
+      const root = await mkdtemp(path.join(tmpdir(), "sqlite-supervisor-"));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const file = path.join(root, "values.db");
+      const db = new DatabaseSync(file);
+      db.exec("CREATE TABLE sample(x)");
+      db.close();
+      const child = fork(
+        new URL("../src/database-process-entry.mjs", import.meta.url),
+        {
+          execArgv: ["--max-old-space-size=16"],
+          stdio: ["ignore", "ignore", "ignore", "ipc"],
+          serialization: "advanced",
+        },
+      );
+      let forced = false,
+        disconnectTimer;
+      const started = Date.now();
+      const outcome = await new Promise((resolve, reject) => {
+        const failSafe = setTimeout(() => {
+          forced = true;
+          child.kill("SIGKILL");
+        }, 5000);
+        child.once("error", reject);
+        child.once("exit", (code, signal) => {
+          clearTimeout(failSafe);
+          clearTimeout(disconnectTimer);
+          resolve({ code, signal });
+        });
+        child.send(
+          { filename: file, sql: heavy, parameters: [], mode: "read" },
+          (error) => {
+            if (error) reject(error);
+          },
+        );
+        if (disconnect)
+          disconnectTimer = setTimeout(() => {
+            if (child.connected) child.disconnect();
+          }, 500);
+      });
+      assert.equal(
+        forced,
+        false,
+        "the supervisor must end native execution without test cleanup killing it",
+      );
+      assert.notEqual(
+        outcome.code,
+        0,
+        "the native query must not report success",
+      );
+      assert(Date.now() - started < 4500);
+      assert.equal(
+        (await querySQLiteBounded(file, "SELECT 9 AS value")).rows[0].value,
+        9,
+      );
+    },
+  );
+}
