@@ -7016,6 +7016,15 @@ try {
         "prefix:OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==:suffix",
       ),
   );
+  await page.waitForFunction(() => {
+    const result = document
+      .querySelector("#dynamic-result")
+      .getBoundingClientRect();
+    const content = document
+      .querySelector("#dialog-content")
+      .getBoundingClientRect();
+    return result.top >= content.top && result.bottom <= content.bottom;
+  });
   await page.screenshot({ path: "/tmp/local-api-embedded-body-template.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
