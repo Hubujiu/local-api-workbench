@@ -6615,6 +6615,10 @@ try {
     value: "env",
     current_value: "env-pipeline",
   };
+  templateModern.global.envs[0].env_var_list.data = {
+    value: { token: "env" },
+    current_value: { token: "env-pipeline" },
+  };
   const variableTemplateAPI = modernApipostFixture().apis[1];
   variableTemplateAPI.target_id = "variable-template-api";
   variableTemplateAPI.name = "Source variable pipeline";
@@ -6633,7 +6637,7 @@ try {
       id: "template-before",
       name: "Template variable",
       enabled: 1,
-      data: 'apt.setVar("shared","pre-pipeline");',
+      data: 'apt.setVar("data",{token:"pre-pipeline"});',
     },
   ];
   variableTemplateAPI.request.post_tasks = [
@@ -6974,7 +6978,7 @@ try {
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify("ENV-PIPELINE"),
   );
-  await page.locator("#dynamic-value").fill("{{shared|lower()}}");
+  await page.locator("#dynamic-value").fill("{{data.token|lower()}}");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
@@ -7059,7 +7063,7 @@ try {
   ).requests.find((r) => r.id === variableTemplateRequest.id);
   assert.equal(
     variableTemplateSaved.query[0].dynamic.value,
-    "{{shared|lower()}}",
+    "{{data.token|lower()}}",
   );
   assert.equal(
     variableTemplateSaved.bodyDynamic.apipost_body.value,

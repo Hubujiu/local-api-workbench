@@ -48,7 +48,7 @@ export function parseApipostFunctionTemplate(value) {
     );
   const variable =
     !match &&
-    /^\{\{([A-Za-z_][A-Za-z0-9_]{0,99})((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)+)\}\}$/.exec(
+    /^\{\{([A-Za-z_][A-Za-z0-9_]*(?:\.(?:[A-Za-z_][A-Za-z0-9_]*|0|[1-9][0-9]{0,3})){0,7})((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)+)\}\}$/.exec(
       value,
     );
   const literal =
@@ -59,11 +59,16 @@ export function parseApipostFunctionTemplate(value) {
     );
   if (!match && !variable && !literal)
     throw Error(
-      "仅支持完整函数、单层变量或引号文本及白名单加工链，不支持嵌套或拼接",
+      "仅支持完整函数、安全点路径变量或引号文本及白名单加工链，不支持嵌套表达式或外部拼接",
     );
   if (
     variable &&
-    ["__proto__", "prototype", "constructor"].includes(variable[1])
+    (variable[1].length > 100 ||
+      variable[1]
+        .split(".")
+        .some((part) =>
+          ["__proto__", "prototype", "constructor"].includes(part),
+        ))
   )
     throw Error("原版加工链变量名称无效");
   const suffix = match ? match[3] : variable ? variable[2] : literal[3];

@@ -48,7 +48,7 @@ test("source pipelines stay bounded and reject unsupported expressions before ru
   for (const value of [
     "{{$function.fn_seed(raw)|unknown}}",
     "{{$function.fn_seed(raw)|fn_upper(arg)}}",
-    "{{value.path|fn_upper}}",
+    "{{value[path]|fn_upper}}",
     "{{$function.fn_seed(raw)|fn_upper|}}",
   ])
     assert.throws(() => parseApipostFunctionTemplate(value));

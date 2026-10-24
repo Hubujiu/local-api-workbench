@@ -860,7 +860,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       anyTemplates = true;
       validateApipostTemplateRequest(request);
       request.importNotes.push(
-        "Query/Header/表单/完整正文原版函数模板为受限子集：原样函数参数、单层变量或引号文本起始，有限基本类型结果；首函数抛错保留首段模板，后续抛错保留上一步值。允许响应后置脚本及仅改变量的前置脚本；禁止前置请求修改/SDK模式及其他动态值组合，结果不再次插值。",
+        "Query/Header/表单/完整正文原版函数模板为受限子集：原样函数参数、安全点路径变量或引号文本起始，有限基本类型结果；首函数抛错保留首段模板，后续抛错保留上一步值。允许响应后置脚本及仅改变量的前置脚本；禁止前置请求修改/SDK模式及其他动态值组合，结果不再次插值。",
       );
     }
   }

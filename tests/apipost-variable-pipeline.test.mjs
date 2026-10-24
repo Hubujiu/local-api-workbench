@@ -51,7 +51,7 @@ test("variable pipelines reject structured inputs, unsafe names and excess trans
   for (const value of [
     "{{__proto__|upper}}",
     "{{constructor|upper}}",
-    "{{token.path|upper}}",
+    "{{token[path]|upper}}",
   ])
     await assert.rejects(resolveDynamicValue(spec(value), {}, []));
   let reads = 0;
@@ -129,7 +129,7 @@ test("modern variable and literal pipelines import without a function registry a
   assert.deepEqual(seen, { q: "ENV-VALUE", body: "RAW\\NTEXT-tail" });
   for (const extra of [
     "prefix {{shared|upper}}",
-    "{{shared.path|upper}}",
+    "{{shared[path]|upper}}",
     "{{shared|fn_missing}}",
   ]) {
     const bad = structuredClone(doc),

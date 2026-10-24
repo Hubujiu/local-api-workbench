@@ -53,13 +53,20 @@ export async function resolveApipostFunctionTemplate(
   let initial;
   if (!name) {
     if (parsed.variable) {
-      const descriptor = Object.getOwnPropertyDescriptor(
-        variables,
-        parsed.variable,
-      );
-      if (descriptor && !Object.hasOwn(descriptor, "value"))
-        throw Error("原版加工链不读取访问器变量");
-      initial = descriptor?.value;
+      const ownDescriptor = (object, key) => {
+        if (object === null || object === undefined) return undefined;
+        const descriptor = Object.getOwnPropertyDescriptor(object, key);
+        if (descriptor && !Object.hasOwn(descriptor, "value"))
+          throw Error("原版加工链不读取访问器变量");
+        return descriptor;
+      };
+      const direct = ownDescriptor(variables, parsed.variable);
+      if (direct) initial = direct.value;
+      else {
+        initial = variables;
+        for (const part of parsed.variable.split("."))
+          initial = ownDescriptor(initial, part)?.value;
+      }
       if (initial === undefined) initial = baseExpression;
     } else initial = parsed.literal;
     if (
