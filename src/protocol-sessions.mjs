@@ -1,3 +1,6 @@
+import { StringDecoder } from "node:string_decoder";
+import { protocolPayload } from "./protocol-payload.mjs";
+import { openWebSocket } from "./websocket-client.mjs";
 import {
   boundedSSEParser,
   validSSEHandshake,
@@ -17,14 +20,27 @@ export class ProtocolSessions {
     return session;
   }
   snapshot(id) {
-    const { id: sessionId, type, state, events, createdAt } = this.get(id);
-    return { id: sessionId, type, state, events, createdAt };
+    const {
+      id: sessionId,
+      type,
+      state,
+      events,
+      createdAt,
+      error,
+    } = this.get(id);
+    return {
+      id: sessionId,
+      type,
+      state,
+      events,
+      createdAt,
+      ...(error ? { error } : {}),
+    };
   }
   event(session, direction, data) {
     const text = String(data);
     session.bytes += Buffer.byteLength(text);
     if (session.bytes > 8 * 1024 * 1024) {
-      this.stop(session.id);
       throw Error("会话数据超过 8 MiB");
     }
     session.events.push({
@@ -74,46 +90,53 @@ export class ProtocolSessions {
     const failed = (error) => {
       if (session.state === "closed") return;
       session.state = "error";
+      session.error = String(error.message || error).slice(0, 1000);
       try {
         this.event(session, "error", error.message || error);
       } catch {}
       session.socket?.destroy?.();
+      session.socket?.terminate?.();
       session.socket?.close?.();
       session.controller?.abort();
       clearTimeout(session.deadline);
     };
     try {
       if (type === "websocket") {
-        if (!["ws:", "wss:"].includes(new URL(input.url).protocol))
-          throw Error("必须使用 ws:// 或 wss://");
-        const socket = new WebSocket(input.url, input.protocols || []);
+        const socket = openWebSocket(input);
         session.socket = socket;
-        socket.addEventListener("open", () => {
+        socket.once("open", () => {
+          if (session.state !== "connecting") {
+            socket.terminate();
+            return;
+          }
           session.state = "open";
         });
-        socket.addEventListener("message", async (event) => {
+        socket.on("message", (buffer, binary) => {
+          if (session.state !== "open") return;
           try {
             this.event(
               session,
               "received",
-              typeof event.data === "string"
-                ? event.data
-                : Buffer.from(await event.data.arrayBuffer()).toString(
-                    "base64",
-                  ),
+              buffer.toString(binary ? "base64" : "utf8"),
             );
+            session.events.at(-1).encoding = binary ? "base64" : "utf8";
           } catch (error) {
             failed(error);
           }
         });
-        socket.addEventListener("error", () =>
-          failed(Error("WebSocket 连接失败")),
+        socket.on("error", (error) =>
+          failed(Error("WebSocket 连接或消息失败: " + error.message)),
         );
-        socket.addEventListener("close", () => {
+        socket.once("close", () => {
           if (session.state !== "error") session.state = "closed";
           clearTimeout(session.deadline);
+          session.socket = null;
         });
       } else if (type === "tcp") {
+        const receiveEncoding = input.receiveEncoding ?? "utf8";
+        if (!["utf8", "hex", "base64"].includes(receiveEncoding))
+          throw Error("TCP 接收编码无效");
+        const decoder = new StringDecoder("utf8");
         const port = Number(input.port);
         if (!input.host || !Number.isInteger(port) || port < 1 || port > 65535)
           throw Error("TCP 地址无效");
@@ -123,14 +146,39 @@ export class ProtocolSessions {
           if (session.state === "connecting") failed(Error("TCP 连接超时"));
         });
         socket.on("connect", () => {
+          if (session.state !== "connecting") {
+            socket.destroy();
+            return;
+          }
           session.state = "open";
           socket.setTimeout(0);
         });
         socket.on("data", (data) => {
           try {
-            this.event(session, "received", data.toString("utf8"));
+            if (session.state !== "open") return;
+            const text =
+              receiveEncoding === "utf8"
+                ? decoder.write(data)
+                : data.toString(receiveEncoding);
+            if (text) {
+              this.event(session, "received", text);
+              session.events.at(-1).encoding = receiveEncoding;
+            }
           } catch (error) {
             failed(error);
+          }
+        });
+        socket.on("end", () => {
+          if (receiveEncoding === "utf8" && session.state === "open") {
+            try {
+              const text = decoder.end();
+              if (text) {
+                this.event(session, "received", text);
+                session.events.at(-1).encoding = "utf8";
+              }
+            } catch (error) {
+              failed(error);
+            }
           }
         });
         socket.on("error", failed);
@@ -179,11 +227,28 @@ export class ProtocolSessions {
     const session = this.get(id);
     if (session.state !== "open" || session.type === "sse")
       throw Error("当前会话不可发送消息");
-    if (typeof message !== "string" || Buffer.byteLength(message) > 1024 * 1024)
-      throw Error("消息超过 1 MiB");
-    if (session.type === "websocket") session.socket.send(message);
-    else session.socket.write(message);
-    this.event(session, "sent", message);
+    const payload = protocolPayload(message);
+    this.event(
+      session,
+      "sent",
+      payload.buffer.toString(payload.binary ? "base64" : "utf8"),
+    );
+    const recorded = session.events.at(-1);
+    recorded.encoding = payload.binary ? "base64" : "utf8";
+    recorded.sendState = "queued";
+    const complete = (error) => {
+      recorded.sendState = error ? "failed" : "written";
+      if (error) {
+        session.state = "error";
+        session.error = "协议发送失败，远端结果未确认，不会自动重试";
+        session.socket?.destroy?.();
+        session.socket?.terminate?.();
+        clearTimeout(session.deadline);
+      }
+    };
+    if (session.type === "websocket")
+      session.socket.send(payload.buffer, { binary: payload.binary }, complete);
+    else session.socket.write(payload.buffer, complete);
     return this.snapshot(id);
   }
   stop(id) {
@@ -192,7 +257,9 @@ export class ProtocolSessions {
     session.state = "closed";
     clearTimeout(session.deadline);
     session.socket?.destroy?.();
+    session.socket?.terminate?.();
     session.socket?.close?.();
+    session.socket = null;
     session.controller?.abort();
   }
   close() {

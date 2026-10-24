@@ -1,3 +1,5 @@
+import { protocolPayload } from "./protocol-payload.mjs";
+import { openWebSocket } from "./websocket-client.mjs";
 import { boundedSSEParser, validSSEHandshake } from "./sse-parser.mjs";
 import net from "node:net";
 
@@ -60,11 +62,13 @@ export function exchangeTCP(
 ) {
   if (!host || !Number.isInteger(Number(port)) || port < 1 || port > 65535)
     throw Error("TCP 地址或端口无效");
-  if (Buffer.byteLength(message) > 1024 * 1024) throw Error("消息超过 1 MiB");
+  if (signal?.aborted) return Promise.reject(Error("TCP 请求已取消"));
+  const payload = protocolPayload(message);
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0,
-      done = false;
+      done = false,
+      timedOut = false;
     const socket = net.connect({ host, port: Number(port) });
     const finish = (error) => {
       if (done) return;
@@ -73,14 +77,28 @@ export function exchangeTCP(
       socket.destroy();
       signal?.removeEventListener("abort", abort);
       if (error) reject(error);
-      else resolve({ body: Buffer.concat(chunks).toString("utf8"), size });
+      else {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          body: buffer.toString("utf8"),
+          base64: buffer.toString("base64"),
+          size,
+          timedOut,
+          partial: timedOut,
+        });
+      }
     };
     const abort = () => finish(Error("TCP 请求已取消"));
     const timer = setTimeout(
-      () => (chunks.length ? finish() : finish(Error("TCP 请求超时"))),
+      () => {
+        timedOut = true;
+        chunks.length ? finish() : finish(Error("TCP 请求超时"));
+      },
       Math.min(30000, Math.max(100, Number(duration) || 3000)),
     );
-    socket.on("connect", () => socket.write(message));
+    socket.on("connect", () => {
+      if (!done) socket.write(payload.buffer);
+    });
     socket.on("data", (chunk) => {
       size += chunk.length;
       if (size > 1024 * 1024) finish(Error("TCP 响应超过 1 MiB"));
@@ -93,49 +111,71 @@ export function exchangeTCP(
   });
 }
 
-export function exchangeWebSocket(
-  { url, message = "", protocols = [], duration = 3000, maxMessages = 20 },
-  signal,
-) {
-  const target = new URL(url);
-  if (!["ws:", "wss:"].includes(target.protocol))
-    throw Error("必须使用 ws:// 或 wss://");
-  if (Buffer.byteLength(message) > 1024 * 1024) throw Error("消息超过 1 MiB");
+export function exchangeWebSocket(input, signal) {
+  const { message = "", duration = 3000, maxMessages = 20 } = input;
+  if (signal?.aborted) return Promise.reject(Error("WebSocket 已取消"));
+  const payload = protocolPayload(message),
+    socket = openWebSocket(input);
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, protocols),
-      messages = [];
+    const messages = [];
     let done = false,
-      size = 0;
+      size = 0,
+      timedOut = false,
+      closeCode,
+      closeReason;
     const finish = (error) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      socket.close();
+      socket.terminate();
       if (error) reject(error);
-      else resolve({ messages, protocol: socket.protocol });
+      else
+        resolve({
+          messages,
+          protocol: socket.protocol,
+          timedOut,
+          ...(closeCode !== undefined ? { closeCode, closeReason } : {}),
+        });
     };
     const abort = () => finish(Error("WebSocket 已取消"));
     const timer = setTimeout(
-      () => finish(),
+      () => {
+        timedOut = true;
+        finish();
+      },
       Math.min(30000, Math.max(100, Number(duration) || 3000)),
     );
-    socket.addEventListener("open", () => {
-      if (message) socket.send(message);
+    const limit = Number.isFinite(Number(maxMessages))
+      ? Math.min(100, Math.max(1, Math.floor(Number(maxMessages))))
+      : 20;
+    socket.once("open", () => {
+      if (done) return;
+      if (payload.buffer.length || typeof message !== "string")
+        socket.send(payload.buffer, { binary: payload.binary }, (error) => {
+          if (error) finish(error);
+        });
     });
-    socket.addEventListener("message", async (event) => {
-      const data =
-        typeof event.data === "string"
-          ? event.data
-          : Buffer.from(await event.data.arrayBuffer()).toString("base64");
+    socket.on("message", (buffer, binary) => {
+      if (done) return;
+      const data = buffer.toString(binary ? "base64" : "utf8");
       size += Buffer.byteLength(data);
       if (size > 1024 * 1024) return finish(Error("WebSocket 响应超过 1 MiB"));
-      messages.push({ data, receivedAt: new Date().toISOString() });
-      if (messages.length >= Math.min(100, Math.max(1, maxMessages))) finish();
+      messages.push({
+        data,
+        encoding: binary ? "base64" : "utf8",
+        receivedAt: new Date().toISOString(),
+      });
+      if (messages.length >= limit) finish();
     });
-    socket.addEventListener("close", () => finish());
-    socket.addEventListener("error", () => finish(Error("WebSocket 连接失败")));
-    if (signal?.aborted) abort();
-    else signal?.addEventListener("abort", abort, { once: true });
+    socket.once("close", (code, reason) => {
+      closeCode = code;
+      closeReason = reason.toString("utf8");
+      finish();
+    });
+    socket.on("error", (error) =>
+      finish(Error("WebSocket 连接或消息失败: " + error.message)),
+    );
+    signal?.addEventListener("abort", abort, { once: true });
   });
 }
