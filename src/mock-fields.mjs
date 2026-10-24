@@ -209,6 +209,38 @@ export function normalizeMockFieldRules(rules = []) {
   let tokens = 0;
   return rules.map((rule) => {
     if (!rule || typeof rule !== "object") throw Error("字段Mock规则无效");
+    if (rule.apipostSource !== undefined) {
+      const source = rule.apipostSource;
+      if (
+        !source ||
+        typeof source !== "object" ||
+        Array.isArray(source) ||
+        Object.keys(source).some((key) => !["projectId", "id"].includes(key)) ||
+        [source.projectId, source.id].some(
+          (value) => typeof value !== "string" || !value || value.length > 200,
+        ) ||
+        !["integer", "number"].includes(rule.type) ||
+        typeof rule.pattern !== "string" ||
+        !/^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern) ||
+        typeof rule.mock !== "string" ||
+        !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
+      )
+        throw Error(
+          "Apipost自定义Mock暂仅支持精确字段及双整数参数的integer/natural规则",
+        );
+      const values = rule.mock
+        .slice(rule.mock.indexOf("(") + 1, -1)
+        .split(",")
+        .map(Number);
+      if (
+        values.some(
+          (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
+        ) ||
+        values[0] > values[1] ||
+        (rule.mock.startsWith("@natural") && values[0] < 0)
+      )
+        throw Error("Apipost自定义Mock数值范围无效");
+    }
     const compiled = compilePattern(rule.pattern);
     tokens += compiled.reduce((sum, items) => sum + items.length, 0);
     if (tokens > 20000) throw Error("字段Mock通配符总复杂度超过上限");
@@ -227,6 +259,9 @@ export function normalizeMockFieldRules(rules = []) {
       mock: rule.mock,
       enabled: rule.enabled !== false,
       ignoreCase: rule.ignoreCase === true,
+      ...(rule.apipostSource
+        ? { apipostSource: { ...rule.apipostSource } }
+        : {}),
     };
   });
 }
@@ -484,6 +519,11 @@ export function createFieldSampler(settings = {}) {
     const type = fieldType(schema);
     for (const rule of rules)
       if (
+        (!rule.apipostSource ||
+          (rule.type === type &&
+            schema.type === rule.type &&
+            schema.minimum === undefined &&
+            schema.maximum === undefined)) &&
         (rule.type === "any" ||
           rule.type === type ||
           (rule.type === "number" && type === "integer")) &&
@@ -492,8 +532,18 @@ export function createFieldSampler(settings = {}) {
           rule.ignoreCase ? name.toLowerCase() : name,
           budget,
         )
-      )
+      ) {
+        if (
+          rule.apipostSource &&
+          ["exclusiveMinimum", "exclusiveMaximum", "multipleOf"].some(
+            (key) => schema[key] !== undefined,
+          )
+        )
+          throw Error(
+            "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
+          );
         return validateValue(generate(rule.expression, schema), schema);
+      }
     return undefined;
   };
 }

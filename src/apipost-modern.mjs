@@ -1,3 +1,4 @@
+import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
   apipostTemplateStages,
@@ -230,8 +231,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of ["mock_custom_rules", "db_link"])
-    reject(global[name], "global." + name);
+  for (const name of ["db_link"]) reject(global[name], "global." + name);
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
     resource,
@@ -781,6 +781,16 @@ export function importModernApipost(source, project, { sync = false } = {}) {
             source.project_id,
             source,
             { parameterTemplates: true },
+          ),
+        }
+      : {}),
+    ...(!empty(global.mock_custom_rules) ||
+    project.settings?.mockFieldRules !== undefined
+      ? {
+          mockFieldRules: mergeApipostMockRules(
+            empty(global.mock_custom_rules) ? [] : global.mock_custom_rules,
+            project.settings?.mockFieldRules || [],
+            source.project_id,
           ),
         }
       : {}),

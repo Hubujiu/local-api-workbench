@@ -6458,6 +6458,18 @@ try {
       data: 'pm.setRequestHeader("X-Native-Function", fn_wrap("native"));',
     },
   ];
+  nativeModern.global.mock_custom_rules = [
+    {
+      mock_custom_rule_id: "count",
+      field_type: "integer",
+      match_type: "exact",
+      match_rule: "Count",
+      match_case: -1,
+      mock_type: 1,
+      mock_rule_content: "@natural(7,7)",
+      intro: "Native count",
+    },
+  ];
   const nativeFiles = nativeDirectoryFixture(nativeModern);
   for (const file of nativeFiles.files) {
     const filePath = path.join(nativeImportRoot, file.path);
@@ -6578,6 +6590,30 @@ try {
   assert.deepEqual(
     editedImportedFunction.apipostSource,
     nativeProject.settings.functions[0].apipostSource,
+  );
+
+  await page.locator('[data-settings-anchor="settings-mock-fields"]').click();
+  await page.locator("[data-edit-mock-field]").first().click();
+  await page
+    .locator("#dialog-content")
+    .getByText("原版导入规则", { exact: false })
+    .waitFor();
+  await page.locator("#mock-field-value").fill("@natural(8,8)");
+  await page.screenshot({ path: "/tmp/local-api-native-numeric-mock.png" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.reload();
+  const editedNativeRule = (await app.store.get(nativeProjectId)).settings
+    .mockFieldRules[0];
+  assert.equal(editedNativeRule.mock, "@natural(8,8)");
+  assert.deepEqual(
+    editedNativeRule.apipostSource,
+    nativeProject.settings.mockFieldRules[0].apipostSource,
   );
 
   const templateModern = structuredClone(nativeModern);

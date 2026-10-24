@@ -4067,12 +4067,15 @@ function editMockField(id) {
   const ruleId = id || uid();
   modal(
     existing ? "编辑字段 Mock 规则" : "新建字段 Mock 规则",
-    `<label>规则名称</label><input id="mock-field-name" value="${esc(existing?.name || "")}"><label>字段通配符</label><input id="mock-field-pattern" value="${esc(existing?.pattern || "{name,*_name}")}"><label>字段类型</label><select id="mock-field-type">${["any", "string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${(existing?.type || "string") === type ? "selected" : ""}>${type}</option>`).join("")}</select><label>Mock 表达式 / JSON 常量</label><input id="mock-field-value" value="${esc(existing?.mock ?? "@cname()")}"><label><input id="mock-field-ignore-case" type="checkbox" ${existing?.ignoreCase ? "checked" : ""}>忽略字段名大小写</label>`,
+    `${existing?.apipostSource ? "<p>原版导入规则：仅精确匹配字段名及相同数值类型；带 minimum/maximum 的字段不采用此规则。仅支持 integer/natural 双整数参数，保留原版来源。其他规则请另行新建。</p>" : ""}<label>规则名称</label><input id="mock-field-name" value="${esc(existing?.name || "")}"><label>字段通配符</label><input id="mock-field-pattern" value="${esc(existing?.pattern || "{name,*_name}")}"><label>字段类型</label><select id="mock-field-type">${["any", "string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${(existing?.type || "string") === type ? "selected" : ""}>${type}</option>`).join("")}</select><label>Mock 表达式 / JSON 常量</label><input id="mock-field-value" value="${esc(existing?.mock ?? "@cname()")}"><label><input id="mock-field-ignore-case" type="checkbox" ${existing?.ignoreCase ? "checked" : ""}>忽略字段名大小写</label>`,
     async () => {
       project.settings ??= {};
       project.settings.mockFieldRules ??= [];
       const rule = {
         id: ruleId,
+        ...(existing?.apipostSource
+          ? { apipostSource: { ...existing.apipostSource } }
+          : {}),
         name: $("#mock-field-name").value,
         pattern: $("#mock-field-pattern").value,
         type: $("#mock-field-type").value,
