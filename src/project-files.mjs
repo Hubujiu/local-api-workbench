@@ -66,6 +66,7 @@ async function apply(directory, project) {
     servers: "envs/servers.json",
     history: "history/requests.json",
     runs: "history/runs.json",
+    protocolRuns: "history/protocols.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
     parameterDictionary: "settings/parameter-dictionary.json",
@@ -138,6 +139,7 @@ export async function readProject(directory, expectedId) {
     servers: "envs/servers.json",
     history: "history/requests.json",
     runs: "history/runs.json",
+    protocolRuns: "history/protocols.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
     parameterDictionary: "settings/parameter-dictionary.json",
@@ -150,7 +152,7 @@ export async function readProject(directory, expectedId) {
     } catch (error) {
       if (
         error.code === "ENOENT" &&
-        ["history", "runs", "parameterDictionary"].includes(key)
+        ["history", "runs", "protocolRuns", "parameterDictionary"].includes(key)
       )
         project[key] = [];
       else throw error;
@@ -170,6 +172,7 @@ export function projectFingerprint(project) {
     "updatedAt",
     "history",
     "runs",
+    "protocolRuns",
   ])
     delete copy[key];
   const canonical = (value) =>

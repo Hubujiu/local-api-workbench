@@ -1,3 +1,4 @@
+import { normalizeGrpcDefinitions, validateProtocolRuns } from "./grpc.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { requestCookieHeader } from "./request-cookies.mjs";
 import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
@@ -160,6 +161,7 @@ export class Store {
       cases: [],
       protocols: [],
       runs: [],
+      protocolRuns: [],
       history: [],
       dictionary: [],
       parameterDictionary: [],
@@ -203,6 +205,11 @@ export class Store {
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
+    if (p.settings?.grpcDefinitions !== undefined)
+      p.settings.grpcDefinitions = normalizeGrpcDefinitions(
+        p.settings.grpcDefinitions,
+      );
+    validateProtocolRuns(p.protocolRuns ?? []);
     validateResources(p.settings || {});
     validateSharedAuthSettings(p.settings);
     validateSharedScriptSettings(p.settings);
@@ -275,6 +282,7 @@ export class Store {
           if (!activity && previous) {
             next.history = previous.history;
             next.runs = previous.runs;
+            next.protocolRuns = previous.protocolRuns || [];
           }
           next.updatedAt = new Date().toISOString();
           await writeProject(this.directory(p.id), next);

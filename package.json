@@ -19,6 +19,8 @@
   "license": "MIT",
   "dependencies": {
     "@faker-js/faker": "10.6.0",
+    "@grpc/grpc-js": "1.14.6",
+    "@grpc/proto-loader": "0.8.1",
     "@msgpack/msgpack": "3.1.2",
     "@smithy/signature-v4": "5.7.4",
     "@xmldom/xmldom": "0.9.12",
@@ -29,6 +31,7 @@
     "mongodb": "7.7.0",
     "mysql2": "3.24.6",
     "pg": "8.16.3",
+    "protobufjs": "7.6.6",
     "quickjs-emscripten": "0.31.0",
     "tough-cookie": "6.0.2",
     "xpath": "0.0.35",

@@ -1588,7 +1588,14 @@ export function restoreProject(document) {
     )
       throw Error("环境数据无效");
   }
-  for (const key of ["history", "runs", "dictionary", "documents", "cases"]) {
+  for (const key of [
+    "history",
+    "runs",
+    "protocolRuns",
+    "dictionary",
+    "documents",
+    "cases",
+  ]) {
     if (
       document[key] !== undefined &&
       (!Array.isArray(document[key]) ||
@@ -1626,6 +1633,7 @@ export function restoreProject(document) {
   copy.plans = (copy.plans || []).map(snapshotPlan);
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
+  copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
   return copy;

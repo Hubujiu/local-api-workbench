@@ -1,4 +1,9 @@
 import {
+  inspectGrpcSchema,
+  normalizeGrpcDefinition,
+  executeGrpc,
+} from "./grpc.mjs";
+import {
   assertSDKCurlDefinition,
   sdkCurlDefinition,
 } from "./script-url-export.mjs";
@@ -91,6 +96,7 @@ export async function createApp({
   }
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
+  let grpcActive = 0;
   let server;
   const json = (res, status, data) => {
     res.writeHead(status, {
@@ -498,6 +504,141 @@ export async function createApp({
               200,
               u.searchParams.get("format") === "openapi" ? exportOpenAPI(p) : p,
             );
+          if (action === "grpc-schema" && req.method === "POST")
+            return json(res, 200, inspectGrpcSchema((await body(req)).proto));
+          if (action === "grpc-definitions") {
+            const definitions = p.settings.grpcDefinitions || [];
+            if (req.method === "GET") return json(res, 200, definitions);
+            if (req.method === "POST") {
+              const definition = normalizeGrpcDefinition(await body(req));
+              const index = definitions.findIndex(
+                (item) => item.id === definition.id,
+              );
+              const next = definitions.slice();
+              if (index < 0) next.push(definition);
+              else next[index] = definition;
+              p.settings.grpcDefinitions = next;
+              await store.save(p);
+              return json(res, 200, {
+                definition,
+                projectRevision: p.revision,
+              });
+            }
+            if (req.method === "DELETE") {
+              const data = await body(req);
+              if (!definitions.some((item) => item.id === data.id))
+                throw Error("gRPC定义不存在");
+              p.settings.grpcDefinitions = definitions.filter(
+                (item) => item.id !== data.id,
+              );
+              await store.save(p);
+              return json(res, 200, { deleted: true });
+            }
+          }
+          if (action === "grpc-runs" && req.method === "GET")
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter((item) => item.type === "grpc"),
+            );
+          if (action === "grpc-run" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some(
+                (key) =>
+                  ![
+                    "definitionId",
+                    "service",
+                    "method",
+                    "timeoutMs",
+                    "messages",
+                    "metadata",
+                    "tls",
+                    "runId",
+                  ].includes(key),
+              )
+            )
+              throw Error("gRPC执行字段无效，地址及proto须通过定义保存");
+            const source = (p.settings.grpcDefinitions || []).find(
+              (item) => item.id === data.definitionId,
+            );
+            if (!source) throw Error("gRPC定义不存在");
+            const definition = normalizeGrpcDefinition({
+              ...source,
+              ...Object.fromEntries(
+                ["service", "method", "timeoutMs"]
+                  .filter((key) => data[key] !== undefined)
+                  .map((key) => [key, data[key]]),
+              ),
+            });
+            const runId = data.runId || id();
+            if (
+              typeof runId !== "string" ||
+              !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+              controllers.has(runId)
+            )
+              throw Error("gRPC运行标识无效或正在使用");
+            if (grpcActive >= 5) throw Error("最多同时执行5个gRPC调用");
+            const controller = new AbortController();
+            controllers.set(runId, controller);
+            grpcActive++;
+            try {
+              const request = Object.fromEntries(
+                ["target", "proto", "service", "method", "timeoutMs"].map(
+                  (key) => [key, definition[key]],
+                ),
+              );
+              const result = await executeGrpc(
+                {
+                  ...request,
+                  ...Object.fromEntries(
+                    ["messages", "metadata", "tls"]
+                      .filter((key) => data[key] !== undefined)
+                      .map((key) => [key, data[key]]),
+                  ),
+                },
+                controller.signal,
+              );
+              const record = {
+                id: result.id,
+                runId,
+                type: "grpc",
+                createdAt: new Date().toISOString(),
+                definition,
+                definitionHash: createHash("sha256")
+                  .update(JSON.stringify(definition))
+                  .digest("hex"),
+                requestMessages: structuredClone(data.messages ?? [{}]),
+                result: { ...result, metadata: [], trailers: [] },
+                status:
+                  result.status.code === 0
+                    ? "passed"
+                    : result.status.code === 1
+                      ? "cancelled"
+                      : "failed",
+              };
+              try {
+                await store.append(p.id, "protocolRuns", record);
+              } catch (error) {
+                return json(res, 200, {
+                  ...result,
+                  runId,
+                  recordId: null,
+                  recordSaved: false,
+                  persistenceError: String(error.message).slice(0, 500),
+                });
+              }
+              return json(res, 200, {
+                ...result,
+                runId,
+                recordId: record.id,
+                recordSaved: true,
+              });
+            } finally {
+              controllers.delete(runId);
+              grpcActive--;
+            }
+          }
           if (action === "protocol" && req.method === "POST") {
             const b = await body(req);
             const fn = {
