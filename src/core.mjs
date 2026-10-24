@@ -1,3 +1,4 @@
+import { snapshotGrpcStep, grpcPlanRequest } from "./grpc-plan.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { sdkOpenAPIDefinition } from "./script-url-openapi.mjs";
 import {
@@ -378,19 +379,28 @@ export function snapshotPlan(plan) {
     provenance: plan.provenance || { fields: {}, steps: {} },
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
-    steps: plan.steps.map((s) => ({
-      id: s.id || id(),
-      name: s.name || s.request?.name || "步骤",
-      enabled: s.enabled !== false,
-      request: {
-        ...normalizeRequest(structuredClone(s.request)),
-        serviceSnapshot: true,
-        parametersSnapshot: true,
-        authSnapshot: true,
-        sharedScriptsSnapshot: true,
-      },
-      expectedStatus: s.expectedStatus,
-    })),
+    steps: plan.steps.map((s) =>
+      s.type === "grpc"
+        ? {
+            ...snapshotGrpcStep(s),
+            id: s.id || id(),
+            name: s.name || s.grpc?.definition?.name || "gRPC",
+            enabled: s.enabled !== false,
+          }
+        : {
+            id: s.id || id(),
+            name: s.name || s.request?.name || "步骤",
+            enabled: s.enabled !== false,
+            request: {
+              ...normalizeRequest(structuredClone(s.request)),
+              serviceSnapshot: true,
+              parametersSnapshot: true,
+              authSnapshot: true,
+              sharedScriptsSnapshot: true,
+            },
+            expectedStatus: s.expectedStatus,
+          },
+    ),
   };
 }
 export async function runPlan(
@@ -406,11 +416,13 @@ export async function runPlan(
     cookieSession,
     databaseQuery,
     executionContext,
+    executeGrpc,
   } = {},
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
-  for (const step of snapshot.steps) step.request.serviceSnapshot = true;
+  for (const step of snapshot.steps)
+    if (step.type !== "grpc") step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -456,247 +468,292 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
-      validateApipostTemplateRequest(step.request);
-      const executeOperation = async (operation, budget) => {
-        if (operation.type !== "database")
-          return applyOperation(operation, vars);
-        if (
-          operation.enabled !== undefined &&
-          typeof operation.enabled !== "boolean"
-        )
-          throw Error("数据库操作启用标识必须为布尔值");
-        if (operation.enabled === false) return;
-        if (
-          operation.path !== undefined &&
-          (typeof operation.path !== "string" || operation.path.length > 1000)
-        )
-          throw Error("数据库提取路径无效");
-        if ((operation.parameters || []).length > 1000)
-          throw Error("数据库绑定参数最多1000项");
-        if (++budget.count > 5 || performance.now() > budget.deadline)
-          throw Error("每阶段数据库操作最多5项、累计10秒");
-        if (!databaseQuery) throw Error("此执行入口未授权数据库前后置操作");
-        if (
-          !operation.name ||
-          typeof operation.name !== "string" ||
-          operation.name.length > 100 ||
-          ["__proto__", "constructor", "prototype"].includes(operation.name)
-        )
-          throw Error("数据库结果变量名无效");
-        if (
-          typeof operation.connectionId !== "string" ||
-          typeof operation.sql !== "string" ||
-          operation.sql.length > 50000 ||
-          !Array.isArray(operation.parameters ?? [])
-        )
-          throw Error("数据库操作配置无效");
-        const result = await databaseQuery(
-          {
-            connectionId: operation.connectionId,
-            sql: operation.sql,
-            parameters: interpolate(operation.parameters || [], vars),
-          },
+      if (step.type === "grpc") {
+        const validated = snapshotGrpcStep(step);
+        if (!executeGrpc) throw Error("此执行入口未授权gRPC调用");
+        const messages = interpolate(validated.grpc.messages, vars);
+        record.type = "grpc";
+        record.grpc = structuredClone(validated.grpc);
+        record.grpc.messages = messages;
+        const result = await executeGrpc(
+          grpcPlanRequest(validated, messages),
           signal,
         );
-        if (signal?.aborted) throw Error("数据库操作已取消");
-        if (performance.now() > budget.deadline)
-          throw Error("数据库阶段超过10秒，结果未应用");
-        const value = jsonPath(result, operation.path || "$");
-        if (value === undefined) throw Error("数据库结果提取路径不存在");
-        vars[operation.name] = structuredClone(value);
-      };
-      const beforeOperations = { ...vars };
-      const beforeDatabaseBudget = {
-        count: 0,
-        deadline: performance.now() + 10000,
-      };
-      for (const operation of step.request.before || []) {
-        await executeOperation(operation, beforeDatabaseBudget);
-        record.logs.push({
-          phase: "before",
-          type: operation.type,
-          name: operation.name,
-        });
-      }
-      applyLegacyVariables(scopes, beforeOperations, vars);
-      const localVariables = {};
-      let configuredRequest = structuredClone(step.request),
-        finalizedBody;
-      const beforeStages = scriptStages(configuredRequest, "before");
-      if (beforeStages.length) {
-        const templateRequest =
-          ["query", "headers", "path", "cookies", "form"].some((group) =>
-            (configuredRequest[group] || []).some((row) =>
-              isApipostFunctionSource(row.dynamic?.source),
-            ),
-          ) ||
-          Object.values(configuredRequest.bodyDynamic || {}).some((spec) =>
-            isApipostFunctionSource(spec?.source),
+        record.grpcResult = { ...result, metadata: [], trailers: [] };
+        const evidence = {
+          status: result.status.code,
+          duration: result.durationMs,
+          headers: {},
+          body: JSON.stringify(result.messages),
+        };
+        record.assertions = evaluateAssertions(evidence, validated.assertions);
+        record.status =
+          result.status.code === validated.expectedStatus &&
+          record.assertions.every((a) => a.passed)
+            ? "passed"
+            : "failed";
+        if (record.status === "passed")
+          for (const extraction of validated.extract) {
+            const value = extractResponseValue(evidence, extraction);
+            const destination = extraction.scope || "runtime";
+            if (destination === "runtime") {
+              scopes.runtime[extraction.name] = value;
+              scopes.hidden = scopes.hidden.filter(
+                (name) => name !== extraction.name,
+              );
+            } else if (destination === "environment")
+              scopes.environment[extraction.name] = value;
+            else if (destination === "global")
+              scopes.globals[extraction.name] = value;
+            else
+              throw Error("gRPC计划提取仅支持runtime/environment/global作用域");
+            record.extracted[extraction.name] = value;
+          }
+        await commitScopes();
+      } else {
+        validateApipostTemplateRequest(step.request);
+        const executeOperation = async (operation, budget) => {
+          if (operation.type !== "database")
+            return applyOperation(operation, vars);
+          if (
+            operation.enabled !== undefined &&
+            typeof operation.enabled !== "boolean"
+          )
+            throw Error("数据库操作启用标识必须为布尔值");
+          if (operation.enabled === false) return;
+          if (
+            operation.path !== undefined &&
+            (typeof operation.path !== "string" || operation.path.length > 1000)
+          )
+            throw Error("数据库提取路径无效");
+          if ((operation.parameters || []).length > 1000)
+            throw Error("数据库绑定参数最多1000项");
+          if (++budget.count > 5 || performance.now() > budget.deadline)
+            throw Error("每阶段数据库操作最多5项、累计10秒");
+          if (!databaseQuery) throw Error("此执行入口未授权数据库前后置操作");
+          if (
+            !operation.name ||
+            typeof operation.name !== "string" ||
+            operation.name.length > 100 ||
+            ["__proto__", "constructor", "prototype"].includes(operation.name)
+          )
+            throw Error("数据库结果变量名无效");
+          if (
+            typeof operation.connectionId !== "string" ||
+            typeof operation.sql !== "string" ||
+            operation.sql.length > 50000 ||
+            !Array.isArray(operation.parameters ?? [])
+          )
+            throw Error("数据库操作配置无效");
+          const result = await databaseQuery(
+            {
+              connectionId: operation.connectionId,
+              sql: operation.sql,
+              parameters: interpolate(operation.parameters || [], vars),
+            },
+            signal,
           );
-        const templateSnapshot = templateRequest
-          ? structuredClone(configuredRequest)
-          : null;
-        scriptPhase = "before";
-        const scripted = await (
-          configuredRequest.sharedBeforeScripts?.length
-            ? runScriptSequence
-            : runScript
-        )(
-          configuredRequest.sharedBeforeScripts?.length
-            ? beforeStages
-            : configuredRequest.beforeScript,
-          {
-            allowNetwork: true,
-            executionContext,
-            variables: vars,
-            scopes,
-            localVariables,
-            functions: snapshot.functions || [],
-            request: configuredRequest,
-          },
-          { signal, cookieSession },
-        );
-        record.subrequests.push(
-          ...scripted.networkRequests.map((item) => ({
-            ...item,
+          if (signal?.aborted) throw Error("数据库操作已取消");
+          if (performance.now() > budget.deadline)
+            throw Error("数据库阶段超过10秒，结果未应用");
+          const value = jsonPath(result, operation.path || "$");
+          if (value === undefined) throw Error("数据库结果提取路径不存在");
+          vars[operation.name] = structuredClone(value);
+        };
+        const beforeOperations = { ...vars };
+        const beforeDatabaseBudget = {
+          count: 0,
+          deadline: performance.now() + 10000,
+        };
+        for (const operation of step.request.before || []) {
+          await executeOperation(operation, beforeDatabaseBudget);
+          record.logs.push({
             phase: "before",
-          })),
-        );
-        record.logs.push(
-          ...scripted.logs.map((message) => ({ phase: "before", message })),
-        );
-        record.assertions.push(
-          ...scripted.tests.map((test) => ({ ...test, phase: "before" })),
-        );
-        if (scripted.tests.some((test) => !test.passed))
-          throw Error("前置脚本断言失败");
-        scopes = createScopes(scripted.variables, scripted.scopes);
-        replaceVariables(vars, effectiveScopes(scopes));
-        replaceVariables(localVariables, scripted.localVariables || {});
-        if (
-          templateSnapshot &&
-          (!isDeepStrictEqual(templateSnapshot, scripted.request) ||
-            scripted.finalBody !== undefined)
-        )
-          throw Error(
-            "原版模板前置脚本暂仅允许变量修改，不支持请求修改或最终正文覆盖",
+            type: operation.type,
+            name: operation.name,
+          });
+        }
+        applyLegacyVariables(scopes, beforeOperations, vars);
+        const localVariables = {};
+        let configuredRequest = structuredClone(step.request),
+          finalizedBody;
+        const beforeStages = scriptStages(configuredRequest, "before");
+        if (beforeStages.length) {
+          const templateRequest =
+            ["query", "headers", "path", "cookies", "form"].some((group) =>
+              (configuredRequest[group] || []).some((row) =>
+                isApipostFunctionSource(row.dynamic?.source),
+              ),
+            ) ||
+            Object.values(configuredRequest.bodyDynamic || {}).some((spec) =>
+              isApipostFunctionSource(spec?.source),
+            );
+          const templateSnapshot = templateRequest
+            ? structuredClone(configuredRequest)
+            : null;
+          scriptPhase = "before";
+          const scripted = await (
+            configuredRequest.sharedBeforeScripts?.length
+              ? runScriptSequence
+              : runScript
+          )(
+            configuredRequest.sharedBeforeScripts?.length
+              ? beforeStages
+              : configuredRequest.beforeScript,
+            {
+              allowNetwork: true,
+              executionContext,
+              variables: vars,
+              scopes,
+              localVariables,
+              functions: snapshot.functions || [],
+              request: configuredRequest,
+            },
+            { signal, cookieSession },
           );
-        configuredRequest = normalizeRequest(scripted.request);
-        finalizedBody = scripted.finalBody;
-      }
-      await commitScopes();
-      record.request = await resolveDynamicRequest(
-        configuredRequest,
-        {
-          ...vars,
-          ...localVariables,
-        },
-        snapshot.functions || [],
-        interpolate,
-        finalizedBody,
-      );
-      if (prepareRequest) record.request = prepareRequest(record.request);
-      record.response = await execute(record.request, signal, {
-        cookieSession,
-      });
-      if (record.response.cookieError)
-        record.logs.push({
-          phase: "cookies",
-          message: record.response.cookieError,
-        });
-      record.assertions.push(
-        ...evaluateAssertions(record.response, record.request.assertions).map(
-          (assertion) => ({ ...assertion, phase: "response" }),
-        ),
-      );
-      for (const extraction of record.request.extract) {
-        const value = await extractResponse(record.response, extraction);
-        const destination = extraction.scope || "runtime";
-        if (destination === "local") localVariables[extraction.name] = value;
-        else if (destination === "environment")
-          scopes.environment[extraction.name] = value;
-        else if (destination === "global")
-          scopes.globals[extraction.name] = value;
-        else if (destination === "runtime") {
-          scopes.runtime[extraction.name] = value;
-          scopes.hidden = scopes.hidden.filter(
-            (name) => name !== extraction.name,
+          record.subrequests.push(
+            ...scripted.networkRequests.map((item) => ({
+              ...item,
+              phase: "before",
+            })),
           );
-        } else throw Error("未知提取变量作用域");
-        replaceVariables(vars, effectiveScopes(scopes));
-        record.extracted[extraction.name] = value;
-      }
-      const beforeAfterOperations = { ...vars };
-      const afterDatabaseBudget = {
-        count: 0,
-        deadline: performance.now() + 10000,
-      };
-      for (const operation of record.request.after || []) {
-        await executeOperation(operation, afterDatabaseBudget);
-        record.logs.push({
-          phase: "after",
-          type: operation.type,
-          name: operation.name,
-        });
-      }
-      applyLegacyVariables(scopes, beforeAfterOperations, vars);
-      const afterStages = scriptStages(record.request, "after");
-      if (afterStages.length) {
-        scriptPhase = "after";
-        const scripted = await (
-          record.request.sharedAfterScripts?.length
-            ? runScriptSequence
-            : runScript
-        )(
-          record.request.sharedAfterScripts?.length
-            ? afterStages
-            : record.request.afterScript,
+          record.logs.push(
+            ...scripted.logs.map((message) => ({ phase: "before", message })),
+          );
+          record.assertions.push(
+            ...scripted.tests.map((test) => ({ ...test, phase: "before" })),
+          );
+          if (scripted.tests.some((test) => !test.passed))
+            throw Error("前置脚本断言失败");
+          scopes = createScopes(scripted.variables, scripted.scopes);
+          replaceVariables(vars, effectiveScopes(scopes));
+          replaceVariables(localVariables, scripted.localVariables || {});
+          if (
+            templateSnapshot &&
+            (!isDeepStrictEqual(templateSnapshot, scripted.request) ||
+              scripted.finalBody !== undefined)
+          )
+            throw Error(
+              "原版模板前置脚本暂仅允许变量修改，不支持请求修改或最终正文覆盖",
+            );
+          configuredRequest = normalizeRequest(scripted.request);
+          finalizedBody = scripted.finalBody;
+        }
+        await commitScopes();
+        record.request = await resolveDynamicRequest(
+          configuredRequest,
           {
-            allowNetwork: true,
-            executionContext,
-            variables: vars,
-            scopes,
-            localVariables,
-            functions: snapshot.functions || [],
-            request: record.request,
-            response: record.response,
+            ...vars,
+            ...localVariables,
           },
-          { signal, cookieSession },
+          snapshot.functions || [],
+          interpolate,
+          finalizedBody,
         );
-        record.subrequests.push(
-          ...scripted.networkRequests.map((item) => ({
-            ...item,
-            phase: "after",
-          })),
-        );
-        record.visualization = scripted.visualization;
-        if (scripted.responseOverride)
-          record.scriptResponse = scripted.responseOverride;
-        scopes = createScopes(scripted.variables, scripted.scopes);
-        replaceVariables(vars, effectiveScopes(scopes));
-        record.logs.push(
-          ...scripted.logs.map((message) => ({ phase: "after", message })),
-        );
+        if (prepareRequest) record.request = prepareRequest(record.request);
+        record.response = await execute(record.request, signal, {
+          cookieSession,
+        });
+        if (record.response.cookieError)
+          record.logs.push({
+            phase: "cookies",
+            message: record.response.cookieError,
+          });
         record.assertions.push(
-          ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
+          ...evaluateAssertions(record.response, record.request.assertions).map(
+            (assertion) => ({ ...assertion, phase: "response" }),
+          ),
         );
+        for (const extraction of record.request.extract) {
+          const value = await extractResponse(record.response, extraction);
+          const destination = extraction.scope || "runtime";
+          if (destination === "local") localVariables[extraction.name] = value;
+          else if (destination === "environment")
+            scopes.environment[extraction.name] = value;
+          else if (destination === "global")
+            scopes.globals[extraction.name] = value;
+          else if (destination === "runtime") {
+            scopes.runtime[extraction.name] = value;
+            scopes.hidden = scopes.hidden.filter(
+              (name) => name !== extraction.name,
+            );
+          } else throw Error("未知提取变量作用域");
+          replaceVariables(vars, effectiveScopes(scopes));
+          record.extracted[extraction.name] = value;
+        }
+        const beforeAfterOperations = { ...vars };
+        const afterDatabaseBudget = {
+          count: 0,
+          deadline: performance.now() + 10000,
+        };
+        for (const operation of record.request.after || []) {
+          await executeOperation(operation, afterDatabaseBudget);
+          record.logs.push({
+            phase: "after",
+            type: operation.type,
+            name: operation.name,
+          });
+        }
+        applyLegacyVariables(scopes, beforeAfterOperations, vars);
+        const afterStages = scriptStages(record.request, "after");
+        if (afterStages.length) {
+          scriptPhase = "after";
+          const scripted = await (
+            record.request.sharedAfterScripts?.length
+              ? runScriptSequence
+              : runScript
+          )(
+            record.request.sharedAfterScripts?.length
+              ? afterStages
+              : record.request.afterScript,
+            {
+              allowNetwork: true,
+              executionContext,
+              variables: vars,
+              scopes,
+              localVariables,
+              functions: snapshot.functions || [],
+              request: record.request,
+              response: record.response,
+            },
+            { signal, cookieSession },
+          );
+          record.subrequests.push(
+            ...scripted.networkRequests.map((item) => ({
+              ...item,
+              phase: "after",
+            })),
+          );
+          record.visualization = scripted.visualization;
+          if (scripted.responseOverride)
+            record.scriptResponse = scripted.responseOverride;
+          scopes = createScopes(scripted.variables, scripted.scopes);
+          replaceVariables(vars, effectiveScopes(scopes));
+          record.logs.push(
+            ...scripted.logs.map((message) => ({ phase: "after", message })),
+          );
+          record.assertions.push(
+            ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
+          );
+        }
+        await commitScopes();
+        const hasStatusAssertion = record.assertions.some(
+          (a) => a.target === "status",
+        );
+        const statusOK =
+          snapshot.statusPolicy === "strict200"
+            ? record.response.status === 200
+            : step.expectedStatus !== undefined
+              ? record.response.status === step.expectedStatus
+              : hasStatusAssertion ||
+                (record.response.status >= 200 && record.response.status < 300);
+        record.status =
+          statusOK && record.assertions.every((a) => a.passed)
+            ? "passed"
+            : "failed";
       }
-      await commitScopes();
-      const hasStatusAssertion = record.assertions.some(
-        (a) => a.target === "status",
-      );
-      const statusOK =
-        snapshot.statusPolicy === "strict200"
-          ? record.response.status === 200
-          : step.expectedStatus !== undefined
-            ? record.response.status === step.expectedStatus
-            : hasStatusAssertion ||
-              (record.response.status >= 200 && record.response.status < 300);
-      record.status =
-        statusOK && record.assertions.every((a) => a.passed)
-          ? "passed"
-          : "failed";
     } catch (error) {
+      record.status = "failed";
       if (error.networkRequests)
         record.subrequests.push(
           ...error.networkRequests.map((item) => ({
@@ -708,7 +765,10 @@ export async function runPlan(
       scopes.globals = committedScopes.globals;
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
-      if (!record.request) {
+      if (step.type === "grpc") {
+        record.type = "grpc";
+        record.grpc ||= structuredClone(step.grpc);
+      } else if (!record.request) {
         record.request = structuredClone(step.request);
         record.requestUnresolved = true;
       }

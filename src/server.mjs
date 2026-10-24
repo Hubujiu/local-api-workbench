@@ -1,3 +1,4 @@
+import { recordPlanRun } from "./plan-evidence.mjs";
 import { reflectGrpc } from "./grpc-reflection.mjs";
 import {
   inspectGrpcSchema,
@@ -117,6 +118,15 @@ export async function createApp({
       grpcActive--;
     }
   };
+  const executePlanGrpc = (input, parentSignal) =>
+    withGrpcTask(undefined, (_id, childSignal) =>
+      executeGrpc(
+        input,
+        parentSignal
+          ? AbortSignal.any([parentSignal, childSignal])
+          : childSignal,
+      ),
+    );
   let server;
   const json = (res, status, data) => {
     res.writeHead(status, {
@@ -204,6 +214,7 @@ export async function createApp({
           store,
           ...mcp,
           debugEnvironments,
+          grpcExecutor: executePlanGrpc,
           onProgress: (progress) => {
             const activity = mcpActivities.get(activityId);
             if (activity)
@@ -957,12 +968,20 @@ export async function createApp({
             const b = await body(req),
               plan = p.plans.find((x) => x.id === b.planId);
             if (!plan) throw Error("计划不存在");
+            const runId = b.runId || id();
+            if (
+              typeof runId !== "string" ||
+              !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+              controllers.has(runId)
+            )
+              throw Error("计划运行标识无效或正在使用");
             const controller = new AbortController();
-            controllers.set(b.runId, controller);
+            controllers.set(runId, controller);
             try {
               const environmentId = b.environmentId || plan.environmentId;
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
+                executeGrpc: executePlanGrpc,
                 ...scopedExecution(store, p, environmentId),
                 databaseQuery: (operation, signal) =>
                   databaseSessions.query(p.id, operation, signal),
@@ -971,10 +990,13 @@ export async function createApp({
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
               });
-              await store.append(p.id, "runs", { ...run, source: "manual" });
-              return json(res, 200, run);
+              return json(
+                res,
+                200,
+                await recordPlanRun(store, p.id, run, "manual"),
+              );
             } finally {
-              controllers.delete(b.runId);
+              controllers.delete(runId);
             }
           }
           if (action === "load" && req.method === "POST") {

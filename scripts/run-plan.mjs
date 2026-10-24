@@ -1,3 +1,5 @@
+import { executeGrpc } from "../src/grpc.mjs";
+import { recordPlanRun } from "../src/plan-evidence.mjs";
 import { projectCookieSession } from "../src/cookie-jar.mjs";
 import { scopedExecution } from "../src/variable-scopes.mjs";
 import {
@@ -28,12 +30,13 @@ if (!args.includes("--project") || !args.includes("--plan")) {
     const environmentId = args.includes("--environment")
       ? option("--environment")
       : plan.environmentId;
-    const run = await runPlan(
+    let run = await runPlan(
       plan,
       environmentVariables(project, environmentId),
       executeRequest,
       {
         ...scopedExecution(store, project, environmentId),
+        executeGrpc,
         cookieSession: projectCookieSession(store, project, environmentId),
         signal: controller.signal,
         prepareRequest: (request) =>
@@ -42,12 +45,12 @@ if (!args.includes("--project") || !args.includes("--plan")) {
           process.stderr.write(`${step.status.toUpperCase()} ${step.name}\n`),
       },
     );
-    await store.append(project.id, "runs", { ...run, source: "cli" });
+    run = await recordPlanRun(store, project.id, run, "cli");
     const json = JSON.stringify(run, null, 2) + "\n";
     if (args.includes("--output"))
       await writeFile(option("--output"), json, { mode: 0o600 });
     process.stdout.write(json);
-    process.exitCode = run.status === "passed" ? 0 : 1;
+    process.exitCode = !run.recordSaved ? 2 : run.status === "passed" ? 0 : 1;
   } catch (e) {
     process.stderr.write(e.message + "\n");
     process.exitCode = 2;

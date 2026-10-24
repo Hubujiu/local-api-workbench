@@ -510,6 +510,54 @@ test("gRPC backend concurrency slots are bounded and released after cancellation
       headers,
       body: JSON.stringify({ definitionId: definition.id, runId, method }),
     });
+  const plan = await (
+    await fetch(base + "/plans", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        steps: [
+          {
+            type: "grpc",
+            grpc: {
+              definition: { ...definition, method: "Unary" },
+              messages: [{}],
+            },
+          },
+        ],
+      }),
+    })
+  ).json();
+  const enabled = await (
+    await fetch(app.url + "/api/mcp/config", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        enabled: true,
+        projects: [project.id],
+        write: true,
+        execute: true,
+      }),
+    })
+  ).json();
+  const mcp = async () =>
+    await (
+      await fetch(app.url + "/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + enabled.token,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: {
+            name: "localapi_execute_flow",
+            arguments: { projectId: project.id, planId: plan.id },
+          },
+        }),
+      })
+    ).json();
   for (const id of ids) pending.push(invoke(id));
   await remote.fiveStarted;
   const rejected = await invoke("sixth");
@@ -522,9 +570,29 @@ test("gRPC backend concurrency slots are bounded and released after cancellation
   });
   assert.equal(discovery.ok, false);
   assert.match((await discovery.json()).error, /5个/);
+  const saturated = await mcp();
+  assert.notEqual(saturated.result.isError, true);
+  const busy = JSON.parse(saturated.result.content[0].text);
+  assert.equal(busy.status, "failed");
+  assert.match(busy.results[0].error, /5个/);
+  const planBusy = await (
+    await fetch(base + "/run", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ planId: plan.id }),
+    })
+  ).json();
+  assert.equal(planBusy.status, "failed");
+  assert.match(planBusy.results[0].error, /5个/);
   await Promise.all(ids.map(cancel));
   for (const response of await Promise.all(pending))
     assert.equal((await response.json()).status.code, 1);
+  const resumed = await mcp();
+  assert.equal(
+    JSON.parse(resumed.result.content[0].text).status,
+    "passed",
+    JSON.stringify(resumed),
+  );
   const next = await invoke("after-cancel", "Unary");
   assert.equal(next.status, 200);
   assert.equal((await next.json()).status.code, 0);

@@ -1,3 +1,5 @@
+import { recordPlanRun } from "./plan-evidence.mjs";
+import { executeGrpc } from "./grpc.mjs";
 import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
 import { applyMCPInput } from "./mcp-request-input.mjs";
 import {
@@ -32,8 +34,20 @@ export function createMCP({
   execute = false,
   debugEnvironments = new Map(),
   onProgress = () => {},
+  grpcExecutor = executeGrpc,
 }) {
   const allowed = new Set(projects);
+  let grpcActive = 0;
+  const executePlanGrpc = async (input, signal) => {
+    if (!write || !execute) throw Error("gRPC执行未授权");
+    if (grpcActive >= 5) throw Error("最多同时执行5个gRPC调用");
+    grpcActive++;
+    try {
+      return await grpcExecutor(input, signal);
+    } finally {
+      grpcActive--;
+    }
+  };
   const tools = [
     ["localapi_list_projects", "列出已明确授权的本地项目", {}],
     [
@@ -145,6 +159,15 @@ export function createMCP({
   }
   const str = { type: "string" },
     projectArg = { projectId: str };
+  addTool(
+    "list_grpc_definitions",
+    "读取项目gRPC定义摘要，不连接远端",
+    projectArg,
+  );
+  addTool("get_grpc_definition", "读取gRPC完整定义供计划冻结，不连接远端", {
+    ...projectArg,
+    definitionId: str,
+  });
   addTool("list_execution_flows", "查询计划摘要", projectArg);
   addTool("get_execution_flow", "按ID读取完整计划", {
     ...projectArg,
@@ -292,6 +315,23 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_list_grpc_definitions":
+              output = (p.settings?.grpcDefinitions || []).map(
+                ({ id, name, target, service, method }) => ({
+                  id,
+                  name,
+                  target,
+                  service,
+                  method,
+                }),
+              );
+              break;
+            case "localapi_get_grpc_definition":
+              output = (p.settings?.grpcDefinitions || []).find(
+                (x) => x.id === args.definitionId,
+              );
+              if (!output) throw Error("gRPC定义不存在");
+              break;
             case "localapi_list_apis": {
               const folders = [
                 ...new Set([
@@ -526,6 +566,7 @@ export function createMCP({
                 executeRequest,
                 {
                   ...scopedExecution(store, p, environmentId),
+                  executeGrpc: executePlanGrpc,
                   cookieSession: projectCookieSession(store, p, environmentId),
                   onStep: (step) =>
                     onProgress({
@@ -540,7 +581,7 @@ export function createMCP({
                 },
               );
               output.environmentId = environmentId;
-              await store.append(p.id, "runs", { ...output, source: "mcp" });
+              output = await recordPlanRun(store, p.id, output, "mcp");
               break;
             }
           }
