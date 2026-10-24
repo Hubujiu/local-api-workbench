@@ -167,7 +167,8 @@ test("gRPC backend retains remote status, bounds streams and honors deadline/can
   assert.equal(overflow.truncated, true);
   assert.equal(overflow.messages.length, 100);
 });
-test("gRPC validation refuses file imports, unsafe targets, coercion and extra fields before connecting", async () => {
+test("gRPC validation refuses file imports, unsafe targets, coercion and extra fields before connecting", async (t) => {
+  const remote = await fixture(t);
   assert.throws(
     () => inspectGrpcSchema('syntax="proto3"; import "../../secret.proto";'),
     /导入/,
@@ -185,12 +186,14 @@ test("gRPC validation refuses file imports, unsafe targets, coercion and extra f
     /地址/,
   );
   const input = {
-    target: "grpc://127.0.0.1:1",
+    target: remote.target,
     proto,
     service: "fixture.Echo",
     method: "Unary",
   };
   for (const message of [
+    { toString: 1 },
+    { valueOf: 1 },
     { count: "bad" },
     { count: 4294967296 },
     { big: 9007199254740992 },
@@ -512,6 +515,13 @@ test("gRPC backend concurrency slots are bounded and released after cancellation
   const rejected = await invoke("sixth");
   assert.equal(rejected.ok, false);
   assert.match((await rejected.json()).error, /5个/);
+  const discovery = await fetch(base + "/grpc-reflection", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ target: remote.target, service: "fixture.Echo" }),
+  });
+  assert.equal(discovery.ok, false);
+  assert.match((await discovery.json()).error, /5个/);
   await Promise.all(ids.map(cancel));
   for (const response of await Promise.all(pending))
     assert.equal((await response.json()).status.code, 1);

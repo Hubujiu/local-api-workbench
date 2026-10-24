@@ -1,3 +1,4 @@
+import { reflectGrpc } from "./grpc-reflection.mjs";
 import {
   inspectGrpcSchema,
   normalizeGrpcDefinition,
@@ -97,6 +98,25 @@ export async function createApp({
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   let grpcActive = 0;
+  const withGrpcTask = async (candidate, operation) => {
+    const runId = candidate || id();
+    if (
+      typeof runId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+      controllers.has(runId)
+    )
+      throw Error("gRPC运行标识无效或正在使用");
+    if (grpcActive >= 5) throw Error("最多同时执行5个gRPC调用");
+    const controller = new AbortController();
+    controllers.set(runId, controller);
+    grpcActive++;
+    try {
+      return await operation(runId, controller.signal);
+    } finally {
+      controllers.delete(runId);
+      grpcActive--;
+    }
+  };
   let server;
   const json = (res, status, data) => {
     res.writeHead(status, {
@@ -504,8 +524,14 @@ export async function createApp({
               200,
               u.searchParams.get("format") === "openapi" ? exportOpenAPI(p) : p,
             );
+          if (action === "grpc-reflection" && req.method === "POST") {
+            const { runId, ...input } = await body(req);
+            return await withGrpcTask(runId, async (runId, signal) =>
+              json(res, 200, { ...(await reflectGrpc(input, signal)), runId }),
+            );
+          }
           if (action === "grpc-schema" && req.method === "POST")
-            return json(res, 200, inspectGrpcSchema((await body(req)).proto));
+            return json(res, 200, inspectGrpcSchema(await body(req)));
           if (action === "grpc-definitions") {
             const definitions = p.settings.grpcDefinitions || [];
             if (req.method === "GET") return json(res, 200, definitions);
@@ -571,22 +597,20 @@ export async function createApp({
                   .map((key) => [key, data[key]]),
               ),
             });
-            const runId = data.runId || id();
-            if (
-              typeof runId !== "string" ||
-              !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
-              controllers.has(runId)
-            )
-              throw Error("gRPC运行标识无效或正在使用");
-            if (grpcActive >= 5) throw Error("最多同时执行5个gRPC调用");
-            const controller = new AbortController();
-            controllers.set(runId, controller);
-            grpcActive++;
-            try {
+            return await withGrpcTask(data.runId, async (runId, signal) => {
               const request = Object.fromEntries(
-                ["target", "proto", "service", "method", "timeoutMs"].map(
-                  (key) => [key, definition[key]],
-                ),
+                [
+                  "target",
+                  "proto",
+                  "files",
+                  "protoName",
+                  "schema",
+                  "service",
+                  "method",
+                  "timeoutMs",
+                ]
+                  .filter((key) => definition[key] !== undefined)
+                  .map((key) => [key, definition[key]]),
               );
               const result = await executeGrpc(
                 {
@@ -597,7 +621,7 @@ export async function createApp({
                       .map((key) => [key, data[key]]),
                   ),
                 },
-                controller.signal,
+                signal,
               );
               const record = {
                 id: result.id,
@@ -634,10 +658,7 @@ export async function createApp({
                 recordId: record.id,
                 recordSaved: true,
               });
-            } finally {
-              controllers.delete(runId);
-              grpcActive--;
-            }
+            });
           }
           if (action === "protocol" && req.method === "POST") {
             const b = await body(req);

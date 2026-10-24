@@ -1,96 +1,20 @@
+import {
+  compileGrpcSchema as compile,
+  normalizeGrpcSource,
+  grpcSource,
+} from "./grpc-schema.mjs";
+export { inspectGrpcSchema } from "./grpc-schema.mjs";
 import * as grpc from "@grpc/grpc-js";
-import * as protoLoader from "@grpc/proto-loader";
 import protobuf from "protobufjs";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
-const schemas = new Map(),
-  unsafe = new Set(["__proto__", "prototype", "constructor"]);
+const unsafe = new Set(["__proto__", "prototype", "constructor"]);
 const MAX_BYTES = 1024 * 1024;
 const plain = (value) =>
   value !== null &&
   typeof value === "object" &&
   !Array.isArray(value) &&
   [Object.prototype, null].includes(Object.getPrototypeOf(value));
-function compile(proto) {
-  if (
-    typeof proto !== "string" ||
-    !proto.trim() ||
-    Buffer.byteLength(proto) > 65536 ||
-    proto.includes("\0")
-  )
-    throw Error("gRPC proto须为不超过64KiB的文本");
-  if (schemas.has(proto)) return schemas.get(proto);
-  const root = new protobuf.Root(),
-    parsed = protobuf.parse(proto, root, { keepCase: true });
-  if (parsed.imports?.length || parsed.weakImports?.length)
-    throw Error("gRPC暂不支持外部proto导入；请使用完整内联定义");
-  root.resolveAll();
-  let nodes = 0;
-  const check = (value, depth = 0) => {
-    if (depth > 32 || ++nodes > 10000) throw Error("gRPC proto结构过大");
-    if (value && typeof value === "object")
-      for (const [key, item] of Object.entries(value)) {
-        if (unsafe.has(key)) throw Error("gRPC proto含保留标识");
-        check(item, depth + 1);
-      }
-  };
-  const json = root.toJSON();
-  check(json);
-  const definition = protoLoader.fromJSON(json, {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    bytes: String,
-    defaults: true,
-    oneofs: true,
-    json: true,
-  });
-  const methods = new Map(),
-    services = [];
-  const visit = (node) => {
-    if (node instanceof protobuf.Service) {
-      const name = node.fullName.slice(1),
-        rows = [];
-      for (const method of node.methodsArray) {
-        const desc = definition[name]?.[method.name];
-        if (!desc) throw Error("gRPC方法描述不可用");
-        methods.set(name + "/" + method.name, {
-          desc,
-          type: method.resolvedRequestType,
-        });
-        rows.push({
-          name: method.name,
-          path: desc.path,
-          requestStream: desc.requestStream,
-          responseStream: desc.responseStream,
-          requestType: method.resolvedRequestType.fullName.slice(1),
-          responseType: method.resolvedResponseType.fullName.slice(1),
-        });
-      }
-      services.push({ name, methods: rows });
-    }
-    for (const child of node.nestedArray || []) visit(child);
-  };
-  visit(root);
-  if (!services.length || methods.size > 1000)
-    throw Error("gRPC proto须含1至1000个方法");
-  const result = {
-    methods,
-    services,
-    sha256: createHash("sha256").update(proto).digest("hex"),
-  };
-  if (schemas.size >= 8) schemas.delete(schemas.keys().next().value);
-  schemas.set(proto, result);
-  return result;
-}
-export function inspectGrpcSchema(proto) {
-  const { services, sha256 } = compile(proto);
-  return {
-    sha256,
-    services: structuredClone(services),
-    externalImports: false,
-  };
-}
 function endpoint(value) {
   let url;
   try {
@@ -120,6 +44,9 @@ export function normalizeGrpcDefinition(input) {
         "name",
         "target",
         "proto",
+        "files",
+        "protoName",
+        "schema",
         "service",
         "method",
         "timeoutMs",
@@ -130,7 +57,8 @@ export function normalizeGrpcDefinition(input) {
   if (typeof id !== "string" || !/^[A-Za-z0-9_.-]{1,200}$/.test(id))
     throw Error("gRPC定义ID无效");
   endpoint(input.target);
-  const schema = compile(input.proto);
+  const source = normalizeGrpcSource(grpcSource(input));
+  const schema = compile(source);
   const service = input.service || "",
     method = input.method || "";
   if (
@@ -150,7 +78,7 @@ export function normalizeGrpcDefinition(input) {
     id,
     name: String(input.name || "gRPC").slice(0, 200),
     target: input.target,
-    proto: input.proto,
+    ...source,
     service,
     method,
     timeoutMs,
@@ -191,9 +119,14 @@ function validateMessage(type, value, state = { nodes: 0 }, depth = 0) {
       throw Error("gRPC必填字段缺失：" + field.name);
   for (const [name, item] of Object.entries(value)) {
     if (unsafe.has(name)) throw Error("gRPC消息含保留字段");
-    const field = type.fields[name];
+    const field = Object.hasOwn(type.fields, name)
+      ? type.fields[name]
+      : undefined;
     if (!field) {
-      const oneof = type.oneofs?.[name];
+      const oneof =
+        type.oneofs && Object.hasOwn(type.oneofs, name)
+          ? type.oneofs[name]
+          : undefined;
       if (
         oneof &&
         typeof item === "string" &&
@@ -332,6 +265,9 @@ export async function executeGrpc(input, signal) {
         ![
           "target",
           "proto",
+          "files",
+          "protoName",
+          "schema",
           "service",
           "method",
           "timeoutMs",
@@ -344,12 +280,21 @@ export async function executeGrpc(input, signal) {
     throw Error("gRPC调用字段无效");
   const definition = normalizeGrpcDefinition(
     Object.fromEntries(
-      ["target", "proto", "service", "method", "timeoutMs"]
+      [
+        "target",
+        "proto",
+        "files",
+        "protoName",
+        "schema",
+        "service",
+        "method",
+        "timeoutMs",
+      ]
         .filter((k) => input[k] !== undefined)
         .map((k) => [k, input[k]]),
     ),
   );
-  const selected = compile(definition.proto).methods.get(
+  const selected = compile(grpcSource(definition)).methods.get(
     definition.service + "/" + definition.method,
   );
   if (!selected) throw Error("gRPC执行必须指定服务和方法");
