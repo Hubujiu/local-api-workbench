@@ -232,11 +232,26 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char)\(([\s\S]*)\)$/.exec(value);
+    /^@(string|pick|character|char|word)(?:\(([\s\S]*)\))?$/.exec(value);
   let args;
   try {
-    args = match && JSON.parse("[" + match[2] + "]");
+    args = match && JSON.parse("[" + (match[2] ?? "") + "]");
   } catch {}
+  if (match && match[1] === "word") {
+    if (
+      !Array.isArray(args) ||
+      args.length > 2 ||
+      args.some(
+        (value) => !Number.isSafeInteger(value) || value < 0 || value > 64,
+      ) ||
+      (args.length === 2 && args[0] > args[1])
+    )
+      throw Error("原版word仅支持0至64的整数长度或有序长度范围");
+    return {
+      name: "native-word",
+      args: args.length ? [args[0], args[1] ?? args[0]] : [3, 10],
+    };
+  }
   if (match && ["character", "char"].includes(match[1])) {
     if (
       !Array.isArray(args) ||
@@ -702,13 +717,15 @@ export function createFieldSampler(settings = {}) {
             "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
           );
         return validateValue(
-          rule.apipostSource && rule.expression.name === "native-pick"
-            ? pick(rule.expression.args)
-            : rule.apipostSource && rule.expression.name === "native-string"
-              ? nativeString(rule.expression.args)
-              : rule.apipostSource && rule.expression.name === "float"
-                ? nativeFloat(rule.expression.args)
-                : generate(rule.expression, schema),
+          rule.apipostSource && rule.expression.name === "native-word"
+            ? word(integer(...rule.expression.args))
+            : rule.apipostSource && rule.expression.name === "native-pick"
+              ? pick(rule.expression.args)
+              : rule.apipostSource && rule.expression.name === "native-string"
+                ? nativeString(rule.expression.args)
+                : rule.apipostSource && rule.expression.name === "float"
+                  ? nativeFloat(rule.expression.args)
+                  : generate(rule.expression, schema),
           schema,
         );
       }

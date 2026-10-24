@@ -143,6 +143,14 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: '@character("X")',
     }),
   );
+  doc.global.mock_custom_rules.push(
+    rule({
+      mock_custom_rule_id: "word",
+      field_type: "string",
+      match_rule: "word",
+      mock_rule_content: "@word(0)",
+    }),
+  );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -156,6 +164,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       label: { type: "string" },
       gender: { type: "string" },
       code: { type: "string" },
+      word: { type: "string" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -186,6 +195,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     label: "a",
     gender: "女",
     code: "X",
+    word: "",
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -198,14 +208,19 @@ test("native numeric rules retain ordering, source identity and explicit example
     label: "a",
     gender: "女",
     code: "X",
+    word: "",
     Count: 3,
   });
   const current = await app.store.get(p.id);
   current.settings.mockFieldRules.find(
     (rule) => rule.pattern === "price",
   ).mock = "@float(3,3,2,2)";
+  current.settings.mockFieldRules.find((rule) => rule.pattern === "word").mock =
+    "@word(4)";
   await app.store.save(current);
-  const actualFloat = (await (await fetch(p.requests[0].url)).json()).price;
+  const actualResponse = await (await fetch(p.requests[0].url)).json();
+  assert.match(actualResponse.word, /^[a-z]{4}$/);
+  const actualFloat = actualResponse.price;
   assert(actualFloat > 3 && actualFloat < 4);
   assert.match(String(actualFloat), /^3\.[0-9][1-9]$/);
   const conflict = structuredClone(doc);
@@ -532,6 +547,37 @@ test("native character aliases select one ASCII character and preserve named poo
     '@char("abc",2)',
     "@character(3)",
     '@character("")',
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native word rules retain default, fixed and ranged lowercase lengths", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  for (const expression of ["@word", "@word()"]) {
+    const sample = make(expression);
+    for (let i = 0; i < 12; i++)
+      assert.match(sample("count", { type: "string" }), /^[a-z]{3,10}$/);
+  }
+  assert.equal(make("@word(0)")("count", { type: "string" }), "");
+  assert.match(make("@word(64)")("count", { type: "string" }), /^[a-z]{64}$/);
+  const ranged = make("@word(2,5)");
+  for (let i = 0; i < 12; i++)
+    assert.match(ranged("count", { type: "string" }), /^[a-z]{2,5}$/);
+  for (const expression of [
+    "@word(-1)",
+    "@word(65)",
+    "@word(5,2)",
+    "@word(1.5)",
+    '@word("3")',
+    "@word(1,2,3)",
   ])
     assert.throws(() => make(expression));
 });

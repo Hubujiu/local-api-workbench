@@ -6673,8 +6673,8 @@ try {
     )
     .click();
   assert.equal(await page.locator("#mock-field-type").inputValue(), "string");
-  await page.locator("#mock-field-value").fill('@character("number")');
-  await page.screenshot({ path: "/tmp/local-api-native-character-mock.png" });
+  await page.locator("#mock-field-value").fill("@word(4,4)");
+  await page.screenshot({ path: "/tmp/local-api-native-word-mock.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6685,7 +6685,7 @@ try {
   await page.reload();
   const editedStringRule = (await app.store.get(nativeProjectId)).settings
     .mockFieldRules[2];
-  assert.equal(editedStringRule.mock, '@character("number")');
+  assert.equal(editedStringRule.mock, "@word(4,4)");
   assert.deepEqual(
     editedStringRule.apipostSource,
     nativeProject.settings.mockFieldRules[2].apipostSource,
