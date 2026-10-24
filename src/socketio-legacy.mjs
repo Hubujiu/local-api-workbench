@@ -1,8 +1,10 @@
+import { boundLegacyPolling } from "./socketio-legacy-polling.mjs";
 import { createRequire } from "node:module";
 import WebSocket from "ws";
 import { checkedEngineIOPacket } from "./socketio-handshake.mjs";
 const require = createRequire(import.meta.url);
 const MAX = 1024 * 1024;
+const WIRE_BUDGET = Symbol("local legacy wire budget");
 let cachedManager;
 function legacyManager() {
   if (cachedManager) return cachedManager;
@@ -15,15 +17,16 @@ function legacyManager() {
   // must use bounded acquisition; the modern Engine.IO 4 implementation is untouched.
   const originalCreate = Engine.Socket.prototype.createTransport;
   Engine.Socket.prototype.createTransport = function (name) {
-    if (name !== "websocket")
-      throw Error("Socket.IO v2 currently requires websocket transport");
+    if (!["websocket", "polling"].includes(name))
+      throw Error("Unsupported legacy transport");
     const transport = originalCreate.call(this, name),
       owner = this;
     const packet = transport.onPacket,
       data = transport.onData;
-    let bytes = 0,
-      frames = 0;
+    const budget = (owner[WIRE_BUDGET] ||= { bytes: 0, frames: 0, packets: 0 });
     transport.onPacket = function (value) {
+      if (this.readyState === "closed" || ++budget.packets > 10000)
+        throw Error("Legacy packet budget exceeded or transport closed");
       try {
         if (value.type === "open") {
           const handshake = JSON.parse(value.data);
@@ -43,17 +46,22 @@ function legacyManager() {
     transport.onData = function (value) {
       if (this.readyState === "closed") return;
       try {
-        bytes +=
+        budget.bytes +=
           typeof value === "string"
             ? Buffer.byteLength(value)
             : (value.byteLength ?? value.length);
-        if (!Number.isSafeInteger(bytes) || bytes > 8 * MAX || ++frames > 10000)
+        if (
+          !Number.isSafeInteger(budget.bytes) ||
+          budget.bytes > 8 * MAX ||
+          ++budget.frames > 10000
+        )
           throw Error("Socket.IO v2 wire budget exceeded");
         return data.call(this, value);
       } catch (error) {
         this.onError("Invalid Engine.IO 3 data", error);
       }
     };
+    if (name === "polling") return boundLegacyPolling(transport);
     transport.doOpen = function () {
       try {
         this.ws = new WebSocket(this.uri(), {
@@ -100,8 +108,12 @@ export function legacySocket(url, options) {
     key: options.key,
     cert: options.cert,
     rejectUnauthorized: true,
-    transports: ["websocket"],
-    upgrade: false,
+    transports:
+      options.legacyTransport === "auto"
+        ? ["polling", "websocket"]
+        : [options.legacyTransport || "websocket"],
+    upgrade: options.legacyTransport === "auto",
+    transportOptions: { polling: { forceBase64: true } },
     reconnection: false,
     autoConnect: false,
     timeout: options.timeout,

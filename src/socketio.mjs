@@ -125,8 +125,6 @@ export function normalizeSocketIODefinition(input) {
     throw Error("Socket.IO传输类型无效");
   if (input.version !== undefined && ![2, 4].includes(input.version))
     throw Error("Socket.IO版本须为2或4");
-  if (input.version === 2 && input.transport && input.transport !== "websocket")
-    throw Error("Socket.IO v2暂仅支持WebSocket传输");
   const id = input.id || randomUUID();
   if (typeof id !== "string" || !/^[A-Za-z0-9_.-]{1,200}$/.test(id))
     throw Error("Socket.IO定义ID无效");
@@ -257,6 +255,7 @@ function connection(input) {
     definition,
     options: {
       autoConnect: false,
+      legacyTransport: transport,
       forceNew: true,
       multiplex: false,
       reconnection: false,
