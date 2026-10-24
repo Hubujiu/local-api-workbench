@@ -138,3 +138,86 @@ test("unchanged embedded fallback still checks complete serialized field bounds"
     /64KiB/,
   );
 });
+
+test("embedded Header and both form encodings use updated pre-script scope over real HTTP", async (t) => {
+  const http = await import("node:http");
+  const { runPlan, normalizeRequest } = await import("../src/core.mjs");
+  const { executeRequest } = await import("../src/runtime.mjs");
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    seen.push({
+      header: req.headers["x-token"],
+      type: req.headers["content-type"],
+      body: Buffer.concat(chunks).toString(),
+    });
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const dynamic = (source, value) => ({ source, value, functions: [] });
+  for (const bodyType of ["urlencoded", "form-data"]) {
+    const request = normalizeRequest({
+      method: "POST",
+      url: `http://127.0.0.1:${server.address().port}/`,
+      bodyType,
+      beforeScript:
+        'apt.setVar("token","actual");apt.setVar("payload","&+=%中\\n");',
+      headers: [
+        {
+          key: "x-token",
+          enabled: true,
+          value: "",
+          dynamic: dynamic(
+            "apipost-header-function",
+            "Bearer {{token|upper}}!",
+          ),
+        },
+      ],
+      form: [
+        {
+          key: "payload",
+          type: "text",
+          enabled: true,
+          value: "",
+          dynamic: dynamic(
+            "apipost-form-function",
+            "prefix:{{payload|concat(end)}}:suffix",
+          ),
+        },
+      ],
+    });
+    const run = await runPlan(
+      { steps: [{ request }] },
+      { token: "stale", payload: "stale" },
+      executeRequest,
+    );
+    assert.equal(run.status, "passed", JSON.stringify(run));
+  }
+  assert.equal(seen.length, 2);
+  for (const row of seen) assert.equal(row.header, "Bearer ACTUAL!");
+  const value = "prefix:&+=%中\nend:suffix";
+  assert.equal(new URLSearchParams(seen[0].body).get("payload"), value);
+  assert.match(seen[1].type, /multipart\/form-data/);
+  assert(seen[1].body.includes('name="payload"\r\n\r\n' + value + "\r\n"));
+  const bad = normalizeRequest({
+    method: "GET",
+    url: `http://127.0.0.1:${server.address().port}/`,
+    headers: [
+      {
+        key: "x-token",
+        value: "",
+        enabled: true,
+        dynamic: dynamic("apipost-header-function", "Bearer {{token|upper}}!"),
+      },
+    ],
+  });
+  const run = await runPlan(
+    { steps: [{ request: bad }] },
+    { token: "bad\r\nInjected: yes" },
+    executeRequest,
+  );
+  assert.equal(run.status, "failed");
+  assert.equal(seen.length, 2, "invalid Header must not reach transport");
+});

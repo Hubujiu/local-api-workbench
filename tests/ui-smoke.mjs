@@ -7016,6 +7016,7 @@ try {
         "prefix:OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==:suffix",
       ),
   );
+  await page.screenshot({ path: "/tmp/local-api-embedded-body-template.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await Promise.all([
