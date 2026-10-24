@@ -1,3 +1,4 @@
+import { encodeISO8583, decodeISO8583 } from "./iso8583-codec.mjs";
 const MAX = 1024 * 1024;
 const plain = (x) =>
   x &&
@@ -21,6 +22,14 @@ export function protocolPayload(value = "") {
   if (typeof value === "string")
     return { buffer: Buffer.from(text(value)), binary: false };
   if (!plain(value)) throw Error("协议消息必须是文本或显式编码对象");
+  if (value.format === "iso8583") {
+    const profile = structuredClone(value.profile);
+    return {
+      buffer: encodeISO8583({ ...value, profile }),
+      binary: true,
+      decode: (buffer) => decodeISO8583(profile, buffer),
+    };
+  }
   if (value.encoding !== undefined) {
     keys(value, ["encoding", "data"]);
     if (value.encoding === "utf8")

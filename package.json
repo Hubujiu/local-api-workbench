@@ -23,6 +23,7 @@
     "@grpc/proto-loader": "0.8.1",
     "@msgpack/msgpack": "3.1.2",
     "@smithy/signature-v4": "5.7.4",
+    "@tikpay/iso8583-ts": "0.4.0",
     "@xmldom/xmldom": "0.9.12",
     "engine.io-client": "6.6.7",
     "eventsource-parser": "4.1.2",

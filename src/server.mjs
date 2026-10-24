@@ -101,6 +101,18 @@ export async function createApp({
   }
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
+  const claimRun = (candidate) => {
+    const runId = candidate ?? id();
+    if (
+      typeof runId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+      controllers.has(runId)
+    )
+      throw Error("运行标识无效或正在使用");
+    const controller = new AbortController();
+    controllers.set(runId, controller);
+    return { runId, controller };
+  };
   let grpcActive = 0;
   const withGrpcTask = async (candidate, operation) => {
     const runId = candidate || id();
@@ -827,18 +839,21 @@ export async function createApp({
           }
           if (action === "protocol" && req.method === "POST") {
             const b = await body(req);
-            const fn = {
+            const handlers = {
               sse: captureSSE,
               tcp: exchangeTCP,
               websocket: exchangeWebSocket,
-            }[b.type];
-            if (!fn) throw Error("未知协议");
-            const controller = new AbortController();
-            controllers.set(b.runId, controller);
+            };
+            if (!Object.hasOwn(handlers, b.type)) throw Error("未知协议");
+            const fn = handlers[b.type];
+            const { controller, runId } = claimRun(b.runId);
             try {
-              return json(res, 200, await fn(b, controller.signal));
+              return json(res, 200, {
+                ...(await fn(b, controller.signal)),
+                runId,
+              });
             } finally {
-              controllers.delete(b.runId);
+              controllers.delete(runId);
             }
           }
           if (action === "database-connections") {
@@ -990,9 +1005,7 @@ export async function createApp({
           }
           if (action === "execute" && req.method === "POST") {
             const b = await body(req),
-              controller = new AbortController(),
-              runId = b.runId || id();
-            controllers.set(runId, controller);
+              { controller, runId } = claimRun(b.runId);
             try {
               const context = debugEnvironment(
                 p,
@@ -1161,14 +1174,13 @@ export async function createApp({
             }
           }
           if (action === "load" && req.method === "POST") {
-            const b = await body(req),
-              controller = new AbortController();
+            const b = await body(req);
             const context = debugEnvironment(
               p,
               b.environmentId,
               debugEnvironments,
             );
-            controllers.set(b.runId, controller);
+            const { controller, runId } = claimRun(b.runId);
             try {
               return json(
                 res,
@@ -1190,7 +1202,7 @@ export async function createApp({
                 }),
               );
             } finally {
-              controllers.delete(b.runId);
+              controllers.delete(runId);
             }
           }
         }

@@ -79,7 +79,17 @@ export function exchangeTCP(
       if (error) reject(error);
       else {
         const buffer = Buffer.concat(chunks);
+        let decoded, decodeError;
+        if (payload.decode) {
+          try {
+            decoded = payload.decode(buffer);
+          } catch (error) {
+            decodeError = error.message;
+          }
+        }
         resolve({
+          ...(decoded ? { decoded } : {}),
+          ...(decodeError ? { decodeError } : {}),
           body: buffer.toString("utf8"),
           base64: buffer.toString("base64"),
           size,

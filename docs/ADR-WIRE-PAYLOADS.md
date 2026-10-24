@@ -13,3 +13,5 @@ Received WebSocket events state utf8/base64 encoding, including empty binary mes
 Tests cover real TCP binary exchange, UTF-8 packet splits, saved definition reload and reuse, real WebSocket text/binary/empty frames, subprotocol/header authentication, oversized native frames, pre-abort without connection, strict TLS/mTLS, and interactive stop. The existing browser/three-platform CI remains required.
 
 REA's selected original TCP module statically identified fixed/delimited/ISO8583 modes. The original sample was not executed, and its internal implementation is not copied. The candidate iso_8583 2.6.7 ISC dependency was evaluated outside the product tree: npm audit reports a critical xmldom dependency path through jxon, so it was **not** added to production or called complete. ISO8583, original format migration, TCP response framing, TCP TLS and full original script semantics remain separate gaps.
+
+A subsequent explicit-profile ISO8583 adapter is described in [ADR-ISO8583-CODEC.md](ADR-ISO8583-CODEC.md). It uses a different dependency without the rejected XML chain; original native-profile migration is still not claimed.
