@@ -131,6 +131,7 @@ export function exchangeWebSocket(input, signal) {
     let done = false,
       size = 0,
       timedOut = false,
+      limited = false,
       closeCode,
       closeReason;
     const finish = (error) => {
@@ -145,6 +146,7 @@ export function exchangeWebSocket(input, signal) {
           messages,
           protocol: socket.protocol,
           timedOut,
+          limited,
           ...(closeCode !== undefined ? { closeCode, closeReason } : {}),
         });
     };
@@ -176,7 +178,10 @@ export function exchangeWebSocket(input, signal) {
         encoding: binary ? "base64" : "utf8",
         receivedAt: new Date().toISOString(),
       });
-      if (messages.length >= limit) finish();
+      if (messages.length >= limit) {
+        limited = true;
+        finish();
+      }
     });
     socket.once("close", (code, reason) => {
       closeCode = code;

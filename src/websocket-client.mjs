@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { createSecureContext } from "node:tls";
-export function openWebSocket(input) {
+export function websocketConfiguration(input) {
   if (typeof input.url !== "string" || input.url.length > 8192)
     throw Error("WebSocket 地址无效");
   const url = new URL(input.url);
@@ -83,14 +83,22 @@ export function openWebSocket(input) {
       throw Error("WebSocket mTLS 证书和私钥须同时提供");
     createSecureContext(tls);
   }
-  return new WebSocket(url, protocols, {
-    ...tls,
-    headers,
-    rejectUnauthorized: true,
-    handshakeTimeout: 3000,
-    maxPayload: 1024 * 1024,
-    followRedirects: false,
-    perMessageDeflate: false,
-    agent: false,
-  });
+  return {
+    url,
+    protocols,
+    options: {
+      ...tls,
+      headers,
+      rejectUnauthorized: true,
+      handshakeTimeout: 3000,
+      maxPayload: 1024 * 1024,
+      followRedirects: false,
+      perMessageDeflate: false,
+      agent: false,
+    },
+  };
+}
+export function openWebSocket(input) {
+  const { url, protocols, options } = websocketConfiguration(input);
+  return new WebSocket(url, protocols, options);
 }

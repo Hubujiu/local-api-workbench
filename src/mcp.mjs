@@ -204,6 +204,15 @@ export function createMCP({
     "读取Socket.IO完整定义供计划冻结，不连接远端",
     { ...projectArg, definitionId: str },
   );
+  addTool(
+    "list_protocol_runs",
+    "读取项目最近协议执行摘要，不返回消息正文",
+    projectArg,
+  );
+  addTool("get_protocol_run", "按记录ID读取项目协议执行证据，不重放网络请求", {
+    ...projectArg,
+    recordId: str,
+  });
   addTool("list_execution_flows", "查询计划摘要", projectArg);
   addTool("get_execution_flow", "按ID读取完整计划", {
     ...projectArg,
@@ -357,6 +366,24 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_list_protocol_runs":
+              output = (p.protocolRuns || []).map(
+                ({ id, runId, type, status, createdAt, durationMs }) => ({
+                  id,
+                  runId,
+                  type,
+                  status,
+                  createdAt,
+                  ...(durationMs !== undefined ? { durationMs } : {}),
+                }),
+              );
+              break;
+            case "localapi_get_protocol_run":
+              output = (p.protocolRuns || []).find(
+                (record) => record.id === args.recordId,
+              );
+              if (!output) throw Error("协议执行记录不存在");
+              break;
             case "localapi_list_socketio_definitions":
               output = (p.settings?.socketioDefinitions || []).map(
                 ({ id, name, url, path }) => ({ id, name, url, path }),

@@ -1,3 +1,4 @@
+import { validateWireRecord } from "./wire-evidence.mjs";
 import { validateProtocolRuns as validateGrpcRuns } from "./grpc.mjs";
 import { validateSocketIORecord } from "./socketio.mjs";
 export function validateProtocolRuns(values = []) {
@@ -14,6 +15,10 @@ export function validateProtocolRuns(values = []) {
     )
       throw Error("协议执行记录ID无效或重复");
     ids.add(record.id);
+    if (["tcp", "websocket", "sse"].includes(record.type)) {
+      validateWireRecord(record);
+      continue;
+    }
     if (record.type === "grpc") {
       validateGrpcRuns([record]);
       continue;

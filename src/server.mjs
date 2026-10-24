@@ -1,3 +1,4 @@
+import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
@@ -837,20 +838,61 @@ export async function createApp({
               });
             });
           }
+          if (action === "protocol-runs" && req.method === "GET") {
+            const type = u.searchParams.get("type");
+            if (
+              type &&
+              !["tcp", "websocket", "sse", "grpc", "socketio"].includes(type)
+            )
+              throw Error("未知协议记录类型");
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter(
+                (record) => !type || record.type === type,
+              ),
+            );
+          }
           if (action === "protocol" && req.method === "POST") {
-            const b = await body(req);
-            const handlers = {
+            const input = await body(req),
+              prepared = prepareWireExecution(p, input);
+            const fn = {
               sse: captureSSE,
               tcp: exchangeTCP,
               websocket: exchangeWebSocket,
-            };
-            if (!Object.hasOwn(handlers, b.type)) throw Error("未知协议");
-            const fn = handlers[b.type];
-            const { controller, runId } = claimRun(b.runId);
+            }[prepared.definition.type];
+            const { controller, runId } = claimRun(input.runId),
+              startedAt = Date.now();
+            let result, error;
             try {
-              return json(res, 200, {
-                ...(await fn(b, controller.signal)),
+              try {
+                result = await fn(prepared.request, controller.signal);
+              } catch (failure) {
+                error = failure;
+              }
+              let recordId = null,
+                persistenceError;
+              try {
+                const record = makeWireRecord(
+                  prepared,
+                  runId,
+                  startedAt,
+                  result,
+                  error,
+                  controller.signal.aborted,
+                );
+                await store.append(p.id, "protocolRuns", record);
+                recordId = record.id;
+              } catch (failure) {
+                persistenceError = String(failure.message).slice(0, 500);
+              }
+              return json(res, error ? 400 : 200, {
+                ...(result || {}),
+                ...(error ? { error: error.message } : {}),
                 runId,
+                recordId,
+                recordSaved: Boolean(recordId),
+                ...(persistenceError ? { persistenceError } : {}),
               });
             } finally {
               controllers.delete(runId);
