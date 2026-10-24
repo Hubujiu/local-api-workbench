@@ -72,5 +72,41 @@ export function scriptFailureDetails(error) {
   if (Number.isSafeInteger(elapsed) && elapsed >= 0)
     diagnostics.elapsedMs = elapsed;
   if (Object.keys(diagnostics).length) result.scriptDiagnostics = diagnostics;
+  if (Array.isArray(error.sequenceActivity)) {
+    result.sequenceActivity = error.sequenceActivity
+      .slice(0, 34)
+      .flatMap((entry) => {
+        if (
+          !entry ||
+          typeof entry !== "object" ||
+          !Number.isInteger(entry.stageIndex) ||
+          entry.stageIndex < 0 ||
+          entry.stageIndex > 33
+        )
+          return [];
+        const counters =
+          scriptFailureDetails({
+            scriptDiagnostics: {
+              activityBudgetMs: entry.activityBudgetMs,
+              fakerCalls: entry.fakerCalls,
+              timerCount: entry.timerCount,
+              requestCount: entry.requestCount,
+            },
+            activityMetrics: entry.activityMetrics,
+          }).scriptDiagnostics || {};
+        const row = { stageIndex: entry.stageIndex, ...counters };
+        for (const key of ["activityMs", "elapsedMs"]) {
+          const value = entry[key];
+          if (
+            typeof value === "number" &&
+            Number.isFinite(value) &&
+            value >= 0 &&
+            value <= 60000
+          )
+            row[key] = value;
+        }
+        return [row];
+      });
+  }
   return result;
 }

@@ -237,3 +237,63 @@ test("Faker cold-load timing is a bounded metric, not a new execution allowance"
     {},
   );
 });
+
+test("sequence failures retain bounded successful-stage timings without input or source", async () => {
+  const { runScriptSequence } = await import("../src/scripts.mjs");
+  const { scriptFailureDetails } = await import(
+    "../src/script-diagnostics.mjs"
+  );
+  await assert.rejects(
+    runScriptSequence(
+      [
+        {
+          name: "a",
+          code: 'pm.variables.set("private-name","private-value");',
+        },
+        { name: "b", code: 'throw Error("stage-failure");' },
+      ],
+      { variables: {} },
+    ),
+    (error) => {
+      const evidence = scriptFailureDetails(error);
+      assert.equal(evidence.sequenceActivity.length, 1);
+      const first = evidence.sequenceActivity[0];
+      assert.equal(first.stageIndex, 0);
+      assert.equal(first.activityBudgetMs, 250);
+      assert(first.activityMs >= 0 && first.activityMs <= 250);
+      assert(first.elapsedMs >= 0);
+      assert(Number.isInteger(first.compatibilityMs));
+      assert(!JSON.stringify(evidence).includes("private-"));
+      assert.match(error.message, /stage-failure/);
+      return true;
+    },
+  );
+  const raw = {
+    stageIndex: 0,
+    activityBudgetMs: 250,
+    activityMs: 12,
+    elapsedMs: 300,
+    activityMetrics: { compatibilityMs: 8, userScriptMs: 4, source: "private" },
+    input: "private",
+    code: "private",
+  };
+  const sanitized = scriptFailureDetails({
+    sequenceActivity: Array.from({ length: 40 }, () => raw),
+  });
+  assert.equal(sanitized.sequenceActivity.length, 34);
+  assert(!JSON.stringify(sanitized).includes("private"));
+  assert.deepEqual(
+    scriptFailureDetails({
+      sequenceActivity: [
+        { stageIndex: -1 },
+        {
+          stageIndex: 0,
+          activityMs: Infinity,
+          elapsedMs: -1,
+          activityMetrics: { userScriptMs: 70000 },
+        },
+      ],
+    }).sequenceActivity,
+    [{ stageIndex: 0 }],
+  );
+});

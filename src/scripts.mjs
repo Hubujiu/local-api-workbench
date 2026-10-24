@@ -275,16 +275,19 @@ export async function runScriptSequence(stages, input, options = {}) {
   state.responseWire = undefined;
   const logs = [],
     tests = [],
-    networkRequests = [];
-  for (const stage of stages) {
+    networkRequests = [],
+    sequenceActivity = [];
+  for (const [stageIndex, stage] of stages.entries()) {
     if (!stage.code.trim()) continue;
     const wallBudgetMs = Math.min(2000, deadline - performance.now());
     if (remaining <= 0 || wallBudgetMs <= 0)
       throw Object.assign(Error("脚本执行超时"), {
         scriptStage: "sequence-budget",
         networkRequests,
+        sequenceActivity,
       });
     let result;
+    const stageStartedAt = performance.now();
     try {
       result = await runScript(stage.code, state, {
         ...options,
@@ -298,6 +301,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       });
     } catch (error) {
       error.scriptScope = stage.name;
+      error.sequenceActivity = sequenceActivity;
       error.networkRequests = [
         ...networkRequests,
         ...(error.networkRequests || []).map((item) => ({
@@ -307,6 +311,16 @@ export async function runScriptSequence(stages, input, options = {}) {
       ];
       throw error;
     }
+    sequenceActivity.push({
+      stageIndex,
+      activityBudgetMs: remaining,
+      activityMs: result.activityMs,
+      elapsedMs: Math.round(performance.now() - stageStartedAt),
+      fakerCalls: result.usage.fakerCalls,
+      timerCount: result.usage.timers,
+      requestCount: result.networkRequests.length,
+      activityMetrics: { ...result.activityMetrics },
+    });
     if (result.responseOverride) {
       state.responseWire ??= structuredClone(input.response);
       state.responseOverride = validateResponseMutation(
@@ -344,6 +358,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       throw Object.assign(Error("脚本执行超时"), {
         scriptStage: "sequence-budget",
         networkRequests,
+        sequenceActivity,
       });
     if (
       Buffer.byteLength(
@@ -366,6 +381,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       throw Object.assign(Error("脚本输出超过 1 MiB"), {
         scriptStage: "sequence-output",
         networkRequests,
+        sequenceActivity,
       });
     if (result.tests.some((item) => !item.passed)) break;
   }

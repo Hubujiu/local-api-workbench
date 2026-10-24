@@ -24,3 +24,7 @@ A failing HTTP regression first demonstrated the missing script stage. The final
 regression checks actual manual execution failure and persisted history, together
 with strict filtering of diagnostic fields. Existing worker/plan stage coverage
 continues to verify semantic errors are not replaced by diagnostic labels.
+
+Sequence failures additionally retain up to 34 successful-stage timing records. Each record contains only its numeric stage index, incoming activity budget, charged activity time, total stage elapsed time, existing bounded resource counters and whitelisted phase metrics. Stage names, code, variables, requests, outputs and arbitrary properties are not copied into these records. Sanitization is applied again when producing public failure evidence.
+
+This allows a later-stage timeout to be distinguished from budget already consumed by an earlier stage. Phase metrics may overlap (for example provider loading inside user execution), so they must not be summed as independent CPU measurements. The record is observation only: the aggregate 250 ms activity limit, 2 s wall deadline, all quotas, unchanged acceptance assertions and fixed diagnostic probe count remain in force. A subsequent passing run is not proof that an intermittent timeout root cause has been fixed.
