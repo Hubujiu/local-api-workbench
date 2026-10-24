@@ -151,6 +151,15 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: "@word(0)",
     }),
   );
+  for (const name of ["title", "sentence", "paragraph"])
+    doc.global.mock_custom_rules.push(
+      rule({
+        mock_custom_rule_id: name,
+        field_type: "string",
+        match_rule: name,
+        mock_rule_content: "@" + name + "(0)",
+      }),
+    );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -165,6 +174,9 @@ test("native numeric rules retain ordering, source identity and explicit example
       gender: { type: "string" },
       code: { type: "string" },
       word: { type: "string" },
+      title: { type: "string" },
+      sentence: { type: "string" },
+      paragraph: { type: "string" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -196,6 +208,9 @@ test("native numeric rules retain ordering, source identity and explicit example
     gender: "女",
     code: "X",
     word: "",
+    title: "",
+    sentence: ".",
+    paragraph: "",
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -209,6 +224,9 @@ test("native numeric rules retain ordering, source identity and explicit example
     gender: "女",
     code: "X",
     word: "",
+    title: "",
+    sentence: ".",
+    paragraph: "",
     Count: 3,
   });
   const current = await app.store.get(p.id);
@@ -217,9 +235,18 @@ test("native numeric rules retain ordering, source identity and explicit example
   ).mock = "@float(3,3,2,2)";
   current.settings.mockFieldRules.find((rule) => rule.pattern === "word").mock =
     "@word(4)";
+  for (const name of ["title", "sentence", "paragraph"])
+    current.settings.mockFieldRules.find((rule) => rule.pattern === name).mock =
+      "@" + name + (name === "paragraph" ? "(1,1)" : "(2,2)");
   await app.store.save(current);
   const actualResponse = await (await fetch(p.requests[0].url)).json();
   assert.match(actualResponse.word, /^[a-z]{4}$/);
+  assert.match(actualResponse.title, /^[A-Z][a-z]{2,9} [A-Z][a-z]{2,9}$/);
+  assert.match(actualResponse.sentence, /^[A-Z][a-z]{2,9} [a-z]{3,10}\.$/);
+  assert.match(
+    actualResponse.paragraph,
+    /^[A-Z][a-z]{2,9}( [a-z]{3,10}){11,17}\.$/,
+  );
   const actualFloat = actualResponse.price;
   assert(actualFloat > 3 && actualFloat < 4);
   assert.match(String(actualFloat), /^3\.[0-9][1-9]$/);
@@ -578,6 +605,43 @@ test("native word rules retain default, fixed and ranged lowercase lengths", () 
     "@word(1.5)",
     '@word("3")',
     "@word(1,2,3)",
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native title sentence and paragraph composition retains capitalization and punctuation", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  const value = (expression) => make(expression)("count", { type: "string" });
+  assert.equal(value("@title(0)"), "");
+  assert.equal(value("@sentence(0)"), ".");
+  assert.equal(value("@paragraph(0)"), "");
+  assert.match(value("@title(2,2)"), /^[A-Z][a-z]{2,9} [A-Z][a-z]{2,9}$/);
+  assert.match(value("@sentence(2,2)"), /^[A-Z][a-z]{2,9} [a-z]{3,10}\.$/);
+  const sentence = /^[A-Z][a-z]{2,9}( [a-z]{3,10}){11,17}\.$/;
+  assert.match(value("@sentence"), sentence);
+  assert.match(value("@sentence()"), sentence);
+  const paragraph = value("@paragraph(2,2)");
+  assert.equal(paragraph.split(".").length - 1, 2);
+  for (const s of paragraph.slice(0, -1).split(". "))
+    assert.match(s + ".", sentence);
+  assert.match(value("@title"), /^[A-Z][a-z]{2,9}( [A-Z][a-z]{2,9}){2,6}$/);
+  assert(value("@paragraph(8)").length <= 2048);
+  for (const expression of [
+    "@title(33)",
+    "@sentence(33)",
+    "@paragraph(9)",
+    "@paragraph(2,1)",
+    "@title(-1)",
+    "@sentence(1.5)",
+    "@title(1,2,3)",
   ])
     assert.throws(() => make(expression));
 });

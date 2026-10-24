@@ -232,11 +232,33 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char|word)(?:\(([\s\S]*)\))?$/.exec(value);
+    /^@(string|pick|character|char|word|title|sentence|paragraph)(?:\(([\s\S]*)\))?$/.exec(
+      value,
+    );
   let args;
   try {
     args = match && JSON.parse("[" + (match[2] ?? "") + "]");
   } catch {}
+  if (match && ["title", "sentence", "paragraph"].includes(match[1])) {
+    const limit = match[1] === "paragraph" ? 8 : 32;
+    if (
+      !Array.isArray(args) ||
+      args.length > 2 ||
+      args.some(
+        (value) => !Number.isSafeInteger(value) || value < 0 || value > limit,
+      ) ||
+      (args.length === 2 && args[0] > args[1])
+    )
+      throw Error("原版文本生成数量须为有界整数且范围有序");
+    const defaults = match[1] === "sentence" ? [12, 18] : [3, 7];
+    return {
+      name: "native-text",
+      args: [
+        match[1],
+        ...(args.length ? [args[0], args[1] ?? args[0]] : defaults),
+      ],
+    };
+  }
   if (match && match[1] === "word") {
     if (
       !Array.isArray(args) ||
@@ -663,6 +685,41 @@ export function createFieldSampler(settings = {}) {
     }
     return characters.slice(0, count).join("");
   };
+  const nativeText = ([kind, min, max]) => {
+    const capitalize = (value) =>
+      value.charAt(0).toUpperCase() + value.slice(1);
+    const words = (count) =>
+      Array.from({ length: count }, () => word(integer(3, 10)));
+    const sentence = (count) => capitalize(words(count).join(" ")) + ".";
+    const count = integer(min, max);
+    const value =
+      kind === "paragraph"
+        ? Array.from({ length: count }, () => sentence(integer(12, 18))).join(
+            " ",
+          )
+        : kind === "title"
+          ? words(count).map(capitalize).join(" ")
+          : sentence(count);
+    if (Buffer.byteLength(value, "utf8") > 2048)
+      throw Error("原版文本生成结果超过2KiB");
+    return value;
+  };
+  const generateNative = (spec, schema) => {
+    switch (spec.name) {
+      case "native-text":
+        return nativeText(spec.args);
+      case "native-word":
+        return word(integer(...spec.args));
+      case "native-pick":
+        return pick(spec.args);
+      case "native-string":
+        return nativeString(spec.args);
+      case "float":
+        return nativeFloat(spec.args);
+      default:
+        return generate(spec, schema);
+    }
+  };
   const nativeScope = (rule, name, schema, type) => {
     if (
       rule.type !== type ||
@@ -717,15 +774,9 @@ export function createFieldSampler(settings = {}) {
             "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
           );
         return validateValue(
-          rule.apipostSource && rule.expression.name === "native-word"
-            ? word(integer(...rule.expression.args))
-            : rule.apipostSource && rule.expression.name === "native-pick"
-              ? pick(rule.expression.args)
-              : rule.apipostSource && rule.expression.name === "native-string"
-                ? nativeString(rule.expression.args)
-                : rule.apipostSource && rule.expression.name === "float"
-                  ? nativeFloat(rule.expression.args)
-                  : generate(rule.expression, schema),
+          rule.apipostSource
+            ? generateNative(rule.expression, schema)
+            : generate(rule.expression, schema),
           schema,
         );
       }
