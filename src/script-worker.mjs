@@ -178,7 +178,8 @@ try {
   fakerFunction.dispose();
 
   const setup = `
-    const input = ${JSON.stringify(workerData.input)};
+    const input = JSON.parse(__localapiInputJSON);
+    delete globalThis.__localapiInputJSON;
     const pendingTasks=new Set();
     const trackTask=value=>{
       if(value && typeof value.then==='function'){
@@ -405,6 +406,12 @@ try {
     result.value.dispose();
   };
   parentPort.postMessage({ kind: "stage", stage: "bootstrap" });
+  const inputJSON = context.newString(JSON.stringify(workerData.input));
+  try {
+    context.setProp(context.global, "__localapiInputJSON", inputJSON);
+  } finally {
+    inputJSON.dispose();
+  }
   run(setup);
   run("const __urlQueryTools = (" + urlQueryToolsSource + ")();");
   run(trustedLibraries);
@@ -499,7 +506,7 @@ try {
     __sendRequest(JSON.stringify({request:config,variables:captured}),(errorJSON,responseJSON)=>{
       const error=errorJSON?new Error(errorJSON):null, data=responseJSON?JSON.parse(responseJSON):null;
       const headers=data?.headers||{};
-      const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,responseSize:data.size,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>headers[String(name).toLowerCase()],has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
+      const response=data?{code:data.status,status:data.statusText,responseTime:data.duration,responseSize:data.size,json:()=>JSON.parse(data.body),text:()=>data.body,headers:{get:name=>{const key=String(name).toLowerCase();return Object.prototype.hasOwnProperty.call(headers,key)?headers[key]:undefined;},has:name=>Object.prototype.hasOwnProperty.call(headers,String(name).toLowerCase()),toObject:()=>JSON.parse(JSON.stringify(headers))}}:null;
       if(response)registerSchemaResponse(response,data.body);
       const result=callback(error,response);
       trackTask(result);

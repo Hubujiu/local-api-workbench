@@ -279,7 +279,10 @@ function installScriptCompatibility({
     };
   }
   pm.response.headers = {
-    get: (name) => responseHeaders[String(name).toLowerCase()],
+    get: (name) => {
+      const key = String(name).toLowerCase();
+      return own(responseHeaders, key) ? responseHeaders[key] : undefined;
+    },
     has: (name) => own(responseHeaders, String(name).toLowerCase()),
     all: () =>
       Object.entries(responseHeaders).map(([key, value]) => ({ key, value })),
