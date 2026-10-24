@@ -158,7 +158,7 @@ test("Socket.IO rejects insecure overrides, reserved events, oversized data and 
     { ...f.definition, url: "http://user:pass@localhost" },
     { ...f.definition, tls: { rejectUnauthorized: false } },
     { ...f.definition, reconnection: true },
-    { ...f.definition, transport: "polling" },
+    { ...f.definition, transport: "unsupported" },
   ])
     assert.throws(() => sessions.start("a", input));
   assert.throws(() =>

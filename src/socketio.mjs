@@ -1,3 +1,5 @@
+import { BoundedPolling, BoundedWebSocket } from "./socketio-polling.mjs";
+import { validateHeaderName, validateHeaderValue } from "node:http";
 import { io } from "socket.io-client";
 import { randomUUID } from "node:crypto";
 import { createSecureContext } from "node:tls";
@@ -102,10 +104,15 @@ export function normalizeSocketIODefinition(input) {
   if (
     !plain(input) ||
     Object.keys(input).some(
-      (k) => !["id", "name", "url", "path", "events"].includes(k),
+      (k) => !["id", "name", "url", "path", "events", "transport"].includes(k),
     )
   )
     throw Error("Socket.IO定义不保存认证信息或额外字段");
+  if (
+    input.transport !== undefined &&
+    !["websocket", "polling", "auto"].includes(input.transport)
+  )
+    throw Error("Socket.IO传输类型无效");
   const id = input.id || randomUUID();
   if (typeof id !== "string" || !/^[A-Za-z0-9_.-]{1,200}$/.test(id))
     throw Error("Socket.IO定义ID无效");
@@ -114,6 +121,7 @@ export function normalizeSocketIODefinition(input) {
     name: String(input.name || "Socket.IO").slice(0, 200),
     ...urlDefinition(input),
     events: eventFilter(input.events),
+    ...(input.transport !== undefined ? { transport: input.transport } : {}),
   };
 }
 export function normalizeSocketIODefinitions(values = []) {
@@ -147,7 +155,7 @@ function connection(input) {
     throw Error("Socket.IO连接字段无效");
   const definition = normalizeSocketIODefinition(
     Object.fromEntries(
-      ["id", "name", "url", "path", "events"]
+      ["id", "name", "url", "path", "events", "transport"]
         .filter((k) => input[k] !== undefined)
         .map((k) => [k, input[k]]),
     ),
@@ -156,8 +164,8 @@ function connection(input) {
   if (!Number.isInteger(timeout) || timeout < 50 || timeout > 30000)
     throw Error("Socket.IO连接超时须为50至30000毫秒");
   const transport = input.transport ?? "websocket";
-  if (transport !== "websocket")
-    throw Error("Socket.IO当前仅支持有帧大小限制的websocket传输");
+  if (!["websocket", "polling", "auto"].includes(transport))
+    throw Error("Socket.IO传输类型无效");
   const auth = input.auth ?? {};
   if (!plain(auth) || Buffer.byteLength(JSON.stringify(auth)) > 8192)
     throw Error("Socket.IO认证信息无效或超过8KiB");
@@ -182,6 +190,33 @@ function connection(input) {
         ["__proto__", "constructor", "prototype"].includes(k)
       )
         throw Error("Socket.IO " + label + "字段无效");
+      if (
+        label === "query" &&
+        ["EIO", "transport", "sid", "t", "b64", "j"].includes(k)
+      )
+        throw Error("Socket.IO内部传输查询参数不可覆盖");
+      if (label === "headers") {
+        if (
+          [
+            "content-type",
+            "content-length",
+            "transfer-encoding",
+            "accept-encoding",
+            "connection",
+            "upgrade",
+            "sec-websocket-key",
+            "sec-websocket-version",
+            "sec-websocket-extensions",
+          ].includes(k.toLowerCase())
+        )
+          throw Error("Socket.IO协议控制头不可覆盖");
+        try {
+          validateHeaderName(k);
+          validateHeaderValue(k, v);
+        } catch {
+          throw Error("Socket.IO头字段无效");
+        }
+      }
       if (label === "headers" && !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(k))
         throw Error("Socket.IO头名称无效");
     }
@@ -209,7 +244,13 @@ function connection(input) {
       reconnection: false,
       timeout,
       path: definition.path,
-      transports: ["websocket"],
+      transports:
+        transport === "websocket"
+          ? [BoundedWebSocket]
+          : transport === "polling"
+            ? [BoundedPolling]
+            : [BoundedPolling, BoundedWebSocket],
+      withCredentials: false,
       maxPayload: MAX,
       perMessageDeflate: false,
       auth: structuredClone(auth),
@@ -285,7 +326,10 @@ export class SocketIOSessions {
   }
   fail(s, error) {
     if (["closed", "error"].includes(s.state)) return;
-    s.error = String(error.message || error).slice(0, 1000);
+    s.error = (
+      String(error.message || error) +
+      (error.description?.message ? ": " + error.description.message : "")
+    ).slice(0, 1000);
     s.state = "error";
     s.pending.clear();
     clearTimeout(s.deadline);
