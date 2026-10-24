@@ -1,5 +1,7 @@
 import {
   parseApipostMockDate,
+  parseApipostMockNow,
+  sampleApipostMockNow,
   sampleApipostMockDate,
 } from "./apipost-mock-dates.mjs";
 import {
@@ -236,13 +238,15 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime)(?:\(([\s\S]*)\))?$/.exec(
+    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime|now)(?:\(([\s\S]*)\))?$/.exec(
       value,
     );
   let args;
   try {
     args = match && JSON.parse("[" + (match[2] ?? "") + "]");
   } catch {}
+  if (match && match[1] === "now")
+    return { name: "native-now", args: parseApipostMockNow(args) };
   if (match && ["date", "time", "datetime"].includes(match[1]))
     return {
       name: "native-date",
@@ -715,6 +719,8 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
   };
   const generateNative = (spec, schema) => {
     switch (spec.name) {
+      case "native-now":
+        return sampleApipostMockNow(spec.args, now);
       case "native-date":
         return sampleApipostMockDate(spec.args[0], random, now);
       case "native-text":
