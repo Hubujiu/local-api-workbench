@@ -6480,6 +6480,16 @@ try {
     mock_rule_content: "@integer(3,3)",
     intro: "Native total",
   });
+  nativeModern.global.mock_custom_rules.push({
+    mock_custom_rule_id: "label",
+    field_type: "string",
+    match_type: "exact",
+    match_rule: "Label",
+    match_case: 1,
+    mock_type: 1,
+    mock_rule_content: '@string("ab",2)',
+    intro: "Native label",
+  });
   const nativeFiles = nativeDirectoryFixture(nativeModern);
   for (const file of nativeFiles.files) {
     const filePath = path.join(nativeImportRoot, file.path);
@@ -6611,7 +6621,7 @@ try {
   await page.getByText("字段名（精确匹配）", { exact: true }).waitFor();
   assert.deepEqual(
     await page.locator("#mock-field-type option").allTextContents(),
-    ["integer", "number"],
+    ["integer", "number", "string"],
   );
   await page.locator("#mock-field-value").fill("@natural(8,8)");
   await page.screenshot({ path: "/tmp/local-api-native-numeric-mock.png" });
@@ -6656,6 +6666,30 @@ try {
   assert.equal(editedStarRule.pattern, "{*total,su?,item_[0-9]}");
   assert.equal(editedStarRule.apipostSource.matchType, "wildcard");
   assert.equal(editedStarRule.mock, "@float(3,3,2,2)");
+
+  await page
+    .locator(
+      `[data-edit-mock-field="${nativeProject.settings.mockFieldRules[2].id}"]`,
+    )
+    .click();
+  assert.equal(await page.locator("#mock-field-type").inputValue(), "string");
+  await page.locator("#mock-field-value").fill('@string("xyz",3)');
+  await page.screenshot({ path: "/tmp/local-api-native-string-mock.png" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.reload();
+  const editedStringRule = (await app.store.get(nativeProjectId)).settings
+    .mockFieldRules[2];
+  assert.equal(editedStringRule.mock, '@string("xyz",3)');
+  assert.deepEqual(
+    editedStringRule.apipostSource,
+    nativeProject.settings.mockFieldRules[2].apipostSource,
+  );
 
   const templateModern = structuredClone(nativeModern);
   templateModern.name = "Query template fixture";

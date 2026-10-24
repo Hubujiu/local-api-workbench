@@ -228,6 +228,37 @@ function nativeWildcardPattern(pattern) {
       !value.includes("**"),
   );
 }
+function nativeStringExpression(value) {
+  const match =
+    typeof value === "string" &&
+    value.length <= 200 &&
+    /^@string\(([\s\S]*)\)$/.exec(value);
+  let args;
+  try {
+    args = match && JSON.parse("[" + match[1] + "]");
+  } catch {}
+  if (
+    !Array.isArray(args) ||
+    ![2, 3].includes(args.length) ||
+    typeof args[0] !== "string" ||
+    args[0].length < 1 ||
+    args[0].length > 64 ||
+    !/^[A-Za-z0-9 _.-]+$/.test(args[0]) ||
+    args
+      .slice(1)
+      .some(
+        (value) => !Number.isSafeInteger(value) || value < 0 || value > 64,
+      ) ||
+    args[1] > (args[2] ?? args[1])
+  )
+    throw Error(
+      "原版string仅支持显式ASCII字符池及0到64整数长度，参数须使用JSON字面量",
+    );
+  return {
+    name: "native-string",
+    args: [args[0], args[1], args[2] ?? args[1]],
+  };
+}
 export function normalizeMockFieldRules(rules = []) {
   if (!Array.isArray(rules) || rules.length > 100)
     throw Error("字段Mock规则最多100条");
@@ -247,45 +278,49 @@ export function normalizeMockFieldRules(rules = []) {
         [source.projectId, source.id].some(
           (value) => typeof value !== "string" || !value || value.length > 200,
         ) ||
-        !["integer", "number"].includes(rule.type) ||
+        !["integer", "number", "string"].includes(rule.type) ||
         typeof rule.pattern !== "string" ||
         (source.matchType !== undefined && source.matchType !== "wildcard") ||
         !(source.matchType === "wildcard"
           ? nativeWildcardPattern(rule.pattern)
           : /^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern)) ||
         typeof rule.mock !== "string" ||
-        !(
-          /^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock) ||
-          (rule.type === "number" &&
-            /^@float\(\s*-?\d+\s*,\s*-?\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(
-              rule.mock,
-            ))
-        )
+        !(rule.type === "string"
+          ? nativeStringExpression(rule.mock)
+          : /^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock) ||
+            (rule.type === "number" &&
+              /^@float\(\s*-?\d+\s*,\s*-?\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(
+                rule.mock,
+              )))
       )
         throw Error(
           "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及integer/natural双整数或float四整数参数规则",
         );
-      const values = rule.mock
-        .slice(rule.mock.indexOf("(") + 1, -1)
-        .split(",")
-        .map(Number);
-      if (
-        values.some(
-          (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
-        ) ||
-        values[0] > values[1] ||
-        (rule.mock.startsWith("@natural") && values[0] < 0) ||
-        (rule.mock.startsWith("@float") &&
-          (values.slice(0, 2).some((value) => Math.abs(value) > 1e6) ||
-            values.slice(2).some((value) => value < 0 || value > 6) ||
-            values[2] > values[3]))
-      )
-        throw Error("Apipost自定义Mock数值范围无效");
+      if (rule.type !== "string") {
+        const values = rule.mock
+          .slice(rule.mock.indexOf("(") + 1, -1)
+          .split(",")
+          .map(Number);
+        if (
+          values.some(
+            (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
+          ) ||
+          values[0] > values[1] ||
+          (rule.mock.startsWith("@natural") && values[0] < 0) ||
+          (rule.mock.startsWith("@float") &&
+            (values.slice(0, 2).some((value) => Math.abs(value) > 1e6) ||
+              values.slice(2).some((value) => value < 0 || value > 6) ||
+              values[2] > values[3]))
+        )
+          throw Error("Apipost自定义Mock数值范围无效");
+      }
     }
     const compiled = compilePattern(rule.pattern);
     tokens += compiled.reduce((sum, items) => sum + items.length, 0);
     if (tokens > 20000) throw Error("字段Mock通配符总复杂度超过上限");
-    expression(rule.mock);
+    if (rule.apipostSource && rule.type === "string")
+      nativeStringExpression(rule.mock);
+    else expression(rule.mock);
     const type = rule.type || "any";
     if (!types.includes(type)) throw Error("字段Mock类型无效");
     const id = rule.id || randomUUID();
@@ -400,7 +435,10 @@ export function createFieldSampler(settings = {}) {
       compiled: compilePattern(
         rule.ignoreCase ? rule.pattern.toLowerCase() : rule.pattern,
       ),
-      expression: expression(rule.mock),
+      expression:
+        rule.apipostSource && rule.type === "string"
+          ? nativeStringExpression(rule.mock)
+          : expression(rule.mock),
     }));
   const budget = { remaining: 2000000 };
   let seed = (settings.mockSeed ?? 0) >>> 0;
@@ -551,12 +589,21 @@ export function createFieldSampler(settings = {}) {
       fraction += integer(i === count - 1 ? 1 : 0, 9);
     return Number(String(whole) + "." + fraction);
   };
+  const nativeString = ([pool, min, max]) => {
+    const characters = pool.split("");
+    const count = Math.min(integer(min, max), characters.length);
+    for (let i = 0; i < count; i++) {
+      const j = integer(i, characters.length - 1);
+      [characters[i], characters[j]] = [characters[j], characters[i]];
+    }
+    return characters.slice(0, count).join("");
+  };
   const nativeScope = (rule, name, schema, type) => {
     if (
       rule.type !== type ||
       schema.type !== rule.type ||
-      schema.minimum !== undefined ||
-      schema.maximum !== undefined
+      (type !== "string" &&
+        (schema.minimum !== undefined || schema.maximum !== undefined))
     )
       return false;
     if (rule.apipostSource.matchType === "wildcard") {
@@ -596,6 +643,7 @@ export function createFieldSampler(settings = {}) {
       ) {
         if (
           rule.apipostSource &&
+          rule.type !== "string" &&
           ["exclusiveMinimum", "exclusiveMaximum", "multipleOf"].some(
             (key) => schema[key] !== undefined,
           )
@@ -604,9 +652,11 @@ export function createFieldSampler(settings = {}) {
             "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
           );
         return validateValue(
-          rule.apipostSource && rule.expression.name === "float"
-            ? nativeFloat(rule.expression.args)
-            : generate(rule.expression, schema),
+          rule.apipostSource && rule.expression.name === "native-string"
+            ? nativeString(rule.expression.args)
+            : rule.apipostSource && rule.expression.name === "float"
+              ? nativeFloat(rule.expression.args)
+              : generate(rule.expression, schema),
           schema,
         );
       }

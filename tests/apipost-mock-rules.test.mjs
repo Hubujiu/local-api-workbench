@@ -119,6 +119,14 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: "@float(6,6,0,0)",
     }),
   );
+  doc.global.mock_custom_rules.push(
+    rule({
+      mock_custom_rule_id: "label",
+      field_type: "string",
+      match_rule: "label",
+      mock_rule_content: '@string("a",3)',
+    }),
+  );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -129,6 +137,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       sum: { type: "integer" },
       item_5: { type: "integer" },
       price: { type: "number" },
+      label: { type: "string" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -156,6 +165,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     sum: 3,
     item_5: 3,
     price: 6,
+    label: "a",
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -165,6 +175,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     sum: 3,
     item_5: 3,
     price: 6,
+    label: "a",
     Count: 3,
   });
   const current = await app.store.get(p.id);
@@ -384,4 +395,52 @@ test("native float rules use integer-part bounds and a nonzero last fractional d
     rule({ mock_rule_content: "@float(1,2,1,1)" }),
   ];
   assert.throws(() => importIntoProject(project(), doc));
+});
+
+test("native string rules sample explicit ASCII pools without replacement", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    p.settings.mockSeed = 42;
+    return createFieldSampler(p.settings);
+  };
+  const full = make('@string("abc",3)'),
+    duplicates = make('@string("aab",3)'),
+    range = make('@string("abcd",1,2)');
+  for (let i = 0; i < 8; i++) {
+    assert.equal([...full("count", { type: "string" })].sort().join(""), "abc");
+    assert.equal(
+      [...duplicates("count", { type: "string" })].sort().join(""),
+      "aab",
+    );
+    const value = range("count", { type: "string" });
+    assert(value.length >= 1 && value.length <= 2);
+    assert.equal(new Set(value).size, value.length);
+  }
+  assert.equal(make('@string("a",4)')("count", { type: "string" }), "a");
+  assert.equal(make('@string("abc",0)')("count", { type: "string" }), "");
+  assert.equal(
+    make('@string("abc",3)')("count", { type: "integer" }),
+    undefined,
+  );
+  assert.throws(
+    () => make('@string("abc",3)')("count", { type: "string", maxLength: 1 }),
+    /长度/,
+  );
+  for (const expression of [
+    "@string(3)",
+    '@string("@name",3)',
+    '@string("中",1)',
+    '@string("abc",65)',
+    '@string("abc",2,1)',
+    '@string("abc",1.5)',
+    '@string("",0)',
+    "@string('abc',3)",
+  ]) {
+    assert.throws(() => make(expression));
+  }
 });
