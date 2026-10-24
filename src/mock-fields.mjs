@@ -1,4 +1,9 @@
 import {
+  parseNativeMockLibrary,
+  createNativeMockEvaluator,
+  evaluateNativeMock,
+} from "./native-mock-library.mjs";
+import {
   sampleApipostIsoTimestamp,
   sampleApipostTimestamp,
   parseApipostMockDate,
@@ -275,6 +280,8 @@ function nativeNumericExpression(value, type) {
   return expression(value);
 }
 function nativeStringExpression(value) {
+  const library = parseNativeMockLibrary(value);
+  if (library) return { name: "native-library", args: library };
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
@@ -565,7 +572,10 @@ function validateValue(value, schema) {
   }
   return value;
 }
-export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
+export function createFieldSampler(
+  settings = {},
+  { now = Date.now, nativeLibrary = evaluateNativeMock } = {},
+) {
   const custom = validateMockFieldSettings(settings);
   const rules = [...custom, ...(settings.smartMockBuiltins ? builtins : [])]
     .filter((rule) => rule.enabled !== false)
@@ -759,6 +769,8 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
   };
   const generateNative = (spec, schema) => {
     switch (spec.name) {
+      case "native-library":
+        return nativeLibrary(spec.args, random);
       case "native-timestamp":
         return sampleApipostTimestamp(now);
       case "native-random-int":
@@ -848,16 +860,29 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
 }
 
 export function sampleProjectSchema(project, schema) {
-  return sampleFromSchema(
-    schema,
-    0,
-    {
-      ...(schema || {}),
-      components: project.openapiComponents || schema?.components || {},
-    },
-    { valueForField: createFieldSampler(project.settings || {}) },
-  );
+  let scope;
+  try {
+    return sampleFromSchema(
+      schema,
+      0,
+      {
+        ...(schema || {}),
+        components: project.openapiComponents || schema?.components || {},
+      },
+      {
+        valueForField: createFieldSampler(project.settings || {}, {
+          nativeLibrary: (spec, random) => {
+            scope ??= createNativeMockEvaluator(random);
+            return scope.evaluate(spec);
+          },
+        }),
+      },
+    );
+  } finally {
+    scope?.dispose();
+  }
 }
+
 export function schemaMockResponse(project, request) {
   for (const definition of request.responses || []) {
     if (!/^2\d\d$/.test(String(definition.status))) continue;

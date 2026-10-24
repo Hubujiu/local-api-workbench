@@ -96,3 +96,6 @@ await writeFile(
 
 // Rebuild the reviewed, separately scoped URL adapter with the other trusted assets.
 await import("./build-url-sdk.mjs");
+
+// Rebuild the separately isolated, licensed original Mock core.
+await import("./build-native-mock.mjs");
