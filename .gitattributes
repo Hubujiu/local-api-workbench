@@ -10,3 +10,7 @@
 /src/script-url-facade.mjs text eol=lf
 /src/script-url-runtime.mjs text eol=lf
 /src/script-url-state.mjs text eol=lf
+# Preserve the licensed Mock bundle's exact-byte integrity on Windows checkout.
+/src/vendor/native-mock-library.js -text
+/src/vendor/native-mock-library.json -text
+/src/vendor/APIPOST-MOCK-LICENSE.txt -text
