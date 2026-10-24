@@ -6642,7 +6642,8 @@ try {
     .getByText("字段名（星号/问号/ASCII集合/候选项）", { exact: true })
     .waitFor();
   await page.locator("#mock-field-pattern").fill("{*total,su?,item_[0-9]}");
-  await page.screenshot({ path: "/tmp/local-api-native-class-mock.png" });
+  await page.locator("#mock-field-value").fill("@float(3,3,2,2)");
+  await page.screenshot({ path: "/tmp/local-api-native-float-mock.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6654,6 +6655,7 @@ try {
     .mockFieldRules[1];
   assert.equal(editedStarRule.pattern, "{*total,su?,item_[0-9]}");
   assert.equal(editedStarRule.apipostSource.matchType, "wildcard");
+  assert.equal(editedStarRule.mock, "@float(3,3,2,2)");
 
   const templateModern = structuredClone(nativeModern);
   templateModern.name = "Query template fixture";

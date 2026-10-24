@@ -111,6 +111,14 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: "@natural(3,3)",
     }),
   ];
+  doc.global.mock_custom_rules.push(
+    rule({
+      mock_custom_rule_id: "price",
+      field_type: "number",
+      match_rule: "price",
+      mock_rule_content: "@float(6,6,0,0)",
+    }),
+  );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -120,6 +128,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       totalCount: { type: "integer" },
       sum: { type: "integer" },
       item_5: { type: "integer" },
+      price: { type: "number" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -146,6 +155,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     totalCount: 3,
     sum: 3,
     item_5: 3,
+    price: 6,
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -154,8 +164,17 @@ test("native numeric rules retain ordering, source identity and explicit example
     totalCount: 3,
     sum: 3,
     item_5: 3,
+    price: 6,
     Count: 3,
   });
+  const current = await app.store.get(p.id);
+  current.settings.mockFieldRules.find(
+    (rule) => rule.pattern === "price",
+  ).mock = "@float(3,3,2,2)";
+  await app.store.save(current);
+  const actualFloat = (await (await fetch(p.requests[0].url)).json()).price;
+  assert(actualFloat > 3 && actualFloat < 4);
+  assert.match(String(actualFloat), /^3\.[0-9][1-9]$/);
   const conflict = structuredClone(doc);
   conflict.global.mock_custom_rules[0].mock_rule_content = "@natural(9,9)";
   const before = structuredClone(restored);
@@ -314,4 +333,55 @@ test("native bounded ASCII classes preserve ranges, negation and UTF-16 matching
     ];
     assert.throws(() => importIntoProject(project(), doc));
   }
+});
+
+test("native float rules use integer-part bounds and a nonzero last fractional digit", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "number", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    p.settings.mockSeed = 42;
+    return createFieldSampler(p.settings);
+  };
+  assert.equal(
+    createFieldSampler({
+      mockFieldRules: [
+        { pattern: "count", type: "number", mock: "@float(3,3,2,2)" },
+      ],
+    })("count", { type: "number" }),
+    3,
+    "existing Local API float rules keep their own numeric interval semantics",
+  );
+  const positive = make("@float(3,3,2,2)"),
+    negative = make("@float(-3,-3,2,2)");
+  for (let i = 0; i < 12; i++) {
+    const p = positive("count", { type: "number" }),
+      n = negative("count", { type: "number" });
+    assert(p > 3 && p < 4);
+    assert(n < -3 && n > -4);
+    assert.match(String(p), /^3\.[0-9][1-9]$/);
+    assert.match(String(n), /^-3\.[0-9][1-9]$/);
+  }
+  assert.equal(make("@float(6,6,0,0)")("count", { type: "number" }), 6);
+  assert.equal(
+    make("@float(3,3,2,2)")("count", { type: "integer" }),
+    undefined,
+  );
+  for (const expression of [
+    "@float(1,2)",
+    "@float(1,2,0,7)",
+    "@float(1,2,3,2)",
+    "@float(1.5,2,1,1)",
+    "@float(1000001,1000001,1,1)",
+  ]) {
+    assert.throws(() => make(expression));
+  }
+  const doc = modernApipostFixture();
+  doc.global.mock_custom_rules = [
+    rule({ mock_rule_content: "@float(1,2,1,1)" }),
+  ];
+  assert.throws(() => importIntoProject(project(), doc));
 });

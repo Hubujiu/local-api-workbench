@@ -254,10 +254,16 @@ export function normalizeMockFieldRules(rules = []) {
           ? nativeWildcardPattern(rule.pattern)
           : /^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern)) ||
         typeof rule.mock !== "string" ||
-        !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
+        !(
+          /^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock) ||
+          (rule.type === "number" &&
+            /^@float\(\s*-?\d+\s*,\s*-?\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(
+              rule.mock,
+            ))
+        )
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及双整数参数的integer/natural规则",
+          "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及integer/natural双整数或float四整数参数规则",
         );
       const values = rule.mock
         .slice(rule.mock.indexOf("(") + 1, -1)
@@ -268,7 +274,11 @@ export function normalizeMockFieldRules(rules = []) {
           (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
         ) ||
         values[0] > values[1] ||
-        (rule.mock.startsWith("@natural") && values[0] < 0)
+        (rule.mock.startsWith("@natural") && values[0] < 0) ||
+        (rule.mock.startsWith("@float") &&
+          (values.slice(0, 2).some((value) => Math.abs(value) > 1e6) ||
+            values.slice(2).some((value) => value < 0 || value > 6) ||
+            values[2] > values[3]))
       )
         throw Error("Apipost自定义Mock数值范围无效");
     }
@@ -533,6 +543,14 @@ export function createFieldSampler(settings = {}) {
           ? date.slice(0, 10)
           : date;
   };
+  const nativeFloat = (args) => {
+    const whole = integer(args[0], args[1]);
+    const count = integer(args[2], args[3]);
+    let fraction = "";
+    for (let i = 0; i < count; i++)
+      fraction += integer(i === count - 1 ? 1 : 0, 9);
+    return Number(String(whole) + "." + fraction);
+  };
   const nativeScope = (rule, name, schema, type) => {
     if (
       rule.type !== type ||
@@ -585,7 +603,12 @@ export function createFieldSampler(settings = {}) {
           throw Error(
             "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
           );
-        return validateValue(generate(rule.expression, schema), schema);
+        return validateValue(
+          rule.apipostSource && rule.expression.name === "float"
+            ? nativeFloat(rule.expression.args)
+            : generate(rule.expression, schema),
+          schema,
+        );
       }
     return undefined;
   };
