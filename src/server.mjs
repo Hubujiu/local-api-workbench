@@ -1,3 +1,4 @@
+import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { reflectGrpc } from "./grpc-reflection.mjs";
@@ -217,6 +218,11 @@ export async function createApp({
           ...mcp,
           debugEnvironments,
           grpcExecutor: executePlanGrpc,
+          socketioExecutor: (projectId, input, signal) =>
+            executeSocketIOFlow(input, signal, {
+              projectId,
+              sessions: socketioSessions,
+            }),
           onProgress: (progress) => {
             const activity = mcpActivities.get(activityId);
             if (activity)
@@ -1131,6 +1137,12 @@ export async function createApp({
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
                 grpcCredentials: b.grpcCredentials,
+                executeSocketIO: (input, signal) =>
+                  executeSocketIOFlow(input, signal, {
+                    projectId: p.id,
+                    sessions: socketioSessions,
+                  }),
+                socketioCredentials: b.socketioCredentials,
                 ...scopedExecution(store, p, environmentId),
                 databaseQuery: (operation, signal) =>
                   databaseSessions.query(p.id, operation, signal),

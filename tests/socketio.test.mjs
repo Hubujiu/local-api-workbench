@@ -289,7 +289,10 @@ test("Socket.IO HTTP project APIs persist definitions and final evidence, isolat
   assert(!JSON.stringify(reloaded).includes("fixture-token"));
   const restored = restoreProject({ ...reloaded, version: 1 });
   await app.store.save(restored);
-  assert.equal((await app.store.get(p.id)).protocolRuns[0].id, session.id);
+  assert.equal(
+    (await app.store.get(restored.id)).protocolRuns[0].id,
+    session.id,
+  );
   const rejected = await post("socketio-definitions", {
     ...f.definition,
     auth: { token: "must-not-save" },

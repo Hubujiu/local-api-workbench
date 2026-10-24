@@ -1,3 +1,5 @@
+import { executeSocketIOFlow } from "./socketio-plan.mjs";
+import { SocketIOSessions } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { executeGrpc } from "./grpc.mjs";
 import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
@@ -35,8 +37,19 @@ export function createMCP({
   debugEnvironments = new Map(),
   onProgress = () => {},
   grpcExecutor = executeGrpc,
+  socketioExecutor,
 }) {
   const allowed = new Set(projects);
+  const socketioSessions = new SocketIOSessions();
+  const executePlanSocketIO = (projectId, input, signal) => {
+    if (!write || !execute) throw Error("Socket.IO执行未授权");
+    return socketioExecutor
+      ? socketioExecutor(projectId, input, signal)
+      : executeSocketIOFlow(input, signal, {
+          sessions: socketioSessions,
+          projectId,
+        });
+  };
   let grpcActive = 0;
   const executePlanGrpc = async (input, signal) => {
     if (!write || !execute) throw Error("gRPC执行未授权");
@@ -127,6 +140,7 @@ export function createMCP({
               projectId: { type: "string" },
               planId: { type: "string" },
               grpcCredentials: { type: "object" },
+              socketioCredentials: { type: "object" },
             },
           ],
         ]
@@ -145,6 +159,7 @@ export function createMCP({
             "coverMode",
             "apiScripts",
             "grpcCredentials",
+            "socketioCredentials",
           ].includes(k),
       ),
       additionalProperties: false,
@@ -179,6 +194,16 @@ export function createMCP({
     ...projectArg,
     definitionId: str,
   });
+  addTool(
+    "list_socketio_definitions",
+    "读取项目Socket.IO定义摘要，不连接远端",
+    projectArg,
+  );
+  addTool(
+    "get_socketio_definition",
+    "读取Socket.IO完整定义供计划冻结，不连接远端",
+    { ...projectArg, definitionId: str },
+  );
   addTool("list_execution_flows", "查询计划摘要", projectArg);
   addTool("get_execution_flow", "按ID读取完整计划", {
     ...projectArg,
@@ -224,6 +249,7 @@ export function createMCP({
           planId: str,
           environmentId: str,
           grpcCredentials: { type: "object" },
+          socketioCredentials: { type: "object" },
         },
         ["projectId", "planId"],
       );
@@ -331,6 +357,17 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_list_socketio_definitions":
+              output = (p.settings?.socketioDefinitions || []).map(
+                ({ id, name, url, path }) => ({ id, name, url, path }),
+              );
+              break;
+            case "localapi_get_socketio_definition":
+              output = (p.settings?.socketioDefinitions || []).find(
+                (x) => x.id === args.definitionId,
+              );
+              if (!output) throw Error("Socket.IO定义不存在");
+              break;
             case "localapi_list_grpc_definitions":
               output = (p.settings?.grpcDefinitions || []).map(
                 ({ id, name, target, service, method }) => ({
@@ -584,6 +621,9 @@ export function createMCP({
                   ...scopedExecution(store, p, environmentId),
                   executeGrpc: executePlanGrpc,
                   grpcCredentials: args.grpcCredentials,
+                  executeSocketIO: (input, signal) =>
+                    executePlanSocketIO(p.id, input, signal),
+                  socketioCredentials: args.socketioCredentials,
                   cookieSession: projectCookieSession(store, p, environmentId),
                   onStep: (step) =>
                     onProgress({

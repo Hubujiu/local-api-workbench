@@ -247,6 +247,7 @@ export class SocketIOSessions {
     });
   }
   record(s, direction, event, args, extra = {}) {
+    if (s.sequence >= 10000) throw Error("Socket.IO会话事件总数超过10000项");
     const data = jsonData(args);
     const bytes =
       Buffer.byteLength(JSON.stringify(data)) + Buffer.byteLength(event);
@@ -254,6 +255,7 @@ export class SocketIOSessions {
     s.bytes += bytes;
     s.events.push({
       id: randomUUID(),
+      sequence: ++s.sequence,
       at: new Date().toISOString(),
       direction,
       event,
@@ -316,6 +318,7 @@ export class SocketIOSessions {
       state: "connecting",
       events: [],
       bytes: 0,
+      sequence: 0,
       truncated: false,
       pending: new Map(),
       socket,
@@ -514,4 +517,16 @@ export function validateSocketIORecord(record) {
     jsonData(event.args);
     ids.add(event.id);
   }
+}
+
+export function validateSocketIOConnection(input) {
+  connection(input);
+}
+export function validateSocketIOEvent(value) {
+  return eventName(value);
+}
+export function validateSocketIOArgs(value) {
+  if (!Array.isArray(value) || value.length > 100)
+    throw Error("Socket.IO参数必须为至多100项的数组");
+  jsonData(value, true);
 }

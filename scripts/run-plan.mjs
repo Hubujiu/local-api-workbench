@@ -1,3 +1,4 @@
+import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
 import { executeGrpc } from "../src/grpc.mjs";
 import { recordPlanRun } from "../src/plan-evidence.mjs";
 import { projectCookieSession } from "../src/cookie-jar.mjs";
@@ -37,6 +38,8 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       {
         ...scopedExecution(store, project, environmentId),
         executeGrpc,
+        executeSocketIO: (input, signal) =>
+          executeSocketIOFlow(input, signal, { projectId: project.id }),
         cookieSession: projectCookieSession(store, project, environmentId),
         signal: controller.signal,
         prepareRequest: (request) =>
