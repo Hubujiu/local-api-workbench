@@ -232,11 +232,39 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick)\(([\s\S]*)\)$/.exec(value);
+    /^@(string|pick|character|char)\(([\s\S]*)\)$/.exec(value);
   let args;
   try {
     args = match && JSON.parse("[" + match[2] + "]");
   } catch {}
+  if (match && ["character", "char"].includes(match[1])) {
+    if (
+      !Array.isArray(args) ||
+      args.length !== 1 ||
+      typeof args[0] !== "string" ||
+      args[0].length < 1 ||
+      args[0].length > 64 ||
+      !/^[\x20-\x7e]+$/.test(args[0]) ||
+      args[0].includes("@") ||
+      ["__proto__", "constructor", "prototype"].includes(args[0].toLowerCase())
+    )
+      throw Error("原版character/char仅支持一个有界ASCII字符池或已知池别名");
+    const lower = "abcdefghijklmnopqrstuvwxyz",
+      upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      number = "0123456789",
+      symbol = "!@#$%^&*()[]";
+    const pools = {
+      lower,
+      upper,
+      number,
+      symbol,
+      alpha: lower + upper,
+      undefined: lower + upper + number + symbol,
+    };
+    const key = args[0].toLowerCase();
+    const pool = Object.hasOwn(pools, key) ? pools[key] : args[0];
+    return { name: "native-pick", args: pool.split("") };
+  }
   if (match && match[1] === "pick") {
     if (
       !Array.isArray(args) ||

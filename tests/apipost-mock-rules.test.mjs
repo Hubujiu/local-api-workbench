@@ -135,6 +135,14 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: '@pick(["女"])',
     }),
   );
+  doc.global.mock_custom_rules.push(
+    rule({
+      mock_custom_rule_id: "code",
+      field_type: "string",
+      match_rule: "code",
+      mock_rule_content: '@character("X")',
+    }),
+  );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -147,6 +155,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       price: { type: "number" },
       label: { type: "string" },
       gender: { type: "string" },
+      code: { type: "string" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -176,6 +185,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     price: 6,
     label: "a",
     gender: "女",
+    code: "X",
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -187,6 +197,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     price: 6,
     label: "a",
     gender: "女",
+    code: "X",
     Count: 3,
   });
   const current = await app.store.get(p.id);
@@ -484,6 +495,43 @@ test("native pick string lists return one literal candidate without evaluating n
     '@pick(["a"],2)',
     "@pick(" + JSON.stringify(Array(65).fill("a")) + ")",
     "@pick(" + JSON.stringify(["a".repeat(257)]) + ")",
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native character aliases select one ASCII character and preserve named pool semantics", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  assert.equal(make('@character("X")')("count", { type: "string" }), "X");
+  assert.equal(make('@char("X")')("count", { type: "string" }), "X");
+  for (const [pool, pattern] of [
+    ["LOWER", /^[a-z]$/],
+    ["upper", /^[A-Z]$/],
+    ["number", /^[0-9]$/],
+    ["alpha", /^[a-zA-Z]$/],
+    ["symbol", /^[!@#$%^&*()[\]]$/],
+    ["abc", /^[abc]$/],
+  ]) {
+    const generate = make("@character(" + JSON.stringify(pool) + ")");
+    for (let i = 0; i < 8; i++)
+      assert.match(generate("count", { type: "string" }), pattern);
+  }
+  for (const expression of [
+    "@character()",
+    '@character("中")',
+    '@character("@name")',
+    '@character("constructor")',
+    '@character("__proto__")',
+    '@char("abc",2)',
+    "@character(3)",
+    '@character("")',
   ])
     assert.throws(() => make(expression));
 });
