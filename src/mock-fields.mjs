@@ -1,4 +1,8 @@
 import {
+  parseApipostMockDate,
+  sampleApipostMockDate,
+} from "./apipost-mock-dates.mjs";
+import {
   responseMediaEntries,
   selectJsonResponseMedia,
   isJsonResponseType,
@@ -232,13 +236,18 @@ function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
     Buffer.byteLength(value, "utf8") <= 4096 &&
-    /^@(string|pick|character|char|word|title|sentence|paragraph)(?:\(([\s\S]*)\))?$/.exec(
+    /^@(string|pick|character|char|word|title|sentence|paragraph|date|time|datetime)(?:\(([\s\S]*)\))?$/.exec(
       value,
     );
   let args;
   try {
     args = match && JSON.parse("[" + (match[2] ?? "") + "]");
   } catch {}
+  if (match && ["date", "time", "datetime"].includes(match[1]))
+    return {
+      name: "native-date",
+      args: [parseApipostMockDate(match[1], args)],
+    };
   if (match && ["title", "sentence", "paragraph"].includes(match[1])) {
     const limit = match[1] === "paragraph" ? 8 : 32;
     if (
@@ -513,7 +522,7 @@ function validateValue(value, schema) {
   }
   return value;
 }
-export function createFieldSampler(settings = {}) {
+export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
   const custom = validateMockFieldSettings(settings);
   const rules = [...custom, ...(settings.smartMockBuiltins ? builtins : [])]
     .filter((rule) => rule.enabled !== false)
@@ -706,6 +715,8 @@ export function createFieldSampler(settings = {}) {
   };
   const generateNative = (spec, schema) => {
     switch (spec.name) {
+      case "native-date":
+        return sampleApipostMockDate(spec.args[0], random, now);
       case "native-text":
         return nativeText(spec.args);
       case "native-word":

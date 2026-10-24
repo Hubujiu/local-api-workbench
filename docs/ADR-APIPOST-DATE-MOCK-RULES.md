@@ -1,0 +1,9 @@
+# Bounded original date/time Mock generators
+
+The inspected offline 2.0.0 Mockjs date/time/datetime implementation samples a timestamp between epoch zero and the current clock, then formats it with system-local Date getters. It does not use the Local API native generator's fixed 2020s interval. Imported string rules preserve that separate behavior; existing Local API date rules are unchanged.
+
+Bare or empty date/time/datetime calls use yyyy-MM-dd, HH:mm:ss and yyyy-MM-dd HH:mm:ss defaults. One explicit JSON format string is allowed, up to 64 characters. Supported tokens are yyyy, yy, MM/M, dd/d, HH/H, mm/m and ss/s, with numeric or separator literals. Unsupported/ambiguous runs, weekday/month names, timezone/ISO markers, milliseconds and executable or extra parameters fail explicitly. In particular uppercase YYYY and a literal-looking T are not silently treated as Moment/ISO tokens.
+
+A finite nonnegative TimeClip-safe clock and a bounded random fraction are required. Randomness remains seeded illustrative sampling, not a claim of vendor sequence/distribution equivalence. Date output also depends on the current clock and system timezone: a fixed seed alone does not freeze time. The settings label and imported-rule explanation disclose this. Tests can supply a private clock callback; no project setting, API credential or system timezone is changed by that hook.
+
+Validation covers epoch/current-clock bounds, numeric formatting, unsupported input refusal, independent UTC/Shanghai/Kolkata/New York vectors including DST, unchanged native Local API generation, actual Mock HTTP/storage and browser editing with retained source identity. These checks do not execute the original application or establish complete native directory/UI parity.
