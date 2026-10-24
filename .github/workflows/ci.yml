@@ -1,0 +1,222 @@
+name: Validate Local API
+on:
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: local-api-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  NPM_CONFIG_FETCH_TIMEOUT: "30000"
+  NPM_CONFIG_FETCH_RETRIES: "1"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "2000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: node --test --test-concurrency=2 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=core-test-results.tap tests/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 7
+          name: core-test-diagnostics-${{ matrix.os }}
+          path: core-test-results.tap
+  browser:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+      options: --shm-size=1g
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - run: node tests/curl-http2.mjs
+      - run: node tests/ui-smoke.mjs
+        env:
+          PLAYWRIGHT_BUNDLED: "1"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 7
+          name: ui-evidence
+          path: |
+            /tmp/local-api-*.png
+            /tmp/local-api-trace.zip
+            /tmp/local-api-video/
+  desktop:
+    timeout-minutes: 15
+    env:
+      NPM_CONFIG_FETCH_TIMEOUT: "30000"
+      NPM_CONFIG_FETCH_RETRIES: "1"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "2000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm ci --prefix desktop --no-audit
+      - run: npm run audit:ci
+      - run: npm run audit:ci -- --prefix desktop
+      - run: npx --no install-electron
+        working-directory: desktop
+      - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - name: Install only production dependencies for the package
+        run: |
+          node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
+          npm ci --omit=dev --ignore-scripts --prefix production --no-audit
+      - run: node scripts/build-desktop.mjs
+      - run: node scripts/build-manifest.mjs
+        env:
+          BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: node tests/desktop-smoke.mjs
+        if: runner.os != 'Linux'
+      - run: xvfb-run --auto-servernum node tests/desktop-smoke.mjs
+        if: runner.os == 'Linux'
+      - name: Archive desktop executable permissions
+        if: runner.os != 'Windows'
+        run: tar -czf dist/LocalAPI-${{ runner.os }}.tar.gz -C dist LocalAPI
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-build-metadata-${{ runner.os }}
+          retention-days: 7
+          path: |
+            desktop/package-lock.json
+            dist/LocalAPI/build-manifest.json
+            dist/desktop-failure.png
+      - uses: actions/upload-artifact@v4
+        with:
+          retention-days: 7
+          name: LocalAPI-${{ runner.os }}-portable
+          path: |
+            dist/LocalAPI-${{ runner.os }}.tar.gz
+            ${{ runner.os == 'Windows' && 'dist/LocalAPI' || 'dist/LocalAPI/build-manifest.json' }}
+  source-format:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts
+      - run: npm run audit:ci
+      - run: npm run format:check
+      - run: node scripts/build-markdown.mjs
+      - run: node scripts/build-sandbox-libraries.mjs
+      - run: git diff --exit-code -- public/vendor src/vendor
+
+  database-integration:
+    timeout-minutes: 10
+    # MongoDB 8 rejects affected newer host kernels; use the supported LTS runner.
+    runs-on: ubuntu-22.04
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.8.3.105-alpine
+        env:
+          CLICKHOUSE_USER: tester
+          CLICKHOUSE_PASSWORD: local-fixture-only
+          CLICKHOUSE_DB: fixture
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        ports: ["8123:8123"]
+        options: >-
+          --health-cmd "clickhouse-client --user tester --password local-fixture-only --query 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tester
+          POSTGRES_PASSWORD: local-fixture-only
+          POSTGRES_DB: fixture
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tester -d fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mongodb:
+        image: mongo:8.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.runCommand({ping:1}).ok === 1 ? 0 : 1)'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: local-root-fixture-only
+          MYSQL_USER: tester
+          MYSQL_PASSWORD: local-fixture-only
+          MYSQL_DATABASE: fixture
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysql --protocol=tcp -h 127.0.0.1 -u tester -plocal-fixture-only fixture -e 'SELECT 1'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts
+      - name: Record database host compatibility
+        run: uname -r
+      - run: node tests/remote-database.mjs
+      - name: Seed isolated Redis fixtures
+        run: |
+          docker exec ${{ job.services.redis.id }} redis-cli SET localapi:fixture hello
+          docker exec ${{ job.services.redis.id }} redis-cli HSET localapi:hash a 1 b 2
+          docker exec ${{ job.services.redis.id }} redis-cli RPUSH localapi:list x y z
+      - run: node tests/redis-integration.mjs
+      - name: Seed isolated MongoDB fixtures
+        run: docker exec ${{ job.services.mongodb.id }} mongosh --quiet --eval 'db.getSiblingDB("fixture").items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}])'
+      - run: node tests/mongodb-integration.mjs
+      - run: node tests/clickhouse-integration.mjs
+
+  quickjs-reproducible:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node scripts/build-quickjs.mjs prepare "$RUNNER_TEMP/quickjs"
+      - name: Rebuild reviewed runtime with pinned official SDK
+        run: docker run --rm --network=none -v "$RUNNER_TEMP/quickjs:/work" -w /work/packages/variant-quickjs-wasmfile-release-sync emscripten/emsdk:3.1.65 make -j1 dist/emscripten-module.mjs
+      - run: node scripts/build-quickjs.mjs verify "$RUNNER_TEMP/quickjs"

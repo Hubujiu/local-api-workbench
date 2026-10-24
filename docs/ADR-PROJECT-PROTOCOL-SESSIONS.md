@@ -1,0 +1,17 @@
+# Project-bound interactive protocol sessions
+
+The new project protocol-sessions API binds TCP/WebSocket/SSE connections to the owning project. Start accepts a saved project-local definition or explicit bounded configuration; send/get/stop verify ownership. Project-bound IDs cannot be accessed through another project or the legacy global diagnostic API. The existing global API remains available for existing clients, but cannot claim project ownership by injecting a projectId.
+
+Definitions and runtime credentials follow the one-shot preparation contract. Saved TCP receive encoding is honored. A default message in a saved definition is not sent at connection creation: an explicit send action is still required. No frontend controls were added; this is a backend interface and does not silently migrate the current global diagnostic UI.
+
+## Termination and evidence
+
+Stopping explicitly finalizes one immutable session snapshot in the existing project protocol history. A remotely closed/error session can also be explicitly finalized through stop. Repeated or concurrent stops share the same storage promise and record ID. A failed write permits a storage-only retry; if the prior write actually committed but acknowledgement was lost, the retry matches the stored definition/result hashes and confirms it without duplicating the record. A mismatched existing ID fails instead of overwriting evidence. None of these paths reconnects or resends a message.
+
+This is not crash-durable capture of an unfinished session. Callers must finalize before session expiry/eviction; restoring a project restores evidence only, never a live connection. Existing lifecycle limits remain: five live connections, fifty retained session states, fifteen-minute live lifetime, one-hour expiry, two hundred event previews and eight MiB cumulative accepted display-data bytes. The three MiB persisted-record cap also remains; an oversized final record is reported unsaved, not silently called durable.
+
+Snapshots are independent copies. Finished snapshots do not receive late send/message mutations. Failure state is not changed to success by a later stop. Records distinguish a complete remote close, a manual/deadline capture boundary, errors and dropped/truncated previews. Counts describe retained/dropped events; dataBytes/dataHash describe the event's encoded display representation, not a claim that UTF-8 preview text reconstructs arbitrary TCP bytes. Choose hex/base64 receive encoding for binary preservation.
+
+Every preview carries its full representation byte count and hash. A truncated preview is flagged and never splits a surrogate pair. Dropped events and overflow are explicit; manual/deadline closure or any truncation is partial, and an error is failed. Local send progress remains queued/written/failed, not remote business acceptance. Credential configurations are absent from stored definitions/results; application payloads can still be sensitive.
+
+Records participate in project reload, inert backup/restore and existing read-only MCP history tools. Tests cover real multi-send TCP, project/global access denial, duplicate finalization, SSE remote completion, WebSocket event-window truncation, credential omission, both pre-write and post-write-acknowledgement storage failures, error-state preservation, preview integrity and immutable snapshots. Exact-head cross-platform CI remains required.

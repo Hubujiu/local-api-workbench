@@ -1,0 +1,203 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { dynamicEditor, parseDynamicEdits } from "../public/dynamic-editor.js";
+import { applyStepEdits } from "../public/step-editor.js";
+test("step dynamic edits preserve typed values and metadata with explicit removal", () => {
+  const previous = {
+    source: "mock",
+    value: "@integer(1,2)",
+    seed: 0,
+    type: "integer",
+    note: "keep",
+  };
+  for (const value of [false, 0, null, { nested: [1] }]) {
+    const next = parseDynamicEdits(
+      {
+        enabled: true,
+        source: "fixed",
+        value: JSON.stringify(value),
+        functions: "double, stringify",
+      },
+      previous,
+    );
+    assert.deepEqual(next.value, value);
+    assert.equal(next.note, "keep");
+    assert.equal(next.seed, undefined);
+    assert.deepEqual(next.functions, ["double", "stringify"]);
+  }
+  const spec = parseDynamicEdits(
+    {
+      enabled: true,
+      source: "mock",
+      value: "@integer(7,7)",
+      type: "integer",
+      seed: "0",
+    },
+    previous,
+  );
+  assert.equal(spec.seed, 0);
+  assert.equal(previous.value, "@integer(1,2)");
+  assert.equal(parseDynamicEdits({ enabled: false }, previous), null);
+  const step = {
+    name: "step",
+    request: {
+      query: [
+        { key: "x", value: "old", dynamic: previous, description: "keep" },
+      ],
+    },
+  };
+  const next = applyStepEdits(
+    step,
+    { name: "step" },
+    {
+      query: [
+        { index: 0, key: "x", value: "old", enabled: true, dynamic: spec },
+      ],
+    },
+  );
+  assert.equal(next.request.query[0].dynamic.value, "@integer(7,7)");
+  assert.equal(next.request.query[0].description, "keep");
+  const removed = applyStepEdits(
+    next,
+    { name: "step" },
+    {
+      query: [
+        { index: 0, key: "x", value: "plain", enabled: true, dynamic: null },
+      ],
+    },
+  );
+  assert.equal(removed.request.query[0].dynamic, undefined);
+  assert.equal(step.request.query[0].dynamic.value, "@integer(1,2)");
+});
+test("step dynamic editor rejects invalid values and file combinations without source mutation", () => {
+  const base = { enabled: true, source: "fixed", value: "null" };
+  for (const fields of [
+    { ...base, value: "{" },
+    { ...base, value: "1e999" },
+    { ...base, source: "variable", value: "" },
+    { ...base, functions: Array(11).fill("x").join(",") },
+    {
+      ...base,
+      source: "mock",
+      type: "number",
+      value: "@integer(1,2)",
+      seed: "1.5",
+    },
+  ])
+    assert.throws(() => parseDynamicEdits(fields));
+  assert.throws(
+    () =>
+      applyStepEdits(
+        { name: "s", request: {} },
+        { name: "s" },
+        {
+          form: [
+            {
+              key: "file",
+              value: "",
+              enabled: true,
+              type: "file",
+              dynamic: { source: "fixed", value: 1 },
+            },
+          ],
+        },
+      ),
+    /文件/,
+  );
+  assert(
+    !dynamicEditor({ source: "fixed", value: "</textarea><script>" }).includes(
+      "<script>",
+    ),
+  );
+});
+
+test("dynamic Mock seed follows the runtime unsigned32-bit contract", () => {
+  for (const seed of ["-1", "4294967296"])
+    assert.throws(
+      () =>
+        parseDynamicEdits({
+          enabled: true,
+          source: "mock",
+          value: "@integer(1,2)",
+          type: "integer",
+          seed,
+        }),
+      /种子/,
+    );
+});
+test("step body dynamic definitions preserve typed formats and reject dangling tokens atomically", () => {
+  const step = {
+    name: "s",
+    request: {
+      body: '{"n":{{@value:n}}}',
+      bodyDynamic: {
+        n: { source: "fixed", value: 0, format: "json", note: "keep" },
+      },
+    },
+  };
+  const definition = { ...step.request.bodyDynamic.n, value: false };
+  const next = applyStepEdits(
+    step,
+    { name: "s", bodyDynamic: { n: definition } },
+    {},
+  );
+  assert.equal(next.request.bodyDynamic.n.value, false);
+  assert.equal(step.request.bodyDynamic.n.value, 0);
+  assert.throws(
+    () => applyStepEdits(step, { name: "s", bodyDynamic: {} }, {}),
+    /动态/,
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "s", bodyDynamic: { n: { ...definition, format: "unsafe" } } },
+        {},
+      ),
+    /格式/,
+  );
+  const removed = applyStepEdits(
+    step,
+    { name: "s", body: "{}", bodyDynamic: {} },
+    {},
+  );
+  assert.deepEqual(removed.request.bodyDynamic, {});
+});
+
+test("Query template editor rejects embedded fields without changing the prior snapshot", () => {
+  const previous = {
+    source: "apipost-function",
+    value: "{{token|upper}}",
+    functions: [],
+    note: "keep",
+  };
+  const before = structuredClone(previous);
+  assert.throws(
+    () =>
+      parseDynamicEdits(
+        {
+          enabled: true,
+          source: "apipost-function",
+          value: "prefix {{token|upper}}",
+          functions: "",
+        },
+        previous,
+      ),
+    /Query/,
+  );
+  assert.deepEqual(previous, before);
+  for (const source of [
+    "apipost-header-function",
+    "apipost-form-function",
+    "apipost-body-function",
+  ])
+    assert.equal(
+      parseDynamicEdits({
+        enabled: true,
+        source,
+        value: "prefix {{token|upper}}",
+        functions: "",
+      }).value,
+      "prefix {{token|upper}}",
+    );
+});

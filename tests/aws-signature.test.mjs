@@ -1,0 +1,235 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { createHash } from "node:crypto";
+import { awsSignatureHeaders } from "../src/aws-signature.mjs";
+import { executeRequest } from "../src/runtime.mjs";
+const auth = {
+  accessKey: "foo",
+  secretKey: "bar",
+  region: "us-bar-1",
+  service: "foo",
+  signingDate: "2000-01-01T00:00:00.000Z",
+};
+test("AWS signature matches the official Smithy fixed-date header vector", async () => {
+  const headers = await awsSignatureHeaders(
+    "https://foo.us-bar-1.amazonaws.com/",
+    "POST",
+    {},
+    undefined,
+    auth,
+  );
+  assert.equal(
+    headers.authorization,
+    "AWS4-HMAC-SHA256 Credential=foo/20000101/us-bar-1/foo/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=1e3b24fcfd7655c0c245d99ba7b6b5ca6174eab903ebfbda09ce457af062ad30",
+  );
+  const token = await awsSignatureHeaders(
+    "https://foo.us-bar-1.amazonaws.com/",
+    "POST",
+    {},
+    undefined,
+    { ...auth, sessionToken: "baz" },
+  );
+  assert(
+    token.authorization.endsWith(
+      "Signature=4fd09a8cf3b28a62a9c6c424f03ababcd703528578bc6ec9184fc585f18c3fbb",
+    ),
+  );
+  assert.equal(token["x-amz-security-token"], "baz");
+});
+test("AWS wrapper rejects implicit credentials and signs actual binary payload, duplicate query and percent paths", async () => {
+  await assert.rejects(
+    awsSignatureHeaders("https://example.test", "GET", {}, undefined, {}),
+    /缺少/,
+  );
+  await assert.rejects(
+    awsSignatureHeaders("https://example.test", "GET", {}, undefined, {
+      ...auth,
+      signingDate: "invalid",
+    }),
+    /时间/,
+  );
+  const payload = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+  const signed = await awsSignatureHeaders(
+    "https://foo.us-bar-1.amazonaws.com/foo%3Dbar?a=2&a=1",
+    "POST",
+    { "x-amz-content-sha256": "UNSIGNED-PAYLOAD" },
+    payload,
+    auth,
+  );
+  assert.equal(
+    signed["x-amz-content-sha256"],
+    createHash("sha256").update(payload).digest("hex"),
+  );
+  const reversed = await awsSignatureHeaders(
+    "https://foo.us-bar-1.amazonaws.com/foo%3Dbar?a=1&a=2",
+    "POST",
+    {},
+    payload,
+    auth,
+  );
+  assert.equal(signed.authorization, reversed.authorization);
+});
+test("real HTTP AWS signed request contains computed headers and no secret key", async (t) => {
+  let captured;
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    captured = { headers: req.headers, body: Buffer.concat(chunks) };
+    res.end("ok");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const result = await executeRequest({
+    url: "http://127.0.0.1:" + server.address().port,
+    method: "POST",
+    bodyType: "json",
+    body: '{"ok":true}',
+    auth: { type: "aws", ...auth, secretKey: "fixture-secret-not-transmitted" },
+  });
+  assert.equal(result.status, 200);
+  assert.match(captured.headers.authorization, /^AWS4-HMAC-SHA256 /);
+  assert.equal(
+    captured.headers["x-amz-content-sha256"],
+    createHash("sha256").update(captured.body).digest("hex"),
+  );
+  assert(
+    !captured.headers.authorization.includes("fixture-secret-not-transmitted"),
+  );
+});
+test("Postman AWS import retains explicit credentials and cURL does not silently drop signing", async () => {
+  const { importDocument, toCurl } = await import("../src/core.mjs");
+  const [request] = importDocument({
+    info: { name: "AWS fixture" },
+    item: [
+      {
+        name: "aws",
+        request: {
+          method: "GET",
+          url: "https://example.test",
+          auth: {
+            type: "awsv4",
+            awsv4: Object.entries({
+              ...auth,
+              sessionToken: "fixture-session",
+            }).map(([key, value]) => ({ key, value })),
+          },
+        },
+      },
+    ],
+  });
+  assert.equal(request.auth.type, "aws");
+  assert.equal(request.auth.sessionToken, "fixture-session");
+  assert.throws(() => toCurl(request), /AWS签名/);
+});
+
+test("AWS duplicate ordinary headers use ordered normalized values verified independently over HTTP1 and HTTP2", async (t) => {
+  const { createHmac } = await import("node:crypto");
+  const http2 = await import("node:http2");
+  const hash = (value) => createHash("sha256").update(value).digest("hex");
+  const mac = (key, value) => createHmac("sha256", key).update(value).digest();
+  for (const httpVersion of ["1.1", "2"]) {
+    let captured;
+    const sessions = new Set();
+    const server =
+      httpVersion === "2" ? http2.createServer() : http.createServer();
+    server.on("session", (s) => sessions.add(s));
+    server.on("request", async (req, res) => {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const headers = {
+        ...req.headers,
+        host: req.headers.host || req.headers[":authority"],
+      };
+      const authorization = headers.authorization;
+      const names = /SignedHeaders=([^,]+)/.exec(authorization)?.[1];
+      const signature = /Signature=([a-f0-9]+)/.exec(authorization)?.[1];
+      const canonicalHeaders = names
+        .split(";")
+        .map(
+          (name) =>
+            name +
+            ":" +
+            String(headers[name]).trim().replace(/\s+/g, " ") +
+            "\n",
+        )
+        .join("");
+      const payloadHash = hash(Buffer.concat(chunks));
+      const canonical = [
+        "POST",
+        "/",
+        "",
+        canonicalHeaders,
+        names,
+        payloadHash,
+      ].join("\n");
+      const scope = "20000101/us-bar-1/foo/aws4_request";
+      const toSign = [
+        "AWS4-HMAC-SHA256",
+        "20000101T000000Z",
+        scope,
+        hash(canonical),
+      ].join("\n");
+      const key = mac(
+        mac(
+          mac(mac("AWS4" + auth.secretKey, "20000101"), auth.region),
+          auth.service,
+        ),
+        "aws4_request",
+      );
+      const valid = mac(key, toSign).toString("hex") === signature;
+      captured = { valid, headers, payloadHash };
+      res.writeHead(valid ? 200 : 403);
+      res.end(valid ? "verified" : "signature mismatch");
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => {
+      for (const s of sessions) s.destroy();
+      server.close();
+    });
+    const request = {
+      url: "http://127.0.0.1:" + server.address().port,
+      method: "POST",
+      httpVersion,
+      bodyType: "raw",
+      body: "payload",
+      auth: { type: "aws", ...auth },
+      headers: [
+        { key: "X-Amz-Meta-Repeat", value: "  one  two  " },
+        { key: "x-amz-meta-repeat", value: " three\tfour " },
+        { key: "X-Amz-Meta-Repeat", value: "hidden", enabled: false },
+      ],
+    };
+    const before = structuredClone(request);
+    const result = await executeRequest(request);
+    assert.equal(result.status, 200, result.body);
+    assert.equal(captured.valid, true);
+    assert.equal(captured.headers["x-amz-meta-repeat"], "one two,three four");
+    assert.equal(
+      captured.headers["x-amz-content-sha256"],
+      captured.payloadHash,
+    );
+    assert.deepEqual(request, before);
+  }
+});
+
+test("AWS repeated signing-control headers remain rejected before network", async () => {
+  for (const key of [
+    "X-Amz-Date",
+    "X-Amz-Security-Token",
+    "X-Amz-Content-Sha256",
+    "Cookie",
+    "Set-Cookie",
+  ])
+    await assert.rejects(
+      executeRequest({
+        url: "http://127.0.0.1:1",
+        auth: { type: "aws", ...auth },
+        headers: [
+          { key, value: "a" },
+          { key: key.toLowerCase(), value: "b" },
+        ],
+      }),
+      /重复/,
+    );
+});
