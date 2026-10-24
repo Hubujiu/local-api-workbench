@@ -1,0 +1,152 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { prepareApipostModels } from "../src/apipost-models.mjs";
+const prepare = (schema) =>
+  prepareApipostModels(
+    [{ model_id: "one", model_type: "model", name: "One", schema }],
+    (kind, id) => `${kind}-${id}`,
+    "Project",
+  );
+test("model rewriting distinguishes literal instance data and property names from schema references", () => {
+  const literal = {
+    $ref: "https://example.invalid/not-a-schema",
+    ref: "one",
+    APIPOST_REFS: { value: 1 },
+  };
+  const schema = {
+    type: "object",
+    properties: {
+      $ref: { type: "string" },
+      ref: { const: literal },
+      examples: { default: literal },
+    },
+    example: literal,
+    examples: [literal],
+    enum: [literal],
+    default: literal,
+    "x-data": literal,
+  };
+  const result = prepare(schema).schemas["model-one"];
+  assert.deepEqual(result, schema);
+  assert.notEqual(result.example, schema.example);
+});
+test("real nested schema references are rebased while schema maps preserve their names", () => {
+  const schema = {
+    $defs: { $ref: { type: "integer" } },
+    properties: { child: { $ref: "#/$defs/$ref" } },
+    allOf: [{ $ref: "one" }],
+    additionalProperties: { $ref: "one" },
+    dependentSchemas: { ref: { $ref: "one" } },
+    dependencies: { names: ["ref"], rule: { $ref: "one" } },
+    items: [{ $ref: "one" }],
+    prefixItems: [{ $ref: "one" }],
+  };
+  const result = prepare(schema).schemas["model-one"];
+  assert.equal(
+    result.properties.child.$ref,
+    "#/components/schemas/model-one/$defs/$ref",
+  );
+  for (const value of [
+    result.allOf[0],
+    result.additionalProperties,
+    result.dependentSchemas.ref,
+    result.dependencies.rule,
+    result.items[0],
+    result.prefixItems[0],
+  ])
+    assert.equal(value.$ref, "#/components/schemas/model-one");
+  assert.deepEqual(result.dependencies.names, ["ref"]);
+  assert.throws(
+    () =>
+      prepare({
+        properties: { bad: { $ref: "https://example.invalid/schema" } },
+      }),
+    /远程/,
+  );
+  assert.throws(
+    () => prepare({ properties: { bad: { APIPOST_REFS: { id: "one" } } } }),
+    /自定义/,
+  );
+});
+test("literal data remains subject to the same total node and depth budgets", () => {
+  let nested = {};
+  for (let i = 0; i < 42; i++) nested = { child: nested };
+  assert.throws(() => prepare({ example: nested }), /上限/);
+  assert.throws(() => prepare({ examples: Array(50001).fill(null) }), /上限/);
+});
+
+test("model folders preserve hierarchy, empty groups and schema reference identity", () => {
+  const result = prepareApipostModels(
+    [
+      { model_id: "root", model_type: "folder", name: "Types", parent_id: "0" },
+      {
+        model_id: "empty",
+        model_type: "folder",
+        name: "Empty",
+        parent_id: "root",
+      },
+      {
+        model_id: "one",
+        model_type: "model",
+        name: "One",
+        parent_id: "root",
+        schema: { type: "string" },
+      },
+      {
+        model_id: "two",
+        model_type: "model",
+        name: "Two",
+        schema: { $ref: "one" },
+      },
+    ],
+    (kind, id) => `${kind}-${id}`,
+    "Project",
+  );
+  assert.equal(result.folders.length, 2);
+  assert.equal(result.folders[1].parentId, "model-folder-root");
+  assert.equal(result.dictionary[0].folderId, "model-folder-root");
+  assert.equal(
+    result.schemas["model-two"].$ref,
+    "#/components/schemas/model-one",
+  );
+  assert.equal(Object.hasOwn(result.schemas, "model-folder-root"), false);
+});
+
+test("model folders reject missing parents, cycles, model parents and unexpected schema loss", () => {
+  const folder = { model_id: "f", model_type: "folder", name: "Folder" };
+  const model = {
+    model_id: "m",
+    model_type: "model",
+    name: "Model",
+    schema: {},
+  };
+  for (const nodes of [
+    [{ ...folder, parent_id: "missing" }],
+    [{ ...folder, parent_id: "f" }],
+    [
+      folder,
+      { ...folder, model_id: "g", parent_id: "f" },
+      { ...model, parent_id: "missing" },
+    ],
+    [model, { ...folder, parent_id: "m" }],
+    [
+      {
+        ...folder,
+        schema: { type: "object", properties: { x: { type: "string" } } },
+      },
+    ],
+    [folder, { ...model, model_id: "f" }],
+  ])
+    assert.throws(() =>
+      prepareApipostModels(nodes, (kind, id) => `${kind}-${id}`, "Project"),
+    );
+  const deep = Array.from({ length: 21 }, (_, i) => ({
+    ...folder,
+    model_id: "f" + i,
+    parent_id: i ? "f" + (i - 1) : "0",
+  }));
+  assert.throws(
+    () => prepareApipostModels(deep, (kind, id) => `${kind}-${id}`, "Project"),
+    /20层/,
+  );
+});

@@ -1,0 +1,1137 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { importIntoProject, importDocument } from "../src/core.mjs";
+import {
+  resolveServiceRequest,
+  environmentVariables,
+} from "../src/environments.mjs";
+import { executeRequest } from "../src/runtime.mjs";
+import { interpolate } from "../src/core.mjs";
+import { modernApipostFixture as fixture } from "./fixtures/apipost-modern.mjs";
+const project = () => ({
+  requests: [],
+  folders: [],
+  environments: [{ id: "existing", name: "Existing", variables: {} }],
+  currentEnvironmentId: "existing",
+  servers: [],
+  globalVariables: {},
+  settings: { statuses: [] },
+});
+test("modern export preserves wrapped parameters, environments, services, globals and response examples", async (t) => {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, header: req.headers["x-test"] });
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const doc = fixture();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  doc.global.envs[0].env_var_list.id.description = "Identifier";
+  doc.global.global_vars.shared.description = "Shared token";
+  const p = project();
+  const imported = importIntoProject(p, doc);
+  assert.equal(imported.length, 1);
+  assert.equal(p.currentEnvironmentId, "existing");
+  assert.equal(p.environments.length, 2);
+  assert.equal(p.requests[0].folder, "Group");
+  assert.equal(p.requests[0].description, "preserved");
+  assert.equal(p.requests[0].examples[0].body, '{"ok":true}');
+  assert.equal(p.requests[0].statusId, p.settings.statuses[0].id);
+  const env = p.environments.find((x) => x.id !== "existing");
+  assert.deepEqual(env.variableDefinitions.id, {
+    initialValue: "42",
+    description: "Identifier",
+  });
+  assert.deepEqual(p.globalVariableDefinitions.shared, {
+    initialValue: "global",
+    description: "Shared token",
+  });
+  const request = interpolate(
+    resolveServiceRequest(p, p.requests[0], env.id),
+    environmentVariables(p, env.id),
+  );
+  const result = await executeRequest(request);
+  assert.equal(result.status, 200);
+  assert.deepEqual(seen, [{ url: "/items/43?q=one", header: "current" }]);
+});
+test("modern dependency and merge failures are atomic and request-only conversion refuses metadata loss", () => {
+  for (const change of [
+    (d) => d.models.push({ model_id: "unsupported" }),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ type: "script", value: "danger" }),
+    (d) => d.global.attributes.push({ name: "unknown" }),
+    (d) => (d.global.envs[0].server_list[0].server_id = "missing"),
+  ]) {
+    const d = fixture();
+    change(d);
+    const p = project(),
+      before = structuredClone(p);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, before);
+  }
+  const p = project();
+  p.globalVariables.shared = "conflict";
+  const before = structuredClone(p);
+  assert.throws(() => importIntoProject(p, fixture()), /冲突/);
+  assert.deepEqual(p, before);
+  assert.throws(() => importDocument(fixture()), /完整项目/);
+  assert.throws(
+    () => importIntoProject(project(), fixture(), { sync: true }),
+    /同步/,
+  );
+});
+
+test("modern inheritance is flattened explicitly and cyclic or ambiguous dependencies reject", () => {
+  const doc = fixture();
+  doc.global.global_param.header.parameter = [
+    { key: "X-Global", value: "g" },
+    { key: "X-Test", value: "global" },
+  ];
+  doc.apis[0].request.header = {
+    parameter: [{ key: "X-Test", value: "folder" }],
+  };
+  doc.apis[1].request.header.parameter = [];
+  const p = project();
+  const [request] = importIntoProject(p, doc);
+  assert.equal(request.headers.find((h) => h.key === "X-Test").value, "folder");
+  assert.equal(request.headers.find((h) => h.key === "X-Global").value, "g");
+  for (const mutate of [
+    (d) => (d.apis[0].parent_id = "folder"),
+    (d) => (d.apis[1].url = "//{{id}}/path"),
+    (d) => (d.global.global_param.body.raw = "inherited"),
+    (d) => (d.apis[1].request.post_tasks = [{ type: "script" }]),
+    (d) => d.global.servers.push({ ...d.global.servers[0] }),
+    (d) => (d.extraResource = { hidden: true }),
+  ]) {
+    const d = fixture();
+    mutate(d);
+    const target = project(),
+      before = structuredClone(target);
+    assert.throws(() => importIntoProject(target, d));
+    assert.deepEqual(target, before);
+  }
+});
+
+test("modern flat models preserve references and generate usable schemas without fetching remote resources", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  d.models = [
+    {
+      model_id: "user",
+      model_type: "model",
+      parent_id: "0",
+      name: "User",
+      description: "A fictional user",
+      schema: {
+        type: "object",
+        properties: { id: { type: "integer", const: 7 } },
+        required: ["id"],
+      },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "#/definitions/user" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.equal(p.dictionary.length, 1);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), { id: 7 });
+  assert.match(p.requests[0].schema.$ref, /^#\/components\/schemas\/apipost-/);
+  assert.equal(p.dictionary[0].schema.description, "A fictional user");
+  for (const ref of ["https://example.test/schema", "#/definitions/missing"]) {
+    const bad = fixture();
+    bad.models = structuredClone(d.models);
+    bad.apis[1].request.body.raw_schema = { $ref: ref };
+    const target = project(),
+      before = structuredClone(target);
+    assert.throws(() => importIntoProject(target, bad));
+    assert.deepEqual(target, before);
+  }
+  const custom = structuredClone(d);
+  custom.models[0].schema["x-schema-refs"] = { bad: { $ref: "user" } };
+  assert.throws(() => importIntoProject(project(), custom), /自定义/);
+});
+
+test("model-local pointers are rebased and conflicting reimports remain atomic", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  d.models = [
+    {
+      model_id: "local",
+      model_type: "model",
+      name: "Local",
+      schema: {
+        $defs: { Number: { const: 8 } },
+        type: "object",
+        properties: { n: { $ref: "#/$defs/Number" } },
+      },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "local" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), { n: 8 });
+  const before = structuredClone(p);
+  d.models[0].schema.$defs.Number.const = 9;
+  assert.throws(() => importIntoProject(p, d), /冲突/);
+  assert.deepEqual(p, before);
+});
+
+test("modern import preserves literal reference-shaped examples end to end", async () => {
+  const { sampleProjectSchema } = await import("../src/mock-fields.mjs");
+  const d = fixture();
+  const literal = {
+    $ref: "https://example.invalid/data-only",
+    ref: "example",
+    nested: { APIPOST_REFS: { value: 1 } },
+  };
+  d.models = [
+    {
+      model_id: "literal",
+      model_type: "model",
+      name: "Literal",
+      schema: { type: "object", example: literal },
+    },
+  ];
+  d.apis[1].request.body.raw_schema = { $ref: "literal" };
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(p.dictionary[0].schema.example, literal);
+  assert.deepEqual(sampleProjectSchema(p, p.requests[0].schema), literal);
+});
+
+test("modern import rejects conflicting initial variable definitions atomically", () => {
+  const p = project();
+  p.globalVariables.shared = "current";
+  p.globalVariableDefinitions = {
+    shared: { initialValue: "different", description: "" },
+  };
+  const before = structuredClone(p);
+  assert.throws(() => importIntoProject(p, fixture()), /初始定义冲突/);
+  assert.deepEqual(p, before);
+});
+
+test("modern explicit empty response examples survive import, Mock selection and OpenAPI roundtrip", async () => {
+  const { selectMockResponse } = await import("../src/mock.mjs");
+  const { exportOpenAPI } = await import("../src/core.mjs");
+  const doc = fixture(),
+    p = project();
+  doc.apis[1].url = "https://fixture.example.test/empty";
+  doc.apis[1].response.example = [
+    {
+      raw: "",
+      expect: { code: "204", content_type: "text", name: "No content" },
+    },
+    {
+      raw: "  \n",
+      expect: { code: "200", content_type: "text", name: "Whitespace" },
+    },
+    { expect: { code: "404", content_type: "text", name: "Definition only" } },
+  ];
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(
+    p.requests[0].examples.map((x) => [x.name, x.status, x.body]),
+    [
+      ["No content", 204, ""],
+      ["Whitespace", 200, "  \n"],
+    ],
+  );
+  assert.equal(selectMockResponse(p.requests[0], {}).body, "");
+  const exported = exportOpenAPI(p),
+    roundtrip = importDocument(exported);
+  assert.ok(
+    roundtrip[0].examples.some((x) => x.status === 204 && x.body === ""),
+  );
+  assert.ok(
+    roundtrip[0].examples.some((x) => x.status === 200 && x.body === "  \n"),
+  );
+  assert.deepEqual(doc, before);
+});
+
+test("modern disabled numeric Mock allowlist flag is not mistaken for enabled access control", () => {
+  const doc = fixture(),
+    p = project();
+  doc.apis[1].mock_ip_white_list_enable = -1;
+  importIntoProject(p, doc);
+  assert.equal(p.requests.length, 1);
+  for (const enabled of [1, true, "-1", 2]) {
+    const invalid = fixture(),
+      target = project(),
+      before = structuredClone(target);
+    invalid.apis[1].mock_ip_white_list_enable = enabled;
+    assert.throws(() => importIntoProject(target, invalid), /IP白名单/);
+    assert.deepEqual(target, before);
+  }
+});
+
+test("modern omit-equals numeric sentinel preserves the explicit request setting", () => {
+  for (const flag of [-1, 0]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].request.query.query_add_equal = flag;
+    doc.apis[1].request.query.parameter = [
+      { key: "flag", value: "", is_checked: 1 },
+    ];
+    importIntoProject(p, doc);
+    assert.equal(p.requests[0].queryAddEqual, false);
+    assert.equal(p.requests[0].query[0].value, "");
+  }
+  for (const flag of [false, "-1", 2, null]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].request.query.query_add_equal = flag;
+    assert.throws(() => importIntoProject(p, doc), /等号/);
+    assert.deepEqual(p, before);
+  }
+});
+
+test("modern requests without active inherited rows preserve duplicate parameters", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ url: req.url, header: req.headers["x-repeat"] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  doc.global.global_param.header.parameter = [];
+  doc.global.global_param.query = { parameter: [] };
+  doc.apis[0].request.header = { parameter: [] };
+  doc.apis[1].request.header.parameter = [
+    { key: "X-Repeat", value: "first", is_checked: 1 },
+    { key: "x-repeat", value: "second", is_checked: 1 },
+    { key: "X-Repeat", value: "hidden", is_checked: -1 },
+  ];
+  doc.apis[1].request.query.query_add_equal = -1;
+  doc.apis[0].request.query = { parameter: [] };
+  doc.apis[1].request.query.parameter = [
+    { key: "q", value: "first", is_checked: 1 },
+    { key: "middle", value: "keep", is_checked: 1 },
+    { key: "q", value: "second", is_checked: 1 },
+  ];
+  doc.apis[1].request.query.parameter.push({
+    key: "flag",
+    value: "",
+    is_checked: 1,
+  });
+  const original = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(
+    p.requests[0].headers.map((x) => x.value),
+    ["first", "second", "hidden"],
+  );
+  assert.deepEqual(
+    p.requests[0].query.map((x) => [x.key, x.value]),
+    [
+      ["q", "first"],
+      ["middle", "keep"],
+      ["q", "second"],
+      ["flag", ""],
+    ],
+  );
+  const env = p.environments.find((x) => x.id !== "existing");
+  const request = interpolate(
+    resolveServiceRequest(p, p.requests[0], env.id),
+    environmentVariables(p, env.id),
+  );
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.header, "first, second");
+  assert(wire.url.endsWith("&flag"), wire.url);
+  assert.deepEqual(
+    new URL(wire.url, "http://localhost").searchParams.getAll("q"),
+    ["first", "second"],
+  );
+  assert.deepEqual(doc, original);
+});
+
+test("modern plain text body mode preserves literal bytes and media type over HTTP", async (t) => {
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        body: Buffer.concat(chunks).toString(),
+        type: req.headers["content-type"],
+      }),
+    );
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  doc.apis[1].method = "POST";
+  doc.apis[1].request.body = {
+    mode: "plain",
+    raw: "literal + & = 中文\nsecond line",
+    parameter: [],
+  };
+  const original = structuredClone(doc);
+  importIntoProject(p, doc);
+  const env = p.environments.find((x) => x.id !== "existing");
+  const request = interpolate(
+    resolveServiceRequest(p, p.requests[0], env.id),
+    environmentVariables(p, env.id),
+  );
+  assert.equal(request.bodyType, "raw");
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.body, doc.apis[1].request.body.raw);
+  assert.equal(wire.type, "text/plain");
+  assert.deepEqual(doc, original);
+});
+
+test("modern response delays preserve milliseconds through import, persistence and real Mock HTTP", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "modern-delay-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((r) => app.server.close(r));
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  });
+  const p = await app.store.create("Delayed imported example"),
+    doc = fixture();
+  doc.apis[1].response.example[0].expect.sleep = 80;
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.equal(p.requests[0].examples[0].delayMs, 80);
+  assert.ok(
+    p.requests[0].importNotes.some(
+      (x) => x.includes("OpenAPI") && x.includes("延迟"),
+    ),
+  );
+  await app.store.save(p);
+  const saved = await app.store.get(p.id);
+  assert.equal(saved.requests[0].examples[0].delayMs, 80);
+  const start = performance.now();
+  const response = await fetch(
+    app.url + "/mock/" + p.id + "/" + p.requests[0].id,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), '{"ok":true}');
+  assert.ok(
+    performance.now() - start >= 60,
+    "configured 80ms Mock delay must not be discarded",
+  );
+  assert.deepEqual(doc, before);
+});
+
+test("modern response delay limits and definition-only delays reject atomically", () => {
+  for (const delay of [-1, 5001, 1.5, "80", null, false]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].response.example[0].expect.sleep = delay;
+    assert.throws(() => importIntoProject(p, doc), /延迟/);
+    assert.deepEqual(p, before);
+  }
+  const doc = fixture(),
+    p = project(),
+    before = structuredClone(p);
+  delete doc.apis[1].response.example[0].raw;
+  doc.apis[1].response.example[0].expect.sleep = 1;
+  assert.throws(() => importIntoProject(p, doc), /延迟/);
+  assert.deepEqual(p, before);
+  for (const delay of [0, 5000]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].response.example[0].raw = "";
+    doc.apis[1].response.example[0].expect.sleep = delay;
+    importIntoProject(p, doc);
+    assert.equal(p.requests[0].examples[0].delayMs, delay);
+    assert.equal(p.requests[0].examples[0].body, "");
+  }
+});
+
+test("modern Cookie encoding maps enabled, disabled and absent flags to actual wire semantics", async (t) => {
+  const server = http.createServer((req, res) =>
+    res.end(req.headers.cookie ?? ""),
+  );
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => server.close(r)));
+  for (const flag of [undefined, 1, -1, 0]) {
+    const doc = fixture(),
+      p = project();
+    doc.apis[1].url = "http://127.0.0.1:" + server.address().port + "/cookie";
+    doc.apis[1].request.cookie = {
+      parameter: [{ key: "space key", value: "a+b", is_checked: 1 }],
+    };
+    if (flag !== undefined) doc.apis[1].request.cookie.cookie_encode = flag;
+    importIntoProject(p, doc);
+    const encoded = flag === undefined || flag === 1;
+    assert.equal(
+      p.requests[0].cookieEncoding,
+      encoded ? "apipost" : "apipost-name",
+    );
+    assert.equal(
+      (await executeRequest(interpolate(p.requests[0], { shared: "fixture" })))
+        .body,
+      encoded ? "space%20key=a%2Bb" : "space%20key=a+b",
+    );
+  }
+  for (const flag of [true, false, null, "-1", 2]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].request.cookie.cookie_encode = flag;
+    assert.throws(() => importIntoProject(p, doc), /Cookie编码/);
+    assert.deepEqual(p, before);
+  }
+});
+
+test("modern plain response headers survive import and real Mock HTTP", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "modern-response-headers-")),
+    app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    await new Promise((r) => app.server.close(r));
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  });
+  const p = await app.store.create("Imported response headers"),
+    doc = fixture();
+  doc.apis[1].response.example[0].headers = [
+    { key: "X-Imported", value: "literal+value", is_checked: 1 },
+    { key: "Content-Type", value: "application/custom+json", is_checked: 1 },
+  ];
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  await app.store.save(p);
+  assert.deepEqual(p.requests[0].examples[0].headers, {
+    "content-type": "application/custom+json",
+    "x-imported": "literal+value",
+  });
+  const response = await fetch(
+    app.url + "/mock/" + p.id + "/" + p.requests[0].id,
+  );
+  assert.equal(response.headers.get("x-imported"), "literal+value");
+  assert.equal(response.headers.get("content-type"), "application/custom+json");
+  assert.equal(await response.text(), '{"ok":true}');
+  assert.deepEqual(doc, before);
+});
+test("modern response header controls, duplicates and unsupported row semantics reject atomically", () => {
+  for (const headers of [
+    [{ key: "Set-Cookie", value: "x=1", is_checked: 1 }],
+    [{ key: "Content-Length", value: "10", is_checked: 1 }],
+    [
+      { key: "X", value: "1", is_checked: 1 },
+      { key: "x", value: "2", is_checked: 1 },
+    ],
+    [{ key: "X", value: "bad\r\nline", is_checked: 1 }],
+    [{ key: "X", value: "1", is_checked: -1 }],
+    [
+      {
+        key: "X",
+        value: "1",
+        is_checked: 1,
+        description: "cannot silently discard",
+      },
+    ],
+    { X: "not the supported row array" },
+  ]) {
+    const doc = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    doc.apis[1].response.example[0].headers = headers;
+    assert.throws(
+      () => importIntoProject(p, doc),
+      /响应头|响应示例头|隔离头|传输控制头/,
+    );
+    assert.deepEqual(p, before);
+  }
+  const doc = fixture(),
+    p = project(),
+    before = structuredClone(p);
+  delete doc.apis[1].response.example[0].raw;
+  doc.apis[1].response.example[0].headers = [
+    { key: "X", value: "1", is_checked: 1 },
+  ];
+  assert.throws(() => importIntoProject(p, doc), /响应头|响应示例头/);
+  assert.deepEqual(p, before);
+});
+
+test("single enabled modern script tasks preserve code and run only after explicit execution", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.headers["x-import-task"]);
+    res.setHeader("content-type", "application/json");
+    res.end('{"ok":true}');
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const d = fixture(),
+    p = project();
+  d.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  const before =
+    'apt.setRequestHeader("x-import-task", "kept"); apt.variables.set("stage", "before");';
+  const after =
+    'pm.test("imported after", ()=>{ pm.expect(apt.response.json().ok).to.equal(true); pm.expect(apt.variables.get("stage")).to.equal("before"); });';
+  d.apis[1].request.pre_tasks = [
+    {
+      type: "customScript",
+      id: "pre-id",
+      name: "Before name",
+      enabled: 1,
+      data: before,
+    },
+  ];
+  d.apis[1].request.post_tasks = [
+    {
+      type: "customScript",
+      id: "post-id",
+      name: "After name",
+      enabled: 1,
+      data: after,
+    },
+  ];
+  const original = structuredClone(d);
+  importIntoProject(p, d);
+  assert.deepEqual(d, original);
+  assert.deepEqual(seen, []);
+  const request = p.requests[0];
+  assert.equal(request.beforeScript, before);
+  assert.equal(request.afterScript, after);
+  assert.equal(request.scriptDialect, "apipost8");
+  assert(
+    request.importNotes.some(
+      (n) => n.includes("pre-id") && n.includes("Before name"),
+    ),
+  );
+  const environment = p.environments.find((e) => e.id !== "existing");
+  const result = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, request, environment.id) }] },
+    environmentVariables(p, environment.id),
+    executeRequest,
+  );
+  assert.equal(result.status, "passed", JSON.stringify(result));
+  assert.deepEqual(seen, ["kept"]);
+  request.afterScript =
+    'pm.test("imported failure",()=>pm.expect(1).to.equal(2));';
+  const failed = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, request, environment.id) }] },
+    environmentVariables(p, environment.id),
+    executeRequest,
+  );
+  assert.equal(failed.status, "failed");
+});
+
+test("modern task imports reject mixed excessive or unknown semantics atomically", () => {
+  const task = {
+    type: "customScript",
+    id: "task",
+    name: "Script",
+    enabled: 1,
+    data: 'pm.test("x",()=>{});',
+  };
+  for (const change of [
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        ...Array.from({ length: 17 }, (_, i) => ({ ...task, id: String(i) })),
+      ),
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        { ...task, data: "中".repeat(11000) },
+        { ...task, id: "other", data: "中".repeat(11000) },
+      ),
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        ...Array.from({ length: 16 }, (_, i) => ({
+          ...task,
+          id: String(i),
+          name: "x".repeat(200),
+        })),
+      ),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: 2 }),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, unknown: true }),
+    (d) => d.apis[1].request.pre_tasks.push({ ...task, data: { code: "x" } }),
+    (d) => (d.apis[0].request.pre_tasks = [{ ...task, type: "database" }]),
+    (d) => (d.global.global_param.pre_tasks = [{ ...task, enabled: 2 }]),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({ ...task, data: "x".repeat(65537) }),
+  ]) {
+    const d = fixture(),
+      p = project(),
+      original = structuredClone(p);
+    change(d);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, original);
+  }
+});
+
+test("empty modern task placeholders retain preexisting no-script import semantics", () => {
+  for (const value of [undefined, null, "", {}, []]) {
+    const d = fixture(),
+      p = project();
+    d.apis[1].request.pre_tasks = value;
+    d.apis[1].request.post_tasks = value;
+    importIntoProject(p, d);
+    assert.equal(p.requests[0].scriptDialect, "legacy");
+    assert.equal(p.requests[0].beforeScript, "");
+    assert.equal(p.requests[0].afterScript, "");
+  }
+});
+
+test("ordered modern custom-script blocks share lexical scope and preserve await ordering", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, stage: req.headers["x-script-stage"] });
+    res.setHeader("content-type", "application/json");
+    res.end('{"ok":true}');
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const url = "http://127.0.0.1:" + server.address().port;
+  const d = fixture(),
+    p = project();
+  d.global.envs[0].server_list[0].uri = url;
+  const task = (id, data) => ({
+    type: "customScript",
+    id,
+    name: id,
+    enabled: 1,
+    data,
+  });
+  d.apis[1].request.pre_tasks = [
+    task(
+      "one",
+      `const stage = []; await pm.sendRequest(${JSON.stringify(url + "/child")}); stage.push("one"); // trailing comment`,
+    ),
+    task(
+      "two",
+      'stage.push("two"); apt.setRequestHeader("x-script-stage",stage.join(","));',
+    ),
+  ];
+  d.apis[1].request.post_tasks = [
+    task("after-one", "const answer = apt.response.json();"),
+    task(
+      "after-two",
+      'pm.test("ordered after",()=>pm.expect(answer.ok).to.equal(true));',
+    ),
+  ];
+  importIntoProject(p, d);
+  const env = p.environments.find((e) => e.id !== "existing");
+  const run = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, p.requests[0], env.id) }] },
+    environmentVariables(p, env.id),
+    executeRequest,
+  );
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.deepEqual(
+    seen.map((x) => x.url),
+    ["/child", "/items/43?q=one"],
+  );
+  assert.equal(seen[1].stage, "one,two");
+  assert(
+    p.requests[0].importNotes.some(
+      (n) => n.includes("one") && n.includes("two"),
+    ),
+  );
+  const duplicate = fixture(),
+    p2 = project();
+  duplicate.apis[1].request.pre_tasks = [
+    task("one", "const collision=1;"),
+    task("two", "const collision=2;"),
+  ];
+  importIntoProject(p2, duplicate);
+  const bad = await runPlan(
+    {
+      steps: [
+        {
+          request: {
+            ...p2.requests[0],
+            url: url + "/must-not-send",
+            serviceId: undefined,
+          },
+        },
+      ],
+    },
+    {},
+    executeRequest,
+  );
+  assert.equal(bad.status, "failed");
+  assert.equal(
+    seen.length,
+    2,
+    "duplicate lexical declarations must not become separately scoped successful tasks",
+  );
+});
+
+test("disabled modern custom scripts survive native backup without entering the executable program", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.headers["x-active"]);
+    res.setHeader("content-type", "application/json");
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const source = fixture(),
+    p = project();
+  source.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  source.apis[1].request.pre_tasks = [
+    {
+      id: "off",
+      name: "Disabled source",
+      type: "customScript",
+      enabled: -1,
+      data: "throw Error('disabled must never execute')",
+    },
+    {
+      id: "on",
+      name: "Active",
+      type: "customScript",
+      enabled: 1,
+      data: "apt.setRequestHeader('x-active','yes')",
+    },
+    {
+      id: "zero",
+      name: "Disabled zero",
+      type: "customScript",
+      enabled: 0,
+      data: "const invalid syntax = ;",
+    },
+  ];
+  const original = structuredClone(source);
+  importIntoProject(p, source);
+  assert.deepEqual(source, original);
+  const request = p.requests[0];
+  assert.equal(request.beforeScript, source.apis[1].request.pre_tasks[1].data);
+  assert.deepEqual(
+    request.importedScriptTasks.before,
+    source.apis[1].request.pre_tasks,
+  );
+  const restored = importDocument(JSON.stringify({ requests: [request] }))[0];
+  assert.deepEqual(restored.importedScriptTasks, request.importedScriptTasks);
+  const env = p.environments.find((item) => item.id !== "existing");
+  const run = await runPlan(
+    { steps: [{ request: resolveServiceRequest(p, restored, env.id) }] },
+    environmentVariables(p, env.id),
+    executeRequest,
+  );
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.deepEqual(seen, ["yes"]);
+});
+
+test("disabled modern child parameters do not suppress active ancestor values on the wire", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ url: req.url, headers: req.headers }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  for (const key of ["header", "query", "cookie"]) {
+    doc.global.global_param[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-Inherited" : "inherited",
+          value: "global",
+          is_checked: 1,
+        },
+      ],
+    };
+    doc.apis[0].request[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "x-inherited" : "inherited",
+          value: "folder-disabled",
+          is_checked: -1,
+        },
+      ],
+    };
+    doc.apis[1].request[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-INHERITED" : "inherited",
+          value: "request-disabled",
+          is_checked: 0,
+        },
+      ],
+    };
+  }
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(doc, before);
+  const env = p.environments.find((x) => x.id !== "existing"),
+    request = interpolate(
+      resolveServiceRequest(p, p.requests[0], env.id),
+      environmentVariables(p, env.id),
+    );
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.headers["x-inherited"], "global");
+  assert.equal(
+    new URL(wire.url, "http://localhost").searchParams.get("inherited"),
+    "global",
+  );
+  assert.match(wire.headers.cookie, /inherited=global/);
+  assert.doesNotMatch(JSON.stringify(wire), /folder-disabled|request-disabled/);
+  assert(
+    p.requests[0].headers.some(
+      (row) => row.value === "request-disabled" && row.enabled === false,
+    ),
+  );
+});
+
+test("inherited system rows remain effective without activating disabled request-local system rows", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ url: req.url, headers: req.headers }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const doc = fixture(),
+    p = project();
+  doc.global.envs[0].server_list[0].uri =
+    "http://127.0.0.1:" + server.address().port;
+  for (const key of ["header", "query", "cookie"]) {
+    doc.global.global_param[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-System" : "system",
+          value: "parent-system",
+          is_checked: 0,
+          is_system: 1,
+        },
+      ],
+    };
+    doc.apis[1].request[key] = {
+      parameter: [
+        {
+          key: key === "header" ? "X-Local-System" : "local",
+          value: "must-stay-disabled",
+          is_checked: 0,
+          is_system: 1,
+        },
+      ],
+    };
+  }
+  const before = structuredClone(doc);
+  importIntoProject(p, doc);
+  assert.deepEqual(doc, before);
+  const env = p.environments.find((x) => x.id !== "existing"),
+    request = interpolate(
+      resolveServiceRequest(p, p.requests[0], env.id),
+      environmentVariables(p, env.id),
+    );
+  const wire = JSON.parse((await executeRequest(request)).body);
+  assert.equal(wire.headers["x-system"], "parent-system");
+  assert.equal(
+    new URL(wire.url, "http://localhost").searchParams.get("system"),
+    "parent-system",
+  );
+  assert.match(wire.headers.cookie, /system=parent-system/);
+  assert.doesNotMatch(JSON.stringify(wire), /must-stay-disabled/);
+  assert.equal(
+    p.requests[0].headers.find((r) => r.key === "X-Local-System").enabled,
+    false,
+  );
+});
+
+test("modern form bodies inherit bounded ancestor text rows without replacing their body mode", async (t) => {
+  const received = [];
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    received.push({
+      body: Buffer.concat(chunks).toString(),
+      type: req.headers["content-type"],
+    });
+    res.end("ok");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  for (const mode of ["urlencoded", "form-data"]) {
+    const d = fixture(),
+      p = project();
+    d.global.envs[0].server_list[0].uri =
+      "http://127.0.0.1:" + server.address().port;
+    d.apis[1].method = "POST";
+    d.global.global_param.body.parameter = [
+      { key: "shared", value: "global", is_checked: 1 },
+      { key: "system", value: "system-value", is_checked: 0, is_system: 1 },
+    ];
+    d.apis[0].request.body = {
+      parameter: [{ key: "shared", value: "folder", is_checked: 1 }],
+    };
+    d.apis[1].request.body = {
+      mode,
+      parameter: [
+        { key: "shared", value: "disabled-child", is_checked: 0 },
+        { key: "own", value: "a+b & c", is_checked: 1 },
+      ],
+    };
+    const before = structuredClone(d);
+    importIntoProject(p, d);
+    assert.deepEqual(d, before);
+    assert.equal(p.requests[0].bodyType, mode);
+    const env = p.environments.find((e) => e.id !== "existing");
+    const r = interpolate(
+      resolveServiceRequest(p, p.requests[0], env.id),
+      environmentVariables(p, env.id),
+    );
+    assert.equal((await executeRequest(r)).status, 200);
+  }
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(received[0].body)), {
+    system: "system-value",
+    shared: "folder",
+    own: "a+b & c",
+  });
+  assert.match(received[1].type, /multipart\/form-data; boundary=/);
+  for (const v of [
+    'name="shared"',
+    'name="system"',
+    'name="own"',
+    "folder",
+    "system-value",
+    "a+b & c",
+  ])
+    assert(received[1].body.includes(v));
+  assert.doesNotMatch(JSON.stringify(received), /disabled-child/);
+});
+
+test("unsupported inherited form dependencies reject atomically rather than disappearing", () => {
+  for (const change of [
+    (d) => {
+      d.apis = [];
+      d.global.global_param.body.parameter = [
+        { key: "empty", value: "x", is_checked: 1 },
+      ];
+    },
+    (d) => {
+      d.apis = [d.apis[0]];
+      d.apis[0].request.body = {
+        parameter: [{ key: "empty", value: "x", is_checked: 1 }],
+      };
+    },
+    (d) => {
+      d.apis[1].request.body = { mode: "urlencoded", parameter: [] };
+      d.global.global_param.body.parameter = [
+        { key: "file", value: "/private/file", type: "file", is_checked: 1 },
+      ];
+    },
+    (d) => {
+      d.apis[1].request.body = { mode: "json", raw: "{}" };
+      d.global.global_param.body.parameter = [
+        { key: "form", value: "x", is_checked: 1 },
+      ];
+    },
+  ]) {
+    const d = fixture(),
+      p = project(),
+      before = structuredClone(p);
+    change(d);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, before);
+  }
+});
+
+test("modern inherited duplicate parameters reject atomically instead of guessing source deduplication", () => {
+  for (const key of ["header", "query", "cookie", "body"]) {
+    const d = fixture();
+    if (key === "body")
+      d.apis[1].request.body = { mode: "urlencoded", parameter: [] };
+    d.global.global_param[key] = {
+      parameter: [{ key: "inherited", value: "yes", is_checked: 1 }],
+    };
+    const rows = [
+      { key: "duplicate", value: "first", is_checked: 1 },
+      {
+        key: key === "header" ? "Duplicate" : "duplicate",
+        value: "second",
+        is_checked: 1,
+      },
+    ];
+    d.apis[1].request[key] = { ...d.apis[1].request[key], parameter: rows };
+    const p = project(),
+      before = structuredClone(p),
+      source = structuredClone(d);
+    assert.throws(() => importIntoProject(p, d), /继承.*重复参数/);
+    assert.deepEqual(p, before);
+    assert.deepEqual(d, source);
+  }
+});
+
+test("inheritance duplicate guard covers ancestor duplicates but permits inactive rows and case-sensitive query keys", () => {
+  const d = fixture();
+  d.global.global_param.query = {
+    parameter: [
+      { key: "inherited", value: "one", is_checked: 1 },
+      { key: "inherited", value: "two", is_checked: 1 },
+    ],
+  };
+  assert.throws(() => importIntoProject(project(), d), /继承.*重复参数/);
+  d.global.global_param.query.parameter[1].is_checked = 0;
+  d.apis[1].request.query.parameter = [
+    { key: "q", value: "lower", is_checked: 1 },
+    { key: "Q", value: "upper", is_checked: 1 },
+    { key: "q", value: "inactive", is_checked: 0 },
+  ];
+  const p = project();
+  importIntoProject(p, d);
+  assert.deepEqual(
+    p.requests[0].query
+      .filter((x) => x.enabled !== false)
+      .map((x) => [x.key, x.value]),
+    [
+      ["inherited", "one"],
+      ["q", "lower"],
+      ["Q", "upper"],
+    ],
+  );
+  assert.equal(
+    p.requests[0].query.find((x) => x.value === "inactive").enabled,
+    false,
+  );
+});

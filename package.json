@@ -1,0 +1,69 @@
+{
+  "name": "local-api-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test --test-concurrency=2 tests/*.test.mjs",
+    "check": "node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js",
+    "format": "prettier --write \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
+    "build:markdown": "node scripts/build-markdown.mjs",
+    "build:sandbox": "node scripts/build-sandbox-libraries.mjs",
+    "audit:ci": "node scripts/audit-dependencies.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@faker-js/faker": "10.6.0",
+    "@grpc/grpc-js": "1.14.6",
+    "@grpc/proto-loader": "0.8.1",
+    "@msgpack/msgpack": "3.1.2",
+    "@smithy/signature-v4": "5.7.4",
+    "@tikpay/iso8583-ts": "0.4.0",
+    "@xmldom/xmldom": "0.9.12",
+    "engine.io-client": "6.6.7",
+    "eventsource-parser": "4.1.2",
+    "hawk": "9.0.2",
+    "jose": "6.2.13",
+    "js-md4": "0.3.2",
+    "markdown-it": "15.0.3",
+    "mongodb": "7.7.0",
+    "mysql2": "3.24.6",
+    "pg": "8.16.3",
+    "postgres-array": "2.0.0",
+    "protobufjs": "7.6.6",
+    "quickjs-emscripten": "0.31.0",
+    "socket.io-client": "4.8.4",
+    "socket.io-client-v2": "npm:socket.io-client@2.5.0",
+    "ssh2": "1.17.0",
+    "tough-cookie": "6.0.2",
+    "ws": "8.21.3",
+    "xpath": "0.0.35",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@grpc/reflection": "1.0.4",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "apipost-mock": "1.0.2",
+    "chai": "6.3.0",
+    "crypto-js": "4.2.0",
+    "esbuild": "0.28.2",
+    "handlebars": "4.7.10",
+    "json5": "2.2.3",
+    "lodash": "4.18.1",
+    "moment": "2.31.0",
+    "postman-url-encoder": "3.0.8",
+    "prettier": "3.6.2",
+    "socket.io": "4.8.4",
+    "uuid": "14.0.3"
+  },
+  "overrides": {
+    "parseuri": "3.0.2"
+  }
+}

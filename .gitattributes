@@ -1,0 +1,16 @@
+# Preserve reviewed URL SDK source and generated asset bytes on every platform.
+# Their manifests intentionally hash exact bytes, not normalized text.
+/scripts/vendor/postman-url-sdk/** -text
+/src/vendor/url-sdk.js -text
+/src/vendor/url-sdk-host.js -text
+/src/vendor/url-sdk-manifest.json -text
+/src/vendor/URL-SDK-LICENSES.txt -text
+/src/vendor/url-sdk-facade.js -text
+/src/vendor/url-sdk-facade-manifest.json -text
+/src/script-url-facade.mjs text eol=lf
+/src/script-url-runtime.mjs text eol=lf
+/src/script-url-state.mjs text eol=lf
+# Preserve the licensed Mock bundle's exact-byte integrity on Windows checkout.
+/src/vendor/native-mock-library.js -text
+/src/vendor/native-mock-library.json -text
+/src/vendor/APIPOST-MOCK-LICENSE.txt -text

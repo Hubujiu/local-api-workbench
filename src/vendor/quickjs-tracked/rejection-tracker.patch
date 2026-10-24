@@ -1,0 +1,142 @@
+diff --git a/c/interface.c b/c/interface.c
+index 39eb0c6..bff2b7d 100644
+--- a/c/interface.c
++++ b/c/interface.c
+@@ -294,11 +294,115 @@ JSValueConst *QTS_GetTrue() {
+  * Standard FFI functions
+  */
+ 
++/* Local API extension: bounded, host-only native promise rejection tracking.
++ * Each script uses an isolated WASM module. No tracker callback is exposed to JS.
++ */
++#define QTS_MAX_UNHANDLED 1000
++static struct {
++  JSRuntime *runtime;
++  JSContext *context;
++  JSValue promise;
++  JSValue reason;
++} qts_unhandled[QTS_MAX_UNHANDLED];
++static int qts_unhandled_count = 0;
++static int qts_unhandled_overflow = 0;
++static void qts_drop_unhandled(int index) {
++  JSContext *ctx = qts_unhandled[index].context;
++  JS_FreeValue(ctx, qts_unhandled[index].promise);
++  JS_FreeValue(ctx, qts_unhandled[index].reason);
++  if (index + 1 < qts_unhandled_count) {
++    memmove(&qts_unhandled[index], &qts_unhandled[index + 1],
++      (qts_unhandled_count - index - 1) * sizeof(qts_unhandled[0]));
++  }
++  qts_unhandled_count--;
++}
++static void qts_clear_unhandled(JSRuntime *runtime, JSContext *context) {
++  for (int i = 0; i < qts_unhandled_count;) {
++    if ((runtime && qts_unhandled[i].runtime == runtime) ||
++        (context && qts_unhandled[i].context == context)) qts_drop_unhandled(i);
++    else i++;
++  }
++  if (!qts_unhandled_count) qts_unhandled_overflow = 0;
++}
++static void qts_track_rejection(JSContext *ctx, JSValueConst promise,
++    JSValueConst reason, JS_BOOL handled, void *opaque) {
++  JSRuntime *runtime = JS_GetRuntime(ctx);
++  for (int i = 0; i < qts_unhandled_count; i++) {
++    if (qts_unhandled[i].runtime == runtime &&
++        JS_VALUE_GET_PTR(qts_unhandled[i].promise) == JS_VALUE_GET_PTR(promise)) {
++      if (handled) qts_drop_unhandled(i);
++      return;
++    }
++  }
++  if (handled) return;
++  if (qts_unhandled_count >= QTS_MAX_UNHANDLED) { qts_unhandled_overflow = 1; return; }
++  int index = qts_unhandled_count++;
++  qts_unhandled[index].runtime = runtime;
++  qts_unhandled[index].context = ctx;
++  qts_unhandled[index].promise = JS_DupValue(ctx, promise);
++  qts_unhandled[index].reason = JS_DupValue(ctx, reason);
++}
++int QTS_UnhandledRejectionCount() {
++  return qts_unhandled_count + qts_unhandled_overflow;
++}
++const char *QTS_UnhandledRejectionMessage() {
++  static char message[4096];
++  if (qts_unhandled_overflow) return "Promise rejection tracking exceeded 1000 entries";
++  if (!qts_unhandled_count) return "";
++  JSContext *ctx = qts_unhandled[0].context;
++  JSValue reason = JS_DupValue(ctx, qts_unhandled[0].reason);
++  JSValue display = JS_UNDEFINED;
++  if (JS_IsError(ctx, reason)) {
++    JSPropertyDescriptor descriptor;
++    JSAtom atom = JS_NewAtom(ctx, "message");
++    if (atom == JS_ATOM_NULL) {
++      JS_FreeValue(ctx, JS_GetException(ctx));
++      JS_FreeValue(ctx, reason);
++      return "Unhandled Promise rejection (reason unavailable)";
++    }
++    int found = JS_GetOwnProperty(ctx, &descriptor, reason, atom);
++    JS_FreeAtom(ctx, atom);
++    if (found > 0) {
++      if (JS_IsString(descriptor.value)) display = JS_DupValue(ctx, descriptor.value);
++      JS_FreeValue(ctx, descriptor.value);
++      JS_FreeValue(ctx, descriptor.getter);
++      JS_FreeValue(ctx, descriptor.setter);
++    } else if (found < 0) {
++      JS_FreeValue(ctx, JS_GetException(ctx));
++    }
++    if (JS_IsUndefined(display)) {
++      JS_FreeValue(ctx, reason);
++      return "Unhandled Promise rejection (Error.message is not plain text)";
++    }
++  } else if (JS_IsString(reason) || JS_IsNumber(reason) || JS_IsBool(reason) ||
++      JS_IsNull(reason) || JS_IsUndefined(reason)) {
++    display = JS_DupValue(ctx, reason);
++  } else {
++    JS_FreeValue(ctx, reason);
++    return "Unhandled Promise rejection (opaque reason)";
++  }
++  JS_FreeValue(ctx, reason);
++  size_t length = 0;
++  const char *text = JS_ToCStringLen(ctx, &length, display);
++  JS_FreeValue(ctx, display);
++  if (!text) {
++    JS_FreeValue(ctx, JS_GetException(ctx));
++    return "Unhandled Promise rejection (reason unavailable)";
++  }
++  if (length >= sizeof(message)) length = sizeof(message) - 1;
++  memcpy(message, text, length); message[length] = 0;
++  JS_FreeCString(ctx, text);
++  return message;
++}
+ JSRuntime *QTS_NewRuntime() {
+-  return JS_NewRuntime();
++  JSRuntime *runtime = JS_NewRuntime();
++  if (runtime) JS_SetHostPromiseRejectionTracker(runtime, qts_track_rejection, NULL);
++  return runtime;
+ }
+ 
+ void QTS_FreeRuntime(JSRuntime *rt) {
++  JS_SetHostPromiseRejectionTracker(rt, NULL, NULL);
++  qts_clear_unhandled(rt, NULL);
+   void *data = JS_GetRuntimeOpaque(rt);
+   if (data) {
+     free(data);
+@@ -392,6 +496,7 @@ JSContext *QTS_NewContext(JSRuntime *rt, IntrinsicsFlags intrinsics) {
+ }
+ 
+ void QTS_FreeContext(JSContext *ctx) {
++  qts_clear_unhandled(NULL, ctx);
+   JS_FreeContext(ctx);
+ }
+ 
+diff --git a/packages/variant-quickjs-wasmfile-release-sync/Makefile b/packages/variant-quickjs-wasmfile-release-sync/Makefile
+index 8b19b6a..c32ca9a 100644
+--- a/packages/variant-quickjs-wasmfile-release-sync/Makefile
++++ b/packages/variant-quickjs-wasmfile-release-sync/Makefile
+@@ -74,7 +74,7 @@ CFLAGS_WASM_BROWSER=$(CFLAGS_WASM)
+ # Emscripten options - variant & target specific
+ CFLAGS_WASM+=-Oz
+ CFLAGS_WASM+=-flto
+-CFLAGS_WASM+=--closure 1
++CFLAGS_WASM+=--closure 0
+ CFLAGS_WASM+=-s FILESYSTEM=0
+ CFLAGS_WASM+=--pre-js $(TEMPLATES)/pre-extension.js
+ CFLAGS_WASM+=--pre-js $(TEMPLATES)/pre-wasmMemory.js

@@ -1,0 +1,15 @@
+# Bounded selected and all-case execution
+
+The interface-case panel supports explicit selected/all execution, complementing the source component's corresponding actions. A batch takes independent case snapshots before starting, resolves a single explicitly selected environment, and runs at most 100 cases serially in the visible root/group order. Existing case script, HTTP, variable-write, history and runtime limits are reused without expansion.
+
+A failed case outcome is retained and later cases continue. An API/transport exception stops the batch with an explicit error and no retry because the remote outcome may be uncertain. Cancel sets a batch stop flag and cancels the active existing run ID; later cases are not sent. Results and a passed/not-passed/completed count remain visible. Batch summary is session-local; individual request history keeps its existing retention policy. Closing the page does not retry or resume unsent cases, and an in-flight request's outcome may need checking in history.
+
+Selection and organization do not imply execution; only Run Selected or Run All sends requests. Invalid, duplicate, missing or oversized selections fail before sending. The running input is cloned, so editing saved source data cannot silently change queued requests. Request-local function snapshots and environment resolution keep the same behavior as single-case execution. Existing single-case controls are not replaced by a different engine.
+
+Tests cover immutable ordered snapshots, failure continuation, cancellation, size/identity validation and stop-without-retry transport errors. Browser fixtures prove three real sequential requests including a middle HTTP/assertion failure, unchanged saved cases, and cancellation of a held loopback request with the next selected case never sent. This does not implement the excluded traditional test-role automation module or claim original GUI equivalence.
+
+Batch evidence uses compact expandable rows. Result storage is scoped by project as well as case ID: native restored copies intentionally retain IDs, but must not display another project's prior execution result. A restore-copy browser regression checks this boundary. Single-case execution retains its existing expanded result presentation.
+
+Batch input snapshots have a 4 MiB aggregate limit checked before cloning or executing. Per-case session evidence is capped at 64 KiB: larger responses become explicitly labeled summaries with bounded UTF-8 excerpts and failure counts; they never change the original outcome. Full single-request evidence remains subject to the existing server-side history retention. These UI summaries avoid retaining/rendering up to 100 maximum-size payloads at once.
+
+Starting a batch clears prior session evidence for only its selected cases. Unsent cases after cancellation or a transport stop are explicitly marked not run in this batch, never shown with a previous batch pass result. Unselected cases and other projects keep their own evidence; server history is unchanged.

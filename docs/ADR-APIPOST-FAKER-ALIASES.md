@@ -1,0 +1,9 @@
+# Explicit Apipost Faker aliases and mockExp
+
+The official [script guide](https://wiki.apipost.cn/docs/http_debug/script/) shows `mockExp` with `$fakerjs.Company.name`; the [database guide](https://wiki.apipost.cn/docs/http_debug/database/) also uses Internet.displayName/password variables. These documented spellings previously failed with an undefined-variable error. The red-first test in builtin-variables.test.mjs preserves that regression.
+
+The existing reviewed no-argument Faker catalogue now also accepts `$fakerjs.<CapitalizedModule>.<method>` aliases. The documented Internet.displayName and Internet.password paths are explicitly added. Aliases are assembled from fixed internal entries, never by resolving a user-supplied property path or importing an arbitrary module. Entries with customized options are not automatically aliased as default methods. The existing English locale and pinned Faker version remain; this is not the complete vendor catalogue, locale set or distribution equivalence. There are163 total selectable names including existing built-ins and aliases, not163 independently new capabilities.
+
+Global `mockExp(text)` uses the existing bounded replaceIn implementation inside QuickJS. It resolves current variables plus supported built-ins, enforces64KiB UTF-8 input/output and1000 substitutions, and shares the existing Faker-call/VM/time limits. It accepts strings only; unknown expressions and unsupported Mock.js templates fail explicitly. User-defined variables retain precedence. Script source is not pre-interpolated.
+
+Core tests cover the documented names in normal interpolation and the actual isolated script helper, unsafe property names and object-input rejection. The browser scenario runs the helper in a real response script, checks the resulting variable and successful outcome. The generated parameter-assistant catalogue stays aligned with runtime names. Exact-head CI remains the verification gate.

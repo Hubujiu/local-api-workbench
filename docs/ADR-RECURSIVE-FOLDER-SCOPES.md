@@ -1,0 +1,9 @@
+# Explicit ancestor scope inheritance
+
+Existing projects retain exact full-path parameter, authentication and script matching. A separately confirmed project option `recursiveFolderScopes: true` enables project → ancestor → descendant → request precedence. This avoids silently expanding which requests receive existing credentials or code. UI warns about target trust; cancelling confirmation leaves the option disabled. Service bindings are unchanged (exact path).
+
+At each parameter level, same-name rows replace ancestors, including disabled masks; Header names are case-insensitive. The nearest explicit authentication applies, including none. Enabled ancestor scripts execute in root-to-leaf order in both phases, with distinct scope evidence; disabled scripts do not erase other scopes. This is an explicit local contract, not a claim of every undocumented vendor ordering.
+
+Paths allow at most32 segments. Phase descriptor ceiling becomes34 (project +32 folders +request), not a larger time/memory/network budget. All descriptors share the existing250ms activity/2s overall deadline,100000 total source characters and all existing network/timer/assertion/Faker/output quotas. Deep or expensive sequences can therefore fail the same budget. Frozen plans/cases do not acquire new scopes. Malformed boolean settings are rejected on save.
+
+Regression tests first fail on the old exact-only implementation. Tests cover opt-in/default isolation, prefix siblings, nearest overrides, disabled masks, explicit no-auth, frozen snapshots and actual local HTTP execution through project/ancestor/child/request scripts. Browser verifies confirmation cancellation, enabling, persistence and reverting the option. Existing quota-boundary tests remain, with the descriptor-count boundary adjusted to35 for the newly supported34-stage structure.

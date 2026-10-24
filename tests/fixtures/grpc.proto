@@ -1,0 +1,18 @@
+syntax = "proto3";
+package fixture;
+message Payload {
+  string text = 1;
+  int64 big = 2;
+  bytes blob = 3;
+  int32 count = 4;
+  map<string,string> tags = 5;
+}
+service Echo {
+  rpc Unary(Payload) returns (Payload);
+  rpc Watch(Payload) returns (stream Payload);
+  rpc Collect(stream Payload) returns (Payload);
+  rpc Chat(stream Payload) returns (stream Payload);
+  rpc Fail(Payload) returns (Payload);
+  rpc Slow(Payload) returns (Payload);
+  rpc Overflow(Payload) returns (stream Payload);
+}
