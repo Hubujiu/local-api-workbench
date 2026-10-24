@@ -1,9 +1,11 @@
+import { boundedSSEParser, validSSEHandshake } from "./sse-parser.mjs";
 import net from "node:net";
 
 export async function captureSSE(
   { url, headers = {}, duration = 3000, maxEvents = 20 },
   signal,
 ) {
+  signal?.throwIfAborted();
   const target = new URL(url);
   if (!["http:", "https:"].includes(target.protocol))
     throw Error("SSE 仅支持 HTTP/HTTPS");
@@ -16,7 +18,6 @@ export async function captureSSE(
   );
   const events = [];
   let status = 0,
-    buffer = "",
     timedOut = false;
   try {
     const response = await fetch(target, {
@@ -25,41 +26,22 @@ export async function captureSSE(
       redirect: "manual",
     });
     status = response.status;
-    if (!response.headers.get("content-type")?.includes("text/event-stream"))
-      throw Error("响应不是 text/event-stream");
-    const decoder = new TextDecoder();
-    let bytes = 0;
-    for await (const chunk of response.body) {
-      bytes += chunk.byteLength;
-      if (bytes > 1024 * 1024) throw Error("事件流超过 1 MiB");
-      buffer += decoder
-        .decode(chunk, { stream: true })
-        .replaceAll("\r\n", "\n");
-      let index;
-      while ((index = buffer.indexOf("\n\n")) >= 0) {
-        const block = buffer.slice(0, index);
-        buffer = buffer.slice(index + 2);
-        const event = {
-          event: "message",
-          data: "",
-          receivedAt: new Date().toISOString(),
-        };
-        const lines = [];
-        for (const line of block.split("\n")) {
-          if (line.startsWith(":")) continue;
-          const i = line.indexOf(":"),
-            key = i < 0 ? line : line.slice(0, i),
-            value = i < 0 ? "" : line.slice(i + 1).replace(/^ /, "");
-          if (key === "data") lines.push(value);
-          else if (["event", "id", "retry"].includes(key)) event[key] = value;
-        }
-        if (lines.length) {
-          event.data = lines.join("\n");
-          events.push(event);
-        }
-        if (events.length >= Math.min(100, Math.max(1, maxEvents)))
-          return { status, events, limited: true };
-      }
+    if (!validSSEHandshake(response))
+      throw Error("SSE 握手失败: " + response.status);
+    const limit = Number.isFinite(Number(maxEvents))
+      ? Math.min(100, Math.max(1, Math.floor(Number(maxEvents))))
+      : 20;
+    const reached = Symbol("SSE event limit");
+    const parser = boundedSSEParser((event) => {
+      events.push({ ...event, receivedAt: new Date().toISOString() });
+      if (events.length >= limit) throw reached;
+    });
+    try {
+      for await (const chunk of response.body) parser.feed(chunk);
+      parser.finish();
+    } catch (error) {
+      if (error === reached) return { status, events, limited: true };
+      throw error;
     }
   } catch (e) {
     if (controller.signal.aborted && !signal?.aborted) timedOut = true;

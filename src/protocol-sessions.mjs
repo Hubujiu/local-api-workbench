@@ -1,3 +1,8 @@
+import {
+  boundedSSEParser,
+  validSSEHandshake,
+  sseEventText,
+} from "./sse-parser.mjs";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
 
@@ -143,25 +148,25 @@ export class ProtocolSessions {
             signal: session.controller.signal,
             redirect: "manual",
           });
-          if (
-            !response.ok ||
-            !response.headers.get("content-type")?.includes("text/event-stream")
-          )
+          if (!validSSEHandshake(response))
             throw Error("SSE 握手失败: " + response.status);
           session.state = "open";
-          const decoder = new TextDecoder();
-          let buffer = "";
-          for await (const chunk of response.body) {
-            buffer += decoder.decode(chunk, { stream: true });
-            if (buffer.length > 1024 * 1024)
-              throw Error("单个 SSE 事件超过 1 MiB");
-            let match;
-            while ((match = /\r?\n\r?\n/.exec(buffer))) {
-              const block = buffer.slice(0, match.index);
-              buffer = buffer.slice(match.index + match[0].length);
-              this.event(session, "received", block);
-            }
-          }
+          const parser = boundedSSEParser(
+            (event) => {
+              const text = sseEventText(event);
+              this.event(session, "received", text);
+              const recorded = session.events.at(-1);
+              recorded.sse = {
+                event: event.event,
+                id: event.id,
+                ...(event.retry !== undefined ? { retry: event.retry } : {}),
+              };
+              recorded.truncated = text.length > 100000;
+            },
+            { maxWireBytes: 8 * 1024 * 1024 },
+          );
+          for await (const chunk of response.body) parser.feed(chunk);
+          parser.finish();
           this.stop(session.id);
         })().catch(failed);
       }
