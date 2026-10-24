@@ -293,6 +293,7 @@ function nativeStringExpression(value) {
     };
   }
   if (match && ["character", "char"].includes(match[1])) {
+    if (Array.isArray(args) && !args.length) args = ["undefined"];
     if (
       !Array.isArray(args) ||
       args.length !== 1 ||

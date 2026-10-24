@@ -273,6 +273,16 @@ test("native numeric rules retain ordering, source identity and explicit example
   ).mock = '@string("Q")';
   await app.store.save(current);
   assert.equal((await (await fetch(p.requests[0].url)).json()).label, "Q");
+  current.settings.mockFieldRules.find(
+    (rule) => rule.pattern === "label",
+  ).mock = "@char()";
+  await app.store.save(current);
+  const characterResponse = await fetch(p.requests[0].url);
+  assert.equal(characterResponse.status, 200);
+  assert.match(
+    (await characterResponse.json()).label,
+    /^[A-Za-z0-9!@#$%^&*()[\]]$/,
+  );
   const conflict = structuredClone(doc);
   conflict.global.mock_custom_rules[0].mock_rule_content = "@natural(9,9)";
   const before = structuredClone(restored);
@@ -589,7 +599,7 @@ test("native character aliases select one ASCII character and preserve named poo
       assert.match(generate("count", { type: "string" }), pattern);
   }
   for (const expression of [
-    "@character()",
+    "@character(null)",
     '@character("中")',
     '@character("@name")',
     '@character("constructor")',
@@ -730,6 +740,37 @@ test("native string no-count overloads emit one character, not base Mock.js defa
     '@string("😀")',
     "@string(3)",
     "@string(null)",
+  ])
+    assert.throws(() => make(expression));
+});
+
+test("native character default pools include letters digits and original symbols", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings);
+  };
+  const pool =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]";
+  for (const expression of ["@character", "@character()", "@char", "@char()"]) {
+    const sample = make(expression),
+      explicit = make('@character("undefined")');
+    for (let i = 0; i < 128; i++) {
+      const value = sample("count", { type: "string" });
+      assert.equal(value.length, 1);
+      assert(pool.includes(value));
+      assert.equal(value, explicit("count", { type: "string" }));
+    }
+  }
+  for (const expression of [
+    '@char("")',
+    "@character(null)",
+    "@char(3)",
+    '@char("a",1)',
   ])
     assert.throws(() => make(expression));
 });
