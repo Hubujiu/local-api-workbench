@@ -1,5 +1,5 @@
 import { jsonPathSegments } from "./json-path.mjs";
-import { normalizeGrpcDefinition } from "./grpc.mjs";
+import { grpcTransport, normalizeGrpcDefinition } from "./grpc.mjs";
 import { grpcSource } from "./grpc-schema.mjs";
 const plain = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
@@ -119,4 +119,31 @@ export function grpcPlanRequest(step, messages) {
     timeoutMs: d.timeoutMs,
     messages,
   };
+}
+
+export function grpcPlanCredentials(plan, input = {}) {
+  if (
+    !plain(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype ||
+    Buffer.byteLength(JSON.stringify(input)) > 1024 * 1024
+  )
+    throw Error("gRPC临时凭据映射无效或超限");
+  const bindings = new Map();
+  for (const [stepId, value] of Object.entries(input)) {
+    const steps = plan.steps.filter((step) => step.id === stepId);
+    if (
+      steps.length !== 1 ||
+      steps[0]?.type !== "grpc" ||
+      ["__proto__", "constructor", "prototype"].includes(stepId)
+    )
+      throw Error("gRPC临时凭据步骤不存在或不唯一");
+    if (
+      !plain(value) ||
+      Object.keys(value).some((key) => !["metadata", "tls"].includes(key))
+    )
+      throw Error("gRPC临时凭据仅支持metadata与tls，不能覆盖目标或定义");
+    grpcTransport(steps[0].grpc.definition.target, value);
+    bindings.set(stepId, structuredClone(value));
+  }
+  return bindings;
 }

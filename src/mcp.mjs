@@ -123,7 +123,11 @@ export function createMCP({
           [
             "localapi_run_plan",
             "执行已保存的计划，仅在额外执行授权下可用",
-            { projectId: { type: "string" }, planId: { type: "string" } },
+            {
+              projectId: { type: "string" },
+              planId: { type: "string" },
+              grpcCredentials: { type: "object" },
+            },
           ],
         ]
       : []),
@@ -134,7 +138,14 @@ export function createMCP({
       type: "object",
       properties,
       required: Object.keys(properties).filter(
-        (k) => !["keyword", "folder", "coverMode", "apiScripts"].includes(k),
+        (k) =>
+          ![
+            "keyword",
+            "folder",
+            "coverMode",
+            "apiScripts",
+            "grpcCredentials",
+          ].includes(k),
       ),
       additionalProperties: false,
     },
@@ -208,7 +219,12 @@ export function createMCP({
       addTool(
         "execute_flow",
         "执行已有计划，可临时指定环境而不改写计划默认值",
-        { ...projectArg, planId: str, environmentId: str },
+        {
+          ...projectArg,
+          planId: str,
+          environmentId: str,
+          grpcCredentials: { type: "object" },
+        },
         ["projectId", "planId"],
       );
       addTool(
@@ -567,6 +583,7 @@ export function createMCP({
                 {
                   ...scopedExecution(store, p, environmentId),
                   executeGrpc: executePlanGrpc,
+                  grpcCredentials: args.grpcCredentials,
                   cookieSession: projectCookieSession(store, p, environmentId),
                   onStep: (step) =>
                     onProgress({

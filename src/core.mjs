@@ -1,4 +1,8 @@
-import { snapshotGrpcStep, grpcPlanRequest } from "./grpc-plan.mjs";
+import {
+  snapshotGrpcStep,
+  grpcPlanRequest,
+  grpcPlanCredentials,
+} from "./grpc-plan.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { sdkOpenAPIDefinition } from "./script-url-openapi.mjs";
 import {
@@ -417,10 +421,12 @@ export async function runPlan(
     databaseQuery,
     executionContext,
     executeGrpc,
+    grpcCredentials,
   } = {},
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
+  const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   for (const step of snapshot.steps)
     if (step.type !== "grpc") step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
@@ -476,7 +482,10 @@ export async function runPlan(
         record.grpc = structuredClone(validated.grpc);
         record.grpc.messages = messages;
         const result = await executeGrpc(
-          grpcPlanRequest(validated, messages),
+          {
+            ...grpcPlanRequest(validated, messages),
+            ...credentials.get(step.id),
+          },
           signal,
         );
         record.grpcResult = { ...result, metadata: [], trailers: [] };

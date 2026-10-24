@@ -257,6 +257,31 @@ function outputMetadata(metadata) {
     }
   return result;
 }
+export function grpcTransport(target, input = {}) {
+  const metadata = inputMetadata(input.metadata),
+    address = endpoint(target);
+  const tls = input.tls ?? {};
+  if (
+    !plain(tls) ||
+    Object.keys(tls).some((k) => !["ca", "key", "cert"].includes(k))
+  )
+    throw Error("gRPC TLS配置无效");
+  if (!address.secure && Object.keys(tls).length)
+    throw Error("明文gRPC不能携带TLS配置");
+  for (const value of Object.values(tls))
+    if (typeof value !== "string" || !value || Buffer.byteLength(value) > 65536)
+      throw Error("gRPC证书须为有界PEM文本");
+  if (Boolean(tls.key) !== Boolean(tls.cert))
+    throw Error("gRPC双向TLS须同时提供证书和私钥");
+  const credentials = address.secure
+    ? grpc.credentials.createSsl(
+        tls.ca ? Buffer.from(tls.ca) : undefined,
+        tls.key ? Buffer.from(tls.key) : undefined,
+        tls.cert ? Buffer.from(tls.cert) : undefined,
+      )
+    : grpc.credentials.createInsecure();
+  return { metadata, address, credentials };
+}
 export async function executeGrpc(input, signal) {
   if (
     !plain(input) ||
@@ -314,28 +339,10 @@ export async function executeGrpc(input, signal) {
     if (desc.requestSerialize(message).length > MAX_BYTES)
       throw Error("gRPC请求编码超过1MiB");
   }
-  const metadata = inputMetadata(input.metadata),
-    address = endpoint(definition.target);
-  const tls = input.tls || {};
-  if (
-    !plain(tls) ||
-    Object.keys(tls).some((k) => !["ca", "key", "cert"].includes(k))
-  )
-    throw Error("gRPC TLS配置无效");
-  if (!address.secure && Object.keys(tls).length)
-    throw Error("明文gRPC不能携带TLS配置");
-  for (const value of Object.values(tls))
-    if (typeof value !== "string" || !value || Buffer.byteLength(value) > 65536)
-      throw Error("gRPC证书须为有界PEM文本");
-  if (Boolean(tls.key) !== Boolean(tls.cert))
-    throw Error("gRPC双向TLS须同时提供证书和私钥");
-  const credentials = address.secure
-    ? grpc.credentials.createSsl(
-        tls.ca ? Buffer.from(tls.ca) : undefined,
-        tls.key ? Buffer.from(tls.key) : undefined,
-        tls.cert ? Buffer.from(tls.cert) : undefined,
-      )
-    : grpc.credentials.createInsecure();
+  const { metadata, address, credentials } = grpcTransport(
+    definition.target,
+    input,
+  );
   const start = performance.now(),
     result = {
       id: randomUUID(),

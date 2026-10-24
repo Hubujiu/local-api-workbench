@@ -4,7 +4,7 @@
 
 Use the maintained Apache-2.0 `@grpc/grpc-js@1.14.6` and `@grpc/proto-loader@0.8.1`, with BSD-3-Clause `protobufjs@7.6.6`, rather than reimplement HTTP/2 framing, Protobuf encoding, TLS or streaming. Original-application static inspection identified schema discovery, reflection and request/stream entrypoints; that is feature evidence, not proof of runtime equivalence. The older public Apipost wrapper remains a reference, not an unreviewed dependency replacement.
 
-This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. It does not yet implement native Apipost gRPC project migration, interactive long-lived streaming, a frontend, or gRPC-plan scripts and request-scoped credential injection. Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
+This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. It does not yet implement native Apipost gRPC project migration, interactive long-lived streaming, a frontend, or gRPC-plan scripts. Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
 
 ## API and persistence
 
@@ -50,4 +50,12 @@ Records retain native `grpcResult.status.code` and messages, not fabricated HTTP
 
 The ordinary plan history stores the complete snapshot and per-step evidence. HTTP/MCP/CLI report `recordSaved:false` and the storage error if persistence fails after execution, without replaying network effects; CLI also exits nonzero. A successful RPC is not mislabeled as a transport failure solely because storage failed.
 
-Acceptance exercises real gRPC → extraction → real HTTP, MCP save/execute/reload/backup and project isolation, concurrent variable isolation, remote refusal and expected native status, cancellation and run-ID collision, a real CLI child process, malformed input rejection and injected storage failure with exactly one observed remote invocation. Per-step gRPC scripts and authenticated-plan credential injection remain explicit unsupported capabilities, not implicit fallbacks to HTTP.
+Acceptance exercises real gRPC → extraction → real HTTP, MCP save/execute/reload/backup and project isolation, concurrent variable isolation, remote refusal and expected native status, cancellation and run-ID collision, a real CLI child process, malformed input rejection and injected storage failure with exactly one observed remote invocation. Per-step gRPC scripts and CLI credential injection remain explicit unsupported capabilities, not implicit fallbacks to HTTP.
+
+## Request-scoped plan credentials
+
+The HTTP run endpoint and both MCP flow-execution tools accept optional `grpcCredentials`, keyed by an unambiguous saved gRPC step ID. Each binding permits only `metadata` and `tls` (`ca`, `key`, `cert`); it cannot replace the frozen target/schema, messages or method. Before any plan step executes, validate all bindings with the same official transport validation as standalone gRPC. Reject unknown/non-gRPC/duplicate step IDs, malformed metadata, unpaired client key/cert, TLS-verification overrides and a mapping larger than 1 MiB. The core executor accepts the same explicit option; the CLI has no credential file/input flag in this milestone.
+
+Bindings are cloned for this invocation, never added to variables, plan snapshots, history, export or debug-environment caches. Transport metadata/trailers are still omitted from recorded evidence. Missing credentials on a later run do not reuse an earlier binding. This is not a credential vault, automatic login, OAuth refresh mechanism or implicit network authorization. Application payloads and remote error text may still contain sensitive data; do not mistake transport-field omission for universal content redaction.
+
+Acceptance uses an independent real mutual-TLS fixture requiring a metadata token. It covers successful authorized HTTP/MCP execution, missing/bad token, missing TLS material, concurrent good/bad bindings without state leakage, reload/evidence omission, endpoint override refusal and preflight failure before an earlier HTTP step could run. All keys/tokens/certificates are disposable test-fixture material; no user service or credentials are involved.

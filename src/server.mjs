@@ -982,6 +982,7 @@ export async function createApp({
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
+                grpcCredentials: b.grpcCredentials,
                 ...scopedExecution(store, p, environmentId),
                 databaseQuery: (operation, signal) =>
                   databaseSessions.query(p.id, operation, signal),
