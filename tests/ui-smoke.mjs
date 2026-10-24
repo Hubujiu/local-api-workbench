@@ -6983,6 +6983,18 @@ try {
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify("ENV-PIPELINE"),
   );
+  await page.locator("#dynamic-value").fill("prefix {{data.token|lower()}}");
+  await page.locator("#dialog-save").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#toast")
+      .textContent.includes("Query模板暂不支持表达式前后缀"),
+  );
+  assert(await page.locator("#dialog").isVisible());
+  assert.equal(
+    await page.locator("#dynamic-value").inputValue(),
+    "prefix {{data.token|lower()}}",
+  );
   await page.locator("#dynamic-value").fill("{{data.token|lower()}}");
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(

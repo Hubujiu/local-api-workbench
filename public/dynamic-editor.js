@@ -55,7 +55,9 @@ export function parseDynamicEdits(fields, previous = {}) {
     .filter(Boolean);
   if (functions.length > 10) throw Error("动态值最多10个处理函数");
   if (isApipostFunctionSource(fields.source)) {
-    parseApipostFunctionTemplate(value);
+    const parsed = parseApipostFunctionTemplate(value);
+    if (fields.source === "apipost-function" && parsed.fieldExpression)
+      throw Error("原版Query模板暂不支持表达式前后缀");
     if (functions.length) throw Error("原版函数模板暂不支持额外加工链");
   }
   const next = {

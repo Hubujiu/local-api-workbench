@@ -4352,7 +4352,9 @@ function editDynamicValue(group, index) {
       if (isApipostFunctionSource(spec.source)) {
         if (group !== apipostFunctionSourceGroups[spec.source])
           throw Error("原版函数模板来源与参数位置不匹配");
-        parseApipostFunctionTemplate(spec.value);
+        const parsed = parseApipostFunctionTemplate(spec.value);
+        if (group === "query" && parsed.fieldExpression)
+          throw Error("原版Query模板暂不支持表达式前后缀");
         if (spec.source === "apipost-body-function" && spec.format !== "text")
           throw Error("原版正文函数模板须选择原文输出");
         if (spec.functions.length)

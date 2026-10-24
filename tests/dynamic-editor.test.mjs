@@ -163,3 +163,41 @@ test("step body dynamic definitions preserve typed formats and reject dangling t
   );
   assert.deepEqual(removed.request.bodyDynamic, {});
 });
+
+test("Query template editor rejects embedded fields without changing the prior snapshot", () => {
+  const previous = {
+    source: "apipost-function",
+    value: "{{token|upper}}",
+    functions: [],
+    note: "keep",
+  };
+  const before = structuredClone(previous);
+  assert.throws(
+    () =>
+      parseDynamicEdits(
+        {
+          enabled: true,
+          source: "apipost-function",
+          value: "prefix {{token|upper}}",
+          functions: "",
+        },
+        previous,
+      ),
+    /Query/,
+  );
+  assert.deepEqual(previous, before);
+  for (const source of [
+    "apipost-header-function",
+    "apipost-form-function",
+    "apipost-body-function",
+  ])
+    assert.equal(
+      parseDynamicEdits({
+        enabled: true,
+        source,
+        value: "prefix {{token|upper}}",
+        functions: "",
+      }).value,
+      "prefix {{token|upper}}",
+    );
+});
