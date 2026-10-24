@@ -51,6 +51,7 @@ import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 import { mutatePostgres } from "./postgres-write.mjs";
+import { mutateMySQL } from "./mysql-write.mjs";
 import { mutateRedis } from "./redis.mjs";
 import { captureSSE, exchangeTCP, exchangeWebSocket } from "./protocols.mjs";
 import { querySQLiteBounded, mutateSQLiteBounded } from "./database.mjs";
@@ -1036,11 +1037,13 @@ export async function createApp({
             if (b.allowWrite === true) {
               if (b.type === "postgres")
                 return json(res, 200, await mutatePostgres(b));
+              if (b.type === "mysql")
+                return json(res, 200, await mutateMySQL(b));
               if (b.type === "redis")
                 return json(res, 200, await mutateRedis(b));
               if (b.type && b.type !== "sqlite")
                 throw Error(
-                  "显式写入目前仅支持 SQLite / PostgreSQL / Redis SET",
+                  "显式写入目前仅支持 SQLite / PostgreSQL / MySQL / Redis SET",
                 );
               return json(
                 res,

@@ -285,3 +285,6 @@ const { verifySSHDatabaseFlows } = await import(
   "./ssh-database-integration.mjs"
 );
 await verifySSHDatabaseFlows(common);
+
+const { verifyMySQLWrites } = await import("./mysql-write-integration.mjs");
+await verifyMySQLWrites(common);
