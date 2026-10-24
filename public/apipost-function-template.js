@@ -37,7 +37,7 @@ export const apipostFunctionSourceGroups = Object.freeze({
 export const isApipostFunctionSource = (source) =>
   typeof source === "string" &&
   Object.hasOwn(apipostFunctionSourceGroups, source);
-export function parseApipostFunctionTemplate(value) {
+export function parseApipostFunctionTemplate(value, allowField = true) {
   if (
     typeof value !== "string" ||
     new TextEncoder().encode(value).length > 65536
@@ -58,9 +58,21 @@ export function parseApipostFunctionTemplate(value) {
     /^\{\{(['"])([^'"{}|]*)\1((?:\|[A-Za-z_][A-Za-z0-9_]*(?:\([^(){}|]*\))?)+)\}\}$/.exec(
       value,
     );
+  if (!match && !variable && !literal && allowField) {
+    const expressions = value.match(/\{\{[^{}]*\}\}/g) || [];
+    if (
+      expressions.length === 1 &&
+      expressions[0] !== value &&
+      !value.replace(expressions[0], "").includes("{{")
+    )
+      return {
+        ...parseApipostFunctionTemplate(expressions[0], false),
+        fieldExpression: expressions[0],
+      };
+  }
   if (!match && !variable && !literal)
     throw Error(
-      "仅支持完整函数、安全点路径变量或引号文本及白名单加工链，不支持嵌套表达式或外部拼接",
+      "仅支持完整函数、安全点路径变量或引号文本及白名单加工链，不支持嵌套或多个表达式",
     );
   if (
     variable &&
@@ -227,8 +239,10 @@ export function validateApipostTemplateRequest(request) {
   )
     throw Error("原版函数模板暂不支持SDK URL模式或声明式操作组合");
   let count = 0;
-  for (const { row } of entries) {
+  for (const { group, row } of entries) {
     const parsed = parseApipostFunctionTemplate(row.dynamic.value);
+    if (parsed.fieldExpression && group === "query")
+      throw Error("原版Query模板暂不支持表达式前后缀");
     if (row.dynamic.functions?.length)
       throw Error("原版函数模板暂不支持额外加工链");
     if (row.enabled !== false) count += apipostTemplateStages(parsed).length;

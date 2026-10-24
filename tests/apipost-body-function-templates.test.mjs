@@ -135,8 +135,8 @@ test("modern whole JSON and plain body templates import atomically and reach rea
     );
     assert.equal(run.status, "passed", JSON.stringify(run));
     for (const raw of [
-      "prefix " + expression,
-      '{"nested":"' + expression + '"}',
+      "prefix " + expression + expression,
+      '{"nested":"' + expression + '{{other}}"}',
     ]) {
       const bad = structuredClone(d),
         before = structuredClone(p);

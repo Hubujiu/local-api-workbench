@@ -6651,7 +6651,7 @@ try {
       id: "template-after",
       name: "Template response",
       enabled: 1,
-      data: 'pm.test("template after response",()=>pm.expect(pm.response.json().body).to.equal("OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg=="));',
+      data: 'pm.test("template after response",()=>pm.expect(pm.response.json().body).to.equal("prefix:OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==:suffix"));',
     },
   ];
   templateModern.apis.push(variableTemplateAPI);
@@ -7006,14 +7006,14 @@ try {
   await page
     .locator("#dynamic-value")
     .fill(
-      "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}",
+      "prefix:{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}:suffix",
     );
   await page.locator("#dynamic-preview").click();
   await page.waitForFunction(
     () =>
       document.querySelector("#dynamic-result").textContent ===
       JSON.stringify(
-        "OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==",
+        "prefix:OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==:suffix",
       ),
   );
   await page.locator("#dialog-save").click();
@@ -7061,7 +7061,7 @@ try {
   );
   assert.equal(
     variableTemplateEcho.body,
-    "OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==",
+    "prefix:OGRkODMzM2JlMjBkMTg4MDE2YzU3ODcxMTkxNjFiMDg0ZTRhYmMzMGIyZWY4MDhiMzQ3NjNkOGJiM2VlMTdmYg==:suffix",
   );
   assert.equal(
     new URL(variableTemplateEcho.url, "http://fixture").searchParams.get(
@@ -7078,7 +7078,7 @@ try {
   );
   assert.equal(
     variableTemplateSaved.bodyDynamic.apipost_body.value,
-    "{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}",
+    "prefix:{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}:suffix",
   );
 
   assert.deepEqual(errors, []);

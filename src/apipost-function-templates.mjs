@@ -1,4 +1,7 @@
-import { replaceExactApipostTemplate } from "./apipost-template-replacement.mjs";
+import {
+  replaceExactApipostTemplate,
+  replaceApipostFieldTemplate,
+} from "./apipost-template-replacement.mjs";
 import {
   parseApipostFunctionTemplate,
   isApipostBuiltinStage,
@@ -17,6 +20,9 @@ export async function resolveApipostFunctionTemplate(
   if (!["query", "headers", "form", "body"].includes(group))
     throw Error("原版函数模板参数位置无效");
   const parsed = parseApipostFunctionTemplate(expression);
+  if (parsed.fieldExpression && group === "query")
+    throw Error("原版Query模板暂不支持表达式前后缀");
+  const innerExpression = parsed.fieldExpression || expression;
   const { name, argument, pipeline = [] } = parsed;
   const selected = apipostTemplateStages(parsed).map((name, index) => {
     if (isApipostBuiltinStage(name)) {
@@ -53,8 +59,8 @@ export async function resolveApipostFunctionTemplate(
     ],
   });
   const baseExpression = pipeline.length
-    ? expression.slice(0, expression.indexOf("|")) + "}}"
-    : expression;
+    ? innerExpression.slice(0, innerExpression.indexOf("|")) + "}}"
+    : innerExpression;
   let initial;
   if (!name) {
     if (parsed.variable) {
@@ -159,8 +165,23 @@ export async function resolveApipostFunctionTemplate(
     throw Error("原版函数模板暂仅支持有限同步基本类型结果");
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
     throw Error("原版函数模板结果超过64KiB");
-  if (group !== "query" && typeof value === "string" && value !== expression)
+  if (parsed.fieldExpression) {
+    value =
+      value === innerExpression
+        ? expression
+        : replaceApipostFieldTemplate(
+            expression,
+            innerExpression,
+            typeof value === "string" ? value : JSON.stringify(value),
+          );
+  } else if (
+    group !== "query" &&
+    typeof value === "string" &&
+    value !== expression
+  )
     value = replaceExactApipostTemplate(expression, value);
+  if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
+    throw Error("原版函数模板结果超过64KiB");
   const text = typeof value === "string" ? value : JSON.stringify(value);
   if (
     (["query", "headers"].includes(group) && /[\r\n]/.test(text)) ||

@@ -125,7 +125,8 @@ test("modern Header templates import without execution and reach actual HTTP unc
   assert.deepEqual(seen, ["Bearer abc+/=%#?&"]);
   const bad = structuredClone(d),
     before = structuredClone(p);
-  bad.apis[1].request.header.parameter[0].value = "prefix " + expression;
+  bad.apis[1].request.header.parameter[0].value =
+    "prefix " + expression + expression;
   assert.throws(() => importIntoProject(p, bad));
   assert.deepEqual(p, before);
 });
