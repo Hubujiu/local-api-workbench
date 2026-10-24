@@ -4403,8 +4403,10 @@ function editDynamicValue(group, index) {
     } catch (error) {
       output.textContent = error.message;
     }
-    if (output.isConnected && $("#dialog").open)
-      output.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (output.isConnected && $("#dialog").open) {
+      const content = $("#dialog-content");
+      content.scrollTop = content.scrollHeight;
+    }
   };
   $("#dynamic-remove").onclick = () => {
     if (group === "body") {
