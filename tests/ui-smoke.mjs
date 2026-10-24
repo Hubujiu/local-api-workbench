@@ -6673,8 +6673,8 @@ try {
     )
     .click();
   assert.equal(await page.locator("#mock-field-type").inputValue(), "string");
-  await page.locator("#mock-field-value").fill('@string("xyz",3)');
-  await page.screenshot({ path: "/tmp/local-api-native-string-mock.png" });
+  await page.locator("#mock-field-value").fill('@pick(["甲","乙"])');
+  await page.screenshot({ path: "/tmp/local-api-native-pick-mock.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6685,7 +6685,7 @@ try {
   await page.reload();
   const editedStringRule = (await app.store.get(nativeProjectId)).settings
     .mockFieldRules[2];
-  assert.equal(editedStringRule.mock, '@string("xyz",3)');
+  assert.equal(editedStringRule.mock, '@pick(["甲","乙"])');
   assert.deepEqual(
     editedStringRule.apipostSource,
     nativeProject.settings.mockFieldRules[2].apipostSource,

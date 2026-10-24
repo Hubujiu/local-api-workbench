@@ -127,6 +127,14 @@ test("native numeric rules retain ordering, source identity and explicit example
       mock_rule_content: '@string("a",3)',
     }),
   );
+  doc.global.mock_custom_rules.push(
+    rule({
+      mock_custom_rule_id: "gender",
+      field_type: "string",
+      match_rule: "gender",
+      mock_rule_content: '@pick(["女"])',
+    }),
+  );
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
     type: "object",
@@ -138,6 +146,7 @@ test("native numeric rules retain ordering, source identity and explicit example
       item_5: { type: "integer" },
       price: { type: "number" },
       label: { type: "string" },
+      gender: { type: "string" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -166,6 +175,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     item_5: 3,
     price: 6,
     label: "a",
+    gender: "女",
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
@@ -176,6 +186,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     item_5: 3,
     price: 6,
     label: "a",
+    gender: "女",
     Count: 3,
   });
   const current = await app.store.get(p.id);
@@ -443,4 +454,36 @@ test("native string rules sample explicit ASCII pools without replacement", () =
   ]) {
     assert.throws(() => make(expression));
   }
+});
+
+test("native pick string lists return one literal candidate without evaluating nested expressions", () => {
+  const make = (expression) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: "string", mock_rule_content: expression }),
+    ];
+    const p = project();
+    const before = structuredClone(doc);
+    importIntoProject(p, doc);
+    assert.deepEqual(doc, before);
+    return createFieldSampler(p.settings);
+  };
+  const sample = make('@pick(["男","女","👩‍💻"])');
+  for (let i = 0; i < 12; i++)
+    assert(["男", "女", "👩‍💻"].includes(sample("count", { type: "string" })));
+  assert.equal(
+    make('@pick(["{{literal}}"])')("count", { type: "string" }),
+    "{{literal}}",
+  );
+  assert.equal(make('@pick([""])')("count", { type: "string" }), "");
+  for (const expression of [
+    "@pick([])",
+    '@pick(["@name"])',
+    "@pick([1])",
+    '@pick([["a"]])',
+    '@pick(["a"],2)',
+    "@pick(" + JSON.stringify(Array(65).fill("a")) + ")",
+    "@pick(" + JSON.stringify(["a".repeat(257)]) + ")",
+  ])
+    assert.throws(() => make(expression));
 });

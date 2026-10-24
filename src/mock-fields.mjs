@@ -231,13 +231,35 @@ function nativeWildcardPattern(pattern) {
 function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
-    value.length <= 200 &&
-    /^@string\(([\s\S]*)\)$/.exec(value);
+    Buffer.byteLength(value, "utf8") <= 4096 &&
+    /^@(string|pick)\(([\s\S]*)\)$/.exec(value);
   let args;
   try {
-    args = match && JSON.parse("[" + match[1] + "]");
+    args = match && JSON.parse("[" + match[2] + "]");
   } catch {}
+  if (match && match[1] === "pick") {
+    if (
+      !Array.isArray(args) ||
+      args.length !== 1 ||
+      !Array.isArray(args[0]) ||
+      args[0].length < 1 ||
+      args[0].length > 64 ||
+      args[0].some(
+        (value) =>
+          typeof value !== "string" ||
+          Buffer.byteLength(value, "utf8") > 256 ||
+          /[\uD800-\uDFFF]/u.test(value) ||
+          value.includes("@"),
+      )
+    )
+      throw Error(
+        "原版pick仅支持1至64个有界字符串候选项，不支持嵌套表达式或额外参数",
+      );
+    return { name: "native-pick", args: args[0] };
+  }
   if (
+    typeof value !== "string" ||
+    value.length > 200 ||
     !Array.isArray(args) ||
     ![2, 3].includes(args.length) ||
     typeof args[0] !== "string" ||
@@ -652,11 +674,13 @@ export function createFieldSampler(settings = {}) {
             "原版数值Mock规则暂不支持排他边界或multipleOf组合，请提供明确example",
           );
         return validateValue(
-          rule.apipostSource && rule.expression.name === "native-string"
-            ? nativeString(rule.expression.args)
-            : rule.apipostSource && rule.expression.name === "float"
-              ? nativeFloat(rule.expression.args)
-              : generate(rule.expression, schema),
+          rule.apipostSource && rule.expression.name === "native-pick"
+            ? pick(rule.expression.args)
+            : rule.apipostSource && rule.expression.name === "native-string"
+              ? nativeString(rule.expression.args)
+              : rule.apipostSource && rule.expression.name === "float"
+                ? nativeFloat(rule.expression.args)
+                : generate(rule.expression, schema),
           schema,
         );
       }
