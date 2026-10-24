@@ -1,3 +1,4 @@
+import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
 import { executeWireFlow } from "../src/wire-plan.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
 import { executeGrpc } from "../src/grpc.mjs";
@@ -16,7 +17,7 @@ const args = process.argv.slice(2),
   option = (key) => args[args.indexOf(key) + 1];
 if (!args.includes("--project") || !args.includes("--plan")) {
   console.error(
-    "Usage: node scripts/run-plan.mjs --project ID --plan ID [--environment ID] [--output evidence.json]",
+    "Usage: node scripts/run-plan.mjs --project ID --plan ID [--environment ID] [--output evidence.json] [--credentials-stdin]",
   );
   process.exitCode = 2;
 } else {
@@ -29,6 +30,11 @@ if (!args.includes("--project") || !args.includes("--plan")) {
     if (!plan) throw Error("Plan not found");
     const controller = new AbortController();
     process.once("SIGINT", () => controller.abort());
+    const credentials = args.includes("--credentials-stdin")
+      ? await readRuntimeCredentials(process.stdin, {
+          signal: controller.signal,
+        })
+      : {};
     const environmentId = args.includes("--environment")
       ? option("--environment")
       : plan.environmentId;
@@ -38,6 +44,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       executeRequest,
       {
         ...scopedExecution(store, project, environmentId),
+        ...credentials,
         executeGrpc,
         executeProtocol: executeWireFlow,
         executeSocketIO: (input, signal) =>
