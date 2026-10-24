@@ -145,3 +145,7 @@ export function sampleApipostMockNow(args, now = Date.now) {
 export function sampleApipostIsoTimestamp(now = Date.now) {
   return new Date(readClock(now)).toISOString();
 }
+
+export function sampleApipostTimestamp(now = Date.now) {
+  return Math.round(readClock(now) / 1000);
+}

@@ -1,5 +1,6 @@
 import {
   sampleApipostIsoTimestamp,
+  sampleApipostTimestamp,
   parseApipostMockDate,
   parseApipostMockNow,
   sampleApipostMockNow,
@@ -235,6 +236,44 @@ function nativeWildcardPattern(pattern) {
       !value.includes("**"),
   );
 }
+function nativeNumericExpression(value, type) {
+  if (typeof value !== "string" || value.length > 200)
+    throw Error("原版数值Mock表达式最多200字符");
+  const builtin = /^@(timestamp|randomInt)(?:\(\s*\))?$/.exec(value);
+  if (builtin)
+    return {
+      name:
+        builtin[1] === "timestamp" ? "native-timestamp" : "native-random-int",
+      args: [],
+    };
+  if (
+    !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(value) &&
+    !(
+      type === "number" &&
+      /^@float\(\s*-?\d+\s*,\s*-?\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(value)
+    )
+  )
+    throw Error(
+      "原版数值Mock仅支持受限integer/natural/float或无参数timestamp/randomInt",
+    );
+  const values = value
+    .slice(value.indexOf("(") + 1, -1)
+    .split(",")
+    .map(Number);
+  if (
+    values.some(
+      (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
+    ) ||
+    values[0] > values[1] ||
+    (value.startsWith("@natural") && values[0] < 0) ||
+    (value.startsWith("@float") &&
+      (values.slice(0, 2).some((value) => Math.abs(value) > 1e6) ||
+        values.slice(2).some((value) => value < 0 || value > 6) ||
+        values[2] > values[3]))
+  )
+    throw Error("Apipost自定义Mock数值范围无效");
+  return expression(value);
+}
 function nativeStringExpression(value) {
   const match =
     typeof value === "string" &&
@@ -408,40 +447,19 @@ export function normalizeMockFieldRules(rules = []) {
         typeof rule.mock !== "string" ||
         !(rule.type === "string"
           ? nativeStringExpression(rule.mock)
-          : /^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock) ||
-            (rule.type === "number" &&
-              /^@float\(\s*-?\d+\s*,\s*-?\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/.test(
-                rule.mock,
-              )))
+          : nativeNumericExpression(rule.mock, rule.type))
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及integer/natural双整数或float四整数参数规则",
+          "Apipost自定义Mock暂仅支持精确或星号/问号/ASCII集合/候选项字段及受限数值或字符串表达式规则",
         );
-      if (rule.type !== "string") {
-        const values = rule.mock
-          .slice(rule.mock.indexOf("(") + 1, -1)
-          .split(",")
-          .map(Number);
-        if (
-          values.some(
-            (value) => !Number.isSafeInteger(value) || Math.abs(value) > 1e12,
-          ) ||
-          values[0] > values[1] ||
-          (rule.mock.startsWith("@natural") && values[0] < 0) ||
-          (rule.mock.startsWith("@float") &&
-            (values.slice(0, 2).some((value) => Math.abs(value) > 1e6) ||
-              values.slice(2).some((value) => value < 0 || value > 6) ||
-              values[2] > values[3]))
-        )
-          throw Error("Apipost自定义Mock数值范围无效");
-      }
     }
     const compiled = compilePattern(rule.pattern);
     tokens += compiled.reduce((sum, items) => sum + items.length, 0);
     if (tokens > 20000) throw Error("字段Mock通配符总复杂度超过上限");
-    if (rule.apipostSource && rule.type === "string")
-      nativeStringExpression(rule.mock);
-    else expression(rule.mock);
+    if (rule.apipostSource) {
+      if (rule.type === "string") nativeStringExpression(rule.mock);
+      else nativeNumericExpression(rule.mock, rule.type);
+    } else expression(rule.mock);
     const type = rule.type || "any";
     if (!types.includes(type)) throw Error("字段Mock类型无效");
     const id = rule.id || randomUUID();
@@ -556,10 +574,11 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
       compiled: compilePattern(
         rule.ignoreCase ? rule.pattern.toLowerCase() : rule.pattern,
       ),
-      expression:
-        rule.apipostSource && rule.type === "string"
+      expression: rule.apipostSource
+        ? rule.type === "string"
           ? nativeStringExpression(rule.mock)
-          : expression(rule.mock),
+          : nativeNumericExpression(rule.mock, rule.type)
+        : expression(rule.mock),
     }));
   const budget = { remaining: 2000000 };
   let seed = (settings.mockSeed ?? 0) >>> 0;
@@ -740,6 +759,10 @@ export function createFieldSampler(settings = {}, { now = Date.now } = {}) {
   };
   const generateNative = (spec, schema) => {
     switch (spec.name) {
+      case "native-timestamp":
+        return sampleApipostTimestamp(now);
+      case "native-random-int":
+        return integer(0, 1000);
       case "native-iso-timestamp":
         return sampleApipostIsoTimestamp(now);
       case "native-now":

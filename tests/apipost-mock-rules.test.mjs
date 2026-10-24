@@ -283,6 +283,30 @@ test("native numeric rules retain ordering, source identity and explicit example
     (await characterResponse.json()).label,
     /^[A-Za-z0-9!@#$%^&*()[\]]$/,
   );
+  for (const expression of ["@timestamp()", "@randomInt"]) {
+    current.settings.mockFieldRules.find(
+      (rule) => rule.pattern === "Count",
+    ).mock = expression;
+    await app.store.save(current);
+    const beforeClock = Date.now();
+    const response = await fetch(p.requests[0].url);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(
+      body.Count,
+      3,
+      "explicit schema bounds bypass source numeric rules",
+    );
+    if (expression.startsWith("@timestamp")) {
+      assert(
+        body.count >= Math.round(beforeClock / 1000) &&
+          body.count <= Math.round(Date.now() / 1000),
+      );
+    } else
+      assert(
+        Number.isInteger(body.count) && body.count >= 0 && body.count <= 1000,
+      );
+  }
   const conflict = structuredClone(doc);
   conflict.global.mock_custom_rules[0].mock_rule_content = "@natural(9,9)";
   const before = structuredClone(restored);
@@ -773,4 +797,46 @@ test("native character default pools include letters digits and original symbols
     '@char("a",1)',
   ])
     assert.throws(() => make(expression));
+});
+
+test("native numeric timestamp and randomInt use effective no-argument generators", () => {
+  const make = (mock, type = "integer", clock = 1499) => {
+    const doc = modernApipostFixture();
+    doc.global.mock_custom_rules = [
+      rule({ field_type: type, mock_rule_content: mock }),
+    ];
+    const p = project();
+    importIntoProject(p, doc);
+    return createFieldSampler(p.settings, { now: () => clock });
+  };
+  for (const type of ["integer", "number"]) {
+    assert.equal(make("@timestamp", type, 1499)("count", { type }), 1);
+    assert.equal(make("@timestamp()", type, 1500)("count", { type }), 2);
+    assert.equal(make("@timestamp()", type, 0)("count", { type }), 0);
+    const random = make("@randomInt()", type);
+    for (let i = 0; i < 64; i++) {
+      const value = random("count", { type });
+      assert(Number.isInteger(value) && value >= 0 && value <= 1000);
+    }
+    assert.equal(
+      make("@timestamp", type)("count", { type, minimum: 3, maximum: 3 }),
+      undefined,
+    );
+    assert.throws(
+      () => make("@timestamp", type)("count", { type, multipleOf: 2 }),
+      /multipleOf/,
+    );
+  }
+  for (const mock of [
+    "@timestamp(1)",
+    "@randomInt(0,2)",
+    '@timestamp("x")',
+    "@randomInt(null)",
+  ])
+    assert.throws(() => make(mock));
+  assert.throws(() => make("@timestamp", "string"));
+  assert.throws(
+    () => make("@timestamp", "integer", NaN)("count", { type: "integer" }),
+    /时钟/,
+  );
 });

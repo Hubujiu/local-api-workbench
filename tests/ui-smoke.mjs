@@ -6691,6 +6691,40 @@ try {
     nativeProject.settings.mockFieldRules[2].apipostSource,
   );
 
+  for (const expression of ["@timestamp()", "@randomInt()"]) {
+    await page
+      .locator(
+        `[data-edit-mock-field="${nativeProject.settings.mockFieldRules[0].id}"]`,
+      )
+      .click();
+    assert.equal(
+      await page.locator("#mock-field-type").inputValue(),
+      "integer",
+    );
+    await page.locator("#mock-field-value").fill(expression);
+    await page.screenshot({
+      path:
+        expression === "@timestamp()"
+          ? "/tmp/local-api-native-timestamp.png"
+          : "/tmp/local-api-native-random-int.png",
+    });
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "PUT" && r.status() === 200,
+      ),
+      page.locator("#dialog-save").click(),
+    ]);
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    await page.reload();
+    const saved = (await app.store.get(nativeProjectId)).settings
+      .mockFieldRules[0];
+    assert.equal(saved.mock, expression);
+    assert.deepEqual(
+      saved.apipostSource,
+      nativeProject.settings.mockFieldRules[0].apipostSource,
+    );
+  }
+
   const templateModern = structuredClone(nativeModern);
   templateModern.name = "Query template fixture";
   templateModern.apis[1].url = "/sdk-url/template";
