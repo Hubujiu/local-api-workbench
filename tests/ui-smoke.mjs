@@ -6675,8 +6675,8 @@ try {
   assert.equal(await page.locator("#mock-field-type").inputValue(), "string");
   await page
     .locator("#mock-field-value")
-    .fill('@now("day","yyyy-MM-dd HH:mm:ss")');
-  await page.screenshot({ path: "/tmp/local-api-native-now-mock.png" });
+    .fill('@now("second","yyyy-MM-dd HH:mm:ss.SS A")');
+  await page.screenshot({ path: "/tmp/local-api-native-date-tokens.png" });
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "PUT" && r.status() === 200,
@@ -6687,7 +6687,10 @@ try {
   await page.reload();
   const editedStringRule = (await app.store.get(nativeProjectId)).settings
     .mockFieldRules[2];
-  assert.equal(editedStringRule.mock, '@now("day","yyyy-MM-dd HH:mm:ss")');
+  assert.equal(
+    editedStringRule.mock,
+    '@now("second","yyyy-MM-dd HH:mm:ss.SS A")',
+  );
   assert.deepEqual(
     editedStringRule.apipostSource,
     nativeProject.settings.mockFieldRules[2].apipostSource,

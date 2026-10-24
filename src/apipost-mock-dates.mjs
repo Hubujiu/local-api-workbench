@@ -6,6 +6,14 @@ const formats = Object.freeze({
 const tokens = new Set([
   "yyyy",
   "yy",
+  "y",
+  "hh",
+  "h",
+  "SS",
+  "S",
+  "A",
+  "a",
+  "T",
   "MM",
   "M",
   "dd",
@@ -48,6 +56,14 @@ function formatDate(date, format) {
   const fields = {
     yyyy: String(date.getFullYear()),
     yy: String(date.getFullYear()).slice(2),
+    y: String(date.getFullYear()).slice(2),
+    hh: pad(date.getHours() % 12),
+    h: String(date.getHours() % 12),
+    SS: String(date.getMilliseconds()).padStart(3, "0"),
+    S: String(date.getMilliseconds()),
+    A: date.getHours() < 12 ? "AM" : "PM",
+    a: date.getHours() < 12 ? "am" : "pm",
+    T: String(date.getTime()),
     MM: pad(date.getMonth() + 1),
     M: String(date.getMonth() + 1),
     dd: pad(date.getDate()),
@@ -60,7 +76,7 @@ function formatDate(date, format) {
     s: String(date.getSeconds()),
   };
   return format.replace(
-    /yyyy|yy|MM|M|dd|d|HH|H|mm|m|ss|s/g,
+    /yyyy|yy|y|MM|M|dd|d|HH|H|hh|h|mm|m|ss|s|SS|S|A|a|T/g,
     (token) => fields[token],
   );
 }
@@ -99,7 +115,11 @@ export function parseApipostMockNow(args) {
     format = "";
   if (args.length === 1) {
     if (nowUnits.has(args[0])) unit = args[0];
-    else format = args[0];
+    else {
+      if (/year|month|day|hour|minute|second|week/.test(args[0]))
+        throw Error("原版now截断单位不支持");
+      format = args[0];
+    }
   } else if (args.length === 2) {
     unit = args[0].toLowerCase();
     format = args[1];

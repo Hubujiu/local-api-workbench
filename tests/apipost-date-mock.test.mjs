@@ -38,7 +38,7 @@ test("native date generators use epoch-to-clock bounds and limited numeric forma
   for (const mock of [
     '@date("YYYY-MM-DD")',
     '@date("ddd")',
-    '@datetime("yyyy-MM-ddTHH:mm:ss")',
+    '@datetime("yyyy-MM-ddZHH:mm:ss")',
     "@date(1)",
     '@time("HH",1)',
   ])
@@ -155,10 +155,20 @@ test("imported date rules survive storage and produce formatted strings through 
     match_rule: "updated",
     mock_rule_content: '@now("yyyy")',
   });
+  doc.global.mock_custom_rules.push({
+    ...doc.global.mock_custom_rules[0],
+    mock_custom_rule_id: "stamp",
+    match_rule: "stamp",
+    mock_rule_content: '@now("second","T")',
+  });
   importIntoProject(p, doc);
   const schema = {
     type: "object",
-    properties: { created: { type: "string" }, updated: { type: "string" } },
+    properties: {
+      created: { type: "string" },
+      updated: { type: "string" },
+      stamp: { type: "string" },
+    },
   };
   p.requests = [
     {
@@ -173,11 +183,16 @@ test("imported date rules survive storage and produce formatted strings through 
     (await app.store.get(p.id)).settings.mockFieldRules,
     p.settings.mockFieldRules,
   );
+  const clockBefore = Date.now();
   const yearBefore = String(new Date().getFullYear());
   const response = await fetch(p.requests[0].url);
   assert.equal(response.status, 200);
   const body = await response.json();
   assert([yearBefore, String(new Date().getFullYear())].includes(body.updated));
+  assert.match(body.stamp, /^\d+$/);
+  assert.equal(Number(body.stamp) % 1000, 0);
+  assert(Number(body.stamp) >= Math.floor(clockBefore / 1000) * 1000);
+  assert(Number(body.stamp) <= Date.now());
   assert.match(body.created, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   const before = structuredClone(p);
   doc.global.mock_custom_rules[0].mock_rule_content = '@date("MMMM")';
@@ -235,4 +250,42 @@ test("native now preserves local calendar truncation and Sunday-based weeks", ()
     b("n", { type: "integer" }),
     "now must not consume random samples",
   );
+});
+
+test("native date tokens preserve original twelve-hour, millisecond and timestamp meanings", () => {
+  const clock = new Date(2024, 6, 3, 0, 4, 5, 7).getTime();
+  const value = (mock) =>
+    createFieldSampler(settings(mock), { now: () => clock })("created", {
+      type: "string",
+    });
+  assert.equal(
+    value('@now("y yy yyyy hh h HH H SS S A a T")'),
+    `24 24 2024 00 0 00 0 007 7 AM am ${clock}`,
+  );
+  assert.equal(
+    value('@now("second","SS/S/T")'),
+    `000/0/${Math.floor(clock / 1000) * 1000}`,
+  );
+  assert.equal(
+    value('@now("yyyy-MM-ddTHH:mm:ss")'),
+    `2024-07-03${clock}00:04:05`,
+    "T is a timestamp token, not a literal ISO separator",
+  );
+  const noon = createFieldSampler(settings('@now("hh h A a")'), {
+    now: () => new Date(2024, 6, 3, 12).getTime(),
+  });
+  assert.equal(noon("created", { type: "string" }), "00 0 PM pm");
+  assert.equal(
+    createFieldSampler(settings('@date("T")'), { now: () => 0 })("created", {
+      type: "string",
+    }),
+    "0",
+  );
+  for (const mock of [
+    '@date("SSS")',
+    '@date("YYYY")',
+    '@time("Z")',
+    '@now("days")',
+  ])
+    assert.throws(() => createFieldSampler(settings(mock)));
 });
