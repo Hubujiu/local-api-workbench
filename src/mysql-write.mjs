@@ -136,7 +136,7 @@ export async function mutateMySQL(input, dependencies = {}) {
     begun = true;
     // Acquire a transaction-held metadata lock before inspecting the storage engine.
     await command(
-      `SELECT 1 FROM ${mysql.escapeId(statement.schema, true)}.${mysql.escapeId(statement.table, true)} LIMIT 0`,
+      `SELECT 1 FROM ${mysql.escapeId(statement.schema, true)}.${mysql.escapeId(statement.table, true)} LIMIT 0 FOR UPDATE`,
     );
     const [tables] = await connection.execute(
       {

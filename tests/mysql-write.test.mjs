@@ -105,6 +105,10 @@ test("MySQL transaction pins table metadata, requires InnoDB, binds parameters a
     sql.indexOf("START TRANSACTION") <
       sql.findIndex((x) => String(x).startsWith("SELECT 1 FROM")),
   );
+  assert.match(
+    sql.find((x) => String(x).startsWith("SELECT 1 FROM")),
+    /LIMIT 0 FOR UPDATE$/,
+  );
   assert(sql.includes("COMMIT"));
   assert(!sql.includes("ROLLBACK"));
   assert(
