@@ -228,14 +228,23 @@ for (const type of ["postgres", "mysql"]) {
     }),
     /重复列/,
   );
-  const special = await queryRemoteDatabase({
-    ...common,
-    type,
-    sql: "SELECT 1 AS __proto__",
-  });
-  assert.equal(Object.hasOwn(special.rows[0], "__proto__"), true);
-  assert.equal(special.rows[0].__proto__, 1);
-  assert.equal(Object.getPrototypeOf(special.rows[0]), Object.prototype);
+  if (type === "mysql") {
+    const prototype = Object.getOwnPropertyNames(Object.prototype);
+    await assert.rejects(
+      queryRemoteDatabase({ ...common, type, sql: "SELECT 1 AS __proto__" }),
+      /field name \(__proto__\).*private property/,
+    );
+    assert.deepEqual(Object.getOwnPropertyNames(Object.prototype), prototype);
+  } else {
+    const special = await queryRemoteDatabase({
+      ...common,
+      type,
+      sql: "SELECT 1 AS __proto__",
+    });
+    assert.equal(Object.hasOwn(special.rows[0], "__proto__"), true);
+    assert.equal(special.rows[0].__proto__, 1);
+    assert.equal(Object.getPrototypeOf(special.rows[0]), Object.prototype);
+  }
 }
 assert.deepEqual(JSON.parse(JSON.stringify(pgValues)), pgValues);
 assert.deepEqual(JSON.parse(JSON.stringify(mysqlValues)), mysqlValues);
