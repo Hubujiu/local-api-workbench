@@ -31,13 +31,15 @@ export function mergeApipostMockRules(rows, existing, projectId) {
       throw Error("Apipost自定义Mock规则身份或字段无效");
     ids.add(row.mock_custom_rule_id);
     if (
-      row.match_type !== "exact" ||
+      !["exact", "wildcard"].includes(row.match_type) ||
       ![-1, 1].includes(row.match_case) ||
       row.mock_type !== 1 ||
       typeof (row.intro ?? "") !== "string" ||
       (row.intro ?? "").length > 200
     )
-      throw Error("Apipost自定义Mock暂仅支持明确大小写选项的精确数值规则");
+      throw Error(
+        "Apipost自定义Mock暂仅支持明确大小写选项的精确或星号数值规则",
+      );
     return {
       id:
         "apipost-mock-" +
@@ -51,7 +53,11 @@ export function mergeApipostMockRules(rows, existing, projectId) {
       mock: row.mock_rule_content,
       enabled: true,
       ignoreCase: row.match_case === -1,
-      apipostSource: { projectId, id: row.mock_custom_rule_id },
+      apipostSource: {
+        projectId,
+        id: row.mock_custom_rule_id,
+        ...(row.match_type === "wildcard" ? { matchType: "wildcard" } : {}),
+      },
     };
   });
   const result = normalizeMockFieldRules(existing || []);

@@ -215,18 +215,24 @@ export function normalizeMockFieldRules(rules = []) {
         !source ||
         typeof source !== "object" ||
         Array.isArray(source) ||
-        Object.keys(source).some((key) => !["projectId", "id"].includes(key)) ||
+        Object.keys(source).some(
+          (key) => !["projectId", "id", "matchType"].includes(key),
+        ) ||
         [source.projectId, source.id].some(
           (value) => typeof value !== "string" || !value || value.length > 200,
         ) ||
         !["integer", "number"].includes(rule.type) ||
         typeof rule.pattern !== "string" ||
-        !/^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern) ||
+        (source.matchType !== undefined && source.matchType !== "wildcard") ||
+        !(source.matchType === "wildcard"
+          ? /^[A-Za-z_*][A-Za-z0-9_.*-]{0,99}$/.test(rule.pattern) &&
+            !rule.pattern.includes("**")
+          : /^[A-Za-z_][A-Za-z0-9_.-]{0,99}$/.test(rule.pattern)) ||
         typeof rule.mock !== "string" ||
         !/^@(integer|natural)\(\s*-?\d+\s*,\s*-?\d+\s*\)$/.test(rule.mock)
       )
         throw Error(
-          "Apipost自定义Mock暂仅支持精确字段及双整数参数的integer/natural规则",
+          "Apipost自定义Mock暂仅支持精确或单星号字段及双整数参数的integer/natural规则",
         );
       const values = rule.mock
         .slice(rule.mock.indexOf("(") + 1, -1)
@@ -502,6 +508,21 @@ export function createFieldSampler(settings = {}) {
           ? date.slice(0, 10)
           : date;
   };
+  const nativeScope = (rule, name, schema, type) => {
+    if (
+      rule.type !== type ||
+      schema.type !== rule.type ||
+      schema.minimum !== undefined ||
+      schema.maximum !== undefined
+    )
+      return false;
+    if (rule.apipostSource.matchType === "wildcard") {
+      if (name.startsWith(".") || name.includes("/")) return false;
+      if (name.includes("\\"))
+        throw Error("原版星号Mock规则暂不支持含反斜杠的字段名");
+    }
+    return true;
+  };
   return (name, schema) => {
     if (schema.pattern) throw Error("pattern字段请提供明确example");
     const explicit = schema.mock;
@@ -519,11 +540,7 @@ export function createFieldSampler(settings = {}) {
     const type = fieldType(schema);
     for (const rule of rules)
       if (
-        (!rule.apipostSource ||
-          (rule.type === type &&
-            schema.type === rule.type &&
-            schema.minimum === undefined &&
-            schema.maximum === undefined)) &&
+        (!rule.apipostSource || nativeScope(rule, name, schema, type)) &&
         (rule.type === "any" ||
           rule.type === type ||
           (rule.type === "number" && type === "integer")) &&

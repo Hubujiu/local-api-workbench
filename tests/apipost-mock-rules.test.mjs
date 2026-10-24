@@ -68,7 +68,7 @@ test("bounded native numeric Mock rules import passively with exact names, types
 });
 test("unsupported native Mock rules fail atomically rather than silently changing semantics", () => {
   for (const extra of [
-    { match_type: "wildcard" },
+    { match_type: "wildcard", match_rule: "count?" },
     { mock_type: 2 },
     { field_type: "string" },
     { match_rule: "count*" },
@@ -104,6 +104,12 @@ test("native numeric rules retain ordering, source identity and explicit example
   doc.global.mock_custom_rules = [
     rule(),
     rule({ mock_custom_rule_id: "second", mock_rule_content: "@natural(8,8)" }),
+    rule({
+      mock_custom_rule_id: "total",
+      match_type: "wildcard",
+      match_rule: "total*",
+      mock_rule_content: "@natural(3,3)",
+    }),
   ];
   importIntoProject(p, nativeDirectoryFixture(doc));
   const schema = {
@@ -111,6 +117,7 @@ test("native numeric rules retain ordering, source identity and explicit example
     properties: {
       count: { type: "integer" },
       explicit: { type: "integer", example: 99 },
+      totalCount: { type: "integer" },
       Count: { type: "integer", minimum: 3, maximum: 3 },
     },
   };
@@ -134,11 +141,13 @@ test("native numeric rules retain ordering, source identity and explicit example
   assert.deepEqual((await preview.json()).sample, {
     count: 7,
     explicit: 99,
+    totalCount: 3,
     Count: 3,
   });
   assert.deepEqual(await (await fetch(p.requests[0].url)).json(), {
     count: 7,
     explicit: 99,
+    totalCount: 3,
     Count: 3,
   });
   const conflict = structuredClone(doc);
@@ -155,4 +164,41 @@ test("native numeric rules retain ordering, source identity and explicit example
     assert.throws(() =>
       normalizeMockFieldRules([{ ...p.settings.mockFieldRules[0], ...change }]),
     );
+});
+
+test("native star-only wildcard rules preserve path and dot-name boundaries", () => {
+  const doc = modernApipostFixture();
+  doc.global.mock_custom_rules = [
+    rule({ match_type: "wildcard", match_rule: "*count*" }),
+  ];
+  const p = project();
+  importIntoProject(p, doc);
+  const sample = createFieldSampler(p.settings);
+  for (const name of ["count", "itemCount", "count_total", "项目count"])
+    assert.equal(sample(name, { type: "integer" }), 7);
+  for (const name of [".count", "a/count", "uncounted/path", "other"])
+    assert.equal(sample(name, { type: "integer" }), undefined);
+  assert.throws(() => sample("a\\count", { type: "integer" }), /反斜杠/);
+  const all = modernApipostFixture();
+  all.global.mock_custom_rules = [
+    rule({ match_type: "wildcard", match_rule: "*" }),
+  ];
+  const q = project();
+  importIntoProject(q, all);
+  assert.equal(createFieldSampler(q.settings)("😀", { type: "integer" }), 7);
+  for (const match_rule of [
+    "a?",
+    "[ab]",
+    "{a,b}",
+    "**",
+    "a/**",
+    "!count",
+    ".*",
+  ]) {
+    const bad = modernApipostFixture();
+    bad.global.mock_custom_rules = [
+      rule({ match_type: "wildcard", match_rule }),
+    ];
+    assert.throws(() => importIntoProject(project(), bad));
+  }
 });

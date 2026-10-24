@@ -6470,6 +6470,16 @@ try {
       intro: "Native count",
     },
   ];
+  nativeModern.global.mock_custom_rules.push({
+    mock_custom_rule_id: "total",
+    field_type: "number",
+    match_type: "wildcard",
+    match_rule: "total*",
+    match_case: 1,
+    mock_type: 1,
+    mock_rule_content: "@integer(3,3)",
+    intro: "Native total",
+  });
   const nativeFiles = nativeDirectoryFixture(nativeModern);
   for (const file of nativeFiles.files) {
     const filePath = path.join(nativeImportRoot, file.path);
@@ -6598,6 +6608,11 @@ try {
     .locator("#dialog-content")
     .getByText("原版导入规则", { exact: false })
     .waitFor();
+  await page.getByText("字段名（精确匹配）", { exact: true }).waitFor();
+  assert.deepEqual(
+    await page.locator("#mock-field-type option").allTextContents(),
+    ["integer", "number"],
+  );
   await page.locator("#mock-field-value").fill("@natural(8,8)");
   await page.screenshot({ path: "/tmp/local-api-native-numeric-mock.png" });
   await Promise.all([
@@ -6615,6 +6630,28 @@ try {
     editedNativeRule.apipostSource,
     nativeProject.settings.mockFieldRules[0].apipostSource,
   );
+
+  await page.locator('.rail [data-page="settings"]').click();
+  await page.locator('[data-settings-anchor="settings-mock-fields"]').click();
+  await page
+    .locator(
+      `[data-edit-mock-field="${nativeProject.settings.mockFieldRules[1].id}"]`,
+    )
+    .click();
+  await page.getByText("字段名（仅支持单星号）", { exact: true }).waitFor();
+  await page.locator("#mock-field-pattern").fill("*total");
+  await page.screenshot({ path: "/tmp/local-api-native-star-mock.png" });
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "PUT" && r.status() === 200,
+    ),
+    page.locator("#dialog-save").click(),
+  ]);
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const editedStarRule = (await app.store.get(nativeProjectId)).settings
+    .mockFieldRules[1];
+  assert.equal(editedStarRule.pattern, "*total");
+  assert.equal(editedStarRule.apipostSource.matchType, "wildcard");
 
   const templateModern = structuredClone(nativeModern);
   templateModern.name = "Query template fixture";
