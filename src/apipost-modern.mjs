@@ -3,7 +3,7 @@ import {
   nativeDatabaseTasks,
 } from "./apipost-database-import.mjs";
 import { prepareNativeMock } from "./apipost-native-mock.mjs";
-
+import { prepareNativeProtocols } from "./apipost-native-protocols.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -360,7 +360,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     color: mark.color,
   }));
   const marks = new Set((global.marks ?? []).map((m) => String(m.mark_id)));
-  const apiNodes = list(source.apis, "apis");
+  list(source.apis, "apis");
+  const nativeProtocols = prepareNativeProtocols(source, resource);
+  const apiNodes = nativeProtocols.nodes;
   const samples = prepareModernSamples(
     source.samples,
     apiNodes,
@@ -907,6 +909,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           ),
         }
       : {}),
+    ...(nativeProtocols.sources.length
+      ? {
+          apipostProtocolSources: mergeResources(
+            project.settings?.apipostProtocolSources,
+            nativeProtocols.sources,
+          ),
+        }
+      : {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
     parameterDescriptions: mergeApipostDescriptions(
       empty(global.describe_library) ? [] : global.describe_library,
@@ -1018,6 +1028,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     samples: sampleCases,
     caseFolders: samples.folders,
     metadata: {
+      ...(nativeProtocols.protocols.length
+        ? {
+            protocols: mergeResources(
+              project.protocols,
+              nativeProtocols.protocols,
+            ),
+          }
+        : {}),
       openapiComponents: components,
       dictionary,
       ...(modelFolders.length ? { modelFolders } : {}),

@@ -48,6 +48,15 @@ export function normalizeProtocol(input) {
     protocolPayload(input.message);
   }
   const requestOptions = protocolRequestOptions(input);
+  if (input.duration !== undefined) {
+    if (
+      !Number.isInteger(input.duration) ||
+      input.duration < 100 ||
+      input.duration > 30000
+    )
+      throw Error("协议默认时限须为100至30000毫秒");
+    requestOptions.duration = input.duration;
+  }
   return {
     ...requestOptions,
     ...(input.receiveEncoding !== undefined

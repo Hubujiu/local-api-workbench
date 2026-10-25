@@ -75,7 +75,7 @@ export function prepareWireExecution(project, input) {
   });
   const duration = Math.min(
     30000,
-    Math.max(100, Number(input.duration) || 3000),
+    Math.max(100, Number(input.duration ?? definition.duration) || 3000),
   );
   const limit = (value) =>
     Number.isFinite(Number(value))
@@ -88,8 +88,8 @@ export function prepareWireExecution(project, input) {
   };
   const request = {
     ...input,
-    ...options,
     ...protocolRequestOptions(definition),
+    ...options,
     type,
     ...(type === "tcp"
       ? {
