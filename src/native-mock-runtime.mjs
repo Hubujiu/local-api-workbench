@@ -98,9 +98,16 @@ export async function nativeMockResponse(project, request, input) {
       work += JSON.stringify(actual)?.length || 0;
       work += JSON.stringify(condition.value).length;
       if (work > 1048576) throw Error("原版Mock条件比较总量超过1MiB");
-      if (condition.op === "regularmatch")
-        checks.push({ ...nativeRegex(condition.value), text: String(actual) });
-      else if (!compare(actual, condition.op, condition.value)) {
+      if (condition.op === "regularmatch") {
+        let text;
+        try {
+          text = String(actual);
+        } catch {
+          matches = false;
+          break;
+        }
+        checks.push({ ...nativeRegex(condition.value), text });
+      } else if (!compare(actual, condition.op, condition.value)) {
         matches = false;
         break;
       }

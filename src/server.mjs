@@ -310,7 +310,10 @@ export async function createApp({
         try {
           incoming = JSON.parse(raw);
         } catch {}
-        if (u.searchParams.getAll("example").length > 1)
+        if (
+          r.nativeMock === undefined &&
+          u.searchParams.getAll("example").length > 1
+        )
           throw Error("Mock示例索引不能重复");
         const selected =
           r.nativeMock !== undefined

@@ -68,6 +68,12 @@ test("native directory Mock import -> actual HTTP -> save/reload/restore preserv
       ["?mode=pass&mode=fail", "matched"],
     ])
       await check(project, query, expected);
+  const namedExample = await app.store.get(restored.id);
+  namedExample.requests[0].nativeMock.rules[0].conditions[0].path =
+    "$.query.example";
+  await app.store.save(namedExample);
+  await check(namedExample, "?example=pass&example=fail", "matched");
+  await check(namedExample, "?example=fail&example=pass", "fallback");
   const changed = await app.store.get(restored.id);
   changed.requests[0].nativeMock.rules[0].enabled = false;
   await app.store.save(changed);
@@ -134,6 +140,16 @@ test("native conditional comparisons preserve explicit coercion, existence and c
     { body: { value: "YES" } },
   );
   assert.equal(regex.body, "hit");
+  assert.equal(
+    (
+      await nativeMockResponse(
+        { settings: {} },
+        { nativeMock: plain("regularmatch", "/yes/") },
+        { body: { value: { toString: "not-callable" } } },
+      )
+    ).body,
+    "miss",
+  );
 });
 test("native Mock invalid dependencies fail atomically and persistence rejects protected headers and ambiguous rules", async () => {
   const changes = [

@@ -52,8 +52,16 @@ metadata, not-null=1 and a simple string schema.
 Synthetic full-flow tests cover directory import -> actual HTTP -> source immutability
 -> save/reload/backup -> concurrent project isolation -> restart; response headers,
 schema priority and fixed200; malformed references/paths/policies; every supported
-comparison; bounded regex failure/recovery and concurrency. Original same-input
-whole-directory comparison and exact-head CI must still be checked after this
-feature is saved and integrated with the other feature PRs. Native global routing,
+comparison; bounded regex failure/recovery and concurrency. The integrated current 23-file original directory passed same-input original
+comparison across six cases and 18 real HTTP requests, including concurrent
+original/restored projects and restart. Original bytes stayed unchanged; Mock
+serving did not acquire a database grant or execute request scripts. Exact-head
+CI remains commit-specific. Native global routing,
 alternate response policies, scalar/XML generation and the full vendor Schema/Faker
 surface remain outside this bounded slice. This is not full project delivery.
+
+Native matching treats a query parameter named `example` as ordinary input,
+including last-value handling for duplicates. The legacy Workbench example-index
+selector and its duplicate-input guard remain unchanged for ordinary Mock rules.
+Uncoercible JSON values fail a condition rather than invoking code or poisoning
+subsequent requests.
