@@ -326,3 +326,7 @@ await verifyCLIDatabaseFlow(
   [],
   { native: true },
 );
+const { verifyNativeDatabaseScopes } = await import(
+  "./native-database-scopes.mjs"
+);
+await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });

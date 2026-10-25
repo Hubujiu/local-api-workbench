@@ -149,3 +149,31 @@ test("native mixed tasks retain inherited script order and stable rebinding iden
   );
   assert.equal(p.requests[0].nativeTasks.before[0].origin.scope, "project");
 });
+test("native result scope names map explicitly and survive inherited task flattening", () => {
+  const doc = nativeDatabaseFixture();
+  doc.global.global_param.pre_tasks = [
+    {
+      type: "customScript",
+      enabled: 1,
+      id: "global-script",
+      name: "Global",
+      data: "const marker=1;",
+    },
+  ];
+  doc.apis[1].request.pre_tasks[1].data.variables = [
+    "environment",
+    "variables",
+    "globals",
+  ].map((type, i) => ({ type, name: "value" + i, pattern: "$[0].value" }));
+  const p = project();
+  importIntoProject(p, doc);
+  assert.deepEqual(
+    p.requests[0].nativeTasks.before[2].data.variables.map((x) => x.type),
+    ["environment", "temporary", "global"],
+  );
+  for (const type of ["temporary", "global", "__proto__", "constructor"]) {
+    const invalid = nativeDatabaseFixture();
+    invalid.apis[1].request.pre_tasks[1].data.variables[0].type = type;
+    assert.throws(() => importIntoProject(project(), invalid), /作用域/);
+  }
+});
