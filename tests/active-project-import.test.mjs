@@ -360,3 +360,57 @@ test("uncertain save acknowledgement stops scheduling without retrying or claimi
   await f.manager.tick();
   assert.equal(f.requests, 1);
 });
+
+test("stale scheduler read failure cannot deactivate a newer project session", async (t) => {
+  const f = await fixture(t);
+  const other = await f.store.get(f.other.id);
+  other.settings.autoImports = [{ ...f.definition }];
+  await f.store.save(other);
+  await f.manager.activate(f.project.id);
+  const get = f.store.get.bind(f.store);
+  let rejectRead;
+  f.store.get = (id) => {
+    f.store.get = get;
+    return new Promise((_resolve, reject) => {
+      rejectRead = reject;
+    });
+  };
+  const pending = f.manager.poll();
+  await f.manager.activate(f.other.id);
+  rejectRead(Error("old project read failed"));
+  await pending;
+  assert.equal(f.manager.snapshot().projectId, f.other.id);
+  assert.equal(f.manager.snapshot().warning, "");
+  await f.manager.run(f.other.id, "source-one");
+  assert.equal(f.requests, 1);
+  assert.equal((await get(f.other.id)).requests.length, 1);
+  assert.equal((await get(f.project.id)).requests.length, 0);
+});
+
+test("scheduler failures stop only their own activation, including same-project reactivation", async (t) => {
+  const f = await fixture(t);
+  await f.manager.activate(f.project.id);
+  const get = f.store.get.bind(f.store);
+  let rejectRead;
+  f.store.get = () => {
+    f.store.get = get;
+    return new Promise((_resolve, reject) => {
+      rejectRead = reject;
+    });
+  };
+  const pending = f.manager.poll();
+  await f.manager.activate(f.project.id);
+  rejectRead(Error("previous activation failed"));
+  await pending;
+  assert.equal(f.manager.snapshot().projectId, f.project.id);
+  assert.equal(f.manager.snapshot().warning, "");
+  f.store.get = async () => {
+    throw Error("current activation failed");
+  };
+  await f.manager.poll();
+  assert.equal(f.manager.snapshot().projectId, null);
+  assert.match(f.manager.snapshot().warning, /自动同步已停止/);
+  assert.deepEqual(f.manager.snapshot().nextRuns, []);
+  f.store.get = get;
+  assert.equal(f.requests, 0);
+});

@@ -99,12 +99,23 @@ export class ActiveProjectImports {
     this.closed = false;
     this.warning = "";
     this.timer = setInterval(() => {
-      this.tick().catch(() => {
-        this.warning = "当前项目配置不可用，自动同步已停止";
-        void this.deactivate();
-      });
+      void this.poll();
     }, 1000);
     this.timer.unref();
+  }
+  async poll() {
+    const projectId = this.active,
+      epoch = this.epoch;
+    try {
+      await this.tick();
+    } catch {
+      // A delayed read failure belongs to the activation that started it.
+      // It must not revoke a newer activation, even of the same project.
+      if (this.active !== projectId || this.epoch !== epoch || this.closed)
+        return;
+      this.warning = "当前项目配置不可用，自动同步已停止";
+      await this.deactivate();
+    }
   }
   snapshot() {
     return {

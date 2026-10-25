@@ -73,3 +73,13 @@ as a distinct project, and verifies exact source/history preservation without
 copying activation authority. After server restart both remain inactive. Only
 explicitly activating the restored project permits another real fetch; repeat
 sync preserves its request ID and leaves the original project history unchanged.
+
+## Scheduler failure isolation
+
+A delayed project read failure is scoped to the activation epoch that started
+that polling operation. Switching projects or reactivating the same project
+invalidates the old failure handler; it cannot stop the new session or replace
+its warning. A read failure in the current activation still fails closed and
+clears the schedule. Deterministic delayed-read tests first reproduced both
+cross-project and same-project session revocation, then verify successful real
+HTTP import/persistence after switching and no mutation to the old project.
