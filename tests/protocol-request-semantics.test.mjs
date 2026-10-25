@@ -222,3 +222,31 @@ test("invalid options fail before transport; TCP first-data retains timeout and 
     ),
   );
 });
+
+test("saved bounded protocol duration survives normalization and freezes into plans", () => {
+  const definition = normalizeProtocol({
+    id: "duration",
+    type: "tcp",
+    url: "127.0.0.1",
+    port: 1,
+    duration: 10000,
+  });
+  assert.equal(definition.duration, 10000);
+  const project = { protocols: [definition] };
+  assert.equal(
+    prepareWireExecution(project, { definitionId: "duration" }).request
+      .duration,
+    10000,
+  );
+  assert.equal(
+    prepareWireExecution(project, { definitionId: "duration", duration: 200 })
+      .request.duration,
+    200,
+  );
+  const plan = snapshotPlan({
+    steps: [{ type: "protocol", protocol: { definition } }],
+  });
+  assert.equal(plan.steps[0].protocol.duration, 10000);
+  for (const duration of [0, 99, 30001, 1.5, "1000"])
+    assert.throws(() => normalizeProtocol({ ...definition, duration }));
+});

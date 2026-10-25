@@ -9,7 +9,10 @@ Official Apipost Offline2 2.0.0 was exercised with fictional loopback fixtures o
 A saved TCP client/method sent and received the exact 18-byte text payload.
 The TCP configuration UI exposes a first-received-data completion option
 (`end_func.name = none`), distinct from waiting for peer shutdown. The original
-first-data-versus-delayed-EOF behavior has not yet been independently isolated.
+first-data-versus-delayed-EOF behavior was independently isolated: after the
+server wrote first-chunk it waited up to two seconds for client EOF before any
+second write. The original closed about 1 ms after the first write and displayed
+only first-chunk (11 bytes).
 REA static inspection of the selected TCP renderer modules corroborates the
 configuration fields. No vendor implementation, raw archive, or source data is
 included in this change.
@@ -18,6 +21,11 @@ Previously Workbench SSE always sent GET and one-shot TCP only finished on EOF
 or deadline. Neither behavior can silently represent those native settings.
 
 ## Contract
+
+- Definitions may preserve an explicit 100–30000 ms default duration. Manual
+  calls can explicitly override it; plans freeze their selected duration.
+  Omitting it retains the existing 3000 ms default. This permits safe original
+  TCP timeout settings to migrate without silently substituting three seconds.
 
 - Saved SSE definitions may explicitly contain `method: GET | POST` and a POST
   `body` of valid UTF-8 text, at most 64 KiB. Missing method retains GET. GET
