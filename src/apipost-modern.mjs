@@ -64,6 +64,37 @@ export function isModernApipost(source) {
     )
   );
 }
+// Offline2 exports mirror visible Query rows in the URL. Preserve each row
+// exactly once, without collapsing duplicate rows or rewriting unrelated bytes.
+function withoutMirroredQuery(url, rows) {
+  const hash = url.indexOf("#");
+  const suffix = hash < 0 ? "" : url.slice(hash);
+  const head = hash < 0 ? url : url.slice(0, hash);
+  const query = head.indexOf("?");
+  if (query < 0 || !rows.length) return url;
+  const counts = new Map();
+  for (const row of rows) {
+    if (!row.key) continue;
+    const pair = JSON.stringify([String(row.key), String(row.value ?? "")]);
+    counts.set(pair, (counts.get(pair) || 0) + 1);
+  }
+  let removed = false;
+  const rest = head
+    .slice(query + 1)
+    .split("&")
+    .filter((token) => {
+      const entry = [...new URLSearchParams(token)][0];
+      const pair = JSON.stringify(entry);
+      const count = counts.get(pair) || 0;
+      if (!count) return true;
+      counts.set(pair, count - 1);
+      removed = true;
+      return false;
+    });
+  return removed
+    ? head.slice(0, query) + (rest.length ? "?" + rest.join("&") : "") + suffix
+    : url;
+}
 function variables(map = {}) {
   if (!object(map) || Object.keys(map).length > 5000)
     throw Error("Apipost变量表无效");
@@ -559,7 +590,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         },
       };
     }
-    let url = String(node.url ?? "");
+    let url = withoutMirroredQuery(
+      String(node.url ?? ""),
+      parameterRows(request.query, "query"),
+    );
     if (url.startsWith("//")) throw Error("Apipost接口路径不能覆盖服务主机");
     let serviceId = "";
     if (
