@@ -43,7 +43,7 @@ Other native serialized scope names must be observed before importer mapping.
 - Additional native database types, environment-specific connections and SSH import.
 - MCP/CLI acceptance for native imported task references.
 - Whole original-directory integration with the other feature PRs.
-- Native error-path and additional scope behavior observations.
+- Additional native connection/error-policy configurations.
 - Complete cross-platform CI and MySQL mixed-phase service evidence.
 
 Tests use independently authored fixtures and actual SQLite plus a local HTTP
@@ -84,8 +84,9 @@ with a request import note requiring manual ephemeral rebinding. No connection i
 created by import, save, restore, startup or execution without an explicit grant.
 
 Mixed enabled/disabled tasks retain order, IDs/names and inherited scope metadata.
-Only the observed native `environment` extraction type is imported; other native
-serialized scope names remain rejected. SQL templates are rejected, not interpolated.
+Observed native extraction names are translated explicitly: `environment` to
+environment, `globals` to global, and `variables` to request-temporary. Unknown
+names remain rejected. SQL templates are rejected, not interpolated.
 The existing readonly driver limits still apply, including bounded result rows.
 
 POST database-connections can explicitly bind a current-project imported resource
@@ -113,3 +114,19 @@ the existing MCP execute permission.
 The CLI grant collector is updated in its own feature PR (#2), not duplicated
 here. Combined actual PostgreSQL subprocess verification covers native ordered
 tasks, persisted results, invalid-stdin preflight and per-invocation revocation.
+
+## Result-scope verification
+
+Original UI experiments confirmed `variables` is temporary: it overrides an
+environment value for the actual request without changing the environment getter,
+and disappears on the next request when the database task is disabled. `globals`
+uses a separate global variable that remains available in a later request after
+the database task is disabled. The source files contain these exact plural names;
+we do not accept guessed singular canonical names in native input.
+
+A real PostgreSQL HTTP acceptance fixture now checks all three destinations in
+one query, temporary > environment > global precedence, temporary availability
+in the same request post-script, reset on the next request, persisted environment
+and global values, foreign-project isolation, backup/restore of the canonical
+tasks/values, and denial of restored database grants. Inherited task flattening
+keeps already-normalized scopes without attempting native translation twice.

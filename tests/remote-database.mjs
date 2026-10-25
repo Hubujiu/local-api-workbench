@@ -299,3 +299,7 @@ const { verifyNativeImportHTTPFlow } = await import(
   "./native-database-integration.mjs"
 );
 await verifyNativeImportHTTPFlow({ ...common, type: "postgres", port: 5432 });
+const { verifyNativeDatabaseScopes } = await import(
+  "./native-database-scopes.mjs"
+);
+await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });

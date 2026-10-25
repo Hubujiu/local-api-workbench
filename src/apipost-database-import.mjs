@@ -136,13 +136,29 @@ export function nativeDatabaseTasks(tasks, map, { translated = false } = {}) {
           : map.has(task.data.connectionId))
       )
         throw Error("Apipost数据库任务引用不存在的连接");
+      const scopes = translated
+        ? {
+            environment: "environment",
+            global: "global",
+            temporary: "temporary",
+          }
+        : {
+            environment: "environment",
+            globals: "global",
+            variables: "temporary",
+          };
       if (
         !Array.isArray(task.data.variables) ||
-        task.data.variables.some((variable) => variable.type !== "environment")
+        task.data.variables.some(
+          (variable) =>
+            !object(variable) || !Object.hasOwn(scopes, variable.type),
+        )
       )
-        throw Error(
-          "原版数据库变量类型目前仅验收environment，不猜测其他序列化值",
-        );
+        throw Error("原版数据库变量作用域无效");
+      next.data.variables = task.data.variables.map((variable) => ({
+        ...variable,
+        type: scopes[variable.type],
+      }));
       next.data.connectionId = translated
         ? task.data.connectionId
         : map.get(task.data.connectionId);
