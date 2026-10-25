@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   allowedDirectoryPath,
   nativeMockTargetId,
@@ -175,10 +176,28 @@ export function assembleApipostDirectory(document) {
       !object(value) ||
       value.project_id !== projectId ||
       value.target_id !== targetId ||
-      target.nativeMockConfig !== undefined ||
-      target.ai_expect !== undefined
+      target.nativeMockConfig !== undefined
     )
       throw Error("Apipost Mock文件身份冲突、重复或引用不存在的接口");
+    if (target.ai_expect !== undefined) {
+      const mirror = (tree) =>
+        object(tree)
+          ? { ...tree, none_math_example: tree.none_math_example ?? null }
+          : tree;
+      if (!isDeepStrictEqual(mirror(target.ai_expect), mirror(value.ai_expect)))
+        throw Error("Apipost内联与独立Mock条件配置冲突");
+    }
+    for (const key of [
+      "mock_server_enable",
+      "mock_ip_white_list_enable",
+      "mock_ip_white_list",
+      "mock_show_target_id",
+    ])
+      if (
+        Object.hasOwn(target, key) &&
+        !isDeepStrictEqual(target[key], value[key])
+      )
+        throw Error("Apipost内联与独立Mock开关配置冲突");
     target.nativeMockConfig = structuredClone(value);
   }
   return {

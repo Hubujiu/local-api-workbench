@@ -119,10 +119,16 @@ test("native method/path/selectors share the bounded Mock pipeline and preserve 
   saved.settings.mockEnabled = false;
   await app.store.save(saved);
   assert.equal((await call(saved.id, "/items/123")).status, 503);
+  copy.requests[0].nativeMock.enabled = true;
+  await app.store.save(copy);
   app.server.closeAllConnections();
   await new Promise((r) => app.server.close(r));
   app = await createApp({ root, port: 0 });
-  assert.equal((await call(copy.id, "/changed/123")).status, 404);
+  const restarted = await call(copy.id, "/changed/123?mode=fail");
+  assert.equal(restarted.status, 200);
+  assert.equal(restarted.headers.get("x-native-rule"), "matched");
+  assert.equal((await call(copy.id, "/items/123")).status, 404);
+  assert.equal((await call(saved.id, "/items/123")).status, 503);
   assert.equal(JSON.stringify(directory), before);
 });
 test("Mock route metadata and matching reject malformed path/identity without regex or filesystem access", () => {
@@ -191,4 +197,97 @@ test("Mock route metadata and matching reject malformed path/identity without re
       new URLSearchParams("target_id=../foreign"),
     ),
   );
+});
+
+test("older modern opaque project IDs keep HTTP import without inventing unsafe route aliases", () => {
+  const { doc } = nativeMockFixture();
+  doc.project_id = "legacy project";
+  const p = {
+    requests: [],
+    folders: [],
+    environments: [],
+    servers: [],
+    globalVariables: {},
+    settings: {},
+  };
+  importIntoProject(p, doc);
+  assert.equal(p.requests.length, 1);
+  assert.equal(p.requests[0].nativeMockRoute, undefined);
+  assert(p.requests[0].importNotes.some((n) => n.includes("不启用路径别名")));
+});
+
+test("native saved Mock may mirror its inline condition tree, but conflicting copies fail atomically", () => {
+  const { directory, config } = nativeMockFixture();
+  const file = directory.files.find((f) => f.path === "apis/api.json");
+  const data = JSON.parse(file.text);
+  data.data.ai_expect = structuredClone(config.ai_expect);
+  delete data.data.ai_expect.none_math_example;
+  file.text = JSON.stringify(data);
+  const p = {
+    requests: [],
+    folders: [],
+    environments: [],
+    servers: [],
+    globalVariables: {},
+    settings: {},
+  };
+  importIntoProject(p, directory);
+  assert.equal(p.requests[0].nativeMock.rules.length, 1);
+  for (const mutate of [
+    (n) => (n.ai_expect.none_math_expect_id = "other"),
+    (n) => (n.mock_server_enable = -1),
+    (n) => (n.ai_expect.unknown = true),
+  ]) {
+    const copy = structuredClone(directory),
+      f = copy.files.find((f) => f.path === "apis/api.json"),
+      row = JSON.parse(f.text);
+    mutate(row.data);
+    f.text = JSON.stringify(row);
+    const before = JSON.stringify(p);
+    assert.throws(() => importIntoProject(p, copy), /冲突/);
+    assert.equal(JSON.stringify(p), before);
+  }
+});
+
+test("an edited invalid HTTP target cannot poison another Mock route in the same project", () => {
+  const route = {
+    version: 1,
+    sourceProjectId: "project",
+    sourceTargetId: "valid",
+    sourcePath: "/items/{id}",
+  };
+  const valid = {
+    id: "valid",
+    method: "GET",
+    url: "http://127.0.0.1/items/{id}",
+    nativeMockRoute: route,
+  };
+  const invalid = {
+    ...valid,
+    id: "invalid",
+    url: "file:///not-read",
+    nativeMockRoute: { ...route, sourceTargetId: "invalid" },
+  };
+  assert.equal(
+    resolveNativeMockRoute(
+      { requests: [invalid, valid] },
+      "GET",
+      "/items/1",
+      new URLSearchParams(),
+    ),
+    valid,
+  );
+  const { doc } = nativeMockFixture();
+  doc.apis[1].url = "http://127.0.0.1/encoded%3Fpath";
+  const p = {
+    requests: [],
+    folders: [],
+    environments: [],
+    servers: [],
+    globalVariables: {},
+    settings: {},
+  };
+  importIntoProject(p, doc);
+  assert.equal(p.requests[0].nativeMockRoute, undefined);
+  assert(p.requests[0].importNotes.some((n) => n.includes("不启用路径别名")));
 });

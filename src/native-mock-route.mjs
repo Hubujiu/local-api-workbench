@@ -54,6 +54,8 @@ export function normalizeNativeMockRoute(input) {
   };
 }
 export function nativeMockRouteFromSource(node, projectId) {
+  // Older modern exports allowed opaque IDs; do not break their HTTP import.
+  if (!safeId(projectId) || !safeId(String(node.target_id))) return undefined;
   if (typeof node.url !== "string" || !node.url.trim()) return undefined;
   let path = node.url.trim().split("?")[0];
   if (path.includes("://")) {
@@ -63,16 +65,20 @@ export function nativeMockRouteFromSource(node, projectId) {
         throw Error("HTTP only");
       path = parsed.pathname;
     } catch {
-      throw Error("原生Mock URL路径无法解析");
+      return undefined;
     }
   }
   if (!path.startsWith("/")) path = "/" + path;
-  return normalizeNativeMockRoute({
-    version: 1,
-    sourceProjectId: projectId,
-    sourceTargetId: String(node.target_id),
-    sourcePath: path,
-  });
+  try {
+    return normalizeNativeMockRoute({
+      version: 1,
+      sourceProjectId: projectId,
+      sourceTargetId: String(node.target_id),
+      sourcePath: path,
+    });
+  } catch {
+    return undefined;
+  }
 }
 export function resolveNativeMockRoute(project, method, path, query) {
   const incoming = segments(path),
@@ -100,6 +106,7 @@ export function resolveNativeMockRoute(project, method, path, query) {
       { url: request.url, target_id: route.sourceTargetId },
       route.sourceProjectId,
     );
+    if (!current) return false;
     const expected = segments(current.sourcePath);
     if (expected.length !== incoming.length) return false;
     return expected.every((value, i) => {

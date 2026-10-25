@@ -667,6 +667,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     );
     const route = nativeMockRouteFromSource(row.node, source.project_id);
     if (route) request.nativeMockRoute = route;
+    else
+      request.importNotes.push(
+        "源标识或URL不满足原生Mock路径路由约束；保留HTTP定义与原接口ID的Mock入口，不启用路径别名。",
+      );
     const nativeMock = prepareNativeMock(row.node, {
       projectId: source.project_id,
       headers: responseHeaderMap,
