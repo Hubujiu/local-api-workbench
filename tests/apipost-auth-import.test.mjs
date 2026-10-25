@@ -1,3 +1,4 @@
+import Hawk from "hawk";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -187,6 +188,7 @@ test("extended native auth refuses lossy or malformed conversion before changing
     { type: "hawk", hawk: { ...native[3].hawk, user: "unsupported-user" } },
     { type: "hawk", hawk: { ...native[3].hawk, includePayloadHash: "false" } },
     { type: "hawk", hawk: { ...native[3].hawk, algorithm: "md5" } },
+    { type: "hawk", hawk: { ...native[3].hawk, algorithm: "" } },
     {
       type: "edgegrid",
       edgegrid: { ...native[4].edgegrid, unrecognized: true },
@@ -282,4 +284,85 @@ test("native Query replacement and cURL roundtrip preserve raw fields while gene
     assert.throws(() => toCurl({ url, auth: { ...auth, ...patch } }));
   }
   assert.equal(seen.length, 3);
+});
+
+test("native Hawk POST import authenticates final payload and Content-Type after save and backup restore", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-hawk-payload-"));
+  const observed = [];
+  const credentials = {
+    id: "synthetic-id",
+    key: "synthetic-key",
+    algorithm: "sha256",
+  };
+  const server = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const part of req) chunks.push(part);
+    const payload = Buffer.concat(chunks);
+    try {
+      await Hawk.server.authenticate(
+        req,
+        async (id) => {
+          assert.equal(id, credentials.id);
+          return credentials;
+        },
+        { payload },
+      );
+      observed.push({
+        body: payload.toString(),
+        type: req.headers["content-type"],
+      });
+      res.end("authenticated");
+    } catch (error) {
+      res.statusCode = 401;
+      res.end(error.message);
+    }
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const store = new Store(root);
+  for (const explicitHeader of [false, true]) {
+    const doc = modernApipostFixture();
+    doc.global.envs[0].server_list[0].uri = `http://127.0.0.1:${server.address().port}`;
+    const api = doc.apis[1];
+    api.method = "POST";
+    api.request.body = {
+      mode: "plain",
+      raw: "native={{shared}}",
+      parameter: [],
+    };
+    api.request.auth = {
+      type: "hawk",
+      hawk: { ...native[3].hawk, timestamp: "", nonce: "" },
+    };
+    if (explicitHeader)
+      api.request.header.parameter.push({
+        key: "Content-Type",
+        value: "text/plain",
+        is_checked: 1,
+      });
+    const before = structuredClone(doc),
+      p = await store.create("payload");
+    importIntoProject(p, doc);
+    assert.deepEqual(doc, before);
+    await store.save(p);
+    const saved = await store.get(p.id);
+    for (const project of [saved, restoreProject(saved)]) {
+      const env = project.environments.find((e) => e.name === "Imported");
+      const request = interpolate(
+        resolveServiceRequest(project, project.requests[0], env.id),
+        environmentVariables(project, env.id),
+      );
+      const result = await executeRequest(request);
+      assert.equal(result.status, 200, result.body);
+      assert.equal(result.body, "authenticated");
+    }
+  }
+  assert.deepEqual(
+    observed,
+    Array(4).fill({ body: "native=current", type: "text/plain" }),
+  );
 });

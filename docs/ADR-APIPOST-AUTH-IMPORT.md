@@ -67,3 +67,31 @@ Real HTTP tests cover original-observed spelling and collision behavior, cURL
 roundtrip, unchanged generic behavior and zero-network rejection. Original full
 signing equivalence for AWS/Hawk/EdgeGrid remains unverified; their tests use
 synthetic inputs and the existing independently tested signing implementations.
+
+## Representative original signing observations
+
+Normal original UI requests with fictional credentials were sent only to a local
+fixture. AWS SigV4 matched the existing provider when the probe used all original
+SignedHeaders (including Accept/Accept-Encoding), body, timestamp and session
+value. An initial probe omitted two signed headers and was invalid, not an engine
+regression. EdgeGrid POST authorization also matched for the observed body and
+captured timestamp/nonce. These are controlled vectors, not production-account
+access or universal header/default equivalence.
+
+Hawk sha256 matched with payload hashing disabled. With hashing enabled and
+ext/app/delegation set, a native Text body without an explicit Content-Type signed
+as an empty media type even though the wire later contained text/plain. Adding
+Content-Type explicitly made its hash and MAC match. Workbench continues signing
+the final wire media type/body, rather than copying this inconsistent signature.
+The committed native POST regression is checked by Hawk.server.authenticate with
+payload verification after save/reload and backup restore, both with inferred and
+explicit Content-Type. Empty native Hawk algorithm also produced an empty original
+Authorization header; our importer deliberately rejects it instead of silently
+sending an unauthenticated request.
+
+The live original directory (21 JSON files, two frozen plans plus the edited API)
+was imported locally again, saved/reloaded, backup-restored and exercised through
+eight real HTTP requests after the EdgeGrid edit. Frozen plan authentication did
+not inherit the newly changed live API authentication; source bytes were unchanged.
+Raw source archives remain local. These observations do not cover all optional
+signing settings, services or resource kinds.
