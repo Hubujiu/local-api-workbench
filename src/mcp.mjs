@@ -1,3 +1,7 @@
+import {
+  listImportedExecutionRuns,
+  getImportedExecutionRun,
+} from "./imported-execution-history.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -245,6 +249,26 @@ export function createMCP({
       limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
     },
     ["projectId"],
+  );
+  addTool(
+    "list_imported_execution_runs",
+    "只读查询导入的原版历史摘要；不是本工具新执行或验证的结果",
+    {
+      ...projectArg,
+      sourceProjectId: str,
+      offset: { type: "integer", minimum: 0, maximum: 1000, default: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+    },
+    ["projectId"],
+  );
+  addTool(
+    "get_imported_execution_run",
+    "只读查询原版历史来源档案；不执行、不授权、不验证历史结论",
+    {
+      ...projectArg,
+      sourceProjectId: str,
+      runId: str,
+    },
   );
   addTool("get_execution_result", "读取逐步证据", {
     ...projectArg,
@@ -499,6 +523,17 @@ export function createMCP({
               break;
             case "localapi_get_execution_result":
               output = findExecutionResult(p, args.runId);
+              break;
+            case "localapi_list_imported_execution_runs":
+              output = listImportedExecutionRuns(p, args);
+              break;
+            case "localapi_get_imported_execution_run":
+              output = getImportedExecutionRun(
+                p,
+                args.sourceProjectId,
+                args.runId,
+              );
+              if (!output) throw Error("原始执行记录不存在");
               break;
             case "localapi_get_run":
               output = p.runs.find((r) => r.id === args.runId);

@@ -51,8 +51,8 @@ implementation or raw analysis bundle is copied into this repository.
 Original run index/details are preserved verbatim in the existing bounded
 `settings.apipostDirectoryArtifacts` source archive. They are not added to
 `project.runs`, do not increase new-run counts, and do not inherit authority to
-execute. Project JSON/backup retains them; a dedicated original-history UI/MCP
-view is not provided here. The archive shares the 4MiB/20-source limit, with at
+execute. Project JSON/backup retains them; dedicated read-only HTTP/MCP queries are
+provided below, without a new history UI. The archive shares the 4MiB/20-source limit, with at
 most 52 known files per source (catalog + run index + 50 details). Save/restore
 validates consistency again. Response bodies can contain application data; this
 is not a general-purpose secret scrubber.
@@ -99,3 +99,24 @@ initial environment definitions, not the original process's current values; no
 historical result is promoted into current variables. Import notes require checking
 the selected environment before execution. This preserves safety without claiming
 that absent runtime state can be reconstructed.
+
+## Read-only source-history queries
+
+`GET /api/projects/:id/imported-execution-runs` returns a bounded, paginated summary
+(`sourceProjectId`, `offset`, `limit`; maximum 100 rows). The corresponding detail
+path is `/api/projects/:id/imported-execution-runs/:sourceProjectId/:runId`.
+Existing local-token protection remains; the endpoint is GET-only and rejects
+unknown or repeated parameters. Missing detail returns 404.
+
+MCP exposes `localapi_list_imported_execution_runs` and
+`localapi_get_imported_execution_run` under the existing project read allowlist.
+No write or execute grant is implied. The official SDK HTTP acceptance exercises
+discovery, actual list/detail calls, forbidden project access, malformed input,
+missing records and denied execution while proving the stored project unchanged.
+
+Every result explicitly declares `provenance: imported-apipost-archive` and
+`executedByWorkbench: false`. Summary status is named `originalStatus`; full source
+content sits under `original`. Summaries omit request/response bodies, credentials
+and variables. A SHA-256 identifies exact imported file bytes; it is integrity
+metadata, not proof of historical authenticity or successful current execution.
+No request is replayed and no source-history record is added to project.runs.
