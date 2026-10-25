@@ -9,7 +9,8 @@ export function prepareExtendedProtocol(
   if (Buffer.byteLength(JSON.stringify(node)) > 1024 * 1024)
     fail("扩展协议来源超过1MiB");
   const definitions = [],
-    plans = [];
+    plans = [],
+    notes = [];
   const plan = (suffix, name, step) =>
     plans.push({
       id: resource("native-message-plan", suffix),
@@ -266,10 +267,19 @@ export function prepareExtendedProtocol(
           timeoutMs: 5000,
         });
         definitions.push(definition);
+        if (actual.requestStream) {
+          notes.push(
+            service.service_name +
+              "/" +
+              method.name +
+              "：原版当前不支持客户端/双向流调用；定义与消息仅保留，不生成发送计划，不猜测消息顺序。",
+          );
+          continue;
+        }
         if (parsed.every((v) => v === null)) continue;
         if (parsed.some((v) => v === null)) fail("gRPC空消息混排");
         // Native message tabs are saved alternatives for unary calls, not a stream.
-        if (actual.requestStream) fail("gRPC客户端流消息调度需独立验证");
+
         for (let i = 0; i < parsed.length; i++) {
           const suffix =
             node.target_id +
@@ -294,5 +304,5 @@ export function prepareExtendedProtocol(
     }
   }
   if (definitions.length > 100 || plans.length > 1000) fail("gRPC导入数量");
-  return { socketio: [], grpc: definitions, plans };
+  return { socketio: [], grpc: definitions, plans, notes };
 }
