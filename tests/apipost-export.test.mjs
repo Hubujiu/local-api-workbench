@@ -48,7 +48,7 @@ test("native JSON definition export reimports, persists and restores literal HTT
       name: "Echo",
       folder: "A/B",
       method: "POST",
-      url: `http://127.0.0.1:${server.address().port}/echo?literal=%2f`,
+      url: `http://127.0.0.1:${server.address().port}/echo?literal=one`,
       query: [
         { key: "q", value: "one" },
         { key: "q", value: "two" },
@@ -94,7 +94,7 @@ test("native JSON definition export reimports, persists and restores literal HTT
     seen,
     Array(2).fill({
       method: "POST",
-      url: "/echo?literal=%2f&q=one&q=two",
+      url: "/echo?literal=one&q=one&q=two",
       body: '{"value":"current"}',
       auth: "Basic Zml4dHVyZTpmaWN0aW9uYWw=",
       header: "current",
@@ -114,6 +114,13 @@ test("unsupported native export dependencies reject rather than create silently 
   };
   for (const change of [
     (p) => (p.plans = [{ id: "plan" }]),
+    (p) => (p.requests[0].url = "http://127.0.0.1/echo?literal=%2f"),
+    (p) =>
+      (p.servers = [
+        { id: "one", name: "One" },
+        { id: "two", name: "Two" },
+      ]),
+
     (p) => (p.protocols = [{ id: "ws" }]),
     (p) => (p.settings.globalScripts = { beforeScript: "danger()" }),
     (p) => (p.requests[0].bodyDynamic = { a: { source: "x" } }),

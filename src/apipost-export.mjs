@@ -200,8 +200,10 @@ export function exportApipost(project) {
       }
     }
   const projectId = nativeId("project", project.id);
+  if ((project.servers || []).length > 1)
+    throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");
   const servers = (project.servers || []).map((s, index) => ({
-    server_id: nativeId("s", s.id),
+    server_id: "1",
     name: s.name,
     sort: (index + 1) * 1000,
   }));
@@ -300,24 +302,38 @@ export function exportApipost(project) {
     )
       throw Error("Apipost导出URL必须为HTTP地址、模板或绑定服务的相对路径");
     if (r.url.includes("#")) throw Error("Apipost导出暂不支持URL片段");
-    // Native exports mirror active rows in URL and query.parameter. The importer
-    // strips each mirrored occurrence once; literal URL query remains separate.
-    const suffix = r.query
-      .filter((q) => q.enabled !== false && q.key)
-      .map(
-        (q) =>
-          encodeURIComponent(q.key) +
-          (q.value === "" && r.queryAddEqual === false
-            ? ""
-            : "=" + encodeURIComponent(q.value)),
+    // Original import reconstructs URL from query rows, dropping URL-only query.
+    // Promote literal pairs before editable rows. Refuse spelling we cannot retain.
+    const queryIndex = r.url.indexOf("?");
+    const literal = queryIndex < 0 ? "" : r.url.slice(queryIndex + 1);
+    const literalRows = [];
+    if (queryIndex >= 0 && !literal)
+      throw Error("Apipost导出不能保留空Query分隔符");
+    for (const part of literal ? literal.split("&") : []) {
+      const pairs = [...new URLSearchParams(part)];
+      if (pairs.length !== 1 || !pairs[0][0] || /[+%]/.test(part))
+        throw Error("Apipost导出不能无损表达此URL Query编码；请使用项目备份");
+      const [key, value] = pairs[0];
+      const encoded = new URLSearchParams([[key, value]]).toString();
+      if (
+        part !==
+        (!r.queryAddEqual && value === "" ? encoded.slice(0, -1) : encoded)
       )
+        throw Error("Apipost导出不能无损表达此URL Query编码；请使用项目备份");
+      literalRows.push({ key, value, enabled: true });
+    }
+    const queryRows = [...literalRows, ...r.query];
+    const suffix = queryRows
+      .filter((q) => q.enabled !== false && q.key)
+      .map((q) => {
+        const pair = new URLSearchParams([[q.key, q.value]]).toString();
+        return !r.queryAddEqual && q.value === "" ? pair.slice(0, -1) : pair;
+      })
       .join("&");
     const url =
-      r.url +
-      (suffix
-        ? (r.url.includes("?") ? (/[?&]$/.test(r.url) ? "" : "&") : "?") +
-          suffix
-        : "");
+      (queryIndex < 0 ? r.url : r.url.slice(0, queryIndex)) +
+      (suffix ? "?" + suffix : "");
+
     apis.push({
       target_id: nativeId("a", r.id),
       project_id: projectId,
@@ -338,7 +354,7 @@ export function exportApipost(project) {
         auth: auth(r.auth),
         header: { parameter: rows(r.headers, "header") },
         query: {
-          parameter: rows(r.query, "query"),
+          parameter: rows(queryRows, "query"),
           query_add_equal: r.queryAddEqual ? 1 : -1,
         },
         restful: { parameter: rows(r.path, "path") },

@@ -57,3 +57,18 @@ export/import; actual named components still require a full backup.
 Remaining original-runtime matrix: script/form/service/path/auth variants beyond
 the recorded JSON + Basic + environment workflow, plus the unsupported resource
 classes above. Passing CI does not replace that matrix or full delivery.
+
+## Matrix-discovered compatibility corrections (in progress)
+
+Original import rebuilt the URL from native query rows and discarded query pairs
+present only in the URL. It also discarded a per-API custom service ID. These
+cases were discovered by inspecting the original persisted imported records,
+not inferred from a green local re-import. URL-only literal pairs are now promoted
+to the front of native Query rows. Noncanonical/encoded literal spelling that
+cannot be guaranteed unchanged rejects explicitly. The initial local raw `%2f`
+self-roundtrip was insufficient evidence and is now a rejection regression.
+
+Only a single default service is exported, mapped to native ID `1`; multiple
+services reject rather than silently select a different destination. Native
+runtime re-verification of these corrections is pending. Do not treat the earlier
+JSON/Basic example as acceptance of relative services or URL-only Query.
