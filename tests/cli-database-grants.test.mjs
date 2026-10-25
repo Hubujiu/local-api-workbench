@@ -58,3 +58,71 @@ test("CLI database grants real SQLite query, closure isolation and subprocess pe
   await assert.rejects(grants.query(operation), /关闭/);
   await verifyCLIDatabaseFlow(config, operation.sql);
 });
+test("CLI native-task reference collection requires exact enabled bindings and keeps readonly isolation", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "cli-native-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const filename = path.join(root, "fixture.db");
+  new DatabaseSync(filename).close();
+  const task = (connectionId, enabled = 1) => ({
+    type: "database",
+    enabled,
+    data: { connectionId },
+  });
+  const nativePlan = {
+    steps: [
+      {
+        request: {
+          nativeTasks: {
+            version: 1,
+            before: [task("native"), task("disabled", -1)],
+            after: [task("native")],
+          },
+        },
+      },
+      {
+        enabled: false,
+        request: {
+          nativeTasks: { version: 1, before: [task("skipped")], after: [] },
+        },
+      },
+    ],
+  };
+  const config = { type: "sqlite", filename };
+  for (const map of [
+    {},
+    { native: config, disabled: config },
+    { native: { ...config, allowWrite: true } },
+  ])
+    assert.throws(() => prepareCLIDatabaseGrants("p", nativePlan, map), /CLI/);
+  const grants = prepareCLIDatabaseGrants("p", nativePlan, { native: config });
+  t.after(() => grants.close());
+  assert.equal(
+    (
+      await grants.query({
+        connectionId: "native",
+        sql: "SELECT 'ok' AS value",
+        parameters: [],
+      })
+    ).rows[0].value,
+    "ok",
+  );
+  await assert.rejects(
+    grants.query({ connectionId: "disabled", sql: "SELECT 1" }),
+    /未获/,
+  );
+  grants.close();
+  await assert.rejects(
+    grants.query({ connectionId: "native", sql: "SELECT 1" }),
+    /关闭/,
+  );
+  for (const patch of [
+    { version: 2 },
+    { after: null },
+    { before: [task("x", true)] },
+    { before: [task("")] },
+  ]) {
+    const bad = structuredClone(nativePlan);
+    Object.assign(bad.steps[0].request.nativeTasks, patch);
+    assert.throws(() => prepareCLIDatabaseGrants("p", bad, {}), /CLI/);
+  }
+});

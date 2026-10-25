@@ -36,6 +36,40 @@ export function prepareCLIDatabaseGrants(projectId, plan, connections) {
         required.add(operation.connectionId);
       }
   }
+  for (const step of plan.steps) {
+    if (step.enabled === false || step.request?.nativeTasks === undefined)
+      continue;
+    const tasks = step.request.nativeTasks;
+    if (
+      !plain(tasks) ||
+      tasks.version !== 1 ||
+      Object.keys(tasks).some(
+        (key) => !["version", "before", "after"].includes(key),
+      )
+    )
+      throw Error("CLI 原版数据库任务格式无效");
+    for (const phase of ["before", "after"]) {
+      if (!Array.isArray(tasks[phase]) || tasks[phase].length > 16)
+        throw Error("CLI 原版任务阶段最多16项");
+      for (const task of tasks[phase]) {
+        if (
+          !plain(task) ||
+          ![1, 0, -1].includes(task.enabled) ||
+          !["customScript", "database"].includes(task.type)
+        )
+          throw Error("CLI 原版任务启停或类型无效");
+        if (task.type !== "database" || task.enabled !== 1) continue;
+        if (
+          !plain(task.data) ||
+          typeof task.data.connectionId !== "string" ||
+          !task.data.connectionId ||
+          task.data.connectionId.length > 200
+        )
+          throw Error("CLI 原版数据库任务缺少连接标识");
+        required.add(task.data.connectionId);
+      }
+    }
+  }
   if (
     Object.keys(connections).some((key) => !required.has(key)) ||
     [...required].some((key) => !Object.hasOwn(connections, key))

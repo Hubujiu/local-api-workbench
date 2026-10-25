@@ -7,7 +7,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Store } from "../src/runtime.mjs";
 import { snapshotPlan } from "../src/core.mjs";
-export async function verifyCLIDatabaseFlow(config, sql, parameters = []) {
+export async function verifyCLIDatabaseFlow(
+  config,
+  sql,
+  parameters = [],
+  { native = false } = {},
+) {
   const root = await mkdtemp(path.join(tmpdir(), "cli-db-flow-"));
   let requests = 0;
   const server = http.createServer((req, res) => {
@@ -56,7 +61,73 @@ export async function verifyCLIDatabaseFlow(config, sql, parameters = []) {
         ],
       }),
     ];
+    if (native) {
+      assert.equal(
+        parameters.length,
+        0,
+        "native task SQL is static, never interpolated",
+      );
+      for (const plan of project.plans)
+        for (const step of plan.steps) {
+          if (!step.request.before?.length) continue;
+          const request = step.request;
+          const task = (operation) => ({
+            type: "database",
+            enabled: 1,
+            data: {
+              connectionId: operation.connectionId,
+              query: operation.sql,
+              isConsoleOutput: -1,
+              variables: [
+                {
+                  name: operation.name,
+                  type: "environment",
+                  pattern: "$[0].value",
+                },
+              ],
+            },
+          });
+          request.nativeTasks = {
+            version: 1,
+            before: [
+              {
+                type: "customScript",
+                enabled: 1,
+                data: 'const lexical="same-scope";',
+              },
+              ...request.before.map(task),
+              {
+                type: "customScript",
+                enabled: 1,
+                data: 'pm.test("lexical",()=>pm.expect(lexical).to.equal("same-scope"));',
+              },
+            ],
+            after: [
+              ...request.after.map(task),
+              ...(request.afterScript
+                ? [
+                    {
+                      type: "customScript",
+                      enabled: 1,
+                      data: request.afterScript,
+                    },
+                  ]
+                : []),
+            ],
+          };
+          request.before = [];
+          request.after = [];
+          request.beforeScript = "";
+          request.afterScript = "";
+          request.inheritSharedScripts = false;
+        }
+    }
     await store.save(project);
+    if (native)
+      assert.ok(
+        (await store.get(project.id)).plans[0].steps[0].request.nativeTasks,
+        "native tasks require the separate native execution feature, not silent fallback",
+      );
     const invoke = (plan, flag, input) =>
       new Promise((resolve, reject) => {
         const child = spawn(
