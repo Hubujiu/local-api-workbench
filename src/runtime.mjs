@@ -2,6 +2,8 @@ import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeAutoImports } from "./active-project-import.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 
+import { normalizeNativeMock } from "./native-mock.mjs";
+
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -264,6 +266,11 @@ export class Store {
       validateMockRules(request.mockRules || []);
       if (request.nativeTasks !== undefined)
         request.nativeTasks = normalizeNativeTaskRequest(request);
+      if (request.nativeMock !== undefined) {
+        if (request.mockRules?.length)
+          throw Error("原版Mock与普通Mock规则不能混用");
+        request.nativeMock = normalizeNativeMock(request.nativeMock);
+      }
     }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)

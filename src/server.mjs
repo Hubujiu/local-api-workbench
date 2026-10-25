@@ -8,6 +8,8 @@ import {
 } from "./active-project-import.mjs";
 import { MCPDatabaseGrants } from "./mcp-database-grants.mjs";
 
+import { nativeMockResponse } from "./native-mock-runtime.mjs";
+
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -334,18 +336,28 @@ export async function createApp({
         try {
           incoming = JSON.parse(raw);
         } catch {}
-        if (u.searchParams.getAll("example").length > 1)
+        if (
+          r.nativeMock === undefined &&
+          u.searchParams.getAll("example").length > 1
+        )
           throw Error("Mock示例索引不能重复");
-        const selected = selectMockResponse(
-          r,
-          {
-            method: req.method,
-            query: Object.fromEntries(u.searchParams),
-            headers: req.headers,
-            body: incoming,
-          },
-          () => schemaMockResponse(p, r),
-        );
+        const selected =
+          r.nativeMock !== undefined
+            ? await nativeMockResponse(p, r, {
+                query: Object.fromEntries(u.searchParams),
+                headers: req.headers,
+                body: incoming,
+              })
+            : selectMockResponse(
+                r,
+                {
+                  method: req.method,
+                  query: Object.fromEntries(u.searchParams),
+                  headers: req.headers,
+                  body: incoming,
+                },
+                () => schemaMockResponse(p, r),
+              );
         if (selected.delayMs)
           await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
         res.writeHead(selected.status, {

@@ -5,6 +5,7 @@ import {
 } from "./apipost-directory-artifacts.mjs";
 import {
   allowedDirectoryPath,
+  nativeMockTargetId,
   directorySettings as settings,
 } from "../public/apipost-directory-input.js";
 // Read-only assembly of a bounded, explicitly selected original JSON file set.
@@ -175,13 +176,32 @@ export function assembleApipostDirectory(document) {
   };
   for (const [file, field] of Object.entries(settings))
     global[field] = files.get("settings/" + file + ".json") ?? [];
+  const apis = collection("apis", "target_id", true);
+  for (const [path, value] of files) {
+    const targetId = nativeMockTargetId(path);
+    if (!targetId) continue;
+    const target = apis.find(
+      (node) => node.target_id === targetId && node.target_type === "api",
+    );
+    if (
+      !id(targetId) ||
+      !target ||
+      !object(value) ||
+      value.project_id !== projectId ||
+      value.target_id !== targetId ||
+      target.nativeMockConfig !== undefined ||
+      target.ai_expect !== undefined
+    )
+      throw Error("Apipost Mock文件身份冲突、重复或引用不存在的接口");
+    target.nativeMockConfig = structuredClone(value);
+  }
   return {
     ...(flows.length ? { nativeExecutionFlows: flows } : {}),
     project_id: projectId,
     name: project.name,
     intro: project.intro || "",
     global,
-    apis: collection("apis", "target_id", true),
+    apis,
     samples: collection("samples", "sample_id", true),
     models: collection("schemas", "model_id", true),
     automated_testings: [],
