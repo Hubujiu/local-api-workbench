@@ -303,3 +303,10 @@ const { verifyNativeDatabaseScopes } = await import(
   "./native-database-scopes.mjs"
 );
 await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+await verifyMCPDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  { nativeImport: true },
+);
