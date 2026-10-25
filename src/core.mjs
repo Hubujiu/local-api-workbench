@@ -3,6 +3,9 @@ import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
+import { runNativeTaskPhase } from "./native-task-phase.mjs";
+
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -316,6 +319,9 @@ export function normalizeRequest(r = {}) {
             r.importedScriptTasks,
           ),
         }),
+    ...(r.nativeTasks === undefined
+      ? {}
+      : { nativeTasks: normalizeNativeTaskRequest(r) }),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],
@@ -467,6 +473,9 @@ export async function runPlan(
   for (const step of snapshot.steps)
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
+  for (const step of snapshot.steps)
+    if (step.request?.nativeTasks !== undefined)
+      step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -665,7 +674,10 @@ export async function runPlan(
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
         const beforeStages = scriptStages(configuredRequest, "before");
-        if (beforeStages.length) {
+        if (
+          beforeStages.length ||
+          configuredRequest.nativeTasks?.before.length
+        ) {
           const templateRequest =
             ["query", "headers", "path", "cookies", "form"].some((group) =>
               (configuredRequest[group] || []).some((row) =>
@@ -680,13 +692,17 @@ export async function runPlan(
             : null;
           scriptPhase = "before";
           const scripted = await (
-            configuredRequest.sharedBeforeScripts?.length
-              ? runScriptSequence
-              : runScript
+            configuredRequest.nativeTasks
+              ? runNativeTaskPhase
+              : configuredRequest.sharedBeforeScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            configuredRequest.sharedBeforeScripts?.length
-              ? beforeStages
-              : configuredRequest.beforeScript,
+            configuredRequest.nativeTasks
+              ? configuredRequest.nativeTasks.before
+              : configuredRequest.sharedBeforeScripts?.length
+                ? beforeStages
+                : configuredRequest.beforeScript,
             {
               allowNetwork: true,
               executionContext,
@@ -696,8 +712,15 @@ export async function runPlan(
               functions: snapshot.functions || [],
               request: configuredRequest,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "before",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -712,6 +735,14 @@ export async function runPlan(
           );
           if (scripted.tests.some((test) => !test.passed))
             throw Error("前置脚本断言失败");
+          if (
+            configuredRequest.nativeTasks &&
+            !isDeepStrictEqual(
+              configuredRequest.nativeTasks,
+              scripted.request.nativeTasks,
+            )
+          )
+            throw Error("脚本不能改写本次冻结的原版任务列表");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           replaceVariables(localVariables, scripted.localVariables || {});
@@ -783,16 +814,20 @@ export async function runPlan(
         }
         applyLegacyVariables(scopes, beforeAfterOperations, vars);
         const afterStages = scriptStages(record.request, "after");
-        if (afterStages.length) {
+        if (afterStages.length || record.request.nativeTasks?.after.length) {
           scriptPhase = "after";
           const scripted = await (
-            record.request.sharedAfterScripts?.length
-              ? runScriptSequence
-              : runScript
+            record.request.nativeTasks
+              ? runNativeTaskPhase
+              : record.request.sharedAfterScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            record.request.sharedAfterScripts?.length
-              ? afterStages
-              : record.request.afterScript,
+            record.request.nativeTasks
+              ? record.request.nativeTasks.after
+              : record.request.sharedAfterScripts?.length
+                ? afterStages
+                : record.request.afterScript,
             {
               allowNetwork: true,
               executionContext,
@@ -803,8 +838,15 @@ export async function runPlan(
               request: record.request,
               response: record.response,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "after",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -841,6 +883,13 @@ export async function runPlan(
       }
     } catch (error) {
       record.status = "failed";
+      if (error.databaseQueries?.length)
+        (record.databaseQueries ||= []).push(
+          ...error.databaseQueries.map((item) => ({
+            ...item,
+            phase: scriptPhase,
+          })),
+        );
       if (error.networkRequests)
         record.subrequests.push(
           ...error.networkRequests.map((item) => ({

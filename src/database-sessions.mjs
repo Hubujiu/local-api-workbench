@@ -61,14 +61,40 @@ export class DatabaseSessions {
     }
     if (Buffer.byteLength(JSON.stringify(config)) > 131072)
       throw Error("连接配置最多128KiB");
+    const bindingId = input.bindingId;
+    if (
+      bindingId !== undefined &&
+      (typeof bindingId !== "string" ||
+        !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(bindingId) ||
+        [...this.#connections.values()].some(
+          (item) =>
+            item.projectId === projectId && item.bindingId === bindingId,
+        ))
+    )
+      throw Error("导入数据库绑定标识无效或已授权；请先撤销旧会话");
     const id = randomUUID();
-    this.#connections.set(id, { projectId, name: input.name.trim(), config });
-    return { id, name: input.name.trim(), type };
+    this.#connections.set(id, {
+      projectId,
+      name: input.name.trim(),
+      config,
+      bindingId,
+    });
+    return {
+      id,
+      name: input.name.trim(),
+      type,
+      ...(bindingId ? { bindingId } : {}),
+    };
   }
   list(projectId) {
     return [...this.#connections]
       .filter(([, item]) => item.projectId === projectId)
-      .map(([id, item]) => ({ id, name: item.name, type: item.config.type }));
+      .map(([id, item]) => ({
+        id,
+        name: item.name,
+        type: item.config.type,
+        ...(item.bindingId ? { bindingId: item.bindingId } : {}),
+      }));
   }
   revoke(projectId, id) {
     if (this.#connections.get(id)?.projectId !== projectId)
@@ -77,7 +103,14 @@ export class DatabaseSessions {
   }
   async query(projectId, operation, signal) {
     if (signal?.aborted) throw Error("数据库操作已取消");
-    const item = this.#connections.get(operation.connectionId);
+    const resolvedId = this.#connections.has(operation.connectionId)
+      ? operation.connectionId
+      : [...this.#connections].find(
+          ([, item]) =>
+            item.projectId === projectId &&
+            item.bindingId === operation.connectionId,
+        )?.[0];
+    const item = this.#connections.get(resolvedId);
     if (!item || item.projectId !== projectId)
       throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
     const config = structuredClone(item.config);
@@ -94,7 +127,7 @@ export class DatabaseSessions {
             parameters: operation.parameters,
           });
     if (signal?.aborted) throw Error("数据库操作已取消");
-    if (this.#connections.get(operation.connectionId) !== item)
+    if (this.#connections.get(resolvedId) !== item)
       throw Error("数据库会话连接已撤销，结果未应用");
     if (Buffer.byteLength(JSON.stringify(result)) > 1024 * 1024)
       throw Error("数据库结果超过1MiB");

@@ -1124,12 +1124,17 @@ export async function createApp({
           if (action === "database-connections") {
             if (req.method === "GET")
               return json(res, 200, databaseSessions.list(p.id));
-            if (req.method === "POST")
-              return json(
-                res,
-                200,
-                databaseSessions.register(p.id, await body(req)),
-              );
+            if (req.method === "POST") {
+              const config = await body(req);
+              if (config.bindingId !== undefined) {
+                const source = p.settings?.apipostDatabases?.find(
+                  (item) => item.id === config.bindingId,
+                );
+                if (!source || source.type !== config.type)
+                  throw Error("导入数据库绑定须匹配当前项目来源与数据库类型");
+              }
+              return json(res, 200, databaseSessions.register(p.id, config));
+            }
             if (req.method === "DELETE") {
               databaseSessions.revoke(p.id, (await body(req)).id);
               return json(res, 200, { revoked: true });
@@ -1337,6 +1342,7 @@ export async function createApp({
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
                 subrequests: result.subrequests,
+                databaseQueries: result.databaseQueries,
                 visualization: result.visualization,
                 scriptResponse: result.scriptResponse,
                 scriptStage: result.scriptStage,

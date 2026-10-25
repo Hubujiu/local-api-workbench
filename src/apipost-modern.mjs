@@ -1,3 +1,7 @@
+import {
+  prepareApipostDatabases,
+  nativeDatabaseTasks,
+} from "./apipost-database-import.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -265,7 +269,29 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of ["db_link"]) reject(global[name], "global." + name);
+  const databaseImport = prepareApipostDatabases(
+    global.db_link,
+    source.project_id,
+    resource,
+  );
+  const parseTasks = (value, phase, origins = false) => {
+    if (
+      !Array.isArray(value) ||
+      !value.some((task) => task?.type === "database")
+    )
+      return scriptTasks(value, phase, origins);
+    const tasks = nativeDatabaseTasks(value, databaseImport.map, {
+      translated: origins,
+    });
+    return {
+      native: true,
+      source: tasks,
+      code: "",
+      note:
+        phase +
+        " 原版混排任务保持同一词法作用域；数据库失败会终止请求，不沿用原版继续发送旧值的行为。",
+    };
+  };
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
     resource,
@@ -419,8 +445,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of ["script", "pre_script", "test"])
         reject(layer[task], task);
       // Validate every source layer before deriving a flattened execution snapshot.
-      scriptTasks(layer.pre_tasks, "前置");
-      scriptTasks(layer.post_tasks, "后置");
+      parseTasks(layer.pre_tasks, "前置");
+      parseTasks(layer.post_tasks, "后置");
     }
     const inheritedTasks = ["pre_tasks", "post_tasks"].some((phase) =>
       ancestry.slice(0, -1).some((layer) => !empty(layer[phase])),
@@ -435,10 +461,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       );
     const mergedTasks = (phase, label) => {
       if (node.target_type !== "api") return null;
-      if (!inheritedTasks) return scriptTasks(request[phase], label);
+      if (!inheritedTasks) return parseTasks(request[phase], label);
       const combined = [];
       for (const layer of ancestry) {
-        const parsed = scriptTasks(layer[phase], label);
+        const parsed = parseTasks(layer[phase], label);
         if (!parsed) continue;
         const owner = taskOwners.get(layer);
         const origin =
@@ -450,7 +476,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
               };
         for (const task of parsed.source) combined.push({ ...task, origin });
       }
-      return scriptTasks(combined, label, true);
+      return parseTasks(combined, label, true);
     };
     const beforeTask = mergedTasks("pre_tasks", "前置");
     const afterTask = mergedTasks("post_tasks", "后置");
@@ -688,13 +714,27 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     );
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
-      request.importedScriptTasks = normalizeImportedScriptTasks({
-        version: 1,
-        before: row.beforeTask?.source || [],
-        after: row.afterTask?.source || [],
-      });
-      request.beforeScript = row.beforeTask?.code || "";
-      request.afterScript = row.afterTask?.code || "";
+      if (row.beforeTask?.native || row.afterTask?.native) {
+        request.nativeTasks = {
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        };
+        request.inheritSharedScripts = false;
+        request.beforeScript = "";
+        request.afterScript = "";
+        request.importNotes.push(
+          "数据库地址、用户、密码及SSH配置未导入；仅保留连接标识。运行前须显式重新绑定当前项目临时会话，导入/恢复不会连接数据库。数据库错误立即终止，不沿用原版继续发送旧值的行为。",
+        );
+      } else {
+        request.importedScriptTasks = normalizeImportedScriptTasks({
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        });
+        request.beforeScript = row.beforeTask?.code || "";
+        request.afterScript = row.afterTask?.code || "";
+      }
       request.importNotes.push(
         "导入不执行脚本；运行前请审核。仅兼容现有 Apipost 8 脚本子集，不是完整 SDK 或任务列表往返迁移。",
       );
@@ -828,6 +868,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
             empty(global.mock_custom_rules) ? [] : global.mock_custom_rules,
             project.settings?.mockFieldRules || [],
             source.project_id,
+          ),
+        }
+      : {}),
+    ...(databaseImport.connections.length ||
+    project.settings?.apipostDatabases !== undefined
+      ? {
+          apipostDatabases: mergeResources(
+            project.settings?.apipostDatabases,
+            databaseImport.connections,
           ),
         }
       : {}),

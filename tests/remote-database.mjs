@@ -303,3 +303,13 @@ await verifyCLIDatabaseFlow(
   "SELECT ? AS value",
   ["fixture-value"],
 );
+// Same mixed script/database/real HTTP contract against both real SQL engines.
+const { verifyNativeDatabaseFlow } = await import(
+  "./native-database-integration.mjs"
+);
+await verifyNativeDatabaseFlow({ ...common, type: "postgres", port: 5432 });
+await verifyNativeDatabaseFlow({ ...common, type: "mysql", port: 3306 });
+const { verifyNativeImportHTTPFlow } = await import(
+  "./native-database-integration.mjs"
+);
+await verifyNativeImportHTTPFlow({ ...common, type: "postgres", port: 5432 });
