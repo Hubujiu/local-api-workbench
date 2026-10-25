@@ -43,8 +43,9 @@ implementation or raw analysis bundle is copied into this repository.
   continue-after-failure behavior. Cancellation and all execution grants remain.
 - Supported step input includes JSON body (observed two-space serialization) and
   existing declared Query/Header/Path/Cookie rows through the shared bounded input
-  validator. Explicit Basic/Bearer/no-auth step settings use native-format conversion;
-  other authentication modes and non-JSON body overrides remain unsupported.
+  validator. Text/raw bodies and existing URL-encoded/multipart text fields are
+  also supported; no file content is imported through step input. Explicit Basic/Bearer/no-auth step settings use native-format conversion;
+  other authentication modes, binary and MessagePack body overrides remain unsupported.
   Unknown overrides, missing snapshots/environments and unsupported
   API dependencies reject before any destination change. Other input forms are
   not silently approximated.
@@ -166,3 +167,23 @@ Synthetic real-HTTP/CLI tests exercise Basic, Bearer and explicit no-auth replac
 an old snapshot auth; the second step and another project remain untouched.
 Save/reload/backup retains the chosen request snapshot. Bearer/no-auth coverage is
 synthetic, not a claim of an additional original runtime observation.
+
+## Native body input closure
+
+The original Text editor saves body.mode=plain with a string input.body. A locally
+controlled original plan sent a template-expanded string with literal plus signs,
+percent escapes and ampersands unchanged; its API scripts remained skipped.
+The current full original directory was imported locally, saved/reloaded and
+backup-restored, then both native plans executed against a real loopback server.
+The runtime environment value was explicitly supplied, not inferred from history.
+Source directory bytes remained unchanged; raw experiment archives are not
+included in this commit.
+
+The adapter now uses the shared bounded input path for raw string bodies and
+declared URL-encoded/multipart non-file fields. Explicit native modes are retained
+when an empty body would otherwise normalize to none. JSON still uses two-space
+serialization. Synthetic CLI wire tests cover text/XML, empty JSON, URL-encoded
+escaping, multipart field preservation, second-step isolation and backup snapshots.
+Unknown form fields, file overrides, non-string raw values and unsupported body
+modes reject atomically. URL-encoded/multipart/XML coverage is synthetic real HTTP,
+not a claim of an additional original runtime observation.
