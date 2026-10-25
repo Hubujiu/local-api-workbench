@@ -2,7 +2,7 @@
 
 This feature branch starts from develop. The backend phase executor and explicit
 `nativeTasks` request/plan state are staged implementations, not acceptance of the
-complete database migration feature. Native project import now accepts the explicitly bounded PostgreSQL subset below.
+complete database migration feature. Native project import now accepts the explicitly bounded PostgreSQL/MySQL subset below. Later stages below supersede earlier WIP scope statements.
 
 ## Observed behavior
 
@@ -107,9 +107,8 @@ as native PostgreSQL wire acceptance. Raw original archives remain private.
 Official MCP SDK regression confirms that an execute-enabled MCP client cannot
 inherit a manual HTTP database grant when running a saved native-task plan. The
 plan records a failed result and sends no HTTP request; a manual HTTP execution
-with its own explicit grant succeeds. Foreign projects remain denied. Native
-MCP database granting itself remains unsupported, rather than implicitly widening
-the existing MCP execute permission.
+with its own explicit grant succeeds. Foreign projects remain denied. Explicit MCP-only database grants are implemented in dependent PR #10, never
+by inheriting this manual HTTP grant.
 
 The CLI grant collector is updated in its own feature PR (#2), not duplicated
 here. Combined actual PostgreSQL subprocess verification covers native ordered
@@ -130,3 +129,48 @@ in the same request post-script, reset on the next request, persisted environmen
 and global values, foreign-project isolation, backup/restore of the canonical
 tasks/values, and denial of restored database grants. Inherited task flattening
 keeps already-normalized scopes without attempting native translation twice.
+
+## Native MySQL mapping and real SQL acceptance
+
+The native `mysql` connection type now maps to the existing MySQL readonly
+provider; `pg` still maps to PostgreSQL. Both source and persisted resource
+validators retain the same narrow field/identity/type allowlists, strip all
+connection configuration, require explicit project/type-matched ephemeral
+rebinding, and reject active SSH, independent environment configuration and
+nonempty auth_source. No SQL parser, write permission or grant lifetime changes.
+
+Official Offline2 connection testing succeeded against a disposable MariaDB
+10.11.18 MySQL-protocol fixture from official Debian packages. This is not a
+claim that MariaDB and every MySQL version are identical. Workbench's actual
+independent TCP fixture passed native MySQL import -> explicit binding -> ordered
+scripts/SQL/HTTP -> response assertion/history, three result scopes, project
+isolation, revoke/restart denial and source-secret stripping. MySQL8 CI now runs
+the same native import and scope contracts, in addition to its existing mixed
+phase/CLI tests. Exact-commit CI remains required. Original task-to-HTTP and
+combined MCP/source-directory acceptance are tracked separately until run.
+
+The test server is private, temporary and loopback-only, with a SELECT-only
+fictional account. It is not installed into the system, added as a dependency
+or redistributed. The root test uses TCP only because Unix sockets are not
+available there; authentication remains enabled. Official source:
+https://deb.debian.org/debian/pool/main/m/mariadb/ . Other native engine mappings
+remain rejected, rather than guessed from superficially similar connection fields.
+
+### Observed MySQL result-set shape correction
+
+Original MySQL testing exposed a material difference from PostgreSQL: a single
+SELECT yields `[rows]`, not `rows`, to native JSONPath extraction and console
+output. `$[0].value` therefore produced null in the original; `$[0][0].value`
+produced `from-mysql`, which arrived in the actual HTTP JSON body. Merely mapping
+the engine while treating both as flat rows was an incomplete WIP checkpoint.
+
+The importer now attaches a strictly validated `mysql-resultsets` canonical
+result-view marker from the trusted imported connection type. Native source
+cannot inject that internal marker. Extraction and console output use the same
+single-result-set wrapper, without rewriting JSONPath strings or changing the
+SQL provider's normalized evidence. Ordinary/PG tasks retain their old shape.
+The marker survives inherited task translation, persistence and frozen plans.
+Only one safe SELECT/WITH statement remains allowed; this does not enable
+multi-statement execution. Missing paths deliberately fail closed instead of
+sending the original's null/stale value. Root/array/scalar extraction remains
+bounded by the existing result and sandbox limits.

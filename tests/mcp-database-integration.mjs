@@ -28,7 +28,10 @@ export async function verifyMCPDatabaseFlow(
     if (nativeImport) {
       importIntoProject(
         p,
-        nativeDatabaseFixture(`http://127.0.0.1:${echo.address().port}/`),
+        nativeDatabaseFixture(
+          `http://127.0.0.1:${echo.address().port}/`,
+          config.type === "mysql" ? "mysql" : "pg",
+        ),
       );
       await app.store.save(p);
       bindingId = p.settings.apipostDatabases[0].id;

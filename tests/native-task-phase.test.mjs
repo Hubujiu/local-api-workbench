@@ -224,3 +224,44 @@ test("mixed database phase feeds an actual HTTP request and retains independent 
   );
   assert.equal(independent.tests[0].passed, true);
 });
+
+test("MySQL resultsets retain native nested extraction and console shape without changing ordinary rows", async () => {
+  const { databaseAssignments, normalizeDatabaseOperations } = await import(
+    "../src/script-database-tasks.mjs"
+  );
+  const operation = {
+    connectionId: "fixture",
+    query: "SELECT 1",
+    isConsoleOutput: 1,
+    resultShape: "mysql-resultsets",
+    variables: [
+      { name: "value", type: "environment", pattern: "$[0][0].value" },
+    ],
+  };
+  const input = {
+    variables: {},
+    request: { url: "http://127.0.0.1:1/", method: "GET", headers: [] },
+  };
+  const tasks = [{ type: "database", enabled: 1, data: operation }];
+  const result = await runNativeTaskPhase(tasks, input, {
+    databaseQuery: async () => ({ rows: [{ value: "wrapped" }] }),
+  });
+  assert.equal(result.variables.value, "wrapped");
+  assert(result.logs.some((l) => JSON.stringify(l).includes("[[{")));
+  assert.throws(
+    () =>
+      databaseAssignments(
+        {
+          ...operation,
+          variables: [
+            { name: "value", type: "environment", pattern: "$[0].value" },
+          ],
+        },
+        { rows: [{ value: "wrapped" }] },
+      ),
+    /路径不存在/,
+  );
+  assert.throws(() =>
+    normalizeDatabaseOperations([{ ...operation, resultShape: "arbitrary" }]),
+  );
+});

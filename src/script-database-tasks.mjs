@@ -15,10 +15,16 @@ export function normalizeDatabaseOperations(value = []) {
       !object(entry) ||
       Object.keys(entry).some(
         (key) =>
-          !["connectionId", "query", "variables", "isConsoleOutput"].includes(
-            key,
-          ),
+          ![
+            "connectionId",
+            "query",
+            "variables",
+            "isConsoleOutput",
+            "resultShape",
+          ].includes(key),
       ) ||
+      (entry.resultShape !== undefined &&
+        entry.resultShape !== "mysql-resultsets") ||
       !name(entry.connectionId) ||
       typeof entry.query !== "string" ||
       !entry.query.trim() ||
@@ -31,6 +37,9 @@ export function normalizeDatabaseOperations(value = []) {
     )
       throw Error("数据库任务仅支持显式连接、静态只读SQL和有界提取；不插值SQL");
     return {
+      ...(entry.resultShape !== undefined
+        ? { resultShape: entry.resultShape }
+        : {}),
       connectionId: entry.connectionId,
       query: entry.query,
       isConsoleOutput: entry.isConsoleOutput,
@@ -57,12 +66,18 @@ export function normalizeDatabaseOperations(value = []) {
     };
   });
 }
-export function databaseAssignments(operation, result) {
+export function databaseResultRows(operation, result) {
   if (!object(result) || !Array.isArray(result.rows))
     throw Error("数据库任务结果缺少rows");
+  return operation.resultShape === "mysql-resultsets"
+    ? [result.rows]
+    : result.rows;
+}
+export function databaseAssignments(operation, result) {
+  const rows = databaseResultRows(operation, result);
   // Validate all extractions before applying any changes in the sandbox.
   return operation.variables.map((variable) => {
-    let value = result.rows;
+    let value = rows;
     for (const key of jsonPathSegments(variable.pattern)) {
       if (
         value === null ||

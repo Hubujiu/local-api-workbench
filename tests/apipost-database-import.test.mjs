@@ -177,3 +177,44 @@ test("native result scope names map explicitly and survive inherited task flatte
     assert.throws(() => importIntoProject(project(), invalid), /作用域/);
   }
 });
+
+test("native MySQL catalog strips credentials and retains scoped engine identity", () => {
+  const doc = nativeDatabaseFixture("http://127.0.0.1:1/", "mysql"),
+    p = project(),
+    before = JSON.stringify(doc);
+  importIntoProject(p, doc);
+  assert.equal(p.settings.apipostDatabases[0].type, "mysql");
+  assert.equal(
+    p.requests[0].nativeTasks.before[1].data.connectionId,
+    p.settings.apipostDatabases[0].id,
+  );
+  assert(!JSON.stringify(p).includes("discard-this-fictional-password"));
+  assert(
+    !JSON.stringify(p.settings.apipostDatabases).includes(
+      "private-host.invalid",
+    ),
+  );
+  assert.equal(JSON.stringify(doc), before);
+  const saved = JSON.stringify(p);
+  const invalid = structuredClone(doc);
+  invalid.global.db_link[0].config.default.db_config.auth_source = "admin";
+  assert.throws(() => importIntoProject(p, invalid), /auth_source/);
+  assert.equal(JSON.stringify(p), saved);
+});
+
+test("native MySQL resultset wrapper survives inheritance and cannot be injected by source", () => {
+  const doc = nativeDatabaseFixture("http://127.0.0.1:1/", "mysql"),
+    p = project();
+  importIntoProject(p, doc);
+  assert.equal(
+    p.requests[0].nativeTasks.before[1].data.resultShape,
+    "mysql-resultsets",
+  );
+  assert.equal(
+    p.requests[0].nativeTasks.before[1].data.variables[0].pattern,
+    "$[0][0].value",
+  );
+  const bad = structuredClone(doc);
+  bad.apis[1].request.pre_tasks[1].data.resultShape = "mysql-resultsets";
+  assert.throws(() => importIntoProject(project(), bad));
+});
