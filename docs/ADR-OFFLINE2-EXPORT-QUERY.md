@@ -40,3 +40,15 @@ percent encoding, blank values, disabled rows and independent raw query fields.
 
 This is one verified Offline2 JSON-export workflow, not complete project/native
 format roundtrip, all original modules, or re-export into the original format.
+
+## Original-to-original roundtrip observation
+
+The same exported JSON was imported through the original UI into a separately
+created `Workbench Restored Fixture` project. The API and default environment
+were explicitly selected. Sending the restored API returned HTTP 200 and the
+same observed method/path/body. The UI then produced
+`native-echo-reexport.json`, also retained as an unmodified fictional fixture.
+Source and destination project/API IDs differ, as expected for this operation;
+request URL and body remain equal. Both actual exports now pass the independent
+Workbench import/save/restore/HTTP acceptance. This is not a Workbench exporter
+back into the original native format, nor coverage of models/scripts/plans.
