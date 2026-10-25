@@ -1,8 +1,10 @@
+import { validateApipostDatabaseResources } from "./apipost-database-import.mjs";
 import { validateParameterDescriptions } from "../public/parameter-descriptions.js";
 import { validateAttributeDefinitions } from "../public/attribute-model.js";
 import { validateErrorCodes } from "./error-codes.mjs";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
 export function validateResources(settings = {}) {
+  validateApipostDatabaseResources(settings.apipostDatabases);
   const list = (key, max = 100) => {
     const value = settings[key] || [];
     if (!Array.isArray(value) || value.length > max)

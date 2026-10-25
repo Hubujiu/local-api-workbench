@@ -2,7 +2,7 @@
 
 This feature branch starts from develop. The backend phase executor and explicit
 `nativeTasks` request/plan state are staged implementations, not acceptance of the
-complete database migration feature. Native project import remains fail-closed.
+complete database migration feature. Native project import now accepts the explicitly bounded PostgreSQL subset below.
 
 ## Observed behavior
 
@@ -40,9 +40,9 @@ Other native serialized scope names must be observed before importer mapping.
 
 ## Remaining work
 
-- Strict native connection/task import, credential stripping and explicit rebinding.
-- HTTP/MCP/CLI endpoint acceptance, source provenance and importer validation.
-- Full imported-project persistence/restore and explicit grant rebinding.
+- Additional native database types, environment-specific connections and SSH import.
+- MCP/CLI acceptance for native imported task references.
+- Whole original-directory integration with the other feature PRs.
 - Native error-path and additional scope behavior observations.
 - Complete cross-platform CI and MySQL mixed-phase service evidence.
 
@@ -71,3 +71,32 @@ continued the next script and HTTP request with the prior environment value.
 Workbench intentionally fails closed instead; it will not silently send a request
 with stale database-derived data. This compatibility difference must remain
 explicit in import notes and is not a claim of exact failure-policy equivalence.
+
+## Stage 3: bounded native import and explicit HTTP rebinding
+
+Modern native `global.db_link` accepts PostgreSQL (`pg`) definitions belonging to
+the source project. Non-default environments must explicitly use the default;
+active SSH, other engines, unknown fields and malformed definitions reject
+atomically. The entire source connection catalog is bounded to 1 MiB. Only safe
+resource identifiers, source identifiers, name and type survive import. Host,
+port, database, user, password and SSH configuration are intentionally discarded,
+with a request import note requiring manual ephemeral rebinding. No connection is
+created by import, save, restore, startup or execution without an explicit grant.
+
+Mixed enabled/disabled tasks retain order, IDs/names and inherited scope metadata.
+Only the observed native `environment` extraction type is imported; other native
+serialized scope names remain rejected. SQL templates are rejected, not interpolated.
+The existing readonly driver limits still apply, including bounded result rows.
+
+POST database-connections can explicitly bind a current-project imported resource
+to a new transient session using `bindingId`. The source/type must match the
+project. Duplicate active binding rejects until revoke; cross-project lookup,
+in-flight revocation, restart and restore never inherit authorization. HTTP debug
+returns per-phase database evidence and saves it in history.
+
+Local actual PostgreSQL18.6 acceptance covers synthetic native import -> save ->
+unauthorized rejection -> token/origin/type checks -> explicit binding -> scripts
++ SELECT + HTTP + response assertion -> history -> revoke -> restart denial.
+The same fixture runs in the existing CI PostgreSQL service job. SQLite verifies
+canonical persistence/backup and alias mechanics separately; it is not presented
+as native PostgreSQL wire acceptance. Raw original archives remain private.

@@ -80,3 +80,136 @@ export async function verifyNativeDatabaseFlow(config) {
     await new Promise((resolve) => server.close(resolve));
   }
 }
+
+export async function verifyNativeImportHTTPFlow(config) {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { createApp } = await import("../src/server.mjs");
+  const { importIntoProject } = await import("../src/core.mjs");
+  const { nativeDatabaseFixture } = await import(
+    "./fixtures/apipost-database.mjs"
+  );
+  const root = await mkdtemp(join(tmpdir(), "native-pg-api-"));
+  let app = await createApp({ root, port: 0 });
+  let count = 0;
+  const echo = http.createServer((req, res) => {
+    count++;
+    res.end(JSON.stringify({ value: req.headers["x-db-value"] }));
+  });
+  await new Promise((resolve) => echo.listen(0, "127.0.0.1", resolve));
+  try {
+    const project = await app.store.create("native import fixture"),
+      foreign = await app.store.create("foreign");
+    const source = nativeDatabaseFixture(
+      `http://127.0.0.1:${echo.address().port}/`,
+    );
+    importIntoProject(project, source);
+    await app.store.save(project);
+    const bindingId = project.settings.apipostDatabases[0].id,
+      request = project.requests[0];
+    const headers = () => ({
+      "content-type": "application/json",
+      "x-local-token": app.token,
+    });
+    const endpoint = () =>
+      app.url + "/api/projects/" + project.id + "/database-connections";
+    const execute = async (projectId = project.id) => {
+      const response = await fetch(
+        app.url + "/api/projects/" + projectId + "/execute",
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ request }),
+        },
+      );
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const grantConfig = {
+      ...config,
+      name: "explicit current project",
+      bindingId,
+    };
+    assert.equal((await execute()).outcome, "failed");
+    assert.equal(count, 0);
+    for (const badHeaders of [
+      { "content-type": "application/json" },
+      { ...headers(), Origin: "https://untrusted.example" },
+    ])
+      assert.equal(
+        (
+          await fetch(endpoint(), {
+            method: "POST",
+            headers: badHeaders,
+            body: JSON.stringify(grantConfig),
+          })
+        ).status,
+        403,
+      );
+    assert.equal(
+      (
+        await fetch(endpoint(), {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ ...grantConfig, type: "mysql" }),
+        })
+      ).ok,
+      false,
+    );
+    const grantResponse = await fetch(endpoint(), {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(grantConfig),
+    });
+    assert.equal(grantResponse.ok, true);
+    const grant = await grantResponse.json();
+    assert.equal(grant.bindingId, bindingId);
+    const passed = await execute();
+    assert.equal(passed.outcome, "passed", JSON.stringify(passed));
+    assert.equal(passed.databaseQueries[0].status, "completed");
+    assert.equal(count, 1);
+    assert.equal((await execute(foreign.id)).outcome, "failed");
+    assert.equal(count, 1);
+    const disk = await app.store.get(project.id);
+    assert.equal(
+      JSON.stringify(disk).includes("discard-this-fictional-password"),
+      false,
+    );
+    assert.equal(
+      JSON.stringify(disk.settings.apipostDatabases).includes(config.host),
+      false,
+    );
+    assert.equal(
+      disk.history.at(-1)?.databaseQueries?.[0]?.status === "completed" ||
+        disk.history[0]?.databaseQueries?.[0]?.status === "completed",
+      true,
+    );
+    assert.equal(
+      (
+        await fetch(endpoint(), {
+          method: "DELETE",
+          headers: headers(),
+          body: JSON.stringify({ id: grant.id }),
+        })
+      ).ok,
+      true,
+    );
+    assert.equal((await execute()).outcome, "failed");
+    assert.equal(count, 1);
+    const rebound = await fetch(endpoint(), {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(grantConfig),
+    });
+    assert.equal(rebound.ok, true);
+    await new Promise((resolve) => app.server.close(resolve));
+    app = await createApp({ root, port: 0 });
+    assert.equal((await execute()).outcome, "failed");
+    assert.equal(count, 1);
+  } finally {
+    await new Promise((resolve) => app.server.close(resolve));
+    await new Promise((resolve) => echo.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  }
+}

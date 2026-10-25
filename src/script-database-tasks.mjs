@@ -111,7 +111,8 @@ export function normalizeNativeTaskRequest(request) {
       if (
         !object(task) ||
         Object.keys(task).some(
-          (key) => !["type", "enabled", "data", "id", "name"].includes(key),
+          (key) =>
+            !["type", "enabled", "data", "id", "name", "origin"].includes(key),
         ) ||
         ![1, 0, -1].includes(task.enabled) ||
         !["customScript", "database"].includes(task.type)
@@ -120,6 +121,18 @@ export function normalizeNativeTaskRequest(request) {
       for (const key of ["id", "name"])
         if (task[key] !== undefined && !name(task[key]))
           throw Error("原版执行任务标识无效");
+      if (
+        task.origin !== undefined &&
+        (!object(task.origin) ||
+          Object.keys(task.origin).some(
+            (key) => !["scope", "id"].includes(key),
+          ) ||
+          !["project", "folder", "request", "sample"].includes(
+            task.origin.scope,
+          ) ||
+          !name(task.origin.id))
+      )
+        throw Error("原版任务作用域来源无效");
       let data;
       if (task.type === "customScript") {
         if (
@@ -137,6 +150,9 @@ export function normalizeNativeTaskRequest(request) {
         type: task.type,
         enabled: task.enabled,
         data,
+        ...(task.origin !== undefined
+          ? { origin: structuredClone(task.origin) }
+          : {}),
         ...(task.id !== undefined ? { id: task.id } : {}),
         ...(task.name !== undefined ? { name: task.name } : {}),
       };
