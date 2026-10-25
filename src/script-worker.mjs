@@ -53,7 +53,7 @@ let wake,
   requestCount = 0,
   fakerCalls = 0;
 const receive = (message) => {
-  if (message.kind === "http") {
+  if (message.kind === "http" || message.kind === "database") {
     replies.push(message);
     wake?.();
     wake = null;
@@ -120,6 +120,30 @@ try {
   );
   context.setProp(context.global, "__sendRequest", sendFunction);
   sendFunction.dispose();
+
+  if (workerData.databaseTaskCount) {
+    let nextDatabase = 0;
+    const databaseFunction = context.newFunction(
+      "__nativeDatabaseBridge",
+      (indexHandle, callback) => {
+        const index = context.getNumber(indexHandle);
+        if (
+          finalizing ||
+          index !== nextDatabase ||
+          index >= workerData.databaseTaskCount ||
+          context.typeof(callback) !== "function"
+        )
+          return { error: context.newError("数据库任务次序无效") };
+        nextDatabase++;
+        const id = "database:" + index;
+        callbacks.set(id, callback.dup());
+        parentPort.postMessage({ kind: "database", id, index });
+        return context.undefined;
+      },
+    );
+    context.setProp(context.global, "__nativeDatabaseBridge", databaseFunction);
+    databaseFunction.dispose();
+  }
 
   const scheduleTimer = context.newFunction(
     "__scheduleTimer",
@@ -518,6 +542,11 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.databaseTaskCount)
+      install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
+    if(errorJSON){reject(Error(errorJSON));return;}
+    try{const result=JSON.parse(responseJSON);for(const entry of result.assignments)({environment,global,temporary})[entry.type](entry.name,entry.value);if(result.rows)log(JSON.stringify(result.rows));resolve();}catch(error){reject(error);}
+  })))(globalThis.__nativeDatabaseBridge,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),console.log.bind(console));delete globalThis.__nativeDatabaseBridge;`);
     run(compatibilitySources.join(";\n"));
   });
   let remaining = deadline - Date.now();

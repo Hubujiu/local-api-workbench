@@ -1,3 +1,7 @@
+import {
+  normalizeDatabaseOperations,
+  databaseAssignments,
+} from "./script-database-tasks.mjs";
 import { finalBodyLiteral } from "./script-final-body.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import {
@@ -21,6 +25,8 @@ export function runScript(
   {
     signal,
     cookieSession,
+    databaseQuery,
+    databaseOperations: suppliedDatabaseOperations,
     activityBudgetMs = 250,
     wallBudgetMs = 2000,
     requestLimit = 10,
@@ -30,6 +36,11 @@ export function runScript(
     assertionLimit = 1000,
   } = {},
 ) {
+  const databaseOperations = normalizeDatabaseOperations(
+    suppliedDatabaseOperations,
+  );
+  if (databaseOperations.length && typeof databaseQuery !== "function")
+    throw Error("此执行入口未授权数据库任务");
   if (
     !Number.isFinite(activityBudgetMs) ||
     activityBudgetMs <= 0 ||
@@ -87,6 +98,7 @@ export function runScript(
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
+        databaseTaskCount: databaseOperations.length,
         code,
         input,
         activityBudgetMs,
@@ -99,7 +111,10 @@ export function runScript(
       resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 },
     });
     const controller = new AbortController(),
-      networkRequests = [];
+      networkRequests = [],
+      databaseQueries = [];
+    let nextDatabase = 0,
+      databaseActive = false;
     let completedMessage,
       settled = false,
       total = 0,
@@ -110,6 +125,8 @@ export function runScript(
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
       controller.abort();
+      for (const record of databaseQueries)
+        if (record.status === "running") record.status = "interrupted";
       if (terminate) await worker.terminate();
       if (error) {
         error.elapsedMs ??= Math.round(performance.now() - startedAt);
@@ -119,6 +136,7 @@ export function runScript(
             record.status = "interrupted";
             record.error = error.message;
           }
+        error.databaseQueries = structuredClone(databaseQueries);
         error.networkRequests = structuredClone(networkRequests);
         reject(error);
       } else {
@@ -134,6 +152,7 @@ export function runScript(
               Boolean(input.response),
               true,
             ),
+            databaseQueries,
             networkRequests,
           });
         } catch (error) {
@@ -165,6 +184,58 @@ export function runScript(
       if (settled) return;
       if (message.kind === "stage") {
         lastWorkerStage = message.stage;
+        return;
+      }
+      if (message.kind === "database") {
+        if (
+          databaseActive ||
+          message.index !== nextDatabase ||
+          !databaseOperations[nextDatabase]
+        ) {
+          finish(Error("数据库任务次序无效或重复调用"));
+          return;
+        }
+        const operation = databaseOperations[nextDatabase++];
+        databaseActive = true;
+        const evidence = {
+          index: message.index,
+          connectionId: operation.connectionId,
+          status: "running",
+        };
+        databaseQueries.push(evidence);
+        let response, error;
+        try {
+          const result = await databaseQuery(
+            {
+              connectionId: operation.connectionId,
+              sql: operation.query,
+              parameters: [],
+            },
+            controller.signal,
+          );
+          if (settled || controller.signal.aborted) return;
+          response = {
+            assignments: databaseAssignments(operation, result),
+            ...(operation.isConsoleOutput === 1 ? { rows: result.rows } : {}),
+          };
+          if (Buffer.byteLength(JSON.stringify(response)) > 262144)
+            throw Error("数据库任务结果超过256KiB");
+          evidence.status = "completed";
+        } catch (caught) {
+          error = String(caught.message).slice(0, 2000);
+          evidence.status = "failed";
+          evidence.error = error;
+          response = undefined;
+        } finally {
+          databaseActive = false;
+        }
+        if (!settled)
+          worker.postMessage({
+            kind: "database",
+            id: message.id,
+            error,
+            response,
+          });
         return;
       }
       if (message.kind === "http") {
