@@ -1,3 +1,4 @@
+import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -216,6 +217,10 @@ export class Store {
         p.settings.socketioDefinitions,
       );
     validateProtocolRuns(p.protocolRuns ?? []);
+    if (p.settings?.apipostDirectoryArtifacts !== undefined)
+      p.settings.apipostDirectoryArtifacts = normalizeDirectoryArtifacts(
+        p.settings.apipostDirectoryArtifacts,
+      );
     validateResources(p.settings || {});
     validateSharedAuthSettings(p.settings);
     validateSharedScriptSettings(p.settings);

@@ -1,3 +1,7 @@
+import {
+  mergeDirectoryArtifacts,
+  normalizeDirectoryArtifacts,
+} from "./apipost-directory-artifacts.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1743,6 +1747,8 @@ export function restoreProject(document) {
     )
       throw Error("备份中的 " + key + " 格式无效");
   }
+  if (document.settings?.apipostDirectoryArtifacts !== undefined)
+    normalizeDirectoryArtifacts(document.settings.apipostDirectoryArtifacts);
   validateModelFolders(document);
   validateCaseFolders(document);
   if (
@@ -1895,7 +1901,15 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     }
   }
   const fromDirectory = isApipostDirectoryDocument(original);
+  const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  const directoryArtifacts = fromDirectory
+    ? mergeDirectoryArtifacts(
+        project.settings?.apipostDirectoryArtifacts,
+        directoryDocument,
+        original.project_id,
+      )
+    : null;
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
     ? importModernApipost(source, project, { sync })
@@ -1908,7 +1922,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     for (const request of requests)
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版目录JSON子集（实验性）：仅按已核对的静态文件结构组装，不代表完整原生迁移或原版运行验证；未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。",
+        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。内置规则文件仅保留为备份数据，不启用、不执行。",
       ];
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
@@ -2007,6 +2021,10 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     output.push(value);
   }
   if (modern) Object.assign(project, modern.metadata);
+  if (directoryArtifacts?.length) {
+    project.settings ??= {};
+    project.settings.apipostDirectoryArtifacts = directoryArtifacts;
+  }
   if (importedCases.length)
     project.cases = [...(project.cases || []), ...importedCases];
   if (importedCaseFolders.length)
