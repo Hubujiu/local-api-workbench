@@ -252,6 +252,7 @@ export function runScript(code, input, options = {}) {
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
                 activityOperation: completedMessage.activityOperation,
                 activityMetrics: completedMessage.activityMetrics,
+                activityCPUTimeUs: completedMessage.activityCPUTimeUs,
               })
             : null,
           completedMessage.result,
@@ -337,6 +338,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       timerCount: result.usage.timers,
       requestCount: result.networkRequests.length,
       activityMetrics: { ...result.activityMetrics },
+      activityCPUTimeUs: { ...result.activityCPUTimeUs },
     });
     if (result.responseOverride) {
       state.responseWire ??= structuredClone(input.response);
