@@ -46,6 +46,9 @@ test("native protocol import retains scoped definitions, exact mirrored query, T
 });
 test("native protocol unsupported semantics and identity conflicts fail atomically", () => {
   const cases = [
+    (d) => (d.apis[3].config = { arbitrary: true }),
+    (d) => (d.apis[0].method = "POST"),
+    (d) => (d.apis[3].request.header.arbitrary = true),
     (d) =>
       d.apis[0].request.header.parameter.push({
         key: "Authorization",

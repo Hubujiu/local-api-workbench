@@ -108,8 +108,15 @@ function urlQuery(node) {
 function noHTTPExtras(request) {
   noAuth(request);
   noTasks(request, "协议");
-  for (const k of ["header", "cookie", "restful"])
+  for (const k of ["header", "cookie", "restful"]) {
+    if (request?.[k] !== undefined)
+      keys(
+        request[k],
+        k === "cookie" ? ["parameter", "cookie_encode"] : ["parameter"],
+        k + "配置",
+      );
     no(request?.[k]?.parameter, k + "参数");
+  }
 }
 function rawBody(body, label) {
   if (!object(body)) fail(label);
@@ -198,6 +205,11 @@ export function prepareNativeProtocols(source, resource) {
     const name = text(node.name, "名称", 200),
       path = folder(node),
       request = node.request ?? {};
+    if (node.target_type !== "websocket2") {
+      no(node.config, "非WebSocket配置");
+      no(node.message, "非WebSocket消息");
+    } else if (node.method !== undefined && node.method !== "")
+      fail("WebSocket方法");
     const sourceCopy = structuredClone(node);
     // Inactive provider editors can contain credentials; never retain them.
     if (sourceCopy.request?.auth)
