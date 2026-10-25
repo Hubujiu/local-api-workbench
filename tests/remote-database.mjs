@@ -313,3 +313,16 @@ const { verifyNativeImportHTTPFlow } = await import(
   "./native-database-integration.mjs"
 );
 await verifyNativeImportHTTPFlow({ ...common, type: "postgres", port: 5432 });
+// Native task execution is present only in this combined checkpoint.
+await verifyCLIDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  "SELECT 'fixture-value' AS value",
+  [],
+  { native: true },
+);
+await verifyCLIDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  "SELECT 'fixture-value' AS value",
+  [],
+  { native: true },
+);
