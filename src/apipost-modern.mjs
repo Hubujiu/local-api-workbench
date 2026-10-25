@@ -1,3 +1,4 @@
+import { nativeMockRouteFromSource } from "./native-mock-route.mjs";
 import { prepareNativeMock } from "./apipost-native-mock.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
@@ -664,6 +665,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
     );
+    const route = nativeMockRouteFromSource(row.node, source.project_id);
+    if (route) request.nativeMockRoute = route;
     const nativeMock = prepareNativeMock(row.node, {
       projectId: source.project_id,
       headers: responseHeaderMap,
@@ -672,7 +675,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     if (nativeMock) {
       request.nativeMock = nativeMock;
       request.importNotes.push(
-        "原版条件Mock以固定HTTP 200和优先JSON Schema策略迁移；期望状态码仅保留为来源元数据。运行时使用工作台按接口ID的本地Mock地址，不复刻原版路径路由。IP限制/其他返回策略不自动丢弃或启用。",
+        "原版条件Mock以固定HTTP 200和优先JSON Schema策略迁移；期望状态码仅保留为来源元数据。运行时保留工作台接口ID地址，并支持工作台项目ID下的原生方法/路径路由；未知路径失败而不返回伪成功。IP限制/其他返回策略不自动丢弃或启用。",
       );
     }
     if (row.beforeTask || row.afterTask) {

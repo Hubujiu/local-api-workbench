@@ -1,3 +1,4 @@
+import { resolveNativeMockRoute } from "./native-mock-route.mjs";
 import { nativeMockResponse } from "./native-mock-runtime.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
@@ -292,9 +293,30 @@ export async function createApp({
         }
         return json(res, 200, result);
       }
-      if (parts[0] === "mock") {
-        const p = await store.get(parts[1]),
-          r = p.requests.find((r) => r.id === parts[2] && !r.deletedAt);
+      const nativeMockAlias =
+        parts[0] === "app" && parts[1] === "mock" && parts[2] === "project";
+      if (parts[0] === "mock" || nativeMockAlias) {
+        const offset = nativeMockAlias ? 3 : 1;
+        const p = await store.get(parts[offset]);
+        // The old ID route keeps priority and its query arguments stay ordinary data.
+        let r =
+          !nativeMockAlias && parts.length === 3
+            ? p.requests.find((r) => r.id === parts[2] && !r.deletedAt)
+            : undefined;
+        if (!r) {
+          try {
+            r = resolveNativeMockRoute(
+              p,
+              req.method,
+              "/" + parts.slice(offset + 1).join("/"),
+              u.searchParams,
+            );
+          } catch (error) {
+            if (error.statusCode === 409)
+              return json(res, 409, { error: error.message });
+            throw error;
+          }
+        }
         if (!r) return json(res, 404, { error: "Mock not found" });
         if (p.settings?.mockEnabled === false)
           return json(res, 503, { error: "Mock服务已关闭" });
