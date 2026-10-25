@@ -229,7 +229,7 @@ test("cancellation while waiting for the save queue prevents a new disk commit",
   assert.equal((await f.store.get(f.project.id)).requests.length, 0);
 });
 
-test("public HTTP API completes remote YAML import, reload, disable and inactive restart", async (t) => {
+test("public HTTP API completes YAML import, backup roundtrip, explicit reactivation and isolation", async (t) => {
   const { createApp } = await import("../src/server.mjs");
   const root = await mkdtemp(path.join(os.tmpdir(), "import-api-"));
   let requests = 0;
@@ -286,6 +286,26 @@ test("public HTTP API completes remote YAML import, reload, disable and inactive
   const saved = await call(base);
   assert.equal(saved.requests.length, 1);
   assert.equal(saved.settings.autoImportRuns[0].status, "success");
+  const backup = await call(base + "/export?format=backup");
+  const restored = await call(
+    "/api/restore",
+    "POST",
+    { document: backup },
+    201,
+  );
+  assert.notEqual(restored.id, p.id);
+  const restoredBase = `/api/projects/${restored.id}`;
+  const restoredImport = await call(restoredBase + "/auto-imports");
+  assert.deepEqual(restoredImport.definitions, [definition]);
+  assert.deepEqual(restoredImport.runs, backup.settings.autoImportRuns);
+  assert.equal(restoredImport.session.projectId, p.id);
+  await call(
+    restoredBase + "/auto-import-run",
+    "POST",
+    { sourceId: "remote" },
+    400,
+  );
+  assert.equal(requests, 1);
   await call(base + "/auto-imports", "PUT", {
     definitions: [{ ...definition, enabled: false }],
   });
@@ -299,6 +319,25 @@ test("public HTTP API completes remote YAML import, reload, disable and inactive
   assert.equal(reopened.runs.length, 1);
   assert.equal((await call(base)).requests[0].id, saved.requests[0].id);
   await call(base + "/auto-imports", "PUT", {}, 400);
+  const restoredReopened = await call(restoredBase + "/auto-imports");
+  assert.equal(restoredReopened.definitions[0].enabled, true);
+  assert.equal(restoredReopened.session.projectId, null);
+  await call(
+    restoredBase + "/auto-import-run",
+    "POST",
+    { sourceId: "remote" },
+    400,
+  );
+  assert.equal(requests, 1);
+  await call(restoredBase + "/auto-import-session", "POST", {
+    action: "activate",
+  });
+  await call(restoredBase + "/auto-import-run", "POST", { sourceId: "remote" });
+  const restoredSaved = await call(restoredBase);
+  assert.equal(requests, 2);
+  assert.equal(restoredSaved.requests.length, 1);
+  assert.equal(restoredSaved.requests[0].id, restored.requests[0].id);
+  assert.equal((await call(base)).settings.autoImportRuns.length, 1);
 });
 
 test("uncertain save acknowledgement stops scheduling without retrying or claiming rollback", async (t) => {

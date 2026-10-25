@@ -67,3 +67,9 @@ It does not imply rollback: a transaction may already have committed. The user
 must reload and inspect the project before explicitly activating again; the next
 interval must not silently retry an uncertain write. A real-write-then-throw
 fixture verifies this boundary while preserving the committed data.
+
+The public-API fixture also exports a project with an enabled source, restores it
+as a distinct project, and verifies exact source/history preservation without
+copying activation authority. After server restart both remain inactive. Only
+explicitly activating the restored project permits another real fetch; repeat
+sync preserves its request ID and leaves the original project history unchanged.
