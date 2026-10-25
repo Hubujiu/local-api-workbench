@@ -1,5 +1,13 @@
+import { prepareExtendedProtocol } from "./apipost-extended-protocols.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
-const types = new Set(["websocket2", "socket", "socket_method", "sse"]);
+const types = new Set([
+  "websocket2",
+  "socket",
+  "socket_method",
+  "sse",
+  "socketio",
+  "grpc",
+]);
 const object = (x) => x && typeof x === "object" && !Array.isArray(x);
 const empty = (x) =>
   x == null ||
@@ -142,7 +150,15 @@ function rawBody(body, label) {
 export function prepareNativeProtocols(source, resource) {
   const nodes = source.apis,
     native = nodes.filter((n) => types.has(n?.target_type));
-  if (!native.length) return { nodes, protocols: [], sources: [] };
+  if (!native.length)
+    return {
+      nodes,
+      protocols: [],
+      sources: [],
+      socketio: [],
+      grpc: [],
+      plans: [],
+    };
   if (native.length > 1000) fail("资源数量");
   const ids = new Map();
   for (const n of nodes) {
@@ -151,7 +167,10 @@ export function prepareNativeProtocols(source, resource) {
     ids.set(n.target_id, n);
   }
   const protocols = [],
-    sources = [];
+    sources = [],
+    socketio = [],
+    grpc = [],
+    plans = [];
   const folder = (node) => {
     const names = [],
       seen = new Set([node.target_id]);
@@ -195,6 +214,9 @@ export function prepareNativeProtocols(source, resource) {
         "response",
         "config",
         "message",
+        "ack",
+        "msg_data",
+        "protos",
       ],
       "资源字段",
     );
@@ -205,7 +227,7 @@ export function prepareNativeProtocols(source, resource) {
     const name = text(node.name, "名称", 200),
       path = folder(node),
       request = node.request ?? {};
-    if (node.target_type !== "websocket2") {
+    if (!["websocket2", "socketio"].includes(node.target_type)) {
       no(node.config, "非WebSocket配置");
       no(node.message, "非WebSocket消息");
     } else if (node.method !== undefined && node.method !== "")
@@ -223,7 +245,21 @@ export function prepareNativeProtocols(source, resource) {
           ...definition,
         }),
       );
-    if (node.target_type === "socket") {
+    if (["socketio", "grpc"].includes(node.target_type)) {
+      const extended = prepareExtendedProtocol(node, {
+        resource,
+        text,
+        no,
+        keys,
+        fail,
+        noInherited,
+        noHTTPExtras,
+        rawBody,
+      });
+      socketio.push(...extended.socketio);
+      grpc.push(...extended.grpc);
+      plans.push(...extended.plans);
+    } else if (node.target_type === "socket") {
       keys(request, ["end_func", "timeout"], "TCP客户端");
       keys(request.end_func ?? {}, ["name", "option"], "TCP结束条件");
       if (request.end_func?.name !== "none" || !empty(request.end_func.option))
@@ -366,6 +402,9 @@ export function prepareNativeProtocols(source, resource) {
   return {
     protocols,
     sources,
+    socketio,
+    grpc,
+    plans,
     nodes: nodes.flatMap((n) =>
       !types.has(n.target_type)
         ? [n]

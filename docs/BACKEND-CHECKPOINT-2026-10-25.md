@@ -1,6 +1,6 @@
 # 后端交付检查点：2026-10-25
 
-> 截至 19:32 UTC 的提交与证据快照。不是完整复刻声明，也不使用测试数量或基础覆盖率推算交付百分比。后续必须核对精确提交的 CI，不能借用旧绿灯。
+> 截至 20:42 UTC 的提交与证据快照。不是完整复刻声明，也不使用测试数量或基础覆盖率推算交付百分比。后续必须核对精确提交的 CI，不能借用旧绿灯。
 
 ## 分支与保存
 
@@ -18,21 +18,29 @@
 | [#8](https://github.com/Hubujiu/local-api-workbench/pull/8) | develop | 4716436e547ec28a7465251dadb0bed176a08fd4 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40214404570) |
 | [#9](https://github.com/Hubujiu/local-api-workbench/pull/9) | develop | 373bccc34f253e88ae946f08ae34cd26b304b68d | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40222159732) |
 | [#10](https://github.com/Hubujiu/local-api-workbench/pull/10) | feat/apipost-database-tasks | dec6f23cd9f6d79acf0f153771feecfec8e5643d | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40223067176) |
-| [#11](https://github.com/Hubujiu/local-api-workbench/pull/11) | develop | ab9966dbaa5de5172f705055fefa63f504a94745 | [in_progress](https://github.com/Hubujiu/local-api-workbench/actions/runs/40226350020) |
+| [#11](https://github.com/Hubujiu/local-api-workbench/pull/11) | develop | ab9966dbaa5de5172f705055fefa63f504a94745 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40226350020) |
 
-最近完整绿色组合为 8ff6c71323f71c415806a0fba34ae85ac2239e36，独立 [CI40223341098](https://github.com/Hubujiu/local-api-workbench/actions/runs/40223341098)。它包含 PR #2–#10 的生产改动；PR #8 后续仅测试/ADR更新不改变其生产代码。本提交继续加入 PR #11，必须等待本提交自己的 CI，不把先前组合通过视为新增 Mock 已完成平台验收。
+| [#12](https://github.com/Hubujiu/local-api-workbench/pull/12) | develop | 19731690bafa368fbb5237799f5baab4e6792bdc | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40229568609) |
+| [#13](https://github.com/Hubujiu/local-api-workbench/pull/13) | feat/protocol-request-semantics | bf6d7c25e48a7d5799cdd3054e544111e708c49b | 新提交待验；旧430ecd1c绿灯不替代 |
+
+最近完整绿色组合为 568186295d108631820a174755c51b83b060cee2，独立 [CI40230280457](https://github.com/Hubujiu/local-api-workbench/actions/runs/40230280457)。它已包含 WS/TCP/SSE 原生导入与 PR #2–#12 生产改动。本提交继续加入同一 PR #13 的 Socket.IO/gRPC 扩展，须核对新的精确提交 CI，不能借旧绿灯。所有生产修改均已按功能提交，组合分支只用于交叉验证，不合入 main/develop。
 
 ## 模块闭环与真实缺口
 
 ### 项目存储、导入导出
-- 自建真实原版项目现包含 23 个 JSON 文件。有限目录、内置目录的惰性保留、冻结计划与来源执行档案、认证、数据库、条件 Mock 均有独立迁移实现。
+- 自建真实原版项目已验收基础样本包含 27 个 JSON 文件，另建独立 9 文件扩展协议样本。有限目录、内置目录的惰性保留、冻结计划与来源执行档案、认证、数据库、条件 Mock 均有独立迁移实现。
 - 当前原版输入经过导入、保存、重载、备份恢复和真实执行；源字节未修改。原运行档案明确标记为导入来源，不冒充 Workbench 执行证据。
 - 活动项目的 OpenAPI 定时导入及临时源认证有切换、撤销、重启和旧结果隔离验证。
 - 剩余：完整原生反向写入、全部资源/版本/配置的往返；未知文件和不支持语义仍整体拒绝。不能把有限适配器称为任意原版项目迁移器。
 
 ### 请求协议与认证
 - 原版 Query API-key 编码、同名覆盖，以及代表性 AWS/Hawk/EdgeGrid 请求已经实际对照；本工具仍保留正确的最终正文签名和错误拒绝。
-- 请求执行复用现有协议/认证实现，不从专有软件复制签名代码。真实账户授权、所有提供方及高级 NTLM/OAuth 部署并未全部验收；更多原版非 HTTP 协议资源导入仍需独立证据。
+- 请求执行复用现有协议/认证实现，不从专有软件复制签名代码。真实账户授权、所有提供方及高级 NTLM/OAuth 部署并未全部验收；WS/TCP/SSE 已完成有限原生导入闭环；Socket.IO/gRPC 的最新提交正在补齐平台 CI。
+
+- WS 文本、TCP 原始 UTF-8/首段完成/默认时限、GET/POST SSE 的导入、保存、恢复与真实发送已验收；TLS 始终校验，不复制无限握手或自动重连默认值。
+- 独立扩展样本验证 Socket.IO v4 事件/Ack，以及 gRPC 无反射后导入自写 Proto、Unary 与服务端双消息流。已有保存消息转为明确标注的单次冻结计划，导入不执行，不冒充原版计划或来源结果。
+- 原版 gRPC 将字符串9007199254740993发成9007199254740992；同一服务独立客户端可精确回显。本工具保留精确int64/二进制处理，不复制该缺陷。
+- 最新扩展样本通过9文件导入→保存/恢复/重启→6次实际执行；旧27文件协议样本在最后修改后重新通过。活动协议认证/Header/Cookie/脚本/模板、TCP自定义分帧、非默认WS配置、Socket.IO自定义监听行/JSON或二进制消息、gRPC外部文件/TLS选项/客户端流消息调度仍明确拒绝，不能称为全协议等价。
 
 ### 前后置脚本
 - 原版普通 API 的 JS→数据库→JS 顺序和共享词法变量得到实际验证；已按同一沙箱作用域实现。计划独立脚本与 API 原有任务的隔离有原版运行证据。
