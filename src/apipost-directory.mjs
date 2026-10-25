@@ -125,6 +125,13 @@ export function assembleApipostDirectory(document) {
         if (Object.hasOwn(row, name)) {
           if (
             Object.hasOwn(data, name) &&
+            !(
+              name === "sort" &&
+              data.sort === 0 &&
+              ["websocket2", "socket", "socket_method", "sse"].includes(
+                row.target_type,
+              )
+            ) &&
             JSON.stringify(data[name]) !== JSON.stringify(row[name])
           )
             throw Error(
