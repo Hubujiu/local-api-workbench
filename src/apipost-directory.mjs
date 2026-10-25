@@ -128,9 +128,14 @@ export function assembleApipostDirectory(document) {
             !(
               name === "sort" &&
               data.sort === 0 &&
-              ["websocket2", "socket", "socket_method", "sse"].includes(
-                row.target_type,
-              )
+              [
+                "websocket2",
+                "socket",
+                "socket_method",
+                "sse",
+                "socketio",
+                "grpc",
+              ].includes(row.target_type)
             ) &&
             JSON.stringify(data[name]) !== JSON.stringify(row[name])
           )

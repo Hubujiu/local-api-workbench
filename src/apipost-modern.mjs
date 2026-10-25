@@ -805,6 +805,22 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           ),
         }
       : {}),
+    ...(nativeProtocols.socketio.length
+      ? {
+          socketioDefinitions: mergeResources(
+            project.settings?.socketioDefinitions,
+            nativeProtocols.socketio,
+          ),
+        }
+      : {}),
+    ...(nativeProtocols.grpc.length
+      ? {
+          grpcDefinitions: mergeResources(
+            project.settings?.grpcDefinitions,
+            nativeProtocols.grpc,
+          ),
+        }
+      : {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
     parameterDescriptions: mergeApipostDescriptions(
       empty(global.describe_library) ? [] : global.describe_library,
@@ -913,6 +929,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   validateModelFolders({ dictionary, modelFolders });
   return {
     ...legacy,
+    nativeProtocolPlans: nativeProtocols.plans,
     samples: sampleCases,
     caseFolders: samples.folders,
     metadata: {
