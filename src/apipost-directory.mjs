@@ -1,4 +1,8 @@
 import {
+  directoryArtifactPath,
+  normalizeDirectoryArtifacts,
+} from "./apipost-directory-artifacts.mjs";
+import {
   allowedDirectoryPath,
   directorySettings as settings,
 } from "../public/apipost-directory-input.js";
@@ -62,6 +66,13 @@ export function assembleApipostDirectory(document) {
   )
     throw Error("Apipost目录缺少有效project.json");
   const projectId = project.project_id;
+  const artifact = document.files.find(
+    (file) => file.path === directoryArtifactPath,
+  );
+  if (artifact)
+    normalizeDirectoryArtifacts([
+      { sourceProjectId: projectId, files: [artifact] },
+    ]);
   const collection = (dir, field, wrapped) => {
     const index = files.get(dir + "/index.json");
     const paths = [...files.keys()].filter(
