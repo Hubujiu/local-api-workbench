@@ -58,7 +58,7 @@ Remaining original-runtime matrix: script/form/service/path/auth variants beyond
 the recorded JSON + Basic + environment workflow, plus the unsupported resource
 classes above. Passing CI does not replace that matrix or full delivery.
 
-## Matrix-discovered compatibility corrections (in progress)
+## Matrix-discovered compatibility corrections
 
 Original import rebuilt the URL from native query rows and discarded query pairs
 present only in the URL. It also discarded a per-API custom service ID. These
@@ -69,6 +69,26 @@ cannot be guaranteed unchanged rejects explicitly. The initial local raw `%2f`
 self-roundtrip was insufficient evidence and is now a rejection regression.
 
 Only a single default service is exported, mapped to native ID `1`; multiple
-services reject rather than silently select a different destination. Native
-runtime re-verification of these corrections is pending. Do not treat the earlier
-JSON/Basic example as acceptance of relative services or URL-only Query.
+services reject rather than silently select a different destination. Native runtime re-verification now passes for the single default service,
+scripted urlencoded form with repeated/disabled fields and Bearer auth, literal
+URL Query plus Path and query API-key, and repeated multipart text fields.
+Do not generalize this to multiple native service bindings or arbitrary raw Query
+encoding.
+
+
+The original UI re-exported only those three corrected requests and Matrix Fixed
+environment. Its exported current variables confirmed both pre-script and
+post-script changes. The combined backend imported generated and original
+re-export files, reopened/restored each and executed all three flows, comparing
+actual path/body/auth with the original; multipart compares parsed ordered fields,
+not random boundary bytes. Sources stayed unchanged. The isolated PR #5 base
+lacks PR #8's native kv importer, so its committed matrix tests API-key export
+shape and executes Path without auth; the original and combined private matrix
+execute the actual API key. This dependency is explicit, not a silently skipped
+assertion or copied authentication implementation.
+
+An earlier head 4788331 had a Windows CI failure in the existing SQLite write
+process test (SQLITE_WRITE_OUTCOME_UNKNOWN, run40239943970), not the exporter.
+Later c3dd0de and combined c512ab1 passed their exact CI, but no SQLite cause was
+fixed by exporter changes. The root cause remains under investigation; unknown
+writes are never retried automatically and the two-second process bound remains.
