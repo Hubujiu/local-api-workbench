@@ -38,7 +38,7 @@ for (const mode of ["read", "write"]) {
       // The outer timeout is only a test fail-safe. Success must be a natural exit.
       const script = `import {${operation}} from ${JSON.stringify(new URL("../src/database.mjs", import.meta.url).href)};
       try { await ${operation}(${JSON.stringify(file)},${JSON.stringify(sql)}); process.exitCode=2; }
-      catch(error) { console.log(JSON.stringify({code:error.code,message:error.message})); }`;
+      catch(error) { console.log(JSON.stringify({code:error.code,message:error.message,diagnostics:error.diagnostics})); }`;
       const started = Date.now();
       const { stdout } = await execute(
         process.execPath,
@@ -50,6 +50,14 @@ for (const mode of ["read", "write"]) {
         "must actually reach the execution timeout, not fail at startup",
       );
       const result = JSON.parse(stdout);
+      assert.equal(result.diagnostics.timeout, true);
+      assert.equal(result.diagnostics.receivedResult, false);
+      assert.equal(typeof result.diagnostics.elapsedMs, "number");
+      assert.equal(typeof result.diagnostics.workerReadyMs, "number");
+      assert(result.diagnostics.workerReadyMs >= 0);
+      assert(!JSON.stringify(result.diagnostics).includes(file));
+      assert(Buffer.byteLength(JSON.stringify(result.diagnostics)) < 1024);
+
       assert.equal(
         result.code,
         mode === "read"
