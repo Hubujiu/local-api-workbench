@@ -11,6 +11,7 @@ import { MCPDatabaseGrants } from "./mcp-database-grants.mjs";
 import { resolveNativeMockRoute } from "./native-mock-route.mjs";
 import { nativeMockResponse } from "./native-mock-runtime.mjs";
 
+import { exportApipost } from "./apipost-export.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -729,7 +730,11 @@ export async function createApp({
             return json(
               res,
               200,
-              u.searchParams.get("format") === "openapi" ? exportOpenAPI(p) : p,
+              u.searchParams.get("format") === "apipost"
+                ? exportApipost(p)
+                : u.searchParams.get("format") === "openapi"
+                  ? exportOpenAPI(p)
+                  : p,
             );
           if (action === "grpc-reflection" && req.method === "POST") {
             const { runId, ...input } = await body(req);
