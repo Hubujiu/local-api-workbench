@@ -1,3 +1,7 @@
+import {
+  validateQueryRuntime,
+  initializeQueryRuntime,
+} from "./script-url-runtime.mjs";
 const own = (o, k) => Object.hasOwn(o, k);
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function dictionary(value, label) {
@@ -69,6 +73,52 @@ export function applyMCPInput(request, input) {
   for (const key of ["query", "path", "headers", "cookies"]) {
     if (own(input, key))
       rowsOverride(result[key], input[key], key, key === "headers");
+  }
+  if (
+    result.scriptURLRuntime !== undefined &&
+    (own(input, "query") || own(input, "path"))
+  ) {
+    const runtime = validateQueryRuntime(result.scriptURLRuntime);
+    for (const key of Object.keys(input.query || {})) {
+      const defined = (result.query || []).filter((row) => row.key === key);
+      const indices = runtime.state.url.query.flatMap((row, index) =>
+        row.key === key && runtime.origins[index].encoding === "form"
+          ? [index]
+          : [],
+      );
+      if (indices.length !== defined.length)
+        throw Error("SDK URL查询状态与已定义参数不一致，不能安全覆盖");
+      indices.forEach((index, i) => {
+        runtime.state.url.query[index].value = defined[i].value;
+        runtime.state.url.query[index].disabled = false;
+        delete runtime.origins[index].dynamic;
+      });
+    }
+    for (const key of Object.keys(input.path || {})) {
+      const row = result.path.find((row) => row.key === key);
+      let indices = runtime.state.url.variable.flatMap((item, index) =>
+        item.key === key ? [index] : [],
+      );
+      if (!indices.length) {
+        if (!runtime.inactivePath.some((item) => item.key === key))
+          throw Error("SDK URL路径状态与已定义参数不一致，不能安全覆盖");
+        runtime.state.url.variable.push(
+          initializeQueryRuntime({ url: "http://localhost/", path: [row] })
+            .state.url.variable[0],
+        );
+        runtime.variableOrigins.push({ encoding: "raw" });
+        indices = [runtime.state.url.variable.length - 1];
+      }
+      runtime.inactivePath = runtime.inactivePath.filter(
+        (item) => item.key !== key,
+      );
+      for (const index of indices) {
+        runtime.state.url.variable[index].value = row.value;
+        runtime.state.url.variable[index].disabled = false;
+        delete runtime.variableOrigins[index].dynamic;
+      }
+    }
+    result.scriptURLRuntime = validateQueryRuntime(runtime);
   }
   if (own(input, "body")) {
     if (!["urlencoded", "form-data"].includes(result.bodyType))

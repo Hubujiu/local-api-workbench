@@ -1,70 +1,80 @@
-# 后端交付检查点：2026-10-25
+# 后端交付检查点 · 2026-10-25 23:31 UTC
 
-> 截至 20:42 UTC 的提交与证据快照。不是完整复刻声明，也不使用测试数量或基础覆盖率推算交付百分比。后续必须核对精确提交的 CI，不能借用旧绿灯。
+本文件是范围与证据清单，不是完整交付声明。尚未合入 main/develop、未部署、未新增前端或视觉工作。功能改动保持独立 draft PR，同功能修复留在原 PR；组合分支仅用于跨模块验收。
 
-## 分支与保存
+## GitHub 保存与精确 CI
 
-所有功能仍为 draft PR；没有合入 main/develop、没有部署。PR #1 保留基础开发，新功能按独立 PR 保存。依赖分支以明确的 stacked PR 保持功能差异，不自动 retarget 或合并。
-
-| PR | 功能分支目标 | 精确提交 | 提交时 CI |
+| PR | 功能 | 最新远端提交 | 对应 CI |
 |---|---|---|---|
-| [#1](https://github.com/Hubujiu/local-api-workbench/pull/1) | main | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40136832590) |
-| [#2](https://github.com/Hubujiu/local-api-workbench/pull/2) | develop | 53f1bdc5228487a86f2dfba89d1f5fd5e41ae367 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40221021089) |
-| [#3](https://github.com/Hubujiu/local-api-workbench/pull/3) | develop | 4ea22a506d604c10250895126bbe027e21ca65a1 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40212570108) |
-| [#4](https://github.com/Hubujiu/local-api-workbench/pull/4) | develop | 7f3d32ce91b6e09915778608dd95c65268d8aed3 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40196468822) |
-| [#5](https://github.com/Hubujiu/local-api-workbench/pull/5) | develop | 7167ce31e30ef356d51cc974c8b99940fe2cbe1e | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40199316420) |
-| [#6](https://github.com/Hubujiu/local-api-workbench/pull/6) | fix/apipost-native-query-import | 2d1654a10fd73db70e098d02138bca77464b5d76 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40200210452) |
-| [#7](https://github.com/Hubujiu/local-api-workbench/pull/7) | feat/offline2-directory-import | 13198af17359bd81fd9889554318c6dd5cf3a366 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40208918993) |
-| [#8](https://github.com/Hubujiu/local-api-workbench/pull/8) | develop | 4716436e547ec28a7465251dadb0bed176a08fd4 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40214404570) |
-| [#9](https://github.com/Hubujiu/local-api-workbench/pull/9) | develop | 373bccc34f253e88ae946f08ae34cd26b304b68d | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40222159732) |
-| [#10](https://github.com/Hubujiu/local-api-workbench/pull/10) | feat/apipost-database-tasks | dec6f23cd9f6d79acf0f153771feecfec8e5643d | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40223067176) |
-| [#11](https://github.com/Hubujiu/local-api-workbench/pull/11) | develop | ab9966dbaa5de5172f705055fefa63f504a94745 | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40226350020) |
+| #1 | 基础 develop → main | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | 40136832590 success |
+| #2 | CLI 数据库临时授权 | 53f1bdc5228487a86f2dfba89d1f5fd5e41ae367 | 40221021089 success |
+| #3 | 脚本预算与诊断 | 4ea22a506d604c10250895126bbe027e21ca65a1 | 40212570108 success |
+| #4 | 活动项目自动导入 | 7f3d32ce91b6e09915778608dd95c65268d8aed3 | 40196468822 success |
+| #5 | 原版 Query 镜像导入 | 7167ce31e30ef356d51cc974c8b99940fe2cbe1e | 40199316420 success |
+| #6 | 原生目录导入 | 2d1654a10fd73db70e098d02138bca77464b5d76 | 40200210452 success |
+| #7 | 冻结计划与来源结果 | 13198af17359bd81fd9889554318c6dd5cf3a366 | 40208918993 success |
+| #8 | 原版认证导入 | 4716436e547ec28a7465251dadb0bed176a08fd4 | 40214404570 success |
+| #9 | 原版 PG/MySQL 任务 | 7a84aa51283a6ba287a910c5980e444d06e5a359 | 40234736433 success |
+| #10 | MCP 数据库临时授权 | 9a61edda03241c7bdb6bb1aabe38377e40156780 | 40235121362 success |
+| #11 | 原版条件 Mock 与路径路由 | d3d3d520dee31ad71e6f6ec739c72478f1bd9d85 | 40238628575 success |
+| #12 | SSE/TCP 请求语义 | 19731690bafa368fbb5237799f5baab4e6792bdc | 40229568609 success |
+| #13 | 原版协议导入与消息计划 | 8c82e04f5a0d58f87b819d8b1750aeacf899ba93 | 40232660540 success |
+| #14 | 有限原生 JSON 反向导出 | 4985b66a8e228970ccbc559e066828013e643fc1 | 40241216105 success |
+| #15 | SQLite 进程与 HTTP 脱敏诊断 | 2a91c8e0dd0c13a56c04dbfd4fbd2cc1f383288b | 40244416727 success |
+| #16 | 原版输入形态 MCP 计划闭环 | 3fcd020ce3bfa9ffecd4c3d65301dc53013c8ca6 | 40244993491 尚在运行，不能借旧00564952绿灯 |
 
-| [#12](https://github.com/Hubujiu/local-api-workbench/pull/12) | develop | 19731690bafa368fbb5237799f5baab4e6792bdc | [success](https://github.com/Hubujiu/local-api-workbench/actions/runs/40229568609) |
-| [#13](https://github.com/Hubujiu/local-api-workbench/pull/13) | feat/protocol-request-semantics | bf6d7c25e48a7d5799cdd3054e544111e708c49b | 新提交待验；旧430ecd1c绿灯不替代 |
+CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接运行编号。PR 地址为 https://github.com/Hubujiu/local-api-workbench/pull/ 后接编号。
 
-最近完整绿色组合为 568186295d108631820a174755c51b83b060cee2，独立 [CI40230280457](https://github.com/Hubujiu/local-api-workbench/actions/runs/40230280457)。它已包含 WS/TCP/SSE 原生导入与 PR #2–#12 生产改动。本提交继续加入同一 PR #13 的 Socket.IO/gRPC 扩展，须核对新的精确提交 CI，不能借旧绿灯。所有生产修改均已按功能提交，组合分支只用于交叉验证，不合入 main/develop。
+必要依赖采用堆叠 PR：#6/#14 基于 #5，#7 基于 #6，#10 基于 #9，#13 基于 #12；其余功能以 develop 为目标。#14 的 API-key 再导入在组合中使用 #8，独立分支测试不假装具备该导入器。
 
-## 模块闭环与真实缺口
+本地与 GitHub Git Data API 提交的作者/时间可不同；发布时逐一核对 tree SHA 完全一致。不能用旧工作区、旧提交或单个功能分支的绿灯替代新组合提交验证。本报告所在组合提交仍须取得自己的 CI。
 
-### 项目存储、导入导出
-- 自建真实原版项目已验收基础样本包含 27 个 JSON 文件，另建独立 9 文件扩展协议样本。有限目录、内置目录的惰性保留、冻结计划与来源执行档案、认证、数据库、条件 Mock 均有独立迁移实现。
-- 当前原版输入经过导入、保存、重载、备份恢复和真实执行；源字节未修改。原运行档案明确标记为导入来源，不冒充 Workbench 执行证据。
-- 活动项目的 OpenAPI 定时导入及临时源认证有切换、撤销、重启和旧结果隔离验证。
-- 剩余：完整原生反向写入、全部资源/版本/配置的往返；未知文件和不支持语义仍整体拒绝。不能把有限适配器称为任意原版项目迁移器。
+## 已有完整流程证据与真实剩余缺口
+
+### 项目存储与导入导出
+
+- 自建真实原版 27 文件基础项目、9 文件扩展协议项目、10 文件 MySQL 项目、9 文件参数 Mock 项目均有有限导入、保存、重载、恢复与真实执行证据；来源运行档案始终与本工具新执行证据分开。
+- 原版正常 UI 已导入 Workbench 生成的 JSON，执行 JSON/Basic/环境变量，以及默认服务/前后脚本/urlencoded/Bearer、Path/Query/API-key、multipart 重复文本字段，再由原版 UI 导出回 Workbench 重载恢复执行。
+- 原版会丢弃仅存在于 URL 的 Query 和自定义 API service_id，已据实修正为显式 Query 行与单默认服务；多服务及无法保证字节保真的 raw Query 编码明确拒绝。
+- 活动项目 OpenAPI 自动导入含切换、撤销、重启、源认证和旧结果隔离。
+- 未完成：所有原生资源/版本/模型/样例/协议/高级配置的反向导出与往返。有限互操作不是任意原版项目迁移器；完整项目备份与原生定义导出是不同用途。
 
 ### 请求协议与认证
-- 原版 Query API-key 编码、同名覆盖，以及代表性 AWS/Hawk/EdgeGrid 请求已经实际对照；本工具仍保留正确的最终正文签名和错误拒绝。
-- 请求执行复用现有协议/认证实现，不从专有软件复制签名代码。真实账户授权、所有提供方及高级 NTLM/OAuth 部署并未全部验收；WS/TCP/SSE 已完成有限原生导入闭环；Socket.IO/gRPC 的最新提交正在补齐平台 CI。
 
-- WS 文本、TCP 原始 UTF-8/首段完成/默认时限、GET/POST SSE 的导入、保存、恢复与真实发送已验收；TLS 始终校验，不复制无限握手或自动重连默认值。
-- 独立扩展样本验证 Socket.IO v4 事件/Ack，以及 gRPC 无反射后导入自写 Proto、Unary 与服务端双消息流。已有保存消息转为明确标注的单次冻结计划，导入不执行，不冒充原版计划或来源结果。
-- 原版 gRPC 将字符串9007199254740993发成9007199254740992；同一服务独立客户端可精确回显。本工具保留精确int64/二进制处理，不复制该缺陷。
-- 最新扩展样本通过9文件导入→保存/恢复/重启→6次实际执行；旧27文件协议样本在最后修改后重新通过。活动协议认证/Header/Cookie/脚本/模板、TCP自定义分帧、非默认WS配置、Socket.IO自定义监听行/JSON或二进制消息、gRPC外部文件/TLS选项/客户端流消息调度仍明确拒绝，不能称为全协议等价。
+- WS 文本、TCP UTF-8 首段完成、GET/POST SSE、Socket.IO v4 事件/Ack、嵌入自写 Proto 的 gRPC Unary/服务端流，均有真实原版输入、保存消息计划、执行、恢复、错误与隔离证据。
+- 原版 gRPC 大整数丢精度和不支持客户端流的现象有静态/运行证据；本工具保持精确 int64，未把原版未执行的消息冒充成功计划。
+- 代表性 Query API-key、AWS/Hawk/EdgeGrid 对照保留正确签名与安全拒绝，不复制原版缺陷。
+- 未完成：原生活动协议认证/Header/Cookie/脚本/模板、非默认连接选项、TCP自定义分帧、Socket.IO高级监听/消息、gRPC外部文件/TLS/客户端流调度，以及全部真实账户授权与高级 NTLM/OAuth 部署。
 
-### 前后置脚本
-- 原版普通 API 的 JS→数据库→JS 顺序和共享词法变量得到实际验证；已按同一沙箱作用域实现。计划独立脚本与 API 原有任务的隔离有原版运行证据。
-- 临时/环境/全局结果变量的优先级、作用域、持久化、下一请求清理与跨项目隔离已验证。
-- 完整 SDK 仍不等价。既有偶发初始化超时的唯一根因没有证明修复；CPU诊断不替代或放宽250ms活动/2s总时限，成功重跑也不算根因修复。
+### 前后置脚本与数据库
 
-### Mock 与数据库
-- 原版 PostgreSQL 定义导入只保留安全元数据，连接配置不落项目；必须显式按当前项目重新绑定临时会话。真实 PG、CLI 子进程、手工 HTTP 和 MCP 入口均有独立授权/撤销/恢复隔离测试。
-- native 环境/临时/全局提取已映射；其他原版数据库类型、独立环境连接、SSH定义导入、SQL模板和写入联动仍不支持。底层只读事务不能保证用户自定义函数没有外部副作用，只连接可信且最小权限的数据库。
-- 条件 Mock 默认 fixed200/schema-first 的真实行为已对照；匹配/回退、响应头、重复 Query、Schema、保存恢复、项目并发隔离有实际 HTTP 验证。正则在受限 VM 执行，保留输入/比较/并发/响应安全界限。
-- 剩余：原版路径路由、其他返回策略、标量/XML生成、活动IP限制和完整 Faker/Schema 目录。保留 Workbench 接口ID路由与隔离头，不能声称每个字节完全一致。
+- 普通原版 API 的 JS→数据库→JS 顺序、共享词法变量、临时/环境/全局提取与持久化已验证。PG 与 MySQL 原生结果形态分开处理，MySQL使用嵌套结果集路径；原版 MariaDB 协议实测与 CI MySQL8 是分别注明的证据。
+- 手工、CLI、MCP 临时数据库绑定分别授权；撤销、重启、策略代际及跨项目隔离不互相继承。原版连接凭据不随项目导入获得使用权限。
+- 未完成：全部原版数据库类型/SSH/环境连接定义/模板及写入联动、完整脚本 SDK 等价性。可信最小权限数据库仍是前提。
+- 已有间歇性脚本初始化与 Windows SQLite 子进程问题的唯一根因未证明修复。#15新增阶段/超时/退出/IPC脱敏证据，并接通HTTP和桌面CI日志，不放宽2秒/内存限制，不重试写入结果未知的操作。后续绿灯不是根因修复证明。
+
+### Mock
+
+- 原版 fixed200/schema-first、条件匹配/回退、重复 Query、响应头、Schema 和有限路径/方法/{参数}/选择器路由均经实际 HTTP 对照；保存恢复后及重启后的正向请求重新执行，非仅验证404。
+- 同项目冲突报409、未知路径报404是明确安全差异，不复制原版泛200回退/首项选择。旧接口ID路由仍兼容。镜像配置仅在精确一致时合并，真实冲突原子拒绝。
+- 正则仍在有界隔离 VM；Mock不执行API脚本、不获取数据库权限，保留Host/Origin/响应头/大小/并发检查。
+- 未完成：任意路由正则、路径变量注入表达式、其他返回策略、标量/XML生成、活动IP限制与完整Faker/Schema目录。
 
 ### 执行计划与结果
-- 冻结重复步骤、显式步骤脚本/认证/文本/JSON/表单输入、失败继续及 strict200 的有限原版迁移已验证。保存与恢复不会改写原快照或自动取得数据库权限。
-- 原版当前两个真实计划仍可执行；含数据库的普通 API 与原版计划中跳过 API 任务的语义分别验证。
-- 剩余：更多原版高级计划节点、二进制/文件覆盖、全部配置与报告格式。
+
+- 原生冻结重复步骤、显式脚本/输入/认证、失败继续/strict200和来源执行档案已有独立实现。接口任务与计划独立脚本的隔离有原版运行证据。
+- 新MCP输入计划按API ID冻结，旧step ID不刷新基础定义；完整JSON替换、显式空输入重置、禁用步骤、手工编辑转换及元数据一致性有验证。
+- 未完成：更多原版高级节点、二进制/文件覆盖、完整报告格式和所有跨入口并发语义。
 
 ### MCP 后端
-- 官方 SDK 验证 HTTP/stdio、项目/读写/执行权限和来源档案查询；新增 HTTP MCP 专属数据库临时会话，绝不继承手工或CLI权限。
-- 授权项目变更、令牌轮换、撤销、重启，以及慢请求跨授权代际均有真实拒绝路径。数据库失败信息不保存连接细节；MCP工具不能自行创建数据库授权。
-- stdio 不隐式取得 HTTP MCP 会话。全部宿主客户端 GUI、全部原版 MCP 工具契约与高级场景并未完成。
 
-## 证据使用边界
+- 官方SDK HTTP/stdio覆盖项目/读写/执行权限、结果读取、临时数据库授权、撤销和重启。
+- #16提供有限原版 snake_case 输入别名，补文档详情读取，以及创建→更新→执行→证据→恢复流程。原API任务/断言/提取不隐式进入新计划；覆盖参数不会再被旧动态值或SDK URL缓存替换。
+- MCP同一Store进程内锁覆盖异步读取、修改与执行全程；明确不冒充跨进程CLI/手工HTTP锁。嵌套快照/结果明确标为Workbench格式，不声称完整原版输出契约或全部30工具。
+- 原版MCP本身尚未开启/授予持久项目访问；这一部分使用REA静态接口证据与自建官方SDK测试，不冒充原版实际调用。尚需完整工具/输出兼容与全部宿主客户端验证。
 
-原版为官方 Offline2 2.0.0 正常试用，仅使用自建虚构数据和本地服务。REA 使用合法取得的安装包进行静态分析；部分图不代表完整调用覆盖。未绕过许可/付费检查，未复制无许可专有实现。原始项目、运行档案与内置目录没有作为本次新增公开测试夹具发布；提交的新增夹具独立编写。
+## 证据与发布边界
 
-桌面包与浏览器 CI 验证现有产品没有回归，不代表本轮新增前端开发或视觉验收。未签名/公证分发、真实业务负载和生产部署不在当前完成项中。
+官方 Offline2 2.0.0 正常试用，仅自建虚构项目与回环服务；REA静态分析，不绕过授权/付费检查，不复制无许可专有实现。新增原版原始目录、运行档案与内置目录保持私有；公开夹具和实现独立编写。
+
+桌面与浏览器CI只表示现有产品回归验证，不表示本轮新增前端或视觉验收。签名/公证分发、真实业务负载和完整产品交付仍有缺口。模块测试或工具数量不作为交付百分比。

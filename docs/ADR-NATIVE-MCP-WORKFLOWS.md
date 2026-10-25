@@ -60,3 +60,10 @@ expansion is capped at4MiB in both construction and backup normalization.
 These paths have focused real SDK/HTTP/storage tests; exact final CI remains
 separate. Initial feature CI had a failure and is being diagnosed, not reported
 as accepted solely from focused results.
+
+Cached SDK URL state also participates in temporary Query/Path overrides. A real
+HTTP regression first sent the old cached query despite an explicit new value.
+The adapter now updates only matching table-origin members, keeps literal URL
+query bytes untouched, clears selected dynamic providers and activates a defined
+disabled Path through the existing SDK normalizer. Divergent cached/definition
+membership rejects instead of guessing. The original definition remains unchanged.
