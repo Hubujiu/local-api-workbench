@@ -20,6 +20,7 @@ export async function verifyNativeDatabaseScopes(config) {
       other = await app.store.create("other");
     const doc = nativeDatabaseFixture(
         `http://127.0.0.1:${echo.address().port}/`,
+        config.type === "mysql" ? "mysql" : "pg",
       ),
       api = doc.apis[1];
     api.request.pre_tasks[0].data =

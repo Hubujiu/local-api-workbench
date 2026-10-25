@@ -24,7 +24,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
           ),
       ) ||
       entry.project_id !== projectId ||
-      entry.type !== "pg" ||
+      !["pg", "mysql"].includes(entry.type) ||
       !safe(entry.db_id) ||
       !safe(entry.name) ||
       typeof entry.intro !== "string" ||
@@ -35,7 +35,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       map.has(entry.db_id)
     )
       throw Error(
-        "Apipost数据库连接仅支持同项目PostgreSQL定义，不会丢弃未知语义",
+        "Apipost数据库连接仅支持同项目PostgreSQL/MySQL定义，不会丢弃未知语义",
       );
     for (const [environment, config] of Object.entries(entry.config)) {
       if (
@@ -71,7 +71,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       for (const key of ["auth_source", "database", "host", "password", "user"])
         if (typeof db[key] !== "string" || db[key].length > 65536)
           throw Error("Apipost数据库配置文本无效");
-      if (db.auth_source) throw Error("PostgreSQL auth_source不支持");
+      if (db.auth_source) throw Error("SQL数据库 auth_source不支持");
       if (
         !object(ssh) ||
         Object.keys(ssh).some(
@@ -107,7 +107,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
     const connection = {
       id: resource("db", entry.db_id),
       name: entry.name,
-      type: "postgres",
+      type: entry.type === "pg" ? "postgres" : "mysql",
       sourceProjectId: projectId,
       sourceId: entry.db_id,
     };
@@ -184,7 +184,7 @@ export function validateApipostDatabaseResources(value = []) {
       !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(entry.id) ||
       ids.has(entry.id) ||
       !safe(entry.name) ||
-      entry.type !== "postgres" ||
+      !["postgres", "mysql"].includes(entry.type) ||
       !safe(entry.sourceProjectId) ||
       !safe(entry.sourceId)
     )
