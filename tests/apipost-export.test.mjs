@@ -338,3 +338,106 @@ test("native custom scripts and text forms execute after export/import, while di
   assert.equal(saved.requests[0].importedScriptTasks.before[1].enabled, -1);
   assert.deepEqual(source.environments[0].variables, {});
 });
+
+test("native export matrix preserves service, URL-only query, path and multipart through restore; API-key export shape is explicit", async (t) => {
+  const { nativeExportMatrix } = await import(
+    "./fixtures/native-export-matrix.mjs"
+  );
+  const { runPlan } = await import("../src/core.mjs");
+  const { scopedExecution } = await import("../src/variable-scopes.mjs");
+  const { resolveServiceRequest } = await import("../src/environments.mjs");
+  const seen = [],
+    server = http.createServer(async (req, res) => {
+      let body = "";
+      for await (const c of req) body += c;
+      const type = req.headers["content-type"];
+      const fields = type?.startsWith("multipart/form-data")
+        ? [
+            ...(await new Response(body, {
+              headers: { "content-type": type },
+            }).formData()),
+          ]
+        : null;
+      seen.push({
+        path: req.url,
+        body,
+        fields,
+        auth: req.headers.authorization,
+      });
+      res.setHeader("content-type", "application/json");
+      res.end('{"fixture":"native-roundtrip"}');
+    });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-export-matrix-"));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const source = nativeExportMatrix(server.address().port);
+  // The isolated PR #5 base has no native kv importer (provided by PR #8).
+  // Verify export shape here; combined/original acceptance runs the actual key.
+  assert.deepEqual(
+    exportApipost(source).apis.find((a) => a.name === "Export Path Key").request
+      .auth,
+    { type: "kv", kv: { in: "query", key: "api-key", value: "fictional-key" } },
+  );
+  source.requests[1].auth = { type: "none" };
+  const before = structuredClone(source),
+    doc = exportApipost(source);
+  assert.equal(doc.global.servers[0].server_id, "1");
+  assert.equal(
+    doc.apis.find((a) => a.name === "Export Path Key").request.query
+      .parameter[0].key,
+    "literal",
+  );
+  const store = new Store(root),
+    p = await store.create("matrix");
+  p.environments = [];
+  importIntoProject(p, doc);
+  await store.save(p);
+  const restored = restoreProject(await store.get(p.id));
+  await store.save(restored);
+  for (const id of [p.id, restored.id]) {
+    const reopened = new Store(root),
+      copy = await reopened.get(id),
+      env = copy.environments[0];
+    env.variables = { value: "reset-before-run" };
+    await reopened.save(copy);
+    const steps = copy.requests.map((r) => ({
+      request: resolveServiceRequest(copy, r, env.id),
+    }));
+    const result = await runPlan(
+      { steps },
+      {},
+      executeRequest,
+      scopedExecution(reopened, copy, env.id),
+    );
+    assert.equal(result.status, "passed", JSON.stringify(result));
+    assert.equal(
+      (await reopened.get(id)).environments[0].variables.after,
+      "native-roundtrip",
+    );
+  }
+  assert.equal(seen.length, 6);
+  for (const offset of [0, 3]) {
+    assert.equal(seen[offset].path, "/echo?fixture=export-script");
+    assert.equal(
+      seen[offset].body,
+      "value=from-export-script&repeat=one&repeat=two",
+    );
+    assert.equal(seen[offset].auth, "Bearer fictional-export-bearer");
+    assert.equal(
+      seen[offset + 1].path,
+      "/echo/alpha?literal=one&fixture=export-path",
+    );
+    assert.equal(seen[offset + 1].body, '{"kind":"path-key"}');
+    assert.equal(seen[offset + 2].path, "/echo?fixture=export-multipart");
+    assert.deepEqual(seen[offset + 2].fields, [
+      ["value", "literal text"],
+      ["repeat", "one"],
+      ["repeat", "two"],
+    ]);
+  }
+  assert.deepEqual(source, before);
+});
