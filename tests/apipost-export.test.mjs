@@ -70,6 +70,13 @@ test("native JSON definition export reimports, persists and restores literal HTT
   await store.save(target);
   const saved = await store.get(target.id),
     restored = restoreProject(saved);
+  const repeatedExport = exportApipost(saved),
+    third = await store.create("Second export");
+  third.environments = [];
+  importIntoProject(third, repeatedExport);
+  assert.equal(third.requests[0].url, saved.requests[0].url);
+  assert.deepEqual(third.requests[0].query, saved.requests[0].query);
+
   await store.save(restored);
   for (const copy of [saved, await store.get(restored.id)]) {
     assert.equal(copy.requests[0].folder, "A/B");
@@ -243,4 +250,84 @@ test("public export endpoint is authenticated, read-only and rejects partial nat
     (await app.store.get(p.id)).requests[0].beforeScript,
     p.requests[0].beforeScript,
   );
+});
+
+test("native custom scripts and text forms execute after export/import, while disabled source remains inert", async (t) => {
+  const { runPlan } = await import("../src/core.mjs");
+  const { scopedExecution } = await import("../src/variable-scopes.mjs");
+  const seen = [],
+    server = http.createServer(async (req, res) => {
+      let body = "";
+      for await (const c of req) body += c;
+      seen.push({ body, type: req.headers["content-type"], url: req.url });
+      res.setHeader("content-type", "application/json");
+      res.end('{"result":"after"}');
+    });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-export-script-"));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const store = new Store(root),
+    source = await store.create("Scripts and forms");
+  source.environments[0].variables = {};
+  source.requests = [
+    normalizeRequest({
+      id: "r",
+      name: "Script form",
+      method: "POST",
+      url: `http://127.0.0.1:${server.address().port}/forms`,
+      bodyType: "urlencoded",
+      form: [
+        { key: "value", value: "{{value}}" },
+        { key: "repeat", value: "one" },
+        { key: "repeat", value: "two" },
+        { key: "skip", value: "off", enabled: false },
+      ],
+      scriptDialect: "apipost8",
+      beforeScript: 'apt.environment.set("value", "from-script");',
+      afterScript: 'apt.environment.set("after", apt.response.json().result);',
+    }),
+  ];
+  source.requests[0].importedScriptTasks = {
+    version: 1,
+    before: [
+      {
+        id: "active",
+        name: "active",
+        type: "customScript",
+        enabled: 1,
+        data: source.requests[0].beforeScript,
+      },
+      {
+        id: "disabled",
+        name: "disabled",
+        type: "customScript",
+        enabled: -1,
+        data: 'throw Error("must remain disabled")',
+      },
+    ],
+    after: [],
+  };
+  const target = await store.create("Imported");
+  target.environments = [];
+  importIntoProject(target, exportApipost(source));
+  await store.save(target);
+  const env = target.environments[0];
+  const result = await runPlan(
+    { steps: [{ request: target.requests[0] }] },
+    {},
+    executeRequest,
+    scopedExecution(store, target, env.id),
+  );
+  assert.equal(result.status, "passed", JSON.stringify(result));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].body, "value=from-script&repeat=one&repeat=two");
+  assert.match(seen[0].type, /application\/x-www-form-urlencoded/);
+  const saved = await store.get(target.id);
+  assert.equal(saved.environments[0].variables.after, "after");
+  assert.equal(saved.requests[0].importedScriptTasks.before[1].enabled, -1);
+  assert.deepEqual(source.environments[0].variables, {});
 });
