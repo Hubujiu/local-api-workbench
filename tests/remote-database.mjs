@@ -288,3 +288,10 @@ await verifySSHDatabaseFlows(common);
 
 const { verifyMySQLWrites } = await import("./mysql-write-integration.mjs");
 await verifyMySQLWrites(common);
+
+// Same mixed script/database/real HTTP contract against both real SQL engines.
+const { verifyNativeDatabaseFlow } = await import(
+  "./native-database-integration.mjs"
+);
+await verifyNativeDatabaseFlow({ ...common, type: "postgres", port: 5432 });
+await verifyNativeDatabaseFlow({ ...common, type: "mysql", port: 3306 });

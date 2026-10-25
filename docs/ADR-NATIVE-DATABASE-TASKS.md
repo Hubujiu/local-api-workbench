@@ -44,8 +44,12 @@ Other native serialized scope names must be observed before importer mapping.
 - Core request/plan and HTTP/MCP/CLI integration, source provenance and validation.
 - Persistence and backup/restore round trips, without retaining ephemeral grants.
 - Native error-path and additional scope behavior observations.
-- Real PostgreSQL mixed-phase integration and complete cross-platform CI evidence.
+- Complete cross-platform CI and MySQL mixed-phase service evidence.
 
 Tests use independently authored fixtures and actual SQLite plus a local HTTP
-server. The original PostgreSQL experiment is research evidence, not a passing
-Workbench migration acceptance test.
+server. The same mixed phase also passed locally against an independent disposable
+PostgreSQL 18.6 instance, including actual HTTP output, immutable input, project
+isolation and revoked-session rejection. The reusable test is wired into the
+existing PostgreSQL/MySQL CI service job; MySQL remains pending until that job
+passes. The original PostgreSQL experiment is separate research evidence. Neither
+experiment constitutes acceptance of the still-unwired native project migration.
