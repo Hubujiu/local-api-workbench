@@ -222,9 +222,9 @@ test("cancellation while waiting for the save queue prevents a new disk commit",
   const running = f.manager.run(f.project.id, "source-one");
   const rejected = assert.rejects(running, /取消/);
   await reached;
-  const stopped = f.manager.deactivate(f.project.id);
+  const stopped = f.manager.activate(f.other.id);
   unlock();
-  await stopped;
+  assert.equal((await stopped).projectId, f.other.id);
   await rejected;
   assert.equal((await f.store.get(f.project.id)).requests.length, 0);
 });
@@ -299,4 +299,25 @@ test("public HTTP API completes remote YAML import, reload, disable and inactive
   assert.equal(reopened.runs.length, 1);
   assert.equal((await call(base)).requests[0].id, saved.requests[0].id);
   await call(base + "/auto-imports", "PUT", {}, 400);
+});
+
+test("uncertain save acknowledgement stops scheduling without retrying or claiming rollback", async (t) => {
+  const f = await fixture(t);
+  await f.manager.activate(f.project.id);
+  const save = f.store.save.bind(f.store);
+  f.store.save = async (...args) => {
+    await save(...args);
+    throw Error("simulated lost save acknowledgement");
+  };
+  await assert.rejects(
+    f.manager.run(f.project.id, "source-one"),
+    /lost save acknowledgement/,
+  );
+  assert.equal(f.manager.snapshot().projectId, null);
+  assert.match(f.manager.snapshot().warning, /保存结果/);
+  // The transaction actually committed, even though its acknowledgement failed.
+  assert.equal((await f.store.get(f.project.id)).requests.length, 1);
+  f.advance(180000);
+  await f.manager.tick();
+  assert.equal(f.requests, 1);
 });

@@ -61,3 +61,9 @@ rather than corrupting the transaction or pretending it was rolled back.
 No future run is scheduled after deactivation/shutdown. An invalid active
 project configuration stops the session with a bounded diagnostic; a remote
 fetch/import failure is recorded and waits for the next normal interval.
+
+A failed save acknowledgement stops the active session and clears its schedule.
+It does not imply rollback: a transaction may already have committed. The user
+must reload and inspect the project before explicitly activating again; the next
+interval must not silently retry an uncertain write. A real-write-then-throw
+fixture verifies this boundary while preserving the committed data.

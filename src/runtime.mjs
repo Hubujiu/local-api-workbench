@@ -193,7 +193,10 @@ export class Store {
     return p;
   }
   async save(p, { activity = false, signal } = {}) {
-    if (signal?.aborted) throw Error("项目保存已取消");
+    if (signal?.aborted)
+      throw Object.assign(Error("项目保存已取消"), {
+        code: "STORE_SAVE_ABORTED",
+      });
     if (p.settings?.autoImports !== undefined)
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
     validateEnvironmentModel(p);
@@ -295,7 +298,10 @@ export class Store {
             next.protocolRuns = previous.protocolRuns || [];
           }
           next.updatedAt = new Date().toISOString();
-          if (signal?.aborted) throw Error("项目保存已取消");
+          if (signal?.aborted)
+            throw Object.assign(Error("项目保存已取消"), {
+              code: "STORE_SAVE_ABORTED",
+            });
           await writeProject(this.directory(p.id), next);
           Object.assign(p, await readProject(this.directory(p.id), p.id));
           return p;

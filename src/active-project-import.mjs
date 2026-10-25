@@ -252,6 +252,16 @@ export class ActiveProjectImports {
       await this.store.save(current, { signal: controller.signal });
       return structuredClone(entry);
     } catch (error) {
+      if (writeAttempted && error.code !== "STORE_SAVE_ABORTED") {
+        // A failed acknowledgement does not establish whether the atomic write
+        // committed. Stop this session instead of retrying on the next interval.
+        this.warning =
+          "保存结果需重新加载核实，自动同步已停止；请检查后重新激活";
+        this.active = null;
+        this.epoch++;
+        this.next.clear();
+        this.signatures.clear();
+      }
       if (
         !writeAttempted &&
         this.active === projectId &&
