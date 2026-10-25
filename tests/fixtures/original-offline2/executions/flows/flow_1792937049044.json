@@ -1,0 +1,502 @@
+{
+  "created_at": "2026-10-25T14:05:53.662Z",
+  "description": "Two local echo steps for scope and result persistence.",
+  "environment_id": "1",
+  "flow_id": "flow_1792937049044",
+  "name": "Native Script Plan",
+  "project_id": "10f7386134404a",
+  "source": "manual",
+  "steps": [
+    {
+      "api_snapshot": {
+        "attribute_info": {},
+        "description": "",
+        "has_changed": -1,
+        "is_changed": -1,
+        "is_exampled": 0,
+        "mark_id": "1",
+        "method": "POST",
+        "name": "Native Echo",
+        "parent_id": "0",
+        "project_id": "10f7386134404a",
+        "protocol": "http/1.1",
+        "request": {
+          "auth": {
+            "asap": {
+              "alg": "HS256",
+              "aud": "",
+              "claims": "",
+              "exp": "",
+              "iss": "",
+              "kid": "",
+              "privateKey": "",
+              "sub": ""
+            },
+            "awsv4": {
+              "accessKey": "",
+              "addAuthDataToQuery": false,
+              "region": "",
+              "secretKey": "",
+              "service": "",
+              "sessionToken": ""
+            },
+            "basic": {
+              "password": "",
+              "username": ""
+            },
+            "bearer": {
+              "key": ""
+            },
+            "digest": {
+              "algorithm": "MD5",
+              "cnonce": "",
+              "disableRetryRequest": false,
+              "nc": "",
+              "nonce": "",
+              "opaque": "",
+              "password": "",
+              "qop": "",
+              "realm": "",
+              "username": ""
+            },
+            "edgegrid": {
+              "accessToken": "",
+              "baseURi": "",
+              "clientSecret": "",
+              "clientToken": "",
+              "headersToSign": "",
+              "nonce": "",
+              "timestamp": ""
+            },
+            "hawk": {
+              "algorithm": "",
+              "app": "",
+              "authId": "",
+              "authKey": "",
+              "delegation": "",
+              "extraData": "",
+              "includePayloadHash": false,
+              "nonce": "",
+              "timestamp": "",
+              "user": ""
+            },
+            "jwt": {
+              "addTokenTo": "header",
+              "algorithm": "HS256",
+              "header": "",
+              "headerPrefix": "Bearer",
+              "isSecretBase64Encoded": false,
+              "payload": "",
+              "queryParamKey": "token",
+              "secret": ""
+            },
+            "kv": {
+              "in": "header",
+              "key": "",
+              "value": ""
+            },
+            "ntlm": {
+              "disableRetryRequest": false,
+              "domain": "",
+              "password": "",
+              "username": "",
+              "workstation": ""
+            },
+            "oauth1": {
+              "addEmptyParamsToSign": true,
+              "addParamsToHeader": false,
+              "callback": "",
+              "consumerKey": "",
+              "consumerSecret": "",
+              "disableHeaderEncoding": false,
+              "includeBodyHash": true,
+              "nonce": "",
+              "realm": "",
+              "signatureMethod": "HMAC-SHA1",
+              "timestamp": "",
+              "token": "",
+              "tokenSecret": "",
+              "verifier": "",
+              "version": "1.0"
+            },
+            "oauth2": {
+              "accessTokenUrl": "",
+              "access_token": "",
+              "addTokenTo": "header",
+              "authRequestParams": [],
+              "authUrl": "",
+              "challengeAlgorithm": "S256",
+              "clientId": "",
+              "clientSecret": "",
+              "client_authentication": "header",
+              "code_verifier": "Bearer",
+              "grant_type": "authorization_code",
+              "headerPrefix": "Bearer",
+              "password": "",
+              "redirect_uri": "",
+              "refreshRequestParams": [],
+              "refreshTokenUrl": "",
+              "scope": "",
+              "state": "",
+              "tokenRequestParams": [],
+              "username": ""
+            },
+            "type": "inherit"
+          },
+          "body": {
+            "binary": null,
+            "mode": "json",
+            "parameter": [],
+            "raw": "{\"message\":\"{{native_value}}\",\"number\":7}",
+            "raw_parameter": [],
+            "raw_schema": {
+              "type": "object"
+            }
+          },
+          "cookie": {
+            "parameter": []
+          },
+          "header": {
+            "parameter": []
+          },
+          "post_tasks": [
+            {
+              "data": "apt.environment.set(\"native_after\", apt.response.json().fixture); console.log(\"native-after\");",
+              "enabled": 1,
+              "id": "10fa4ff3f44055",
+              "name": "自定义脚本",
+              "type": "customScript"
+            }
+          ],
+          "pre_tasks": [
+            {
+              "data": "apt.environment.set(\"native_value\", \"from-before\"); console.log(\"native-before\");",
+              "enabled": 1,
+              "id": "10f9c2e5744054",
+              "name": "自定义脚本",
+              "type": "customScript"
+            }
+          ],
+          "query": {
+            "parameter": [
+              {
+                "description": "",
+                "field_type": "String",
+                "is_checked": 1,
+                "key": "fixture",
+                "not_null": 1,
+                "param_id": "10f794faf4404d",
+                "schema": {},
+                "value": "original"
+              }
+            ]
+          },
+          "restful": {
+            "parameter": []
+          }
+        },
+        "response": {
+          "example": [
+            {
+              "example_id": "1",
+              "expect": {
+                "code": "200",
+                "content_type": "json",
+                "is_default": 1,
+                "mock": "",
+                "name": "成功",
+                "schema": {
+                  "properties": {},
+                  "type": "object"
+                },
+                "verify_type": "schema"
+              },
+              "headers": [],
+              "raw": "",
+              "raw_parameter": []
+            },
+            {
+              "example_id": "2",
+              "expect": {
+                "code": "404",
+                "content_type": "json",
+                "is_default": -1,
+                "mock": "",
+                "name": "失败",
+                "schema": {
+                  "properties": {},
+                  "type": "object"
+                },
+                "verify_type": "schema"
+              },
+              "headers": [],
+              "raw": "",
+              "raw_parameter": []
+            }
+          ],
+          "is_check_result": 1
+        },
+        "sort": 1,
+        "status": 1,
+        "target_id": "10f7b2a5b4404e",
+        "target_type": "api",
+        "url": "http://127.0.0.1:18766/echo?fixture=original",
+        "version": 4
+      },
+      "input": {
+        "body": {
+          "message": "{{native_value}}",
+          "number": 7
+        }
+      },
+      "step_id": "flow_step_1792937095487_0_k3l8cs",
+      "target_id": "10f7b2a5b4404e"
+    },
+    {
+      "api_snapshot": {
+        "attribute_info": {},
+        "description": "",
+        "has_changed": -1,
+        "is_changed": -1,
+        "is_exampled": 0,
+        "mark_id": "1",
+        "method": "POST",
+        "name": "Native Echo",
+        "parent_id": "0",
+        "project_id": "10f7386134404a",
+        "protocol": "http/1.1",
+        "request": {
+          "auth": {
+            "asap": {
+              "alg": "HS256",
+              "aud": "",
+              "claims": "",
+              "exp": "",
+              "iss": "",
+              "kid": "",
+              "privateKey": "",
+              "sub": ""
+            },
+            "awsv4": {
+              "accessKey": "",
+              "addAuthDataToQuery": false,
+              "region": "",
+              "secretKey": "",
+              "service": "",
+              "sessionToken": ""
+            },
+            "basic": {
+              "password": "",
+              "username": ""
+            },
+            "bearer": {
+              "key": ""
+            },
+            "digest": {
+              "algorithm": "MD5",
+              "cnonce": "",
+              "disableRetryRequest": false,
+              "nc": "",
+              "nonce": "",
+              "opaque": "",
+              "password": "",
+              "qop": "",
+              "realm": "",
+              "username": ""
+            },
+            "edgegrid": {
+              "accessToken": "",
+              "baseURi": "",
+              "clientSecret": "",
+              "clientToken": "",
+              "headersToSign": "",
+              "nonce": "",
+              "timestamp": ""
+            },
+            "hawk": {
+              "algorithm": "",
+              "app": "",
+              "authId": "",
+              "authKey": "",
+              "delegation": "",
+              "extraData": "",
+              "includePayloadHash": false,
+              "nonce": "",
+              "timestamp": "",
+              "user": ""
+            },
+            "jwt": {
+              "addTokenTo": "header",
+              "algorithm": "HS256",
+              "header": "",
+              "headerPrefix": "Bearer",
+              "isSecretBase64Encoded": false,
+              "payload": "",
+              "queryParamKey": "token",
+              "secret": ""
+            },
+            "kv": {
+              "in": "header",
+              "key": "",
+              "value": ""
+            },
+            "ntlm": {
+              "disableRetryRequest": false,
+              "domain": "",
+              "password": "",
+              "username": "",
+              "workstation": ""
+            },
+            "oauth1": {
+              "addEmptyParamsToSign": true,
+              "addParamsToHeader": false,
+              "callback": "",
+              "consumerKey": "",
+              "consumerSecret": "",
+              "disableHeaderEncoding": false,
+              "includeBodyHash": true,
+              "nonce": "",
+              "realm": "",
+              "signatureMethod": "HMAC-SHA1",
+              "timestamp": "",
+              "token": "",
+              "tokenSecret": "",
+              "verifier": "",
+              "version": "1.0"
+            },
+            "oauth2": {
+              "accessTokenUrl": "",
+              "access_token": "",
+              "addTokenTo": "header",
+              "authRequestParams": [],
+              "authUrl": "",
+              "challengeAlgorithm": "S256",
+              "clientId": "",
+              "clientSecret": "",
+              "client_authentication": "header",
+              "code_verifier": "Bearer",
+              "grant_type": "authorization_code",
+              "headerPrefix": "Bearer",
+              "password": "",
+              "redirect_uri": "",
+              "refreshRequestParams": [],
+              "refreshTokenUrl": "",
+              "scope": "",
+              "state": "",
+              "tokenRequestParams": [],
+              "username": ""
+            },
+            "type": "inherit"
+          },
+          "body": {
+            "binary": null,
+            "mode": "json",
+            "parameter": [],
+            "raw": "{\"message\":\"{{native_value}}\",\"number\":7}",
+            "raw_parameter": [],
+            "raw_schema": {
+              "type": "object"
+            }
+          },
+          "cookie": {
+            "parameter": []
+          },
+          "header": {
+            "parameter": []
+          },
+          "post_tasks": [
+            {
+              "data": "apt.environment.set(\"native_after\", apt.response.json().fixture); console.log(\"native-after\");",
+              "enabled": 1,
+              "id": "10fa4ff3f44055",
+              "name": "自定义脚本",
+              "type": "customScript"
+            }
+          ],
+          "pre_tasks": [
+            {
+              "data": "apt.environment.set(\"native_value\", \"from-before\"); console.log(\"native-before\");",
+              "enabled": 1,
+              "id": "10f9c2e5744054",
+              "name": "自定义脚本",
+              "type": "customScript"
+            }
+          ],
+          "query": {
+            "parameter": [
+              {
+                "description": "",
+                "field_type": "String",
+                "is_checked": 1,
+                "key": "fixture",
+                "not_null": 1,
+                "param_id": "10f794faf4404d",
+                "schema": {},
+                "value": "original"
+              }
+            ]
+          },
+          "restful": {
+            "parameter": []
+          }
+        },
+        "response": {
+          "example": [
+            {
+              "example_id": "1",
+              "expect": {
+                "code": "200",
+                "content_type": "json",
+                "is_default": 1,
+                "mock": "",
+                "name": "成功",
+                "schema": {
+                  "properties": {},
+                  "type": "object"
+                },
+                "verify_type": "schema"
+              },
+              "headers": [],
+              "raw": "",
+              "raw_parameter": []
+            },
+            {
+              "example_id": "2",
+              "expect": {
+                "code": "404",
+                "content_type": "json",
+                "is_default": -1,
+                "mock": "",
+                "name": "失败",
+                "schema": {
+                  "properties": {},
+                  "type": "object"
+                },
+                "verify_type": "schema"
+              },
+              "headers": [],
+              "raw": "",
+              "raw_parameter": []
+            }
+          ],
+          "is_check_result": 1
+        },
+        "sort": 1,
+        "status": 1,
+        "target_id": "10f7b2a5b4404e",
+        "target_type": "api",
+        "url": "http://127.0.0.1:18766/echo?fixture=original",
+        "version": 4
+      },
+      "input": {
+        "body": {
+          "message": "{{native_value}}",
+          "number": 7
+        }
+      },
+      "step_id": "flow_step_1792937128939_0_dmd161",
+      "target_id": "10f7b2a5b4404e"
+    }
+  ],
+  "updated_at": "2026-10-25T14:05:53.662Z"
+}

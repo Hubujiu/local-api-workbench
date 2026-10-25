@@ -1,3 +1,4 @@
+import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
@@ -1903,6 +1904,16 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  const directoryFlows = fromDirectory
+    ? original.nativeExecutionFlows || []
+    : [];
+  if (fromDirectory) delete original.nativeExecutionFlows;
+  const directoryPlans = fromDirectory
+    ? prepareDirectoryPlans(original, directoryFlows, project, {
+        normalizeRequest,
+        snapshotPlan,
+      })
+    : [];
   const directoryArtifacts = fromDirectory
     ? mergeDirectoryArtifacts(
         project.settings?.apipostDirectoryArtifacts,
@@ -1922,7 +1933,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     for (const request of requests)
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。内置规则文件仅保留为备份数据，不启用、不执行。",
+        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置或回收站。内置规则及原执行报告仅保留为来源备份数据，不启用、不执行，不作为本工具新运行。",
       ];
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
@@ -2021,6 +2032,8 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     output.push(value);
   }
   if (modern) Object.assign(project, modern.metadata);
+  if (directoryPlans.length)
+    project.plans = [...(project.plans || []), ...directoryPlans];
   if (directoryArtifacts?.length) {
     project.settings ??= {};
     project.settings.apipostDirectoryArtifacts = directoryArtifacts;
