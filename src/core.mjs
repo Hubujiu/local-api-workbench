@@ -1,3 +1,4 @@
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -176,6 +177,8 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  if (r.nativeMock !== undefined && r.mockRules?.length)
+    throw Error("原版Mock与普通Mock规则不能混用");
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -311,6 +314,9 @@ export function normalizeRequest(r = {}) {
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    ...(r.nativeMock === undefined
+      ? {}
+      : { nativeMock: normalizeNativeMock(r.nativeMock) }),
     mockRules: r.mockRules || [],
     schema: r.schema ?? {},
     responses: r.responses || [],
