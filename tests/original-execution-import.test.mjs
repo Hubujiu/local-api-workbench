@@ -91,6 +91,20 @@ test("genuine native flow imports frozen repeated steps, runs through CLI and pr
   assert.equal(plan.name, "Native Script Plan");
   assert.equal(plan.statusPolicy, "strict200");
   assert.equal(plan.steps.length, 2);
+  assert.equal(plan.steps[0].request.beforeScript, "");
+  assert.equal(plan.steps[0].request.afterScript, "");
+  assert.match(
+    plan.steps[0].request.importedScriptTasks.before[0].data,
+    /from-before/,
+  );
+  assert.match(
+    plan.steps[0].request.importedScriptTasks.after[0].data,
+    /native_after/,
+  );
+  assert.match(plan.steps[0].request.importNotes.join(" "), /跳过.*前后置/);
+  const environment = p.environments.find((e) => e.id === plan.environmentId);
+  environment.variables.native_value = "environment-only";
+  environment.variables.native_after = "unchanged-post-value";
   assert.notEqual(plan.steps[0].id, plan.steps[1].id);
   assert.equal(
     plan.steps[0].request.body,
@@ -123,12 +137,21 @@ test("genuine native flow imports frozen repeated steps, runs through CLI and pr
     run.results.map((s) => s.status),
     ["failed", "passed"],
   );
-  assert.equal(run.variables.native_after, "native-roundtrip");
+  assert.equal(run.variables.native_after, "unchanged-post-value");
+  assert.equal(run.variables.native_value, "environment-only");
+  assert.equal(
+    run.results
+      .flatMap((r) => r.logs)
+      .some(
+        (l) => l.message === "native-before" || l.message === "native-after",
+      ),
+    false,
+  );
   assert.deepEqual(
     seen,
     Array.from({ length: 2 }, () => ({
       path: "/echo?fixture=original",
-      body: JSON.stringify({ message: "from-before", number: 7 }, null, 2),
+      body: JSON.stringify({ message: "environment-only", number: 7 }, null, 2),
     })),
   );
   const saved = await new Store(root).get(p.id);

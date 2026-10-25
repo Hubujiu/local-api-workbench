@@ -35,7 +35,9 @@ implementation or raw analysis bundle is copied into this repository.
   reject rather than silently overwrite or append indistinguishable copies.
 - Repeated target APIs remain distinct steps. Only the saved API snapshot is used;
   later edits of the live API do not change the imported plan. Original folder
-  and project dependencies are resolved at import and then frozen.
+  and project parameter dependencies are resolved at import and then frozen.
+  API pre/post tasks are skipped, as observed in the original flow entry; their
+  script provenance remains inert instead of being silently activated.
 - Bind the explicitly named imported environment. Preserve timestamps, source,
   description and ordered steps. Set strict200 and use the existing executor's
   continue-after-failure behavior. Cancellation and all execution grants remain.
@@ -59,7 +61,7 @@ is not a general-purpose secret scrubber.
 
 Genuine saved flow and success/failure fixtures are imported without mutation.
 Actual CLI executions reproduce first-503/second-200 continuation, body/query
-fidelity, pre/post scope effects and durable new results. Source API edits do not
+fidelity, environment-only inputs and durable new results. Source API edits do not
 redirect the snapshot. Backup restore executes independently and retains original
 archives separately; another project receives no runs. Negative fixture mutations
 cover unknown bindings/inputs, snapshot identity drift, duplicate steps, index
@@ -69,3 +71,31 @@ This is a bounded native flow import, not all original step-input/resource types
 a native writer, or a claim that imported historical success was re-executed.
 The PR is stacked on the directory-catalog prerequisite to keep feature diffs
 isolated; no main merge, deployment or automatic retargeting is authorized here.
+
+## Corrective runtime experiment: flow scripts are skipped
+
+The first implementation ran converted API scripts in imported flows. Further
+original-runtime controls disproved that assumption, so that checkpoint remained
+WIP even with passing local tests. The current live API pre-script was first
+changed and debug-executed to set `native_value=live-source-edited`. The old flow
+still contained a pre-script setting `from-before`, yet sent live-source-edited.
+Next the live API pre-script was saved as `flow-live-probe` **without** debug
+execution. The old flow again sent live-source-edited. Thus neither its saved nor
+its current API pre-script ran. A compact observation fixture records both runs.
+
+A REA static pass of the original work.asar sources 1277.59ec09176043.js and
+1996.33c788c75f64.js produced
+`ev_58cb8d53bebf019bc11d13052fa981ea3e8c18baa349993fe5023acdff5796da`:
+two parsed files, zero parse failures, 342 files unselected. Inspection found the
+execution entry conditionally clearing both pre/post task arrays, consistent
+with the runtime pre-script experiment. This is not full application coverage.
+
+The correction clears executable pre/post operations and shared script stages
+only in imported native flow snapshots. Original source script provenance remains
+available, and normal imported API debug execution is unchanged. Regression tests
+use a distinct environment-only value and confirm no before/after console messages
+or post-script variable changes. Existing native directory files may contain only
+initial environment definitions, not the original process's current values; no
+historical result is promoted into current variables. Import notes require checking
+the selected environment before execution. This preserves safety without claiming
+that absent runtime state can be reconstructed.

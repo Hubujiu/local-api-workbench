@@ -111,6 +111,20 @@ export function prepareDirectoryPlans(
         throw Error("原版计划快照转换结果不唯一");
       let request = normalizeRequest(converted.requests[0]);
       request = applyMCPInput(request, step.input);
+      // The original flow entry skips API pre/post tasks. Preserve their source
+      // provenance, but do not silently activate them in a migrated plan.
+      request.beforeScript = "";
+      request.afterScript = "";
+      request.sharedBeforeScripts = [];
+      request.sharedAfterScripts = [];
+      request.inheritSharedScripts = false;
+      request.before = [];
+      request.after = [];
+      request.importNotes = [
+        ...(request.importNotes || []),
+        "原版执行计划跳过接口前后置操作；原脚本仅保留来源，不执行。请核对所选环境的当前值；目录可能仅保存初始值。",
+      ];
+
       if (step.input && Object.hasOwn(step.input, "body")) {
         if (request.bodyType !== "json")
           throw Error("原版计划输入目前仅验证JSON正文");
