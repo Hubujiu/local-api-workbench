@@ -43,7 +43,8 @@ implementation or raw analysis bundle is copied into this repository.
   continue-after-failure behavior. Cancellation and all execution grants remain.
 - Supported step input includes JSON body (observed two-space serialization) and
   existing declared Query/Header/Path/Cookie rows through the shared bounded input
-  validator. Auth overrides and non-JSON body overrides remain unsupported.
+  validator. Explicit Basic/Bearer/no-auth step settings use native-format conversion;
+  other authentication modes and non-JSON body overrides remain unsupported.
   Unknown overrides, missing snapshots/environments and unsupported
   API dependencies reject before any destination change. Other input forms are
   not silently approximated.
@@ -139,8 +140,29 @@ The real CLI regression checks actual path/body/log order and environment
 results against synthetic expectations, and checks restored script snapshots.
 
 Query/Header/Path/Cookie overrides reuse applyMCPInput: only already declared
-rows can be overridden; no target, TLS, file or authentication settings can be
-introduced. Query has genuine original wire evidence. Additional map/casefold/
+rows can be overridden; no target, TLS or file settings can be introduced.
+Authentication uses the separate bounded native-format path described below. Query has genuine original wire evidence. Additional map/casefold/
 path-escaping checks are explicitly synthetic real-HTTP tests, not a claim that
 every original input coercion was observed. Oversized/non-string scripts, unknown
-parameter names and forbidden auth overrides reject atomically before import.
+parameter names and malformed/unsupported auth settings reject atomically before import.
+
+## Explicit native step authentication
+
+A further locally controlled original run selected Basic authentication on step one
+using fictional credentials against a loopback echo. The server returned only a
+boolean matching the expected Basic header: true on step one, false on step two.
+The saved input.auth is a native auth object, not a Workbench/MCP auth patch.
+Raw source files for this experiment are kept local, not published.
+
+The importer applies explicit Basic/Bearer/noauth to a cloned frozen API before
+the established modern converter runs. Inactive native authentication sections
+are not executed or retained as alternate grants. Active fields must be strings
+with known keys, and the whole input auth object is limited to 64KiB. Unsupported
+inherit, OAuth, JWT and other modes reject instead of guessing semantics. This
+does not change MCP temporary input rules or allow acquiring OAuth tokens, file
+access, TLS changes or database grants. Import itself makes no network request.
+
+Synthetic real-HTTP/CLI tests exercise Basic, Bearer and explicit no-auth replacing
+an old snapshot auth; the second step and another project remain untouched.
+Save/reload/backup retains the chosen request snapshot. Bearer/no-auth coverage is
+synthetic, not a claim of an additional original runtime observation.

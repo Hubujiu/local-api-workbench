@@ -13,6 +13,42 @@ function fields(x, allowed) {
   if (!object(x) || Object.keys(x).some((k) => !allowed.includes(k)))
     throw Error("原版执行计划包含未知字段");
 }
+function stepAuthentication(value) {
+  if (
+    !object(value) ||
+    Buffer.byteLength(JSON.stringify(value), "utf8") > 65536
+  )
+    throw Error("原版步骤认证必须是最多64KiB的对象");
+  const known = [
+    "type",
+    "asap",
+    "awsv4",
+    "basic",
+    "bearer",
+    "digest",
+    "edgegrid",
+    "hawk",
+    "jwt",
+    "kv",
+    "ntlm",
+    "oauth1",
+    "oauth2",
+  ];
+  fields(value, known);
+  if (["noauth", "none"].includes(value.type)) return { type: "noauth" };
+  const keys =
+    value.type === "basic"
+      ? ["username", "password"]
+      : value.type === "bearer"
+        ? ["key"]
+        : null;
+  if (!keys) throw Error("原版步骤认证目前仅支持显式无需认证、Basic和Bearer");
+  const config = value[value.type];
+  fields(config, keys);
+  if (keys.some((key) => typeof config[key] !== "string"))
+    throw Error("原版步骤认证字段必须是字符串");
+  return { type: value.type, [value.type]: structuredClone(config) };
+}
 export function prepareDirectoryPlans(
   source,
   flows,
@@ -98,7 +134,20 @@ export function prepareDirectoryPlans(
         throw Error("原版执行计划步骤快照身份无效");
       stepIds.add(step.step_id);
       if (step.input !== undefined)
-        fields(step.input, ["body", "query", "path", "headers", "cookies"]);
+        fields(step.input, [
+          "body",
+          "query",
+          "path",
+          "headers",
+          "cookies",
+          "auth",
+        ]);
+      const frozenAPI = structuredClone(step.api_snapshot);
+      const overrides = structuredClone(step.input);
+      if (overrides && Object.hasOwn(overrides, "auth")) {
+        frozenAPI.request.auth = stepAuthentication(overrides.auth);
+        delete overrides.auth;
+      }
       // Reuse the established converter with the frozen API and original folders,
       // not the live API record with the same target ID.
       const converted = importModernApipost(
@@ -106,7 +155,7 @@ export function prepareDirectoryPlans(
           ...source,
           apis: [
             ...source.apis.filter((n) => n.target_type === "folder"),
-            structuredClone(step.api_snapshot),
+            frozenAPI,
           ],
           samples: [],
         },
@@ -125,7 +174,7 @@ export function prepareDirectoryPlans(
       if (converted.requests.length !== 1)
         throw Error("原版计划快照转换结果不唯一");
       let request = normalizeRequest(converted.requests[0]);
-      request = applyMCPInput(request, step.input);
+      request = applyMCPInput(request, overrides);
       // The original flow entry skips API pre/post tasks. Preserve their source
       // provenance, but do not silently activate them in a migrated plan.
       request.beforeScript = step.pre_script || "";

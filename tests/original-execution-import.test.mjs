@@ -371,3 +371,92 @@ test("synthetic native step maps reuse bounded Query Header Path and Cookie over
     cookie: undefined,
   });
 });
+
+test("synthetic explicit native authentication is snapshot-bound and never leaks to the next step or project", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-auth-input-"));
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    for await (const _ of req) {
+    }
+    seen.push(req.headers.authorization || "");
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const store = new Store(root);
+  const unrelated = await store.create("unrelated");
+  const before = await store.get(unrelated.id);
+  for (const [auth, expected] of [
+    [
+      {
+        type: "basic",
+        basic: { username: "synthetic-user", password: "synthetic-password" },
+      },
+      "Basic " +
+        Buffer.from("synthetic-user:synthetic-password").toString("base64"),
+    ],
+    [
+      { type: "bearer", bearer: { key: "synthetic-not-a-real-token" } },
+      "Bearer synthetic-not-a-real-token",
+    ],
+    [{ type: "noauth" }, ""],
+  ]) {
+    const document = await source();
+    changeFile(document, flowPath, (flow) => {
+      flow.steps[0].api_snapshot.request.auth = {
+        type: "basic",
+        basic: { username: "old", password: "old-synthetic" },
+      };
+      flow.steps[0].input.auth = auth;
+    });
+    const p = await store.create("synthetic auth " + auth.type);
+    importIntoProject(p, document);
+    const plan = p.plans[0];
+    for (const step of plan.steps)
+      step.request.url = step.request.url.replace(
+        "127.0.0.1:18766",
+        `127.0.0.1:${server.address().port}`,
+      );
+    await store.save(p);
+    const saved = restoreProject(await store.get(p.id));
+    assert.deepEqual(
+      saved.plans[0].steps[0].request.auth,
+      plan.steps[0].request.auth,
+    );
+    const offset = seen.length;
+    const run = await cli(root, p.id, plan.id);
+    assert.equal(run.code, 0, run.stderr);
+    assert.deepEqual(seen.slice(offset), [expected, ""]);
+  }
+  assert.deepEqual(await store.get(unrelated.id), before);
+});
+
+test("native authentication rejects unsupported grants and malformed active fields before mutation", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-auth-invalid-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const p = await new Store(root).create("unchanged");
+  for (const auth of [
+    { type: "inherit" },
+    { type: "oauth2", oauth2: { clientSecret: "synthetic" } },
+    { type: "basic", basic: { username: {}, password: "synthetic" } },
+    {
+      type: "basic",
+      basic: { username: "u", password: "p", file: "/not-read" },
+    },
+    { type: "bearer", bearer: { key: "x".repeat(65536) } },
+    { type: "noauth", unexpected: true },
+  ]) {
+    const document = await source();
+    changeFile(document, flowPath, (flow) => {
+      flow.steps[0].input.auth = auth;
+    });
+    const before = structuredClone(p);
+    assert.throws(() => importIntoProject(p, document));
+    assert.deepEqual(p, before);
+  }
+});
