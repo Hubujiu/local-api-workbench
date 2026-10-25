@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { randomUUID } from "node:crypto";
 export function normalizeProtocol(input) {
@@ -46,7 +47,9 @@ export function normalizeProtocol(input) {
     if (input.type === "sse") throw Error("SSE 定义不支持发送消息");
     protocolPayload(input.message);
   }
+  const requestOptions = protocolRequestOptions(input);
   return {
+    ...requestOptions,
     ...(input.receiveEncoding !== undefined
       ? { receiveEncoding: input.receiveEncoding }
       : {}),

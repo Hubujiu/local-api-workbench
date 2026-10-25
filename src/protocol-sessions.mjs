@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -209,9 +210,11 @@ export class ProtocolSessions {
       } else {
         if (!["http:", "https:"].includes(new URL(input.url).protocol))
           throw Error("SSE 仅支持 HTTP/HTTPS");
+        const options = protocolRequestOptions({ ...input, type: "sse" });
         session.controller = new AbortController();
         (async () => {
           const response = await fetch(input.url, {
+            ...options,
             headers: { Accept: "text/event-stream", ...(input.headers || {}) },
             signal: session.controller.signal,
             redirect: "manual",

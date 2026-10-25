@@ -1,13 +1,15 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
 import { boundedSSEParser, validSSEHandshake } from "./sse-parser.mjs";
 import net from "node:net";
 
 export async function captureSSE(
-  { url, headers = {}, duration = 3000, maxEvents = 20 },
+  { url, headers = {}, duration = 3000, maxEvents = 20, method, body },
   signal,
 ) {
   signal?.throwIfAborted();
+  const options = protocolRequestOptions({ type: "sse", method, body });
   const target = new URL(url);
   if (!["http:", "https:"].includes(target.protocol))
     throw Error("SSE 仅支持 HTTP/HTTPS");
@@ -23,6 +25,7 @@ export async function captureSSE(
     timedOut = false;
   try {
     const response = await fetch(target, {
+      ...options,
       headers: { Accept: "text/event-stream", ...headers },
       signal: controller.signal,
       redirect: "manual",
@@ -57,12 +60,13 @@ export async function captureSSE(
 }
 
 export function exchangeTCP(
-  { host, port, message = "", duration = 3000 },
+  { host, port, message = "", duration = 3000, completion },
   signal,
 ) {
   if (!host || !Number.isInteger(Number(port)) || port < 1 || port > 65535)
     throw Error("TCP 地址或端口无效");
   if (signal?.aborted) return Promise.reject(Error("TCP 请求已取消"));
+  protocolRequestOptions({ type: "tcp", completion });
   const payload = protocolPayload(message);
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -110,9 +114,13 @@ export function exchangeTCP(
       if (!done) socket.write(payload.buffer);
     });
     socket.on("data", (chunk) => {
+      if (done) return;
       size += chunk.length;
       if (size > 1024 * 1024) finish(Error("TCP 响应超过 1 MiB"));
-      else chunks.push(chunk);
+      else {
+        chunks.push(chunk);
+        if (completion === "first-data") finish();
+      }
     });
     socket.on("end", () => finish());
     socket.on("error", finish);

@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
 import { decodeISO8583 } from "./iso8583-codec.mjs";
 import { createHash, randomUUID } from "node:crypto";
@@ -34,7 +35,9 @@ export function prepareWireExecution(project, input) {
     saved = (project.protocols || []).find((x) => x.id === input.definitionId);
     if (!saved) throw Error("协议定义不存在或不属于此项目");
     if (
-      ["url", "host", "port"].some((key) => input[key] !== undefined) ||
+      ["url", "host", "port", "method", "body", "completion"].some(
+        (key) => input[key] !== undefined,
+      ) ||
       (input.type !== undefined && input.type !== saved.type)
     )
       throw Error("已保存协议定义不能在调用时替换端点");
@@ -51,6 +54,7 @@ export function prepareWireExecution(project, input) {
   const definition = normalizeProtocol({
     ...(saved || {}),
     type,
+    ...protocolRequestOptions(saved || input),
     name: saved?.name ?? input.name,
     url: saved?.url ?? (type === "tcp" ? input.host : input.url),
     ...(type === "tcp"
@@ -85,6 +89,7 @@ export function prepareWireExecution(project, input) {
   const request = {
     ...input,
     ...options,
+    ...protocolRequestOptions(definition),
     type,
     ...(type === "tcp"
       ? {

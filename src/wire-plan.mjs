@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
@@ -253,6 +254,7 @@ export async function executeWireFlow(input, signal) {
     signal?.throwIfAborted();
     const request = {
       ...input,
+      ...protocolRequestOptions(input.definition),
       ...(type === "tcp"
         ? { host: input.definition.url, port: input.definition.port }
         : { url: input.definition.url }),
