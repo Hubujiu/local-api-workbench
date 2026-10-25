@@ -52,3 +52,22 @@ Source and destination project/API IDs differ, as expected for this operation;
 request URL and body remain equal. Both actual exports now pass the independent
 Workbench import/save/restore/HTTP acceptance. This is not a Workbench exporter
 back into the original native format, nor coverage of models/scripts/plans.
+
+## Actual original script export
+
+A third UI-generated fixture, `native-echo-scripts.json`, adds our own short
+pre-script setting `native_value` and post-script extracting response.fixture
+into `native_after`. The original successfully sent JSON with message
+`from-before`, then exported both task records and current environment values.
+The original environment file retains blank initial definitions; the export
+contains current values separately. No proprietary SDK implementation is copied.
+
+Workbench acceptance clears those imported current values before execution, so
+it cannot pass merely by reading values left over from the original. Actual HTTP,
+pre/post log order, environment scope commits, disk reload, another project's
+isolation and backup-preserved script source are verified. Explicitly synthetic
+pre/post throwing variants check no request after pre-failure and retained HTTP
+evidence after post-failure; these are Workbench safety contracts, not claimed
+observations of original error semantics. The first temporary probe was launched
+with Node `--input-type`, which workers inherit and reject; the real file-based
+acceptance runs without that probe flag. No production limits were changed.
