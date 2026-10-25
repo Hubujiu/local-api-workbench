@@ -460,3 +460,123 @@ test("native authentication rejects unsupported grants and malformed active fiel
     assert.deepEqual(p, before);
   }
 });
+
+test("synthetic native text, empty JSON and form body overrides preserve real CLI wire bytes and backup snapshots", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-body-input-"));
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const part of req) body += part;
+    seen.push({ body, type: req.headers["content-type"] });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const store = new Store(root);
+  for (const [mode, input, expected, media] of [
+    [
+      "plain",
+      "literal=+%20&value={{native_value}}",
+      "literal=+%20&value=synthetic-body-value",
+      "text/plain",
+    ],
+    [
+      "xml",
+      "<value>{{native_value}}</value>",
+      "<value>synthetic-body-value</value>",
+      "application/xml",
+    ],
+    [
+      "json",
+      { value: "{{native_value}}", number: 7 },
+      '{\n  "value": "synthetic-body-value",\n  "number": 7\n}',
+      "application/json",
+    ],
+    [
+      "urlencoded",
+      { value: "a+b &{{native_value}}" },
+      "value=a%2Bb+%26synthetic-body-value&keep=unchanged",
+      "application/x-www-form-urlencoded",
+    ],
+    [
+      "form-data",
+      { value: "a+b &{{native_value}}" },
+      null,
+      "multipart/form-data",
+    ],
+  ]) {
+    const document = await source();
+    changeFile(document, flowPath, (flow) => {
+      const step = flow.steps[0];
+      step.api_snapshot.request.body = {
+        mode,
+        raw: "",
+        parameter: [
+          { key: "value", value: "base", is_checked: 1 },
+          { key: "keep", value: "unchanged", is_checked: 1 },
+        ],
+      };
+      // Raw/JSON do not carry form metadata.
+      if (!["urlencoded", "form-data"].includes(mode))
+        step.api_snapshot.request.body.parameter = [];
+      step.input.body = input;
+      step.pre_script =
+        'apt.environment.set("native_value", "synthetic-body-value");';
+    });
+    const p = await store.create("body " + mode);
+    importIntoProject(p, document);
+    const plan = p.plans[0];
+    for (const step of plan.steps)
+      step.request.url = step.request.url.replace(
+        "127.0.0.1:18766",
+        `127.0.0.1:${server.address().port}`,
+      );
+    await store.save(p);
+    const restored = restoreProject(await store.get(p.id));
+    assert.deepEqual(restored.plans[0].steps[0].request, plan.steps[0].request);
+    const offset = seen.length;
+    const run = await cli(root, p.id, plan.id);
+    assert.equal(run.code, 0, run.stderr);
+    const first = seen[offset];
+    assert.ok(first.type.startsWith(media), first.type);
+    if (expected !== null) assert.equal(first.body, expected);
+    else {
+      assert.match(
+        first.body,
+        /name="value"\r\n\r\na\+b &synthetic-body-value\r\n/,
+      );
+      assert.match(first.body, /name="keep"\r\n\r\nunchanged\r\n/);
+    }
+    assert.equal(JSON.parse(seen[offset + 1].body).number, 7);
+  }
+});
+
+test("native body inputs reject files, unknown form fields and non-text raw values atomically", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-body-invalid-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const p = await new Store(root).create("unchanged");
+  for (const [mode, parameter, input] of [
+    ["plain", [], { not: "text" }],
+    ["urlencoded", [{ key: "known", value: "old" }], { missing: "new" }],
+    [
+      "form-data",
+      [{ key: "upload", type: "file", value: "/not-read" }],
+      { upload: "new-file" },
+    ],
+    ["none", [], "body"],
+  ]) {
+    const document = await source();
+    changeFile(document, flowPath, (flow) => {
+      flow.steps[0].api_snapshot.request.body = { mode, parameter, raw: "" };
+      flow.steps[0].input.body = input;
+    });
+    const before = structuredClone(p);
+    assert.throws(() => importIntoProject(p, document));
+    assert.deepEqual(p, before);
+  }
+});

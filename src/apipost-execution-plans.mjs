@@ -174,6 +174,38 @@ export function prepareDirectoryPlans(
       if (converted.requests.length !== 1)
         throw Error("原版计划快照转换结果不唯一");
       let request = normalizeRequest(converted.requests[0]);
+      const hasBody = overrides && Object.hasOwn(overrides, "body");
+      if (hasBody) {
+        const mode = frozenAPI.request?.body?.mode;
+        const media = {
+          plain: "text/plain",
+          text: "text/plain",
+          raw: "text/plain",
+          xml: "application/xml",
+          html: "text/html",
+          javascript: "application/javascript",
+        };
+        // Empty native raw/JSON bodies still have an explicit mode. The legacy
+        // API converter may collapse them to none; step input must not lose it.
+        if (mode === "json") request.bodyType = "json";
+        else if (Object.hasOwn(media, mode)) {
+          request.bodyType = "raw";
+          if (
+            !request.headers.some(
+              (row) => row.key.toLowerCase() === "content-type",
+            )
+          )
+            request.headers.push({
+              key: "Content-Type",
+              value: media[mode],
+              enabled: true,
+            });
+        }
+        if (
+          !["json", "raw", "urlencoded", "form-data"].includes(request.bodyType)
+        )
+          throw Error("原版步骤正文覆盖类型尚未支持");
+      }
       request = applyMCPInput(request, overrides);
       // The original flow entry skips API pre/post tasks. Preserve their source
       // provenance, but do not silently activate them in a migrated plan.
@@ -191,11 +223,8 @@ export function prepareDirectoryPlans(
         "原版执行计划跳过接口前后置操作；原接口脚本仅保留来源，不执行；步骤自身的显式脚本独立执行。请核对所选环境的当前值；目录可能仅保存初始值。",
       ];
 
-      if (step.input && Object.hasOwn(step.input, "body")) {
-        if (request.bodyType !== "json")
-          throw Error("原版计划输入目前仅验证JSON正文");
+      if (hasBody && request.bodyType === "json")
         request.body = JSON.stringify(step.input.body, null, 2);
-      }
       functions = converted.metadata?.settings?.functions || [];
       const key = createHash("sha256")
         .update(flow.flow_id + "\0" + step.step_id)
