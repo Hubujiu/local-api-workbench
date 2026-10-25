@@ -100,3 +100,16 @@ unauthorized rejection -> token/origin/type checks -> explicit binding -> script
 The same fixture runs in the existing CI PostgreSQL service job. SQLite verifies
 canonical persistence/backup and alias mechanics separately; it is not presented
 as native PostgreSQL wire acceptance. Raw original archives remain private.
+
+## Cross-entrypoint authority checks
+
+Official MCP SDK regression confirms that an execute-enabled MCP client cannot
+inherit a manual HTTP database grant when running a saved native-task plan. The
+plan records a failed result and sends no HTTP request; a manual HTTP execution
+with its own explicit grant succeeds. Foreign projects remain denied. Native
+MCP database granting itself remains unsupported, rather than implicitly widening
+the existing MCP execute permission.
+
+The CLI grant collector is updated in its own feature PR (#2), not duplicated
+here. Combined actual PostgreSQL subprocess verification covers native ordered
+tasks, persisted results, invalid-stdin preflight and per-invocation revocation.
