@@ -139,9 +139,18 @@ export function exportApipost(project) {
     "dictionary",
     "parameterDictionary",
     "models",
-    "openapiComponents",
   ])
     unsupported(project[key], key);
+  if (project.openapiComponents !== undefined) {
+    if (
+      !project.openapiComponents ||
+      typeof project.openapiComponents !== "object" ||
+      Array.isArray(project.openapiComponents)
+    )
+      throw Error("Apipost导出模型组件无效");
+    for (const [key, value] of Object.entries(project.openapiComponents))
+      unsupported(value, "模型组件 " + key);
+  }
   for (const [key, value] of Object.entries(project.settings || {}))
     if (!["statuses", "recursiveFolderScopes"].includes(key))
       unsupported(value, `设置 ${key}`);
