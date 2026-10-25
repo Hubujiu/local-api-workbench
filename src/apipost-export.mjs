@@ -16,18 +16,29 @@ const nativeId = (kind, value) =>
   kind + createHash("sha256").update(String(value)).digest("hex").slice(0, 24);
 function variables(values, definitions) {
   return Object.fromEntries(
-    variableRows(values, definitions).map((row) => [
-      row.key,
-      {
-        value: row.initialValue,
-        description: row.description,
-        ...(row.currentSet ? { current_value: row.currentValue } : {}),
-      },
-    ]),
+    variableRows(values, definitions).map((row) => {
+      if (
+        !row.currentSet ||
+        row.currentValue === null ||
+        row.initialValue === null
+      )
+        throw Error("Apipost导出不能保留未设置或null的变量值；请使用项目备份");
+      return [
+        row.key,
+        {
+          value: row.initialValue,
+          description: row.description,
+          current_value: row.currentValue,
+        },
+      ];
+    }),
   );
 }
+
 function rows(values, kind) {
   return values.map((row, index) => {
+    if (typeof row.key !== "string" || typeof row.value !== "string")
+      throw Error("Apipost导出参数名和值须为文本");
     unsupported(row.dynamic, `${kind}动态函数`);
     if (row.type === "file")
       throw Error("Apipost导出不读取或携带本地文件；请使用项目备份");
@@ -71,9 +82,19 @@ function auth(value) {
 function tasks(request, phase) {
   const code = request[phase === "before" ? "beforeScript" : "afterScript"];
   const source = request.importedScriptTasks?.[phase];
-  if ((source?.length || code) && request.scriptDialect !== "apipost")
+  if ((source?.length || code) && request.scriptDialect !== "apipost8")
     throw Error("Apipost导出不能转换其他脚本方言；请使用项目备份");
-  if (source?.length)
+  if (source?.length) {
+    const active = source.filter((task) => task.enabled === 1);
+    const original =
+      active.length === 1
+        ? active[0].data
+        : active
+            .filter((task) => task.data && task.data !== "undefined")
+            .map((task) => "\n" + task.data.trim() + "\n")
+            .join("");
+    if (original !== code)
+      throw Error("当前脚本已修改，不能用旧的任务来源替换；请使用项目备份");
     return source.map((task) => {
       if (task.type !== "customScript" || task.origin)
         throw Error(
@@ -87,6 +108,7 @@ function tasks(request, phase) {
         data: task.data,
       };
     });
+  }
   return code
     ? [
         {
@@ -123,6 +145,51 @@ export function exportApipost(project) {
   for (const [key, value] of Object.entries(project.settings || {}))
     if (!["statuses", "recursiveFolderScopes"].includes(key))
       unsupported(value, `设置 ${key}`);
+  if (
+    typeof project.id !== "string" ||
+    !project.id ||
+    typeof project.name !== "string" ||
+    !project.name.trim()
+  )
+    throw Error("Apipost导出项目标识或名称无效");
+  for (const [label, items] of [
+    ["环境", project.environments],
+    ["服务", project.servers || []],
+    ["状态", project.settings?.statuses || []],
+  ]) {
+    if (!Array.isArray(items) || items.length > 100)
+      throw Error("Apipost导出" + label + "列表无效");
+    const seen = new Set();
+    for (const item of items) {
+      if (
+        !item ||
+        typeof item.id !== "string" ||
+        !item.id ||
+        seen.has(item.id) ||
+        typeof item.name !== "string" ||
+        !item.name.trim()
+      )
+        throw Error("Apipost导出" + label + "标识或名称无效/重复");
+      seen.add(item.id);
+    }
+  }
+  const sourceServerIds = new Set((project.servers || []).map((s) => s.id));
+  for (const env of project.environments)
+    for (const [key, value] of Object.entries(env.serverUrls || {})) {
+      if (!sourceServerIds.has(key))
+        throw Error("Apipost导出环境服务引用不存在");
+      if (value) {
+        const url = new URL(value);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash
+        )
+          throw Error("Apipost导出服务地址不等价或无效");
+      }
+    }
   const projectId = nativeId("project", project.id);
   const servers = (project.servers || []).map((s, index) => ({
     server_id: nativeId("s", s.id),

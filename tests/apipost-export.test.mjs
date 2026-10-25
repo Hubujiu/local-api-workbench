@@ -115,6 +115,29 @@ test("unsupported native export dependencies reject rather than create silently 
     (p) => (p.requests[0].beforeScript = "danger()"),
     (p) => (p.requests[0].examples = [{ status: 200, body: "x" }]),
     (p) => p.requests.push(p.requests[0]),
+    (p) =>
+      (p.environments = [
+        { id: "dup", name: "A" },
+        { id: "dup", name: "B" },
+      ]),
+    (p) =>
+      (p.environments = [
+        {
+          id: "e",
+          name: "A",
+          variables: {},
+          serverUrls: { missing: "http://127.0.0.1" },
+        },
+      ]),
+    (p) =>
+      (p.servers = [
+        { id: "s", name: "S" },
+        { id: "s", name: "S2" },
+      ]),
+    (p) =>
+      (p.environments = [
+        { id: "e", name: "A", variables: { nullValue: null } },
+      ]),
   ]) {
     const p = structuredClone(base);
     change(p);
@@ -122,4 +145,102 @@ test("unsupported native export dependencies reject rather than create silently 
     assert.throws(() => exportApipost(p));
     assert.deepEqual(p, snapshot);
   }
+});
+
+test("current native script source cannot be silently replaced by stale provenance", () => {
+  const p = {
+    id: "p",
+    name: "P",
+    environments: [],
+    settings: {},
+    requests: [
+      normalizeRequest({
+        id: "r",
+        url: "http://127.0.0.1/echo",
+        scriptDialect: "apipost8",
+        beforeScript: 'console.log("current");',
+      }),
+    ],
+  };
+  const out = exportApipost(p);
+  assert.equal(
+    out.apis[0].request.pre_tasks[0].data,
+    'console.log("current");',
+  );
+  p.requests[0].importedScriptTasks = {
+    version: 1,
+    before: [
+      {
+        id: "t",
+        name: "old",
+        enabled: 1,
+        type: "customScript",
+        data: 'console.log("old");',
+      },
+    ],
+    after: [],
+  };
+  assert.throws(() => exportApipost(p), /当前脚本已修改/);
+  p.requests[0].beforeScript = 'console.log("old");';
+  assert.equal(
+    exportApipost(p).apis[0].request.pre_tasks[0].data,
+    p.requests[0].beforeScript,
+  );
+  p.environments = [
+    {
+      id: "e",
+      name: "Env",
+      variables: {},
+      variableDefinitions: {
+        missing: { initialValue: "not-current", description: "" },
+      },
+    },
+  ];
+  assert.throws(() => exportApipost(p), /未设置/);
+});
+
+test("public export endpoint is authenticated, read-only and rejects partial native exports", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-export-http-")),
+    app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    app.server.closeAllConnections();
+    await new Promise((r) => app.server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const p = await app.store.create("Endpoint");
+  p.requests = [normalizeRequest({ id: "r", url: "http://127.0.0.1/echo" })];
+  await app.store.save(p);
+  const endpoint = app.url + "/api/projects/" + p.id + "/export?format=apipost";
+  assert.equal((await fetch(endpoint)).status, 403);
+  const before = await app.store.get(p.id);
+  const res = await fetch(endpoint, {
+    headers: { "x-local-token": app.token },
+  });
+  assert.equal(res.status, 200);
+  const doc = await res.json();
+  assert.equal(doc.apis.length, 1);
+  assert.equal(doc.name, "Endpoint");
+  assert.deepEqual(await app.store.get(p.id), before);
+  const q = await app.store.create("Separate");
+  q.requests = [normalizeRequest({ id: "q", url: "http://127.0.0.1/other" })];
+  await app.store.save(q);
+  const other = await (
+    await fetch(app.url + "/api/projects/" + q.id + "/export?format=apipost", {
+      headers: { "x-local-token": app.token },
+    })
+  ).json();
+  assert.notEqual(other.project_id, doc.project_id);
+  assert.equal(other.apis[0].url, "http://127.0.0.1/other");
+  p.requests[0].beforeScript = 'throw Error("not executed")';
+  await app.store.save(p);
+  const bad = await fetch(endpoint, {
+    headers: { "x-local-token": app.token },
+  });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error, /脚本方言/);
+  assert.equal(
+    (await app.store.get(p.id)).requests[0].beforeScript,
+    p.requests[0].beforeScript,
+  );
 });
