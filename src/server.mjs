@@ -12,6 +12,7 @@ import { resolveNativeMockRoute } from "./native-mock-route.mjs";
 import { nativeMockResponse } from "./native-mock-runtime.mjs";
 
 import { exportApipost } from "./apipost-export.mjs";
+import { sqliteProcessFailureDetails } from "./sqlite-process-diagnostics.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -1577,7 +1578,10 @@ export async function createApp({
       );
       res.end(data);
     } catch (e) {
-      json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
+      json(res, e.code === "ENOENT" ? 404 : 400, {
+        error: e.message,
+        ...sqliteProcessFailureDetails(e),
+      });
     }
   });
   server.on("close", () => {

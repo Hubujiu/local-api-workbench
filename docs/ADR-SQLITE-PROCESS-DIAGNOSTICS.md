@@ -39,3 +39,18 @@ OS-level fork failure and resource-driven synchronous Worker constructor failure
 have safe handling but are not claimed reproduced by the test fixtures. Exact
 Windows/macOS/Linux CI remains required; diagnostics cannot retroactively prove
 the cause of the earlier failure. No merge into main or deployment.
+
+## HTTP and packaged failure visibility
+
+Initial PR16 Windows desktop smoke also reached the database-write phase and
+received the same unknown-write message (CI40243242788/job121319339103); installs,
+startup and preceding read succeeded. Its isolated develop base did not contain
+this diagnostics PR. Similar symptoms do not establish the same cause.
+
+Authenticated SQLite HTTP errors now include the error code and a reconstructed
+fixed diagnostic allowlist. The packaged desktop smoke logs only those sanitized
+fields for database failures, not arbitrary response bodies, SQL or paths. A real
+HTTP write timeout exercises this boundary and verifies journal recovery by a
+subsequent read, never a retry of the mutation. Missing authorization still gets
+403 without database execution. The parent timeout flag is not proof about the
+independent child watchdog or other external termination.

@@ -138,3 +138,100 @@ test("SQLite completed worker plus successful process close returns result and s
     },
   );
 });
+
+test("public SQLite diagnostics reconstruct only bounded known fields", async () => {
+  const { sqliteProcessFailureDetails } = await import(
+    "../src/sqlite-process-diagnostics.mjs"
+  );
+  const result = sqliteProcessFailureDetails({
+    code: "SQLITE_WRITE_OUTCOME_UNKNOWN",
+    message: "PRIVATE_SQL_SENTINEL",
+    cause: { secret: "PRIVATE_SQL_SENTINEL" },
+    diagnostics: {
+      phase: "PRIVATE_SQL_SENTINEL",
+      elapsedMs: Infinity,
+      signal: "PRIVATE_SQL_SENTINEL",
+      timeout: true,
+      receivedResult: false,
+      exitCode: 1,
+      workerErrorCode: "PRIVATE_SQL_SENTINEL",
+      sql: "PRIVATE_SQL_SENTINEL",
+      filename: "private-database-path",
+    },
+  });
+  assert.equal(result.diagnostics.phase, "unknown");
+  assert.equal(result.diagnostics.workerErrorCode, "OTHER");
+  assert.equal(result.diagnostics.elapsedMs, null);
+  assert(!JSON.stringify(result).includes("PRIVATE_SQL_SENTINEL"));
+  assert(!JSON.stringify(result).includes("private-database-path"));
+  assert(JSON.stringify(result).length < 1024);
+  assert.deepEqual(
+    sqliteProcessFailureDetails({
+      code: "OTHER",
+      diagnostics: { phase: "worker-ready" },
+    }),
+    {},
+  );
+});
+
+test(
+  "authenticated HTTP preserves unknown-write protection and exposes only redacted stage evidence",
+  { timeout: 10000 },
+  async (t) => {
+    const { createApp } = await import("../src/server.mjs");
+    const { DatabaseSync } = await import("node:sqlite");
+    const root = await mkdtemp(path.join(tmpdir(), "sqlite-http-diagnostics-")),
+      app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      app.server.closeAllConnections();
+      await new Promise((r) => app.server.close(r));
+      await rm(root, { recursive: true, force: true });
+    });
+    const file = path.join(root, "private-database-path.db"),
+      db = new DatabaseSync(file);
+    db.exec(
+      "CREATE TABLE items(id INTEGER PRIMARY KEY,value TEXT); INSERT INTO items VALUES(1,'before'); CREATE TRIGGER bounded AFTER UPDATE ON items BEGIN SELECT sum(x) FROM (WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1000000000) SELECT x FROM n); END;",
+    );
+    db.close();
+    const p = await app.store.create("HTTP diagnostics"),
+      endpoint = app.url + "/api/projects/" + p.id + "/database";
+    const body = JSON.stringify({
+      allowWrite: true,
+      filename: file,
+      sql: "UPDATE items SET value='PRIVATE_SQL_SENTINEL' WHERE id=1",
+      parameters: [],
+    });
+    assert.equal(
+      (
+        await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        })
+      ).status,
+      403,
+    );
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-local-token": app.token,
+      },
+      body,
+    });
+    assert.equal(response.status, 400);
+    const result = await response.json();
+    assert.equal(result.code, "SQLITE_WRITE_OUTCOME_UNKNOWN");
+    assert.match(result.error, /不要直接重试/);
+    assert.equal(result.diagnostics.timeout, true);
+    assert.equal(result.diagnostics.receivedResult, false);
+    assert(!JSON.stringify(result).includes("PRIVATE_SQL_SENTINEL"));
+    assert(!JSON.stringify(result).includes("private-database-path"));
+    const recovery = new DatabaseSync(file);
+    assert.equal(
+      recovery.prepare("SELECT value FROM items").get().value,
+      "before",
+    );
+    recovery.close();
+  },
+);
