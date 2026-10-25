@@ -294,6 +294,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       return scriptTasks(value, phase, origins);
     const tasks = nativeDatabaseTasks(value, databaseImport.map, {
       translated: origins,
+      connections: databaseImport.connections,
     });
     return {
       native: true,

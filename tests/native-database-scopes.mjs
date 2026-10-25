@@ -20,14 +20,27 @@ export async function verifyNativeDatabaseScopes(config) {
       other = await app.store.create("other");
     const doc = nativeDatabaseFixture(
         `http://127.0.0.1:${echo.address().port}/`,
+        config.type === "mysql" ? "mysql" : "pg",
       ),
       api = doc.apis[1];
     api.request.pre_tasks[0].data =
       'apt.environment.set("shared","environment");apt.globals.set("shared","global");';
     api.request.pre_tasks[1].data.variables = [
-      { name: "shared", type: "variables", pattern: "$[0].value" },
-      { name: "dbGlobal", type: "globals", pattern: "$[0].value" },
-      { name: "dbEnvironment", type: "environment", pattern: "$[0].value" },
+      {
+        name: "shared",
+        type: "variables",
+        pattern: config.type === "mysql" ? "$[0][0].value" : "$[0].value",
+      },
+      {
+        name: "dbGlobal",
+        type: "globals",
+        pattern: config.type === "mysql" ? "$[0][0].value" : "$[0].value",
+      },
+      {
+        name: "dbEnvironment",
+        type: "environment",
+        pattern: config.type === "mysql" ? "$[0][0].value" : "$[0].value",
+      },
     ];
     api.request.pre_tasks[2].data =
       'apt.setRequestHeader("x-local",pm.variables.get("shared"));apt.setRequestHeader("x-environment",apt.environment.get("shared"));apt.setRequestHeader("x-global",apt.globals.get("shared"));';

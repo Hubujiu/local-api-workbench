@@ -337,3 +337,11 @@ await verifyMCPDatabaseFlow(
   { ...common, type: "postgres", port: 5432 },
   { nativeImport: true },
 );
+
+await verifyNativeImportHTTPFlow({ ...common, type: "mysql", port: 3306 });
+await verifyNativeDatabaseScopes({ ...common, type: "mysql", port: 3306 });
+
+await verifyMCPDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  { nativeImport: true },
+);

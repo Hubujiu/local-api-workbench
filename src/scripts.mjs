@@ -1,6 +1,7 @@
 import {
   normalizeDatabaseOperations,
   databaseAssignments,
+  databaseResultRows,
 } from "./script-database-tasks.mjs";
 import { finalBodyLiteral } from "./script-final-body.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
@@ -230,7 +231,9 @@ export function runScript(code, input, options = {}) {
           if (settled || controller.signal.aborted) return;
           response = {
             assignments: databaseAssignments(operation, result),
-            ...(operation.isConsoleOutput === 1 ? { rows: result.rows } : {}),
+            ...(operation.isConsoleOutput === 1
+              ? { rows: databaseResultRows(operation, result) }
+              : {}),
           };
           if (Buffer.byteLength(JSON.stringify(response)) > 262144)
             throw Error("数据库任务结果超过256KiB");

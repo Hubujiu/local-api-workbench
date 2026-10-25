@@ -1,6 +1,9 @@
 // Independently authored data, not an original export.
 import { modernApipostFixture } from "./apipost-modern.mjs";
-export function nativeDatabaseFixture(url = "http://127.0.0.1:1/") {
+export function nativeDatabaseFixture(
+  url = "http://127.0.0.1:1/",
+  type = "pg",
+) {
   const doc = modernApipostFixture();
   doc.global.envs = [];
   doc.global.servers = [];
@@ -10,7 +13,7 @@ export function nativeDatabaseFixture(url = "http://127.0.0.1:1/") {
       database: "synthetic-db",
       host: "private-host.invalid",
       password: "discard-this-fictional-password",
-      port: 5432,
+      port: type === "mysql" ? 3306 : 5432,
       user: "synthetic-user",
     },
     ssh: {
@@ -30,7 +33,7 @@ export function nativeDatabaseFixture(url = "http://127.0.0.1:1/") {
       db_id: "database",
       name: "Fixture database",
       intro: "fictional",
-      type: "pg",
+      type,
       config: {
         default: config,
         1: { ...structuredClone(config), use_default: 1 },
@@ -57,7 +60,7 @@ export function nativeDatabaseFixture(url = "http://127.0.0.1:1/") {
         {
           name: "native_value",
           type: "environment",
-          pattern: "$[0].value",
+          pattern: type === "mysql" ? "$[0][0].value" : "$[0].value",
           param_id: "value",
         },
       ],

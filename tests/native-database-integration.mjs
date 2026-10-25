@@ -90,7 +90,7 @@ export async function verifyNativeImportHTTPFlow(config) {
   const { nativeDatabaseFixture } = await import(
     "./fixtures/apipost-database.mjs"
   );
-  const root = await mkdtemp(join(tmpdir(), "native-pg-api-"));
+  const root = await mkdtemp(join(tmpdir(), "native-sql-api-"));
   let app = await createApp({ root, port: 0 });
   let count = 0;
   const echo = http.createServer((req, res) => {
@@ -103,6 +103,7 @@ export async function verifyNativeImportHTTPFlow(config) {
       foreign = await app.store.create("foreign");
     const source = nativeDatabaseFixture(
       `http://127.0.0.1:${echo.address().port}/`,
+      config.type === "mysql" ? "mysql" : "pg",
     );
     importIntoProject(project, source);
     await app.store.save(project);
@@ -152,7 +153,10 @@ export async function verifyNativeImportHTTPFlow(config) {
         await fetch(endpoint(), {
           method: "POST",
           headers: headers(),
-          body: JSON.stringify({ ...grantConfig, type: "mysql" }),
+          body: JSON.stringify({
+            ...grantConfig,
+            type: config.type === "mysql" ? "postgres" : "mysql",
+          }),
         })
       ).ok,
       false,
