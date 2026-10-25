@@ -155,3 +155,22 @@ or redistributed. The root test uses TCP only because Unix sockets are not
 available there; authentication remains enabled. Official source:
 https://deb.debian.org/debian/pool/main/m/mariadb/ . Other native engine mappings
 remain rejected, rather than guessed from superficially similar connection fields.
+
+### Observed MySQL result-set shape correction
+
+Original MySQL testing exposed a material difference from PostgreSQL: a single
+SELECT yields `[rows]`, not `rows`, to native JSONPath extraction and console
+output. `$[0].value` therefore produced null in the original; `$[0][0].value`
+produced `from-mysql`, which arrived in the actual HTTP JSON body. Merely mapping
+the engine while treating both as flat rows was an incomplete WIP checkpoint.
+
+The importer now attaches a strictly validated `mysql-resultsets` canonical
+result-view marker from the trusted imported connection type. Native source
+cannot inject that internal marker. Extraction and console output use the same
+single-result-set wrapper, without rewriting JSONPath strings or changing the
+SQL provider's normalized evidence. Ordinary/PG tasks retain their old shape.
+The marker survives inherited task translation, persistence and frozen plans.
+Only one safe SELECT/WITH statement remains allowed; this does not enable
+multi-statement execution. Missing paths deliberately fail closed instead of
+sending the original's null/stale value. Root/array/scalar extraction remains
+bounded by the existing result and sandbox limits.

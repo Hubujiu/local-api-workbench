@@ -60,7 +60,7 @@ export function nativeDatabaseFixture(
         {
           name: "native_value",
           type: "environment",
-          pattern: "$[0].value",
+          pattern: type === "mysql" ? "$[0][0].value" : "$[0].value",
           param_id: "value",
         },
       ],

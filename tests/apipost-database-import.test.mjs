@@ -201,3 +201,20 @@ test("native MySQL catalog strips credentials and retains scoped engine identity
   assert.throws(() => importIntoProject(p, invalid), /auth_source/);
   assert.equal(JSON.stringify(p), saved);
 });
+
+test("native MySQL resultset wrapper survives inheritance and cannot be injected by source", () => {
+  const doc = nativeDatabaseFixture("http://127.0.0.1:1/", "mysql"),
+    p = project();
+  importIntoProject(p, doc);
+  assert.equal(
+    p.requests[0].nativeTasks.before[1].data.resultShape,
+    "mysql-resultsets",
+  );
+  assert.equal(
+    p.requests[0].nativeTasks.before[1].data.variables[0].pattern,
+    "$[0][0].value",
+  );
+  const bad = structuredClone(doc);
+  bad.apis[1].request.pre_tasks[1].data.resultShape = "mysql-resultsets";
+  assert.throws(() => importIntoProject(project(), bad));
+});

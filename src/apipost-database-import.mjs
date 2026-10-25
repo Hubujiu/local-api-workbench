@@ -116,7 +116,11 @@ export function prepareApipostDatabases(value, projectId, resource) {
   }
   return { map, connections };
 }
-export function nativeDatabaseTasks(tasks, map, { translated = false } = {}) {
+export function nativeDatabaseTasks(
+  tasks,
+  map,
+  { translated = false, connections = [] } = {},
+) {
   if (!Array.isArray(tasks) || tasks.length > 16)
     throw Error("Apipost任务阶段最多16项");
   const output = tasks.map((task) => {
@@ -131,6 +135,7 @@ export function nativeDatabaseTasks(tasks, map, { translated = false } = {}) {
     if (task.type === "database") {
       if (
         !object(task.data) ||
+        (!translated && Object.hasOwn(task.data, "resultShape")) ||
         !(translated
           ? [...map.values()].includes(task.data.connectionId)
           : map.has(task.data.connectionId))
@@ -162,6 +167,10 @@ export function nativeDatabaseTasks(tasks, map, { translated = false } = {}) {
       next.data.connectionId = translated
         ? task.data.connectionId
         : map.get(task.data.connectionId);
+      const sourceType = connections.find(
+        (c) => c.id === next.data.connectionId,
+      )?.type;
+      if (sourceType === "mysql") next.data.resultShape = "mysql-resultsets";
     }
     return next;
   });
