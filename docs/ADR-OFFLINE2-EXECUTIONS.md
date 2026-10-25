@@ -41,8 +41,10 @@ implementation or raw analysis bundle is copied into this repository.
 - Bind the explicitly named imported environment. Preserve timestamps, source,
   description and ordered steps. Set strict200 and use the existing executor's
   continue-after-failure behavior. Cancellation and all execution grants remain.
-- Currently supported step input is JSON body only, with observed two-space
-  serialization. Unknown overrides, missing snapshots/environments and unsupported
+- Supported step input includes JSON body (observed two-space serialization) and
+  existing declared Query/Header/Path/Cookie rows through the shared bounded input
+  validator. Auth overrides and non-JSON body overrides remain unsupported.
+  Unknown overrides, missing snapshots/environments and unsupported
   API dependencies reject before any destination change. Other input forms are
   not silently approximated.
 
@@ -120,3 +122,25 @@ content sits under `original`. Summaries omit request/response bodies, credentia
 and variables. A SHA-256 identifies exact imported file bytes; it is integrity
 metadata, not proof of historical authenticity or successful current execution.
 No request is replayed and no source-history record is added to project.runs.
+
+## Explicit step scripts are different from API tasks
+
+The original UI's expanded step editor exposes Query input and separate step
+`pre_script` / `post_script` strings. A locally controlled original run showed that
+explicit step scripts execute while API snapshot tasks remain skipped. The new raw
+source sample is not included in this commit, pending publication approval.
+The committed regression uses synthetic step values and expected wire/log results,
+not a redistributed original run archive.
+
+The importer now preserves those explicit per-step scripts in apipost8 mode,
+while still keeping API task provenance inert. Each script is at most 64KiB UTF-8;
+normal sandbox/time/network limits remain. Import never executes the scripts.
+The real CLI regression checks actual path/body/log order and environment
+results against synthetic expectations, and checks restored script snapshots.
+
+Query/Header/Path/Cookie overrides reuse applyMCPInput: only already declared
+rows can be overridden; no target, TLS, file or authentication settings can be
+introduced. Query has genuine original wire evidence. Additional map/casefold/
+path-escaping checks are explicitly synthetic real-HTTP tests, not a claim that
+every original input coercion was observed. Oversized/non-string scripts, unknown
+parameter names and forbidden auth overrides reject atomically before import.

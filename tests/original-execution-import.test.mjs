@@ -217,3 +217,157 @@ test("native execution preflight rejects missing bindings, drifting snapshots, u
     assert.deepEqual(p, before);
   }
 });
+
+test("synthetic explicit step scripts and Query overrides run while API tasks stay inert", async (t) => {
+  const document = await source();
+  changeFile(document, flowPath, (flow) => {
+    flow.steps[0].input.query = { fixture: "synthetic-query" };
+    flow.steps[0].pre_script =
+      'apt.environment.set("native_value", "synthetic-value"); console.log("synthetic-before");';
+    flow.steps[0].post_script =
+      'apt.environment.set("native_after", "synthetic-post"); console.log("synthetic-after");';
+  });
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-step-input-")),
+    seen = [];
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const b of req) body += b;
+    seen.push({ path: req.url, body });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"fixture":"native-roundtrip"}');
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const store = new Store(root),
+    p = await store.create("explicit plan script");
+  importIntoProject(p, document);
+  assert.equal(seen.length, 0);
+  const plan = p.plans[0];
+  assert.match(plan.steps[0].request.beforeScript, /synthetic-value/);
+  assert.match(plan.steps[0].request.afterScript, /synthetic-post/);
+  assert.equal(plan.steps[1].request.beforeScript, "");
+  assert.equal(plan.steps[1].request.afterScript, "");
+  assert.match(
+    plan.steps[0].request.importedScriptTasks.before[0].data,
+    /from-before/,
+  );
+  for (const step of plan.steps)
+    step.request.url = step.request.url.replace(
+      "127.0.0.1:18766",
+      `127.0.0.1:${server.address().port}`,
+    );
+  await store.save(p);
+  const result = await cli(root, p.id, plan.id);
+  assert.equal(result.code, 0, result.stderr);
+  const run = JSON.parse(result.stdout);
+  assert.equal(run.status, "passed");
+  assert.deepEqual(
+    seen,
+    ["/echo?fixture=synthetic-query", "/echo?fixture=original"].map((path) => ({
+      path,
+      body: JSON.stringify({ message: "synthetic-value", number: 7 }, null, 2),
+    })),
+  );
+  assert.deepEqual(
+    run.results.map((r) =>
+      r.logs.filter((l) => l.message).map((l) => l.message),
+    ),
+    [["synthetic-before", "synthetic-after"], []],
+  );
+  assert.equal(run.variables.native_value, "synthetic-value");
+  assert.equal(run.variables.native_after, "synthetic-post");
+  const saved = await store.get(p.id);
+  assert.equal(
+    saved.environments.find((e) => e.id === plan.environmentId).variables
+      .native_after,
+    "synthetic-post",
+  );
+  assert.equal(
+    restoreProject(saved).plans[0].steps[0].request.beforeScript,
+    plan.steps[0].request.beforeScript,
+  );
+});
+
+test("native step inputs reject unknown parameter names and over-budget scripts before project mutation", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-step-invalid-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const p = await new Store(root).create("unchanged");
+  for (const change of [
+    (f) => (f.steps[0].input.query = { undefinedParameter: "value" }),
+    (f) => (f.steps[0].pre_script = "x".repeat(65537)),
+    (f) => (f.steps[0].post_script = { code: "not-string" }),
+    (f) => (f.steps[0].input.auth = { type: "bearer", token: "not-granted" }),
+  ]) {
+    const d = await source();
+    changeFile(d, flowPath, change);
+    const before = structuredClone(p);
+    assert.throws(() => importIntoProject(p, d));
+    assert.deepEqual(p, before);
+  }
+});
+
+test("synthetic native step maps reuse bounded Query Header Path and Cookie overrides on real HTTP", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-map-input-")),
+    seen = [];
+  const server = http.createServer(async (req, res) => {
+    for await (const _ of req) {
+    }
+    seen.push({
+      path: req.url,
+      header: req.headers["x-plan"],
+      cookie: req.headers.cookie,
+    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const document = await source();
+  changeFile(document, flowPath, (flow) => {
+    const step = flow.steps[0],
+      request = step.api_snapshot.request;
+    step.api_snapshot.url = "http://127.0.0.1:18766/echo/{id}?fixture=original";
+    request.header.parameter = [
+      { key: "X-Plan", value: "base", is_checked: 1 },
+    ];
+    request.cookie.parameter = [{ key: "sid", value: "base", is_checked: 1 }];
+    request.restful.parameter = [{ key: "id", value: "base", is_checked: 1 }];
+    step.input = {
+      ...step.input,
+      query: { fixture: "mapped" },
+      headers: { "x-plan": "header-override" },
+      cookies: { sid: "cookie-override" },
+      path: { id: "a/b" },
+    };
+  });
+  const store = new Store(root),
+    p = await store.create("maps");
+  importIntoProject(p, document);
+  const plan = p.plans[0];
+  for (const step of plan.steps)
+    step.request.url = step.request.url.replace(
+      "127.0.0.1:18766",
+      `127.0.0.1:${server.address().port}`,
+    );
+  await store.save(p);
+  const run = await cli(root, p.id, plan.id);
+  assert.equal(run.code, 0, run.stderr);
+  assert.deepEqual(seen[0], {
+    path: "/echo/a%2Fb?fixture=mapped",
+    header: "header-override",
+    cookie: "sid=cookie-override",
+  });
+  assert.deepEqual(seen[1], {
+    path: "/echo?fixture=original",
+    header: undefined,
+    cookie: undefined,
+  });
+});

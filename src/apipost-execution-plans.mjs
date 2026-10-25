@@ -71,7 +71,21 @@ export function prepareDirectoryPlans(
     const stepIds = new Set();
     let functions = [];
     const steps = flow.steps.map((step) => {
-      fields(step, ["api_snapshot", "input", "step_id", "target_id"]);
+      fields(step, [
+        "api_snapshot",
+        "input",
+        "step_id",
+        "target_id",
+        "pre_script",
+        "post_script",
+      ]);
+      for (const key of ["pre_script", "post_script"])
+        if (
+          step[key] !== undefined &&
+          (typeof step[key] !== "string" ||
+            Buffer.byteLength(step[key], "utf8") > 65536)
+        )
+          throw Error("原版步骤专属脚本须为最多64KiB的字符串");
       if (
         !identifier(step.step_id) ||
         stepIds.has(step.step_id) ||
@@ -83,7 +97,8 @@ export function prepareDirectoryPlans(
       )
         throw Error("原版执行计划步骤快照身份无效");
       stepIds.add(step.step_id);
-      if (step.input !== undefined) fields(step.input, ["body"]);
+      if (step.input !== undefined)
+        fields(step.input, ["body", "query", "path", "headers", "cookies"]);
       // Reuse the established converter with the frozen API and original folders,
       // not the live API record with the same target ID.
       const converted = importModernApipost(
@@ -113,8 +128,10 @@ export function prepareDirectoryPlans(
       request = applyMCPInput(request, step.input);
       // The original flow entry skips API pre/post tasks. Preserve their source
       // provenance, but do not silently activate them in a migrated plan.
-      request.beforeScript = "";
-      request.afterScript = "";
+      request.beforeScript = step.pre_script || "";
+      request.afterScript = step.post_script || "";
+      if (request.beforeScript || request.afterScript)
+        request.scriptDialect = "apipost8";
       request.sharedBeforeScripts = [];
       request.sharedAfterScripts = [];
       request.inheritSharedScripts = false;
@@ -122,7 +139,7 @@ export function prepareDirectoryPlans(
       request.after = [];
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版执行计划跳过接口前后置操作；原脚本仅保留来源，不执行。请核对所选环境的当前值；目录可能仅保存初始值。",
+        "原版执行计划跳过接口前后置操作；原接口脚本仅保留来源，不执行；步骤自身的显式脚本独立执行。请核对所选环境的当前值；目录可能仅保存初始值。",
       ];
 
       if (step.input && Object.hasOwn(step.input, "body")) {
