@@ -19,8 +19,9 @@ fresh interval, with no catch-up storm. This is not all-project background sync.
 ## Supported contract
 
 - Up to ten explicitly enabled HTTP(S) sources per project, intervals 60 seconds
-  through 24 hours. URLs cannot contain credentials. Authenticated source feeds
-  are not supported yet; no credentials are inherited from project requests.
+  through 24 hours. URLs cannot contain credentials. An optional persisted
+  `authType` selects none/Basic/Bearer/header API key. No credentials are inherited
+  from project requests.
 - OpenAPI 3.0/3.1 JSON or YAML only. Reuse the existing bounded HTTP executor,
   YAML parser and stable-ID synchronization implementation. Remote references
   remain forbidden. Only URL, URL-and-folder and ignore-existing cover modes;
@@ -83,3 +84,26 @@ its warning. A read failure in the current activation still fails closed and
 clears the schedule. Deterministic delayed-read tests first reproduced both
 cross-project and same-project session revocation, then verify successful real
 HTTP import/persistence after switching and no mutation to the old project.
+
+## Authenticated sources
+
+Activation accepts a `credentials` object keyed by enabled source ID. Each value
+is the existing HTTP auth shape: `{type:"basic",username,password}`,
+`{type:"bearer",token}`, or `{type:"apiKey",in:"header",key,value}`. Exact keys,
+types, bounded strings and header syntax are validated before any network call.
+Missing/mismatched grants, query API keys, transport-control headers and target
+or TLS overrides fail closed. HTTP uses the existing executor and TLS checks;
+there is no credential discovery, OAuth acquisition or redirect following.
+
+Grants are cloned, process-local, and tied to the complete source definition and
+activation. Saving definitions persists only the auth type. Config edits stop
+an authenticated session and require explicit reactivation; project switching,
+deactivation, restart and restore never inherit grants. Direct Store edits are
+also checked before the next request and again before import commit. Session
+snapshots, run history and backup contain no supplied grants. Imported document
+content can itself contain sensitive values; it is not a general secret scrubber.
+
+The local-token-protected activation API is the only grant entry point. No new
+frontend or automatic secret persistence is included. Actual Basic/Bearer/API-key
+HTTP, unauthorized responses, invalid-input preflight, scheduled credential use,
+configuration changes, project isolation and backup/restart are covered.

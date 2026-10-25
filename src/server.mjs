@@ -574,7 +574,7 @@ export async function createApp({
               await autoImports.deactivate(p.id);
             const saved = await store.save(b);
             if (importSessionActive && importSessionChanged && !b.archived)
-              await autoImports.activate(p.id);
+              await autoImports.reactivate(p.id);
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
@@ -603,7 +603,7 @@ export async function createApp({
               p.settings ??= {};
               p.settings.autoImports = definitions;
               await store.save(p);
-              if (active && !p.archived) await autoImports.activate(p.id);
+              if (active && !p.archived) await autoImports.reactivate(p.id);
               return json(res, 200, {
                 definitions,
                 session: autoImports.snapshot(),
@@ -614,7 +614,11 @@ export async function createApp({
           if (action === "auto-import-session" && req.method === "POST") {
             const data = await body(req);
             if (
-              Object.keys(data).some((k) => k !== "action") ||
+              Object.keys(data).some(
+                (k) => !["action", "credentials"].includes(k),
+              ) ||
+              (data.action === "deactivate" &&
+                data.credentials !== undefined) ||
               !["activate", "deactivate"].includes(data.action)
             )
               throw Error("自动导入会话操作无效");
@@ -622,7 +626,7 @@ export async function createApp({
               res,
               200,
               await (data.action === "activate"
-                ? autoImports.activate(p.id)
+                ? autoImports.activate(p.id, data.credentials)
                 : autoImports.deactivate(p.id)),
             );
           }

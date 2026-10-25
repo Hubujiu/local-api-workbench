@@ -414,3 +414,186 @@ test("scheduler failures stop only their own activation, including same-project 
   f.store.get = get;
   assert.equal(f.requests, 0);
 });
+
+test("source authentication is activation-scoped, validated before network, and never saved", async (t) => {
+  const f = await fixture(t);
+  const secret = "source-fixture-secret";
+  const p = await f.store.get(f.project.id);
+  p.settings.autoImports[0].authType = "bearer";
+  await f.store.save(p);
+  await assert.rejects(f.manager.activate(p.id), /凭据/);
+  assert.equal(f.requests, 0);
+  for (const credentials of [
+    { unknown: { type: "bearer", token: secret } },
+    { "source-one": { type: "basic", username: "u", password: secret } },
+    { "source-one": { type: "bearer", token: "bad\r\nheader" } },
+    {
+      "source-one": { type: "bearer", token: secret, url: "http://evil.test" },
+    },
+  ])
+    await assert.rejects(f.manager.activate(p.id, credentials), /凭据/);
+  const seen = [];
+  f.manager.request = async (input, signal) => {
+    seen.push(structuredClone(input.auth));
+    return executeRequest(input, signal);
+  };
+  const credentials = { "source-one": { type: "bearer", token: secret } };
+  await f.manager.activate(p.id, credentials);
+  credentials["source-one"].token = "mutated";
+  f.advance(60000);
+  await f.manager.tick();
+  assert.deepEqual(seen, [{ type: "bearer", token: secret }]);
+  const saved = await f.store.get(p.id);
+  assert.equal(saved.settings.autoImports[0].authType, "bearer");
+  assert.equal(JSON.stringify(saved).includes(secret), false);
+  assert.equal(JSON.stringify(f.manager.snapshot()).includes(secret), false);
+  // A new target/configuration cannot receive the old credential binding.
+  saved.settings.autoImports[0].url += "?changed=1";
+  await f.store.save(saved);
+  await assert.rejects(f.manager.run(p.id, "source-one"), /凭据/);
+  assert.equal(seen.length, 1);
+  assert.equal(f.manager.snapshot().projectId, null);
+  assert.deepEqual(f.manager.snapshot().nextRuns, []);
+  await f.manager.activate(f.other.id);
+  await assert.rejects(f.manager.activate(p.id), /凭据/);
+  assert.equal(f.requests, 1);
+});
+
+test("authenticated source API uses real Basic/Bearer/API-key HTTP and forgets credentials on config edits and restore", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const root = await mkdtemp(path.join(os.tmpdir(), "import-auth-"));
+  const secret = "fixture-only-auth-value";
+  const seen = [];
+  const feed = http.createServer((req, res) => {
+    seen.push({
+      path: req.url,
+      auth: req.headers.authorization,
+      key: req.headers["x-feed-key"],
+    });
+    const expected =
+      req.url === "/basic"
+        ? "Basic " + Buffer.from("fixture:" + secret).toString("base64")
+        : "Bearer " + secret;
+    const valid =
+      req.url === "/key"
+        ? req.headers["x-feed-key"] === secret
+        : req.headers.authorization === expected;
+    if (!valid) {
+      res.writeHead(401);
+      return res.end("private " + secret);
+    }
+    res.end(
+      JSON.stringify({
+        openapi: "3.0.3",
+        paths: {
+          "/secured": { get: { responses: { 200: { description: "OK" } } } },
+        },
+      }),
+    );
+  });
+  await new Promise((r) => feed.listen(0, "127.0.0.1", r));
+  let app = await createApp({ root, port: 0 });
+  const close = async () => {
+    app.server.closeAllConnections();
+    await new Promise((r) => app.server.close(r));
+  };
+  t.after(async () => {
+    await close();
+    feed.closeAllConnections();
+    await new Promise((r) => feed.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const call = async (url, method = "GET", data, expected = 200) => {
+    const res = await fetch(app.url + url, {
+      method,
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      body: data === undefined ? undefined : JSON.stringify(data),
+    });
+    const value = await res.json();
+    assert.equal(res.status, expected, JSON.stringify(value));
+    return value;
+  };
+  const p = await call("/api/projects", "POST", { name: "auth-feed" }, 201);
+  const base = `/api/projects/${p.id}`;
+  const definition = {
+    id: "feed",
+    name: "feed",
+    url: `http://127.0.0.1:${feed.address().port}/bearer`,
+    enabled: true,
+    intervalSeconds: 60,
+    authType: "bearer",
+  };
+  await call(base + "/auto-imports", "PUT", { definitions: [definition] });
+  await call(
+    base + "/auto-import-session",
+    "POST",
+    { action: "activate" },
+    400,
+  );
+  assert.equal(seen.length, 0);
+  for (const [kind, auth] of [
+    ["bearer", { type: "bearer", token: secret }],
+    ["basic", { type: "basic", username: "fixture", password: secret }],
+    ["key", { type: "apiKey", in: "header", key: "X-Feed-Key", value: secret }],
+  ]) {
+    definition.authType = auth.type;
+    definition.url = `http://127.0.0.1:${feed.address().port}/${kind}`;
+    const changed = await call(base + "/auto-imports", "PUT", {
+      definitions: [definition],
+    });
+    assert.equal(changed.session.projectId, null);
+    await call(base + "/auto-import-session", "POST", {
+      action: "activate",
+      credentials: { feed: auth },
+    });
+    await call(base + "/auto-import-run", "POST", { sourceId: "feed" });
+  }
+  assert.equal(seen.length, 3);
+  // Query credentials and transport-control API keys are not silently accepted.
+  for (const auth of [
+    { type: "apiKey", in: "query", key: "token", value: secret },
+    { type: "apiKey", in: "header", key: "Host", value: secret },
+  ])
+    await call(
+      base + "/auto-import-session",
+      "POST",
+      { action: "activate", credentials: { feed: auth } },
+      400,
+    );
+  await call(base + "/auto-import-session", "POST", {
+    action: "activate",
+    credentials: {
+      feed: { type: "apiKey", in: "header", key: "X-Feed-Key", value: "wrong" },
+    },
+  });
+  await call(base + "/auto-import-run", "POST", { sourceId: "feed" }, 400);
+  const saved = await call(base);
+  assert.equal(saved.requests.length, 1);
+  assert.equal(saved.settings.autoImportRuns[0].status, "failed");
+  const backup = await call(base + "/export?format=backup");
+  assert.equal(JSON.stringify(backup).includes(secret), false);
+  const restored = await call(
+    "/api/restore",
+    "POST",
+    { document: backup },
+    201,
+  );
+  await close();
+  app = await createApp({ root, port: 0 });
+  await call(
+    `/api/projects/${restored.id}/auto-import-session`,
+    "POST",
+    { action: "activate" },
+    400,
+  );
+  await call(
+    base + "/auto-import-session",
+    "POST",
+    { action: "activate" },
+    400,
+  );
+  assert.equal(seen.length, 4);
+});

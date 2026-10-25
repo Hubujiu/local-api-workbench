@@ -1,3 +1,4 @@
+import { validateHeaderName, validateHeaderValue } from "node:http";
 import { parse as parseYAML } from "yaml";
 import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
 
@@ -20,6 +21,7 @@ export function normalizeAutoImports(value = []) {
             "intervalSeconds",
             "folder",
             "coverMode",
+            "authType",
           ].includes(k),
       )
     )
@@ -62,7 +64,13 @@ export function normalizeAutoImports(value = []) {
       !["url", "url_and_folder", "ignore"].includes(coverMode)
     )
       throw Error("同步目录或覆盖方式无效");
+    if (
+      item.authType !== undefined &&
+      !["none", "basic", "bearer", "apiKey"].includes(item.authType)
+    )
+      throw Error("数据源认证类型无效");
     return {
+      ...(item.authType === undefined ? {} : { authType: item.authType }),
       id: item.id,
       name: item.name,
       url: url.href,
@@ -72,6 +80,96 @@ export function normalizeAutoImports(value = []) {
       coverMode,
     };
   });
+}
+// Source credentials are process-local activation grants, never project fields.
+function sourceCredentials(sources, value = {}) {
+  const plain = (v) =>
+    v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    Object.getPrototypeOf(v) === Object.prototype;
+  const invalid = () => {
+    throw Error("数据源临时凭据无效、缺失或与配置不匹配");
+  };
+  if (!plain(value) || Object.keys(value).length > 10) invalid();
+  const result = new Map();
+  for (const id of Object.keys(value)) {
+    const source = sources.find((s) => s.id === id && s.enabled);
+    const auth = value[id];
+    if (
+      !source ||
+      !plain(auth) ||
+      !Object.hasOwn(auth, "type") ||
+      auth.type !== source.authType
+    )
+      invalid();
+    const fields = {
+      basic: ["type", "username", "password"],
+      bearer: ["type", "token"],
+      apiKey: ["type", "in", "key", "value"],
+    }[auth.type];
+    if (
+      !fields ||
+      Object.keys(auth).length !== fields.length ||
+      fields.some(
+        (k) =>
+          !Object.hasOwn(auth, k) ||
+          typeof auth[k] !== "string" ||
+          Buffer.byteLength(auth[k]) > 8192,
+      ) ||
+      Object.keys(auth).some((k) => !fields.includes(k))
+    )
+      invalid();
+    if (
+      auth.type === "basic" &&
+      (auth.username.includes(":") ||
+        /[\r\n\0]/.test(auth.username + auth.password))
+    )
+      invalid();
+    try {
+      if (auth.type === "bearer") {
+        if (!auth.token) invalid();
+        validateHeaderValue("authorization", "Bearer " + auth.token);
+      }
+      if (auth.type === "apiKey") {
+        if (
+          auth.in !== "header" ||
+          !auth.value ||
+          [
+            "host",
+            "content-length",
+            "transfer-encoding",
+            "connection",
+            "upgrade",
+            "expect",
+            "trailer",
+            "te",
+            "proxy-authorization",
+            "cookie",
+            "set-cookie",
+          ].includes(auth.key.toLowerCase())
+        )
+          invalid();
+        validateHeaderName(auth.key);
+        validateHeaderValue(auth.key, auth.value);
+      }
+    } catch {
+      invalid();
+    }
+    result.set(id, {
+      signature: signature(source),
+      auth: structuredClone(auth),
+    });
+  }
+  for (const source of sources)
+    if (
+      source.enabled &&
+      source.authType &&
+      source.authType !== "none" &&
+      !result.has(source.id)
+    )
+      invalid();
+  return result;
 }
 const definitions = (p) => normalizeAutoImports(p.settings?.autoImports);
 const signature = (d) => JSON.stringify(d);
@@ -94,6 +192,7 @@ export class ActiveProjectImports {
     this.epoch = 0;
     this.next = new Map();
     this.signatures = new Map();
+    this.credentials = new Map();
     this.running = null;
     this.controller = null;
     this.closed = false;
@@ -132,11 +231,12 @@ export class ActiveProjectImports {
     this.active = null;
     this.next.clear();
     this.signatures.clear();
+    this.credentials.clear();
     this.controller?.abort();
     await this.running?.catch(() => {});
     return this.snapshot();
   }
-  async activate(projectId) {
+  async activate(projectId, credentials = {}) {
     if (this.closed) throw Error("自动导入服务已关闭");
     const stop = this.deactivate();
     const epoch = this.epoch;
@@ -145,6 +245,8 @@ export class ActiveProjectImports {
     if (epoch !== this.epoch || this.closed) throw Error("项目激活已取消");
     if (p.archived) throw Error("归档项目不能自动导入");
     const sources = definitions(p);
+    const bindings = sourceCredentials(sources, credentials);
+    this.credentials = bindings;
     this.active = projectId;
     this.warning = "";
     for (const source of sources)
@@ -153,6 +255,19 @@ export class ActiveProjectImports {
         this.signatures.set(source.id, signature(source));
       }
     return this.snapshot();
+  }
+  async reactivate(projectId) {
+    const p = await this.store.get(projectId);
+    if (
+      definitions(p).some(
+        (s) => s.enabled && s.authType && s.authType !== "none",
+      )
+    ) {
+      await this.deactivate();
+      this.warning = "配置已更改，请提供临时凭据重新激活数据源";
+      return this.snapshot();
+    }
+    return this.activate(projectId);
   }
   async close() {
     this.closed = true;
@@ -214,6 +329,24 @@ export class ActiveProjectImports {
     const source = definitions(p).find((d) => d.id === sourceId);
     if (p.archived || !source?.enabled) throw Error("数据源未启用或项目已归档");
     const key = signature(source);
+    const binding = this.credentials.get(sourceId);
+    if (
+      source.authType &&
+      source.authType !== "none" &&
+      (!binding || binding.signature !== key)
+    ) {
+      this.warning = "数据源凭据已失效，请重新激活";
+      this.active = null;
+      this.epoch++;
+      this.next.clear();
+      this.signatures.clear();
+      this.credentials.clear();
+      throw Error(this.warning);
+    }
+    const auth =
+      binding?.signature === key
+        ? structuredClone(binding.auth)
+        : { type: "none" };
     this.next.set(sourceId, this.now() + source.intervalSeconds * 1000);
     this.signatures.set(sourceId, key);
     const controller = new AbortController();
@@ -231,7 +364,7 @@ export class ActiveProjectImports {
           url: source.url,
           method: "GET",
           timeout: 15000,
-          auth: { type: "none" },
+          auth,
         },
         controller.signal,
       );
@@ -272,6 +405,7 @@ export class ActiveProjectImports {
         this.epoch++;
         this.next.clear();
         this.signatures.clear();
+        this.credentials.clear();
       }
       if (
         !writeAttempted &&
