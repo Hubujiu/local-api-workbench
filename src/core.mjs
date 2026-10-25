@@ -1,3 +1,4 @@
+import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -421,6 +422,15 @@ export function snapshotPlan(plan) {
                   authSnapshot: true,
                   sharedScriptsSnapshot: true,
                 },
+                ...(s.nativeMCP === undefined
+                  ? {}
+                  : {
+                      nativeMCP: normalizeNativeMCPState(
+                        s.nativeMCP,
+                        s.request,
+                        normalizeRequest,
+                      ),
+                    }),
                 expectedStatus: s.expectedStatus,
               },
     ),

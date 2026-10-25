@@ -234,8 +234,12 @@ export async function createApp({
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
