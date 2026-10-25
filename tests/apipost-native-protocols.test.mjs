@@ -83,3 +83,66 @@ test("native protocol unsupported semantics and identity conflicts fail atomical
     assert.equal(JSON.stringify(p), before);
   }
 });
+
+test("native protocol ordering permits only the known zero inner default", async () => {
+  const { assembleApipostDirectory } = await import(
+    "../src/apipost-directory.mjs"
+  );
+  const source = nativeProtocolFixture(),
+    records = source.apis.map((n, i) => ({ ...n, sort: i + 1, data: n }));
+  const doc = {
+    format: "apipost-offline-directory-v1",
+    files: [
+      {
+        path: "project.json",
+        text: JSON.stringify({
+          project_id: source.project_id,
+          name: source.name,
+        }),
+      },
+      {
+        path: "apis/index.json",
+        text: JSON.stringify({
+          project_id: source.project_id,
+          items: records.map(({ data, ...n }) => n),
+        }),
+      },
+      ...records.map((n) => ({
+        path: "apis/" + n.target_id + ".json",
+        text: JSON.stringify(n),
+      })),
+    ],
+  };
+  assert.equal(assembleApipostDirectory(doc).apis[2].sort, 3);
+  for (const mutate of [
+    (n) => (n.data.sort = 99),
+    (n) => (n.data.name = "conflict"),
+    (n) => (n.data.project_id = "foreign"),
+    (n) => (n.data.target_id = "foreign"),
+  ]) {
+    const bad = structuredClone(doc),
+      row = JSON.parse(bad.files[2].text);
+    mutate(row);
+    bad.files[2].text = JSON.stringify(row);
+    assert.throws(() => assembleApipostDirectory(bad));
+  }
+  const p = project();
+  importIntoProject(p, doc);
+  assert.equal(p.protocols.length, 3);
+});
+test("native query mirrors consume multiplicity without re-encoding original spelling", () => {
+  const source = nativeProtocolFixture();
+  source.apis[0].url = "ws://127.0.0.1:1/?x=a+b&x=a%20b&literal=%2b";
+  source.apis[0].request.query.parameter = [
+    { key: "x", value: "a b", is_checked: 1 },
+    { key: "x", value: "a b", is_checked: 1 },
+    { key: "x", value: "a b", is_checked: 1 },
+    { key: "literal", value: "+", is_checked: 1 },
+  ];
+  const p = project();
+  importIntoProject(p, source);
+  assert.equal(
+    p.protocols[0].url,
+    "ws://127.0.0.1:1/?x=a+b&x=a%20b&literal=%2b&x=a+b",
+  );
+});

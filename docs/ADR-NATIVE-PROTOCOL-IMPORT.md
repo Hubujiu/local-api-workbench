@@ -25,12 +25,25 @@ It does not modify the frontend or copy vendor implementation code.
 Official Offline2 synthetic loopback WS text echo, TCP raw/first-data completion,
 and POST SSE two-event execution have been observed. Pure conversion of the
 current four original protocol records produces three execution definitions.
-Original source files remain private; repository fixtures are independently
-written. Initial synthetic conversion/atomic-rejection tests passed before an
-additional inheritance guard. A transient workspace disconnection interrupted
-creation of the planned end-to-end test; files were recovered without rollback.
+Original files remain private; repository fixtures are independently written.
 
-At this WIP checkpoint the complete HTTP import/save/reload/restore/execute
-pipeline, source directory plus earlier features, and precise-commit CI have NOT
-yet been accepted. No claim of full native protocol compatibility, all resource
-migration or original reverse export. Further tests/fixes update this PR.
+Fresh local validation after the transient workspace disconnect includes actual
+HTTP import (and invalid-import atomicity), save/reload/restore, nine real
+WS/TCP/SSE exchanges across source/restored projects and frozen plans, query
+mirror multiplicity, wrapper identity/order errors and the existing modern and
+directory import regressions. The initial batch passed 40 tests; the HTTP-import
+endpoint version was rerun after the final test edit.
+
+The integration worktree combines this feature with database, Mock and native
+flow imports. Its current genuine 27-file original directory imported, saved,
+restored and restarted successfully. Six actual protocol exchanges preserved
+observed original inputs, SSE POST/two events and TCP first-chunk completion;
+source bytes remained unchanged. Original Mock's six cases were separately
+compared across 18 HTTP calls with status/body/header equality after this merge.
+These local results are not a substitute for exact-commit CI.
+
+No full native protocol compatibility, complete resource migration or original
+reverse export is claimed. Headers/cookies/auth/scripts, variable templates,
+binary WS/TCP modes, custom TCP frame completion and nondefault WS settings
+remain unsupported. Source response examples/config are inert metadata, not an
+editable or executable recreation of every original setting.
