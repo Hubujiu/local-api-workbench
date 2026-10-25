@@ -6,7 +6,7 @@ import {
   nativeRunResult,
 } from "./native-mcp-tools.mjs";
 import { buildNativeMCPPlan, nativeFlowView } from "./native-mcp-plan.mjs";
-import { assertMCPPlanIdle, lockMCPPlan } from "./mcp-plan-locks.mjs";
+import { lockMCPPlan } from "./mcp-plan-locks.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -328,7 +328,7 @@ export function createMCP({
       typeof params.name === "string" && params.name.startsWith("apipost_")
         ? params.name
         : null;
-    let nativePlanArgs;
+    let nativePlanArgs, unlockPlan;
     if (requestId === undefined) return null;
     const result = (value) => ({
       jsonrpc: "2.0",
@@ -395,6 +395,17 @@ export function createMCP({
         projects.push(output.id);
       } else {
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
+        const lockedOperations = [
+          "localapi_save_plan",
+          "localapi_create_execution_flow",
+          "localapi_update_execution_flow",
+          "localapi_delete_execution_flow",
+          "localapi_execute_flow",
+          "localapi_run_plan",
+        ];
+        const lockId = nativePlanArgs?.flow_id || args.planId || args.plan?.id;
+        if (lockId && lockedOperations.includes(params.name))
+          unlockPlan = lockMCPPlan(store, args.projectId, lockId);
         const p = await store.get(args.projectId);
         if (p.archived) throw Error("项目已归档");
         if (nativePlanArgs) {
@@ -403,7 +414,6 @@ export function createMCP({
             : undefined;
           if (params.name === "localapi_update_execution_flow" && !previous)
             throw Error("计划不存在");
-          if (previous) assertMCPPlanIdle(store, p.id, previous.id);
           args = {
             projectId: p.id,
             plan: buildNativeMCPPlan(
@@ -565,7 +575,6 @@ export function createMCP({
             case "localapi_create_execution_flow":
             case "localapi_update_execution_flow":
             case "localapi_save_plan":
-              if (args.plan?.id) assertMCPPlanIdle(store, p.id, args.plan.id);
               if (
                 params.name === "localapi_create_execution_flow" &&
                 args.plan.id &&
@@ -625,7 +634,6 @@ export function createMCP({
               if (!output) throw Error("计划不存在");
               break;
             case "localapi_delete_execution_flow":
-              assertMCPPlanIdle(store, p.id, args.planId);
               if (!p.plans.some((item) => item.id === args.planId))
                 throw Error("计划不存在");
               p.plans = p.plans.filter((item) => item.id !== args.planId);
@@ -711,44 +719,35 @@ export function createMCP({
                 p,
                 args.environmentId || plan.environmentId,
               ).id;
-              const unlock = lockMCPPlan(store, p.id, plan.id);
-              try {
-                let completed = 0;
-                output = await runPlan(
-                  plan,
-                  environmentVariables(p, environmentId),
-                  executeRequest,
-                  {
-                    ...scopedExecution(store, p, environmentId),
-                    executeGrpc: executePlanGrpc,
-                    grpcCredentials: args.grpcCredentials,
-                    executeProtocol: executePlanProtocol,
-                    protocolCredentials: args.protocolCredentials,
-                    executeSocketIO: (input, signal) =>
-                      executePlanSocketIO(p.id, input, signal),
-                    socketioCredentials: args.socketioCredentials,
-                    cookieSession: projectCookieSession(
-                      store,
-                      p,
-                      environmentId,
-                    ),
-                    onStep: (step) =>
-                      onProgress({
-                        completed: ++completed,
-                        total: plan.steps.filter((s) => s.enabled !== false)
-                          .length,
-                        stepId: step.stepId,
-                        stepStatus: step.status,
-                      }),
-                    prepareRequest: (request) =>
-                      resolveServiceRequest(p, request, environmentId),
-                  },
-                );
-                output.environmentId = environmentId;
-                output = await recordPlanRun(store, p.id, output, "mcp");
-              } finally {
-                unlock();
-              }
+              let completed = 0;
+              output = await runPlan(
+                plan,
+                environmentVariables(p, environmentId),
+                executeRequest,
+                {
+                  ...scopedExecution(store, p, environmentId),
+                  executeGrpc: executePlanGrpc,
+                  grpcCredentials: args.grpcCredentials,
+                  executeProtocol: executePlanProtocol,
+                  protocolCredentials: args.protocolCredentials,
+                  executeSocketIO: (input, signal) =>
+                    executePlanSocketIO(p.id, input, signal),
+                  socketioCredentials: args.socketioCredentials,
+                  cookieSession: projectCookieSession(store, p, environmentId),
+                  onStep: (step) =>
+                    onProgress({
+                      completed: ++completed,
+                      total: plan.steps.filter((s) => s.enabled !== false)
+                        .length,
+                      stepId: step.stepId,
+                      stepStatus: step.status,
+                    }),
+                  prepareRequest: (request) =>
+                    resolveServiceRequest(p, request, environmentId),
+                },
+              );
+              output.environmentId = environmentId;
+              output = await recordPlanRun(store, p.id, output, "mcp");
               break;
             }
           }
@@ -808,6 +807,8 @@ export function createMCP({
         isError: true,
         content: [{ type: "text", text: e.message }],
       });
+    } finally {
+      unlockPlan?.();
     }
   };
 }

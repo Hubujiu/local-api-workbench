@@ -371,6 +371,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const nativeMCPBudget = { bytes: 0 };
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -429,6 +430,7 @@ export function snapshotPlan(plan) {
                         s.nativeMCP,
                         s.request,
                         normalizeRequest,
+                        nativeMCPBudget,
                       ),
                     }),
                 expectedStatus: s.expectedStatus,

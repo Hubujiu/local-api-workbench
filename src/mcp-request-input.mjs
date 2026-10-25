@@ -25,6 +25,7 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
       if (form && (row.type === "file" || row.filename || row.requiresFile))
         throw Error("不支持临时覆盖文件字段");
       row.value = textValue(value);
+      delete row.dynamic;
       row.enabled = true;
     }
   }
@@ -70,6 +71,8 @@ export function applyMCPInput(request, input) {
       rowsOverride(result[key], input[key], key, key === "headers");
   }
   if (own(input, "body")) {
+    if (!["urlencoded", "form-data"].includes(result.bodyType))
+      result.bodyDynamic = {};
     if (["json", "msgpack"].includes(result.bodyType))
       result.body = JSON.stringify(input.body);
     else if (["urlencoded", "form-data"].includes(result.bodyType))

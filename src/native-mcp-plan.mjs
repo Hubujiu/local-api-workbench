@@ -23,6 +23,8 @@ function stripTasks(r) {
   const copy = snapshotInterfaceForPlan(r);
   delete copy.nativeTasks;
   delete copy.importedScriptTasks;
+  copy.assertions = [];
+  copy.extract = [];
   return copy;
 }
 function inputAuth(base, input) {
@@ -71,7 +73,12 @@ function materialize(state) {
     sharedScriptsSnapshot: true,
   };
 }
-export function normalizeNativeMCPState(value, request, normalizeRequest) {
+export function normalizeNativeMCPState(
+  value,
+  request,
+  normalizeRequest,
+  budget,
+) {
   if (value === undefined) return undefined;
   plain(
     value,
@@ -86,6 +93,15 @@ export function normalizeNativeMCPState(value, request, normalizeRequest) {
     throw Error("原版MCP步骤来源版本或接口标识无效");
   if (Buffer.byteLength(JSON.stringify(value)) > 2 * 1024 * 1024)
     throw Error("原版MCP步骤来源超过2MiB");
+  if (budget) {
+    budget.bytes +=
+      Buffer.byteLength(JSON.stringify(value)) +
+      Buffer.byteLength(JSON.stringify(request));
+    if (budget.bytes > 4 * 1024 * 1024)
+      throw Error("原版MCP计划展开快照超过4MiB");
+  }
+  if (value.baseRequest?.nativeTasks || value.baseRequest?.importedScriptTasks)
+    throw Error("原版MCP基础快照不能携带接口任务");
   const base = normalizeRequest(value.baseRequest);
   if (
     base.id !== value.targetId ||
@@ -93,6 +109,8 @@ export function normalizeNativeMCPState(value, request, normalizeRequest) {
     base.afterScript ||
     base.before.length ||
     base.after.length ||
+    base.assertions.length ||
+    base.extract.length ||
     base.nativeTasks ||
     base.importedScriptTasks ||
     base.sharedBeforeScripts.length ||
@@ -132,6 +150,7 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
   )
     throw Error("原版兼容计划必须包含1至200步");
   if (!update && source === null) throw Error("缺少计划步骤");
+  const budget = { bytes: 0 };
   const seen = new Set();
   const steps =
     source === null
@@ -193,12 +212,13 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
           return {
             id: stepId,
             name: old?.name || api.name,
-            enabled: true,
+            enabled: old?.enabled !== false,
             request,
             nativeMCP: normalizeNativeMCPState(
               state,
               request,
               normalizeRequest,
+              budget,
             ),
           };
         });

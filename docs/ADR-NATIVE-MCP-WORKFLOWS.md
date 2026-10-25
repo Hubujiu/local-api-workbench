@@ -42,3 +42,21 @@ original MCP itself remains disabled: enabling it creates persistent token and
 project grants, so this stage uses static original evidence and our SDK fixture,
 not an unapproved original authorization change. No frontend additions, merge
 into main/develop or deployment.
+
+## Second-stage isolation review
+
+SDK stdio restart and restored-project execution now pass in addition to HTTP.
+Running-plan locks are acquired before asynchronous storage reads and held until
+save/execution settles, including mutation-first and read-in-flight interleavings.
+API assertions and automatic extraction are stripped too, preventing hidden
+post-response variable writes. Disabled steps stay disabled on native updates.
+Explicit input overrides remove inherited dynamic row/body definitions; empty
+input restores the old frozen base and its dynamics.
+
+Manual edits through the existing backend detach unchanged native provenance
+when the executable request changes, with an explicit note; validation is not
+bypassed and no frontend code changes are needed. Aggregate native snapshot
+expansion is capped at4MiB in both construction and backup normalization.
+These paths have focused real SDK/HTTP/storage tests; exact final CI remains
+separate. Initial feature CI had a failure and is being diagnosed, not reported
+as accepted solely from focused results.
