@@ -1,9 +1,32 @@
+import { isDeepStrictEqual } from "node:util";
 import { freezeWireStep } from "./wire-plan.mjs";
 import { freezeSocketIOStep } from "./socketio-plan.mjs";
 import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  if (source === "manual" && previous && Array.isArray(input.steps)) {
+    input = {
+      ...input,
+      steps: input.steps.map((step) => {
+        const old = previous.steps.find((s) => s.id === step.id);
+        if (
+          old?.nativeMCP &&
+          isDeepStrictEqual(step.nativeMCP, old.nativeMCP) &&
+          !isDeepStrictEqual(step.request, old.request)
+        ) {
+          const copy = structuredClone(step);
+          delete copy.nativeMCP;
+          copy.request.importNotes = [
+            ...(copy.request.importNotes || []),
+            "手工编辑已解除原版MCP输入基线；当前步骤按独立Workbench快照执行。",
+          ];
+          return copy;
+        }
+        return step;
+      }),
+    };
+  }
   if (project && Array.isArray(input.steps))
     input = {
       ...input,

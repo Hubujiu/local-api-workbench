@@ -9,6 +9,7 @@ import { runNativeTaskPhase } from "./native-task-phase.mjs";
 import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
 import { normalizeNativeMock } from "./native-mock.mjs";
 
+import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -402,6 +403,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const nativeMCPBudget = { bytes: 0 };
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -453,6 +455,16 @@ export function snapshotPlan(plan) {
                   authSnapshot: true,
                   sharedScriptsSnapshot: true,
                 },
+                ...(s.nativeMCP === undefined
+                  ? {}
+                  : {
+                      nativeMCP: normalizeNativeMCPState(
+                        s.nativeMCP,
+                        s.request,
+                        normalizeRequest,
+                        nativeMCPBudget,
+                      ),
+                    }),
                 expectedStatus: s.expectedStatus,
               },
     ),

@@ -2,6 +2,15 @@ import {
   listImportedExecutionRuns,
   getImportedExecutionRun,
 } from "./imported-execution-history.mjs";
+import {
+  nativeMCPTools,
+  translateNativeCall,
+  nativeAPIList,
+  nativeAPIDetail,
+  nativeRunResult,
+} from "./native-mcp-tools.mjs";
+import { buildNativeMCPPlan, nativeFlowView } from "./native-mcp-plan.mjs";
+import { lockMCPPlan } from "./mcp-plan-locks.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -22,7 +31,7 @@ import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store, executeRequest } from "./runtime.mjs";
-import { snapshotPlan, runPlan } from "./core.mjs";
+import { snapshotPlan, runPlan, normalizeRequest } from "./core.mjs";
 import {
   environmentVariables,
   selectedEnvironment,
@@ -336,8 +345,15 @@ export function createMCP({
     tool.inputSchema.required = [...tool.inputSchema.required, "confirm"];
     tool.description += "；必须显式传入 confirm: true";
   }
+  tools.push(...nativeMCPTools(write, execute));
   return async function dispatch(message) {
-    const { id: requestId, method, params = {} } = message;
+    const { id: requestId, method, params: incomingParams = {} } = message;
+    let params = incomingParams;
+    const nativeName =
+      typeof params.name === "string" && params.name.startsWith("apipost_")
+        ? params.name
+        : null;
+    let nativePlanArgs, unlockPlan;
     if (requestId === undefined) return null;
     const result = (value) => ({
       jsonrpc: "2.0",
@@ -361,7 +377,7 @@ export function createMCP({
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
-      const args = params.arguments === undefined ? {} : params.arguments;
+      let args = params.arguments === undefined ? {} : params.arguments;
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
@@ -380,8 +396,18 @@ export function createMCP({
         if (schema.type === "array" && !Array.isArray(value))
           throw Error("参数必须为数组 " + key);
       }
-      if (tool.name.startsWith("localapi_delete_") && args.confirm !== true)
+      if (
+        (tool.name.startsWith("localapi_delete_") ||
+          tool.name.startsWith("apipost_delete_")) &&
+        args.confirm !== true
+      )
         throw Error("删除操作必须显式传入 confirm: true");
+      if (nativeName) {
+        const translated = translateNativeCall(nativeName, args);
+        params = { ...params, name: translated.name };
+        args = translated.args;
+        nativePlanArgs = translated.planArgs;
+      }
       let output;
       if (params.name === "localapi_list_projects")
         output = (await store.list()).filter(
@@ -394,8 +420,36 @@ export function createMCP({
         projects.push(output.id);
       } else {
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
+        const lockedOperations = [
+          "localapi_save_plan",
+          "localapi_create_execution_flow",
+          "localapi_update_execution_flow",
+          "localapi_delete_execution_flow",
+          "localapi_execute_flow",
+          "localapi_run_plan",
+        ];
+        const lockId = nativePlanArgs?.flow_id || args.planId || args.plan?.id;
+        if (lockId && lockedOperations.includes(params.name))
+          unlockPlan = lockMCPPlan(store, args.projectId, lockId);
         const p = await store.get(args.projectId);
         if (p.archived) throw Error("项目已归档");
+        if (nativePlanArgs) {
+          const previous = nativePlanArgs.flow_id
+            ? p.plans.find((x) => x.id === nativePlanArgs.flow_id)
+            : undefined;
+          if (params.name === "localapi_update_execution_flow" && !previous)
+            throw Error("计划不存在");
+          args = {
+            projectId: p.id,
+            plan: buildNativeMCPPlan(
+              p,
+              nativePlanArgs,
+              previous,
+              normalizeRequest,
+            ),
+          };
+        }
+
         if (isEnvironmentTool(params.name)) {
           output = await executeEnvironmentTool(store, p, params.name, args);
           if (params.name === "localapi_get_environment_variables")
@@ -454,6 +508,10 @@ export function createMCP({
               if (!output) throw Error("gRPC定义不存在");
               break;
             case "localapi_list_apis": {
+              if (nativeName) {
+                output = nativeAPIList(p, args);
+                break;
+              }
               const folders = [
                 ...new Set([
                   ...(p.folders || []),
@@ -503,9 +561,15 @@ export function createMCP({
               break;
             }
             case "localapi_get_api_detail":
-              output = [...p.requests, ...(p.protocols || [])].find(
-                (r) => r.id === args.apiId && !r.deletedAt,
-              );
+              if (nativeName) {
+                output = nativeAPIDetail(p, args.apiId);
+                break;
+              }
+              output = [
+                ...p.requests,
+                ...(p.protocols || []),
+                ...(p.documents || []),
+              ].find((r) => r.id === args.apiId && !r.deletedAt);
               if (!output) throw Error("接口不存在");
               break;
             case "localapi_list_plans":
@@ -732,6 +796,53 @@ export function createMCP({
             }
           }
       }
+      if (nativeName) {
+        const kind = nativeName.slice(8);
+        if (kind === "list_projects")
+          output = {
+            projects: output.map((p) => ({
+              project_id: p.id,
+              name: p.name,
+              intro: p.description || "",
+            })),
+          };
+        else if (
+          kind === "create_execution_flow" ||
+          kind === "update_execution_flow"
+        )
+          output = {
+            flow_id: output.id,
+            name: output.name,
+            message: "计划已保存",
+          };
+        else if (kind === "list_execution_flows")
+          output = {
+            flows: output.map((p) => ({
+              flow_id: p.id,
+              project_id: args.projectId,
+              name: p.name,
+              description: p.description,
+              environment_id: p.environmentId,
+              step_count: p.stepCount,
+              updated_at: p.updatedAt,
+            })),
+          };
+        else if (kind === "get_execution_flow")
+          output = { flow: nativeFlowView(args.projectId, output) };
+        else if (kind === "delete_execution_flow")
+          output = { deleted: true, flow_id: args.planId };
+        else if (kind === "execute_flow")
+          output = nativeRunResult(args.projectId, output);
+        else if (kind === "get_execution_result")
+          output = {
+            run: {
+              ...output,
+              run_id: output.id,
+              project_id: args.projectId,
+              workbench_evidence_format: 1,
+            },
+          };
+      }
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],
       });
@@ -740,6 +851,8 @@ export function createMCP({
         isError: true,
         content: [{ type: "text", text: e.message }],
       });
+    } finally {
+      unlockPlan?.();
     }
   };
 }
@@ -770,17 +883,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         message.method === "tools/call" &&
         argv.includes("--execute") &&
         argv.includes("--write") &&
-        projects.includes(message.params?.arguments?.projectId) &&
+        projects.includes(
+          message.params?.arguments?.projectId ??
+            message.params?.arguments?.project_id,
+        ) &&
         [
           "localapi_run_plan",
           "localapi_execute_flow",
           "localapi_execute_api",
+          "apipost_execute_flow",
         ].includes(message.params?.name)
       ) {
         activity = await new MCPActivity(store.root, {
           tool: message.params.name,
-          projectId: message.params.arguments.projectId,
-          planId: message.params.arguments.planId,
+          projectId:
+            message.params.arguments.projectId ??
+            message.params.arguments.project_id,
+          planId:
+            message.params.arguments.planId ?? message.params.arguments.flow_id,
         }).start();
       }
       const answer = await dispatch(message);
