@@ -1,5 +1,7 @@
 name: Validate Local API
 on:
+  push:
+    branches: [wip/backend-integration]
   pull_request:
   workflow_dispatch:
 concurrency:
