@@ -1,0 +1,9 @@
+# CLI invocation-scoped database grants
+
+The existing CLI accepts an explicit --database-stdin option. Its bounded UTF-8 JSON envelope may contain databaseConnections keyed by enabled frozen database operation connectionId values, alongside existing protocol credential maps. The older --credentials-stdin option alone still rejects databaseConnections. Without either flag, stdin is not consumed and database execution remains ungranted.
+
+Bindings must exactly match enabled database operations in enabled HTTP steps. Validate all configurations before any plan step, including earlier HTTP-only steps. This is configuration preflight, not full SQL validation. Explicit type and remote host/database are required; SQLite accepts only type and filename. Unknown fields, write authorization and persistent grant options are rejected. Existing DatabaseSessions validators, limits, TLS/SSH constraints and read-only query providers remain authoritative.
+
+Each invocation creates new project-bound transient grants, remaps logical connection IDs privately, removes the database map from runner options and closes sessions in finally. Neither snapshots nor result configuration contains the connection map. Ordinary query values and remote errors remain execution evidence and may themselves contain sensitive data; this is not blanket redaction. Input files and pipe producers remain the caller's responsibility.
+
+Verification uses an actual subprocess, database query, loopback HTTP, post-query assertion, persisted results reloaded through a new Store, no-grant subsequent run, explicit regrant, and invalid maps failing before earlier HTTP steps. PostgreSQL/MySQL fixtures use the same helper. Supported providers are not a claim of complete original database parity or original project migration. No frontend, write capability, persistent credential vault or automatic rebinding is added.

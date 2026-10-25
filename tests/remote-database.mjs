@@ -288,3 +288,18 @@ await verifySSHDatabaseFlows(common);
 
 const { verifyMySQLWrites } = await import("./mysql-write-integration.mjs");
 await verifyMySQLWrites(common);
+
+// Reuse the actual CLI end-to-end contract against both disposable services.
+const { verifyCLIDatabaseFlow } = await import(
+  "./cli-database-integration.mjs"
+);
+await verifyCLIDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  "SELECT $1::text AS value",
+  ["fixture-value"],
+);
+await verifyCLIDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  "SELECT ? AS value",
+  ["fixture-value"],
+);
