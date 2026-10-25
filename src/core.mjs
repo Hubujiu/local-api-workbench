@@ -33,7 +33,11 @@ import {
   normalizeCookieEncoding,
   requestCookieHeader,
 } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
@@ -1672,7 +1676,7 @@ export function toCurl(input) {
   if (["bearer", "oauth2"].includes(r.auth.type))
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);

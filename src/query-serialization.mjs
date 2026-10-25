@@ -14,10 +14,8 @@ export function appendRequestQuery(url, rows, addEqual = true) {
       (url.search ? url.search.slice(1) + "&" : "") + added.join("&");
   return url;
 }
-export function setURLQuery(url, name, value) {
-  name = String(name);
-  const replacement = encodedPair(name, value),
-    rows = url.search ? url.search.slice(1).split("&") : [];
+function replaceURLQuery(url, name, replacement) {
+  const rows = url.search ? url.search.slice(1).split("&") : [];
   let replaced = false;
   const result = [];
   for (const row of rows) {
@@ -30,4 +28,20 @@ export function setURLQuery(url, name, value) {
   if (!replaced) result.push(replacement);
   url.search = result.join("&");
   return url;
+}
+
+export function setURLQuery(url, name, value) {
+  return replaceURLQuery(url, String(name), encodedPair(name, value));
+}
+// Explicit native-import compatibility. Do not change ordinary API-key encoding.
+export function setAPIKeyQuery(url, auth) {
+  if (auth.queryEncoding === undefined)
+    return setURLQuery(url, auth.key, auth.value);
+  if (auth.queryEncoding !== "apipost") throw Error("不支持的API Key查询编码");
+  const name = String(auth.key ?? ""),
+    value = String(auth.value ?? "");
+  if (!/^[A-Za-z0-9_.~-]+$/.test(name) || /[&#\x00-\x1f\x7f]/.test(value))
+    throw Error("原版API Key查询模式不支持分隔符、控制字符或复杂键名");
+  // URL.search retains literal + and existing percent escapes, but encodes spaces.
+  return replaceURLQuery(url, name, name + "=" + value);
 }

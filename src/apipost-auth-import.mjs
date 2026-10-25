@@ -31,7 +31,11 @@ export function importExtendedApipostAuth(auth) {
       throw Error("Apipost私密键值对位置或名称无效");
     if (result.in === "header" && !result.key.includes("{{"))
       validateHeaderName(result.key);
-    return { type: "apiKey", ...result };
+    return {
+      type: "apiKey",
+      ...result,
+      ...(result.in === "query" ? { queryEncoding: "apipost" } : {}),
+    };
   }
   if (auth?.type === "awsv4") {
     const names = [

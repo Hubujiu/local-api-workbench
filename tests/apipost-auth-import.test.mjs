@@ -8,6 +8,8 @@ import {
   importIntoProject,
   restoreProject,
   interpolate,
+  toCurl,
+  importCurl,
 } from "../src/core.mjs";
 import { Store, executeRequest } from "../src/runtime.mjs";
 import {
@@ -216,4 +218,68 @@ test("extended native auth refuses lossy or malformed conversion before changing
     }).payloadHash,
     "disabled",
   );
+});
+
+test("native Query API-key preserves the observed original plus/space wire spelling", async (t) => {
+  let seen;
+  const server = http.createServer((req, res) => {
+    seen = req.url;
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const auth = importExtendedApipostAuth({
+    type: "kv",
+    kv: { in: "query", key: "fixture_key", value: "synthetic+kv value" },
+  });
+  await executeRequest({
+    url: `http://127.0.0.1:${server.address().port}/echo?fixture=original`,
+    auth,
+  });
+  assert.equal(seen, "/echo?fixture=original&fixture_key=synthetic+kv%20value");
+});
+
+test("native Query replacement and cURL roundtrip preserve raw fields while generic encoding is unchanged", async (t) => {
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(req.url);
+    res.end("{}");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const url = `http://127.0.0.1:${server.address().port}/echo?keep=a%20b&fixture=old&fixture=second&flag`;
+  const auth = importExtendedApipostAuth({
+    type: "kv",
+    kv: { in: "query", key: "fixture", value: "synthetic+kv value" },
+  });
+  const request = { url, auth };
+  await executeRequest(request);
+  await executeRequest(importCurl(toCurl(request)));
+  assert.deepEqual(
+    seen,
+    Array(2).fill("/echo?keep=a%20b&fixture=synthetic+kv%20value&flag"),
+  );
+  const generic = structuredClone(auth);
+  delete generic.queryEncoding;
+  await executeRequest({ url, auth: generic });
+  assert.equal(seen[2], "/echo?keep=a%20b&fixture=synthetic%2Bkv+value&flag");
+  for (const patch of [
+    { value: "bad&injected=true" },
+    { value: "bad#fragment" },
+    { value: "bad\r\nvalue" },
+    { key: "bad=name" },
+    { key: "bad+name" },
+    { queryEncoding: "unknown" },
+    { in: "header" },
+  ]) {
+    await assert.rejects(executeRequest({ url, auth: { ...auth, ...patch } }));
+    assert.throws(() => toCurl({ url, auth: { ...auth, ...patch } }));
+  }
+  assert.equal(seen.length, 3);
 });
