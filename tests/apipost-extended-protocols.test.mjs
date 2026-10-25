@@ -34,6 +34,8 @@ test("native Socket.IO/gRPC become scoped definitions and explicit immutable mes
 });
 test("unsupported native RPC/Socket.IO options reject without mutating prior project", () => {
   const cases = [
+    (d) => (d.apis[0].msg_data = "{{event}}"),
+    (d) => (d.apis[0].description = "x".repeat(1024 * 1024)),
     (d) => (d.apis[0].config.reconnect_num = 8),
     (d) => d.apis[0].request.query.parameter.push({ key: "token", value: "x" }),
     (d) => d.apis[0].request.event.parameter.push({ key: "fixture" }),

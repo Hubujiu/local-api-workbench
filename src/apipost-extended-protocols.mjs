@@ -6,6 +6,8 @@ export function prepareExtendedProtocol(
   node,
   { resource, text, no, keys, fail, noInherited, noHTTPExtras, rawBody },
 ) {
+  if (Buffer.byteLength(JSON.stringify(node)) > 1024 * 1024)
+    fail("扩展协议来源超过1MiB");
   const definitions = [],
     plans = [];
   const plan = (suffix, name, step) =>
@@ -47,6 +49,8 @@ export function prepareExtendedProtocol(
       fail("Socket.IO非默认配置/版本");
     if (![-1, 1].includes(node.ack) || typeof node.msg_data !== "string")
       fail("Socket.IO消息设置");
+    if (node.msg_data.includes("{{") || node.url?.includes("{{"))
+      fail("Socket.IO事件/地址模板");
     const rows = node.request.event?.parameter ?? [];
     if (!Array.isArray(rows) || rows.length > 100) fail("Socket.IO监听事件");
     // Nonempty native listener row semantics require separate evidence.

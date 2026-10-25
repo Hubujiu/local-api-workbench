@@ -77,5 +77,8 @@ an independent official gRPC client preserves 9007199254740993. Workbench keeps
 its existing exact string integer handling; it does not reproduce this defect.
 REA selected Socket.IO and gRPC renderer modules were analyzed statically.
 Synthetic committed tests exercise actual import/persist/restore and HTTP/MCP
-execution including exact int64/base64 data. Current original extended-project
-full-directory integration and this new precise-commit CI remain to be checked.
+execution including exact int64/base64 data. The separate original 9-file extended project also imported, saved, restored
+and restarted in the combined worktree, producing one Socket.IO definition,
+two gRPC definitions and three explicit message plans. Six actual executions
+verified Ack, exact int64/base64 and two-message server streams with unchanged
+source files. Precise-commit CI remains separately required.
