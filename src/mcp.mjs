@@ -44,6 +44,7 @@ export function createMCP({
   grpcExecutor = executeGrpc,
   protocolExecutor = executeWireFlow,
   socketioExecutor,
+  databaseExecutor,
 }) {
   const allowed = new Set(projects);
   const socketioSessions = new SocketIOSessions();
@@ -641,6 +642,10 @@ export function createMCP({
                   .variables,
                 executeRequest,
                 {
+                  databaseQuery: databaseExecutor
+                    ? (operation, signal) =>
+                        databaseExecutor(p.id, operation, signal)
+                    : undefined,
                   cookieSession: projectCookieSession(
                     store,
                     p,
@@ -697,6 +702,10 @@ export function createMCP({
                 executeRequest,
                 {
                   ...scopedExecution(store, p, environmentId),
+                  databaseQuery: databaseExecutor
+                    ? (operation, signal) =>
+                        databaseExecutor(p.id, operation, signal)
+                    : undefined,
                   executeGrpc: executePlanGrpc,
                   grpcCredentials: args.grpcCredentials,
                   executeProtocol: executePlanProtocol,

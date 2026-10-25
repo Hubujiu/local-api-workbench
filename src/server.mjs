@@ -6,6 +6,8 @@ import {
   ActiveProjectImports,
   normalizeAutoImports,
 } from "./active-project-import.mjs";
+import { MCPDatabaseGrants } from "./mcp-database-grants.mjs";
+
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -98,6 +100,7 @@ export async function createApp({
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
   const databaseSessions = new DatabaseSessions();
+  const mcpDatabaseGrants = new MCPDatabaseGrants(() => mcp);
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
@@ -207,6 +210,7 @@ export async function createApp({
         return json(res, 403, { error: "Origin rejected" });
       const u = new URL(req.url, base),
         parts = u.pathname.split("/").filter(Boolean);
+      const requestDatabaseEpoch = mcpDatabaseGrants.capture();
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Referrer-Policy", "no-referrer");
       if (u.pathname === "/api/session" && req.method === "GET") {
@@ -233,7 +237,14 @@ export async function createApp({
           res.setHeader("Allow", "POST");
           return json(res, 405, { error: "Only POST is supported" });
         }
+        const mcpEpoch = mcpDatabaseGrants.capture();
+        const incomingMCPToken = mcpToken;
         const message = await body(req);
+        if (
+          mcpEpoch !== mcpDatabaseGrants.capture() ||
+          incomingMCPToken !== mcpToken
+        )
+          return json(res, 403, { error: "MCP authorization changed" });
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
         const activityId = id();
@@ -257,6 +268,8 @@ export async function createApp({
           store,
           ...mcp,
           debugEnvironments,
+          databaseExecutor: (projectId, operation, signal) =>
+            mcpDatabaseGrants.query(mcpEpoch, projectId, operation, signal),
           grpcExecutor: executePlanGrpc,
           protocolExecutor: executePlanWire,
           socketioExecutor: (projectId, input, signal) =>
@@ -423,6 +436,7 @@ export async function createApp({
               token: nextToken,
               port: server.address().port,
             });
+            mcpDatabaseGrants.invalidate();
             mcp = next;
             mcpToken = nextToken;
             mcpWarning = "";
@@ -1121,6 +1135,23 @@ export async function createApp({
               controllers.delete(runId);
             }
           }
+          if (action === "mcp-database-connections") {
+            const epoch = requestDatabaseEpoch;
+            mcpDatabaseGrants.assertProject(p.id, epoch);
+            if (req.method === "GET")
+              return json(res, 200, mcpDatabaseGrants.list(p.id, epoch));
+            if (req.method === "POST")
+              return json(
+                res,
+                200,
+                mcpDatabaseGrants.register(p, await body(req), epoch),
+              );
+            if (req.method === "DELETE") {
+              mcpDatabaseGrants.revoke(p.id, (await body(req)).id, epoch);
+              return json(res, 200, { revoked: true });
+            }
+            return json(res, 405, { error: "Method not allowed" });
+          }
           if (action === "database-connections") {
             if (req.method === "GET")
               return json(res, 200, databaseSessions.list(p.id));
@@ -1513,6 +1544,7 @@ export async function createApp({
     oauth.close();
     oauth1.close();
     databaseSessions.close();
+    mcpDatabaseGrants.invalidate();
   });
   const listen = (listenPort) =>
     new Promise((resolve, reject) => {
