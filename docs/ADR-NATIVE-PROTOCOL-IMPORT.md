@@ -62,8 +62,12 @@ Embedded gRPC Proto definitions can migrate configured unary and server-stream
 methods and each saved JSON message as a separate one-step frozen plan.
 Unconfigured methods remain inert source metadata; no target is guessed. Proto
 paths/include directories/files, remote definitions, native TLS options,
-metadata credentials and configured client/bidirectional streaming message
-schedules reject rather than reading host files or guessing behavior. Native
+metadata credentials reject rather than reading host files or guessing behavior.
+Configured client/bidirectional stream definitions are retained for explicit
+manual Workbench calls; saved native messages remain inert source metadata
+(with a clearly stated no-generated-plan note), because original
+UI and its static call dispatcher explicitly report these calls unsupported.
+No message schedule is invented and no source message is auto-executed. Native
 stream flags must match the locally compiled embedded Proto. This slice has a
 5-second execution bound and no automatic retry; source response examples remain
 inert, not assertions. Existing namespaces, plan hashes, project guards and

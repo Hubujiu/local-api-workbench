@@ -65,3 +65,27 @@ test("unsupported native RPC/Socket.IO options reject without mutating prior pro
     assert.equal(JSON.stringify(p), before);
   }
 });
+
+test("native unsupported client-stream messages remain inert instead of creating invented schedules", () => {
+  const source = extendedProtocolFixture();
+  const proto = source.apis[1].protos[0];
+  proto.proto_content = proto.proto_content.replace(
+    "rpc Unary(Input)",
+    "rpc Unary(stream Input)",
+  );
+  proto.services[0].methods[0].request_stream = 1;
+  const p = project();
+  importIntoProject(p, source);
+  assert.equal(p.settings.grpcDefinitions.length, 1);
+  assert.equal(p.plans.length, 1);
+  assert.equal(p.plans[0].steps[0].type, "socketio");
+  const notes = p.settings.apipostProtocolSources.find(
+    (s) => s.sourceTargetId === "rpc",
+  ).notes;
+  assert(notes.some((n) => n.includes("不生成发送计划")));
+  assert.equal(
+    p.settings.apipostProtocolSources.find((s) => s.sourceTargetId === "rpc")
+      .source.protos[0].services[0].methods[0].request.message[0].raw,
+    source.apis[1].protos[0].services[0].methods[0].request.message[0].raw,
+  );
+});

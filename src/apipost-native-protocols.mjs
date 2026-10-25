@@ -232,6 +232,7 @@ export function prepareNativeProtocols(source, resource) {
       no(node.message, "非WebSocket消息");
     } else if (node.method !== undefined && node.method !== "")
       fail("WebSocket方法");
+    const sourceNotes = [];
     const sourceCopy = structuredClone(node);
     // Inactive provider editors can contain credentials; never retain them.
     if (sourceCopy.request?.auth)
@@ -259,6 +260,7 @@ export function prepareNativeProtocols(source, resource) {
       socketio.push(...extended.socketio);
       grpc.push(...extended.grpc);
       plans.push(...extended.plans);
+      sourceNotes.push(...(extended.notes || []));
     } else if (node.target_type === "socket") {
       keys(request, ["end_func", "timeout"], "TCP客户端");
       keys(request.end_func ?? {}, ["name", "option"], "TCP结束条件");
@@ -390,6 +392,7 @@ export function prepareNativeProtocols(source, resource) {
       sourceTargetId: node.target_id,
       source: sourceCopy,
       notes: [
+        ...sourceNotes,
         "原生协议受限迁移；源描述/响应示例与配置保留为惰性元数据，不执行。",
         "不导入认证编辑器中的停用提供方秘密；不自动继承Header/Cookie/认证/脚本。",
         "保持TLS校验与有界采集，不沿用无限握手或关闭证书校验；重连配置仅保留，不自动重连。",
