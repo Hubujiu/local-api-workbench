@@ -80,3 +80,69 @@ export function databaseAssignments(operation, result) {
     };
   });
 }
+
+export function normalizeNativeTaskRequest(request) {
+  if (request.nativeTasks === undefined) return undefined;
+  const source = request.nativeTasks;
+  if (
+    !object(source) ||
+    Object.keys(source).some(
+      (key) => !["version", "before", "after"].includes(key),
+    ) ||
+    source.version !== 1
+  )
+    throw Error("原版执行任务版本或字段无效");
+  if (
+    request.inheritSharedScripts !== false ||
+    ["beforeScript", "afterScript"].some((key) => request[key]) ||
+    ["before", "after", "sharedBeforeScripts", "sharedAfterScripts"].some(
+      (key) => request[key]?.length,
+    )
+  )
+    throw Error("原版执行任务不能与旧操作或共享脚本混用；须明确关闭共享继承");
+  const result = { version: 1 };
+  for (const phase of ["before", "after"]) {
+    const tasks = source[phase];
+    if (!Array.isArray(tasks) || tasks.length > 16)
+      throw Error("原版任务阶段最多16项");
+    let bytes = 0,
+      databases = 0;
+    result[phase] = tasks.map((task) => {
+      if (
+        !object(task) ||
+        Object.keys(task).some(
+          (key) => !["type", "enabled", "data", "id", "name"].includes(key),
+        ) ||
+        ![1, 0, -1].includes(task.enabled) ||
+        !["customScript", "database"].includes(task.type)
+      )
+        throw Error("原版执行任务配置无效");
+      for (const key of ["id", "name"])
+        if (task[key] !== undefined && !name(task[key]))
+          throw Error("原版执行任务标识无效");
+      let data;
+      if (task.type === "customScript") {
+        if (
+          typeof task.data !== "string" ||
+          (bytes += Buffer.byteLength(task.data)) > 65536
+        )
+          throw Error("任务脚本合计最多64KiB");
+        data = task.data;
+      } else {
+        data = normalizeDatabaseOperations([task.data])[0];
+        if (task.enabled === 1 && ++databases > 5)
+          throw Error("数据库任务每阶段最多5项");
+      }
+      return {
+        type: task.type,
+        enabled: task.enabled,
+        data,
+        ...(task.id !== undefined ? { id: task.id } : {}),
+        ...(task.name !== undefined ? { name: task.name } : {}),
+      };
+    });
+  }
+  if (Buffer.byteLength(JSON.stringify(result)) > 262144)
+    throw Error("原版执行任务合计最多256KiB");
+  return result;
+}

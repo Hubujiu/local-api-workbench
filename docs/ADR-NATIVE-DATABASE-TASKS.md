@@ -1,8 +1,8 @@
 # Native database task execution (work in progress)
 
-This feature branch starts from develop. It does not enable a project importer,
-HTTP/MCP endpoint or plan wiring yet. The backend phase executor is a staged
-implementation, not acceptance of the complete database migration feature.
+This feature branch starts from develop. The backend phase executor and explicit
+`nativeTasks` request/plan state are staged implementations, not acceptance of the
+complete database migration feature. Native project import remains fail-closed.
 
 ## Observed behavior
 
@@ -41,8 +41,8 @@ Other native serialized scope names must be observed before importer mapping.
 ## Remaining work
 
 - Strict native connection/task import, credential stripping and explicit rebinding.
-- Core request/plan and HTTP/MCP/CLI integration, source provenance and validation.
-- Persistence and backup/restore round trips, without retaining ephemeral grants.
+- HTTP/MCP/CLI endpoint acceptance, source provenance and importer validation.
+- Full imported-project persistence/restore and explicit grant rebinding.
 - Native error-path and additional scope behavior observations.
 - Complete cross-platform CI and MySQL mixed-phase service evidence.
 
@@ -53,3 +53,21 @@ isolation and revoked-session rejection. The reusable test is wired into the
 existing PostgreSQL/MySQL CI service job; MySQL remains pending until that job
 passes. The original PostgreSQL experiment is separate research evidence. Neither
 experiment constitutes acceptance of the still-unwired native project migration.
+
+## Stage 2: explicit request/plan wiring
+
+A versioned `nativeTasks` request field is preserved by normalization, frozen plan
+snapshots, Store save/reload and project backup restore. It cannot coexist with
+legacy operations/scripts or inherited shared scripts. All phases are validated
+before plan effects. Before/after execution uses the existing explicit database
+resolver, phase evidence and scope commits. Scripts cannot rewrite the frozen
+task list for subsequent phases. Restoring a project does not recreate grants.
+Real SQLite-to-HTTP tests verify live-request/snapshot separation, both phases,
+round trips, denied foreign/restored projects, missing/revoked grants and atomic
+preflight. This is not yet native connection/task import acceptance.
+
+Original error-path observation: a missing PostgreSQL table logged an error but
+continued the next script and HTTP request with the prior environment value.
+Workbench intentionally fails closed instead; it will not silently send a request
+with stale database-derived data. This compatibility difference must remain
+explicit in import notes and is not a claim of exact failure-policy equivalence.
