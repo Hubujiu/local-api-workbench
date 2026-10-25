@@ -5,7 +5,11 @@ import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { requestCookieHeader } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import { asapAuthorization } from "./asap-auth.mjs";
 import { jwtAuthorization } from "./jwt-auth.mjs";
@@ -351,7 +355,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         "base64",
       );
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(u, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(u, r.auth);
     else headers[r.auth.key] = r.auth.value;
   }
   if (r.auth.type === "asap")

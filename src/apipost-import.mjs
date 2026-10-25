@@ -1,3 +1,4 @@
+import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { randomUUID } from "node:crypto";
 const truth = (value) => value === true || value === 1 || value === "1";
@@ -80,6 +81,8 @@ function auth(value = { type: "noauth" }) {
       type: "bearer",
       token: String(value.bearer?.key ?? value.bearer?.token ?? ""),
     };
+  const extended = importExtendedApipostAuth(value);
+  if (extended) return extended;
   throw Error(
     "Apipost认证格式尚未支持，请先转换为OpenAPI/Postman: " + value.type,
   );
