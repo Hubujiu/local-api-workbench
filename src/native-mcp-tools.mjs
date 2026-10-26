@@ -1,3 +1,7 @@
+import {
+  nativeEnvironmentTools,
+  isNativeEnvironmentTool,
+} from "./native-mcp-environments.mjs";
 // Independent, bounded native-input compatibility. Canonical tools remain available.
 const str = { type: "string" },
   project = { project_id: str };
@@ -90,28 +94,37 @@ const definitions = [
   ],
 ];
 export function nativeMCPTools(write, execute) {
-  return definitions
-    .filter(
-      ([, , , level]) =>
-        level === "read" || (write && (level !== "execute" || execute)),
-    )
-    .map(([name, properties, required]) => ({
-      name: "apipost_" + name,
-      description:
-        "有限原版输入兼容：" +
-        name +
-        "；保留Workbench授权和快照安全策略，嵌套快照使用Workbench格式",
-      inputSchema: {
-        type: "object",
-        properties,
-        required,
-        additionalProperties: false,
-      },
-    }));
+  return [
+    ...nativeEnvironmentTools(write),
+    ...definitions
+      .filter(
+        ([, , , level]) =>
+          level === "read" || (write && (level !== "execute" || execute)),
+      )
+      .map(([name, properties, required]) => ({
+        name: "apipost_" + name,
+        description:
+          "有限原版输入兼容：" +
+          name +
+          "；保留Workbench授权和快照安全策略，嵌套快照使用Workbench格式",
+        inputSchema: {
+          type: "object",
+          properties,
+          required,
+          additionalProperties: false,
+        },
+      })),
+  ];
 }
 export function translateNativeCall(name, args) {
   if (!name.startsWith("apipost_")) return null;
   const kind = name.slice(8);
+  if (isNativeEnvironmentTool(kind))
+    return {
+      name: "localapi_" + kind,
+      args: { projectId: args.project_id },
+      environmentArgs: args,
+    };
   if (!definitions.some(([n]) => n === kind)) throw Error("原版工具尚未支持");
   if (kind === "create_execution_flow" || kind === "update_execution_flow")
     return {

@@ -1,4 +1,8 @@
 import {
+  executeNativeEnvironmentTool,
+  resolveNativeEnvironment,
+} from "./native-mcp-environments.mjs";
+import {
   nativeMCPTools,
   translateNativeCall,
   nativeAPIList,
@@ -328,7 +332,7 @@ export function createMCP({
       typeof params.name === "string" && params.name.startsWith("apipost_")
         ? params.name
         : null;
-    let nativePlanArgs, unlockPlan;
+    let nativePlanArgs, nativeEnvironmentArgs, unlockPlan;
     if (requestId === undefined) return null;
     const result = (value) => ({
       jsonrpc: "2.0",
@@ -382,6 +386,7 @@ export function createMCP({
         params = { ...params, name: translated.name };
         args = translated.args;
         nativePlanArgs = translated.planArgs;
+        nativeEnvironmentArgs = translated.environmentArgs;
       }
       let output;
       if (params.name === "localapi_list_projects")
@@ -408,6 +413,12 @@ export function createMCP({
           unlockPlan = lockMCPPlan(store, args.projectId, lockId);
         const p = await store.get(args.projectId);
         if (p.archived) throw Error("项目已归档");
+        if (nativeName && Object.hasOwn(args, "environmentId"))
+          args = {
+            ...args,
+            environmentId: resolveNativeEnvironment(p, args.environmentId).id,
+          };
+
         if (nativePlanArgs) {
           const previous = nativePlanArgs.flow_id
             ? p.plans.find((x) => x.id === nativePlanArgs.flow_id)
@@ -425,7 +436,14 @@ export function createMCP({
           };
         }
 
-        if (isEnvironmentTool(params.name)) {
+        if (nativeEnvironmentArgs)
+          output = await executeNativeEnvironmentTool(
+            store,
+            p,
+            nativeName.slice(8),
+            nativeEnvironmentArgs,
+          );
+        else if (isEnvironmentTool(params.name)) {
           output = await executeEnvironmentTool(store, p, params.name, args);
           if (params.name === "localapi_get_environment_variables")
             output.runtimeVariables = debugEnvironment(

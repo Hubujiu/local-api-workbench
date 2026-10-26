@@ -67,3 +67,44 @@ The adapter now updates only matching table-origin members, keeps literal URL
 query bytes untouched, clears selected dynamic providers and activates a defined
 disabled Path through the existing SDK normalizer. Divergent cached/definition
 membership rejects instead of guessing. The original definition remains unchanged.
+
+## Environment/service/variable compatibility stage
+
+Fifteen environment/shared-service/variable aliases extend the same workflow
+feature. Initial and current values are distinct: a new key set with only native
+value gets current_value=""; subsequent omitted fields preserve prior state.
+Runtime-only Workbench keys are not promoted into default values. Explicit null
+is stored but native views return "" for null; false/0 remain intact. Deletion
+requires confirm:true and an existing key, and removes both maps. Dangerous keys
+are rejected and native keys are trimmed.
+
+Environment base_url is the actual default service address, not a baseUrl
+variable. Shared services can be created or renamed without an environment;
+setting an address requires one. Names are shared and URLs are per environment,
+including newly created environments. The original stale-environment service
+creation defect is not copied. No-environment service listing does not silently
+use the currently selected environment.
+
+Default resource bindings are established only by successful write operations
+and persisted as bounded, validated project metadata. Reads do not initialize
+files. Workbench IDs remain opaque; "1" can resolve the default when no exact ID
+exists. Bound default environment/service deletion is rejected across native and
+canonical tools, an intentional stronger guard than the original MCP service
+handler. Create/update report truthful is_current and do not switch selection;
+the original misleading response flag is not reproduced. Deleting an environment
+does not retarget a native frozen plan, even through canonical MCP; later execution
+fails before transport instead of silently choosing another destination.
+
+An official SDK HTTP lifecycle validates permission filtering, read-only source
+immutability, address/tool consistency, independent variable values/null/false/0,
+shared rename/create/delete, real service-bound plan execution and script-created
+runtime values, deletion safety, backup isolation, server restart and reauthorization.
+This stage still awaits exact final CI and integration review; original service
+was not enabled. Remaining native tools and complete nested output fidelity are
+not implied by this extension.
+
+Explicit empty environment IDs are rejected, never interpreted as the current
+environment for a mutation or execution override. Environment and plan tools use
+the same strict default-alias resolver. SDK cases cover blank-ID delete/update/
+variable/service/plan attempts without state changes, and the default alias across
+configuration, plan creation and execution without changing current selection.
