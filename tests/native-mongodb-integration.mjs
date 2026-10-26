@@ -74,7 +74,13 @@ export async function verifyNativeMongoFlow(config) {
     assert.equal(seen.length, 0);
     assert.equal((await grant(p, { type: "postgres" })).status, 400);
     assert.equal(
-      (await grant(p, { user: "missing-user", password: "not-real" })).status,
+      (
+        await grant(p, {
+          user: "missing-user",
+          password: "not-real",
+          authSource: undefined,
+        })
+      ).status,
       400,
       "authenticated native grant requires explicit authSource",
     );

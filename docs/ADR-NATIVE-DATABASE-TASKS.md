@@ -260,3 +260,9 @@ MCP/CLI combination and inert frozen-task source updates remain pending.
 The script controller signal now reaches the Mongo worker through database sessions and the remote dispatcher. Pre-cancelled queries do not start a worker; active cancellation terminates the worker, clears its timeout/listener, and the query promise settles only after worker termination. Stalled real-driver TCP fixtures verify peer closure, concurrent-project isolation, and native-script interrupted evidence. Late driver rejections cannot overwrite interrupted script records.
 
 This does not add MCP cancellation-notification support, cancel other database drivers, or promise remote Mongo server computation rollback. The outer script response does not await every database cleanup promise; it initiates cancellation and discards late results. Successful Mongo data queries remain independently verified by the real-service CI.
+
+### Authenticated TLS MongoDB acceptance fixture (WIP)
+
+A separate ephemeral CI Mongo8 container requires TLS and authentication. Its only published port is runner loopback, it uses public repository test certificates/fictional credentials, and an explicitly read-only fixture user performs the application paths. Setup admin credentials are confined to container initialization; they are not passed to Workbench. The test checks missing trust, incorrect password/authSource, unauthenticated query, and a denied write, then runs the native HTTP/persistence/restore flow. This fixture is pending its exact CI until recorded otherwise.
+
+The fixture allows password-authenticated clients without client certificates, not invalid server certificates or hostnames. No system trust/TLS settings change. Official option reference: https://www.mongodb.com/docs/v8.0/reference/program/mongod/
