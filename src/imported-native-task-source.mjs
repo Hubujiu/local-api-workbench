@@ -119,3 +119,19 @@ export function normalizeImportedNativeTaskSource(value) {
     throw Error("任务来源合计最多256KiB");
   return result;
 }
+export function validateRequestTaskSource(request) {
+  if (!request || typeof request !== "object") return;
+  const descriptor = Object.getOwnPropertyDescriptor(
+    request,
+    "importedNativeTaskSource",
+  );
+  if (!descriptor) return;
+  if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+    throw Error("任务来源属性不能包含访问器或隐藏字段");
+  if (descriptor.value !== undefined)
+    normalizeImportedNativeTaskSource(descriptor.value);
+}
+export function cloneRequestWithTaskSource(request) {
+  validateRequestTaskSource(request);
+  return structuredClone(request);
+}

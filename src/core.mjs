@@ -1,4 +1,8 @@
-import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+  cloneRequestWithTaskSource,
+} from "./imported-native-task-source.mjs";
 import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
   mergeDirectoryArtifacts,
@@ -182,6 +186,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validateRequestTaskSource(r);
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -428,7 +433,7 @@ export function snapshotPlan(plan) {
                 name: s.name || s.request?.name || "步骤",
                 enabled: s.enabled !== false,
                 request: {
-                  ...normalizeRequest(structuredClone(s.request)),
+                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
@@ -1786,6 +1791,13 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  // Validate task provenance before cloning can invoke source accessors.
+  for (const request of document.requests) validateRequestTaskSource(request);
+  for (const item of document.cases || [])
+    validateRequestTaskSource(item.request);
+  for (const plan of document.plans || [])
+    for (const step of plan.steps || [])
+      validateRequestTaskSource(step.request);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

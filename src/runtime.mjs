@@ -1,4 +1,7 @@
-import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+} from "./imported-native-task-source.mjs";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -249,6 +252,7 @@ export class Store {
       );
     }
     for (const request of p.requests || []) {
+      validateRequestTaskSource(request);
       validateMockRules(request.mockRules || []);
       if (request.importedNativeTaskSource !== undefined)
         request.importedNativeTaskSource = normalizeImportedNativeTaskSource(

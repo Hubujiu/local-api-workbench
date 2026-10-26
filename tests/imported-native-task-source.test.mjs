@@ -150,3 +150,41 @@ test("Store rejects invalid provenance before persisting and preserves valid sou
     fixture(),
   );
 });
+
+test("snapshot and restore validate source before cloning and reject malformed case provenance", async () => {
+  const { snapshotCase } = await import("../src/cases.mjs");
+  let reads = 0;
+  const request = normalizeRequest({ importedNativeTaskSource: fixture() });
+  Object.defineProperty(request.importedNativeTaskSource.before[0], "data", {
+    enumerable: true,
+    get() {
+      reads++;
+      return "";
+    },
+  });
+  const backup = { version: 1, requests: [], environments: [] };
+  assert.throws(() => snapshotPlan({ steps: [{ request }] }), /访问器/);
+  assert.throws(
+    () => snapshotCase({ name: "Case", sourceRequestId: "api", request }),
+    /访问器/,
+  );
+  assert.throws(
+    () => restoreProject({ ...backup, requests: [request] }),
+    /访问器/,
+  );
+  assert.throws(
+    () => restoreProject({ ...backup, plans: [{ steps: [{ request }] }] }),
+    /访问器/,
+  );
+  assert.throws(
+    () => restoreProject({ ...backup, cases: [{ request }] }),
+    /访问器/,
+  );
+  assert.equal(reads, 0);
+  const invalid = normalizeRequest({ importedNativeTaskSource: fixture() });
+  invalid.importedNativeTaskSource.before[1].data.password = "not retained";
+  assert.throws(
+    () => restoreProject({ ...backup, cases: [{ request: invalid }] }),
+    /未知字段/,
+  );
+});
