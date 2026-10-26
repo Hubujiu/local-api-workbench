@@ -29,3 +29,8 @@ source-style binding ID must exist there and its engine must match the temporary
 configuration, like HTTP/MCP registration. Native Redis/MySQL result-shape tags
 also constrain manual task bindings before any connection. This is validation,
 not a new grant or persisted configuration; credentials remain stdin-only.
+
+Imported requiresSSH:true is also checked against the temporary configuration.
+The flag is read only from the project's source catalog, never accepted as a grant
+field. Missing SSH or a missing independently checked host-key fingerprint rejects
+before earlier HTTP steps. The requirement does not create or persist a connection.

@@ -26,7 +26,8 @@ export function prepareCLIDatabaseGrants(
 ) {
   if (!Array.isArray(sourceCatalog) || sourceCatalog.length > 100)
     throw Error("CLI 数据库来源目录无效");
-  const sourceTypes = new Map();
+  const sourceTypes = new Map(),
+    sshRequired = new Set();
   for (const source of sourceCatalog) {
     if (
       !plain(source) ||
@@ -42,6 +43,13 @@ export function prepareCLIDatabaseGrants(
       ].includes(source.type)
     )
       throw Error("CLI 数据库来源标识或类型无效");
+    if (
+      source.requiresSSH !== undefined &&
+      (source.requiresSSH !== true ||
+        !["postgres", "mysql"].includes(source.type))
+    )
+      throw Error("CLI 数据库SSH来源要求无效");
+    if (source.requiresSSH === true) sshRequired.add(source.id);
     sourceTypes.set(source.id, source.type);
   }
   const inferredTypes = new Map();
@@ -140,6 +148,8 @@ export function prepareCLIDatabaseGrants(
           !sourceTypes.has(id))
       )
         throw Error("CLI 数据库授权必须匹配当前项目来源及任务引擎");
+      if (sshRequired.has(id) && !config.ssh)
+        throw Error("CLI 此数据库来源要求显式SSH临时通道和已核对主机指纹");
       if (
         config.type !== "sqlite" &&
         (typeof config.host !== "string" || !config.host.trim())
