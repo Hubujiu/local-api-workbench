@@ -51,7 +51,11 @@ function configuration(config) {
       (typeof config[key] !== "string" || !config[key].isWellFormed())
     )
       throw Error("OAuth 客户端配置须为文本");
-  const authentication = config.clientAuthentication || "body";
+  const authentication =
+    config.clientAuthentication === undefined ||
+    config.clientAuthentication === ""
+      ? "body"
+      : config.clientAuthentication;
   if (!["basic", "body", "none"].includes(authentication))
     throw Error("OAuth 客户端认证仅支持 basic、body 或 none");
   endpoint(config.tokenEndpoint);
@@ -100,6 +104,13 @@ function tokenResponse(response) {
       (!Number.isSafeInteger(data.expires_in) || data.expires_in < 0))
   )
     throw Error("OAuth token endpoint 返回无效令牌字段");
+  // The existing oauth2 request executor installs Bearer, not MAC or DPoP.
+  // Do not report a usable credential that would be sent under the wrong scheme.
+  if (
+    data.token_type !== undefined &&
+    data.token_type.toLowerCase() !== "bearer"
+  )
+    throw Error("OAuth token type 仅支持 Bearer");
   return {
     accessToken: data.access_token,
     tokenType: data.token_type || "Bearer",
@@ -115,6 +126,16 @@ export async function exchangeOAuthToken(config, extra = {}, signal) {
   // The selected mode alone owns client authentication, including supplied extras.
   delete fields.client_id;
   delete fields.client_secret;
+  for (const key of ["code", "refresh_token"])
+    if (
+      fields[key] !== undefined &&
+      (typeof fields[key] !== "string" ||
+        !fields[key].trim() ||
+        !fields[key].isWellFormed() ||
+        fields[key].length > 8192 ||
+        /[\r\n\0]/.test(fields[key]))
+    )
+      throw Error("OAuth 授权码或 refresh token 无效");
   if (config.scope) fields.scope = config.scope;
   let auth = { type: "none" };
   if (authentication === "basic") {
@@ -301,6 +322,7 @@ export class OAuthManager {
       if (
         typeof params.code !== "string" ||
         !params.code.trim() ||
+        !params.code.isWellFormed() ||
         params.code.length > 8192 ||
         /[\r\n\0]/.test(params.code)
       )

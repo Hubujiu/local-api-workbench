@@ -789,3 +789,140 @@ test("only explicit owner save persists an acquired token through backup, restor
   assert.equal(tokenPosts, 1);
   assert.equal(bearerCalls, 2);
 });
+
+test("invalid auth-mode types and malformed protocol credentials fail before token I/O", async (t) => {
+  const p = await provider(t, ({ res }) =>
+    res.end('{"access_token":"unexpected"}'),
+  );
+  const { app, call } = await appFixture(t);
+  const manager = new OAuthManager();
+  t.after(() => manager.close());
+  const config = { tokenEndpoint: p.base, clientId, clientSecret };
+  for (const clientAuthentication of [false, 0, null, true, [], {}]) {
+    await assert.rejects(
+      exchangeOAuthToken({ ...config, clientAuthentication }, grant),
+      /客户端认证/,
+    );
+    const result = await call("/api/oauth/token", {
+      ...config,
+      clientAuthentication,
+    });
+    assert.equal(result.status, 400);
+    assert.match(result.data.error, /客户端认证/);
+  }
+  for (const credential of [
+    "fixture\ud800",
+    "fixture\udfff",
+    { secret: "not-a-string" },
+  ]) {
+    for (const key of ["code", "refresh_token"])
+      await assert.rejects(
+        exchangeOAuthToken(config, {
+          grant_type: key === "code" ? "authorization_code" : "refresh_token",
+          [key]: credential,
+        }),
+        /授权码|refresh token/,
+      );
+    const result = await call("/api/oauth/token", {
+      ...config,
+      grantType: "refresh_token",
+      refreshToken: credential,
+    });
+    assert.equal(result.status, 400);
+    const flow = start(manager, p.base);
+    await assert.rejects(
+      manager.complete({ state: flow.state, code: credential }),
+      /授权码/,
+    );
+    await assert.rejects(
+      manager.complete({ state: flow.state, code: "replacement" }),
+      /state/,
+    );
+  }
+  assert.equal(p.seen.length, 0);
+  // Existing editor defaults serialize a blank mode, so preserve this explicit legacy input.
+  const accepted = await provider(t, ({ fields, req, res }) => {
+    assert.equal(fields.get("client_secret"), clientSecret);
+    assert.equal(req.headers.authorization, undefined);
+    res.end('{"access_token":"legacy-body-mode"}');
+  });
+  assert.equal(
+    (
+      await exchangeOAuthToken(
+        { ...config, tokenEndpoint: accepted.base, clientAuthentication: "" },
+        grant,
+      )
+    ).accessToken,
+    "legacy-body-mode",
+  );
+  assert.equal(accepted.seen.length, 1);
+  assert.equal(
+    (
+      await fetch(app.url + "/api/oauth/status/unknown", {
+        headers: { "x-local-token": app.token },
+      })
+    ).status,
+    400,
+  );
+});
+
+test("OAuth rejects non-Bearer acquisition rather than mis-sending MAC or DPoP tokens", async (t) => {
+  let tokenType,
+    resourceCalls = 0;
+  const p = await provider(t, ({ req, res }) => {
+    if (req.url === "/resource") {
+      resourceCalls++;
+      res.writeHead(401);
+      res.end("wrong scheme");
+      return;
+    }
+    res.end(
+      JSON.stringify({
+        access_token: "fictional-non-bearer-access",
+        token_type: tokenType,
+      }),
+    );
+  });
+  const { call } = await appFixture(t);
+  const manager = new OAuthManager();
+  t.after(() => manager.close());
+  for (tokenType of ["MAC", "DPoP", "other-scheme"]) {
+    for (const clientAuthentication of ["basic", "body", "none"]) {
+      const config = {
+        tokenEndpoint: p.base,
+        clientId,
+        clientSecret,
+        clientAuthentication,
+      };
+      const response = await call("/api/oauth/token", config);
+      assert.equal(response.status, 400);
+      assert.equal(response.data.error, "OAuth token type 仅支持 Bearer");
+      assert.equal(response.data.accessToken, undefined);
+      const flow = start(manager, p.base, { clientAuthentication });
+      await assert.rejects(
+        manager.complete({ state: flow.state, code: "fixture-code" }),
+        { message: "OAuth token type 仅支持 Bearer" },
+      );
+      assert.equal(manager.status(flow.id).status, "error");
+      assert.equal(manager.status(flow.id).result, undefined);
+      assert.equal(
+        manager.status(flow.id).error.includes("fictional-non-bearer-access"),
+        false,
+      );
+      manager.forget(flow.id);
+    }
+  }
+  assert.equal(p.seen.length, 18);
+  assert.equal(resourceCalls, 0);
+  for (tokenType of [undefined, "Bearer", "bearer", "bEaReR"]) {
+    const response = await call("/api/oauth/token", {
+      tokenEndpoint: p.base,
+      clientAuthentication: "none",
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.data.accessToken, "fictional-non-bearer-access");
+    assert.equal(response.data.tokenType, tokenType ?? "Bearer");
+  }
+  assert.equal(p.seen.length, 22);
+  assert.equal(resourceCalls, 0);
+});
