@@ -1,0 +1,17 @@
+# Bounded MCP HTTP cancellation (work in progress)
+
+An initialized HTTP client receives an ephemeral Mcp-Session-Id. Session IDs route cancellation; they do not grant project access or persist credentials. Legacy stateless POST remains supported but has no notification-cancellation ownership. Unknown supplied session IDs return 404, never silently fall back to stateless execution. HTTP GET still returns 405 (no SSE listener); DELETE removes that session and aborts its active cancellable execution.
+
+Each session remembers all request IDs, preserving string/number identity and rejecting reuse as required by the MCP 2025-06-18 basic protocol. Limits: 32 sessions, 1024 request IDs/session, 256 UTF-8 bytes/string ID, 15 minutes idle expiry, existing 10 concurrent tool-execution slots. In-flight handlers are not idle. Cancellation/DELETE bypass execution-slot admission. Unknown, late, malformed and noncancellable notifications do not start work. The seen-ID set is never evicted within a session.
+
+Only canonical localapi_execute_api, localapi_execute_flow and localapi_run_plan are cancellable here. CRUD changes are not treated as rollbackable transactions. A same-token policy update advances the execution epoch and aborts old active calls, while retaining session routing and consumed IDs; future calls read current policy. Rotation, disabling and server shutdown drop all sessions. Requests that waited across an authorization change reject before dispatch.
+
+Client notifications/cancelled cause the server to finish and persist cancelled execution evidence before ending the original POST with 202 and no late JSON-RPC reply. DELETE/policy cancellation still yields a terminal result or bounded authorization-changed error to callers still waiting. Activities and API history preserve cancelled status. Notification receipt or the SDK's immediate local abort rejection is not evidence that server-side work has finished.
+
+Signals reach runPlan and its runtime. New variable commits stop at observed cancellation/read/retry boundaries; an already-entered store save, an earlier committed variable change, or a sent external request is not rolled back. Cancelled execution does not refresh debug-environment cache. Scope-save and final history persistence failures remain errors, not automatic network retries. Protocol-level stdio cancellation and native-named adapter cancellation are not implemented by this isolated branch.
+
+Local tests use the official SDK against the real HTTP app with two clients sharing request numbers, verify cancellation of only the intended plan, read its persisted terminal history, retain the other client's completed request, and confirm late notifications/ID reuse/session deletion behavior. Additional capacity/policy/TTL/typed-ID tests use the registry directly. Exact-head cross-platform CI, live-policy/DELETE in-flight SDK cases, full-slot cancellation, and combined Mongo driver cancellation remain WIP until separately verified.
+
+References:
+- https://modelcontextprotocol.io/specification/2025-06-18/basic
+- https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/cancellation

@@ -1,3 +1,4 @@
+import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -88,6 +89,7 @@ export async function createApp({
   const databaseSessions = new DatabaseSessions();
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
+  const mcpHTTPSessions = new MCPHTTPSessions();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpToken = "",
     mcpLastActivity = null;
@@ -217,20 +219,66 @@ export async function createApp({
       if (u.pathname === "/mcp") {
         if (!mcp.enabled || req.headers.authorization !== "Bearer " + mcpToken)
           return json(res, 403, { error: "MCP disabled or unauthorized" });
-        if (req.method !== "POST") {
-          res.setHeader("Allow", "POST");
-          return json(res, 405, { error: "Only POST is supported" });
+        const sessionHeader = req.headers["mcp-session-id"];
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
+        if (req.method === "DELETE" && sessionHeader !== undefined) {
+          mcpHTTPSessions.delete(sessionHeader);
+          res.writeHead(204);
+          return res.end();
         }
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST, DELETE");
+          return json(res, 405, {
+            error: "Only POST and session DELETE are supported",
+          });
+        }
+        const requestEpoch = mcpHTTPSessions.capture();
+        const incomingToken = mcpToken;
         const message = await body(req);
+        if (
+          requestEpoch !== mcpHTTPSessions.capture() ||
+          incomingToken !== mcpToken
+        )
+          return json(res, 403, { error: "MCP authorization changed" });
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
+        let sessionId = sessionHeader;
+        if (message.method === "initialize" && message.id !== undefined) {
+          if (sessionId !== undefined)
+            return json(res, 400, { error: "Session already initialized" });
+          sessionId = mcpHTTPSessions.create();
+          res.setHeader("Mcp-Session-Id", sessionId);
+        }
+        if (
+          message.method === "notifications/cancelled" &&
+          message.id === undefined
+        ) {
+          if (sessionId !== undefined)
+            mcpHTTPSessions.cancel(sessionId, message.params?.requestId);
+          res.writeHead(202);
+          return res.end();
+        }
+        const cancellable =
+          message.method === "tools/call" &&
+          [
+            "localapi_execute_api",
+            "localapi_execute_flow",
+            "localapi_run_plan",
+          ].includes(message.params?.name);
+        const execution =
+          sessionId !== undefined && message.id !== undefined
+            ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
+            : { signal: undefined, finish() {} };
         const activityId = id();
         if (message.method === "tools/call") {
           const active = [...mcpActivities.values()].filter(
             (a) => a.status === "running",
           );
-          if (active.length >= 10)
+          if (active.length >= 10) {
+            execution.finish();
             return json(res, 429, { error: "MCP并发任务达到上限" });
+          }
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
@@ -258,11 +306,25 @@ export async function createApp({
               Object.assign(activity, { ...progress, status: "running" });
           },
         });
-        const result = await dispatch(message);
+        let result;
+        try {
+          result = await dispatch(message, { signal: execution.signal });
+        } finally {
+          execution.finish();
+        }
         if (message.method === "tools/call") {
           const activity = mcpActivities.get(activityId);
+          let outcome;
+          try {
+            outcome = JSON.parse(result?.result?.content?.[0]?.text)?.status;
+          } catch {}
           Object.assign(activity, {
-            status: result?.result?.isError ? "failed" : "completed",
+            status:
+              outcome === "cancelled"
+                ? "cancelled"
+                : result?.result?.isError || outcome === "failed"
+                  ? "failed"
+                  : "completed",
             finishedAt: new Date().toISOString(),
           });
           mcpLastActivity = activity;
@@ -285,10 +347,20 @@ export async function createApp({
           ))
             mcpActivities.delete(old.id);
         }
-        if (result === null) {
+        if (result === null || execution.cancelledByNotification) {
           res.writeHead(202);
           return res.end();
         }
+        if (requestEpoch !== mcpHTTPSessions.capture())
+          return json(res, 200, {
+            jsonrpc: "2.0",
+            id: message.id,
+            error: {
+              code: -32000,
+              message:
+                "MCP authorization changed; inspect authorized history for operation outcome",
+            },
+          });
         return json(res, 200, result);
       }
       if (parts[0] === "mock") {
@@ -410,6 +482,9 @@ export async function createApp({
               ...next,
               token: nextToken,
               port: server.address().port,
+            });
+            mcpHTTPSessions.advance({
+              dropSessions: !next.enabled || nextToken !== mcpToken,
             });
             mcp = next;
             mcpToken = nextToken;
@@ -1396,6 +1471,7 @@ export async function createApp({
     }
   });
   server.on("close", () => {
+    mcpHTTPSessions.advance({ dropSessions: true });
     protocolSessions.close();
     socketioSessions.close();
     oauth.close();

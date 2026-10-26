@@ -311,7 +311,7 @@ export function createMCP({
     tool.inputSchema.required = [...tool.inputSchema.required, "confirm"];
     tool.description += "；必须显式传入 confirm: true";
   }
-  return async function dispatch(message) {
+  return async function dispatch(message, { signal } = {}) {
     const { id: requestId, method, params = {} } = message;
     if (requestId === undefined) return null;
     const result = (value) => ({
@@ -606,6 +606,7 @@ export function createMCP({
                   .variables,
                 executeRequest,
                 {
+                  signal,
                   cookieSession: projectCookieSession(
                     store,
                     p,
@@ -632,7 +633,7 @@ export function createMCP({
                 args.environmentId,
                 debugEnvironments,
               );
-              if (output.results[0]?.response)
+              if (!signal?.aborted && output.results[0]?.response)
                 debugEnvironments.set(context.cacheKey, {
                   fingerprint: context.fingerprint,
                   variables: output.variables,
@@ -642,6 +643,7 @@ export function createMCP({
                 createdAt: output.createdAt,
                 name: request.name,
                 ...output.results[0],
+                status: output.status,
                 source: "mcp",
                 durationMs: output.durationMs,
               });
@@ -661,6 +663,7 @@ export function createMCP({
                 environmentVariables(p, environmentId),
                 executeRequest,
                 {
+                  signal,
                   ...scopedExecution(store, p, environmentId),
                   executeGrpc: executePlanGrpc,
                   grpcCredentials: args.grpcCredentials,
