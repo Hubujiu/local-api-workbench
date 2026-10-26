@@ -17,7 +17,7 @@ JSON 解析/路径读取在测试回调外，出错是阶段错误。UI chunk
 
 ## 有界实现
 
-- 启用 POST 任务仅支持 responseCode/responseJson/responseHeader、eq/uneq，预期值必须为字面字符串。
+- 启用 POST 任务仅支持 responseCode/responseJson/responseHeader/responseXml、eq/uneq，预期值必须为字面字符串。
   主动拒绝 `{{` 模板；原版递归变量替换与 Workbench 不同，不猜测映射。
   JSON 路径仅 own-property 单值段，空路径为 `$`，不 trim，不执行表达式、wildcard/filter。
 - JSON 根必须为对象/数组，不回退 XML。选中 undefined/null/false/0 分别比较
@@ -84,3 +84,39 @@ native-task-plan、dynamic-values、script-test-registration、apipost-modern �
 
 这里的 receipt 是本分支已有手工 execute 入口。组合分支的 typed journal、CLI/MCP、
 API-local export/reimport 与惰性来源仍须另外验收，不声称本片独立包含这些组合依赖。
+
+
+## responseXml：WIP 有界字符串断言
+
+本增量在同一 PR26 内复用 PR25 的私有 QuickJS XML 运行时及锁定 MIT 依赖；
+不是主机 XML 提取器，也不是第二个 VM。原版 XML 断言异常可能吞为 null；本片明确
+不复制这一兼容行为，解析/选择失败在 pm.test 回调外成为阶段错误，不能因预期为
+`null` 或空字符串而误判成功。独立 intrinsic-guard 完整专项审查此前被平台中断，
+**仍未完成，本增量不重启该专项，也不把正常正式回归当作其替代品**。
+
+- 仅 `data.type:"responseXml"`、后置启用、字面字符串 expected 和 eq/uneq。
+  `expression.path` 原样保存；编译时允许最外层空白，内部语法严格为 `string(P)`。
+  P 仅绝对 ASCII 无冒号 child 名称路径，可用末段 `/@NAME`；最多 32 段/1000 字符。
+  不支持裸节点集、count/boolean、wildcard、predicate、descendant、namespace、
+  text()、任意函数或模板；禁用已知声明继续闭合、有界、惰性保存。
+- 成熟 DOM/XPath 先要求 P 恰好选中一个 leaf Element 或 Attr，再执行 `string(P)`。
+  零个/多个节点、含子元素的 Element、坏 XML 均拒绝；空叶节点和空属性可以与 `""`
+  正常比较，CDATA/标准实体/合法数字引用保持文本值。CDATA/comment/PI 中看似非法
+  数字引用的字面文本不被错误解析为实体；DTD/ENTITY 仍采用共享运行时的保守拒绝策略。
+- XML 断言通过私有 reader 读取当前 response.body 的自有字符串 descriptor，不读取
+  code、不要求 Header transport proof、不调用公开 text() 或 body getter。
+  先前 setBody 可影响下一个 XML 断言；wire response 保持原样。每项任务重新解析
+  当前 body，断言和提取混排时不错误复用前一次文档。
+- 同一阶段只装入一次 XML bundle、创建一次 factory；factory/readXML 与两个 installer
+  在同一私有 IIFE 内，共用 reader，不新增全局 lexical parser、DOM 或 require 入口。
+  bundle 初始化、解析、XPath 与正式任务同受 16 MiB 内存、512 KiB 栈、250ms active /
+  2s wall 共享预算。输入/标量字符串限 64 KiB UTF-8，节点及属性总计最多 2000、深度 32。
+  上限不承诺所有最大组合都能在同一阶段时间预算内成功。
+- 比较 false 仍是已完成软失败：可信断言记录、共享 quota、claimed index 与完成性检查
+  不变，后续普通任务/计划继续；共存启用 pick 时继续其既有整后置阶段回滚/严格停止。
+  禁用 pick 不激活严格策略。网络与存储已发生副作用仍不声称回滚。
+
+正式验收包括 XML 原生导入/来源保真、真实 HTTP、当前 body 与 wire 区分、混排提取、
+失败计划/变量持久化、手工 execute receipt、冻结、备份恢复重启、项目环境隔离及取消；
+资源矩阵覆盖 64 KiB UTF-8、2000 节点属性、32 层、共享测试及输出限额。现有正式安全
+回归与构建重现检查保持启用。此处不宣称原版完整 XML parity 或独立安全专项已完成。

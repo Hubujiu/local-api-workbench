@@ -84,6 +84,18 @@ try {
     new URL("./vendor/schema-library.js", import.meta.url),
     "utf8",
   );
+  const nativeXMLLibrary =
+    workerData.responseExtractions?.some(
+      (operation) => operation.source === "responseXml",
+    ) ||
+    workerData.responseAssertions?.some(
+      (operation) => operation.type === "responseXml",
+    )
+      ? await readFile(
+          new URL("./vendor/native-xml-library.js", import.meta.url),
+          "utf8",
+        )
+      : "";
   const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
@@ -544,34 +556,33 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
-    if (workerData.responseAssertions?.length) {
+    if (
+      workerData.responseAssertions?.length ||
+      workerData.responseExtractions?.length
+    ) {
       const data = context.newString(
         JSON.stringify({
-          operations: workerData.responseAssertions,
+          assertions: workerData.responseAssertions || [],
+          extractions: workerData.responseExtractions || [],
           evidence: workerData.responseHeaderEvidence,
         }),
       );
-      context.setProp(context.global, "__nativeAssertionDataJSON", data);
+      context.setProp(context.global, "__nativeResponseDataJSON", data);
       data.dispose();
+      // One XML bundle/factory per phase. Only this IIFE sees the parser; neither
+      // a public global nor a global lexical binding can become an XML entrypoint.
       install(
-        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const data=JSON.parse(globalThis.__nativeAssertionDataJSON);const state=(" +
+        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence,__readNativePickVarsCompletion]=(()=>{const data=JSON.parse(globalThis.__nativeResponseDataJSON);const readXML=" +
+          (nativeXMLLibrary
+            ? "(()=>{" +
+              nativeXMLLibrary +
+              ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
+            : "null") +
+          ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
           nativeAssertionsInstallerSource +
-          ")(JSON.stringify(data.operations),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response.headers,JSON.stringify(data.evidence));globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
-      );
-    }
-    if (workerData.responseExtractions?.length) {
-      const data = context.newString(
-        JSON.stringify({
-          operations: workerData.responseExtractions,
-          evidence: workerData.responseHeaderEvidence,
-        }),
-      );
-      context.setProp(context.global, "__nativePickVarsDataJSON", data);
-      data.dispose();
-      install(
-        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const state=(" +
+          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response.headers,JSON.stringify(data.evidence),readXML);globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
