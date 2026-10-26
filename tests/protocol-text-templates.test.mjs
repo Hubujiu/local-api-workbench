@@ -922,17 +922,42 @@ test("simultaneous projects select independent environments; literal and legacy 
     assert(!Object.hasOwn(record, "templateProvenance"));
 });
 
-test("invalid legacy selected environment IDs and unscoped routes fail before any connection", async (t) => {
+test("legacy-read fault injection rejects invalid environment IDs before transport; unscoped routes remain unavailable", async (t) => {
   const f = await fixture(t);
-  const project = await f.app.store.get(f.p.id);
-  project.environments[0].id = "\ud800";
-  project.currentEnvironmentId = "\ud800";
-  await f.app.store.save(project);
+  const originalGet = f.app.store.get;
+  const project = await originalGet.call(f.app.store, f.p.id);
   const before = f.connections();
-  for (const route of ["protocol", "protocol-sessions"]) {
-    const result = await f.post(route, { definitionId: "tcp" });
-    assert.equal(result.status, 400);
-    assert.match(result.value.error, /选中环境ID/);
+  let injectedReads = 0;
+  // Model a legacy read-boundary fault without asking a stricter Store to save
+  // an invalid ID. The real disk project always remains valid and unchanged.
+  f.app.store.get = async function (id) {
+    const loaded = await originalGet.call(this, id);
+    if (id === f.p.id) {
+      injectedReads++;
+      loaded.environments[0].id = "\ud800";
+      loaded.currentEnvironmentId = "\ud800";
+    }
+    return loaded;
+  };
+  try {
+    for (const route of ["protocol", "protocol-sessions"]) {
+      const result = await f.post(route, { definitionId: "tcp" });
+      assert.equal(result.status, 400);
+      assert.match(result.value.error, /选中环境ID/);
+    }
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const result = await f.post("protocol-sessions", { definitionId: "tcp" });
+      assert.equal(result.status, 400);
+      assert.match(result.value.error, /选中环境ID/);
+    }
+    assert(injectedReads >= 8);
+    assert.equal(f.connections(), before);
+    const disk = await new Store(f.root).get(f.p.id);
+    assert.deepEqual(disk.environments, project.environments);
+    assert.equal(disk.currentEnvironmentId, project.currentEnvironmentId);
+    assert.equal(disk.protocolRuns.length, 0);
+  } finally {
+    f.app.store.get = originalGet;
   }
   for (const route of ["tcp", "websocket", "sse"]) {
     const result = await f.request("/api/" + route, {
@@ -942,17 +967,10 @@ test("invalid legacy selected environment IDs and unscoped routes fail before an
     });
     assert.equal(result.status, 404);
   }
-  for (let attempt = 0; attempt < 6; attempt++)
-    assert.equal(
-      (await f.post("protocol-sessions", { definitionId: "tcp" })).status,
-      400,
-    );
   assert.equal(f.connections(), before);
   const saved = await f.app.store.get(f.p.id);
+  assert.deepEqual(saved.environments, project.environments);
   assert.equal(saved.protocolRuns.length, 0);
-  saved.environments[0].id = f.p.environments[0].id;
-  saved.currentEnvironmentId = saved.environments[0].id;
-  await f.app.store.save(saved);
   const opened = await f.post("protocol-sessions", { definitionId: "tcp" });
   assert.equal(opened.status, 200, JSON.stringify(opened));
   await until(() => f.connections() > before);
