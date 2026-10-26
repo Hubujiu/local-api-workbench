@@ -53,6 +53,11 @@ const safe = (value) => {
 };
 const digest = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 20);
+export function apipostResourceFactory(projectId) {
+  const prefix = "apipost-" + digest(safe(projectId));
+  return (kind, value) =>
+    prefix + "-" + kind + "-" + digest(safe(String(value)));
+}
 export function isModernApipost(source) {
   return (
     object(source) &&
@@ -241,9 +246,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       ].includes(key)
     )
       reject(value, key);
-  const prefix = "apipost-" + digest(safe(source.project_id));
-  const resource = (kind, id) =>
-    prefix + "-" + kind + "-" + digest(safe(String(id)));
+  const resource = apipostResourceFactory(source.project_id);
   for (const name of ["automated_testings"]) reject(source[name], name);
   const models = prepareApipostModels(source.models, resource, source.name);
   const global = source.global;

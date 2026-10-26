@@ -1,3 +1,8 @@
+import { executionRecords } from "./apipost-execution-files.mjs";
+import {
+  directoryArtifactPath,
+  normalizeDirectoryArtifacts,
+} from "./apipost-directory-artifacts.mjs";
 import {
   allowedDirectoryPath,
   directorySettings as settings,
@@ -62,6 +67,13 @@ export function assembleApipostDirectory(document) {
   )
     throw Error("Apipost目录缺少有效project.json");
   const projectId = project.project_id;
+  const artifact = document.files.find(
+    (file) => file.path === directoryArtifactPath,
+  );
+  if (artifact)
+    normalizeDirectoryArtifacts([
+      { sourceProjectId: projectId, files: [artifact] },
+    ]);
   const collection = (dir, field, wrapped) => {
     const index = files.get(dir + "/index.json");
     const paths = [...files.keys()].filter(
@@ -138,6 +150,8 @@ export function assembleApipostDirectory(document) {
       throw Error("Apipost目录存在未列入索引的记录: " + dir);
     return rows;
   };
+  const flows = executionRecords(files, "flows", projectId);
+  executionRecords(files, "runs", projectId);
   const envs = collection("envs", "env_id", false);
   const servers = new Map();
   for (const env of envs) {
@@ -162,6 +176,7 @@ export function assembleApipostDirectory(document) {
   for (const [file, field] of Object.entries(settings))
     global[field] = files.get("settings/" + file + ".json") ?? [];
   return {
+    ...(flows.length ? { nativeExecutionFlows: flows } : {}),
     project_id: projectId,
     name: project.name,
     intro: project.intro || "",

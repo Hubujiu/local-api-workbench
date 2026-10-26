@@ -1,4 +1,8 @@
 import { exportApipost } from "./apipost-export.mjs";
+import {
+  listImportedExecutionRuns,
+  getImportedExecutionRun,
+} from "./imported-execution-history.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -450,6 +454,34 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "imported-execution-runs") {
+            if (req.method !== "GET")
+              return json(res, 405, { error: "原始记录查询仅支持GET" });
+            if (parts.length === 4) {
+              const options = {};
+              for (const [key, value] of u.searchParams) {
+                if (
+                  !["sourceProjectId", "offset", "limit"].includes(key) ||
+                  Object.hasOwn(options, key)
+                )
+                  throw Error("原始记录查询参数无效或重复");
+                options[key] =
+                  key === "sourceProjectId" ? value : Number(value);
+              }
+              return json(res, 200, listImportedExecutionRuns(p, options));
+            }
+            if (parts.length === 6 && u.searchParams.size === 0) {
+              const result = getImportedExecutionRun(
+                p,
+                decodeURIComponent(parts[4]),
+                decodeURIComponent(parts[5]),
+              );
+              return result
+                ? json(res, 200, result)
+                : json(res, 404, { error: "原始执行记录不存在" });
+            }
+            return json(res, 404, { error: "原始记录查询路径无效" });
+          }
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
             const jar = projectCookieSession(
