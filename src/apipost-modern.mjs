@@ -1,4 +1,8 @@
 import {
+  nativeDataArray,
+  nativeDataObject,
+} from "./native-response-extraction.mjs";
+import {
   prepareApipostDatabases,
   nativeDatabaseTasks,
 } from "./apipost-database-import.mjs";
@@ -241,14 +245,27 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     resource,
   );
   const parseTasks = (value, phase, origins = false) => {
+    if (Array.isArray(value)) {
+      nativeDataArray(value, 16);
+      for (const task of value)
+        nativeDataObject(task, [
+          "type",
+          "id",
+          "name",
+          "enabled",
+          "data",
+          ...(origins ? ["origin"] : []),
+        ]);
+    }
     if (
       !Array.isArray(value) ||
-      !value.some((task) => task?.type === "database")
+      !value.some((task) => ["database", "pickVars"].includes(task?.type))
     )
       return scriptTasks(value, phase, origins);
     const tasks = nativeDatabaseTasks(value, databaseImport.map, {
       translated: origins,
       connections: databaseImport.connections,
+      phase: phase === "后置" ? "after" : "before",
     });
     return {
       native: true,
@@ -256,7 +273,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       code: "",
       note:
         phase +
-        " 原版混排任务保持同一词法作用域；数据库失败会终止请求，不沿用原版继续发送旧值的行为。",
+        " 原版混排任务保持同一词法作用域；pickVars仅支持后置严格JSON单值路径，不回退XML，不执行路径函数；启用提取的后置阶段失败不提交该阶段变量并停止后续计划请求。",
     };
   };
   const attributes = prepareApipostAttributes(

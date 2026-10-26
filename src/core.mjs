@@ -1,5 +1,8 @@
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
-import { runNativeTaskPhase } from "./native-task-phase.mjs";
+import {
+  runNativeTaskPhase,
+  isNativeExtractionPhaseFailure,
+} from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -485,7 +488,8 @@ export async function runPlan(
       subrequests: [],
       extracted: {},
     };
-    let scriptPhase;
+    let scriptPhase,
+      stopAfterExtractionFailure = false;
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -872,6 +876,7 @@ export async function runPlan(
             : "failed";
       }
     } catch (error) {
+      stopAfterExtractionFailure = isNativeExtractionPhaseFailure(error);
       record.status = "failed";
       if (error.databaseQueries?.length)
         (record.databaseQueries ||= []).push(
@@ -902,6 +907,7 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
+    if (stopAfterExtractionFailure) break;
   }
   return {
     id: id(),

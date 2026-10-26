@@ -1,3 +1,4 @@
+import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -542,6 +543,18 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.responseExtractions?.length) {
+      const data = context.newString(
+        JSON.stringify(workerData.responseExtractions),
+      );
+      context.setProp(context.global, "__nativePickVarsDataJSON", data);
+      data.dispose();
+      install(
+        "globalThis.__nativePickVarsTask=(" +
+          pickVarsInstallerSource +
+          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));delete globalThis.__nativePickVarsDataJSON;",
+      );
+    }
     if (workerData.databaseTaskCount)
       install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
     if(errorJSON){reject(Error(errorJSON));return;}

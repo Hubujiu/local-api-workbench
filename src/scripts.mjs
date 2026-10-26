@@ -1,3 +1,4 @@
+import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
   databaseAssignments,
@@ -28,6 +29,7 @@ export function runScript(
     cookieSession,
     databaseQuery,
     databaseOperations: suppliedDatabaseOperations,
+    responseExtractions: suppliedResponseExtractions,
     activityBudgetMs = 250,
     wallBudgetMs = 2000,
     requestLimit = 10,
@@ -37,6 +39,11 @@ export function runScript(
     assertionLimit = 1000,
   } = {},
 ) {
+  const responseExtractions = compilePickVarsOperations(
+    suppliedResponseExtractions,
+  );
+  if (responseExtractions.length && !input.response)
+    throw Error("pickVars需要后置响应");
   const databaseOperations = normalizeDatabaseOperations(
     suppliedDatabaseOperations,
   );
@@ -100,6 +107,7 @@ export function runScript(
       workerData: {
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
+        responseExtractions,
         code,
         input,
         activityBudgetMs,
