@@ -15,3 +15,13 @@ Local tests use the official SDK against the real HTTP app with two clients shar
 References:
 - https://modelcontextprotocol.io/specification/2025-06-18/basic
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/cancellation
+
+## Stdio cancellation extension (WIP)
+
+The stdio entrypoint now reuses the official MIT-licensed SDK 1.32.1 ReadBuffer/serializeMessage for bounded JSON-RPC framing. The existing exact SDK dependency is promoted from development to production, with an isolated production-only packaged stdio smoke and license check in desktop CI. It deliberately does not adopt SDK Server: our single shared dispatcher retains debug state and protocol concurrency limits, while request-local progress callbacks keep simultaneous activities separate. Existing protocol-version negotiation is unchanged.
+
+The same typed-ID registry is process-scoped with idle expiry disabled. Limits are 1024 IDs/process, ten concurrent tool calls and 32 total pending handlers, 12 MiB input buffer, 8 MiB output frames, 12 MiB total output queue and five-second write-acknowledgment deadline. Cancellation notifications bypass handler admission. Oversized input or saturated/broken output closes the transport and cancels active execution instead of buffering indefinitely. Replies are framed atomically and may arrive in completion order.
+
+EOF cancels active cancellable operations and waits for their handler/evidence cleanup. External SIGTERM/SIGKILL and the SDK client's two-second shutdown grace can still interrupt persistence; no guarantee of rollback or always-saved evidence is made. CRUD is not rolled back. Activities now accept cancelled and separately record failed persistence.
+
+Local pure-stream tests cover zero/empty request IDs, cancellation during active input, EOF cleanup, input/pending/output bounds and EPIPE/close/timeout. Official SDK real-subprocess tests cover two simultaneous HTTP plans, cancellation of only one, separate disk activities, retained debug variables/new-project grants, plus raw EOF cancellation and clean exit. Exact new-head CI, production-only packaged smoke and additional full-slot/failure integration remain pending at this checkpoint.

@@ -14,7 +14,6 @@ import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
 import { scopedExecution } from "./variable-scopes.mjs";
 import { versionPlan } from "./plan-version.mjs";
-import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store, executeRequest } from "./runtime.mjs";
@@ -311,7 +310,10 @@ export function createMCP({
     tool.inputSchema.required = [...tool.inputSchema.required, "confirm"];
     tool.description += "；必须显式传入 confirm: true";
   }
-  return async function dispatch(message, { signal } = {}) {
+  return async function dispatch(
+    message,
+    { signal, onProgress: emitProgress = onProgress } = {},
+  ) {
     const { id: requestId, method, params = {} } = message;
     if (requestId === undefined) return null;
     const result = (value) => ({
@@ -620,7 +622,7 @@ export function createMCP({
                       .variables,
                   ),
                   onStep: (step) =>
-                    onProgress({
+                    emitProgress({
                       completed: 1,
                       total: 1,
                       stepId: step.stepId,
@@ -680,7 +682,7 @@ export function createMCP({
                   socketioCredentials: args.socketioCredentials,
                   cookieSession: projectCookieSession(store, p, environmentId),
                   onStep: (step) =>
-                    onProgress({
+                    emitProgress({
                       completed: ++completed,
                       total: plan.steps.filter((s) => s.enabled !== false)
                         .length,
@@ -713,58 +715,38 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
     store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));
   await store.init();
-  let activity;
   const dispatch = createMCP({
     store,
     projects,
     write: argv.includes("--write"),
     execute: argv.includes("--execute"),
-    onProgress: (progress) => activity?.update(progress),
   });
-  const lines = readline.createInterface({
-    input: process.stdin,
-    crlfDelay: Infinity,
-  });
-  for await (const line of lines) {
-    let message;
-    try {
-      if (Buffer.byteLength(line) > 12 * 1024 * 1024)
-        throw Error("Input too large");
-      message = JSON.parse(line);
-      if (
-        message.method === "tools/call" &&
-        argv.includes("--execute") &&
-        argv.includes("--write") &&
-        projects.includes(message.params?.arguments?.projectId) &&
-        [
-          "localapi_run_plan",
-          "localapi_execute_flow",
-          "localapi_execute_api",
-        ].includes(message.params?.name)
-      ) {
-        activity = await new MCPActivity(store.root, {
+  const { serveMCPStdio } = await import("./mcp-stdio.mjs");
+  try {
+    await serveMCPStdio({
+      input: process.stdin,
+      output: process.stdout,
+      dispatch,
+      activityFactory: (message) => {
+        const args = message.params?.arguments || {};
+        const projectId = args.projectId ?? args.project_id;
+        if (
+          !argv.includes("--execute") ||
+          !argv.includes("--write") ||
+          !projects.includes(projectId)
+        )
+          return undefined;
+        return new MCPActivity(store.root, {
           tool: message.params.name,
-          projectId: message.params.arguments.projectId,
-          planId: message.params.arguments.planId,
-        }).start();
-      }
-      const answer = await dispatch(message);
-      await activity?.finish(Boolean(answer?.result?.isError));
-      activity = undefined;
-      if (answer) process.stdout.write(JSON.stringify(answer) + "\n");
-    } catch (error) {
-      await activity?.finish(true).catch(() => {});
-      activity = undefined;
-      process.stdout.write(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: message?.id ?? null,
-          error:
-            error instanceof SyntaxError
-              ? { code: -32700, message: "Parse error" }
-              : { code: -32603, message: "Execution/progress storage failed" },
-        }) + "\n",
-      );
-    }
+          projectId,
+          planId: args.planId ?? args.flow_id,
+        });
+      },
+    });
+  } catch {
+    process.stderr.write(
+      "MCP stdio stopped: input/output lifecycle failed; inspect saved execution history.\n",
+    );
+    process.exitCode = 1;
   }
 }

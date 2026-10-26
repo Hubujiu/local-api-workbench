@@ -56,7 +56,7 @@ export async function readMCPActivities(root, now = Date.now()) {
         record.source !== "stdio" ||
         !Number.isInteger(record.pid) ||
         record.pid <= 0 ||
-        !["running", "completed", "failed"].includes(record.status)
+        !["running", "completed", "failed", "cancelled"].includes(record.status)
       )
         continue;
       const row = { ...record };
@@ -132,11 +132,24 @@ export class MCPActivity {
     if (status === "failed") this.failed = true;
     return this.flush();
   }
-  async finish(error = false) {
+  async finish(error = false, { status, recordSaved } = {}) {
     if (this.finished) return this.pending;
     this.finished = true;
     clearInterval(this.timer);
-    this.record.status = error || this.failed ? "failed" : "completed";
+    this.record.status =
+      error || recordSaved === false
+        ? "failed"
+        : status === "cancelled"
+          ? "cancelled"
+          : status === "failed" || this.failed
+            ? "failed"
+            : "completed";
+    if (typeof recordSaved === "boolean") this.record.recordSaved = recordSaved;
+    if (recordSaved === false) {
+      if (["passed", "failed", "cancelled"].includes(status))
+        this.record.executionStatus = status;
+      this.record.persistenceError = "执行记录保存失败；不会重新执行请求";
+    }
     this.record.finishedAt = new Date().toISOString();
     await this.flush();
   }
