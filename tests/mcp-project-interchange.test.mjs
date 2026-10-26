@@ -144,6 +144,9 @@ test("canonical project tool schema is closed and respects read/write, allowlist
     "x".repeat(MCP_PROJECT_FRAME_BYTES),
     {},
     null,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    Infinity,
   ]) {
     const response = await write(call("import_project", args(), id));
     assert.equal(Object.hasOwn(response, "id"), false);

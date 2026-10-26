@@ -396,14 +396,14 @@ export function createMCP({
       !(
         (typeof requestId === "string" &&
           Buffer.byteLength(requestId) <= 256) ||
-        (typeof requestId === "number" && Number.isFinite(requestId))
+        (typeof requestId === "number" && Number.isSafeInteger(requestId))
       )
     )
       return {
         jsonrpc: "2.0",
         error: {
           code: -32600,
-          message: "项目导入导出请求ID必须为数字或最多256字节的字符串",
+          message: "项目导入导出请求ID必须为安全整数或最多256字节的字符串",
         },
       };
     try {

@@ -541,11 +541,13 @@ test(
     assert.match(rejected.result.content[0].text, /8MiB/);
     assert(Buffer.byteLength(JSON.stringify(rejected)) < 16384);
     await client.ping();
-    const invalidId = await rawCall("x".repeat(257), args);
-    assert.equal(Object.hasOwn(invalidId, "id"), false);
-    assert.equal(invalidId.error.code, -32600);
-    assert(Buffer.byteLength(JSON.stringify(invalidId)) < 16384);
-    await client.ping();
+    for (const id of ["x".repeat(257), 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const invalidId = await rawCall(id, args);
+      assert.equal(Object.hasOwn(invalidId, "id"), false);
+      assert.equal(invalidId.error.code, -32600);
+      assert(Buffer.byteLength(JSON.stringify(invalidId)) < 16384);
+      await client.ping();
+    }
     const unknown = await client.callTool({
       name: "localapi_export_project",
       arguments: { ...args, ["x".repeat(20000)]: true },
