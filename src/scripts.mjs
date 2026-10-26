@@ -225,6 +225,9 @@ export function runScript(
             throw Error("数据库任务结果超过256KiB");
           evidence.status = "completed";
         } catch (caught) {
+          // Cancellation already records an interrupted query. A late driver
+          // rejection must not rewrite that evidence or publish a worker reply.
+          if (settled || controller.signal.aborted) return;
           error = String(caught.message).slice(0, 2000);
           evidence.status = "failed";
           evidence.error = error;
