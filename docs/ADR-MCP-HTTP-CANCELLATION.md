@@ -37,3 +37,9 @@ The first production smoke failed on macOS, while Ubuntu/Windows passed. A regre
 This cancellation PR is now stacked on PR3 (fix/script-sequence-budgets), not duplicating its budget validation, diagnostics or ASCII optimization. The first stdio CI used the older develop runtime and hit its known Faker budget race. Keeping PR3 as the explicit base preserves feature-only diffs and the original six default-limit assertions; it does not change or enlarge safety budgets and is not a merge into develop/main.
 
 ExecutionStatus remains explicit even when the output path later fails. An activity completed after execution/history persistence does not acknowledge client receipt; a frame already being written cannot be recalled. The recorded operation must never be replayed solely because the reply channel failed.
+
+## Stdio early-error correlation
+
+The same `requestKey` validation now governs stdio error correlation as session admission: safe integers and strings of at most 256 UTF-8 bytes may be echoed, including numeric zero and the empty string. Invalid IDs are omitted from error responses, never copied into the output and never replaced by `null` (the official SDK's error schema accepts an optional ID, not a nullable one). Legal duplicate IDs and tool/session quota failures still retain their original IDs. Invalid IDs consume no execution lease or session request quota.
+
+Malformed JSON is classified as `-32700`; syntactically valid JSON rejected by the SDK JSON-RPC schema is `-32600`. Both use fixed short messages and omit the uncorrelatable ID. Later valid messages remain usable through the same official SDK stdio transport. This only fixes early error framing: frame/queue/input budgets, admission counts, cancellation, EOF handling, and mutation delivery/rollback semantics are unchanged.

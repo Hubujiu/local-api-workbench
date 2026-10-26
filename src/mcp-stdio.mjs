@@ -3,7 +3,7 @@ import {
   ReadBuffer,
   serializeMessage,
 } from "@modelcontextprotocol/sdk/shared/stdio.js";
-import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
+import { MCPHTTPSessions, requestKey } from "./mcp-http-sessions.mjs";
 
 const executionTools = new Set([
   "localapi_execute_api",
@@ -12,11 +12,16 @@ const executionTools = new Set([
   "apipost_execute_api",
   "apipost_execute_flow",
 ]);
-const rpcError = (id, message, code = -32603) => ({
-  jsonrpc: "2.0",
-  id: id ?? null,
-  error: { code, message },
-});
+const rpcError = (id, message, code = -32603) => {
+  let correlation = {};
+  try {
+    requestKey(id);
+    correlation = { id };
+  } catch {}
+  // The SDK error schema permits an omitted ID, not null. Never reflect an
+  // invalid/unbounded ID, while preserving valid duplicate/quota correlation.
+  return { jsonrpc: "2.0", ...correlation, error: { code, message } };
+};
 
 export class BoundedMCPWriter {
   constructor(
@@ -295,8 +300,16 @@ export async function serveMCPStdio({
       let message;
       try {
         message = buffer.readMessage();
-      } catch {
-        sendFailure(rpcError(null, "Invalid JSON-RPC input", -32700));
+      } catch (error) {
+        sendFailure(
+          rpcError(
+            undefined,
+            error instanceof SyntaxError
+              ? "Parse error"
+              : "Invalid JSON-RPC request",
+            error instanceof SyntaxError ? -32700 : -32600,
+          ),
+        );
         continue;
       }
       if (message === null) break;
