@@ -85,6 +85,19 @@ test("native XML private bundle and MIT notices reproduce byte-for-byte from pin
     "@xmldom/xmldom": "0.9.12",
     xpath: "0.0.35",
   });
+  const attributes = await readFile(
+    new URL("../.gitattributes", import.meta.url),
+    "utf8",
+  );
+  for (const line of [
+    "/scripts/sandbox-intrinsic-guard.mjs text eol=lf",
+    "/scripts/sandbox-native-xml-entry.mjs text eol=lf",
+    "/src/native-xml-path.mjs text eol=lf",
+    "/src/vendor/native-xml-library.js -text",
+    "/src/vendor/native-xml-library.json -text",
+    "/src/vendor/NATIVE-XML-LICENSES.txt -text",
+  ])
+    assert(attributes.split("\n").includes(line), line);
 });
 
 test("native XML reads only own body data, does not expose DOM/require, and preserves exact scalar text", async () => {
@@ -239,4 +252,20 @@ test("disabled XML is inert and unrelated JSON/header tasks do not load the stri
     },
   ]);
   assert.equal(result.scopes.environment.token, "json");
+});
+
+test("native XML repeated tasks share the original phase activity budget without a per-parser reset", async () => {
+  const body = "<login><token>ok</token>" + "<x/>".repeat(1996) + "</login>";
+  await assert.rejects(
+    phase(
+      body,
+      Array.from({ length: 16 }, () => pick()),
+    ),
+    (error) => {
+      assert.match(error.message, /超时/);
+      assert.equal(error.scriptDiagnostics.activityBudgetMs, 250);
+      assert.equal(error.networkRequests.length, 0);
+      return true;
+    },
+  );
 });

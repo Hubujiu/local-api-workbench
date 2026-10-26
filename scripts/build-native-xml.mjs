@@ -37,7 +37,8 @@ const result = await build({
   metafile: true,
 });
 const sources = {};
-for (const file of Object.keys(result.metafile.inputs).sort()) {
+for (const input of Object.keys(result.metafile.inputs).sort()) {
+  const file = input.replaceAll("\\", "/");
   if (
     !/^(?:scripts\/sandbox-(?:native-xml-entry|intrinsic-guard)\.mjs|src\/native-xml-path\.mjs|node_modules\/(?:@xmldom\/xmldom\/lib\/[a-z-]+\.js|xpath\/xpath\.js))$/.test(
       file,
