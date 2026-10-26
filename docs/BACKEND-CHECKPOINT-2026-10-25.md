@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 18:53 UTC
+# 后端检查点 · 2026-10-26 19:18 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：9194c19c3350fd025676ee4fe9c65899d7cba8a4。
-- Tree：a4a4c75dcba4d6698c65b4abfaa6ff2b6e822b2c，与本地53e3d064e8eef8fb42a2a087aa9243fc6c61a46f一致。
-- Push CI：[40378404104](https://github.com/Hubujiu/local-api-workbench/actions/runs/40378404104)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：d0aa0994a0cced97548dd4c3847a11a5cfa96d6c。
+- Tree：2f9bec23adc873d92162cba90bf28ff7a6c8815c，与本地f14444cda06e1a9dd5c7527919626285578a80dd一致。
+- Push CI：[40382971082](https://github.com/Hubujiu/local-api-workbench/actions/runs/40382971082)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线不包含下述PR30保存收据及原生MCP结果适配。**
+- **该基线包含PR30保存收据及原生MCP结果适配，不包含下述PR7新saved-flow来源导入。**
 
 ## 最近功能PR与精确CI
 
@@ -27,7 +27,7 @@
 
 PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
 
-## PR30：真实执行完成与保存结果分开
+## PR30已验证：真实执行完成与保存结果分开
 
 真实回环POST已收到201或200，但历史保存可在journal发布前或发布后失败。旧manual HTTP会只返回错误并丢掉实际响应；部分已有计划/协议路径把typed保存状态压成可能含路径的字符串。本片复用原执行器和Store，只改证据保存与结果投影：
 
@@ -39,13 +39,24 @@ PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧
 
 功能final已在其独立分支保存；真实prejournal/postjournal、API/MCP/plan/TCP/SIO、冲突/隔离和scope提交定向验证通过。当前本地新组合保留原取消/数据库授权/原生MCP与环境状态；原生别名补充snake_case保存收据，manual HTTP单独保留scopeCommit，避免把变量提交未知与历史保存状态混同。
 
-本地最终29项定向组合通过，包含实际SDK native API/flow、scope未知+历史确认/未知、stdio取消时抑制响应但journal可核对同ID，以及SIO恢复/并发/冲突。**新组合仍需自己的完整CI**，不能借9194的绿灯。
+本地最终29项定向组合通过，包含实际SDK native API/flow、scope未知+历史确认/未知、stdio取消时抑制响应但journal可核对同ID，以及SIO恢复/并发/冲突。这些receipt组合检查已由d0aa自己的完整CI核实；后续PR7组合不能借用其绿灯。
+
+## PR7继续原功能：原生MCP保存flow迁移
+
+合法静态分析确认原版MCP可保存source:mcp及流程/步骤mcp\_\*比较基线；原执行只读取当前input、显式environment_id、步骤脚本及冻结快照。旧导入器拒绝这些元数据，新片继续同PR7，不另建重复导入PR。
+
+新增闭合有界importedNativeFlowSource仅保留历史来源/导入时ID与基线，非当前steps补丁；source:mcp映射canonical ai但不授MCP权限，新运行source由实际入口记录。当前input/environment唯一权威，不从历史基线补缺省或重新合并删除键。克隆/重排/删除/编辑保留历史，source-only变化纳入版本/hash；Store/snapshot/restore克隆前验证，来源合计仍4MiB。
+
+历史auth仅明确none/noauth；带凭证/连接/文件等不支持字段拒绝，不静默删除或恢复权限。body/header/cookie仍可能含用户输入敏感数据，不承诺自动去秘。旧manual/ai且无mcp元数据保持旧shape；组合原生目录导出对新历史来源明确拒绝并提示项目备份，不能静默丢失，旧无元数据目录往返继续支持。
+
+功能final已保存，定向真实CLI/HTTP 503继续、输入/环境优先、取消、编辑/克隆/restore与独立getter回归通过。组合保留原active nativeMCP预算及手工编辑剥离语义，补原生SDK读写/执行授权隔离及导出guard。**该新组合尚待自身完整CI**；静态来源+synthetic Workbench fixture不是原版GUI运行证明。
 
 ## 历史失败与仍需调查的风险
 
 - 985b955f / CI40374549274为真实RED：Windows重启第二轮后置pm.sendRequest尚未完成即到2秒wall，后续wait120尚未调度。不能由此认定native wait计时器错误。
 - 确定性持有Cookie锁可复现同一签名，只证明旧日志不足，不能证明该次Windows原因。PR27增加上游接收/完成/关闭、重启轮次和fixture锁存在性诊断；没有提高预算、删除marker或放宽断言。9194和独立PR27本次通过仍不等于历史根因已修复。
-- 99122与35153最终cancelled不作完整绿灯；35153各平台观察到的非法ID错误回显已在PR19真实修复。旧失败与取消证据保留，不重跑碰绿。
+- PR30旧a47的Windows故障fixture未保证提交前失败，真实返回typed unknown，保留RED。新89a使用真实损坏history JSON确保parser在journal前拒绝；严格generic/零journal/修复后零记录/revision不变/网络一次，生产分类不变。Windows底层errno未观测，不能把源码推断当实测。
+- 99122、35153及a922最终cancelled不作完整绿灯；35153各平台观察到的非法ID错误回显已在PR19真实修复。旧失败与取消证据保留，不重跑碰绿。
 - 短暂执行连接中断后已核对feature c48ccaa5与tree9a06aba5仍在，未发生工作区回退；只续存中断的GitHub对象上传，不把丢失前结果冒充恢复后验证。
 
 ## 明确剩余边界

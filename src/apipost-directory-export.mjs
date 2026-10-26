@@ -48,6 +48,10 @@ export function exportApipostDirectory(project) {
   const flowIds = new Set();
   let totalSteps = 0;
   const flows = plans.map((input) => {
+    // Historical MCP comparison data has no lossless native export mapping yet.
+    // Reject by property presence before snapshotting; never silently erase it.
+    if (Object.hasOwn(input, "importedNativeFlowSource"))
+      throw Error("原生目录尚不能无损导出MCP历史来源；请使用项目备份");
     if (
       input.steps?.some(
         (step) => step.type !== undefined && step.type !== "http",

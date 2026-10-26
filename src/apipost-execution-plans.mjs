@@ -1,3 +1,4 @@
+import { normalizeImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
 import { createHash } from "node:crypto";
 import {
@@ -11,8 +12,22 @@ const identifier = (x) =>
   /^[A-Za-z0-9_-]{1,200}$/.test(x) &&
   !["__proto__", "constructor", "prototype"].includes(x);
 function fields(x, allowed) {
-  if (!object(x) || Object.keys(x).some((k) => !allowed.includes(k)))
-    throw Error("原版执行计划包含未知字段");
+  if (
+    !object(x) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(x))
+  )
+    throw Error("原版执行计划须为普通对象");
+  const descriptors = Object.getOwnPropertyDescriptors(x);
+  if (
+    Reflect.ownKeys(x).some(
+      (k) =>
+        typeof k !== "string" ||
+        !allowed.includes(k) ||
+        !descriptors[k].enumerable ||
+        !Object.hasOwn(descriptors[k], "value"),
+    )
+  )
+    throw Error("原版执行计划包含未知字段或访问器");
 }
 function stepAuthentication(value) {
   if (
@@ -77,11 +92,14 @@ export function prepareDirectoryPlans(
       "source",
       "steps",
       "updated_at",
+      "mcp_name",
+      "mcp_description",
+      "mcp_environment_id",
     ]);
     if (
       !identifier(flow.flow_id) ||
       flow.project_id !== source.project_id ||
-      !["manual", "ai"].includes(flow.source) ||
+      !["manual", "ai", "mcp"].includes(flow.source) ||
       typeof flow.name !== "string" ||
       !flow.name.trim() ||
       flow.name.length > 200 ||
@@ -96,6 +114,9 @@ export function prepareDirectoryPlans(
       )
         throw Error("原版执行计划时间无效");
     if (
+      !Object.hasOwn(flow, "environment_id") ||
+      typeof flow.environment_id !== "string" ||
+      !flow.environment_id ||
       !source.global.envs.some(
         (env) => String(env.env_id) === flow.environment_id,
       )
@@ -108,6 +129,7 @@ export function prepareDirectoryPlans(
     planIds.add(planId);
     const stepIds = new Set();
     let functions = [];
+    const historySteps = [];
     const steps = flow.steps.map((step) => {
       fields(step, [
         "api_snapshot",
@@ -116,6 +138,8 @@ export function prepareDirectoryPlans(
         "target_id",
         "pre_script",
         "post_script",
+        "mcp_input",
+        "mcp_deleted_body_keys",
       ]);
       for (const key of ["pre_script", "post_script"])
         if (
@@ -245,19 +269,62 @@ export function prepareDirectoryPlans(
       const key = createHash("sha256")
         .update(flow.flow_id + "\0" + step.step_id)
         .digest("hex");
+      const importedStepId = resource("flow-step", key);
+      historySteps.push({
+        sourceStepId: step.step_id,
+        importedStepId,
+        ...Object.fromEntries(
+          ["mcp_input", "mcp_deleted_body_keys"]
+            .filter((key) => Object.hasOwn(step, key))
+            .map((key) => [key, step[key]]),
+        ),
+      });
       return {
-        id: resource("flow-step", key),
+        id: importedStepId,
         name: request.name,
         enabled: true,
         request,
       };
     });
+    // Preserve the prior shape for ordinary manual/AI flows without comparison data.
+    const hasNativeHistory =
+      flow.source === "mcp" ||
+      ["mcp_name", "mcp_description", "mcp_environment_id"].some((key) =>
+        Object.hasOwn(flow, key),
+      ) ||
+      flow.steps.some((step) =>
+        ["mcp_input", "mcp_deleted_body_keys"].some((key) =>
+          Object.hasOwn(step, key),
+        ),
+      );
+    const importedNativeFlowSource = hasNativeHistory
+      ? normalizeImportedNativeFlowSource({
+          version: 1,
+          source: flow.source,
+          sourceProjectId: flow.project_id,
+          sourceFlowId: flow.flow_id,
+          ...Object.fromEntries(
+            ["mcp_name", "mcp_description", "mcp_environment_id"]
+              .filter((key) => Object.hasOwn(flow, key))
+              .map((key) => [key, flow[key]]),
+          ),
+          steps: historySteps,
+        })
+      : undefined;
+    if (importedNativeFlowSource !== undefined) {
+      sourceBytes += Buffer.byteLength(
+        JSON.stringify(importedNativeFlowSource),
+      );
+      if (sourceBytes > 4 * 1024 * 1024)
+        throw Error("导入计划来源合计最多4MiB");
+    }
     return snapshotPlan({
       id: planId,
       name: flow.name,
       description: flow.description,
       environmentId: resource("env", flow.environment_id),
-      source: flow.source,
+      source: flow.source === "mcp" ? "ai" : flow.source,
+      importedNativeFlowSource,
       createdAt: flow.created_at,
       updatedAt: flow.updated_at,
       statusPolicy: "strict200",

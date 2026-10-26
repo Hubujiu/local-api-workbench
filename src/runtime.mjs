@@ -1,3 +1,4 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
@@ -248,6 +249,8 @@ export class Store {
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
+    for (const run of p.runs || [])
+      if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,

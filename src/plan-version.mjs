@@ -1,10 +1,14 @@
 import { isDeepStrictEqual } from "node:util";
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import { freezeWireStep } from "./wire-plan.mjs";
 import { freezeSocketIOStep } from "./socketio-plan.mjs";
 import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  const importedNativeFlowSource =
+    readImportedNativeFlowSource(input) ??
+    (previous ? readImportedNativeFlowSource(previous) : undefined);
   if (source === "manual" && previous && Array.isArray(input.steps)) {
     input = {
       ...input,
@@ -62,6 +66,9 @@ export function versionPlan(previous, input, source = "manual", project) {
     };
   const next = snapshotPlan({
     ...input,
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     statusPolicy:
       input.statusPolicy ??
       previous?.statusPolicy ??
@@ -79,6 +86,7 @@ export function versionPlan(previous, input, source = "manual", project) {
       "statusPolicy",
       "functions",
       "steps",
+      "importedNativeFlowSource",
     ].every(
       (field) => JSON.stringify(next[field]) === JSON.stringify(old[field]),
     )
