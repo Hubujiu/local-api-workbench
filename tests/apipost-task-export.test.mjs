@@ -538,3 +538,124 @@ test("authenticated export and malformed reimport failures leave memory, disk an
     assert.deepEqual(await readFile(app.store.file(p.id)), disk);
   }
 });
+
+test("native export validates request descriptors and data limits before reading or normalizing task fields", () => {
+  for (const key of [
+    "nativeTasks",
+    "inheritSharedScripts",
+    "beforeScript",
+    "afterScript",
+    "before",
+    "after",
+    "sharedBeforeScripts",
+    "sharedAfterScripts",
+    "scriptDialect",
+    "importedScriptTasks",
+    "importedNativeTaskSource",
+  ]) {
+    for (const format of [exportApipost, exportApipostDirectory]) {
+      let reads = 0;
+      const p = projectFor(),
+        value = p.requests[0][key];
+      Object.defineProperty(p.requests[0], key, {
+        enumerable: true,
+        configurable: true,
+        get() {
+          reads++;
+          return value;
+        },
+      });
+      assert.throws(() => format(p), /访问器/);
+      assert.equal(reads, 0);
+      Object.defineProperty(p.requests[0], key, {
+        enumerable: false,
+        configurable: true,
+        value,
+      });
+      assert.throws(() => format(p), /隐藏字段/);
+    }
+  }
+  const inherited = projectFor(),
+    pipeline = inherited.requests[0].nativeTasks;
+  delete inherited.requests[0].nativeTasks;
+  let reads = 0;
+  Object.setPrototypeOf(inherited.requests[0], {
+    get nativeTasks() {
+      reads++;
+      return pipeline;
+    },
+  });
+  assert.throws(() => exportApipost(inherited), /继承属性/);
+  assert.equal(reads, 0);
+  for (const [size, accepted] of [
+    [16, true],
+    [17, false],
+  ]) {
+    const p = projectFor();
+    p.requests[0].nativeTasks.before = Array.from({ length: size }, (_, i) =>
+      task("wait" + i, "wait", 0),
+    );
+    if (accepted) assert.doesNotThrow(() => exportApipost(p));
+    else assert.throws(() => exportApipost(p), /超限|16/);
+  }
+  for (const [duration, accepted] of [
+    [500, true],
+    [501, false],
+  ]) {
+    const p = projectFor();
+    p.requests[0].nativeTasks.before = [
+      task("a", "wait", 500),
+      task("b", "wait", duration),
+    ];
+    if (accepted) assert.doesNotThrow(() => exportApipost(p));
+    else assert.throws(() => exportApipost(p), /1000/);
+  }
+});
+
+test("mixed task export validates pure-script phase import limits without trimming source or injecting tasks", () => {
+  const make = (before) => {
+    const p = projectFor();
+    p.requests[0].nativeTasks = {
+      version: 1,
+      before,
+      after: [task("wait", "wait", 0)],
+    };
+    return p;
+  };
+  const metadata = make(
+    Array.from({ length: 10 }, (_, i) => ({
+      ...task("x".repeat(100) + i, "customScript", "const value" + i + "=1;"),
+      name: "y".repeat(100),
+    })),
+  );
+  const merged = make([
+    task("one", "customScript", "x".repeat(32768)),
+    task("two", "customScript", "y".repeat(32768)),
+  ]);
+  for (const [p, error] of [
+    [metadata, /导入说明上限/],
+    [merged, /合并脚本/],
+  ]) {
+    const before = structuredClone(p);
+    assert.doesNotThrow(
+      () => normalizeRequest(p.requests[0]),
+      "valid canonical runtime does not guarantee native interchange",
+    );
+    for (const format of [exportApipost, exportApipostDirectory])
+      assert.throws(() => format(p), error);
+    assert.deepEqual(p, before);
+  }
+  const p = make([
+    task("first", "customScript", "  const first=1;\n"),
+    task("disabled", "customScript", "literal {{token}}", 0),
+  ]);
+  for (const format of [exportApipost, exportApipostDirectory]) {
+    const copy = { requests: [], environments: [], settings: {} };
+    importIntoProject(copy, format(p));
+    assert.deepEqual(
+      withoutTaskIds(copy.requests[0].nativeTasks),
+      withoutTaskIds(p.requests[0].nativeTasks),
+    );
+    assert.equal(copy.requests[0].nativeTasks.before.length, 2);
+  }
+});

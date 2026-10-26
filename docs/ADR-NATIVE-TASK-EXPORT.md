@@ -23,7 +23,11 @@ missing task ID/name and non-Apipost dialect. Existing export guards still apply
 Empty or all-customScript canonical pipelines also reject: native import would
 classify them as legacy script sources rather than `nativeTasks`. No private
 marker or synthetic wait is inserted to change that classification. Legacy
-`importedScriptTasks` exports retain their previous behavior.
+`importedScriptTasks` exports retain their previous behavior. Each pure-script
+phase inside a mixed request is preflighted by the existing import parser too:
+its bounded provenance text and combined script length must fit without changing
+source. Request-level hidden/inherited fields or accessors reject before reading
+pipeline configuration, including direct non-JSON callers.
 
 Frozen plan steps containing `nativeTasks` reject explicitly, even empty or
 entirely disabled pipelines. Native flow API source is inert and is not the

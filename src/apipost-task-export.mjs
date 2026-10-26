@@ -1,10 +1,35 @@
+import { parseApipostScriptTasks } from "./apipost-modern.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { nativeDataObject } from "./native-response-extraction.mjs";
 
 // Independently written format adapter. Never compile source or activate inert
 // provenance. The executable pipeline, not an old script-source mirror, wins.
 export function exportApipostTaskPipeline(request) {
-  if (request.nativeTasks === undefined) return undefined;
+  const native = Object.getOwnPropertyDescriptor(request, "nativeTasks");
+  if (!native && !("nativeTasks" in request)) return undefined;
+  // Unlike HTTP JSON, direct callers may supply accessors or hidden fields.
+  // Inspect every field the pipeline normalizer reads before any value access.
+  for (const key of [
+    "nativeTasks",
+    "inheritSharedScripts",
+    "beforeScript",
+    "afterScript",
+    "before",
+    "after",
+    "sharedBeforeScripts",
+    "sharedAfterScripts",
+    "scriptDialect",
+    "importedScriptTasks",
+    "importedNativeTaskSource",
+  ]) {
+    const property = Object.getOwnPropertyDescriptor(request, key);
+    if (
+      (property && (!property.enumerable || !("value" in property))) ||
+      (!property && key in request)
+    )
+      throw Error("Apipost导出nativeTasks不接受访问器、隐藏字段或继承属性");
+  }
+  if (native.value === undefined) return undefined;
   nativeDataObject(request.nativeTasks, ["version", "before", "after"]);
   const pipeline = normalizeNativeTaskRequest(request);
   if (request.scriptDialect !== "apipost8")
@@ -36,5 +61,10 @@ export function exportApipostTaskPipeline(request) {
     throw Error(
       "Apipost导出nativeTasks暂不转换纯脚本或空执行管线；请使用项目备份",
     );
+  for (const phase of ["before", "after"])
+    if (pipeline[phase].every((task) => task.type === "customScript"))
+      // Import classifies phases separately, even within a mixed request. Reuse
+      // its metadata/merged-text limits; never alter the original task data.
+      parseApipostScriptTasks(pipeline[phase], phase);
   return pipeline;
 }
