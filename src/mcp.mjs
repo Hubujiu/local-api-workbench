@@ -38,9 +38,8 @@ import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
 import { scopedExecution } from "./variable-scopes.mjs";
 import { versionPlan } from "./plan-version.mjs";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Store, executeRequest } from "./runtime.mjs";
+import { executeRequest } from "./runtime.mjs";
 import { snapshotPlan, runPlan, normalizeRequest } from "./core.mjs";
 import {
   environmentVariables,
@@ -977,20 +976,24 @@ const isStdioEntrypoint = () => {
   }
 };
 if (isStdioEntrypoint()) {
-  const argv = process.argv.slice(2),
-    projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
-    store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));
-  const sessionProjects = [];
-  await store.init();
-  const dispatch = createMCP({
-    store,
-    projects,
-    sessionProjects,
-    write: argv.includes("--write"),
-    execute: argv.includes("--execute"),
-  });
-  const { serveMCPStdio } = await import("./mcp-stdio.mjs");
+  let context;
   try {
+    const { createMCPStdioContext } = await import("./mcp-stdio-bootstrap.mjs");
+    context = await createMCPStdioContext(
+      process.argv.slice(2),
+      process.env.LOCAL_API_DATA,
+    );
+    const { store, projects, write, execute } = context;
+    const sessionProjects = [];
+    const dispatch = createMCP({
+      store,
+      projects,
+      sessionProjects,
+      write,
+      execute,
+      databaseExecutor: context.databaseExecutor,
+    });
+    const { serveMCPStdio } = await import("./mcp-stdio.mjs");
     await serveMCPStdio({
       input: process.stdin,
       output: process.stdout,
@@ -999,8 +1002,8 @@ if (isStdioEntrypoint()) {
         const args = message.params?.arguments || {};
         const projectId = args.projectId ?? args.project_id;
         if (
-          !argv.includes("--execute") ||
-          !argv.includes("--write") ||
+          !execute ||
+          !write ||
           ![...projects, ...sessionProjects].includes(projectId)
         )
           return undefined;
@@ -1013,8 +1016,10 @@ if (isStdioEntrypoint()) {
     });
   } catch {
     process.stderr.write(
-      "MCP stdio stopped: input/output lifecycle failed; inspect saved execution history.\n",
+      "MCP stdio startup/transport failed; no input or credentials echoed.\n",
     );
     process.exitCode = 1;
+  } finally {
+    context?.close();
   }
 }
