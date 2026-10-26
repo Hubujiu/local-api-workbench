@@ -87,7 +87,8 @@ export function prepareApipostDatabases(value, projectId, resource) {
               "username",
             ].includes(key),
         ) ||
-        ![-1, 0].includes(ssh.enable) ||
+        ![-1, 0, 1].includes(ssh.enable) ||
+        (ssh.enable === 1 && !["pg", "mysql"].includes(entry.type)) ||
         ![1, 2].includes(ssh.auth_type) ||
         !Number.isInteger(ssh.port) ||
         ssh.port < 0 ||
@@ -110,6 +111,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       type: entry.type === "pg" ? "postgres" : entry.type,
       sourceProjectId: projectId,
       sourceId: entry.db_id,
+      ...(entry.config.default.ssh.enable === 1 ? { requiresSSH: true } : {}),
     };
     map.set(entry.db_id, connection.id);
     connections.push(connection);
@@ -224,14 +226,24 @@ export function validateApipostDatabaseResources(value = []) {
       !object(entry) ||
       Object.keys(entry).some(
         (key) =>
-          !["id", "name", "type", "sourceProjectId", "sourceId"].includes(key),
+          ![
+            "id",
+            "name",
+            "type",
+            "sourceProjectId",
+            "sourceId",
+            "requiresSSH",
+          ].includes(key),
       ) ||
       !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(entry.id) ||
       ids.has(entry.id) ||
       !safe(entry.name) ||
       !["postgres", "mysql", "redis"].includes(entry.type) ||
       !safe(entry.sourceProjectId) ||
-      !safe(entry.sourceId)
+      !safe(entry.sourceId) ||
+      (entry.requiresSSH !== undefined &&
+        (entry.requiresSSH !== true ||
+          !["postgres", "mysql"].includes(entry.type)))
     )
       throw Error("导入数据库目录只保留安全标识，不允许连接配置或凭据");
     ids.add(entry.id);

@@ -1,4 +1,7 @@
-import { DatabaseSessions } from "./database-sessions.mjs";
+import {
+  DatabaseSessions,
+  assertDatabaseBindingRequirements,
+} from "./database-sessions.mjs";
 const fields = new Set([
   "name",
   "type",
@@ -16,11 +19,12 @@ const fields = new Set([
 ]);
 /** Explicit MCP-only grants: never share manual sessions or persist configuration. */
 export class MCPDatabaseGrants {
-  #sessions = new DatabaseSessions();
+  #sessions;
   #epoch = 0;
   #policy;
-  constructor(policy) {
+  constructor(policy, resolveProject) {
     this.#policy = policy;
+    this.#sessions = new DatabaseSessions({ resolveProject });
   }
   capture() {
     return this.#epoch;
@@ -53,8 +57,7 @@ export class MCPDatabaseGrants {
       const source = project.settings?.apipostDatabases?.find(
         (item) => item.id === input.bindingId,
       );
-      if (!source || source.type !== input.type)
-        throw Error("MCP 数据库绑定须匹配当前项目来源和数据库类型");
+      assertDatabaseBindingRequirements(source, input);
     }
     return this.#sessions.register(project.id, input);
   }

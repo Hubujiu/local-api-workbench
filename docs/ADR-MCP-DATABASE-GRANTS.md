@@ -45,3 +45,10 @@ readonly queries and bounded output. No new dependencies or original proprietary
 implementation are used. CI must pass for this exact feature commit before it is
 accepted. HTTP MCP is covered; stdio MCP intentionally receives no implicit
 process-session database resolver or persisted credentials.
+
+Native requiresSSH is enforced at MCP registration and through the shared session
+resolver before querying and before applying results. Session UUID aliases retain
+that binding policy; changing/removing the current source cannot reuse an older
+direct grant. The requirement does not create authority or import credentials.
+Real PG/MySQL SSH+SDK fixtures are staged in the existing dedicated CI suite;
+acceptance requires the exact new head and the cross-feature combined run.

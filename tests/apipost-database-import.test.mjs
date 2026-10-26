@@ -106,7 +106,10 @@ test("native database import failures are atomic and unknown/unsafe configuratio
     (d) => (d.global.db_link[0].type = "oracle"),
     (d) => (d.global.db_link[0].project_id = "other"),
     (d) => d.global.db_link.push(structuredClone(d.global.db_link[0])),
-    (d) => (d.global.db_link[0].config.default.ssh.enable = 1),
+    (d) => {
+      d.global.db_link[0].config.default.ssh.enable = 1;
+      d.global.db_link[0].config.default.ssh.auth_type = 3;
+    },
     (d) => (d.global.db_link[0].config["1"].use_default = -1),
     (d) => (d.global.db_link[0].config.default.db_config.unknown = true),
     (d) => (d.apis[1].request.pre_tasks[1].data.connectionId = "missing"),

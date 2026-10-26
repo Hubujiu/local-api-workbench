@@ -202,3 +202,29 @@ engine and write rejection. That newly added real-service test remains pending
 until its exact commit CI completes; local callbacks do not count as real Redis.
 CLI and MCP combination evidence and frozen inert-source compatibility must be
 verified separately with their respective feature branches before acceptance.
+
+## Native SSH requirement (work in progress)
+
+An effective default native PostgreSQL/MySQL connection with ssh.enable=1 now
+retains only requiresSSH:true. Source host/password/private_key file paths and
+all original connection secrets are still discarded. Default-inheriting
+environments use the default requirement; independent environment definitions,
+combined authentication mode and SSH for other native engines remain rejected.
+The marker is a compatibility constraint, not an execution grant.
+
+HTTP registration requires a new explicit canonical SSH configuration, including
+an independently checked host-key fingerprint. Imported session bindings resolve
+the current project catalog before each query and before applying its result.
+This follows the registered bindingId even when the request uses a session UUID;
+removed/type-changed/SSH-upgraded sources cannot reuse an old direct grant. A
+revoked session while catalog lookup is pending cannot start a query. Resolver
+failures are fail-closed and do not expose filesystem errors.
+
+Focused local tests cover source-only retention/restore, no source path reads,
+HTTP registration/execution policy, UUID aliases, lookup revocation and completed
+result rejection after a policy change. Dedicated CI extends the existing real
+ssh2.Server forwarding fixture and PostgreSQL/MySQL services with native imported
+JS→SQL→HTTP, result persistence, restored-project isolation and restart/regrant.
+This is not an OpenSSH sshd or original-application runtime claim. The new exact
+commit CI is pending; MCP and CLI policy integration are separate feature updates
+and must be included before cross-entrypoint acceptance.

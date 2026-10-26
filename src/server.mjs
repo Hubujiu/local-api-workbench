@@ -16,7 +16,10 @@ import {
   sdkCurlDefinition,
 } from "./script-url-export.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
-import { DatabaseSessions } from "./database-sessions.mjs";
+import {
+  DatabaseSessions,
+  assertDatabaseBindingRequirements,
+} from "./database-sessions.mjs";
 import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -86,8 +89,13 @@ export async function createApp({
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
-  const databaseSessions = new DatabaseSessions();
-  const mcpDatabaseGrants = new MCPDatabaseGrants(() => mcp);
+  const databaseSessions = new DatabaseSessions({
+    resolveProject: (id) => store.get(id),
+  });
+  const mcpDatabaseGrants = new MCPDatabaseGrants(
+    () => mcp,
+    (id) => store.get(id),
+  );
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
@@ -1055,8 +1063,7 @@ export async function createApp({
                 const source = p.settings?.apipostDatabases?.find(
                   (item) => item.id === config.bindingId,
                 );
-                if (!source || source.type !== config.type)
-                  throw Error("导入数据库绑定须匹配当前项目来源与数据库类型");
+                assertDatabaseBindingRequirements(source, config);
               }
               return json(res, 200, databaseSessions.register(p.id, config));
             }
