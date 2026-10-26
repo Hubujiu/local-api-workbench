@@ -3,9 +3,45 @@ import { randomUUID } from "node:crypto";
 import { querySQLiteBounded } from "./database.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 
+export function assertDatabaseBindingRequirements(source, config) {
+  if (
+    !source ||
+    source.type !== config.type ||
+    (source.requiresSSH !== undefined && source.requiresSSH !== true)
+  )
+    throw Error("导入数据库来源或类型已变化，须重新核对授权");
+  if (source.requiresSSH === true && !config.ssh)
+    throw Error("此导入数据库要求SSH，须显式配置已核对主机指纹的临时通道");
+}
+
 // Explicit ephemeral grants. Connection secrets are never written into projects.
 export class DatabaseSessions {
   #connections = new Map();
+  #resolveProject;
+  constructor({ resolveProject } = {}) {
+    if (resolveProject !== undefined && typeof resolveProject !== "function")
+      throw Error("数据库项目来源解析器无效");
+    this.#resolveProject = resolveProject;
+  }
+  async #checkSource(projectId, item) {
+    if (!item.bindingId || !this.#resolveProject) return;
+    let project;
+    try {
+      project = await this.#resolveProject(projectId);
+    } catch {
+      throw Error("当前项目数据库来源不可核对，查询或结果应用已拒绝");
+    }
+    const catalog = project?.settings?.apipostDatabases;
+    if (
+      project?.id !== projectId ||
+      !Array.isArray(catalog) ||
+      catalog.length > 100
+    )
+      throw Error("当前项目数据库来源目录无效");
+    const matches = catalog.filter((source) => source?.id === item.bindingId);
+    if (matches.length !== 1) throw Error("当前项目数据库来源已移除或不唯一");
+    assertDatabaseBindingRequirements(matches[0], item.config);
+  }
   register(projectId, input) {
     if (this.#connections.size >= 20)
       throw Error("会话数据库连接最多20个，请先撤销不用的连接");
@@ -113,6 +149,10 @@ export class DatabaseSessions {
     const item = this.#connections.get(resolvedId);
     if (!item || item.projectId !== projectId)
       throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
+    await this.#checkSource(projectId, item);
+    if (signal?.aborted) throw Error("数据库操作已取消");
+    if (this.#connections.get(resolvedId) !== item)
+      throw Error("数据库会话连接已撤销");
     const config = structuredClone(item.config);
     const result =
       config.type === "sqlite"
@@ -126,6 +166,7 @@ export class DatabaseSessions {
             sql: operation.sql,
             parameters: operation.parameters,
           });
+    await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
     if (this.#connections.get(resolvedId) !== item)
       throw Error("数据库会话连接已撤销，结果未应用");

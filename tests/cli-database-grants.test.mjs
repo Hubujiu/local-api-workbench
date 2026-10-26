@@ -189,3 +189,52 @@ test("CLI imported bindings and typed native task results require matching engin
     /引擎/,
   );
 });
+
+test("CLI source SSH requirements cannot be downgraded or supplied as a grant flag", () => {
+  const id = "apipost-" + "a".repeat(20) + "-db-" + "b".repeat(20);
+  const plan = {
+    steps: [{ request: { before: [{ type: "database", connectionId: id }] } }],
+  };
+  const source = [{ id, type: "postgres", requiresSSH: true }],
+    config = { type: "postgres", host: "127.0.0.1", database: "fixture" };
+  assert.throws(
+    () => prepareCLIDatabaseGrants("p", plan, { [id]: config }, source),
+    /SSH/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants(
+        "p",
+        plan,
+        { [id]: { ...config, requiresSSH: true } },
+        source,
+      ),
+    /字段/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants(
+        "p",
+        plan,
+        {
+          [id]: {
+            ...config,
+            ssh: {
+              host: "127.0.0.1",
+              username: "fixture",
+              password: "fixture",
+            },
+          },
+        },
+        source,
+      ),
+    /指纹/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants("p", plan, { [id]: config }, [
+        { ...source[0], requiresSSH: false },
+      ]),
+    /来源要求/,
+  );
+});

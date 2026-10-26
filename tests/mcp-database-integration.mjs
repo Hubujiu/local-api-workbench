@@ -11,7 +11,7 @@ import { snapshotPlan, importIntoProject } from "../src/core.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
 export async function verifyMCPDatabaseFlow(
   config,
-  { nativeImport = false } = {},
+  { nativeImport = false, requiresSSH = false } = {},
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "mcp-database-"));
   let app = await createApp({ root, port: 0 }),
@@ -27,15 +27,17 @@ export async function verifyMCPDatabaseFlow(
     const other = await app.store.create("other");
     let bindingId;
     if (nativeImport) {
-      importIntoProject(
-        p,
+      const source =
         config.type === "redis"
           ? nativeRedisFixture(`http://127.0.0.1:${echo.address().port}/`)
           : nativeDatabaseFixture(
               `http://127.0.0.1:${echo.address().port}/`,
               config.type === "mysql" ? "mysql" : "pg",
-            ),
-      );
+            );
+      if (requiresSSH) source.global.db_link[0].config.default.ssh.enable = 1;
+      importIntoProject(p, source);
+      if (requiresSSH)
+        assert.equal(p.settings.apipostDatabases[0].requiresSSH, true);
       await app.store.save(p);
       bindingId = p.settings.apipostDatabases[0].id;
     }
@@ -245,6 +247,16 @@ export async function verifyMCPDatabaseFlow(
       ).ok,
       false,
     );
+    if (requiresSSH) {
+      const { ssh, ...direct } = grantInput;
+      const refused = await fetch(endpoint(), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(direct),
+      });
+      assert.equal(refused.status, 400);
+      assert.match((await refused.json()).error, /SSH/);
+    }
     let connection = await grant(),
       request = await putPlan(connection);
     const listed = await fetch(endpoint(), { headers: headers() }).then((r) =>
@@ -304,6 +316,15 @@ export async function verifyMCPDatabaseFlow(
     app.server.closeAllConnections();
     await new Promise((resolve) => app.server.close(resolve));
     app = await createApp({ root, port: 0 });
+    if (requiresSSH) {
+      const persisted = await app.store.get(p.id);
+      assert.equal(persisted.settings.apipostDatabases[0].requiresSSH, true);
+      assert.equal(
+        persisted.environments[0].variables.native_value,
+        "from-database",
+      );
+      assert(persisted.runs.some((run) => run.status === "passed"));
+    }
     policy = await configure();
     c = await connect(policy.token);
     assert.equal((await run(c)).status, "failed");

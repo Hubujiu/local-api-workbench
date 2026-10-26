@@ -81,18 +81,25 @@ export async function verifyNativeDatabaseFlow(config) {
   }
 }
 
-export async function verifyNativeImportHTTPFlow(config) {
+export async function verifyNativeImportHTTPFlow(
+  config,
+  { requiresSSH = false } = {},
+) {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { createApp } = await import("../src/server.mjs");
-  const { importIntoProject } = await import("../src/core.mjs");
+  const { importIntoProject, restoreProject, snapshotPlan } = await import(
+    "../src/core.mjs"
+  );
   const { nativeDatabaseFixture } = await import(
     "./fixtures/apipost-database.mjs"
   );
   const root = await mkdtemp(join(tmpdir(), "native-sql-api-"));
   let app = await createApp({ root, port: 0 });
-  let count = 0;
+  let count = 0,
+    expectedCount = 1,
+    restoredState;
   const echo = http.createServer((req, res) => {
     count++;
     res.end(JSON.stringify({ value: req.headers["x-db-value"] }));
@@ -105,7 +112,16 @@ export async function verifyNativeImportHTTPFlow(config) {
       `http://127.0.0.1:${echo.address().port}/`,
       config.type === "mysql" ? "mysql" : "pg",
     );
+    if (requiresSSH) {
+      Object.assign(source.global.db_link[0].config.default.ssh, {
+        enable: 1,
+        password: "discard-source-ssh-password",
+        private_key: "/do/not/read/native-key",
+      });
+    }
     importIntoProject(project, source);
+    if (requiresSSH)
+      assert.equal(project.settings.apipostDatabases[0].requiresSSH, true);
     await app.store.save(project);
     const bindingId = project.settings.apipostDatabases[0].id,
       request = project.requests[0];
@@ -113,8 +129,8 @@ export async function verifyNativeImportHTTPFlow(config) {
       "content-type": "application/json",
       "x-local-token": app.token,
     });
-    const endpoint = () =>
-      app.url + "/api/projects/" + project.id + "/database-connections";
+    const endpoint = (projectId = project.id) =>
+      app.url + "/api/projects/" + projectId + "/database-connections";
     const execute = async (projectId = project.id) => {
       const response = await fetch(
         app.url + "/api/projects/" + projectId + "/execute",
@@ -161,6 +177,24 @@ export async function verifyNativeImportHTTPFlow(config) {
       ).ok,
       false,
     );
+    if (requiresSSH) {
+      const { ssh, ...direct } = grantConfig;
+      const directResponse = await fetch(endpoint(), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(direct),
+      });
+      assert.equal(directResponse.status, 400);
+      assert.match((await directResponse.json()).error, /SSH/);
+      const missingPin = { ...grantConfig, ssh: { ...ssh } };
+      delete missingPin.ssh.hostKeySHA256;
+      const pinResponse = await fetch(endpoint(), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(missingPin),
+      });
+      assert.equal(pinResponse.status, 400);
+    }
     const grantResponse = await fetch(endpoint(), {
       method: "POST",
       headers: headers(),
@@ -172,10 +206,15 @@ export async function verifyNativeImportHTTPFlow(config) {
     const passed = await execute();
     assert.equal(passed.outcome, "passed", JSON.stringify(passed));
     assert.equal(passed.databaseQueries[0].status, "completed");
-    assert.equal(count, 1);
+    assert.equal(count, expectedCount);
     assert.equal((await execute(foreign.id)).outcome, "failed");
-    assert.equal(count, 1);
+    assert.equal(count, expectedCount);
     const disk = await app.store.get(project.id);
+    if (requiresSSH) {
+      assert.equal(disk.settings.apipostDatabases[0].requiresSSH, true);
+      assert(!JSON.stringify(disk).includes("discard-source-ssh-password"));
+      assert(!JSON.stringify(disk).includes("/do/not/read/native-key"));
+    }
     assert.equal(
       JSON.stringify(disk).includes("discard-this-fictional-password"),
       false,
@@ -189,6 +228,49 @@ export async function verifyNativeImportHTTPFlow(config) {
         disk.history[0]?.databaseQueries?.[0]?.status === "completed",
       true,
     );
+    if (requiresSSH) {
+      const restored = restoreProject(await app.store.get(project.id));
+      await app.store.save(restored);
+      assert.equal((await execute(restored.id)).outcome, "failed");
+      assert.equal(count, expectedCount);
+      const granted = await fetch(endpoint(restored.id), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(grantConfig),
+      });
+      assert.equal(granted.status, 200);
+      const current = await app.store.get(restored.id);
+      current.plans = [
+        snapshotPlan({
+          name: "SSH restored",
+          environmentId: current.environments[0].id,
+          steps: [{ request: current.requests[0] }],
+        }),
+      ];
+      await app.store.save(current);
+      restoredState = { id: current.id, planId: current.plans[0].id };
+      const response = await fetch(
+        app.url + "/api/projects/" + current.id + "/run",
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ planId: restoredState.planId }),
+        },
+      );
+      const run = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(run));
+      assert.equal(run.status, "passed", JSON.stringify(run));
+      assert.equal(run.recordSaved, true);
+      expectedCount++;
+      assert.equal(count, expectedCount);
+      assert(
+        (await app.store.get(current.id)).runs.some(
+          (record) =>
+            record.id === run.id &&
+            record.results[0].databaseQueries[0].status === "completed",
+        ),
+      );
+    }
     assert.equal(
       (
         await fetch(endpoint(), {
@@ -200,7 +282,7 @@ export async function verifyNativeImportHTTPFlow(config) {
       true,
     );
     assert.equal((await execute()).outcome, "failed");
-    assert.equal(count, 1);
+    assert.equal(count, expectedCount);
     const rebound = await fetch(endpoint(), {
       method: "POST",
       headers: headers(),
@@ -210,7 +292,38 @@ export async function verifyNativeImportHTTPFlow(config) {
     await new Promise((resolve) => app.server.close(resolve));
     app = await createApp({ root, port: 0 });
     assert.equal((await execute()).outcome, "failed");
-    assert.equal(count, 1);
+    assert.equal(count, expectedCount);
+    if (requiresSSH) {
+      const persisted = await app.store.get(restoredState.id);
+      assert.equal(persisted.settings.apipostDatabases[0].requiresSSH, true);
+      assert.equal(
+        persisted.environments[0].variables.native_value,
+        "from-database",
+      );
+      assert(persisted.runs.some((run) => run.status === "passed"));
+      assert.equal((await execute(restoredState.id)).outcome, "failed");
+      assert.equal(count, expectedCount);
+      const granted = await fetch(endpoint(restoredState.id), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(grantConfig),
+      });
+      assert.equal(granted.status, 200);
+      const response = await fetch(
+        app.url + "/api/projects/" + restoredState.id + "/run",
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ planId: restoredState.planId }),
+        },
+      );
+      const run = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(run));
+      assert.equal(run.status, "passed", JSON.stringify(run));
+      assert.equal(run.recordSaved, true);
+      expectedCount++;
+      assert.equal(count, expectedCount);
+    }
   } finally {
     await new Promise((resolve) => app.server.close(resolve));
     await new Promise((resolve) => echo.close(resolve));

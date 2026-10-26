@@ -12,9 +12,19 @@ import {
 } from "../src/core.mjs";
 import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
-// Cross-feature acceptance: native Redis import + CLI invocation-only grants.
+// Cross-feature acceptance: native database import + invocation-only CLI grants.
 export async function verifyNativeRedisCLIFlow(config) {
-  const root = await mkdtemp(path.join(os.tmpdir(), "redis-cli-"));
+  return verifyNativeDatabaseCLIFlow(config);
+}
+export async function verifyNativeDatabaseCLIFlow(
+  config,
+  {
+    sourceFactory = nativeRedisFixture,
+    expectedValue = "hello",
+    requiresSSH = false,
+  } = {},
+) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-db-cli-"));
   let calls = 0;
   const echo = http.createServer((req, res) => {
     calls++;
@@ -44,7 +54,7 @@ export async function verifyNativeRedisCLIFlow(config) {
         stderr = "";
       const timer = setTimeout(() => {
         child.kill();
-        reject(Error("Redis CLI fixture deadline"));
+        reject(Error("Native database CLI fixture deadline"));
       }, 15000);
       child.stdout.on("data", (b) => (stdout += b));
       child.stderr.on("data", (b) => (stderr += b));
@@ -65,8 +75,8 @@ export async function verifyNativeRedisCLIFlow(config) {
     });
   try {
     const store = new Store(root),
-      p = await store.create("Native Redis CLI");
-    const source = nativeRedisFixture(
+      p = await store.create("Native database CLI");
+    const source = sourceFactory(
         `http://127.0.0.1:${echo.address().port}/echo`,
       ),
       before = structuredClone(source);
@@ -97,11 +107,42 @@ export async function verifyNativeRedisCLIFlow(config) {
     assert.equal(calls, 0);
     for (const connections of [
       {},
-      { [binding]: { ...config, type: "postgres" } },
+      {
+        [binding]: {
+          ...config,
+          type: config.type === "postgres" ? "mysql" : "postgres",
+        },
+      },
       { [binding]: config, foreign: config },
     ]) {
       const failed = await invoke(p.id, "preflight", connections);
       assert.equal(failed.code, 2, failed.stdout + failed.stderr);
+      assert.equal(calls, 0);
+    }
+    if (requiresSSH) {
+      assert.equal(p.settings.apipostDatabases[0].requiresSSH, true);
+      const { ssh, ...direct } = config;
+      const noPin = { ...config, ssh: { ...ssh } };
+      delete noPin.ssh.hostKeySHA256;
+      for (const candidate of [direct, noPin]) {
+        const invalid = await invoke(p.id, "preflight", {
+          [binding]: candidate,
+        });
+        assert.equal(invalid.code, 2, invalid.stdout + invalid.stderr);
+        assert.equal(calls, 0);
+      }
+      const wrongPin = {
+        ...config,
+        ssh: {
+          ...ssh,
+          hostKeySHA256:
+            "SHA256:" +
+            Buffer.alloc(32, 1).toString("base64").replace(/=$/, ""),
+        },
+      };
+      const rejected = await invoke(p.id, "native", { [binding]: wrongPin });
+      assert.equal(rejected.code, 1, rejected.stdout + rejected.stderr);
+      assert.match(rejected.stdout, /SSH|指纹/);
       assert.equal(calls, 0);
     }
     const allowed = await invoke(p.id, "native", { [binding]: config });
@@ -111,7 +152,7 @@ export async function verifyNativeRedisCLIFlow(config) {
     assert.equal(result.recordSaved, true);
     assert.equal(calls, 1);
     const saved = await new Store(root).get(p.id);
-    assert.equal(saved.environments[0].variables.native_value, "hello");
+    assert.equal(saved.environments[0].variables.native_value, expectedValue);
     assert(
       saved.runs.some(
         (r) =>
@@ -133,7 +174,13 @@ export async function verifyNativeRedisCLIFlow(config) {
     assert.equal(restoredRun.code, 0, restoredRun.stdout + restoredRun.stderr);
     assert.equal(calls, 2);
     assert.deepEqual(source, before);
-    console.log("REAL_NATIVE_REDIS_CLI_INPUT_ENGINE_PREFLIGHT_RESTORE_PASS");
+    console.log(
+      requiresSSH
+        ? "REAL_NATIVE_REQUIRED_SSH_" +
+            config.type.toUpperCase() +
+            "_CLI_PREFLIGHT_RESTORE_PASS"
+        : "REAL_NATIVE_REDIS_CLI_INPUT_ENGINE_PREFLIGHT_RESTORE_PASS",
+    );
   } finally {
     echo.closeAllConnections();
     await new Promise((r) => echo.close(r));
