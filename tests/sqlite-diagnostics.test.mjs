@@ -9,7 +9,11 @@ import { sqliteProcessErrorCode } from "../src/sqlite-process-diagnostics.mjs";
 async function harness(t, entry, worker) {
   const root = await mkdtemp(path.join(tmpdir(), "sqlite-diagnostics-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const name of ["database-process.mjs", "sqlite-process-diagnostics.mjs"])
+  for (const name of [
+    "database-process.mjs",
+    "sqlite-process-diagnostics.mjs",
+    "database-read-cancellation.mjs",
+  ])
     await copyFile(
       new URL("../src/" + name, import.meta.url),
       path.join(root, name),

@@ -75,9 +75,11 @@ async function fixture(t, type) {
     peers = [],
     projects = [];
   const secret = `FICTIONAL_${type.toUpperCase()}_CANCEL_PASSWORD`;
+  const httpPaths = [];
   let httpCalls = 0,
     app = await createApp({ root: data, port: 0 });
-  const echo = http.createServer((_request, response) => {
+  const echo = http.createServer((request, response) => {
+    httpPaths.push(request.url);
     httpCalls++;
     response.end("{}");
   });
@@ -298,6 +300,7 @@ async function fixture(t, type) {
     raw,
     httpConnect,
     calls: () => httpCalls,
+    paths: () => [...httpPaths],
     async restartHTTP() {
       for (const { client } of clients) await client.close().catch(() => {});
       app.server.closeAllConnections();
@@ -418,7 +421,20 @@ async function noGrantRestart(f, entry, collection) {
     f.peers.map((peer) => peer.connections),
     before,
   );
-  assert.equal(f.calls(), 0);
+  // Missing database grants reject the DB-dependent step, not an unrelated
+  // later HTTP step. Existing plans deliberately continue after ordinary errors;
+  // the cancelled invocation above must still make zero subsequent requests.
+  if (collection === "runs") {
+    assert.equal(response.results.length, 2);
+    assert.equal(response.results[0].status, "failed");
+    assert.equal(response.results[0].response, undefined);
+    assert.match(response.results[0].error, /数据库|授权/);
+    assert.equal(response.results[1].status, "passed");
+    assert.deepEqual(f.paths(), ["/later-a"]);
+  } else {
+    assert.equal(f.calls(), 0);
+    assert.deepEqual(f.paths(), []);
+  }
   await f.cleanEvidence(entry.stderr() + JSON.stringify(entry.messages));
 }
 

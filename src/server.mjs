@@ -1366,17 +1366,29 @@ export async function createApp({
               );
             }
 
-            return json(
-              res,
-              200,
-              b.type && b.type !== "sqlite"
-                ? await queryRemoteDatabase(b)
-                : await querySQLiteBounded(
-                    b.filename,
-                    b.sql,
-                    b.parameters || [],
-                  ),
-            );
+            // Only the read branch is disconnect-cancellable. Explicit writes
+            // retain their acknowledged/uncertain outcome contract.
+            const controller = new AbortController();
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            res.once("close", disconnected);
+            if (res.destroyed) disconnected();
+            try {
+              const result =
+                b.type && b.type !== "sqlite"
+                  ? await queryRemoteDatabase(b, { signal: controller.signal })
+                  : await querySQLiteBounded(
+                      b.filename,
+                      b.sql,
+                      b.parameters || [],
+                      { signal: controller.signal },
+                    );
+              if (!res.destroyed) return json(res, 200, result);
+              return;
+            } finally {
+              res.removeListener("close", disconnected);
+            }
           }
           if (action === "dictionary-preview" && req.method === "POST") {
             const data = await body(req);

@@ -1,7 +1,11 @@
 import ssh2 from "ssh2";
 const { Client } = ssh2;
 import { timingSafeEqual } from "node:crypto";
-import { isIP } from "node:net";
+import { isIP, connect } from "node:net";
+import {
+  checkDatabaseSignal,
+  databaseCancelled,
+} from "./database-read-cancellation.mjs";
 let active = 0;
 const object = (x) => x && typeof x === "object" && !Array.isArray(x);
 const host = (value) =>
@@ -72,7 +76,8 @@ export function databaseSSHConfig(input) {
         }),
   };
 }
-export async function openDatabaseSSH(input) {
+export async function openDatabaseSSH(input, { signal } = {}) {
+  checkDatabaseSignal(signal);
   if (input.ssh === undefined) return null;
   if (!["postgres", "mysql"].includes(input.type))
     throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
@@ -98,6 +103,15 @@ export async function openDatabaseSSH(input) {
   if (active >= 5) throw Error("SSH 数据库并发最多5个");
   active++;
   const client = new Client();
+  // Public ssh2 sock option gives this invocation an actual close boundary.
+  const socket = connect({ host: config.host, port: config.port });
+  socket.on("error", () => {});
+  const transportClosed = new Promise((resolve) =>
+    socket.once("close", () => {
+      active--;
+      resolve();
+    }),
+  );
   let stream,
     closed = false,
     rejectOpen,
@@ -106,9 +120,10 @@ export async function openDatabaseSSH(input) {
     if (closed) return;
     closed = true;
     clearTimeout(timer);
-    active--;
+    signal?.removeEventListener("abort", cancel);
     stream?.destroy();
     client.destroy();
+    socket.destroy();
   };
   const fail = (error) => {
     if (closed) return;
@@ -116,6 +131,7 @@ export async function openDatabaseSSH(input) {
     stream?.destroy(error);
     close();
   };
+  const cancel = () => fail(databaseCancelled());
   const timer = setTimeout(
     () => fail(Error("SSH 数据库通道超过8秒，已关闭；不会重放请求")),
     8000,
@@ -131,14 +147,23 @@ export async function openDatabaseSSH(input) {
   try {
     return await new Promise((resolve, reject) => {
       rejectOpen = reject;
+      signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) {
+        cancel();
+        return;
+      }
       client.once("ready", () => {
+        if (closed || signal?.aborted) {
+          cancel();
+          return;
+        }
         client.forwardOut(
           "127.0.0.1",
           0,
           targetHost,
           targetPort,
           (error, channel) => {
-            if (closed) {
+            if (closed || signal?.aborted) {
               channel?.destroy();
               return;
             }
@@ -164,13 +189,14 @@ export async function openDatabaseSSH(input) {
             stream.setKeepAlive = () => stream;
             stream.ref = () => stream;
             stream.unref = () => stream;
-            resolve({ stream, close });
+            resolve({ stream, close, closed: transportClosed });
           },
         );
       });
       const { hostKeySHA256, ...credentials } = config;
       client.connect({
         ...credentials,
+        sock: socket,
         readyTimeout: 3000,
         keepaliveInterval: 1000,
         keepaliveCountMax: 2,
@@ -187,6 +213,7 @@ export async function openDatabaseSSH(input) {
     });
   } catch (error) {
     close();
+    await transportClosed;
     throw error;
   }
 }

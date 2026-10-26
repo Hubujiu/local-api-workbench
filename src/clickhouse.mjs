@@ -1,3 +1,7 @@
+import {
+  checkDatabaseSignal,
+  databaseCancelled,
+} from "./database-read-cancellation.mjs";
 import http from "node:http";
 import https from "node:https";
 
@@ -90,9 +94,23 @@ export function clickhouseRequest(input) {
     },
   };
 }
-export async function queryClickHouse(input) {
+export async function queryClickHouse(input, { signal } = {}) {
+  checkDatabaseSignal(signal);
   const { url, headers } = clickhouseRequest(input);
   const body = await new Promise((resolve, reject) => {
+    let settled = false,
+      closeRequest;
+    const closed = new Promise((resolve) => {
+      closeRequest = resolve;
+    });
+    const finish = async (error, result) => {
+      if (settled) return;
+      settled = true;
+      if (error) request.destroy();
+      await closed;
+      if (signal?.aborted) error = databaseCancelled();
+      error ? reject(error) : resolve(result);
+    };
     const request = (input.ssl ? https : http).request(
       url,
       {
@@ -101,6 +119,7 @@ export async function queryClickHouse(input) {
         rejectUnauthorized: true,
         ...(input.ca && input.ssl ? { ca: input.ca } : {}),
         agent: false,
+        signal,
       },
       (response) => {
         const chunks = [];
@@ -114,8 +133,8 @@ export async function queryClickHouse(input) {
           }
           chunks.push(chunk);
         });
-        response.on("error", reject);
-        response.on("aborted", () => reject(Error("ClickHouse响应中断")));
+        response.on("error", (error) => finish(error));
+        response.on("aborted", () => finish(Error("ClickHouse响应中断")));
         response.on("end", () => {
           let text;
           try {
@@ -123,7 +142,7 @@ export async function queryClickHouse(input) {
               Buffer.concat(chunks),
             );
           } catch {
-            reject(Error("ClickHouse响应不是有效UTF-8"));
+            finish(Error("ClickHouse响应不是有效UTF-8"));
             return;
           }
           if (
@@ -131,7 +150,7 @@ export async function queryClickHouse(input) {
             (response.headers["x-clickhouse-exception-code"] &&
               response.headers["x-clickhouse-exception-code"] !== "0")
           )
-            reject(
+            finish(
               Error(
                 "ClickHouse查询失败(" +
                   response.statusCode +
@@ -143,8 +162,8 @@ export async function queryClickHouse(input) {
             response.headers["content-encoding"] &&
             response.headers["content-encoding"] !== "identity"
           )
-            reject(Error("不支持压缩的ClickHouse响应"));
-          else resolve(text);
+            finish(Error("不支持压缩的ClickHouse响应"));
+          else finish(null, text);
         });
       },
     );
@@ -152,10 +171,14 @@ export async function queryClickHouse(input) {
       () => request.destroy(Error("ClickHouse请求超过5秒")),
       5000,
     );
-    request.once("close", () => clearTimeout(timer));
-    request.once("error", reject);
+    request.once("close", () => {
+      clearTimeout(timer);
+      closeRequest();
+    });
+    request.once("error", (error) => finish(error));
     request.end();
   });
+  checkDatabaseSignal(signal);
   let value;
   try {
     value = JSON.parse(body, (key, item) => {
