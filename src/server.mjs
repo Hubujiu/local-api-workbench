@@ -47,7 +47,7 @@ import {
   manageEnvironment,
 } from "./environments.mjs";
 import { createMCP } from "./mcp.mjs";
-import { OAuthManager, exchangeOAuthToken } from "./oauth.mjs";
+import { OAuthManager } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 import { mutatePostgres } from "./postgres-write.mjs";
@@ -158,6 +158,23 @@ export async function createApp({
           : childSignal,
       ),
     );
+  // OAuth POSTs belong to the incoming caller; a completed request body does
+  // not mean its response connection is still alive.
+  const withOAuthCaller = async (req, res, operation) => {
+    const controller = new AbortController();
+    const abort = () => {
+      if (!res.writableFinished) controller.abort();
+    };
+    req.once("aborted", abort);
+    res.once("close", abort);
+    if (req.aborted || res.destroyed) abort();
+    try {
+      return await operation(controller.signal);
+    } finally {
+      req.off("aborted", abort);
+      res.off("close", abort);
+    }
+  };
   let server;
   const json = (res, status, data) => {
     res.writeHead(status, {
@@ -205,7 +222,12 @@ export async function createApp({
         return json(res, 200, { token, version: "0.1.0" });
       }
       if (u.pathname === "/oauth/callback" && req.method === "GET") {
-        await oauth.complete(Object.fromEntries(u.searchParams));
+        for (const key of ["state", "code", "error", "error_description"])
+          if (u.searchParams.getAll(key).length > 1)
+            throw Error("OAuth 回调参数重复");
+        await withOAuthCaller(req, res, (signal) =>
+          oauth.complete(Object.fromEntries(u.searchParams), signal),
+        );
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'none'",
@@ -375,14 +397,31 @@ export async function createApp({
           return json(res, 200, oauth.status(parts[3]));
         if (u.pathname === "/api/oauth/token" && req.method === "POST") {
           const config = await body(req);
+          const grantType = config.grantType || "client_credentials";
+          if (!["client_credentials", "refresh_token"].includes(grantType))
+            throw Error(
+              "OAuth token 入口仅支持 client_credentials 或 refresh_token",
+            );
+          if (
+            grantType === "refresh_token" &&
+            (typeof config.refreshToken !== "string" ||
+              !config.refreshToken.trim())
+          )
+            throw Error("OAuth refresh token 不能为空");
           const grant =
-            config.grantType === "refresh_token"
+            grantType === "refresh_token"
               ? {
                   grant_type: "refresh_token",
                   refresh_token: config.refreshToken,
                 }
               : { grant_type: "client_credentials" };
-          return json(res, 200, await exchangeOAuthToken(config, grant));
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, (signal) =>
+              oauth.exchange(config, grant, signal),
+            ),
+          );
         }
         if (u.pathname === "/api/mcp/config") {
           if (req.method === "POST") {
@@ -1395,6 +1434,13 @@ export async function createApp({
       json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
     }
   });
+  // The close event fires only after responses finish. Abort OAuth at shutdown
+  // initiation instead, otherwise a held provider POST prevents server.close().
+  const closeServer = server.close;
+  server.close = function (...args) {
+    oauth.close();
+    return closeServer.apply(this, args);
+  };
   server.on("close", () => {
     protocolSessions.close();
     socketioSessions.close();
