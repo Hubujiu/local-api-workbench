@@ -157,3 +157,18 @@ XML 提取的 first-node textContent；原版 parse/select 异常还可能吞错
 冻结后编辑、项目/环境隔离、失败回滚/停止/取消、JSON/Header/XML 同阶段共存首批 20 项通过。
 独立审查已指出并复验关闭一个 global lexical parser 暴露缺陷；随后独立 guard 完整审查
 被平台中断，**尚未完成**，本片按 WIP 保存，不将局部修复证明宣称为完整独立安全验收。
+
+### XML 共享 phase 资源修正
+
+组合 CI 的并发项目场景包含同一当前正文上的 7 条 XML 断言，每次仍必须先检查完整
+intrinsic 图。正常资源分段测量显示，约 200B 文档每次 DOM parse 为 0–2ms、select
+为 0–3ms，而旧 guard 约 8–16ms；主要额外开销是比较 descriptor 的 6 个字段时，
+对双方 descriptor 再分别创建 descriptor。改用 bootstrap 捕获的 hasOwn 检查双方
+字段是否存在，再以捕获的 Object.is 比较**存在的 own data 字段**。这些记录均由
+捕获的原生 getOwnPropertyDescriptor 生成；缺失字段绝不读取继承值或触发 getter。
+
+全部对象/方法函数、symbol own keys、原型身份、全局绑定和每任务前置检查均不减少，
+没有 DOM 缓存、跳过检查、预算提升或并发串行化。本地相同 7 次读取的 guard 合计由
+约 61–72ms 降至 33–37ms；真实 worker 的两项目并发资源回归继续使用原预算。
+数值是本机样本而非跨设备性能保证；正式全量 guard 回归保留，仍不代表已完成此前
+被中断的独立专项审查。

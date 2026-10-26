@@ -2,6 +2,7 @@
 // callback. Refuse changed intrinsics instead of freezing/restoring user state.
 export function intrinsicGuard() {
   const descriptor = Object.getOwnPropertyDescriptor,
+    hasOwn = Object.hasOwn,
     prototype = Object.getPrototypeOf,
     keys = Reflect.ownKeys,
     same = Object.is,
@@ -101,11 +102,13 @@ export function intrinsicGuard() {
   const equal = (current, initial) => {
     if (!current || !initial) return current === initial;
     for (let at = 0; at < fields.length; at++) {
-      const a = descriptor(current, fields[at]),
-        b = descriptor(initial, fields[at]);
-      if (!a || !b) {
-        if (a !== b) return false;
-      } else if (!same(a.value, b.value)) return false;
+      const field = fields[at],
+        a = hasOwn(current, field),
+        b = hasOwn(initial, field);
+      if (a !== b) return false;
+      // These are native-created descriptor records, whose own fields are data
+      // properties. Never read a missing field through a modified prototype.
+      if (a && !same(current[field], initial[field])) return false;
     }
     return true;
   };
