@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { Duplex } from "node:stream";
 import {
   parseMySQLWrite,
   mutateMySQL,
@@ -21,6 +22,7 @@ function fixture({
   failCommit = false,
   failRollback = false,
   slow = false,
+  closeDelay = 0,
 } = {}) {
   const calls = [];
   let created = 0,
@@ -28,12 +30,15 @@ function fixture({
   const createConnection = async (options) => {
     const role = created++ === 0 ? "main" : "control";
     calls.push([role, "connect", options]);
+    options.stream.on("close", () => {
+      calls.push([role, "closed"]);
+      if (role === "main") rejectWrite?.(Error("closed"));
+    });
     return {
       threadId: role === "main" ? 41 : 42,
       on() {},
       destroy() {
-        calls.push([role, "destroy"]);
-        rejectWrite?.(Error("closed"));
+        throw Error("driver.destroy must not replace owned transport close");
       },
       async query(q) {
         const sql = typeof q === "string" ? q : q.sql;
@@ -57,7 +62,20 @@ function fixture({
       },
     };
   };
-  return { createConnection, calls };
+  const createStream = () => {
+    const stream = new Duplex({
+      read() {},
+      write(_chunk, _encoding, done) {
+        done();
+      },
+      destroy(error, done) {
+        setTimeout(() => done(error), closeDelay);
+      },
+    });
+    stream.connect = () => stream;
+    return stream;
+  };
+  return { createConnection, createStream, calls };
 }
 test("MySQL AST validation rejects batches, non-DML, joined or external-schema targets and ambiguous modifiers", async () => {
   for (const sql of [
@@ -161,5 +179,58 @@ test("MySQL concurrent write leases reject a sixth operation and are released on
   await assert.rejects(mutateMySQL(input, sixth), /最多同时执行5/);
   assert.deepEqual(sixth.calls, []);
   assert((await Promise.all(pending)).every((value) => value instanceof Error));
+  assert.equal(mysqlWriteUsage().active, 0);
+});
+
+test("MySQL confirmed COMMIT survives slow teardown and retains capacity until actual close", async () => {
+  const f = fixture({ closeDelay: 250 });
+  const pending = mutateMySQL(input, {
+    ...f,
+    queryTimeoutMs: 25,
+    operationTimeoutMs: 8000,
+  });
+  pending.catch(() => {});
+  const waitUntil = Date.now() + 3000;
+  while (!f.calls.some((x) => x[1] === "COMMIT")) {
+    assert(
+      Date.now() < waitUntil,
+      "fixture must reach COMMIT before teardown checks",
+    );
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert.equal(mysqlWriteUsage().active, 1);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(mysqlWriteUsage().active, 1);
+  assert.equal((await pending).committed, true);
+  assert.equal(f.calls.filter((x) => x[1] === "closed").length, 2);
+  assert.equal(mysqlWriteUsage().active, 0);
+  assert(
+    !f.calls.some(
+      (x) => x[1] === "ROLLBACK" || x[1]?.startsWith?.("KILL QUERY"),
+    ),
+  );
+});
+
+test("MySQL late metadata completion after deadline cannot send DML or COMMIT", async () => {
+  const f = fixture();
+  const create = f.createConnection;
+  f.createConnection = async (options) => {
+    const connection = await create(options);
+    const execute = connection.execute;
+    connection.execute = async (...args) => {
+      const result = await execute(...args);
+      if (String(args[0]).startsWith("SELECT ENGINE"))
+        await new Promise((r) => setTimeout(r, 100));
+      return result;
+    };
+    return connection;
+  };
+  await assert.rejects(
+    mutateMySQL(input, { ...f, queryTimeoutMs: 25 }),
+    /超时/,
+  );
+  assert(!f.calls.some((x) => x[1] === "execute" && x[2].startsWith("INSERT")));
+  assert(!f.calls.some((x) => x[1] === "COMMIT" || x[1] === "ROLLBACK"));
+  assert.equal(f.calls.filter((x) => x[1] === "closed").length, 2);
   assert.equal(mysqlWriteUsage().active, 0);
 });
