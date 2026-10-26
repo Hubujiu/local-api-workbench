@@ -284,7 +284,8 @@ test("protocol failure/cancellation persists honestly and disk failure never rep
   assert.equal(result.base64, "AP8=");
   assert.equal(result.recordSaved, false);
   assert.equal(result.recordId, null);
-  assert.match(result.persistenceError, /disk unavailable/);
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(result.persistenceError, /disk unavailable/);
   assert.equal(f.calls(), 2);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, before);
 });
@@ -351,7 +352,8 @@ test("oversized serialized SSE evidence is reported unsaved without replay or fa
   assert.equal(response.status, 200);
   assert.equal(result.events[0].data.length, 600000);
   assert.equal(result.recordSaved, false);
-  assert.match(result.persistenceError, /3MiB/);
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(result.persistenceError, /3MiB/);
   assert.equal(requests, 1);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, 0);
 });
