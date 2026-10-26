@@ -1,4 +1,4 @@
-# 后端检查点 · 2026-10-26 22:42 UTC
+# 后端检查点 · 2026-10-26 23:06 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
@@ -121,7 +121,7 @@ Header 提取组合760cc2d2f5da31af2323d434613f051d16554608的CI40407071290最�
 
 ## PR25 XML 标量提取增量（WIP，组合待验）
 
-同一PR25最新headfbabb04189301d9b82937df6ede3fc0969f72989/tree81ccaebd605c36871385a74843846ddcbb143b26，与local65ca68adecdef90574fdaaf1fd826adaead0d1da一致。CI40413869629待完成，不借旧Header或构建阶段绿灯。此前992f159的CI40412497011最终取消，Windows取消前观察到可复现产物检查失败；后续ab07补LF属性和metafile跨平台路径规范，但不猜测旧日志没有显示的具体差异。
+PR25该XML阶段headfbabb04189301d9b82937df6ede3fc0969f72989/tree81ccaebd605c36871385a74843846ddcbb143b26，与local65ca68adecdef90574fdaaf1fd826adaead0d1da一致。CI40413869629首轮10个job通过，实际merge b14c274ac092533d99a675e42019b4dc5372726a/tree=head；新成本修复头见后，不借此绿灯。此前992f159的CI40412497011最终取消，Windows取消前观察到可复现产物检查失败；后续ab07补LF属性和metafile跨平台路径规范，但不猜测旧日志没有显示的具体差异。
 
 仅支持responseXml的string(P)，绝对ASCII无冒号子路径、可末属性，恰好一个leaf Element/Attr。零/多匹配、裸node-set、其他XPath函数、整文namespace（含无关分支及声明）均拒绝；与标准XPath零匹配空串/多匹配取首及原版吞错赋空串明确不同，不伪造成功token。
 
@@ -136,8 +136,21 @@ Header 提取组合760cc2d2f5da31af2323d434613f051d16554608的CI40407071290最�
 
 PR25旧ab07及8fe均被替代取消；Windows仍观察可复现test失败，但其build --check已通过，失败的是.gitattributes按LF-only分行的完整行判断。本地CRLF字符串复现旧误报，不能说已直接取得runner文件字节。最终65ca/fbabb仅测试修正LF/CRLF解析，保留全部六条精确规则、真实产物字节重建及缺行/注释/额外字符拒绝，不修改生产和预算。
 
-同PR26最新head5b6f27df988462afb4a71dc0b0851a6268c1c32d/treec8a5308ad5bbe5cf3567ed30b35afa8aaf6db1fa，对应local9c34dd17654d4082b6e3a9fe4b6534f5d14bd3df；parent b626 + PR25fbabb，独立CI40413998798进行中。新增responseXml的string(P)字面eq/uneq，严格唯一leaf/Attr及解析资源边界沿用PR25；不复制原版异常变null的假通过。来源path原样保存，支持的外围空白仅由语法处理，不重写历史字段。
+PR26该XML阶段head5b6f27df988462afb4a71dc0b0851a6268c1c32d/treec8a5308ad5bbe5cf3567ed30b35afa8aaf6db1fa，对应local9c34dd17654d4082b6e3a9fe4b6534f5d14bd3df；parent b626 + PR25fbabb，独立CI40413998798首轮10个job通过，实际merge tree与head一致。新增responseXml的string(P)字面eq/uneq，严格唯一leaf/Attr及解析资源边界沿用PR25；不复制原版异常变null的假通过。来源path原样保存，支持的外围空白仅由语法处理，不重写历史字段。
 
 同一phase的XML断言与提取只初始化一次私有bundle/factory，共享原预算；reader只在同IIFE内传递，不新增global lexical解析入口。XML读取当前位置的处理正文，不读code或Header证据，Header/Code/JSON原语义保留。比较false保持普通继续，读取错误为stageerror，只有启用pick的既有严格策略才要求后置回滚/fail-stop；私有断言证据、完成性、配额与scope/record receipts继续生效。
 
 最终本地组合无冲突合入65ca及9c34；XMLassert/inert/真实XMLpick入口39项通过，新增XMLassert完整入口commit9d490b548f389326bf46c4d00a39da7633cff006的12项通过：两协议及官方SDK/CLI、native往返/恢复、零code getter读取、Header/wait/JSON/XML同阶段、严格错误分类与activepick矩阵、真实final journal unknown同ID恢复不重放、来源惰性/原子拒绝。此前XMLpick最终41+8入口独立记录保留。为避免相邻两轮组合全量CI，本次将提取与断言一并作XML整模块验证；组合待其自身push CI。独立guard专项未完成的WIP限制仍适用，任何CI通过不消除这一缺口。
+
+
+## XML 组合实际失败与检查成本修复（23:06 UTC）
+
+组合adeb1ec6e10827787f9973c902e9933b20a1be99/tree7bd61bb0dfc2851e64e23b81ba6d5721437667e7的CI40414686399最终8成功/2失败：Ubuntu core原XML七断言并发生命周期失败，compat80ms+user173ms触发原250ms活动预算；macOS desktop既有schema smoke用户脚本290ms、schema-only352ms超预算。Mac/Windows core及全部20新增入口、真实数据库与三OS生产stdio通过，不抵消RED；全部actual checkout/tree已核。
+
+本地资源分段显示XML七次每任务完整guard合计约61–72ms，反复创建descriptor字段的descriptor占主要检查成本。仅将其改成captured hasOwn判断双方字段存在，再用Object.is比较可信自有数据字段；仍检查全部377对象图、全部键/symbol、prototype、全局绑定和每任务前置guard，不减少检查或串行化请求。相同本地资源probe七次guard约33–37ms；时值只是该环境观测，不承诺任意机器相同。
+
+PR25修复head203a78b25f84bedfe44a0f2480d37601e56787de/tree2f4b907dbc15b2593dbc1a595e3317dd8da158de=locala43da06390b6a2930bcf8edcca611e8697857dd8，CI40417032300进行中。PR26必要依赖merge head50c176efe72ceef414f1a4bd04bbc1c0acc6c57b/treee790d0d86b1b622f64f915e161eaa4d5c1745ee1=localfa35c71cfb038c4b8251644a2641989f74c5715f，CI40417178864进行中。两个阶段均没有混入后续Text草稿。
+
+完整正式三来源96项通过，原7XML断言A/C并发工作流在PR26定向19项、边界34项均通过；root新组合的原七断言并发及20条真实SDK/CLI/receipt入口共32项通过。250ms/2s/16MiB及所有正式安全测试不变，新组合仍待自己的CI，独立guard专项未完成状态仍如实保留。
+
+macOS schema问题没有被当作XML回归：原smoke/schema-entry/schema bundle与旧树字节相同、该请求不加载XML，promise-state只是后续预算检查位置。本地原完整script+真实loopback通过，未复现原超时。optimize0无明显收益；按选项懒解析固定meta的/tmp原型虽144条结果/错误一致，但仅约35→30ms、bundle增加2.6%、全选项样本反更慢，故未落生产/未新建PR。历史根因仍未知，后续CI即使绿也不宣称已证明修复；未提高预算、删schema或盲重跑。

@@ -322,3 +322,43 @@ test("native XML preserves literal numeric-reference text in CDATA comments and 
   ])
     await assert.rejects(phase(bad), /XML.*字符/);
 });
+
+test("native XML seven current-body tasks retain concurrent phase budget headroom", async () => {
+  const paths = [
+    "/login/state",
+    "/login/@kind",
+    "/login/@blank",
+    "/login/empty",
+    "/login/text",
+    "/login/escaped",
+    "/login/state",
+  ];
+  const runs = await Promise.all(
+    ["A", "C"].map((tenant) =>
+      phase(
+        `<login kind="ready" blank=""><state>view:${tenant}</state><empty/><text><![CDATA[雪 & punctuation]]></text><escaped>&amp;&#x41;&#66;</escaped></login>`,
+        paths.map((path, index) =>
+          pick([row("value" + index, `string(${path})`)]),
+        ),
+      ),
+    ),
+  );
+  for (const [index, result] of runs.entries()) {
+    const values = result.scopes.environment;
+    assert.deepEqual(
+      paths.map((_, position) => values["value" + position]),
+      [
+        "view:" + ["A", "C"][index],
+        "ready",
+        "",
+        "",
+        "雪 & punctuation",
+        "&AB",
+        "view:" + ["A", "C"][index],
+      ],
+    );
+    // Success is governed by the actual worker's unchanged 250ms activity / 2s
+    // wall limits, not by a benchmark-only time allowance or a serial fallback.
+    assert.equal(result.networkRequests.length, 0);
+  }
+});
