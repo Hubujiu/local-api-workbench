@@ -8,10 +8,32 @@ Canonical localapi_execute_api, localapi_execute_flow and localapi_run_plan are 
 
 Client notifications/cancelled cause the server to finish and persist cancelled execution evidence before ending the original POST with 202 and no late JSON-RPC reply. DELETE/policy cancellation still yields a terminal result or bounded authorization-changed error to callers still waiting. Activities and API history preserve cancelled status. Notification receipt or the SDK's immediate local abort rejection is not evidence that server-side work has finished.
 
-Signals reach runPlan and its runtime. New variable commits stop at observed cancellation/read/retry boundaries; an already-entered store save, an earlier committed variable change, or a sent external request is not rolled back. Cancelled execution does not refresh debug-environment cache. Scope-save and final history persistence failures remain errors, not automatic network retries. Protocol-level stdio cancellation is not implemented by this isolated branch. Native adapter cancellation requires its own combined validation.
+Signals reach runPlan and its runtime. New variable commits stop at observed cancellation/read/retry boundaries; an already-entered store save, an earlier committed variable change, or a sent external request is not rolled back. Cancelled execution does not refresh debug-environment cache. Scope-save and final history persistence failures remain errors, not automatic network retries. The stdio extension below is a separately verified transport stage. Native adapter cancellation requires its own combined validation.
 
 Local tests use the official SDK against the real HTTP app with two clients sharing request numbers, verify cancellation of only the intended plan, read its persisted terminal history, retain the other client's completed request, and confirm late notifications/ID reuse/session deletion behavior. Additional capacity/policy/TTL/typed-ID tests use the registry directly. Live-policy changes, in-flight DELETE, cancellation at ten occupied execution slots, API history, and injected history-save failure are additionally covered by the real SDK/HTTP fixture. Failed persistence remains visible in activity as recordSaved:false with a bounded error even when a cancelled client no longer waits for a reply. Exact new-head CI and combined Mongo driver cancellation remain WIP until separately verified.
 
 References:
 - https://modelcontextprotocol.io/specification/2025-06-18/basic
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/cancellation
+
+## Stdio cancellation extension (WIP)
+
+The stdio entrypoint now reuses the official MIT-licensed SDK 1.32.1 ReadBuffer/serializeMessage for bounded JSON-RPC framing. The existing exact SDK dependency is promoted from development to production, with an isolated production-only packaged stdio smoke and license check in desktop CI. It deliberately does not adopt SDK Server: our single shared dispatcher retains debug state and protocol concurrency limits, while request-local progress callbacks keep simultaneous activities separate. Existing protocol-version negotiation is unchanged.
+
+The same typed-ID registry is process-scoped with idle expiry disabled. Limits are 1024 IDs/process, ten concurrent tool calls and 32 total pending handlers, 12 MiB input buffer, 8 MiB output frames, 12 MiB total output queue and five-second write-acknowledgment deadline. Cancellation notifications bypass handler admission. Oversized input or saturated/broken output closes the transport and cancels active execution instead of buffering indefinitely. Replies are framed atomically and may arrive in completion order.
+
+EOF cancels active cancellable operations and waits for their handler/evidence cleanup. External SIGTERM/SIGKILL and the SDK client's two-second shutdown grace can still interrupt persistence; no guarantee of rollback or always-saved evidence is made. CRUD is not rolled back. Activities now accept cancelled and separately record failed persistence.
+
+Local pure-stream tests cover zero/empty request IDs, cancellation during active input, EOF cleanup, input/pending/output bounds and EPIPE/close/timeout. Official SDK real-subprocess tests cover two simultaneous HTTP plans, cancellation of only one, separate disk activities, retained debug variables/new-project grants, plus raw EOF cancellation and clean exit. Exact new-head CI, production-only packaged smoke and additional full-slot/failure integration remain pending at this checkpoint.
+
+### Lifecycle corrections and platform entrypoint
+
+Activity finalization now precedes the sole reply; a failed activity write cannot produce both success and error for the same ID. Queued replies recheck accepted cancellation at the actual write boundary; already-started frames cannot be recalled. Input close without end, including already-destroyed input, aborts and settles. Activity metadata is bounded before writing; oversized progress step IDs are explicitly omitted rather than producing unreadable >4 KiB logs.
+
+The first production smoke failed on macOS, while Ubuntu/Windows passed. A regression test reproduced the old argv-string entrypoint guard failing through a directory symlink and passed after realpath comparison. The smoke now captures bounded child stderr. The new exact CI must still verify this platform fix. The same first CI also hit the old baseline Faker quota/time-budget race; it did not contain PR3's existing ASCII optimization, and no budget/assertion is relaxed.
+
+### Shared runtime prerequisite
+
+This cancellation PR is now stacked on PR3 (fix/script-sequence-budgets), not duplicating its budget validation, diagnostics or ASCII optimization. The first stdio CI used the older develop runtime and hit its known Faker budget race. Keeping PR3 as the explicit base preserves feature-only diffs and the original six default-limit assertions; it does not change or enlarge safety budgets and is not a merge into develop/main.
+
+ExecutionStatus remains explicit even when the output path later fails. An activity completed after execution/history persistence does not acknowledge client receipt; a frame already being written cannot be recalled. The recorded operation must never be replayed solely because the reply channel failed.
