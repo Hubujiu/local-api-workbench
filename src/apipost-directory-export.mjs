@@ -95,10 +95,10 @@ export function exportApipostDirectory(project) {
         (n) => n.target_type === "folder",
       )) {
         const mapped = mapNode(folder);
-        if (!folders.has(mapped.target_id)) {
-          folders.set(mapped.target_id, mapped);
-          apis.push(mapped);
-        }
+        if (!folders.has(mapped.target_id))
+          throw Error(
+            "原生目录快照引用非活动目录，不能重新创建已删除或移动的目录；请使用项目备份",
+          );
       }
       const api = mapNode(frozen.apis.find((n) => n.target_type === "api"));
       api.target_id = scoped("snapshot", plan.id + "\0" + step.id);
