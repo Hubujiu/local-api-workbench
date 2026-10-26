@@ -1,4 +1,4 @@
-# 原生 request wait（开发检查点）
+# 原生 request wait
 
 ## 静态契约及差异
 
@@ -27,11 +27,25 @@
 - wait-only 阶段错误沿用普通计划继续策略；取消停止计划；有启用 pickVars 的请求仍保留既有严格策略。
   同 VM 词法作用域/来源与冻结快照保持不变，原 wire 与处理视图保持独立。
 
-## 检查点
+## 本地验收
 
-首批 3 项本地测试通过：严格/惰性输入、零值无 timer/无 microtask 让步、真实 loopback
-entered→继承 wait80ms→主 HTTP / post-entered→wait120ms→后续 Bearer HTTP。
-时间以服务端 monotonic 观察，包含变量/run 落盘、冻结后编辑、重启及完整备份恢复。
-对抗/取消/隔离/限额矩阵仍待完成，此阶段不是完成交付。
+最终七个 focused 测试文件 103/103 通过：native-wait-tasks、native-response-assertions、
+native-pick-vars、native-task-phase、native-task-plan、apipost-modern、dynamic-values。
+语法/format/diff 检查通过；exact-head CI 与组合入口另行验收，focused 不是全产品通过。
+
+覆盖严格/惰性输入、零值无 timer/无 microtask 让步、真实 loopback entered→继承 wait80ms→
+主 HTTP / post-entered→wait120ms→后续 Bearer HTTP，变量/run 落盘、冻结后编辑、重启、完整备份恢复。
+Number/Promise/timer/Date 篡改测试中的后一个 HTTP 也由同一 VM 在 wait 后发送；
+服务端 monotonic 时间证明未提前发送，不靠脚本时钟或仅等待最终 completion 掩盖过早副作用。
+另验证两项目/两环境并发隔离、外项目环境拒绝、1000ms inclusive、合计超限、100次/32并行 timer、
+700ms wall deadline 在等待期间仍生效、异步重入 sticky failure、早退/吞调度错误/猜 clear ID 不伪装成功。
+
+真实 HTTP 取消测试在 wait 期间由另一个已授权定时回调发送 wait-active 标记后取消：
+前置取消不发送主请求、不提交该 VM 变量；后置取消保留已成功提交的前置变量与原 wire 响应，
+不提交本次 VM 后置变量、不发送后续计划请求。另一项目继续成功，cancelled run 落盘后重启不重放。
+这些是本地 Workbench 的验证，不是原版同步 sleep/外层取消保证。
+
+旧 modern 未知任务负例曾使用现在合法的 wait10；已保留真正 unsupported-task 原子拒绝，
+同时覆盖 wait 字符串强制转换/合计超限拒绝与整数 wait10 的实际 timer 正例，未删除未知类型覆盖。
 
 PR2 CLI 与 PR7 惰性 flow 来源类型适配属于组合验收；不复制整分支、不激活 flow API 来源任务。
