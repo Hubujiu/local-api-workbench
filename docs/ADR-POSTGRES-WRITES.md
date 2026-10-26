@@ -36,6 +36,7 @@
 
 - tests/postgres-write.test.mjs：显式授权与目标、引用/括号/批次逃逸、严格 TLS、计数边界、提交/回滚失败、无自动重试，以及只读协议的先失败回归。
 - tests/remote-database.mjs：CI 专用 PostgreSQL 服务，经真实 HTTP 路由完成授权拒绝、参数化写入/更新/删除、1000 行边界、1001 行回滚和只读批次逃逸拒绝；专用表自动清理，不使用用户数据库。
+- 真实 PostgreSQL 超时回归另由额外 fixture 连接先取得现有测试行的 FOR UPDATE 锁，再调用 owner HTTP UPDATE；持锁直到既有 2000ms 服务端 statement_timeout 触发且响应明确确认 ROLLBACK，finally 释放锁后经正常只读路径确认原值未变。不使用 sleep、替换驱动或修改生产预算；成功才输出 `REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS`。这是本测试行的超时回滚/读回证据，不是 COMMIT 响应丢失、任意副作用或 raw peer 的服务端事务证明；新增检查须等待其最终头真实数据库 CI，不能借用 MySQL timeout marker。
 - tests/ui-smoke.mjs：切换提供方清除授权，确认目标及风险提示，取消后零数据库请求，MySQL 不展示写入授权。浏览器本身不冒充真实 PostgreSQL 成功执行，成功执行证据来自独立真实服务测试。
 - dde1ea720242bb9dda15eae985563fa05a7146b6 已通过402项核心回归及全部10项CI，包含真实数据库 HTTP 验证和浏览器取消路径：[Actions 39743195242](https://github.com/Hubujiu/local-api-workbench/actions/runs/39743195242)。
 - 后续界面补充：保留原有提供方切换清空/失效旧结果的行为，并增加 TLS 切换清理。仅写入等待期间锁定提供方与 TLS，保留只读查询期间切换并丢弃旧响应的既有能力。门控真实 SQLite 响应确认等待期间控件锁定，完成后恢复；PostgreSQL 面板另有截图。后续改动以其独立CI为准。
