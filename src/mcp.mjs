@@ -13,7 +13,11 @@ import {
   nativeAPIDetail,
   nativeRunResult,
 } from "./native-mcp-tools.mjs";
-import { buildNativeMCPPlan, nativeFlowView } from "./native-mcp-plan.mjs";
+import {
+  buildNativeMCPPlan,
+  nativeFlowView,
+  inputAuth,
+} from "./native-mcp-plan.mjs";
 import { lockMCPPlan } from "./mcp-plan-locks.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
@@ -702,42 +706,45 @@ export function createMCP({
                 (item) => item.id === args.apiId && !item.deletedAt,
               );
               if (!request) throw Error("接口不存在");
+              const environmentId = selectedEnvironment(
+                p,
+                args.environmentId,
+              ).id;
+              const effectiveRequest = resolveServiceRequest(
+                p,
+                freezeServiceBinding(p, request),
+                environmentId,
+              );
               const plan = snapshotPlan({
                 name: request.name,
+                ...(nativeName ? { statusPolicy: "strict200" } : {}),
                 functions: p.settings?.functions || [],
                 steps: [
                   {
                     request: applyMCPInput(
-                      resolveServiceRequest(
-                        p,
-                        freezeServiceBinding(p, request),
-                        args.environmentId,
-                      ),
-                      args.input,
+                      effectiveRequest,
+                      nativeName
+                        ? inputAuth(effectiveRequest, args.input)
+                        : args.input,
                     ),
                   },
                 ],
               });
               output = await runPlan(
                 plan,
-                debugEnvironment(p, args.environmentId, debugEnvironments)
-                  .variables,
+                debugEnvironment(p, environmentId, debugEnvironments).variables,
                 executeRequest,
                 {
                   databaseQuery: databaseExecutor
                     ? (operation, signal) =>
                         databaseExecutor(p.id, operation, signal)
                     : undefined,
-                  cookieSession: projectCookieSession(
-                    store,
-                    p,
-                    args.environmentId,
-                  ),
+                  cookieSession: projectCookieSession(store, p, environmentId),
                   ...scopedExecution(
                     store,
                     p,
-                    args.environmentId,
-                    debugEnvironment(p, args.environmentId, debugEnvironments)
+                    environmentId,
+                    debugEnvironment(p, environmentId, debugEnvironments)
                       .variables,
                   ),
                   onStep: (step) =>
@@ -751,7 +758,7 @@ export function createMCP({
               );
               const context = debugEnvironment(
                 p,
-                args.environmentId,
+                environmentId,
                 debugEnvironments,
               );
               if (output.results[0]?.response)
@@ -759,14 +766,23 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              await store.append(p.id, "history", {
-                id: output.id,
-                createdAt: output.createdAt,
-                name: request.name,
-                ...output.results[0],
-                source: "mcp",
-                durationMs: output.durationMs,
-              });
+              output.environmentId = environmentId;
+              try {
+                await store.append(p.id, "history", {
+                  id: output.id,
+                  createdAt: output.createdAt,
+                  name: request.name,
+                  ...output.results[0],
+                  source: "mcp",
+                  durationMs: output.durationMs,
+                  environmentId: output.environmentId,
+                });
+                output.recordSaved = true;
+              } catch {
+                output.recordSaved = false;
+                output.persistenceError =
+                  "执行已完成，但历史记录保存失败；请勿自动重放请求";
+              }
               break;
             }
             case "localapi_execute_flow":
@@ -849,8 +865,12 @@ export function createMCP({
           output = { flow: nativeFlowView(args.projectId, output) };
         else if (kind === "delete_execution_flow")
           output = { deleted: true, flow_id: args.planId };
-        else if (kind === "execute_flow")
-          output = nativeRunResult(args.projectId, output);
+        else if (kind === "execute_flow" || kind === "execute_api")
+          output = nativeRunResult(
+            args.projectId,
+            output,
+            kind === "execute_api" ? "api" : "flow",
+          );
         else if (kind === "get_execution_result")
           output = {
             run: {

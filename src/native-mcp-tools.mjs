@@ -35,6 +35,12 @@ const steps = {
   },
 };
 const definitions = [
+  [
+    "execute_api",
+    { ...project, target_id: str, environment_id: str, input },
+    ["project_id", "target_id"],
+    "execute",
+  ],
   ["list_projects", {}, [], "read"],
   [
     "list_apis",
@@ -227,7 +233,7 @@ export function nativeAPIDetail(project, apiId) {
     },
   };
 }
-export function nativeRunResult(projectId, run) {
+export function nativeRunResult(projectId, run, scope = "flow") {
   const results = run.results || [],
     failed = results
       .filter((r) => r.status !== "passed")
@@ -244,7 +250,7 @@ export function nativeRunResult(projectId, run) {
     run_id: run.id,
     project_id: projectId,
     status: run.status,
-    scope: "flow",
+    scope,
     elapsed_ms: run.durationMs,
     total: results.length,
     passed: results.filter((r) => r.status === "passed").length,
