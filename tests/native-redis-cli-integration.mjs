@@ -173,6 +173,11 @@ export async function verifyNativeDatabaseCLIFlow(
     });
     assert.equal(restoredRun.code, 0, restoredRun.stdout + restoredRun.stderr);
     assert.equal(calls, 2);
+    for (const projectId of [p.id, restored.id]) {
+      const disk = JSON.stringify(await new Store(root).get(projectId));
+      for (const secret of [config.password, config.ca].filter(Boolean))
+        assert(!disk.includes(JSON.stringify(secret).slice(1, -1)));
+    }
     assert.deepEqual(source, before);
     console.log(
       requiresSSH

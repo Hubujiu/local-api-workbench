@@ -266,6 +266,7 @@ export async function verifyMCPDatabaseFlow(
           ...grantInput,
           user: "fixture-user",
           password: "fictional",
+          authSource: undefined,
         }),
       });
       assert.equal(missingAuth.status, 400);
@@ -358,8 +359,11 @@ export async function verifyMCPDatabaseFlow(
     const disk = await app.store.get(p.id);
     if (config.filename)
       assert.equal(JSON.stringify(disk).includes(config.filename), false);
-    if (config.password)
-      assert.equal(JSON.stringify(disk).includes(config.password), false);
+    for (const secret of [config.password, config.ca].filter(Boolean))
+      assert.equal(
+        JSON.stringify(disk).includes(JSON.stringify(secret).slice(1, -1)),
+        false,
+      );
     assert.ok(disk.runs.some((record) => record.status === "passed"));
     assert.ok(disk.runs.some((record) => record.status === "failed"));
   } finally {
