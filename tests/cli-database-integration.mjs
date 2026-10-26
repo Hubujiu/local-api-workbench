@@ -77,12 +77,15 @@ export async function verifyCLIDatabaseFlow(
             data: {
               connectionId: operation.connectionId,
               query: operation.sql,
+              ...(config.type === "redis"
+                ? { resultShape: "redis-value" }
+                : {}),
               isConsoleOutput: -1,
               variables: [
                 {
                   name: operation.name,
                   type: "environment",
-                  pattern: "$[0].value",
+                  pattern: config.type === "redis" ? "$" : "$[0].value",
                 },
               ],
             },
@@ -203,6 +206,14 @@ export async function verifyCLIDatabaseFlow(
         1,
         "invalid grants must fail before earlier HTTP step",
       );
+    }
+    if (native && config.type === "redis") {
+      const wrongEngine = await invoke("preflight", "--database-stdin", {
+        databaseConnections: { fixture: { ...config, type: "postgres" } },
+      });
+      assert.equal(wrongEngine.code, 2);
+      assert.match(wrongEngine.stderr, /引擎/);
+      assert.equal(requests, 1, "engine mismatch fails before earlier HTTP");
     }
     const repeat = await invoke("db", "--database-stdin", envelope);
     assert.equal(repeat.code, 0, repeat.stdout + repeat.stderr);
