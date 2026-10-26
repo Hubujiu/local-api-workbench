@@ -1,3 +1,4 @@
+import { compileNativeWaits } from "./native-wait-tasks.mjs";
 import { compileNativeAssertions } from "./native-response-assertions.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
@@ -32,6 +33,7 @@ export function runScript(
     databaseOperations: suppliedDatabaseOperations,
     responseExtractions: suppliedResponseExtractions,
     responseAssertions: suppliedResponseAssertions,
+    nativeWaits: suppliedNativeWaits,
     activityBudgetMs = 250,
     wallBudgetMs = 2000,
     requestLimit = 10,
@@ -41,6 +43,7 @@ export function runScript(
     assertionLimit = 1000,
   } = {},
 ) {
+  const nativeWaits = compileNativeWaits(suppliedNativeWaits);
   const responseAssertions = compileNativeAssertions(
     suppliedResponseAssertions,
   );
@@ -118,6 +121,7 @@ export function runScript(
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
         responseAssertions,
+        nativeWaits,
         code,
         input,
         activityBudgetMs,

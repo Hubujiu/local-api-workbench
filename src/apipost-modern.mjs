@@ -260,7 +260,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     if (
       !Array.isArray(value) ||
       !value.some((task) =>
-        ["database", "pickVars", "assert"].includes(task?.type),
+        ["database", "pickVars", "assert", "wait"].includes(task?.type),
       )
     )
       return scriptTasks(value, phase, origins);
@@ -278,6 +278,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         " 原版混排任务保持同一词法作用域。" +
         (tasks.some((task) => task.type === "database")
           ? "数据库任务错误终止当前阶段，不沿用原版继续发送旧值的行为。"
+          : "") +
+        (tasks.some((task) => task.type === "wait")
+          ? "原生wait仅支持0至1000ms整数、同阶段合计1000ms；使用有界异步定时器而非原同步sleep，等待期间其他已授权回调可能运行；禁用数据仅惰性保存。"
           : "") +
         (tasks.some((task) => task.type === "assert")
           ? "原生断言仅支持后置responseCode/严格responseJson与eq/uneq字面比较；不展开模板、转换对象、回退XML或执行路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
