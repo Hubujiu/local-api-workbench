@@ -1044,6 +1044,12 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (
+        config.type === "awsv4" &&
+        (config.awsv4 || []).filter((item) => item.key === "addAuthDataToQuery")
+          .length > 1
+      )
+        throw Error("Postman AWS Query认证开关重复");
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1097,7 +1103,14 @@ export function importDocument(doc) {
         return {
           type: "aws",
           ...Object.fromEntries(
-            ["accessKey", "secretKey", "sessionToken", "region", "service"]
+            [
+              "accessKey",
+              "secretKey",
+              "sessionToken",
+              "region",
+              "service",
+              "addAuthDataToQuery",
+            ]
               .filter((key) => values[key] !== undefined)
               .map((key) => [key, values[key]]),
           ),

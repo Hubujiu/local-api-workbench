@@ -17,7 +17,8 @@ import {
 import { ntlmType1, parseNtlmChallenge, ntlmType3 } from "./ntlm.mjs";
 import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
-import { awsSignatureHeaders } from "./aws-signature.mjs";
+import { awsSignatureRequest, validateAWSQueryURL } from "./aws-signature.mjs";
+import { validateAuth } from "../public/auth-model.js";
 import { oauth1Authorization } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
@@ -242,8 +243,10 @@ export class Store {
         normalizeParameterEntry,
       );
     }
-    for (const request of p.requests || [])
+    for (const request of p.requests || []) {
+      validateAuth(request.auth);
       validateMockRules(request.mockRules || []);
+    }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)
         throw Error("用例最多1000个");
@@ -318,6 +321,8 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
+  if (r.auth.type === "aws" && r.auth.addAuthDataToQuery === true)
+    validateAWSQueryURL(raw);
   const u = new URL(raw);
   if (!["http:", "https:"].includes(u.protocol))
     throw Error("仅支持 HTTP/HTTPS");
@@ -408,11 +413,21 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       body,
       r.auth,
     ).header;
-  if (r.auth.type === "aws")
-    Object.assign(
+  if (r.auth.type === "aws") {
+    const signed = await awsSignatureRequest(
+      u.href,
+      r.method,
       headers,
-      await awsSignatureHeaders(u.href, r.method, headers, body, r.auth),
+      body,
+      r.auth,
     );
+    u.href = signed.url;
+    // Query signing removes/hoists authentication headers. Object.assign alone
+    // would leave old Authorization or session-token headers on the wire.
+    if (r.auth.addAuthDataToQuery === true)
+      for (const key of Object.keys(headers)) delete headers[key];
+    Object.assign(headers, signed.headers);
+  }
   if (r.auth.type === "hawk")
     headers.authorization = hawkAuthorization(
       u.href,
