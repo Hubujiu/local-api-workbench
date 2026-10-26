@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { validateMockResponse } from "../public/response-example.js";
 const formats = {
@@ -102,6 +103,13 @@ export function exportApipostResponses(request) {
     if (definition?.used) throw Error("原生响应状态/媒体示例重复");
     if (definition) definition.used = true;
     return {
+      example_id:
+        "example_" +
+        createHash("sha256")
+          .update(String(request.id) + "\0" + String(index))
+          .digest("hex")
+          .slice(0, 24),
+      raw_parameter: [],
       raw: example.body,
       headers: Object.entries(headers).map(([key, value], i) => ({
         param_id: `response_${index}_${i}`,
@@ -110,8 +118,11 @@ export function exportApipostResponses(request) {
         is_checked: 1,
       })),
       expect: {
+        is_default: -1,
+        verify_type: "schema",
+        mock: "",
         name: example.name,
-        code: example.status,
+        code: String(example.status),
         content_type: formats[media],
         schema: definition?.schema ?? {},
         ...(example.delayMs === undefined ? {} : { sleep: example.delayMs }),

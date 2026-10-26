@@ -28,6 +28,8 @@ export function exportApipostDirectory(project) {
     for (const phase of ["pre_tasks", "post_tasks"])
       for (const [i, task] of (copy.request?.[phase] || []).entries())
         task.id = scoped("t", copy.target_id + ":" + phase + ":" + i);
+    for (const [i, example] of (copy.response?.example || []).entries())
+      example.example_id = scoped("example", copy.target_id + ":" + i);
     return copy;
   };
   const apis = document.apis.map(mapNode);
@@ -74,6 +76,8 @@ export function exportApipostDirectory(project) {
         throw Error("原生目录步骤标识重复或缺失");
       stepIds.add(step.id);
       const request = step.request;
+      if (step.name !== request.name)
+        throw Error("原生目录不能分别保留步骤名与快照接口名；请使用项目备份");
       if (
         (request.beforeScript || request.afterScript) &&
         request.scriptDialect !== "apipost8"
@@ -98,6 +102,8 @@ export function exportApipostDirectory(project) {
       }
       const api = mapNode(frozen.apis.find((n) => n.target_type === "api"));
       api.target_id = scoped("snapshot", plan.id + "\0" + step.id);
+      for (const [i, example] of (api.response?.example || []).entries())
+        example.example_id = scoped("example", api.target_id + ":" + i);
       for (const [phase, field] of [
         ["before", "pre_tasks"],
         ["after", "post_tasks"],

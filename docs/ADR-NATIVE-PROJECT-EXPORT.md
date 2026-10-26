@@ -136,3 +136,13 @@ verified: the known UI storage picker creates a new project, not an established
 open-existing-directory operation. No registry modification or inferred original
 runtime success is used to hide this remaining gap. Current/initial environment
 values in generated directory files also need that original-runtime verification.
+
+Static compatibility review found and corrected missing native response editor
+identities/defaults: each example now has a stable API-scoped example_id,
+raw_parameter:[], is_default:-1, verify_type:"schema", mock:"", and string status.
+Directory snapshots namespace those IDs separately from live APIs. Raw text uses
+native body mode plain (the observed original UI enum), not the import-only text
+alias. Parameter schemas preserve supported basic types and reject constraints
+that the native importer would discard. Different step/request labels reject
+rather than silently change the label. These static corrections still need the
+separately pending original UI verification; local roundtrips do not replace it.

@@ -45,6 +45,18 @@ function rows(values, kind) {
       throw Error("Apipost导出不读取或携带本地文件；请使用项目备份");
     for (const key of ["contentType", "content_type", "fileBase64", "filePath"])
       unsupported(row[key], `${kind}.${key}`);
+    const schema = row.schema ?? {};
+    if (
+      !schema ||
+      typeof schema !== "object" ||
+      Array.isArray(schema) ||
+      Object.keys(schema).some((key) => key !== "type") ||
+      (schema.type !== undefined &&
+        !["string", "integer", "number", "boolean", "array", "object"].includes(
+          schema.type,
+        ))
+    )
+      throw Error("Apipost导出参数schema仅支持明确基础类型；不会丢弃约束");
     return {
       param_id: apipostExportId("p", kind + ":" + index),
       key: row.key,
@@ -52,7 +64,7 @@ function rows(values, kind) {
       is_checked: row.enabled === false ? -1 : 1,
       not_null: row.required === true ? 1 : -1,
       description: row.description || "",
-      field_type: "String",
+      field_type: schema.type ?? "string",
       schema: structuredClone(row.schema || {}),
     };
   });
@@ -364,7 +376,7 @@ export function exportApipost(project) {
           cookie_encode: r.cookieEncoding === "apipost" ? 1 : -1,
         },
         body: {
-          mode: r.bodyType === "raw" ? "text" : r.bodyType,
+          mode: r.bodyType === "raw" ? "plain" : r.bodyType,
           raw: r.body,
           parameter: rows(r.form, "body"),
           raw_parameter: [],

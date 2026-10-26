@@ -139,6 +139,17 @@ test("directory export preserves independent frozen HTTP steps, inert sources an
   );
   assert.match(flow.steps[0].pre_script, /"one"/);
   assert.equal(flow.steps[0].api_snapshot.response.is_check_result, -1);
+  const nativeExample = flow.steps[0].api_snapshot.response.example[0];
+  assert.match(nativeExample.example_id, /^example/);
+  assert.notEqual(
+    nativeExample.example_id,
+    flow.steps[1].api_snapshot.response.example[0].example_id,
+  );
+  assert.deepEqual(nativeExample.raw_parameter, []);
+  assert.equal(nativeExample.expect.is_default, -1);
+  assert.equal(nativeExample.expect.verify_type, "schema");
+  assert.equal(nativeExample.expect.mock, "");
+  assert.equal(nativeExample.expect.code, "200");
   const p = await app.store.create("Imported");
   importIntoProject(p, document);
   await app.store.save(p);
@@ -222,6 +233,7 @@ test("native directory export rejects unrepresentable execution semantics and re
     (p) => (p.plans[0].statusPolicy = "assertions"),
     (p) => (p.plans[0].steps[0].type = "unknown"),
     (p) => (p.plans[0].steps[0].enabled = false),
+    (p) => (p.plans[0].steps[0].name = "different label"),
     (p) =>
       (p.plans[0].steps[0].request.assertions = [
         { target: "status", op: "eq", value: 200 },
@@ -284,4 +296,44 @@ test("response media whitelist cannot be satisfied by inherited object propertie
     p.requests[0].examples[0].headers["content-type"] = media;
     assert.throws(() => exportApipost(p), /Content-Type/);
   }
+});
+
+test("native parameter schemas retain supported basic types and reject dropped constraints", () => {
+  for (const type of [
+    "string",
+    "integer",
+    "number",
+    "boolean",
+    "array",
+    "object",
+  ]) {
+    const p = fixture("http://127.0.0.1:1/");
+    p.plans = [];
+    p.requests[0].query = [
+      { key: "q", value: "1", enabled: true, schema: { type } },
+    ];
+    const output = exportApipost(p),
+      target = { requests: [], environments: [], settings: {} };
+    importIntoProject(target, output);
+    assert.deepEqual(target.requests[0].query[0].schema, { type });
+    p.requests[0].query[0].schema.minimum = 1;
+    assert.throws(() => exportApipost(p), /schema/);
+  }
+});
+
+test("raw text uses the original plain body mode and retains explicit media", () => {
+  const p = fixture("http://127.0.0.1:1/");
+  p.plans = [];
+  const request = p.requests[0];
+  request.bodyType = "raw";
+  request.body = "plain body";
+  request.headers = [
+    { key: "Content-Type", value: "text/plain", enabled: true },
+  ];
+  const output = exportApipost(p);
+  assert.equal(output.apis[0].request.body.mode, "plain");
+  const target = { requests: [], environments: [], settings: {} };
+  importIntoProject(target, output);
+  assert.equal(target.requests[0].bodyType, "raw");
+  assert.equal(target.requests[0].body, "plain body");
 });
