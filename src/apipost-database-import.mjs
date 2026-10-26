@@ -24,7 +24,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
           ),
       ) ||
       entry.project_id !== projectId ||
-      !["pg", "mysql"].includes(entry.type) ||
+      !["pg", "mysql", "redis"].includes(entry.type) ||
       !safe(entry.db_id) ||
       !safe(entry.name) ||
       typeof entry.intro !== "string" ||
@@ -35,7 +35,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       map.has(entry.db_id)
     )
       throw Error(
-        "Apipost数据库连接仅支持同项目PostgreSQL/MySQL定义，不会丢弃未知语义",
+        "Apipost数据库连接仅支持同项目PostgreSQL/MySQL/Redis定义，不会丢弃未知语义",
       );
     for (const [environment, config] of Object.entries(entry.config)) {
       if (
@@ -107,7 +107,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
     const connection = {
       id: resource("db", entry.db_id),
       name: entry.name,
-      type: entry.type === "pg" ? "postgres" : "mysql",
+      type: entry.type === "pg" ? "postgres" : entry.type,
       sourceProjectId: projectId,
       sourceId: entry.db_id,
     };
@@ -171,6 +171,42 @@ export function nativeDatabaseTasks(
         (c) => c.id === next.data.connectionId,
       )?.type;
       if (sourceType === "mysql") next.data.resultShape = "mysql-resultsets";
+      if (sourceType === "redis") {
+        if (!translated) {
+          const method = task.data.method;
+          if (
+            !["get", "hget", "exists"].includes(method) ||
+            typeof task.data.query !== "string" ||
+            task.data.query.length > 50000
+          )
+            throw Error("原版Redis任务仅支持GET/HGET/EXISTS及有界JSON对象参数");
+          let args;
+          try {
+            args = JSON.parse(task.data.query);
+          } catch {
+            throw Error("原版Redis参数必须是JSON对象文本");
+          }
+          const keys = method === "hget" ? ["key", "field"] : ["key"];
+          if (
+            !object(args) ||
+            Object.keys(args).length !== keys.length ||
+            Object.keys(args).some((key) => !keys.includes(key)) ||
+            keys.some(
+              (key) =>
+                typeof args[key] !== "string" ||
+                !args[key].isWellFormed() ||
+                Buffer.byteLength(args[key]) > 4096,
+            )
+          )
+            throw Error("原版Redis查询参数字段无效");
+          next.data.query = JSON.stringify([
+            method.toUpperCase(),
+            ...keys.map((key) => args[key]),
+          ]);
+          delete next.data.method;
+        }
+        next.data.resultShape = "redis-value";
+      }
     }
     return next;
   });
@@ -193,7 +229,7 @@ export function validateApipostDatabaseResources(value = []) {
       !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(entry.id) ||
       ids.has(entry.id) ||
       !safe(entry.name) ||
-      !["postgres", "mysql"].includes(entry.type) ||
+      !["postgres", "mysql", "redis"].includes(entry.type) ||
       !safe(entry.sourceProjectId) ||
       !safe(entry.sourceId)
     )
