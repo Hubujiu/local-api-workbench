@@ -54,6 +54,24 @@ export async function verifySSHDatabaseFlows(common) {
         }),
       );
     }
+    const { verifyNativeImportHTTPFlow } = await import(
+      "./native-database-integration.mjs"
+    );
+    for (const type of ["postgres", "mysql"]) {
+      const forwardedBefore = fixture.stats.forwarded.length;
+      await verifyNativeImportHTTPFlow(
+        {
+          ...common,
+          type,
+          host: "database.fixture",
+          port: type === "postgres" ? 5432 : 3306,
+          ssh: fixture.ssh,
+        },
+        { requiresSSH: true },
+      );
+      assert(fixture.stats.forwarded.length > forwardedBefore);
+    }
+    console.log("REAL_NATIVE_REQUIRED_SSH_PG_MYSQL_HTTP_REBIND_PASS");
     const keySSH = { ...fixture.ssh, privateKey: fixture.privateKey };
     delete keySSH.password;
     const input = {

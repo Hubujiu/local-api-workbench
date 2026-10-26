@@ -82,3 +82,13 @@ assert(
   "PX applies the requested millisecond expiry",
 );
 console.log("REAL_REDIS_SET_ACK_CONDITION_EXPIRY_PASS");
+
+const { verifyNativeRedisFlow } = await import(
+  "./native-redis-integration.mjs"
+);
+await verifyNativeRedisFlow({
+  type: "redis",
+  host: "127.0.0.1",
+  port: 6379,
+  database: "0",
+});

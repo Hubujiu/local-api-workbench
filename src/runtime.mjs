@@ -1,3 +1,4 @@
+import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -242,8 +243,11 @@ export class Store {
         normalizeParameterEntry,
       );
     }
-    for (const request of p.requests || [])
+    for (const request of p.requests || []) {
       validateMockRules(request.mockRules || []);
+      if (request.nativeTasks !== undefined)
+        request.nativeTasks = normalizeNativeTaskRequest(request);
+    }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)
         throw Error("用例最多1000个");
