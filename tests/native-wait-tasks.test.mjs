@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { performance } from "node:perf_hooks";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
+import { projectCookieSession } from "../src/cookie-jar.mjs";
 import { importIntoProject } from "../src/core.mjs";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
 import { normalizeNativeTaskRequest } from "../src/script-database-tasks.mjs";
@@ -145,8 +146,16 @@ test("zero wait is synchronous and does not allocate a timer or yield to queued 
 });
 
 test("real inherited pre and post waits order HTTP, persist frozen tasks, and survive restore/restart", async (t) => {
-  const events = [];
+  const events = [],
+    upstreamTrace = [];
   const upstream = http.createServer((req, res) => {
+    // Keep wire observation separate from the ordering assertions below. A
+    // brokered HTTP task can time out before reaching this fixture at all.
+    const record = (kind) =>
+      upstreamTrace.push({ kind, path: req.url, at: performance.now() });
+    record("received");
+    res.once("finish", () => record("response-finish"));
+    res.once("close", () => record("response-close"));
     events.push({
       path: req.url,
       at: performance.now(),
@@ -159,6 +168,39 @@ test("real inherited pre and post waits order HTTP, persist frozen tasks, and su
   await new Promise((r) => upstream.listen(0, "127.0.0.1", r));
   const root = await mkdtemp(path.join(tmpdir(), "native-wait-"));
   let app = await createApp({ root, port: 0 });
+  const initialAppReadyAt = performance.now();
+  let restart;
+  const presence = async (file) => {
+    try {
+      await stat(file);
+      return { exists: true };
+    } catch (error) {
+      return error.code === "ENOENT"
+        ? { exists: false }
+        : { errorCode: error.code || "UNKNOWN" };
+    }
+  };
+  const assertRunPassed = async (run, context, project) => {
+    let details;
+    if (run.value.status !== "passed") {
+      const lock =
+        projectCookieSession(app.store, project, project.environments[0].id)
+          .file + ".lock";
+      details = JSON.stringify({
+        run,
+        context: { ...context, initialAppReadyAt, restart },
+        upstreamTrace: upstreamTrace.slice(context.traceStart),
+        // Presence is sampled after failure, not proof of historical ownership.
+        // Never read cookie values, owner identities, nonces or external files.
+        cookieLockSnapshot: {
+          sampledAt: performance.now(),
+          directory: await presence(lock),
+          ownerFile: await presence(path.join(lock, "owner.json")),
+        },
+      });
+    }
+    assert.equal(run.value.status, "passed", details);
+  };
   const stop = async () => {
     app.server.closeAllConnections();
     await new Promise((r) => app.server.close(r));
@@ -212,8 +254,14 @@ test("real inherited pre and post waits order HTTP, persist frozen tasks, and su
   await app.store.save(live);
   for (let round = 0; round < 2; round++) {
     events.length = 0;
+    const context = {
+      phase: round === 0 ? "initial" : "after-restart",
+      round: round + 1,
+      runStartedAt: performance.now(),
+      traceStart: upstreamTrace.length,
+    };
     const run = await post(`/api/projects/${p.id}/run`, { planId: plan.id });
-    assert.equal(run.value.status, "passed", JSON.stringify(run));
+    await assertRunPassed(run, context, p);
     assert.deepEqual(
       events.map((e) => e.path),
       ["/entered/A", "/main/A", "/post-entered/A", "/later/A"],
@@ -233,8 +281,10 @@ test("real inherited pre and post waits order HTTP, persist frozen tasks, and su
       plan.steps[0].request.nativeTasks,
     );
     if (round === 0) {
+      restart = { startedAt: performance.now() };
       await stop();
       app = await createApp({ root, port: 0 });
+      restart.readyAt = performance.now();
     }
   }
   const disk = await new Store(root).get(p.id),
@@ -244,10 +294,15 @@ test("real inherited pre and post waits order HTTP, persist frozen tasks, and su
     restored.value.plans[0].steps[0].request.nativeTasks,
     plan.steps[0].request.nativeTasks,
   );
+  const restoredContext = {
+    phase: "after-restore",
+    runStartedAt: performance.now(),
+    traceStart: upstreamTrace.length,
+  };
   const run = await post(`/api/projects/${restored.value.id}/run`, {
     planId: plan.id,
   });
-  assert.equal(run.value.status, "passed", JSON.stringify(run));
+  await assertRunPassed(run, restoredContext, restored.value);
   const other = await app.store.create("isolated wait project");
   importIntoProject(other, source);
   other.environments[0].variables.tenant = "C";
