@@ -173,10 +173,19 @@ export async function mutateMySQL(input, dependencies = {}) {
   try {
     const statement = await parseMySQLWrite(input.sql, input.database);
     check();
-    const mysql = await import("mysql2/promise");
+    const mysql = (await import("mysql2")).default;
     check();
     const createConnection =
-      dependencies.createConnection || mysql.createConnection;
+      dependencies.createConnection ||
+      (async (options) => {
+        const driver = mysql.createConnection(options);
+        // TLS may report another error after the connect promise rejects. Install
+        // the sink before authentication, not only on a resolved promise wrapper.
+        driver.on("error", () => {});
+        const client = driver.promise();
+        await client.connect();
+        return client;
+      });
     const open = async (label) => {
       phase(3000, label);
       openingController = new AbortController();
@@ -284,7 +293,6 @@ export async function mutateMySQL(input, dependencies = {}) {
     // This final successful command is itself the outcome acknowledgement.
     // Do not turn a genuine ACK into uncertainty because time crossed the
     // deadline before this continuation; no later SQL is queued from here.
-    // ACK has been observed. Teardown must not later relabel this as uncertain.
     clearTimeout(phaseTimer);
     clearTimeout(totalTimer);
     begun = false;

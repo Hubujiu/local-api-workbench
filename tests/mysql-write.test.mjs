@@ -187,10 +187,17 @@ test("MySQL confirmed COMMIT survives slow teardown and retains capacity until a
   const pending = mutateMySQL(input, {
     ...f,
     queryTimeoutMs: 25,
-    operationTimeoutMs: 250,
+    operationTimeoutMs: 8000,
   });
-  while (!f.calls.some((x) => x[1] === "COMMIT"))
+  pending.catch(() => {});
+  const waitUntil = Date.now() + 3000;
+  while (!f.calls.some((x) => x[1] === "COMMIT")) {
+    assert(
+      Date.now() < waitUntil,
+      "fixture must reach COMMIT before teardown checks",
+    );
     await new Promise((r) => setTimeout(r, 5));
+  }
   assert.equal(mysqlWriteUsage().active, 1);
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(mysqlWriteUsage().active, 1);

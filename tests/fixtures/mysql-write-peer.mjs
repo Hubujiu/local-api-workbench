@@ -1,4 +1,5 @@
 import net from "node:net";
+import tls from "node:tls";
 import { channel } from "node:diagnostics_channel";
 import { once } from "node:events";
 
@@ -40,8 +41,9 @@ function column(name) {
     tail,
   ]);
 }
-function greeting(id) {
-  const capabilities = 512 | 8192 | 32768 | 131072 | 524288,
+function greeting(id, secure) {
+  const capabilities =
+      512 | 8192 | 32768 | 131072 | 524288 | (secure ? 2048 : 0),
     connectionId = Buffer.alloc(4),
     low = Buffer.alloc(2),
     high = Buffer.alloc(2);
@@ -67,6 +69,7 @@ function greeting(id) {
 export async function startMySQLWritePeer({
   hold,
   fail,
+  secureContext,
   delays = {},
   count = 1,
   warning = 0,
@@ -103,9 +106,10 @@ export async function startMySQLWritePeer({
     };
     peers.push(peer);
     socket.on("error", () => {});
+    let transport = socket;
     const send = (bodies, start = 1) => {
-      if (!socket.destroyed)
-        socket.write(
+      if (!transport.destroyed)
+        transport.write(
           Buffer.concat(bodies.map((body, i) => packet(body, start + i))),
         );
     };
@@ -123,7 +127,7 @@ export async function startMySQLWritePeer({
                 Buffer.from("#HY000" + errorText),
               ]),
             ],
-            stage.endsWith("handshake") ? 2 : 1,
+            stage.endsWith("handshake") ? (secureContext ? 3 : 2) : 1,
           );
         } else callback();
       };
@@ -142,16 +146,40 @@ export async function startMySQLWritePeer({
       authenticated = false,
       nextStatementId = 1;
     const statements = new Map();
-    socket.on("data", (chunk) => {
+    const receive = (chunk) => {
       bytes = Buffer.concat([bytes, chunk]);
       while (bytes.length >= 4) {
         const size = bytes.readUIntLE(0, 3) + 4;
         if (bytes.length < size) return;
-        const body = bytes.subarray(4, size);
+        const sequence = bytes[3],
+          body = bytes.subarray(4, size);
         bytes = bytes.subarray(size);
         if (!authenticated) {
+          if (secureContext && transport === socket) {
+            if (body.length !== 32 || !(body.readUInt32LE(0) & 2048)) {
+              socket.destroy();
+              return;
+            }
+            if (hold === "tls-handshake") {
+              peer.stage = "tls-handshake";
+              socket.removeListener("data", receive);
+              return;
+            }
+            socket.pause();
+            socket.removeListener("data", receive);
+            if (bytes.length) socket.unshift(bytes);
+            bytes = Buffer.alloc(0);
+            transport = new tls.TLSSocket(socket, {
+              isServer: true,
+              secureContext,
+            });
+            peer.secure = transport;
+            transport.on("error", () => {});
+            transport.on("data", receive);
+            return;
+          }
           authenticated = true;
-          reply(peer.role + "-handshake", () => send([ok()], 2));
+          reply(peer.role + "-handshake", () => send([ok()], sequence + 1));
           continue;
         }
         const command = body[0];
@@ -225,8 +253,9 @@ export async function startMySQLWritePeer({
           records.push({ role: peer.role, stage: "unexpected", command });
         }
       }
-    });
-    socket.write(greeting(peer.id));
+    };
+    socket.on("data", receive);
+    socket.write(greeting(peer.id, secureContext));
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -249,7 +278,10 @@ export async function startMySQLWritePeer({
       channel("net.client.socket").unsubscribe(observe);
       for (const timer of timers) clearTimeout(timer);
       for (const client of clients) client.socket.destroy();
-      for (const peer of peers) peer.socket.destroy();
+      for (const peer of peers) {
+        peer.secure?.destroy();
+        peer.socket.destroy();
+      }
       await new Promise((resolve) => server.close(resolve));
     },
   };
