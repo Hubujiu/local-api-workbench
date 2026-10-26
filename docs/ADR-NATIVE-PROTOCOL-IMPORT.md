@@ -179,3 +179,28 @@ this is not arbitrary-content redaction.
 requiredMetadata checks key presence, not nonempty values or successful server
 authentication. Empty text/binary values remain valid explicit metadata. Remote
 authentication status is still determined by the actual RPC result.
+
+## Verified native TLS declaration subset
+
+Only the observed gRPC TLS + certificate-verification-on tuple (tls:1, ssl:1)
+is newly accepted and mapped to grpcs://. The previous plaintext -1/-1 tuple is
+unchanged. Verification-off/ambiguous combinations and reconnection overrides
+remain rejected; there is no plaintext downgrade or verification bypass.
+
+Original renderer analysis distinguishes tls (protocol choice) from ssl (the
+verification preference), not a client-certificate flag. Certificate settings
+are global to the original app, not project method credentials. They are never
+read or imported. Runtime bounded PEM ca/key/cert uses the existing grpc-js path;
+private key and certificate must be paired. No PFX/file-path/hostname override or
+global trust installation is added. Without custom CA, grpc-js/Node default trust
+is used; importing TLS does not imply a mandatory custom CA binding or zero
+network on a trust failure.
+
+The original UI saved that tuple and a fictional localhost TLS endpoint. Its
+request did not complete or deliver an RPC in the bounded observation window and
+was cancelled; no global CA change or verification disable was used. Thus native
+successful TLS wire parity is not claimed. Workbench independently verifies the
+declaration with a real mTLS service: no CA fails, CA without required client
+identity fails, full per-run binding succeeds, insecure override rejects, official
+SDK executes, and restored/restarted projects do not inherit trust or client keys.
+Existing test certificates are fictional fixture identities, not production PKI.

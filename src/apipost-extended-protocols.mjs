@@ -202,12 +202,19 @@ export function prepareExtendedProtocol(
           actual.responseStream !== (method.response_stream === 1)
         )
           fail("gRPC流类型与Proto不匹配");
+        const secure = method.tls === 1 && method.ssl === 1;
         if (
-          method.ssl !== -1 ||
-          method.tls !== -1 ||
+          (!secure && (method.ssl !== -1 || method.tls !== -1)) ||
           method.reconnect_num !== 0
         )
-          fail("gRPC TLS/重连配置");
+          fail("gRPC TLS/重连配置；TLS须开启证书验证");
+        if (secure)
+          notes.push(
+            service.service_name +
+              "/" +
+              method.name +
+              "：按TLS声明强制证书验证；全局CA/客户端证书不导入，必要时显式传入运行时PEM",
+          );
         keys(method.request ?? {}, ["message", "metadata"], "gRPC方法请求");
         keys(method.request.metadata ?? {}, ["parameter"], "gRPC Metadata");
         const requiredMetadata = nativeGrpcMetadata(
@@ -275,7 +282,7 @@ export function prepareExtendedProtocol(
           ...(requiredMetadata === undefined ? {} : { requiredMetadata }),
           id: resource("grpc", node.target_id + ":" + method.grpc_method_id),
           name: node.name + " / " + service.service_name + "/" + method.name,
-          target: "grpc://" + endpoint,
+          target: (secure ? "grpcs://" : "grpc://") + endpoint,
           proto: content,
           service: service.service_name,
           method: method.name,
