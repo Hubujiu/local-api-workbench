@@ -13,6 +13,7 @@ import { nativeMockResponse } from "./native-mock-runtime.mjs";
 
 import { exportApipost } from "./apipost-export.mjs";
 import { sqliteProcessFailureDetails } from "./sqlite-process-diagnostics.mjs";
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -1588,6 +1589,7 @@ export async function createApp({
       json(res, e.code === "ENOENT" ? 404 : 400, {
         error: e.message,
         ...sqliteProcessFailureDetails(e),
+        ...publicProjectCommitOutcome(e),
       });
     }
   });

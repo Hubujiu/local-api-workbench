@@ -4,6 +4,10 @@ import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 
 import { normalizeNativeMock } from "./native-mock.mjs";
 
+import {
+  ProjectCommitUncertain,
+  ProjectRecoveryRequired,
+} from "./project-commit-outcome.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -150,13 +154,26 @@ export class Store {
   async get(key) {
     await this.init();
     const release = await acquireFileLock(this.lockFile(key));
+    let primaryError;
     try {
       return await this.readUnlocked(key);
+    } catch (error) {
+      primaryError = error;
+      throw error;
     } finally {
-      await release();
+      try {
+        await release();
+      } catch (error) {
+        throw primaryError || error;
+      }
     }
   }
   async create(name, directory, { description } = {}) {
+    const unresolved = (await this.list()).filter((project) => project.error);
+    if (unresolved.length)
+      throw new ProjectRecoveryRequired(
+        unresolved.map((project) => project.id),
+      );
     const p = {
       version: 1,
       id: id(),
@@ -286,6 +303,8 @@ export class Store {
         await this.init();
         const lock = this.lockFile(p.id);
         const release = await acquireFileLock(lock);
+        let commitReached = false,
+          primaryError;
         try {
           let previous;
           try {
@@ -324,11 +343,30 @@ export class Store {
             throw Object.assign(Error("项目保存已取消"), {
               code: "STORE_SAVE_ABORTED",
             });
-          await writeProject(this.directory(p.id), next);
-          Object.assign(p, await readProject(this.directory(p.id), p.id));
+          try {
+            await writeProject(this.directory(p.id), next);
+            commitReached = true;
+          } catch (error) {
+            if (error instanceof ProjectCommitUncertain) commitReached = true;
+            throw error;
+          }
+          try {
+            Object.assign(p, await readProject(this.directory(p.id), p.id));
+          } catch (error) {
+            throw new ProjectCommitUncertain(p.id, error);
+          }
           return p;
+        } catch (error) {
+          primaryError = error;
+          throw error;
         } finally {
-          await release();
+          try {
+            await release();
+          } catch (error) {
+            if (primaryError) throw primaryError;
+            if (commitReached) throw new ProjectCommitUncertain(p.id, error);
+            throw error;
+          }
         }
       });
     this.pending = task;
