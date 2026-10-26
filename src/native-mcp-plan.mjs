@@ -28,7 +28,7 @@ function stripTasks(r) {
   copy.extract = [];
   return copy;
 }
-function inputAuth(base, input) {
+export function inputAuth(base, input) {
   if (input === undefined) return {};
   const next = structuredClone(input);
   if (!next.auth) return next;

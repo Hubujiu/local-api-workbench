@@ -1,9 +1,9 @@
 # Bounded native-input MCP workflows (work in progress)
 
 REA selected official Offline2 mcpService/mcp-stdio plus renderer1550 analysis
-(evidence ev_f87bdaf27cf1fc54a2ad83eee55e943e560268ce9f0bd02cc01539e388715cb8,
+(evidence ev*f87bdaf27cf1fc54a2ad83eee55e943e560268ce9f0bd02cc01539e388715cb8,
 ev_d40fc172d38359a41ef5facf8fe998fc3dfbbb98253c7128c1c113da7cb0497e) identified
-30 advertised apipost_* tools and ID-driven frozen plan contracts. Implementation
+30 advertised apipost*\* tools and ID-driven frozen plan contracts. Implementation
 here is independent; no vendor code or raw private artifacts are included.
 
 Ten bounded aliases support project/API/document discovery, plan create/update,
@@ -108,3 +108,23 @@ environment for a mutation or execution override. Environment and plan tools use
 the same strict default-alias resolver. SDK cases cover blank-ID delete/update/
 variable/service/plan attempts without state changes, and the default alias across
 configuration, plan creation and execution without changing current selection.
+
+### Native single-API execution
+
+The bounded apipost_execute_api entry point runs an owned saved HTTP API with its
+own scripts, assertions and extraction intact. Native auth input is translated
+against the effective frozen request, including inherited auth. JSON body input
+replaces the full body. It retains Workbench's strict input validation and both
+write/execute gates, rather than copying permissive native input behavior.
+
+Execution captures the selected environment once. A concurrent UI/MCP selection
+change cannot redirect the active call's variables, cookies, scope commits or
+debug cache. History now includes that environment ID. If history append fails
+after execution, canonical and native calls return the completed evidence with
+recordSaved/record_saved false and a redacted persistence warning; they do not
+retry or replay the network request. This does not recover a failed disk write.
+
+Actual SDK/localhost coverage includes API scripts and failing assertions,
+temporary bearer/full-JSON input, unchanged saved definitions, project and
+environment denial before transport, injected history failure with one request
+only, and gated concurrent environment switching with a persistent script write.
