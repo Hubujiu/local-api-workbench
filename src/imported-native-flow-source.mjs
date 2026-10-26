@@ -16,7 +16,7 @@ function identifier(value) {
     throw Error("原生计划来源标识无效");
   return value;
 }
-function plain(value, allowed) {
+function plain(value, allowed, required = []) {
   if (
     !value ||
     typeof value !== "object" ||
@@ -38,6 +38,8 @@ function plain(value, allowed) {
       throw Error("原生计划来源包含未知字段或访问器");
     text(key, 1000);
   }
+  if (required.some((key) => !Object.hasOwn(descriptors, key)))
+    throw Error("原生计划来源缺少必需字段");
   return keys;
 }
 function array(value, max) {
@@ -87,16 +89,20 @@ function baselineInput(value) {
   return result;
 }
 export function normalizeImportedNativeFlowSource(value) {
-  plain(value, [
-    "version",
-    "source",
-    "sourceProjectId",
-    "sourceFlowId",
-    "mcp_name",
-    "mcp_description",
-    "mcp_environment_id",
-    "steps",
-  ]);
+  plain(
+    value,
+    [
+      "version",
+      "source",
+      "sourceProjectId",
+      "sourceFlowId",
+      "mcp_name",
+      "mcp_description",
+      "mcp_environment_id",
+      "steps",
+    ],
+    ["version", "source", "sourceProjectId", "sourceFlowId", "steps"],
+  );
   if (value.version !== 1 || !["manual", "ai", "mcp"].includes(value.source))
     throw Error("原生计划来源版本或来源无效");
   const result = {
@@ -115,12 +121,11 @@ export function normalizeImportedNativeFlowSource(value) {
     importedIds = new Set();
   let bytes = Buffer.byteLength(JSON.stringify(result), "utf8");
   result.steps = array(value.steps, 200).map((step) => {
-    plain(step, [
-      "sourceStepId",
-      "importedStepId",
-      "mcp_input",
-      "mcp_deleted_body_keys",
-    ]);
+    plain(
+      step,
+      ["sourceStepId", "importedStepId", "mcp_input", "mcp_deleted_body_keys"],
+      ["sourceStepId", "importedStepId"],
+    );
     const row = {
       sourceStepId: identifier(step.sourceStepId),
       importedStepId: identifier(step.importedStepId),

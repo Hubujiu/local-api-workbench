@@ -147,9 +147,11 @@ test("native flow provenance rejects getters without invoking them through snaps
   assert.equal(reads, 0);
 });
 
-test("native flow source has a closed credential-free input envelope and strict JSON/UTF16/ID budgets", () => {
+test("native flow source has a closed input envelope with explicit authentication restrictions and strict JSON/UTF16/ID budgets", () => {
   for (const mutate of [
     (x) => (x.extra = true),
+    (x) => delete x.sourceFlowId,
+    (x) => delete x.steps[0].sourceStepId,
     (x) => (x.source = "execute"),
     (x) => (x.sourceFlowId = "../flow"),
     (x) => (x.mcp_name = "\ud800"),
@@ -194,6 +196,8 @@ test("native flow source has a closed credential-free input envelope and strict 
     (x) => (x.steps[0].mcp_deleted_body_keys = new Array(1)),
     (x) => (x.steps[0].mcp_deleted_body_keys = ["\udc00"]),
     (x) => (x.steps[0].mcp_deleted_body_keys = Array(1001).fill("a")),
+    (x) =>
+      (x.steps[0].mcp_deleted_body_keys = Array(100).fill("x".repeat(1000))),
   ]) {
     const source = fixture();
     mutate(source);
@@ -263,4 +267,26 @@ test("Store rejects invalid plan and run-snapshot provenance before any disk wri
     (await store.get(restored.id)).plans[0].importedNativeFlowSource,
     fixture(),
   );
+});
+
+test("history-only edits change the plan hash but never affect the executed request", async () => {
+  const first = plan(),
+    next = versionPlan(first, {
+      ...first,
+      importedNativeFlowSource: { ...fixture(), mcp_name: "history-only" },
+    });
+  const requests = [];
+  const execute = async (request) => {
+    requests.push(request);
+    return { status: 200, headers: {}, body: "{}", duration: 1 };
+  };
+  const a = await runPlan(first, {}, execute),
+    b = await runPlan(next, {}, execute);
+  assert.notEqual(a.planHash, b.planHash);
+  assert.deepEqual(requests[0], requests[1]);
+  assert.equal(
+    a.snapshot.importedNativeFlowSource.mcp_name,
+    "{{never_interpolate}}",
+  );
+  assert.equal(b.snapshot.importedNativeFlowSource.mcp_name, "history-only");
 });

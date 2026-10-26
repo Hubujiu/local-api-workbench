@@ -258,3 +258,30 @@ base does not implement native reverse export. Combined native directory writers
 must explicitly reject plans carrying `importedNativeFlowSource` until they have
 a tested lossless mapping; silently dropping this field is not a round trip.
 Native API-only JSON export already rejects plans and must continue doing so.
+
+### Evidence and acceptance for the MCP comparison slice
+
+The bounded static references are Unicode character offsets after universal-newline
+text decoding, not byte offsets:
+
+- `1550.0381c5a8bb4d.js`, SHA-256
+  `e3ebd9a4f65ffc2ef0fdb1efa228a198eac9334b23d3bb8e8dedbfdbaca30adb`:
+  input envelope at 84206; comparison-body reduction at 84626; step baseline
+  assignment at 89171; MCP metadata assignment at 91382.
+- `1996.33c788c75f64.js`, SHA-256
+  `150589fb1018fb58659d0c6d94179355619158939066469226190200b18416d6`:
+  MCP source assignment at 18272; saved-flow execution projection at 20455.
+- `1277.59ec09176043.js`, SHA-256
+  `add06658b9b7aca3cec15e265b10775836eed26d94319d0c345f8c8c62e38d70`:
+  comparison UI at 44673–45118; manual editing of current input at 55834.
+
+The tests deliberately mutate the previously approved directory fixture into
+synthetic MCP-shaped data; they are not newly captured original MCP runs.
+Real loopback CLI tests prove current-input and actual-environment precedence,
+absent-input snapshot behavior, 503/200 continuation, API-task isolation, durable
+CLI origin, backup/restore/restart and unrelated-project isolation. Authenticated
+HTTP tests cover import, clone with fresh step IDs, reorder/delete, source-only
+edits, project PUT, invalid-PUT atomicity, real execution and restored execution.
+Cancelling a held real request records cancellation without dispatching a later
+step; its saved origin is manual, not imported MCP. Source-only edits change the
+snapshot hash, but not the wire request. No test grants new MCP authority.
