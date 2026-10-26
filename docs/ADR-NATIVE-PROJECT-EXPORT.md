@@ -98,3 +98,51 @@ that whole pipeline, any such field is explicitly rejected (including disabled
 tasks), even when an older normalizer would omit it. Actual HTTP regression first
 returned 200 with erased tasks; it now rejects without modifying the saved project.
 This guard does not claim native pipeline export is delivered.
+
+## Native directory definitions (work in progress, 2026-10-26)
+
+The directory exporter reuses the native HTTP serializer and PR #7's directory
+and frozen-flow importer. PR #14 is now stacked on PR #7 for this actual dependency;
+its diff remains the export feature. GET export?format=apipost-directory returns
+a bounded JSON file manifest and does not write host paths or registry entries.
+
+This slice supports up to 50 strict200 HTTP plans and 200 enabled steps. Each
+snapshot has a project-scoped stable ID independent of the mutable live API.
+Actual step scripts are written only to pre_script/post_script; pure non-inherited
+customScript source is written only to the frozen API task fields. These source
+tasks are not copied to live API records or promoted to step execution. Already
+materialized request input is exported directly, with empty native input maps;
+old MCP input is not replayed. The full generated directory is imported into a
+detached project before returning output. This is validation, never execution.
+
+Both native export modes now support explicit response bodies (including empty
+text), delays/headers, unique status/media pairs and matching inline object
+schemas. Description/name conflicts, reference-dependent/boolean-root schemas,
+unknown fields and ambiguous pairs reject. Response auto-validation is explicitly
+disabled; documentation schemas do not become runtime assertions.
+
+The directory remains definition interchange, not an execution backup. Existing
+source archives, DB/mixed task provenance, inherited task origins, unsupported
+protocols, disabled steps, non-strict200 policies, assertions/extraction and shared
+function snapshots reject rather than silently lose semantics. Session grants and
+runtime history are not recreated. The normal full Workbench backup remains the
+complete preservation path for unsupported resources.
+
+Local acceptance covers live API edits not changing frozen steps, separate source
+and step scripts, real HTTP execution across import/re-export/restore/restart,
+response/schema roundtrip, read-only authenticated export and cross-project IDs.
+Original application reopening/saving of the generated directory has NOT yet been
+verified: the known UI storage picker creates a new project, not an established
+open-existing-directory operation. No registry modification or inferred original
+runtime success is used to hide this remaining gap. Current/initial environment
+values in generated directory files also need that original-runtime verification.
+
+Static compatibility review found and corrected missing native response editor
+identities/defaults: each example now has a stable API-scoped example_id,
+raw_parameter:[], is_default:-1, verify_type:"schema", mock:"", and string status.
+Directory snapshots namespace those IDs separately from live APIs. Raw text uses
+native body mode plain (the observed original UI enum), not the import-only text
+alias. Parameter schemas preserve supported basic types and reject constraints
+that the native importer would discard. Different step/request labels reject
+rather than silently change the label. These static corrections still need the
+separately pending original UI verification; local roundtrips do not replace it.
