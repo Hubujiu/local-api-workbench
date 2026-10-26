@@ -8,16 +8,22 @@ const text = (value, max) =>
   typeof value === "string" && value.isWellFormed() && value.length <= max;
 export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
   nativeDataObject(value, ["type", "expression"]);
-  if (!["responseCode", "responseJson"].includes(value.type))
-    throw Error("原生断言仅支持responseCode/responseJson");
+  if (!["type", "expression"].every((key) => Object.hasOwn(value, key)))
+    throw Error("原生断言缺少自有来源或表达式字段");
+  if (!["responseCode", "responseJson", "responseHeader"].includes(value.type))
+    throw Error("原生断言仅支持responseCode/responseJson/responseHeader");
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
+  if (!["path", "compareValue"].every((key) => Object.hasOwn(expression, key)))
+    throw Error("原生断言表达式缺少自有字段");
+  const compareType = Object.hasOwn(expression, "compareType")
+    ? expression.compareType
+    : undefined;
   if (
     !text(expression.path, 1000) ||
     !text(expression.compareValue, 65536) ||
-    (expression.compareType !== undefined &&
-      !["eq", "uneq"].includes(expression.compareType)) ||
-    (enabled && expression.compareType === undefined)
+    (compareType !== undefined && !["eq", "uneq"].includes(compareType)) ||
+    (enabled && compareType === undefined)
   )
     throw Error("原生断言仅支持有界文字路径与eq/uneq字面字符串比较");
   if (
@@ -31,9 +37,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     type: value.type,
     expression: {
       path: expression.path,
-      ...(expression.compareType !== undefined
-        ? { compareType: expression.compareType }
-        : {}),
+      ...(compareType !== undefined ? { compareType } : {}),
       compareValue: expression.compareValue,
     },
   };
@@ -46,6 +50,8 @@ export function compileNativeAssertions(value = []) {
   nativeDataArray(value, 16);
   const normalized = value.map((entry) => {
     nativeDataObject(entry, ["name", "data"]);
+    if (!["name", "data"].every((key) => Object.hasOwn(entry, key)))
+      throw Error("原生断言缺少自有名称或数据字段");
     if (!text(entry.name, 200) || !entry.name.trim())
       throw Error("原生断言名称无效");
     return { name: entry.name, data: normalizeNativeAssertionData(entry.data) };
@@ -59,6 +65,9 @@ export function compileNativeAssertions(value = []) {
       data.type === "responseJson"
         ? jsonPathSegments(data.expression.path || "$")
         : [],
+    ...(data.type === "responseHeader"
+      ? { header: data.expression.path.toLowerCase() }
+      : {}),
     comparison: data.expression.compareType,
     expected: data.expression.compareValue,
   }));
@@ -71,9 +80,13 @@ function installNativeAssertions(
   readResponse,
   registerTest,
   publicTests,
+  headers,
+  headerEvidenceJSON,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
+    hasOwn = Object.hasOwn,
+    charCode = Function.prototype.call.bind(String.prototype.charCodeAt),
     finite = Number.isFinite,
     string = String,
     Failure = Error,
@@ -81,7 +94,53 @@ function installNativeAssertions(
     create = Object.create,
     define = Object.defineProperty;
   const operations = parse(json),
-    evidence = create(null);
+    evidence = create(null),
+    headerEvidence = parse(headerEvidenceJSON),
+    initialHeaders = create(null);
+  // Capture only presence, before user tasks run. A wire field missing from the
+  // initial Node projection is unknown, not an observed script-side deletion.
+  for (let index = 0; index < operations.length; index++) {
+    const op = operations[index];
+    if (op.type === "responseHeader")
+      initialHeaders[op.header] = !!descriptor(headers, op.header);
+  }
+  const readHeader = (name) => {
+    if (headerEvidence?.complete !== true)
+      throw Failure("原生断言响应头需要完整且唯一的传输证据");
+    const count = descriptor(headerEvidence.counts, name),
+      property = descriptor(headers, name);
+    if (!count) {
+      if (property) throw Failure("原生断言响应头缺少传输证据");
+      return undefined;
+    }
+    if (!hasOwn(count, "value") || count.value !== 1)
+      throw Failure("原生断言响应头需要完整且唯一的传输证据");
+    if (!initialHeaders[name])
+      throw Failure("原生断言响应头初始映射缺失，不能证明字段被删除");
+    if (!property) return undefined;
+    if (
+      !property.enumerable ||
+      !hasOwn(property, "value") ||
+      typeof property.value !== "string"
+    )
+      throw Failure("原生断言响应头不是自有字符串数据");
+    const value = property.value;
+    if (value.length > 65536) throw Failure("原生断言响应头值超过64KiB");
+    let bytes = 0;
+    for (let at = 0; at < value.length; at++) {
+      const code = charCode(value, at);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = charCode(value, ++at);
+        if (!(next >= 0xdc00 && next <= 0xdfff))
+          throw Failure("原生断言响应头值包含无效Unicode");
+        bytes += 4;
+      } else if (code >= 0xdc00 && code <= 0xdfff)
+        throw Failure("原生断言响应头值包含无效Unicode");
+      else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+      if (bytes > 65536) throw Failure("原生断言响应头值超过64KiB");
+    }
+    return value;
+  };
   const safeArray = () => {
     const value = [];
     define(value, "toJSON", { value: undefined });
@@ -91,9 +150,12 @@ function installNativeAssertions(
     completed = 0,
     failed = false;
   const perform = (index) => {
-    const op = operations[index],
-      response = readResponse();
-    let value = response.status;
+    const op = operations[index];
+    // A header assertion must never touch body/code, even through a reader that
+    // eagerly creates a response object. Existing Code/JSON behavior is unchanged.
+    const response = op.type === "responseHeader" ? null : readResponse();
+    let value =
+      op.type === "responseHeader" ? readHeader(op.header) : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);

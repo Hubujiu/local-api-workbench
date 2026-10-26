@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 21:40 UTC
+# 后端检查点 · 2026-10-26 22:11 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：575b0330920f1be51a8dc869b54f843f377b431c。
-- Tree：df46bab2a5e0335761a614cb74024c3fe11ba8a3，与本地0c1dcc7dd5a9edfde5a78b76ff87acc7118477e5一致。
-- Push CI：[40396796815](https://github.com/Hubujiu/local-api-workbench/actions/runs/40396796815)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：baacade2b53d095945d7b361928ef9241b549db8。
+- Tree：c7037abef79a5da2a37b537116e5b1fbce8807bd，与本地f3b94057a84ba688a89f449bd001c889754636d2一致。
+- Push CI：[40409275790](https://github.com/Hubujiu/local-api-workbench/actions/runs/40409275790)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含PostgreSQL ACK后清理及真实持锁超时检查，不包含下述PR25响应头提取扩展。**
+- **该基线包含PostgreSQL ACK后清理、真实持锁超时及PR25响应头提取；不包含下述PR26响应头断言扩展。**
 
 ## 最近功能PR与精确CI
 
@@ -23,11 +23,11 @@
 | #27 有界等待诊断    | 15c75beb47c536dbc06bff02c0114b4b94999432 | CI40377823350成功；merge30dedbb8e1748165659eb4ea414079ae73225a43，tree e134ef4845f37dab702ad16d9e620eab68218d7d=head |
 | #28 原生任务往返    | f9753d9db4855679b74f7787eb974170df15de89 | CI40372605965成功；merge4efd8c03e4a113b5b1effaf23a9a2d147ef5c72c，tree d104c516587154c0a699487c90b5f74c6131c36b=head |
 | #29 MCP项目往返     | c25897e7bb1c71f680c826502e26621799c4f4d5 | CI40377086009成功；merge535ae58c6d4d61b8e813e2ca212b930c14b2f1e7，tree270396551bba40355e8ef273c97464bc47beaf78=head  |
-| #30 执行保存收据    | a47d40b8041e96238c117b9e20d3a3792752bdb7 | tree9a06aba5c49b99369f990f967dd1f78a299eb9a8；CI40381534716进行中，不能算通过                                        |
+| #30 执行保存收据    | 89aabed852bd3a77e1eff0661846865eb9d33cfe | CI40382756465成功；merge97588b2d08bd7e872fb8ee7c65ab00cbdddaede5，tree dce8ab9ca25a1c5b4854075d9f5efd7067c9c984=head                                        |
 
 PR31 OAuth2生命周期当前head b8212924c139497196ebb28faa1742a75382c23d/tree640595564efa1f3aa82404b69e0db67b9c82233d，CI40388177786全部10个job成功（actual merge42d08a8dc50e90ace367b7164d9d1e161408f0de，tree=head）。PR32 Base64早拒head2d5f390270e52037bc48f437eb45c52aeca54106/treec27663db3e9cc2689ef7bc673806230157527148，CI40387995935全部10个job成功（actual merge5f691087ac8734879f0cb7031ed4719464786886，tree=head）。二者都直接基于develop88f70bb，独立功能diff，未把认证或模板生产修复塞进PR7。
 
-PR1/2最后重新读取于20:56 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
+PR1/2最后重新读取于22:03 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
 
 ## PR30已验证：真实执行完成与保存结果分开
 
@@ -81,7 +81,7 @@ Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 
 
 已收到ACK保留committed/confirmed rollback；COMMIT未ACK仍unknown、不重放。独立44项相关检查与review18项通过，组合25项PG身份/写入/真实wire/TLS/SSH检查通过。旧b465实际postgres:17-alpine写/readback/row overflow和duplicate-key rollback/SSH已通过；不能借MySQL timeout marker充当PG超时。新6238仅追加真实PG额外连接先确认持有行锁，再调用owner HTTP写入，必须返回确认回滚+statement timeout，finally放锁后正常只读读回原值；独立marker为REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS。无sleep/缩短生产预算。此新增真实服务case未在本地执行，但已在独立6238及组合575b的postgres:17-alpine CI各自通过专属marker；组合全部10个job成功且actual checkout精确匹配。本地连接关闭本身不证明远端回滚。
 
-## PR25继续原功能：单值响应头提取组合待CI
+## PR25继续原功能：单值响应头提取组合已验证
 
 原PR25最新head bbed463df60bf5116ce97af0b15d7aba1aaf5d66/treea8b8fe9a24a7d4efc1ad7d79e13a6771d4697e1f，独立CI40402279135首轮10个job成功；actual merge9a1f83a328458cc4b2d3bf932f04efb78b67f992/tree=head。不新建重复提取PR，旧JSON提取契约与预算保留。
 
@@ -108,3 +108,12 @@ Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 
 - 关闭数据库连接不能证明远端SQL回滚。保存定义、备份、显式发送正文和既有运行变量可能含敏感值，不承诺所有证据自动脱敏。
 - 原版GUI重新打开/保存未验证；不运行未获许可的原版，不接受尚未确认的第三方许可。不宣称原版task ID稳定或其同步等待/执行安全语义与本实现完全相同。
 - 更完整的协议/数据库高级配置、原生资源往返、分发签名和前端完整交付仍未完成；本轮没有新增前端或视觉工作。
+
+
+## Header 组合修正与 PR26 断言增量（尚未完整验收）
+
+Header 提取组合760cc2d2f5da31af2323d434613f051d16554608的CI40407071290最终失败，三个OS均仅旧惰性来源负例失败：它仍将新增支持的responseHeader视作未知来源。其他job及新增真实入口均通过，但不抵消失败。修正仅将未知来源改为responseXml，并添加canonical Header来源保存、快照、计划运行仍不激活/插值的正例，未放宽raw enabled字段校验。修正remote baacade2b53d095945d7b361928ef9241b549db8/tree c7037abef79a5da2a37b537116e5b1fbce8807bd，本地f3b94057a84ba688a89f449bd001c889754636d2，CI40409275790首轮10个job成功，三OS完整核心、真实数据库与production stdio均通过，实际checkout精确匹配。
+
+现有PR26增量head b6268807eafa9605202bef5c5a6cf4feb27f4e50/tree c4d4916078c223787e37b387710c97009836c1f4与本地60da309b19052f45a57b8eef0889c6d759a1520a一致，独立CI40409348742首轮10个job成功；全部实际checkout为merge1c344aed13c9eb58d4eabd28fe32ea208a37bf87，tree与head一致。包含最新PR25依赖，没有重复PR。新增Header eq/uneq只casefold原path，不trim、不当JSONPath；与提取器缺失即错误不同，可信缺失/已观察字段删除按String(undefined)比较，真实空值保留。重复/截断/伪造/投影丢失证据、getter、数组和非字符串拒绝；Header分支不读取body/code。比较false保持软失败和普通后续步骤，启用pickVars才沿用严格回滚/stop。私有断言结果与完成性检查、共享配额均保留。
+
+本地组合f4224891a66c3511928d4bfb1c00a9d748711c41仅保留既有nativeWaits的两处merge冲突，scripts/runtime相对第一父没有字节变化；77项Header/等待/真实入口回归及格式检查通过。新断言完整入口已在0de45e1528f9a80f58cbbee019b3ddfa22278606完成：H1/H2及官方HTTP/stdio SDK、真实CLI、API-local导出回读与backup/restart、私有软失败证据、active/disabled pick四策略、真实final activity journal未知提交同ID恢复且不重放、原生flow来源惰性与错误导入原子性，共8项本地通过。独立组合审查另确认wait+Header断言+Header提取与scope journal unknown交互。含该断言的新组合仍待自身push CI，不借提取器或独立断言绿灯代验。

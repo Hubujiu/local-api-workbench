@@ -577,14 +577,17 @@ try {
     );
     if (workerData.responseAssertions?.length) {
       const data = context.newString(
-        JSON.stringify(workerData.responseAssertions),
+        JSON.stringify({
+          operations: workerData.responseAssertions,
+          evidence: workerData.responseHeaderEvidence,
+        }),
       );
       context.setProp(context.global, "__nativeAssertionDataJSON", data);
       data.dispose();
       install(
-        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const state=(" +
+        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const data=JSON.parse(globalThis.__nativeAssertionDataJSON);const state=(" +
           nativeAssertionsInstallerSource +
-          ")(globalThis.__nativeAssertionDataJSON,((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests);globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
+          ")(JSON.stringify(data.operations),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response.headers,JSON.stringify(data.evidence));globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
       );
     }
     if (workerData.responseExtractions?.length) {
