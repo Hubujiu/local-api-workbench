@@ -1,3 +1,7 @@
+import {
+  captureResponseHeaderEvidence,
+  HTTP1_HEADER_PAIR_LIMIT,
+} from "./response-header-evidence.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -512,26 +516,36 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
                 displayBody = rawBodyBase64;
               }
             }
-            resolve({
-              status: res.statusCode,
-              protocol: res.httpVersion || "1.1",
-              statusText: res.statusMessage,
-              headers: res.headers,
-              body: displayBody,
-              rawBodyBase64,
-              codecError,
-              size,
-              duration: Math.round((performance.now() - start) * 100) / 100,
-              request: {
-                method: r.method,
-                url: u.href,
-                headers: { ...headers },
-                body: body?.toString() || "",
-              },
-            });
+            resolve(
+              captureResponseHeaderEvidence(
+                {
+                  status: res.statusCode,
+                  protocol: res.httpVersion || "1.1",
+                  statusText: res.statusMessage,
+                  headers: res.headers,
+                  body: displayBody,
+                  rawBodyBase64,
+                  codecError,
+                  size,
+                  duration: Math.round((performance.now() - start) * 100) / 100,
+                  request: {
+                    method: r.method,
+                    url: u.href,
+                    headers: { ...headers },
+                    body: body?.toString() || "",
+                  },
+                },
+                res.rawHeaders,
+                res.httpVersion,
+              ),
+            );
           });
         },
       );
+      // Keep Node's existing default range visible to ordinary requests. Set the
+      // public parser cap before socket/parser binding, never the smaller native
+      // extraction cap. Saturated/oversized evidence is rejected independently.
+      if (r.httpVersion !== "2") req.maxHeadersCount = HTTP1_HEADER_PAIR_LIMIT;
       const totalTimer = setTimeout(
         () => req.destroy(Error("请求超时（总时限已到）")),
         remainingTimeout,

@@ -1,3 +1,4 @@
+import { readResponseHeaderEvidence } from "./response-header-evidence.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
@@ -108,6 +109,8 @@ export function runScript(
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
+        // Never trust serialized fields supplied by a request, response or VM.
+        responseHeaderEvidence: readResponseHeaderEvidence(input.response),
         code,
         input,
         activityBudgetMs,
