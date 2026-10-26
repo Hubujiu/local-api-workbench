@@ -116,6 +116,66 @@ export async function verifyNativeRedisFlow(config) {
     );
     assert.equal(writeResponse.status, 400);
     assert.equal(seen.length, 8);
+    const wrongTypeSource = nativeRedisFixture(
+      `http://127.0.0.1:${echo.address().port}/echo`,
+      { method: "get", query: '{"key":"localapi:hash"}' },
+    );
+    const wrongTypeProject = { requests: [], environments: [], settings: {} };
+    importIntoProject(wrongTypeProject, wrongTypeSource);
+    const wrongType = await execute(p, wrongTypeProject.requests[0]);
+    assert.equal(wrongType.outcome, "failed");
+    assert.match(wrongType.error, /WRONGTYPE/);
+    assert.equal(seen.length, 8);
+    const phasedSource = nativeRedisFixture(
+      `http://127.0.0.1:${echo.address().port}/echo`,
+    );
+    const task = (id, method, query, name, type) => ({
+      id,
+      name: id,
+      type: "database",
+      enabled: 1,
+      data: {
+        connectionId: "database",
+        method,
+        query: JSON.stringify(query),
+        isConsoleOutput: -1,
+        variables: [{ name, type, pattern: "$[0]" }],
+      },
+    });
+    phasedSource.apis[1].request.post_tasks.push(
+      task(
+        "global-after",
+        "hget",
+        { key: "localapi:hash", field: "a" },
+        "redisGlobal",
+        "globals",
+      ),
+      task(
+        "temporary-after",
+        "exists",
+        { key: "localapi:fixture" },
+        "redisTemporary",
+        "variables",
+      ),
+      {
+        id: "check-after",
+        name: "Check scopes",
+        type: "customScript",
+        enabled: 1,
+        data: 'pm.test("after scopes",()=>{pm.expect(pm.globals.get("redisGlobal")).to.equal("1");pm.expect(pm.variables.get("redisTemporary")).to.equal(1);});',
+      },
+    );
+    const phased = { requests: [], environments: [], settings: {} };
+    importIntoProject(phased, phasedSource);
+    const phaseResult = await execute(p, phased.requests[0]);
+    assert.equal(phaseResult.outcome, "passed", JSON.stringify(phaseResult));
+    assert.equal(phaseResult.databaseQueries.length, 3);
+    const phaseSaved = await app.store.get(p.id);
+    assert.equal(phaseSaved.globalVariables.redisGlobal, "1");
+    assert.equal(
+      phaseSaved.environments[0].variables.redisTemporary,
+      undefined,
+    );
     const saved = await app.store.get(p.id);
     saved.plans = [
       snapshotPlan({
@@ -128,22 +188,26 @@ export async function verifyNativeRedisFlow(config) {
     const restored = restoreProject(saved);
     await app.store.save(restored);
     assert.equal((await execute(restored)).outcome, "failed");
-    assert.equal(seen.length, 8);
+    assert.equal(seen.length, 9);
     assert.equal((await grant(restored)).status, 200);
     assert.equal((await execute(restored)).outcome, "passed");
-    assert.equal(seen.length, 9);
+    assert.equal(seen.length, 10);
     await fetch(app.url + "/api/projects/" + p.id + "/database-connections", {
       method: "DELETE",
       headers: headers(),
       body: JSON.stringify({ id: granted.data.id }),
     });
     assert.equal((await execute(p)).outcome, "failed");
-    assert.equal(seen.length, 9);
+    assert.equal(seen.length, 10);
+    const beforeRestart = await app.store.get(restored.id);
     app.server.closeAllConnections();
     await new Promise((r) => app.server.close(r));
     app = await createApp({ root, port: 0 });
+    const afterRestart = await app.store.get(restored.id);
+    assert.deepEqual(afterRestart.environments, beforeRestart.environments);
+    assert.deepEqual(afterRestart.plans, beforeRestart.plans);
     assert.equal((await execute(restored)).outcome, "failed");
-    assert.equal(seen.length, 9);
+    assert.equal(seen.length, 10);
     assert.equal((await grant(restored)).status, 200);
     const response = await fetch(
       app.url + "/api/projects/" + restored.id + "/run",
@@ -156,7 +220,13 @@ export async function verifyNativeRedisFlow(config) {
     const result = await response.json();
     assert.equal(response.status, 200, JSON.stringify(result));
     assert.equal(result.status, "passed", JSON.stringify(result));
-    assert.equal(seen.length, 10);
+    assert.equal(result.recordSaved, true, JSON.stringify(result));
+    const recorded = (await app.store.get(restored.id)).runs.find(
+      (run) => run.id === result.id,
+    );
+    assert(recorded);
+    assert.equal(recorded.results[0].databaseQueries[0].status, "completed");
+    assert.equal(seen.length, 11);
     assert(
       !JSON.stringify(await app.store.get(p.id)).includes(
         "discard-this-fictional-password",

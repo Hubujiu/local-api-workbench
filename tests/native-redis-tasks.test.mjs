@@ -114,3 +114,16 @@ test("Redis scalar task pipelines preserve scope and HTTP preparation without pa
   assert.equal(queries, 1);
   assert.equal(requests, 1);
 });
+
+test("native Redis scalar extraction never indexes a string through retained path metadata", () => {
+  for (const pattern of ["$", "$[0]", "$.length", "$.missing"]) {
+    const operation = {
+      resultShape: "redis-value",
+      variables: [{ name: "v", type: "environment", pattern }],
+    };
+    for (const value of ["hello", "", null, 0, 1, '{"literal":true}'])
+      assert.deepEqual(databaseAssignments(operation, { rows: [{ value }] }), [
+        { name: "v", type: "environment", value },
+      ]);
+  }
+});

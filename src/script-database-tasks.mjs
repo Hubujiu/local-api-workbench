@@ -105,7 +105,11 @@ export function databaseAssignments(operation, result) {
   // Validate all extractions before applying any changes in the sandbox.
   return operation.variables.map((variable) => {
     let value = rows;
-    for (const key of jsonPathSegments(variable.pattern)) {
+    // Native scalar database results assign directly. Retain the path as
+    // provenance, but do not index strings into characters or expose .length.
+    for (const key of operation.resultShape === "redis-value"
+      ? []
+      : jsonPathSegments(variable.pattern)) {
       if (
         value === null ||
         value === undefined ||
