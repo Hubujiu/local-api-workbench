@@ -45,6 +45,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
         project.id,
         plan,
         credentials.databaseConnections || {},
+        project.settings?.apipostDatabases || [],
       );
     delete credentials.databaseConnections;
     const environmentId = args.includes("--environment")

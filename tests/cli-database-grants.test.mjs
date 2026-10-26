@@ -126,3 +126,66 @@ test("CLI native-task reference collection requires exact enabled bindings and k
     assert.throws(() => prepareCLIDatabaseGrants("p", bad, {}), /CLI/);
   }
 });
+
+test("CLI imported bindings and typed native task results require matching engines before any connection", () => {
+  const id = "apipost-" + "a".repeat(20) + "-db-" + "b".repeat(20);
+  const plan = {
+    steps: [
+      {
+        request: {
+          nativeTasks: {
+            version: 1,
+            before: [
+              {
+                type: "database",
+                enabled: 1,
+                data: { connectionId: id, resultShape: "redis-value" },
+              },
+            ],
+            after: [],
+          },
+        },
+      },
+    ],
+  };
+  const config = {
+    type: "redis",
+    host: "127.0.0.1",
+    port: 6379,
+    database: "0",
+  };
+  assert.throws(
+    () => prepareCLIDatabaseGrants("p", plan, { [id]: config }),
+    /来源/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants(
+        "p",
+        plan,
+        { [id]: { ...config, type: "postgres" } },
+        [{ id, type: "redis" }],
+      ),
+    /引擎/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants("p", plan, { [id]: config }, [
+        { id, type: "postgres" },
+      ]),
+    /引擎/,
+  );
+  const grants = prepareCLIDatabaseGrants("p", plan, { [id]: config }, [
+    { id, type: "redis" },
+  ]);
+  grants.close();
+  const manual = structuredClone(plan);
+  manual.steps[0].request.nativeTasks.before[0].data.connectionId = "manual";
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants("p", manual, {
+        manual: { ...config, type: "postgres" },
+      }),
+    /引擎/,
+  );
+});

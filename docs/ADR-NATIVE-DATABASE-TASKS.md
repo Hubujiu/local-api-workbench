@@ -174,3 +174,31 @@ Only one safe SELECT/WITH statement remains allowed; this does not enable
 multi-statement execution. Missing paths deliberately fail closed instead of
 sending the original's null/stale value. Root/array/scalar extraction remains
 bounded by the existing result and sandbox limits.
+
+## Redis scalar task slice (work in progress, 2026-10-26)
+
+The observed native envelope also permits type redis. Its task remains database,
+with data.method get/hget/exists and a JSON-object query containing key (and field
+for hget). Independently authored conversion maps this exact bounded shape to
+existing readonly Redis commands and canonical resultShape redis-value. It never
+imports host/user/password/SSH configuration, reads original file paths or grants
+connections. Runtime authorization must explicitly provide host, port and database.
+Other commands, extra keys, dynamic interpolation and supplied source resultShape
+reject before execution; GET/HGET/EXISTS remain readonly even in mixed phases.
+
+The result adapter unwraps the existing single value row into the original scalar
+shape, so $ addresses the scalar. Empty text, null, numbers and JSON-looking text
+are not coerced or parsed. Static inspection found that the original shared task
+bridge attempts to parse Redis results as an unrelated database wrapper; this can
+lose numeric/null/JSON-looking values. Workbench intentionally does not reproduce
+that behavior. This is a stated compatibility difference, not an original runtime
+comparison claim. Original GUI execution is not currently authorized in this run.
+
+Local conversion, scalar semantics, immutable pipeline and rejection regressions
+pass. The existing disposable Redis 7.2 CI service runs a full native import →
+explicit temporary grant → JS/Redis/JS → actual HTTP → persisted variables/results
+→ restore/restart/regrant flow, including cross-project denial, revocation, wrong
+engine and write rejection. That newly added real-service test remains pending
+until its exact commit CI completes; local callbacks do not count as real Redis.
+CLI and MCP combination evidence and frozen inert-source compatibility must be
+verified separately with their respective feature branches before acceptance.

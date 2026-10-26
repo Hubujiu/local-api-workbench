@@ -1,3 +1,4 @@
+import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -28,10 +29,12 @@ export async function verifyMCPDatabaseFlow(
     if (nativeImport) {
       importIntoProject(
         p,
-        nativeDatabaseFixture(
-          `http://127.0.0.1:${echo.address().port}/`,
-          config.type === "mysql" ? "mysql" : "pg",
-        ),
+        config.type === "redis"
+          ? nativeRedisFixture(`http://127.0.0.1:${echo.address().port}/`)
+          : nativeDatabaseFixture(
+              `http://127.0.0.1:${echo.address().port}/`,
+              config.type === "mysql" ? "mysql" : "pg",
+            ),
       );
       await app.store.save(p);
       bindingId = p.settings.apipostDatabases[0].id;

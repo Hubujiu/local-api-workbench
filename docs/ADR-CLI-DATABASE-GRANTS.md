@@ -21,3 +21,11 @@ runtime actually preserved native tasks before executing, avoiding a false green
 from silently dropped tasks. Combined PostgreSQL verification covers query -> HTTP
 -> post-query assertion -> persisted result, invalid grant preflight before earlier
 HTTP, denied next invocation, and a fresh explicitly granted repeat.
+
+### Imported engine binding
+
+The CLI now receives the current project's safe imported database catalog. A
+source-style binding ID must exist there and its engine must match the temporary
+configuration, like HTTP/MCP registration. Native Redis/MySQL result-shape tags
+also constrain manual task bindings before any connection. This is validation,
+not a new grant or persisted configuration; credentials remain stdin-only.

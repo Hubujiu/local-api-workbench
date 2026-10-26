@@ -74,7 +74,8 @@ export function normalizeImportedNativeTaskSource(value) {
         ]);
         if (
           ![-1, 0, 1].includes(d.isConsoleOutput) ||
-          (d.resultShape !== undefined && d.resultShape !== "mysql-resultsets")
+          (d.resultShape !== undefined &&
+            !["mysql-resultsets", "redis-value"].includes(d.resultShape))
         )
           throw Error("数据库任务来源格式无效");
         data = {
