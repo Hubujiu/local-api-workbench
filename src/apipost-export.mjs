@@ -1,3 +1,4 @@
+import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
 import { variableRows } from "../public/variable-definitions.js";
@@ -12,7 +13,7 @@ const unsupported = (value, label) => {
   if (populated(value))
     throw Error(`Apipost导出尚不能表达${label}；请使用项目备份`);
 };
-const nativeId = (kind, value) =>
+export const apipostExportId = (kind, value) =>
   kind + createHash("sha256").update(String(value)).digest("hex").slice(0, 24);
 function variables(values, definitions) {
   return Object.fromEntries(
@@ -45,7 +46,7 @@ function rows(values, kind) {
     for (const key of ["contentType", "content_type", "fileBase64", "filePath"])
       unsupported(row[key], `${kind}.${key}`);
     return {
-      param_id: nativeId("p", kind + ":" + index),
+      param_id: apipostExportId("p", kind + ":" + index),
       key: row.key,
       value: row.value,
       is_checked: row.enabled === false ? -1 : 1,
@@ -112,7 +113,7 @@ function tasks(request, phase) {
   return code
     ? [
         {
-          id: nativeId("t", request.id + phase),
+          id: apipostExportId("t", request.id + phase),
           name: phase === "before" ? "前置脚本" : "后置脚本",
           type: "customScript",
           enabled: 1,
@@ -199,7 +200,7 @@ export function exportApipost(project) {
           throw Error("Apipost导出服务地址不等价或无效");
       }
     }
-  const projectId = nativeId("project", project.id);
+  const projectId = apipostExportId("project", project.id);
   if ((project.servers || []).length > 1)
     throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");
   const servers = (project.servers || []).map((s, index) => ({
@@ -213,7 +214,7 @@ export function exportApipost(project) {
   if (!servers.length)
     servers.push({ server_id: "1", name: "默认服务", sort: 1000 });
   const marks = (project.settings?.statuses || []).map((s) => ({
-    mark_id: nativeId("m", s.id),
+    mark_id: apipostExportId("m", s.id),
     name: s.name,
     color: s.color,
     project_id: projectId,
@@ -237,7 +238,7 @@ export function exportApipost(project) {
     )
       throw Error("Apipost导出目录路径无效");
     const parent_id = folder(parts.slice(0, -1).join("/"));
-    const target_id = nativeId("f", name);
+    const target_id = apipostExportId("f", name);
     folders.set(name, target_id);
     apis.push({
       target_id,
@@ -265,10 +266,8 @@ export function exportApipost(project) {
       "after",
       "assertions",
       "extract",
-      "examples",
       "mockRules",
       "nativeMock",
-      "responses",
       "openapiOperation",
       "attributes",
       "proxy",
@@ -337,7 +336,7 @@ export function exportApipost(project) {
       (suffix ? "?" + suffix : "");
 
     apis.push({
-      target_id: nativeId("a", r.id),
+      target_id: apipostExportId("a", r.id),
       project_id: projectId,
       parent_id: folder(r.folder),
       target_type: "api",
@@ -351,7 +350,7 @@ export function exportApipost(project) {
       status: 1,
       attribute_info: {},
       ...(r.serviceId ? { server_id: serverIds.get(r.serviceId) } : {}),
-      ...(r.statusId ? { mark_id: nativeId("m", r.statusId) } : {}),
+      ...(r.statusId ? { mark_id: apipostExportId("m", r.statusId) } : {}),
       request: {
         auth: auth(r.auth),
         header: { parameter: rows(r.headers, "header") },
@@ -375,7 +374,7 @@ export function exportApipost(project) {
         pre_tasks: tasks(r, "before"),
         post_tasks: tasks(r, "after"),
       },
-      response: { example: [] },
+      response: exportApipostResponses(r),
     });
   }
   const document = {
@@ -384,7 +383,7 @@ export function exportApipost(project) {
     intro: project.description || "",
     global: {
       envs: project.environments.map((env, index) => ({
-        env_id: nativeId("e", env.id),
+        env_id: apipostExportId("e", env.id),
         name: env.name,
         is_private: -1,
         sort: (index + 1) * 1000,
