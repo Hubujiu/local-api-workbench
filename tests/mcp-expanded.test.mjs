@@ -29,10 +29,10 @@ test("MCP covers project/environment/service/global lifecycle and plan CRUD with
   );
   assert.equal(
     list.result.tools.filter((t) => t.name.startsWith("apipost_")).length,
-    26,
+    30,
   );
   const toolNames = new Set(list.result.tools.map((tool) => tool.name));
-  assert.equal(toolNames.size, 66);
+  assert.equal(toolNames.size, 70);
   assert(toolNames.has("localapi_list_protocol_runs"));
   assert(toolNames.has("localapi_get_protocol_run"));
   const detail = list.result.tools.find(

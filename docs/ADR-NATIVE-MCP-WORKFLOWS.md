@@ -128,3 +128,38 @@ Actual SDK/localhost coverage includes API scripts and failing assertions,
 temporary bearer/full-JSON input, unchanged saved definitions, project and
 environment denial before transport, injected history failure with one request
 only, and gated concurrent environment switching with a persistent script write.
+
+### Managed project, sync, deletion and history entry points
+
+All 30 observed native tool names now have bounded input adapters, not a claim of
+full native parity. Creation accepts a trimmed name/description and stores both
+in the first project transaction; a nonempty storage_path is rejected. New
+project access is the existing MCP session's access, not a new persistent grant.
+
+OpenAPI 3.0/3.1 JSON synchronization uses detached conversion and validates all
+script mappings before saving. Native mode preserves operation-relative URLs,
+binds an existing folder service or the explicit native default service, and
+uses apipost8 for supplied scripts. A missing service address must be configured
+before execution. API scripts are not proprietary code. clear, enabled
+base_path/host_path flags, invalid folder IDs and external references are
+rejected. Counts are captured during matching, with skipped rows excluded from
+sync_items. Folder rows are not emitted in this bounded result.
+
+delete_apis deliberately supports only confirmed, nonduplicate existing HTTP API
+IDs (at most 1000); it soft-deletes and reports the actual affected IDs. Recursive
+folder/document deletion remains unsupported. Existing frozen plans are not
+rewritten by deletion.
+
+History filters before limiting and returns total over the actual two bounded
+Workbench stores (API and flow, up to 50 each), not an invented global native
+50-record cap. It excludes request/response bodies, logs, variables and assertion
+details. finished_at is the recorded completion timestamp; started_at is derived
+from the recorded elapsed duration when valid, and omitted for missing legacy
+timing. cli/unknown origins can appear in unfiltered output but native source
+filters accept only manual/mcp. This is a documented Workbench compatibility
+difference, not guessed native evidence.
+
+SDK acceptance covers managed creation, native environment address configuration,
+sync and overwrite/ignore counts, actual API execution of mapped response scripts,
+history/result lookup, confirmed deletion, filesystem restart and noninherited
+MCP authorization; invalid mutations leave the saved project unchanged.

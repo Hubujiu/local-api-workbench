@@ -123,6 +123,24 @@ test(
       }),
     );
     assert.equal(canonical.status, "passed");
+    const summary = decode(
+      await client.callTool({
+        name: "apipost_list_execution_runs",
+        arguments: { project_id: p.id, scope: "api", source: "mcp", limit: 1 },
+      }),
+    );
+    assert.equal(summary.total, 3);
+    assert.equal(summary.records.length, 1);
+    assert.equal(summary.records[0].scope, "api");
+    assert.equal(typeof summary.records[0].failed, "number");
+    const detail = decode(
+      await client.callTool({
+        name: "apipost_get_execution_result",
+        arguments: { project_id: p.id, run_id: run.run_id },
+      }),
+    );
+    assert.equal(detail.run.run_id, run.run_id);
+    assert.equal(detail.run.response.status, 200);
     const append = app.store.append.bind(app.store);
     app.store.append = async (id, key, value) => {
       if (key === "history") throw Error("private/path/secret");
