@@ -291,26 +291,40 @@ export async function createApp({
             completed: 0,
           });
         }
-        const dispatch = createMCP({
-          store,
-          ...mcp,
-          debugEnvironments,
-          grpcExecutor: executePlanGrpc,
-          protocolExecutor: executePlanWire,
-          socketioExecutor: (projectId, input, signal) =>
-            executeSocketIOFlow(input, signal, {
-              projectId,
-              sessions: socketioSessions,
-            }),
-          onProgress: (progress) => {
-            const activity = mcpActivities.get(activityId);
-            if (activity)
-              Object.assign(activity, { ...progress, status: "running" });
-          },
-        });
         let result;
         try {
+          const dispatch = createMCP({
+            store,
+            ...mcp,
+            debugEnvironments,
+            grpcExecutor: executePlanGrpc,
+            protocolExecutor: executePlanWire,
+            socketioExecutor: (projectId, input, signal) =>
+              executeSocketIOFlow(input, signal, {
+                projectId,
+                sessions: socketioSessions,
+              }),
+            onProgress: (progress) => {
+              const activity = mcpActivities.get(activityId);
+              if (activity)
+                Object.assign(activity, { ...progress, status: "running" });
+            },
+          });
           result = await dispatch(message, { signal: execution.signal });
+        } catch {
+          result = {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "MCP执行异常；请检查活动与历史，不要自动重放",
+                },
+              ],
+            },
+          };
         } finally {
           execution.finish();
         }

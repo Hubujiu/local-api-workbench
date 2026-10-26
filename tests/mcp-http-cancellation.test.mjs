@@ -304,6 +304,23 @@ test(
     };
     await configure(true);
     const capacity = await connect();
+    for (let i = 0; i < 12; i++) {
+      const malformed = await fetch(app.url + "/mcp", {
+        method: "POST",
+        headers: {
+          ...rpcHeaders,
+          "mcp-session-id": capacity.transport.sessionId,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "malformed-" + i,
+          method: "tools/call",
+          params: null,
+        }),
+      });
+      assert.equal(malformed.status, 200);
+      assert.equal((await malformed.json()).result.isError, true);
+    }
     const controllers = capacityProjects.map(() => new AbortController());
     const rejections = capacityProjects.map((project, i) =>
       assert.rejects(
