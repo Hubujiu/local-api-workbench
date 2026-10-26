@@ -48,10 +48,20 @@ export function importExtendedApipostAuth(auth) {
     const value = section(auth, "awsv4", [...names, "addAuthDataToQuery"]);
     if (
       value.addAuthDataToQuery !== undefined &&
-      value.addAuthDataToQuery !== false
+      typeof value.addAuthDataToQuery !== "boolean"
     )
-      throw Error("Apipost AWS Query预签名尚未支持，不能替换为Header签名");
-    return { type: "aws", ...strings(value, names) };
+      throw Error("Apipost AWS Query开关必须为布尔值");
+    if (value.addAuthDataToQuery === true && value.service !== "s3")
+      throw Error(
+        "Apipost AWS Query认证目前仅支持明确S3服务，不会替换为Header签名",
+      );
+    return {
+      type: "aws",
+      ...strings(value, names),
+      ...(value.addAuthDataToQuery !== undefined
+        ? { addAuthDataToQuery: value.addAuthDataToQuery }
+        : {}),
+    };
   }
   if (auth?.type === "hawk") {
     const names = [
