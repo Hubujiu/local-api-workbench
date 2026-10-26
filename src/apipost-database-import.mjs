@@ -1,3 +1,4 @@
+import { mongoQuery } from "./mongodb.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 const object = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
@@ -24,7 +25,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
           ),
       ) ||
       entry.project_id !== projectId ||
-      !["pg", "mysql", "redis"].includes(entry.type) ||
+      !["pg", "mysql", "redis", "mongodb"].includes(entry.type) ||
       !safe(entry.db_id) ||
       !safe(entry.name) ||
       typeof entry.intro !== "string" ||
@@ -35,7 +36,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       map.has(entry.db_id)
     )
       throw Error(
-        "Apipost数据库连接仅支持同项目PostgreSQL/MySQL/Redis定义，不会丢弃未知语义",
+        "Apipost数据库连接仅支持同项目PostgreSQL/MySQL/Redis/MongoDB定义，不会丢弃未知语义",
       );
     for (const [environment, config] of Object.entries(entry.config)) {
       if (
@@ -71,7 +72,10 @@ export function prepareApipostDatabases(value, projectId, resource) {
       for (const key of ["auth_source", "database", "host", "password", "user"])
         if (typeof db[key] !== "string" || db[key].length > 65536)
           throw Error("Apipost数据库配置文本无效");
-      if (db.auth_source) throw Error("SQL数据库 auth_source不支持");
+      if (db.auth_source && entry.type !== "mongodb")
+        throw Error("此数据库不支持auth_source");
+      if (entry.type === "mongodb" && db.auth_source.length > 128)
+        throw Error("MongoDB来源认证库最多128字符");
       if (
         !object(ssh) ||
         Object.keys(ssh).some(
@@ -173,6 +177,31 @@ export function nativeDatabaseTasks(
         (c) => c.id === next.data.connectionId,
       )?.type;
       if (sourceType === "mysql") next.data.resultShape = "mysql-resultsets";
+      if (sourceType === "mongodb") {
+        if (!translated) {
+          if (
+            task.data.method !== "findone" ||
+            typeof task.data.query !== "string" ||
+            task.data.query.length > 50000
+          )
+            throw Error("原版MongoDB任务仅支持findone和有界JSON筛选文本");
+          let filter;
+          try {
+            filter = JSON.parse(task.data.query);
+          } catch {
+            throw Error("原版MongoDB筛选须为JSON对象文本");
+          }
+          if (!object(filter)) throw Error("原版MongoDB筛选须为JSON对象");
+          next.data.query = JSON.stringify(
+            mongoQuery({
+              query: { collection: task.data.collectionName, filter, limit: 1 },
+            }),
+          );
+          delete next.data.method;
+          delete next.data.collectionName;
+        }
+        next.data.resultShape = "mongodb-document";
+      }
       if (sourceType === "redis") {
         if (!translated) {
           const method = task.data.method;
@@ -238,7 +267,7 @@ export function validateApipostDatabaseResources(value = []) {
       !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(entry.id) ||
       ids.has(entry.id) ||
       !safe(entry.name) ||
-      !["postgres", "mysql", "redis"].includes(entry.type) ||
+      !["postgres", "mysql", "redis", "mongodb"].includes(entry.type) ||
       !safe(entry.sourceProjectId) ||
       !safe(entry.sourceId) ||
       (entry.requiresSSH !== undefined &&

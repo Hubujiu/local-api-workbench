@@ -545,7 +545,7 @@ try {
     if (workerData.databaseTaskCount)
       install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
     if(errorJSON){reject(Error(errorJSON));return;}
-    try{const result=JSON.parse(responseJSON);for(const entry of result.assignments)({environment,global,temporary})[entry.type](entry.name,entry.value);if(result.rows)log(JSON.stringify(result.rows));resolve();}catch(error){reject(error);}
+    try{const result=JSON.parse(responseJSON);for(const entry of result.assignments)({environment,global,temporary})[entry.type](entry.name,entry.value);if(Object.prototype.hasOwnProperty.call(result,"rows"))log(JSON.stringify(result.rows));resolve();}catch(error){reject(error);}
   })))(globalThis.__nativeDatabaseBridge,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),console.log.bind(console));delete globalThis.__nativeDatabaseBridge;`);
     run(compatibilitySources.join(";\n"));
   });
