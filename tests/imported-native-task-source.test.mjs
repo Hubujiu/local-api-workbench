@@ -251,7 +251,7 @@ test("pickVars provenance remains closed inert data and cannot introduce hidden 
       s.after[0].data.password = "not retained";
     },
     (s) => {
-      s.after[0].data.source = "responseHeader";
+      s.after[0].data.source = "responseXml";
     },
     (s) => {
       s.after[0].data.variables[0].type = "unknown";
@@ -502,4 +502,50 @@ test("wait provenance rejects objects and hidden accessors atomically without in
     assert.deepEqual(await new Store(root).get(project.id), saved);
   }
   assert.equal(reads, 0);
+});
+
+test("Header provenance preserves historical literal templates without compiling or activating them", async () => {
+  const source = {
+    version: 1,
+    before: [],
+    after: [
+      {
+        type: "pickVars",
+        enabled: 1,
+        data: {
+          source: "responseHeader",
+          variables: [
+            { name: "v", expression: "{{NOT_EXECUTED}}", type: "envVars" },
+          ],
+        },
+      },
+    ],
+  };
+  // Canonical provenance is inert even with historical enabled=1. Raw enabled
+  // API imports still enforce the active literal-name grammar separately.
+  assert.deepEqual(normalize(source), source);
+  const plan = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url: "http://fixture.invalid",
+          importedNativeTaskSource: source,
+        },
+      },
+    ],
+  });
+  assert.deepEqual(plan.steps[0].request.importedNativeTaskSource, source);
+  const run = await runPlan(
+    plan,
+    { v: "unchanged", NOT_EXECUTED: "x-token" },
+    async () => ({
+      status: 200,
+      headers: {},
+      body: "not JSON and no token header",
+      duration: 1,
+    }),
+  );
+  assert.equal(run.status, "passed");
+  assert.equal(run.variables.v, "unchanged");
+  assert.deepEqual(run.results[0].request.importedNativeTaskSource, source);
 });
