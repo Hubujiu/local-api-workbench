@@ -808,6 +808,7 @@ export async function createApp({
                   "service",
                   "method",
                   "timeoutMs",
+                  "requiredMetadata",
                 ]
                   .filter((key) => definition[key] !== undefined)
                   .map((key) => [key, definition[key]]),

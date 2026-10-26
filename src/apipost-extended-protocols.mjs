@@ -1,3 +1,4 @@
+import { nativeGrpcMetadata } from "./apipost-grpc-metadata.mjs";
 import { normalizeSocketIODefinition } from "./socketio.mjs";
 import { snapshotSocketIOStep } from "./socketio-plan.mjs";
 import { normalizeGrpcDefinition, inspectGrpcSchema } from "./grpc.mjs";
@@ -209,7 +210,9 @@ export function prepareExtendedProtocol(
           fail("gRPC TLS/重连配置");
         keys(method.request ?? {}, ["message", "metadata"], "gRPC方法请求");
         keys(method.request.metadata ?? {}, ["parameter"], "gRPC Metadata");
-        no(method.request.metadata.parameter, "gRPC Metadata行");
+        const requiredMetadata = nativeGrpcMetadata(
+          method.request.metadata.parameter,
+        );
         const messages = method.request.message;
         if (!Array.isArray(messages) || messages.length > 100)
           fail("gRPC消息列表");
@@ -269,6 +272,7 @@ export function prepareExtendedProtocol(
         if (endpoint.includes("{{") || endpoint.includes("://"))
           fail("gRPC端点模板/前缀");
         const definition = normalizeGrpcDefinition({
+          ...(requiredMetadata === undefined ? {} : { requiredMetadata }),
           id: resource("grpc", node.target_id + ":" + method.grpc_method_id),
           name: node.name + " / " + service.service_name + "/" + method.name,
           target: "grpc://" + endpoint,
