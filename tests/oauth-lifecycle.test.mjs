@@ -635,3 +635,157 @@ test("OAuth owner endpoints still reject unauthenticated/cross-origin calls and 
   );
   assert.equal(p.seen.length, 0);
 });
+
+test("concurrent OAuth callbacks publish only their own out-of-order token and reject parallel replay", async (t) => {
+  const arrivals = new Map();
+  const both = Promise.withResolvers();
+  const p = await provider(t, (request) => {
+    arrivals.set(request.fields.get("code"), request);
+    if (arrivals.size === 2) both.resolve();
+  });
+  const manager = new OAuthManager();
+  t.after(() => manager.close());
+  const first = start(manager, p.base),
+    second = start(manager, p.base);
+  const one = manager.complete({ state: first.state, code: "first" });
+  const two = manager.complete({ state: second.state, code: "second" });
+  await within(both.promise);
+  await assert.rejects(
+    manager.complete({ state: first.state, code: "replayed" }),
+    /state/,
+  );
+  arrivals
+    .get("second")
+    .res.end(
+      '{"access_token":"second-access","refresh_token":"second-refresh"}',
+    );
+  await within(two);
+  assert.equal(manager.status(first.id).status, "exchanging");
+  assert.equal(manager.status(second.id).result.accessToken, "second-access");
+  arrivals
+    .get("first")
+    .res.end('{"access_token":"first-access","refresh_token":"first-refresh"}');
+  await within(one);
+  assert.equal(manager.status(first.id).result.accessToken, "first-access");
+  assert.equal(manager.status(first.id).result.refreshToken, "first-refresh");
+  assert.equal(manager.status(second.id).result.refreshToken, "second-refresh");
+  const copy = manager.status(first.id);
+  copy.result.accessToken = "caller-mutation";
+  assert.equal(manager.status(first.id).result.accessToken, "first-access");
+  assert.equal(p.seen.length, 2);
+});
+
+test("OAuth flow and active-exchange slots stay bounded and shutdown releases all owned sockets", async (t) => {
+  const received = Promise.withResolvers();
+  let requests = 0;
+  const p = await provider(t, () => {
+    if (++requests === 10) received.resolve();
+  });
+  const manager = new OAuthManager();
+  t.after(() => manager.close());
+  for (let i = 0; i < 10; i++) start(manager, p.base);
+  assert.throws(() => start(manager, p.base), /流程过多/);
+  const pending = Array.from({ length: 10 }, () =>
+    manager.exchange({ tokenEndpoint: p.base }, grant),
+  );
+  const rejected = pending.map((operation) =>
+    assert.rejects(operation, { code: "OAUTH_CLOSED" }),
+  );
+  await within(received.promise);
+  await assert.rejects(
+    manager.exchange({ tokenEndpoint: p.base }, grant),
+    /请求过多/,
+  );
+  const closed = p.seen.map(({ req }) => once(req.socket, "close"));
+  manager.close();
+  await within(Promise.all([...closed, ...rejected]));
+  assert.equal(p.seen.length, 10);
+  assert.equal(manager.flows.size, 0);
+  assert.equal(manager.exchanges.size, 0);
+});
+
+test("only explicit owner save persists an acquired token through backup, restore and restart", async (t) => {
+  let tokenPosts = 0,
+    bearerCalls = 0;
+  const p = await provider(t, ({ req, res }) => {
+    if (req.url === "/token") {
+      tokenPosts++;
+      res.end(
+        '{"access_token":"saved-fictional-token","refresh_token":"saved-fictional-refresh"}',
+      );
+    } else {
+      bearerCalls++;
+      assert.equal(req.headers.authorization, "Bearer saved-fictional-token");
+      res.end("authorized after restart");
+    }
+  });
+  const root = await mkdtemp(path.join(os.tmpdir(), "oauth-save-roundtrip-"));
+  const apps = [];
+  t.after(async () => {
+    for (const app of apps) {
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+  let app = await createApp({ root, port: 0 });
+  apps.push(app);
+  const call = async (route, method = "GET", data) => {
+    const response = await fetch(app.url + route, {
+      method,
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    assert(response.ok, await response.clone().text());
+    return response.json();
+  };
+  let project = await call("/api/projects", "POST", { name: "Explicit save" });
+  const unrelated = await call("/api/projects", "POST", {
+    name: "Unrelated project",
+  });
+  const token = await call("/api/oauth/token", "POST", {
+    tokenEndpoint: p.base + "/token",
+    grantType: "client_credentials",
+    clientId,
+    clientSecret,
+    clientAuthentication: "basic",
+  });
+  assert.deepEqual(await call("/api/projects/" + project.id), project);
+  project.requests = [
+    {
+      id: "saved-oauth-request",
+      name: "Saved OAuth bearer",
+      url: p.base + "/resource",
+      method: "GET",
+      auth: {
+        type: "oauth2",
+        token: token.accessToken,
+        refreshToken: token.refreshToken,
+      },
+    },
+  ];
+  project = await call("/api/projects/" + project.id, "PUT", project);
+  const backup = await call("/api/projects/" + project.id + "/export");
+  const restored = await call("/api/restore", "POST", { document: backup });
+  assert.notEqual(restored.id, project.id);
+  assert.equal(restored.requests[0].auth.token, token.accessToken);
+  app.server.closeAllConnections();
+  await new Promise((resolve) => app.server.close(resolve));
+  app = await createApp({ root, port: 0 });
+  apps.push(app);
+  for (const id of [project.id, restored.id]) {
+    const saved = await call("/api/projects/" + id);
+    assert.equal(saved.requests[0].auth.refreshToken, token.refreshToken);
+    const response = await call("/api/projects/" + id + "/execute", "POST", {
+      request: saved.requests[0],
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body, "authorized after restart");
+  }
+  assert.deepEqual(await call("/api/projects/" + unrelated.id), unrelated);
+  assert.equal(tokenPosts, 1);
+  assert.equal(bearerCalls, 2);
+});
