@@ -114,9 +114,22 @@ test(
         { projectId: p.id, planId: p.plans[0].id },
         "runs",
       ],
+      [
+        "apipost_execute_api",
+        { project_id: p.id, target_id: p.requests[0].id },
+        "history",
+      ],
+      [
+        "apipost_execute_flow",
+        { project_id: p.id, flow_id: p.plans[0].id },
+        "runs",
+      ],
     ]) {
       const previous = handshakes,
         controller = new AbortController();
+      const oldIDs = new Set(
+        (await app.store.get(p.id))[collection].map((record) => record.id),
+      );
       const rejected = assert.rejects(
         client.callTool({ name, arguments: args }, undefined, {
           signal: controller.signal,
@@ -128,13 +141,13 @@ test(
       await rejected;
       await waitFor(async () =>
         (await new Store(root).get(p.id))[collection].some(
-          (record) => record.status === "cancelled",
+          (record) => record.status === "cancelled" && !oldIDs.has(record.id),
         ),
       );
       await waitFor(() => sockets.size === 0);
       const saved = await new Store(root).get(p.id);
       const record = saved[collection].find(
-        (record) => record.status === "cancelled",
+        (record) => record.status === "cancelled" && !oldIDs.has(record.id),
       );
       const query =
         collection === "runs"
@@ -144,6 +157,19 @@ test(
       assert.equal(saved.environments[0].variables.native_value, undefined);
       assert.equal(httpCalls, 0);
       assert(!JSON.stringify(saved).includes(sessionId));
+      await waitFor(async () => {
+        const state = await fetch(app.url + "/api/mcp/config", {
+          headers,
+        }).then((r) => r.json());
+        return (
+          state.lastActivity?.tool === name &&
+          state.lastActivity?.status === "cancelled"
+        );
+      });
+      const activity = await fetch(app.url + "/api/mcp/config", {
+        headers,
+      }).then((r) => r.json());
+      assert.equal(activity.lastActivity.recordSaved, true);
       await client.ping();
     }
   },
