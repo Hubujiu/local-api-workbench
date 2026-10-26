@@ -553,7 +553,7 @@ try {
       install(
         "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const state=(" +
           nativeAssertionsInstallerSource +
-          ")(globalThis.__nativeAssertionDataJSON,()=>({body:response.body,status:response.status}),pm.test,tests);globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
+          ")(globalThis.__nativeAssertionDataJSON,((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests);globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
       );
     }
     if (workerData.responseExtractions?.length) {
@@ -763,11 +763,24 @@ try {
   if (nativeAssertionEvidence.length) {
     if (!Array.isArray(serializedResult.tests))
       throw Error("脚本断言输出格式无效");
+    const claimed = new Set();
     for (const entry of nativeAssertionEvidence) {
-      if (entry.index >= 0 && entry.index < serializedResult.tests.length)
-        serializedResult.tests[entry.index] = entry.record;
-      else serializedResult.tests.push(entry.record);
+      const target =
+        entry.index >= 0 &&
+        entry.index < serializedResult.tests.length &&
+        !claimed.has(entry.index)
+          ? entry.index
+          : serializedResult.tests.length;
+      serializedResult.tests[target] = entry.record;
+      claimed.add(target);
     }
+    if (serializedResult.tests.length > workerData.assertionLimit)
+      throw Error("脚本断言输出超过本次共享断言预算");
+    if (
+      Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
+      1024 * 1024
+    )
+      throw Error("脚本输出超过 1 MiB");
   }
   outcome = {
     result: {

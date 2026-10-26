@@ -1,4 +1,4 @@
-# 原生响应断言（开发检查点）
+# 原生响应断言
 
 ## 静态契约
 
@@ -23,7 +23,14 @@ JSON 解析/路径读取在测试回调外，出错是阶段错误。UI chunk
   仍拒绝首片外来源、比较算子及未知字段，不把禁用任务变成任意不透明来源容器。
 - 同一 VM 内保持项目→目录→接口顺序与词法作用域。调用捕获的 quota-wrapped pm.test；
   新声明式断言另保留私有真实结果，由可信出口合并，普通脚本改写公开 tests 不抹去它。
+  私有结果使用无原型记录及自有 toJSON 屏蔽的数组，独立读取；公开结果引用碰撞时追加，
+  不能用后一个 passed 覆盖前一个 failed。声明数和合并后结果仍受调用者断言配额及输出 1 MiB 约束。
   用户来源/路径/名称不拼入代码；没有新增主机 I/O 权限或函数求值。
+- responseCode 捕获原响应 facade 后读取当前 code，包括 setCode 与直接 code 赋值；
+  后者只是脚本处理视图，不将原 wire 状态或 responseOverride 伪造为已改变。
+- `nativeTasks`、`importedScriptTasks`、`importedNativeTaskSource` 是声明/来源而不是 wire 字段，
+  与 before/afterScript 一样不经请求整体插值。这是来源保真修正，不是新增模板能力；
+  wire URL/header/body 仍正常插值，显式 pm.variables.replaceIn 仍使用既有运行时语义。
 - 比较 false 是软失败：后续任务和普通计划步骤仍运行，沿用普通后置作用域提交规则。
   有启用 pickVars 的请求继续沿用其独立严格 fail-stop；本片不把 assert-only 改为 fail-fast。
 - 未执行完声明断言（早退、吞取值异常）在可信 worker 出口判为阶段错误，是 Workbench
@@ -33,10 +40,14 @@ JSON 解析/路径读取在测试回调外，出错是阶段错误。UI chunk
 
 ## 当前验收与组合边界
 
-首批 3 项本地测试通过，包含真实 HTTP business false→失败测试→后续脚本/计划请求、
-当前状态视图与原 wire 状态分离、变量/失败 run 保存、冻结后编辑、完整备份恢复和重启，
-以及公开 tests 篡改后原生失败结果保留。完整错误/限额/配额/取消/并发隔离与 pickVars 共存
-矩阵仍在补齐，此检查点不是完成交付。
+本地 focused 97 项通过（native-response-assertions、native-pick-vars、native-task-phase、
+native-task-plan、dynamic-values、script-test-registration、apipost-modern 七个测试文件），
+随后补 numeric prototype setter 的证据篡改用例定向通过；最终 CI 另行记录。
+覆盖真实 HTTP business false→失败测试→后续脚本/计划请求、原 wire/当前视图区分、
+变量/失败 run 保存、冻结后编辑、完整备份恢复/重启、两项目/两环境并发隔离与外项目环境拒绝。
+错误矩阵覆盖解析/非原始值、早退与吞异常、禁用默认形态、soft failure 与 pickVars strict policy
+共存、真实配额、取消、来源不可隐式插值，以及公开记录/重复引用/序列化/原型篡改不能擦掉原生失败。
+第一阶段已知证据 index 碰撞由后续修复封闭；不能把三个初始成功测试当作完整验收。
 
 不扩展原生反向导出。PR2 CLI DB collector 与 PR7 惰性 flow 来源的类型接入仍属组合依赖，
 不复制整分支，也不得把 flow API 来源任务提升为实际执行。

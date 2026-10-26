@@ -76,6 +76,8 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  if (responseAssertions.length > assertionLimit)
+    throw Error("声明的原生断言超过本次共享断言预算");
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
