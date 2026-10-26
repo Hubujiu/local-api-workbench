@@ -146,3 +146,17 @@ alias. Parameter schemas preserve supported basic types and reject constraints
 that the native importer would discard. Different step/request labels reject
 rather than silently change the label. These static corrections still need the
 separately pending original UI verification; local roundtrips do not replace it.
+
+## Frozen directory identity and recoverable resource state
+
+Directory export must not add active API directories merely because a frozen plan
+still references a deleted or moved path. A snapshot requiring a folder absent
+from the active definition export now rejects with a project-backup instruction.
+Explicitly retained active folders remain valid; ancestor presence alone does
+not authorize recreating a removed descendant. This conservative guard preserves
+both the frozen plan and current project rather than rewriting either silently.
+Native definition export also rejects populated `apiResourceTrash`; it cannot
+represent recoverable Workbench resource state. Full project backup is distinct.
+Independent negative tests reproduced both omissions before the fix; pure native
+roundtrip and authenticated HTTP/disk/backup tests cover the guard and unchanged
+state. This is not new original-UI roundtrip evidence.

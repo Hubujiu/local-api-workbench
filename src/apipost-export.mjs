@@ -149,6 +149,7 @@ export function exportApipost(project) {
     "cases",
     "protocols",
     "documents",
+    "apiResourceTrash",
     "dictionary",
     "parameterDictionary",
     "models",

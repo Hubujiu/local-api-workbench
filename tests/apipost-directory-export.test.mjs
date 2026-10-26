@@ -337,3 +337,74 @@ test("raw text uses the original plain body mode and retains explicit media", ()
   assert.equal(target.requests[0].bodyType, "raw");
   assert.equal(target.requests[0].body, "plain body");
 });
+
+test("frozen plan folders cannot resurrect removed active directories on native export roundtrip", () => {
+  const p = fixture("http://127.0.0.1:1/");
+  p.folders = [];
+  p.requests[0].folder = "Deleted/Sub";
+  p.requests[0].deletedAt = "2026-01-01T00:00:00.000Z";
+  for (const step of p.plans[0].steps) step.request.folder = "Deleted/Sub";
+  const before = structuredClone(p);
+  assert.throws(() => exportApipostDirectory(p), /目录.*项目备份/);
+  assert.deepEqual(p, before);
+  // An owner-retained active directory is different from resurrecting one.
+  p.folders = ["Deleted", "Deleted/Sub"];
+  const output = exportApipostDirectory(p),
+    target = { requests: [], environments: [], settings: {} };
+  importIntoProject(target, output);
+  assert.deepEqual(target.folders, p.folders);
+  assert.equal(target.requests.length, 0);
+  assert.equal(target.plans[0].steps.length, 2);
+  assert.equal(target.plans[0].steps[0].request.folder, "Deleted/Sub");
+});
+
+test("native definition exports reject resource trash instead of dropping recoverable state", () => {
+  const p = fixture("http://127.0.0.1:1/");
+  p.apiResourceTrash = { version: 1, batches: [{ id: "retained-fixture" }] };
+  const before = structuredClone(p);
+  assert.throws(() => exportApipostDirectory(p), /apiResourceTrash.*项目备份/);
+  p.plans = [];
+  assert.throws(() => exportApipost(p), /apiResourceTrash.*项目备份/);
+  p.plans = before.plans;
+  assert.deepEqual(p, before);
+});
+
+test("HTTP native export rejects stale frozen folders without changing disk, while full backup preserves the plan", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "export-stale-folder-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    app.server.closeAllConnections();
+    await new Promise((r) => app.server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const p = await app.store.create("deleted directory snapshot");
+  const definition = fixture("http://127.0.0.1:1/not-executed");
+  Object.assign(p, {
+    environments: definition.environments,
+    requests: definition.requests,
+    plans: definition.plans,
+    folders: ["Deleted/Other"],
+  });
+  p.requests[0].folder = "Deleted/Sub";
+  p.requests[0].deletedAt = "2026-01-01T00:00:00.000Z";
+  for (const step of p.plans[0].steps) step.request.folder = "Deleted/Sub";
+  await app.store.save(p);
+  const before = await app.store.get(p.id);
+  const response = await fetch(
+    app.url + "/api/projects/" + p.id + "/export?format=apipost-directory",
+    { headers: { "x-local-token": app.token } },
+  );
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /目录.*项目备份/);
+  assert.deepEqual(await app.store.get(p.id), before);
+  const restored = restoreProject(before);
+  await app.store.save(restored);
+  const reopened = await app.store.get(restored.id);
+  assert.deepEqual(reopened.folders, ["Deleted/Other"]);
+  assert.equal(reopened.requests[0].deletedAt, before.requests[0].deletedAt);
+  assert.equal(reopened.plans[0].steps[0].request.folder, "Deleted/Sub");
+  assert.equal(
+    reopened.plans[0].steps[0].request.url,
+    before.plans[0].steps[0].request.url,
+  );
+});
