@@ -196,7 +196,12 @@ test("CLI source SSH requirements cannot be downgraded or supplied as a grant fl
     steps: [{ request: { before: [{ type: "database", connectionId: id }] } }],
   };
   const source = [{ id, type: "postgres", requiresSSH: true }],
-    config = { type: "postgres", host: "127.0.0.1", database: "fixture" };
+    config = {
+      type: "postgres",
+      user: "fixture",
+      host: "127.0.0.1",
+      database: "fixture",
+    };
   assert.throws(
     () => prepareCLIDatabaseGrants("p", plan, { [id]: config }, source),
     /SSH/,
@@ -237,4 +242,61 @@ test("CLI source SSH requirements cannot be downgraded or supplied as a grant fl
       ]),
     /来源要求/,
   );
+});
+
+test("CLI Mongo document tasks require their engine and explicit authentication database", () => {
+  const id = "apipost-" + "a".repeat(20) + "-db-" + "b".repeat(20),
+    source = [{ id, type: "mongodb" }];
+  const plan = {
+    steps: [
+      {
+        request: {
+          nativeTasks: {
+            version: 1,
+            before: [
+              {
+                type: "database",
+                enabled: 1,
+                data: { connectionId: id, resultShape: "mongodb-document" },
+              },
+            ],
+            after: [],
+          },
+        },
+      },
+    ],
+  };
+  const config = {
+    type: "mongodb",
+    host: "127.0.0.1",
+    port: 27017,
+    database: "fixture",
+  };
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants(
+        "p",
+        plan,
+        { [id]: { ...config, type: "redis" } },
+        source,
+      ),
+    /引擎/,
+  );
+  assert.throws(
+    () =>
+      prepareCLIDatabaseGrants(
+        "p",
+        plan,
+        { [id]: { ...config, user: "fixture" } },
+        source,
+      ),
+    /authSource/,
+  );
+  const granted = prepareCLIDatabaseGrants(
+    "p",
+    plan,
+    { [id]: { ...config, user: "fixture", authSource: "admin" } },
+    source,
+  );
+  granted.close();
 });

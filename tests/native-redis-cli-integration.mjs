@@ -179,7 +179,9 @@ export async function verifyNativeDatabaseCLIFlow(
         ? "REAL_NATIVE_REQUIRED_SSH_" +
             config.type.toUpperCase() +
             "_CLI_PREFLIGHT_RESTORE_PASS"
-        : "REAL_NATIVE_REDIS_CLI_INPUT_ENGINE_PREFLIGHT_RESTORE_PASS",
+        : config.type === "mongodb"
+          ? "REAL_DECLARED_MONGODB_CLI_PREFLIGHT_RESTORE_PASS"
+          : "REAL_NATIVE_REDIS_CLI_INPUT_ENGINE_PREFLIGHT_RESTORE_PASS",
     );
   } finally {
     echo.closeAllConnections();

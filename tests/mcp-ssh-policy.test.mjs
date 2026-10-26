@@ -18,6 +18,8 @@ test("MCP native SSH requirement rejects direct registration and invalidates old
   const input = {
     name: "old direct",
     type: "postgres",
+    user: "fixture",
+    database: "fixture",
     host: "127.0.0.1",
     port: 1,
     bindingId: id,

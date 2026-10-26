@@ -1,3 +1,4 @@
+import { explicitPostgresOptions } from "./postgres-client.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
 import { querySQLiteBounded } from "./database.mjs";
@@ -10,6 +11,14 @@ export function assertDatabaseBindingRequirements(source, config) {
     (source.requiresSSH !== undefined && source.requiresSSH !== true)
   )
     throw Error("导入数据库来源或类型已变化，须重新核对授权");
+  if (
+    source.type === "mongodb" &&
+    config.user &&
+    (typeof config.authSource !== "string" || !config.authSource.trim())
+  )
+    throw Error(
+      "导入MongoDB认证须显式指定当前authSource，不继承原配置或猜测默认认证库",
+    );
   if (source.requiresSSH === true && !config.ssh)
     throw Error("此导入数据库要求SSH，须显式配置已核对主机指纹的临时通道");
 }
@@ -90,6 +99,7 @@ export class DatabaseSessions {
     if (input.ssl !== undefined && typeof input.ssl !== "boolean")
       throw Error("TLS选项必须为布尔值");
     config.ssl = input.ssl === true;
+    if (type === "postgres") explicitPostgresOptions(config);
     if (input.ssh !== undefined) {
       if (!["postgres", "mysql"].includes(type))
         throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL");

@@ -208,3 +208,22 @@ test("Redis canonical task source remains inert and preserves scalar shape witho
   source.before[1].data.resultShape = "unknown";
   assert.throws(() => normalize(source));
 });
+
+test("Mongo document query provenance is preserved without starting a database task", async () => {
+  const source = fixture();
+  source.before[1].data.resultShape = "mongodb-document";
+  source.before[1].data.query = '{"collection":"items","filter":{},"limit":1}';
+  const request = normalizeRequest({
+    url: "http://fixture.invalid",
+    importedNativeTaskSource: source,
+  });
+  const plan = snapshotPlan({ steps: [{ request }] });
+  assert.deepEqual(plan.steps[0].request.importedNativeTaskSource, source);
+  const result = await runPlan(plan, {}, async () => ({
+    status: 200,
+    headers: {},
+    body: "",
+    duration: 1,
+  }));
+  assert.equal(result.status, "passed");
+});

@@ -1,3 +1,4 @@
+import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
 import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 // Cross-feature acceptance for native directory plans and native API task pipelines.
 import test from "node:test";
@@ -45,7 +46,7 @@ function flow(source, api, name, scripts) {
     ],
   };
 }
-for (const engine of ["pg", "redis"])
+for (const engine of ["pg", "redis", "mongodb"])
   test(
     `native frozen ${engine} flows isolate API tasks across real HTTP and restore`,
     { timeout: 20000 },
@@ -72,7 +73,11 @@ for (const engine of ["pg", "redis"])
         await rm(root, { recursive: true, force: true });
       });
       const source = (
-        engine === "redis" ? nativeRedisFixture : nativeDatabaseFixture
+        engine === "mongodb"
+          ? nativeMongoFixture
+          : engine === "redis"
+            ? nativeRedisFixture
+            : nativeDatabaseFixture
       )(`http://127.0.0.1:${upstream.address().port}/echo`);
       source.global.envs = [
         { env_id: "1", name: "Flow Env", server_list: [], env_var_list: {} },
@@ -121,7 +126,15 @@ for (const engine of ["pg", "redis"])
         p.plans[0].steps[0].request.importedNativeTaskSource,
       );
       active.nativeTasks.before.find((t) => t.type === "database").data.query =
-        engine === "redis" ? '["GET","edited-live-key"]' : "SELECT 2";
+        engine === "mongodb"
+          ? JSON.stringify({
+              collection: "items",
+              filter: { name: "edited" },
+              limit: 1,
+            })
+          : engine === "redis"
+            ? '["GET","edited-live-key"]'
+            : "SELECT 2";
       assert.deepEqual(
         p.plans[0].steps[0].request.importedNativeTaskSource,
         frozenSource,
