@@ -56,7 +56,8 @@ export function http2Connection(target, request, tlsOptions, tunnel) {
           session.destroy();
           throw error;
         }
-        stream.once("response", (responseHeaders) => {
+        stream.once("response", (responseHeaders, _flags, rawHeaders) => {
+          stream.rawHeaders = rawHeaders;
           responded = true;
           stream.statusCode = Number(responseHeaders[":status"]);
           stream.statusMessage = "";

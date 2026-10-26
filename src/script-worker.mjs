@@ -589,14 +589,17 @@ try {
     }
     if (workerData.responseExtractions?.length) {
       const data = context.newString(
-        JSON.stringify(workerData.responseExtractions),
+        JSON.stringify({
+          operations: workerData.responseExtractions,
+          evidence: workerData.responseHeaderEvidence,
+        }),
       );
       context.setProp(context.global, "__nativePickVarsDataJSON", data);
       data.dispose();
       install(
-        "const __readNativePickVarsCompletion=(()=>{const state=(" +
+        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const state=(" +
           pickVarsInstallerSource +
-          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)

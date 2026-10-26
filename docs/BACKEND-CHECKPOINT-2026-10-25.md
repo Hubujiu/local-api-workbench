@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 20:32 UTC
+# 后端检查点 · 2026-10-26 21:40 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：ebc26e1ebaf9dfe90fe15d017e6d7054e139fef1。
-- Tree：f6d1ef6b3193b3a0a1c850fe68653912ad3fd4f8，与本地fff3637b3b552cfc84fcc066c00fd5f118aa1a20一致。
-- Push CI：[40393711265](https://github.com/Hubujiu/local-api-workbench/actions/runs/40393711265)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：575b0330920f1be51a8dc869b54f843f377b431c。
+- Tree：df46bab2a5e0335761a614cb74024c3fe11ba8a3，与本地0c1dcc7dd5a9edfde5a78b76ff87acc7118477e5一致。
+- Push CI：[40396796815](https://github.com/Hubujiu/local-api-workbench/actions/runs/40396796815)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含MySQL显式写生命周期，不包含下述PostgreSQL ACK后清理修复。**
+- **该基线包含PostgreSQL ACK后清理及真实持锁超时检查，不包含下述PR25响应头提取扩展。**
 
 ## 最近功能PR与精确CI
 
@@ -27,7 +27,7 @@
 
 PR31 OAuth2生命周期当前head b8212924c139497196ebb28faa1742a75382c23d/tree640595564efa1f3aa82404b69e0db67b9c82233d，CI40388177786全部10个job成功（actual merge42d08a8dc50e90ace367b7164d9d1e161408f0de，tree=head）。PR32 Base64早拒head2d5f390270e52037bc48f437eb45c52aeca54106/treec27663db3e9cc2689ef7bc673806230157527148，CI40387995935全部10个job成功（actual merge5f691087ac8734879f0cb7031ed4719464786886，tree=head）。二者都直接基于develop88f70bb，独立功能diff，未把认证或模板生产修复塞进PR7。
 
-PR1/2最后重新读取于19:45 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
+PR1/2最后重新读取于20:56 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
 
 ## PR30已验证：真实执行完成与保存结果分开
 
@@ -73,13 +73,23 @@ Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 
 
 首阶段held TLS ClientHello关闭时暴露late error，最终通过public core connection先装error监听再await promise.connect修复，未读driver私有字段/升级依赖。真实wire、TLS、双SSH owner、ACK跨截止、容量/隔离/迟到回调与原两红例已本地通过。组合29项相关检查通过；独立与ebc26组合的mysql:8.4真实服务均已验证HTTP opt-in写入/读回、回滚/行数/warnings/timeout、只读授权隔离及pinned SSH写入。协议peer与真实引擎证据分开，不声称任意远端副作用可回滚。
 
-## PostgreSQL显式写清理：新组合待CI
+## PostgreSQL显式写清理：组合已验证
 
-独立draft PR34同样以PR24为依赖，但与MySQL PR33分开：当前head6238c56456dd3509c55487ed856ff8ff521015fb/tree40c3c6d412b166059ae09af368718defb54ae97d，新增真实服务测试后的CI待核实。此前b4659495/tree67d03eb的CI40395088229已10个job成功（actual mergedb5998a7f9ce4599cd5a4fa71d223dc6a994af9c，tree与该旧head一致），但不包含新持锁超时检查。生产改动仅拥有公开Socket/SSH stream传入显式PG client，并在finally强关、等待实际关闭，不再无限await idle client.end。
+独立draft PR34同样以PR24为依赖，但与MySQL PR33分开：当前head6238c56456dd3509c55487ed856ff8ff521015fb/tree40c3c6d412b166059ae09af368718defb54ae97d，CI40396463789全部10个job成功，实际mergef716e21e614eb10f02742382cd056f0e3dac2946/tree与head一致。此前b4659495/tree67d03eb的CI40395088229已10个job成功（actual mergedb5998a7f9ce4599cd5a4fa71d223dc6a994af9c，tree与该旧head一致），但不包含新持锁超时检查。生产改动仅拥有公开Socket/SSH stream传入显式PG client，并在finally强关、等待实际关闭，不再无限await idle client.end。
 
 真实协议peer确认COMMIT/ROLLBACK已ACK后，旧实现发Terminate/FIN仍会等待half-open peer，owner HTTP不返回；直连无兜底，SSH已有8秒总timer但占用lease。PG原query_timeout已覆盖extended PREPARE，不是MySQL的计时空洞。原3秒connect/query、2秒server statement timeout、身份/空密码provider/无PG环境回退、SQL与TLS/SSH约束全部不变；不新增PG五write lease、owner断开取消或MCP/CLI写权限。
 
-已收到ACK保留committed/confirmed rollback；COMMIT未ACK仍unknown、不重放。独立44项相关检查与review18项通过，组合25项PG身份/写入/真实wire/TLS/SSH检查通过。旧b465实际postgres:17-alpine写/readback/row overflow和duplicate-key rollback/SSH已通过；不能借MySQL timeout marker充当PG超时。新6238仅追加真实PG额外连接先确认持有行锁，再调用owner HTTP写入，必须返回确认回滚+statement timeout，finally放锁后正常只读读回原值；独立marker为REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS。无sleep/缩短生产预算。此新增真实服务case未在本地执行，**最新head及新组合完整CI仍待核验**；本地连接关闭不证明远端回滚。
+已收到ACK保留committed/confirmed rollback；COMMIT未ACK仍unknown、不重放。独立44项相关检查与review18项通过，组合25项PG身份/写入/真实wire/TLS/SSH检查通过。旧b465实际postgres:17-alpine写/readback/row overflow和duplicate-key rollback/SSH已通过；不能借MySQL timeout marker充当PG超时。新6238仅追加真实PG额外连接先确认持有行锁，再调用owner HTTP写入，必须返回确认回滚+statement timeout，finally放锁后正常只读读回原值；独立marker为REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS。无sleep/缩短生产预算。此新增真实服务case未在本地执行，但已在独立6238及组合575b的postgres:17-alpine CI各自通过专属marker；组合全部10个job成功且actual checkout精确匹配。本地连接关闭本身不证明远端回滚。
+
+## PR25继续原功能：单值响应头提取组合待CI
+
+原PR25最新head bbed463df60bf5116ce97af0b15d7aba1aaf5d66/treea8b8fe9a24a7d4efc1ad7d79e13a6771d4697e1f，独立CI40402279135首轮10个job成功；actual merge9a1f83a328458cc4b2d3bf932f04efb78b67f992/tree=head。不新建重复提取PR，旧JSON提取契约与预算保留。
+
+新增post responseHeader只处理trim后字面大小写不敏感字段名。HTTP1/HTTP2从真实raw header对取得私有WeakMap身份计数证据，单独传给VM；不相信序列化伪证据。HTTP1明确保留原1000对可见范围，native证据最多256对，缺失/重复/截断/来源不全一律拒绝，不拆逗号猜最后值。只读bootstrap捕获map的own字符串，空值/单字段逗号保留，现有字段同phase修改可见但原wire不变；公开get、整个map/facade替换、getter/原型污染不能伪造来源。无XML或新增HeaderList mutator；数组（含单个Set-Cookie）及Node丢失的特殊字段明确拒绝。
+
+独立真实H1/H2 HTML→header→same-phase→Bearer→保存/backup/restart及边界回归已通过。当前本地组合107项相关检查与7条完整入口检查通过：SDK HTTP/stdio、真CLI、API-local native导出/回读、冻结编辑、隔离、无旧token后续请求，以及真实scope journal unknown与保存receipt、修复后恢复但不重放。原生flow API来源仍惰性、不插值；raw enabled字段先按合法语法归一，disabled历史可保留未解析模板。组合保留已有assert/wait、累计预算及存储guard。
+
+**新组合仍须自己的精确完整CI**；独立bbed绿灯不代表与后续模块已经远端验收。原版HeaderList会按原始大小写分组再casefold，重复行为不宣称与last-wire等价。本片未运行原版GUI。
 
 ## 历史失败与仍需调查的风险
 
