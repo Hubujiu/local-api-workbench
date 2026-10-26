@@ -1,3 +1,4 @@
+import { compileNativeAssertions } from "./native-response-assertions.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
@@ -30,6 +31,7 @@ export function runScript(
     databaseQuery,
     databaseOperations: suppliedDatabaseOperations,
     responseExtractions: suppliedResponseExtractions,
+    responseAssertions: suppliedResponseAssertions,
     activityBudgetMs = 250,
     wallBudgetMs = 2000,
     requestLimit = 10,
@@ -39,6 +41,11 @@ export function runScript(
     assertionLimit = 1000,
   } = {},
 ) {
+  const responseAssertions = compileNativeAssertions(
+    suppliedResponseAssertions,
+  );
+  if (responseAssertions.length && !input.response)
+    throw Error("原生断言需要后置响应");
   const responseExtractions = compilePickVarsOperations(
     suppliedResponseExtractions,
   );
@@ -108,6 +115,7 @@ export function runScript(
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
+        responseAssertions,
         code,
         input,
         activityBudgetMs,
