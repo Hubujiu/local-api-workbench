@@ -103,8 +103,15 @@ test("task provenance rejects hidden accessors, credentials, unknown types and o
   assert.equal(invoked, false);
   const request = normalizeRequest({ importedNativeTaskSource: fixture() });
   request.importedNativeTaskSource.before[1].data.password = "not retained";
-  assert.throws(() =>
-    restoreProject({ version: 1, name: "bad", requests: [request] }),
+  assert.throws(
+    () =>
+      restoreProject({
+        version: 1,
+        name: "bad",
+        environments: [],
+        requests: [request],
+      }),
+    /未知字段/,
   );
 });
 
