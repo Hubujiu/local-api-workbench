@@ -72,6 +72,24 @@ export async function verifySSHDatabaseFlows(common) {
       assert(fixture.stats.forwarded.length > forwardedBefore);
     }
     console.log("REAL_NATIVE_REQUIRED_SSH_PG_MYSQL_HTTP_REBIND_PASS");
+    const { verifyMCPDatabaseFlow } = await import(
+      "./mcp-database-integration.mjs"
+    );
+    for (const type of ["postgres", "mysql"]) {
+      const count = fixture.stats.forwarded.length;
+      await verifyMCPDatabaseFlow(
+        {
+          ...common,
+          type,
+          host: "database.fixture",
+          port: type === "postgres" ? 5432 : 3306,
+          ssh: fixture.ssh,
+        },
+        { nativeImport: true, requiresSSH: true },
+      );
+      assert(fixture.stats.forwarded.length > count);
+    }
+    console.log("REAL_NATIVE_REQUIRED_SSH_PG_MYSQL_MCP_SDK_PASS");
     const keySSH = { ...fixture.ssh, privateKey: fixture.privateKey };
     delete keySSH.password;
     const input = {

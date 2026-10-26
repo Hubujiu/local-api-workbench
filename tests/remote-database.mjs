@@ -303,6 +303,32 @@ const { verifyNativeDatabaseScopes } = await import(
   "./native-database-scopes.mjs"
 );
 await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+await verifyMCPDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  { nativeImport: true },
+);
 
 await verifyNativeImportHTTPFlow({ ...common, type: "mysql", port: 3306 });
 await verifyNativeDatabaseScopes({ ...common, type: "mysql", port: 3306 });
+
+await verifyMCPDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  { nativeImport: true },
+);
+
+const { verifyMCPStdioNativeDatabaseFlow } = await import(
+  "./mcp-stdio-native-database-integration.mjs"
+);
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "mysql",
+  port: 3306,
+});

@@ -55,3 +55,21 @@ assert.deepEqual(
   [{ name: "one" }],
 );
 console.log("REAL_MONGODB_TLS_READONLY_AUTH_HTTP_RESTORE_PASS");
+
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+const { nativeMongoFixture } = await import("./fixtures/apipost-mongodb.mjs");
+await verifyMCPDatabaseFlow(mongoTLSConfig, {
+  nativeImport: true,
+  sourceFactory: nativeMongoFixture,
+});
+console.log("REAL_MONGODB_TLS_READONLY_AUTH_MCP_SDK_PASS");
+
+const { verifyMCPStdioNativeDatabaseFlow } = await import(
+  "./mcp-stdio-native-database-integration.mjs"
+);
+await verifyMCPStdioNativeDatabaseFlow(mongoTLSConfig, {
+  sourceFactory: nativeMongoFixture,
+});
+console.log("REAL_MONGODB_TLS_READONLY_AUTH_MCP_STDIO_PASS");

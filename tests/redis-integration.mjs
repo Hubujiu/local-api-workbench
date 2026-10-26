@@ -92,3 +92,12 @@ await verifyNativeRedisFlow({
   port: 6379,
   database: "0",
 });
+
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+await verifyMCPDatabaseFlow(
+  { type: "redis", host: "127.0.0.1", port: 6379, database: "0" },
+  { nativeImport: true },
+);
+console.log("REAL_NATIVE_REDIS_MCP_SDK_GRANTS_REVOKE_RESTART_PASS");
