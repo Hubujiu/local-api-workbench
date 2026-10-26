@@ -266,3 +266,13 @@ This does not add MCP cancellation-notification support, cancel other database d
 A separate ephemeral CI Mongo8 container requires TLS and authentication. Its only published port is runner loopback, it uses public repository test certificates/fictional credentials, and an explicitly read-only fixture user performs the application paths. Setup admin credentials are confined to container initialization; they are not passed to Workbench. The test checks missing trust, incorrect password/authSource, unauthenticated query, and a denied write, then runs the native HTTP/persistence/restore flow. This fixture is pending its exact CI until recorded otherwise.
 
 The fixture allows password-authenticated clients without client certificates, not invalid server certificates or hostnames. No system trust/TLS settings change. Official option reference: https://www.mongodb.com/docs/v8.0/reference/program/mongod/
+
+## Explicit PostgreSQL transport dependency
+
+This feature now stacks on the independently reviewed PR #18 PostgreSQL identity
+and TLS isolation foundation. Native temporary grants require explicit PostgreSQL
+user/database just like ordinary grants; they never use ambient PG credentials.
+The native SSH policy fixtures supply synthetic explicit identities so they still
+reach and verify pinning, revocation and current-catalog checks. No assertion,
+network safety check or execution budget is relaxed. PR #10 continues to stack
+on this feature. No develop/main merge or deployment is implied.

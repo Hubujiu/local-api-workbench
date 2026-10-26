@@ -52,3 +52,36 @@ that binding policy; changing/removing the current source cannot reuse an older
 direct grant. The requirement does not create authority or import credentials.
 Real PG/MySQL SSH+SDK fixtures are staged in the existing dedicated CI suite;
 acceptance requires the exact new head and the cross-feature combined run.
+
+## Explicit stdio startup grants (work in progress)
+
+Stdio can opt in with one owner-supplied `--database-grants-file PATH`, together
+with explicit `--project ID`, `--write` and `--execute`. The file envelope is
+`{ "version": 1, "projects": [{ "projectId": "ID", "databaseConnections": { "alias": { "type": "sqlite", "filename": "/owner/fixture.db" } } }] }`.
+Connection fields follow the CLI mapping; native aliases must match the current
+imported binding and provider. There is no model-callable grant tool, credential
+environment fallback, automatic generated MCP config change, or imported-secret
+reuse. Startup reads a bounded, strict UTF-8 JSON snapshot once from a verified
+regular file; ambiguous/invalid arguments and files fail before protocol service
+with redacted stderr. POSIX files must be owner-only; Windows mode bits are not
+claimed to enforce an equivalent ACL.
+
+The initial project allowlist is copied independently from the dispatcher's
+session-created project list. Connections remain process-local and do not share
+HTTP MCP or manual-debugger grants. Editing or removing the file does NOT revoke
+an already loaded snapshot. Ending the process clears it; starting again without
+the option denies database work, while supplying the option again explicitly
+regrants. Protect the file outside the project directory and remove it yourself
+when no longer needed. The software neither creates real credentials nor deletes,
+rewrites or changes permissions of an owner's file. Readonly access is to the
+configured database, not a single query/table: use a trusted least-privilege role.
+
+The shared PR #18 PostgreSQL factory is inherited through PR #9, so explicit
+identity/TLS behavior is enforced by the transport, not just this JSON validator.
+The isolated PR #10 transport remains sequential: notification cancellation and
+EOF interruption belong to PR #19 and need the combined regression separately.
+No hard-kill durability or remote-database transaction rollback is promised.
+Local real SQLite official-SDK tests cover DB -> script -> HTTP -> assertions ->
+saved runs, two-project isolation, file mutation, no-file restart, explicit
+regrant and redacted startup failure. Native real-server and exact-head CI
+validation are pending for this checkpoint; this is not complete delivery.
