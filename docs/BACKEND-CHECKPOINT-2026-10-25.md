@@ -1,4 +1,4 @@
-# 后端交付检查点 · 2026-10-26 04:32 UTC
+# 后端交付检查点 · 2026-10-26 07:04 UTC
 
 本文件是范围与证据清单，不是完整交付声明。尚未合入 main/develop、未部署、未新增前端或视觉工作。功能改动保持独立 draft PR，同功能修复留在原 PR；组合分支仅用于跨模块验收。
 
@@ -7,22 +7,23 @@
 | PR | 功能 | 最新远端提交 | 对应 CI |
 |---|---|---|---|
 | #1 | 基础 develop → main | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | 40136832590 success |
-| #2 | CLI 数据库临时授权 | a51584b16ea447c7b734df2a809720c8af16751d | 40268512804 success |
-| #3 | 脚本预算与诊断 | 4ea22a506d604c10250895126bbe027e21ca65a1 | 40212570108 success |
+| #2 | CLI 数据库临时授权 | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | 40275759477 success |
+| #3 | 脚本预算与诊断 | 306ab3225ec835ba72e21d2829747092f4a885a0 | 40281902175 success |
 | #4 | 活动项目自动导入 | 7f3d32ce91b6e09915778608dd95c65268d8aed3 | 40196468822 success |
 | #5 | 原版 Query 镜像导入 | 7167ce31e30ef356d51cc974c8b99940fe2cbe1e | 40199316420 success |
 | #6 | 原生目录导入 | 2d1654a10fd73db70e098d02138bca77464b5d76 | 40200210452 success |
-| #7 | 冻结计划与来源结果 | 5c766521356f71ed190a5d56b6811fe7d0b0ac93 | 40264842685 success |
+| #7 | 冻结计划与来源结果 | 408b1288f7a4b586b0bbd57eef4eb2c18fe25fdc | 40275731913 success |
 | #8 | 原版认证导入 | 4716436e547ec28a7465251dadb0bed176a08fd4 | 40214404570 success |
-| #9 | 原版 PG/MySQL/Redis 与 SSH 任务 | fc482231c77bacb6ff19dc0e39b42812bf4e3df6 | 40268289876 success |
-| #10 | MCP 数据库临时授权 | ccd40186ac67f170fe96e39c1d66f16e1e32f07c | 40268798612 success |
+| #9 | 原生数据库任务与 Mongo TLS | 96f597c5c452ec0209de7cd11e398101446d3506 | 40282755388 success |
+| #10 | MCP 数据库临时授权 | ea3d98518f071b6754187da07987aca5ea287aa3 | 40282876321 success |
 | #11 | 原版条件 Mock 与路径路由 | d3d3d520dee31ad71e6f6ec739c72478f1bd9d85 | 40238628575 success |
 | #12 | SSE/TCP 请求语义 | 19731690bafa368fbb5237799f5baab4e6792bdc | 40229568609 success |
 | #13 | 原版协议导入与消息计划 | f9ddb11510d79d8c3817d6ad2e403c6f580483dd | 40257510622 success |
 | #14 | 原生 JSON / 冻结 HTTP 目录导出 WIP | 7938e138da467f8721ff67377eb994bc41ecc2f0 | 40263622703 success |
 | #15 | SQLite 进程与 HTTP 脱敏诊断 | 2a91c8e0dd0c13a56c04dbfd4fbd2cc1f383288b | 40244416727 success |
 | #16 | 原版输入形态 MCP 计划闭环 | ead0932daef9bfd9d24354f58e5b869c0b32b548 | 40261685328 success |
-| #17 | 项目提交结果不确定与恢复边界 | 9856024753d4cda3ced9696994dcfa11614e0fb3 | 40250383219 success |
+| #17 | 项目提交结果不确定与恢复边界 | cdb9d2fee78ca366a9df747e312527655f3e3731 | 40283451178 running |
+| #18 | PostgreSQL 显式身份与 TLS 隔离 | 9a99f763159ed05f23e3bac46b714d51fe0a10c9 | 40280356717 success |
 
 CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接运行编号。PR 地址为 https://github.com/Hubujiu/local-api-workbench/pull/ 后接编号。
 
@@ -32,13 +33,17 @@ CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 
 
 最近已验证组合 bb0492aa491fab5f05d3e342c6a68dae2536bae5（tree c6118d4a8f7d2b7c691b9c2e1cc3ebc7e585a0b1）完成真实 Redis HTTP/MCP SDK/CLI、来源与冻结计划隔离以及其他既有模块回归。CI40266415086首轮Linux metadata上传触发15分钟超时取消，其他9项成功；仅重跑该job后，attempt2 job121396174945成功且Linux metadata/portable两项artifact均已确认。首次失败不抹去，重跑成功不等于底层上传原因已证明修复。
 
-本提交进一步组合SSH要求与动态绑定政策，并加入真实PG/MySQL SSH CLI验收。功能分支HTTP/MCP SSH实际服务CI已通过；当前组合仅本地定向回归通过，新增组合CI尚待本提交运行，不能借用上述Redis组合绿灯。此前十组原版输入矩阵仍是各自精确旧提交的历史证据，不计作新目录/Redis/SSH切片的原版实跑。
+后续组合 ba373734 已通过 PG/MySQL SSH CLI。组合 dc817970 的 CI40280440086 在 Windows 第六组默认 Faker 压力样本因活动预算先耗尽而失败；原断言与250ms/2秒限制保持。#3 增加 ASCII UTF-8 长度快速路径、保留 Unicode 检查与全部六样本，组合 0f4d2e79f70e15093c32b5afdd35e85bafe70910 的 CI40281969111 首轮全部成功。这证明当前优化与回归通过，不证明历史调度/初始化波动唯一根因已消除。
+
+正在验收的 Mongo TLS 三入口组合为 3d855002a0959388c26c832cd06b7976668374fd，CI40283100626；#9 HTTP与#10 MCP有效只读账号、严格TLS已分别通过。当前提交另加入存储ID布局修复；必须等待自己的新组合CI，不能借上述提交绿灯。此前十组原版输入矩阵仍是各自精确旧提交的历史证据，不计作后续 Mongo/SSH/TLS 切片的原版实跑。
 
 gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧拒绝断言失败；已本地复现并将该项更新为受控 grpc-timeout 拒绝，另加合法 Authorization 声明迁移/去源值正例。未重跑失败 SHA 碰绿灯；旧失败保留，现精确新提交结果见表。
 
 ## 已有完整流程证据与真实剩余缺口
 
 ### 项目存储与导入导出
+
+- 新发现并修复：不完整 UTF-16 ID 曾映射同一文件、154字节ASCII ID加临时后缀超255字节，分别可能覆盖记录或毒化恢复日志。现在提交日志前拒绝不完整Unicode、超长磁盘组件与大小写折叠冲突；既有文件映射不变。真实磁盘和HTTP恢复验证旧状态/列表不变、安全边界ID往返。尚不修复已经丢失的数据或旧损坏日志，需完整备份恢复。新精确CI待验。
 
 - 写事务日志前先校验集合、重复ID和文件名，避免无效输入毒化恢复日志。日志已发布后若应用/回读/清锁失败，HTTP/MCP返回明确提交不确定、项目ID及禁止盲重试标志；不会把失败一律当作回滚。
 - 真实磁盘夹具验证部分资源已写而清单仍旧的恢复、同revision重读、创建失败返回可恢复ID、未恢复项目阻止再次默认创建、主错误不被清锁错误覆盖、MCP不泄露未授权项目ID。此guard不是通用幂等/并发去重，也不承诺掉电durability。
@@ -63,10 +68,14 @@ gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧�
 
 ### 前后置脚本与数据库
 
+- PostgreSQL 不再继承环境密码/密码文件、PGSSLMODE或启动参数；显式用户/库、空密码语义和纯JS驱动选择固定，读写共用连接工厂。虚构环境下实际协议/TLS探针与真实PG/SSH CI分别提供证据；未观察到实际凭据泄露。
+- 新增原生 Mongo findone 声明适配，文档/null与Extended JSON提取、三作用域、HTTP/MCP/CLI、保存恢复和授权隔离已用真实Mongo8验证。原版来源仅静态字段/链路，非原版Mongo实跑等价。有效只读账号+严格TLS的HTTP/MCP已过独立CI；CLI组合仍在验收。
+- Mongo调用者取消会传至工作线程并停止其套接字；queryMongo等待线程退出，晚错误不覆盖interrupted。实际停滞TCP端点与HTTP取消/磁盘记录验证不是Mongo查询成功证据。外层响应不等待全部清理、撤销本身不主动取消在途IO、MCP取消通知和远端服务器计算回滚均未承诺。
+
 - 普通原版 API 的 JS→数据库→JS 顺序、共享词法变量、临时/环境/全局提取与持久化已验证。PG 与 MySQL 原生结果形态分开处理，MySQL使用嵌套结果集路径；原版 MariaDB 协议实测与 CI MySQL8 是分别注明的证据。
 - 手工、CLI、MCP 临时数据库绑定分别授权；撤销、重启、策略代际及跨项目隔离不互相继承。原版连接凭据不随项目导入获得使用权限。
 - 新增原生Redis只读GET/HGET/EXISTS，复用现有RESP与临时授权。真实Redis7.2覆盖0/null/空串/JSON文本、前后阶段和三作用域、WRONGTYPE无HTTP、原始输入/变量/结果保存恢复重启。标量直接赋值，保留但不执行路径元数据，不复制原版静态发现的包装解析缺陷；无原版Redis实跑对照声明。
-- 新增原生PG/MySQL有效默认SSH要求，仅保留requiresSSH:true，原密钥文件路径及连接秘密丢弃。HTTP/MCP注册与每次查询前/结果后沿session.bindingId核对当前项目来源，UUID不能借旧直连授权绕过新要求；CLI从本次目录核对SSH及指纹。真实ssh2.Server（不是OpenSSH sshd）转发到PG/MySQL的HTTP/MCP保存、恢复、重启/重绑已在功能CI通过；本提交加入CLI真实服务组合验收，尚待该CI。
+- 新增原生PG/MySQL有效默认SSH要求，仅保留requiresSSH:true，原密钥文件路径及连接秘密丢弃。HTTP/MCP注册与每次查询前/结果后沿session.bindingId核对当前项目来源，UUID不能借旧直连授权绕过新要求；CLI从本次目录核对SSH及指纹。真实ssh2.Server（不是OpenSSH sshd）转发到PG/MySQL的HTTP/MCP保存、恢复、重启/重绑已在功能CI通过；CLI真实服务组合亦已在 ba373734 验收。
 - 未完成：其他原版数据库类型/SSH认证组合/独立环境连接定义/模板及写入联动、完整脚本 SDK 等价性。可信最小权限数据库仍是前提。
 - 已有间歇性脚本初始化与 Windows SQLite 子进程问题的唯一根因未证明修复。#15新增阶段/超时/退出/IPC脱敏证据，并接通HTTP和桌面CI日志，不放宽2秒/内存限制，不重试写入结果未知的操作。后续绿灯不是根因修复证明。
 
@@ -80,7 +89,7 @@ gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧�
 ### 执行计划与结果
 
 - 原生冻结重复步骤、显式脚本/输入/认证、失败继续/strict200和来源执行档案已有独立实现。接口任务与计划独立脚本的隔离有原版运行证据。
-- 修复原生目录计划误继承API可执行nativeTasks：清除API任务、断言、提取，保留有界importedNativeTaskSource惰性来源。源字段/访问器/体积校验覆盖存储、恢复、克隆前及整计划预算；PG与Redis来源均经实际HTTP保存/恢复/重启隔离。
+- 修复原生目录计划误继承API可执行nativeTasks：清除API任务、断言、提取，保留有界importedNativeTaskSource惰性来源。源字段/访问器/体积校验覆盖存储、恢复、克隆前及整计划预算；PG、Redis与Mongo来源均经实际HTTP保存/恢复/重启隔离。
 - 新MCP输入计划按API ID冻结，旧step ID不刷新基础定义；完整JSON替换、显式空输入重置、禁用步骤、手工编辑转换及元数据一致性有验证。
 - 未完成：更多原版高级节点、二进制/文件覆盖、完整报告格式和所有跨入口并发语义。
 
