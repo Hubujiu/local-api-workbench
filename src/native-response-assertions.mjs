@@ -5,6 +5,20 @@ import {
   nativeDataObject,
 } from "./native-response-extraction.mjs";
 
+const unaryComparisons = ["null", "notnull", "exist", "notexist"];
+const comparisons = [
+  "eq",
+  "uneq",
+  "includes",
+  "unincludes",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  ...unaryComparisons,
+  "belongscollection",
+  "notbelongscollection",
+];
 const text = (value, max) =>
   typeof value === "string" && value.isWellFormed() && value.length <= max;
 export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
@@ -26,26 +40,28 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
   const isText = value.type === "responseText",
-    hasPath = Object.hasOwn(expression, "path");
-  if (!Object.hasOwn(expression, "compareValue") || (!isText && !hasPath))
-    throw Error("原生断言表达式缺少自有字段");
+    hasPath = Object.hasOwn(expression, "path"),
+    hasExpected = Object.hasOwn(expression, "compareValue");
   const path = hasPath ? expression.path : undefined;
   const compareType = Object.hasOwn(expression, "compareType")
     ? expression.compareType
     : undefined;
   if (
+    (!hasExpected && !unaryComparisons.includes(compareType)) ||
+    (!isText && !hasPath)
+  )
+    throw Error("原生断言表达式缺少自有字段");
+  if (
     (hasPath && !text(path, 1000)) ||
-    !text(expression.compareValue, 65536) ||
-    (compareType !== undefined &&
-      !["eq", "uneq", "includes", "unincludes"].includes(compareType)) ||
+    (hasExpected && !text(expression.compareValue, 65536)) ||
+    (compareType !== undefined && !comparisons.includes(compareType)) ||
     (enabled && compareType === undefined)
   )
-    throw Error(
-      "原生断言仅支持有界文字路径与eq/uneq/includes/unincludes字面字符串比较",
-    );
+    throw Error("原生断言仅支持有界文字路径与14种非正则字面比较");
   if (
     enabled &&
-    ((!isText && /\{\{/.test(path)) || /\{\{/.test(expression.compareValue))
+    ((!isText && /\{\{/.test(path)) ||
+      (hasExpected && /\{\{/.test(expression.compareValue)))
   )
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
   if (enabled && value.type === "responseJson")
@@ -56,7 +72,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     expression: {
       ...(hasPath ? { path } : {}),
       ...(compareType !== undefined ? { compareType } : {}),
-      compareValue: expression.compareValue,
+      ...(hasExpected ? { compareValue: expression.compareValue } : {}),
     },
   };
   if (Buffer.byteLength(JSON.stringify(result)) > 65536)
@@ -97,7 +113,9 @@ export function compileNativeAssertions(value = []) {
         }
       : {}),
     comparison: data.expression.compareType,
-    expected: data.expression.compareValue,
+    ...(Object.hasOwn(data.expression, "compareValue")
+      ? { expected: data.expression.compareValue }
+      : {}),
   }));
 }
 
@@ -119,6 +137,7 @@ function installNativeAssertions(
     charCode = Function.prototype.call.bind(String.prototype.charCodeAt),
     indexOf = Function.prototype.call.bind(String.prototype.indexOf),
     finite = Number.isFinite,
+    number = Number,
     string = String,
     Failure = Error,
     stringify = JSON.stringify,
@@ -232,28 +251,72 @@ function installNativeAssertions(
       throw Failure(
         "原生断言仅比较有限JSON原始值或缺失值，不隐式转换对象/数组",
       );
-    const actual = string(value),
-      equal = actual === op.expected,
-      contained =
-        op.comparison === "includes" || op.comparison === "unincludes"
-          ? indexOf(actual, op.expected) !== -1
-          : false;
-    const passed =
-      op.comparison === "eq"
-        ? equal
-        : op.comparison === "uneq"
-          ? !equal
-          : op.comparison === "includes"
-            ? contained
-            : !contained;
-    let message =
-      op.comparison === "eq"
-        ? "响应值与预期不相等"
-        : op.comparison === "uneq"
-          ? "响应值与预期相等"
-          : op.comparison === "includes"
-            ? "响应值不包含预期字符串"
-            : "响应值包含预期字符串";
+    const actual = string(value);
+    let passed = false,
+      message = "响应值不满足声明比较";
+    switch (op.comparison) {
+      case "eq":
+        passed = actual === op.expected;
+        message = "响应值与预期不相等";
+        break;
+      case "uneq":
+        passed = actual !== op.expected;
+        message = "响应值与预期相等";
+        break;
+      case "includes":
+        passed = indexOf(actual, op.expected) !== -1;
+        message = "响应值不包含预期字符串";
+        break;
+      case "unincludes":
+        passed = indexOf(actual, op.expected) === -1;
+        message = "响应值包含预期字符串";
+        break;
+      case "lt":
+      case "lte":
+      case "gt":
+      case "gte": {
+        // Raw permitted primitives, not String(value). Conversion may produce
+        // NaN/Infinity; these stay internal and ordinary comparisons are total.
+        const left = number(value),
+          right = number(op.expected);
+        passed =
+          op.comparison === "lt"
+            ? left < right
+            : op.comparison === "lte"
+              ? left <= right
+              : op.comparison === "gt"
+                ? left > right
+                : left >= right;
+        break;
+      }
+      case "null":
+        // Chai .empty on the permitted domain succeeds only for raw "".
+        // Its primitive type errors are completed failed tests, not stage errors.
+        passed = value === "";
+        break;
+      case "notnull":
+        passed = actual.length !== 0;
+        break;
+      case "exist":
+        passed = value !== null && value !== undefined;
+        break;
+      case "notexist":
+        passed = value === null || value === undefined;
+        break;
+      case "belongscollection":
+      case "notbelongscollection": {
+        // Exact comma-delimited membership, including empty members. Reject a
+        // comma in the candidate before a bounded delimiter-padded search: a
+        // split token can never contain one. No split array or CSV interpretation.
+        const member =
+          indexOf(actual, ",") === -1 &&
+          indexOf("," + op.expected + ",", "," + actual + ",") !== -1;
+        passed = op.comparison === "belongscollection" ? member : !member;
+        break;
+      }
+      default:
+        throw Failure("原生断言比较类型无效");
+    }
     if (op.type === "responseText" && op.diagnostic)
       message = op.diagnostic + ": " + message;
     const before = publicTests.length;

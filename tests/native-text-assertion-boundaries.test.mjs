@@ -59,7 +59,7 @@ test("native Text assertion keeps optional inert diagnostic paths and closes act
     data("{{expected}}"),
     data(42),
     data("real", "regex"),
-    data("real", "gt"),
+    data("real", "regularmatch"),
     data("real", "empty"),
     data("real", "eq", { path: undefined }),
     data("real", "eq", { path: 4 }),

@@ -18,11 +18,13 @@ JSON 解析/路径读取在测试回调外，出错是阶段错误。UI chunk
 ## 有界实现
 
 - 启用 POST 任务仅支持 responseCode/responseJson/responseHeader/responseXml/responseText、
-  eq/uneq/includes/unincludes，预期值必须为字面字符串。主动拒绝 expected 的 `{{` 模板；
+  共 14 种非 regex 比较器（下文列明），binary 预期值必须为字面字符串；
+  四种 unary 可省 compareValue，存在时仍须为字面字符串。主动拒绝 expected 的 `{{` 模板；
   非 Text 来源的路径也拒绝模板，Text 的 path 仅作惰性字面诊断。原版递归变量替换与 Workbench 不同，不猜测映射。
   JSON 路径仅 own-property 单值段，空路径为 `$`，不 trim，不执行表达式、wildcard/filter。
-- JSON 根必须为对象/数组，不回退 XML。选中 undefined/null/false/0 分别比较
-  `undefined`/`null`/`false`/`0` 字符串；对象/数组及非有限数字明确拒绝，不隐式 stringify。
+- JSON 根必须为对象/数组，不回退 XML。字符串比较将选中 undefined/null/false/0 转成
+  `undefined`/`null`/`false`/`0`；新增数值/一元比较按下文原值规则执行。对象/数组及来源
+  直接返回的非有限数字明确拒绝，不隐式 stringify 或放开 valueOf/toString。
 - Header path 只 casefold，不 trim、不解析 JSONPath、不验证为 pickVars 的字段名语法。
   空 path、带空白或 `$.x` 都是原样字段名；可信缺失值与字面值 `undefined` 都按
   String 比较为 `undefined`，空字符串与含逗号字符串原样保留。
@@ -95,7 +97,7 @@ API-local export/reimport 与惰性来源仍须另外验收，不声称本片独
 `null` 或空字符串而误判成功。独立 intrinsic-guard 完整专项审查此前被平台中断，
 **仍未完成，本增量不重启该专项，也不把正常正式回归当作其替代品**。
 
-- 仅 `data.type:"responseXml"`、后置启用、字面字符串 expected 和 eq/uneq/includes/unincludes（后两者见下节）。
+- 仅 `data.type:"responseXml"`、后置启用，沿用下文通用 14 种比较器及 expected 字段规则。
   `expression.path` 原样保存；编译时允许最外层空白，内部语法严格为 `string(P)`。
   P 仅绝对 ASCII 无冒号 child 名称路径，可用末段 `/@NAME`；最多 32 段/1000 字符。
   不支持裸节点集、count/boolean、wildcard、predicate、descendant、namespace、
@@ -149,7 +151,8 @@ setBody 合同，不新增编码、stream、HTML/XML 自动识别或公开 text(
   使用 bootstrap 捕获的 String 与 String.prototype.indexOf；大小写敏感，无正则、
   Unicode规范化、trim或隐式数字比较。空 expected 的 includes 必真、unincludes 必假。
   原 Code/JSON/Header/XML 选值拒绝域不变：对象/数组/非有限值或不可信Header、无效XML
-  不会因为比较器而变成可比较值。未增加 contains/regex别名、数值、集合或empty操作。
+  不会因为比较器而变成可比较值。Text 首片未增加数值/集合；后续通用比较器见下节。
+  仍不增加 contains/regex/empty 别名。
 - eq/uneq 与新比较器共享捕获的 quota-wrapped pm.test、权威私有结果、claimed-index
   合并和完成性检查。替换公开 indexOf/includes/String/pm.test 或清空 tests 不会擦掉
   原生失败。普通比较 false 算完成并继续任务/计划/作用域提交；仅启用 pick 保持原严格
@@ -160,3 +163,56 @@ setBody 合同，不新增编码、stream、HTML/XML 自动识别或公开 text(
 和请求→失败run/作用域保存→receipt→冻结/恢复/重启及项目环境隔离、取消；混排五种来源，
 并验证 Text pick 共用正文、缺失/类型错误、getter零调用、模板样式诊断的来源往返及配额。
 现有XML独立guard专项仍保持中断未完成状态，本增量没有重启该审查；既有正式安全测试保留。
+
+
+## 十个非 regex 比较器：数值、一元与精确集合
+
+本阶段继续同一 PR26，五种 source、路径/当前视图和取值拒绝域不变。支持集合闭合为
+`eq/uneq/includes/unincludes/lt/lte/gt/gte/null/notnull/exist/notexist/belongscollection/notbelongscollection`。
+不新增来源、正则、任意表达式、对象/数组比较或隐式模板替换。
+
+固定静态 sender 的 Unicode 字符偏移：lt/lte 为 33587582/33588037，gt/gte 为
+33588495/33588950，null/notnull 为 33590291/33590697，exist/notexist 为
+33591118/33591522，belongscollection/notbelongscollection 为 33592597/33593058。
+原 sandbox Lodash 4.17.21 的 toNumber 在 31967519，split 在 31976495；
+Chai 4.3.8 的 empty/exist/oneOf 在 29514507/29499273/29518675。
+replaceIn 在 30699275 对非 string 原样返回，因而四个 unary 的 expected 缺省不抛错。
+这些是固定文件的静态事实，不是原版执行证据；本实现按语义独立编写，未复制原代码。
+
+- `lt/lte/gt/gte` 使用 bootstrap 捕获的 Number，分别转换 **raw actual** 和字面 expected。
+  在当前允许域（undefined、null、boolean、有限 number、string）上与 Lodash toNumber
+  等价；不先把 null/false 转成字符串。空白/空 string/null/false 为 0，true 为 1；
+  hex/binary/oct、科学计数和 -0 遵循 Number 字符串规则。NaN 的四种关系均软失败。
+  合法 string 转换出的 Infinity 可参与内部关系比较，不新增转换后 finite 拒绝；来源
+  直接返回非 finite number 仍是阶段错误。转换结果不写入返回的 JSON 断言记录。
+- `null` 按原 raw-value Chai `.empty` 合同：允许域中只有原值 `""` 通过。
+  null/undefined/number/boolean 的 Chai 类型失败是 **已完成的失败测试**，不变成阶段错误。
+  失败诊断使用 Workbench 固定文字，不承诺逐字复制 Chai 的类型错误消息。
+  `notnull` 则先 String 转换后检查非空，因而与 `null` 并非对所有类型互补。
+  `exist` 为 raw actual 非 null/undefined；`notexist` 相反。false、0、空 string 均存在。
+- `belongscollection/notbelongscollection` 将 String(actual) 与 expected 按 ASCII 逗号
+  分出的精确成员比较/取反，不 trim、casefold、规范化、去重或处理 CSV 引号；空成员保留。
+  例如 `a,,b,` 含空成员，`a, b` 不含 `b`，`"a,b",c` 没有带逗号的完整成员。
+  actual 含逗号时直接判为非成员（不是阶段错误）；否则以捕获的 indexOf 做两侧
+  补分隔符的有界字符串搜索；
+  与 split 后成员比较等价，避免为大量逗号分配数组。不信任公开 split/indexOf。
+- 仅四个 unary 允许 compareValue 缺省，并从 normalized data 到持久化来源始终保留缺省，
+  不补空 string，也不读取继承字段/getter。若 own 存在仍要求有界、自有 data string；
+  启用时仍拒绝 `{{`，即使该 unary 不使用 expected。所有 binary 继续必填该字段。
+  禁用已知 unary 可缺省；禁用未配置 compareType 的旧默认仍须保留原有 compareValue，
+  不能借机拓宽为任意元数据。unknown/regularmatch 明确拒绝而非静默跳过。
+- source lookup/parse 错误仍发生在 callback 外。不可信/重复 Header、XML 无选中节点、
+  Text 缺正文、JSON 非支持值不因 notexist 成功；当前 Header 的可证缺失保持旧规则。
+  所有比较 false 都计入完成与共享 quota，使用捕获的 pm.test 和私有权威记录；公开
+  Number/String/test/tests/prototype 篡改不能擦失败。普通阶段继续，启用 pick 保持原
+  post rollback/stop；吞取值异常/早退的完成性拒绝以及取消策略不变。
+
+新增正式表驱动测试使用已安装、锁定的 OSS Lodash 4.18.1 / Chai 6.3.0 独立 oracle：
+1832 个确定性 primitive/string 转换对照，另有 QuickJS 356 个数值、56 个 unary、
+374 个集合断言与 oracle 比较。真实 HTTP 多请求流程覆盖全部 14 个比较器与五种来源、
+当前 body/header、NaN 软失败、Infinity 字符串、空/缺失差异、字段缺省、冻结计划、
+失败与作用域保存、receipt、备份恢复/重启、项目环境隔离和错误原子性。
+任务仍最多16项/阶段，未为测试或新比较器提高任何预算。既有正式安全/资源测试保留。
+
+Text 组合 CI 历史全绿不抹去旧 Mac XML/Schema 预算 RED；本阶段不声称修复这些根因。
+独立 XML intrinsic-guard 专项仍是中断未完成，既有正式测试或本次局部源码核对不替代该专项。
