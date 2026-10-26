@@ -1,3 +1,4 @@
+import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
   databaseAssignments,
@@ -62,6 +63,11 @@ function scriptBudgets({
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
   const { signal, cookieSession, databaseQuery } = options;
+  const responseExtractions = compilePickVarsOperations(
+    options.responseExtractions,
+  );
+  if (responseExtractions.length && !input.response)
+    throw Error("pickVars需要后置响应");
   const databaseOperations = normalizeDatabaseOperations(
     options.databaseOperations,
   );
@@ -114,6 +120,7 @@ export function runScript(code, input, options = {}) {
       workerData: {
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
+        responseExtractions,
         code,
         input,
         activityBudgetMs,

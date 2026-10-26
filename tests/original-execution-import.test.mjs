@@ -580,3 +580,94 @@ test("native body inputs reject files, unknown form fields and non-text raw valu
     assert.deepEqual(p, before);
   }
 });
+
+test("synthetic pickVars added to native flow API snapshots stays inert through CLI and restored projects", async (t) => {
+  // Existing directory/flow layout is a genuine fixture; the added extraction
+  // tasks are independently authored and do not claim original pickVars wire evidence.
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-pick-source-"));
+  let calls = 0;
+  const server = http.createServer((_req, res) => {
+    calls++;
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("not JSON: active pickVars would fail");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const document = await source();
+  changeFile(document, flowPath, (flow) => {
+    for (const step of flow.steps) {
+      step.api_snapshot.request.pre_tasks = [];
+      step.api_snapshot.request.post_tasks = [
+        {
+          type: "pickVars",
+          id: "inert-pick",
+          name: "Inert extraction",
+          enabled: 1,
+          data: {
+            source: "responseJson",
+            variables: [
+              { name: "token", expression: "$.token", type: "envVars" },
+            ],
+          },
+        },
+        {
+          type: "customScript",
+          id: "inert-throw",
+          name: "Inert script",
+          enabled: 1,
+          data: 'throw Error("API source must not execute")',
+        },
+      ];
+      step.pre_script = "";
+      step.post_script = "";
+    }
+  });
+  const original = structuredClone(document),
+    store = new Store(root),
+    p = await store.create("inert extraction");
+  importIntoProject(p, document);
+  assert.deepEqual(document, original);
+  assert.equal(calls, 0);
+  const plan = p.plans[0];
+  const env = p.environments.find((item) => item.id === plan.environmentId);
+  env.variables.token = "unchanged";
+  for (const step of plan.steps) {
+    assert.equal(step.request.nativeTasks, undefined);
+    assert.equal(
+      step.request.importedNativeTaskSource.after[0].type,
+      "pickVars",
+    );
+    step.request.url = step.request.url.replace(
+      "127.0.0.1:18766",
+      `127.0.0.1:${server.address().port}`,
+    );
+  }
+  const frozenSource = structuredClone(
+    plan.steps.map((step) => step.request.importedNativeTaskSource),
+  );
+  await store.save(p);
+  for (const project of [p, restoreProject(await new Store(root).get(p.id))]) {
+    if (project.id !== p.id) await store.save(project);
+    const result = await cli(root, project.id, project.plans[0].id);
+    assert.equal(result.code, 0, result.stderr);
+    const run = JSON.parse(result.stdout);
+    assert.equal(run.status, "passed");
+    assert.equal(run.results.length, 2);
+    assert.deepEqual(
+      run.snapshot.steps.map((step) => step.request.importedNativeTaskSource),
+      frozenSource,
+    );
+    const saved = await new Store(root).get(project.id);
+    assert.equal(
+      saved.environments.find((item) => item.id === plan.environmentId)
+        .variables.token,
+      "unchanged",
+    );
+    assert(saved.runs.some((item) => item.id === run.id));
+  }
+  assert.equal(calls, 4);
+});

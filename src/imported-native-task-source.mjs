@@ -1,3 +1,4 @@
+import { normalizePickVarsData } from "./native-response-extraction.mjs";
 // Frozen, canonical task provenance. No execution entry point reads this field.
 // Validate data descriptors before reading values: source records never run code.
 function plain(value, keys) {
@@ -98,6 +99,10 @@ export function normalizeImportedNativeTaskSource(value) {
             ? {}
             : { resultShape: d.resultShape }),
         };
+      } else if (task.type === "pickVars") {
+        // Provenance only: retain bounded closed data without compiling paths or
+        // enabling a native flow's original API tasks.
+        data = normalizePickVarsData(task.data, { enabled: false });
       } else throw Error("未知任务来源类型");
       const metadata = {};
       for (const key of ["id", "name"])

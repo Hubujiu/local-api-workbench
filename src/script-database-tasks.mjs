@@ -1,3 +1,8 @@
+import {
+  nativeDataArray,
+  nativeDataObject,
+  normalizePickVarsData,
+} from "./native-response-extraction.mjs";
 import { mongoQuery } from "./mongodb.mjs";
 import { redisCommand } from "./redis.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
@@ -170,11 +175,20 @@ export function normalizeNativeTaskRequest(request) {
   const result = { version: 1 };
   for (const phase of ["before", "after"]) {
     const tasks = source[phase];
+    nativeDataArray(tasks, 16);
     if (!Array.isArray(tasks) || tasks.length > 16)
       throw Error("原版任务阶段最多16项");
     let bytes = 0,
       databases = 0;
     result[phase] = tasks.map((task) => {
+      nativeDataObject(task, [
+        "type",
+        "enabled",
+        "data",
+        "id",
+        "name",
+        "origin",
+      ]);
       if (
         !object(task) ||
         Object.keys(task).some(
@@ -182,12 +196,14 @@ export function normalizeNativeTaskRequest(request) {
             !["type", "enabled", "data", "id", "name", "origin"].includes(key),
         ) ||
         ![1, 0, -1].includes(task.enabled) ||
-        !["customScript", "database"].includes(task.type)
+        !["customScript", "database", "pickVars"].includes(task.type)
       )
         throw Error("原版执行任务配置无效");
       for (const key of ["id", "name"])
         if (task[key] !== undefined && !name(task[key]))
           throw Error("原版执行任务标识无效");
+      if (task.origin !== undefined)
+        nativeDataObject(task.origin, ["scope", "id"]);
       if (
         task.origin !== undefined &&
         (!object(task.origin) ||
@@ -208,6 +224,12 @@ export function normalizeNativeTaskRequest(request) {
         )
           throw Error("任务脚本合计最多64KiB");
         data = task.data;
+      } else if (task.type === "pickVars") {
+        if (task.enabled === 1 && phase !== "after")
+          throw Error("启用pickVars仅支持后置响应阶段");
+        data = normalizePickVarsData(task.data, {
+          enabled: task.enabled === 1,
+        });
       } else {
         data = normalizeDatabaseOperations([task.data])[0];
         if (task.enabled === 1 && ++databases > 5)

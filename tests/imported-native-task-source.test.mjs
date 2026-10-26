@@ -227,3 +227,63 @@ test("Mongo document query provenance is preserved without starting a database t
   }));
   assert.equal(result.status, "passed");
 });
+
+test("pickVars provenance remains closed inert data and cannot introduce hidden getters or executable paths", () => {
+  const source = {
+    version: 1,
+    before: [],
+    after: [
+      {
+        type: "pickVars",
+        enabled: 1,
+        data: {
+          source: "responseJson",
+          variables: [{ name: "v", expression: "$[?(@.x)]", type: "envVars" }],
+        },
+      },
+    ],
+  };
+  // An inert source is not compiled, even when its historical enabled flag is 1.
+  assert.deepEqual(normalize(source), source);
+  let reads = 0;
+  for (const alter of [
+    (s) => {
+      s.after[0].data.password = "not retained";
+    },
+    (s) => {
+      s.after[0].data.source = "responseHeader";
+    },
+    (s) => {
+      s.after[0].data.variables[0].type = "unknown";
+    },
+    (s) => {
+      Object.defineProperty(s.after[0].data.variables[0], "expression", {
+        enumerable: true,
+        get() {
+          reads++;
+          return "$.x";
+        },
+      });
+    },
+    (s) => {
+      s.after[0].data.variables = new Array(1);
+    },
+  ]) {
+    const invalid = structuredClone(source);
+    alter(invalid);
+    assert.throws(() => normalize(invalid));
+    assert.throws(() =>
+      snapshotPlan({
+        steps: [
+          {
+            request: {
+              url: "http://fixture.invalid",
+              importedNativeTaskSource: invalid,
+            },
+          },
+        ],
+      }),
+    );
+  }
+  assert.equal(reads, 0);
+});

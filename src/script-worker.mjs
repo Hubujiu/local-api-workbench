@@ -1,3 +1,4 @@
+import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -565,6 +566,18 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.responseExtractions?.length) {
+      const data = context.newString(
+        JSON.stringify(workerData.responseExtractions),
+      );
+      context.setProp(context.global, "__nativePickVarsDataJSON", data);
+      data.dispose();
+      install(
+        "const __readNativePickVarsCompletion=(()=>{const state=(" +
+          pickVarsInstallerSource +
+          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+      );
+    }
     if (workerData.databaseTaskCount)
       install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
     if(errorJSON){reject(Error(errorJSON));return;}
@@ -714,6 +727,10 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
+  if (workerData.responseExtractions?.length)
+    measuredBounded("pick-vars-completion", "promiseStateMs", () =>
+      run("__readNativePickVarsCompletion();"),
+    );
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";

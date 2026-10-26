@@ -1,3 +1,4 @@
+import { normalizePickVarsData } from "./native-response-extraction.mjs";
 import { DatabaseSessions } from "./database-sessions.mjs";
 const plain = (value) =>
   value !== null &&
@@ -89,9 +90,14 @@ export function prepareCLIDatabaseGrants(
         if (
           !plain(task) ||
           ![1, 0, -1].includes(task.enabled) ||
-          !["customScript", "database"].includes(task.type)
+          !["customScript", "database", "pickVars"].includes(task.type)
         )
           throw Error("CLI 原版任务启停或类型无效");
+        if (task.type === "pickVars") {
+          normalizePickVarsData(task.data, { enabled: task.enabled === 1 });
+          if (phase === "before" && task.enabled === 1)
+            throw Error("CLI pickVars仅支持后置响应阶段");
+        }
         if (task.type !== "database" || task.enabled !== 1) continue;
         if (
           !plain(task.data) ||

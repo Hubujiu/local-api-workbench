@@ -1,4 +1,8 @@
 import {
+  nativeDataArray,
+  nativeDataObject,
+} from "./native-response-extraction.mjs";
+import {
   prepareApipostDatabases,
   nativeDatabaseTasks,
 } from "./apipost-database-import.mjs";
@@ -288,14 +292,27 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     resource,
   );
   const parseTasks = (value, phase, origins = false) => {
+    if (Array.isArray(value)) {
+      nativeDataArray(value, 16);
+      for (const task of value)
+        nativeDataObject(task, [
+          "type",
+          "id",
+          "name",
+          "enabled",
+          "data",
+          ...(origins ? ["origin"] : []),
+        ]);
+    }
     if (
       !Array.isArray(value) ||
-      !value.some((task) => task?.type === "database")
+      !value.some((task) => ["database", "pickVars"].includes(task?.type))
     )
       return scriptTasks(value, phase, origins);
     const tasks = nativeDatabaseTasks(value, databaseImport.map, {
       translated: origins,
       connections: databaseImport.connections,
+      phase: phase === "后置" ? "after" : "before",
     });
     return {
       native: true,
@@ -303,7 +320,13 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       code: "",
       note:
         phase +
-        " 原版混排任务保持同一词法作用域；数据库失败会终止请求，不沿用原版继续发送旧值的行为。",
+        " 原版混排任务保持同一词法作用域。" +
+        (tasks.some((task) => task.type === "database")
+          ? "数据库任务错误终止当前阶段，不沿用原版继续发送旧值的行为。"
+          : "") +
+        (tasks.some((task) => task.type === "pickVars")
+          ? "pickVars仅支持后置严格JSON单值路径，不回退XML，不执行路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"
+          : ""),
     };
   };
   const attributes = prepareApipostAttributes(
@@ -770,9 +793,14 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         request.inheritSharedScripts = false;
         request.beforeScript = "";
         request.afterScript = "";
-        request.importNotes.push(
-          "数据库地址、用户、密码及SSH配置未导入；仅保留连接标识。运行前须显式重新绑定当前项目临时会话，导入/恢复不会连接数据库。数据库错误立即终止，不沿用原版继续发送旧值的行为。",
-        );
+        if (
+          [...request.nativeTasks.before, ...request.nativeTasks.after].some(
+            (task) => task.type === "database",
+          )
+        )
+          request.importNotes.push(
+            "数据库地址、用户、密码及SSH配置未导入；仅保留连接标识。运行前须显式重新绑定当前项目临时会话，导入/恢复不会连接数据库。数据库错误立即终止，不沿用原版继续发送旧值的行为。",
+          );
       } else {
         request.importedScriptTasks = normalizeImportedScriptTasks({
           version: 1,
