@@ -2,6 +2,21 @@ import { jsonPathSegments } from "./json-path.mjs";
 import { validateMockResponse } from "../public/response-example.js";
 const object = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
+const scalarTypes = new Set(["string", "number", "integer", "boolean", "null"]);
+export function nativeMockScalarText(value, type) {
+  const valid =
+    type === "null"
+      ? value === null
+      : type === "integer"
+        ? Number.isInteger(value)
+        : type === "number"
+          ? typeof value === "number" && Number.isFinite(value)
+          : type === "string"
+            ? typeof value === "string" && value.isWellFormed()
+            : type === "boolean" && typeof value === "boolean";
+  if (!valid) throw Error("原版Mock标量结果与声明根类型不一致");
+  return value === null ? "" : String(value);
+}
 export const nativeMockOperations = new Set([
   "eq",
   "uneq",
@@ -66,6 +81,7 @@ export function normalizeNativeMock(value) {
             "schema",
             "headers",
             "delayMs",
+            "serialization",
           ].includes(key),
       ) ||
       entry.status !== 200 ||
@@ -75,14 +91,34 @@ export function normalizeNativeMock(value) {
     )
       throw Error("原版Mock仅支持已验证的固定200策略");
     validateMockResponse({ ...entry, body: entry.body ?? "" });
+    if ((entry.schema === undefined) === (typeof entry.body !== "string"))
+      throw Error("原版Mock响应须明确选择Schema或文本");
     if (
+      entry.serialization !== undefined &&
+      !["scalar-text", "raw-xml"].includes(entry.serialization)
+    )
+      throw Error("原版Mock响应序列化策略不支持");
+    if (entry.serialization === "raw-xml") {
+      if (entry.schema !== undefined || typeof entry.body !== "string")
+        throw Error("原版XML Mock仅支持明确原始文本，不支持Schema生成");
+    } else if (entry.serialization === "scalar-text") {
+      if (!object(entry.schema) || !scalarTypes.has(entry.schema.type))
+        throw Error("原版标量Mock需要明确单一根类型");
+      // Mirror the existing sampler's literal priority without sampling or
+      // executing anything during import. Derived values are checked at runtime.
+      for (const key of ["const", "example", "default"])
+        if (entry.schema[key] !== undefined) {
+          nativeMockScalarText(entry.schema[key], entry.schema.type);
+          return structuredClone(entry);
+        }
+      if (entry.schema.enum?.length)
+        nativeMockScalarText(entry.schema.enum[0], entry.schema.type);
+    } else if (
       entry.schema !== undefined &&
       (!object(entry.schema) ||
         !["object", "array"].includes(entry.schema.type))
     )
-      throw Error("原版Schema Mock暂仅支持对象/数组根节点");
-    if ((entry.schema === undefined) === (typeof entry.body !== "string"))
-      throw Error("原版Mock响应须明确选择Schema或文本");
+      throw Error("原版Schema Mock标量根需要明确序列化策略");
     return structuredClone(entry);
   };
   const rules = value.rules.map((rule) => {
