@@ -212,6 +212,9 @@ function cli(f, project, planId) {
     let stdout = "",
       stderr = "",
       failure;
+    // Preserve multibyte JSON/error text across arbitrary OS pipe chunks.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     const timer = setTimeout(() => {
       failure = Error("native export CLI fixture exceeded 15s");
       child.kill();
