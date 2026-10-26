@@ -304,16 +304,18 @@ test("confirmed post-script scope writes and another project remain isolated fro
   assert.equal(f.hits(), 2);
 });
 
-test("real pre-journal I/O failure preserves the response but never invents an unknown commit", async (t) => {
+test("real pre-journal malformed-history read failure preserves the response without inventing an unknown commit", async (t) => {
   const f = await fixture(t);
   const directory = f.app.store.directory(f.project.id);
-  const history = path.join(directory, "history");
-  const kept = path.join(directory, "history-owned-backup");
-  // No Store method is replaced: the peer obstructs only the test-owned history
-  // after receiving the POST, before replying. The subsequent append read fails.
+  const history = path.join(directory, "history", "requests.json");
+  const before = await readFile(history, "utf8");
+  const corrupt = '{"private-password-marker":';
+  // No Store method is replaced. Corrupt only a test-owned JSON file after the
+  // peer receives the POST. Its real JSON.parse failure must precede journaling
+  // on every OS. A directory replaced with a file is not equivalent: Windows
+  // may report ENOENT for child paths, which optional history reads accept.
   f.beforeRespond(async () => {
-    await rename(history, kept);
-    await writeFile(history, "owned obstacle: private-password-marker");
+    await writeFile(history, corrupt);
   });
   const { status, value } = await f.execute();
   assert.equal(status, 200);
@@ -328,18 +330,17 @@ test("real pre-journal I/O failure preserves the response but never invents an u
     retry_safe: false,
   });
   assertPrivateReceipt(value, f);
-  await assert.rejects(f.app.store.get(f.project.id), (error) => {
-    assert.equal(error.code, "ENOTDIR");
-    assert.equal(error.message.includes(f.root), true);
-    return true;
-  });
+  assert.equal(await readFile(history, "utf8"), corrupt);
+  await assert.rejects(f.app.store.get(f.project.id), SyntaxError);
   await assert.rejects(readFile(path.join(directory, ".transaction.json")), {
     code: "ENOENT",
   });
   assert.equal(f.hits(), 1);
-  await rm(history);
-  await rename(kept, history);
-  assert.equal((await new Store(f.root).get(f.project.id)).history.length, 0);
+  await writeFile(history, before);
+  const repaired = await new Store(f.root).get(f.project.id);
+  assert.equal(repaired.history.length, 0);
+  assert.equal(repaired.revision, f.project.revision);
+  assert.equal(await readFile(history, "utf8"), before);
   assert.equal(f.hits(), 1);
 });
 
