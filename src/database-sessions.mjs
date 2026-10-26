@@ -1,3 +1,4 @@
+import { explicitPostgresOptions } from "./postgres-client.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
 import { querySQLiteBounded } from "./database.mjs";
@@ -54,6 +55,7 @@ export class DatabaseSessions {
     if (input.ssl !== undefined && typeof input.ssl !== "boolean")
       throw Error("TLS选项必须为布尔值");
     config.ssl = input.ssl === true;
+    if (type === "postgres") explicitPostgresOptions(config);
     if (input.ssh !== undefined) {
       if (!["postgres", "mysql"].includes(type))
         throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL");

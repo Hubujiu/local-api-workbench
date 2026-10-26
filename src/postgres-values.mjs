@@ -1,4 +1,5 @@
-import { types as pgTypes } from "pg";
+import TypeOverrides from "pg/lib/type-overrides.js";
+const pgTypes = new TypeOverrides();
 import postgresArray from "postgres-array";
 import { parseDatabaseJSON } from "./database-values.mjs";
 export const postgresValueTypes = {
