@@ -159,3 +159,124 @@ test(
     assert.deepEqual(input, { variables: {}, environmentVariables: {} });
   },
 );
+
+test(
+  "HTTP plan cancellation persists interrupted Mongo evidence without sending the request",
+  { timeout: 15000 },
+  async (t) => {
+    const { createApp } = await import("../src/server.mjs");
+    const { importIntoProject, snapshotPlan } = await import("../src/core.mjs");
+    const { Store } = await import("../src/runtime.mjs");
+    const { nativeMongoFixture } = await import(
+      "./fixtures/apipost-mongodb.mjs"
+    );
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { default: http } = await import("node:http");
+    let calls = 0,
+      handshake,
+      closePeer;
+    const started = new Promise((resolve) => {
+      handshake = resolve;
+    });
+    const closed = new Promise((resolve) => {
+      closePeer = resolve;
+    });
+    const sockets = [];
+    const endpoint = net.createServer((socket) => {
+      sockets.push(socket);
+      socket.on("error", () => {});
+      socket.once("data", handshake);
+      socket.once("close", closePeer);
+    });
+    const echo = http.createServer((_req, res) => {
+      calls++;
+      res.end("{}");
+    });
+    await new Promise((resolve) => endpoint.listen(0, "127.0.0.1", resolve));
+    await new Promise((resolve) => echo.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "mongo-http-cancel-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      for (const socket of sockets) socket.destroy();
+      app.server.closeAllConnections();
+      echo.closeAllConnections();
+      await Promise.all(
+        [endpoint, echo, app.server].map(
+          (server) => new Promise((resolve) => server.close(resolve)),
+        ),
+      );
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("Mongo cancellation");
+    importIntoProject(
+      p,
+      nativeMongoFixture("http://127.0.0.1:" + echo.address().port),
+    );
+    p.plans = [
+      snapshotPlan({
+        id: "cancel-plan",
+        name: "cancel",
+        steps: [{ request: p.requests[0] }],
+      }),
+    ];
+    await app.store.save(p);
+    const headers = {
+      "x-local-token": app.token,
+      "content-type": "application/json",
+    };
+    const post = async (route, body) => {
+      const response = await fetch(app.url + route, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    await post("/api/projects/" + p.id + "/database-connections", {
+      type: "mongodb",
+      name: "stall",
+      host: "127.0.0.1",
+      port: endpoint.address().port,
+      database: "fixture",
+      bindingId: p.settings.apipostDatabases[0].id,
+    });
+    const pending = post("/api/projects/" + p.id + "/run", {
+      planId: p.plans[0].id,
+      runId: "cancel-mongo-http",
+    });
+    let timer;
+    await Promise.race([
+      started,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(Error("Mongo handshake did not start")),
+          1800,
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
+    await post("/api/cancel", { id: "cancel-mongo-http" });
+    const result = await pending;
+    assert.equal(result.status, "cancelled", JSON.stringify(result));
+    assert.equal(result.recordSaved, true);
+    assert.equal(result.results[0].databaseQueries[0].status, "interrupted");
+    await Promise.race([
+      closed,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(Error("Mongo socket did not close")),
+          1500,
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
+    const saved = await new Store(root).get(p.id);
+    assert.equal(
+      saved.runs.find((run) => run.id === result.id).status,
+      "cancelled",
+    );
+    assert.equal(saved.environments[0].variables.native_value, undefined);
+    assert.equal(calls, 0);
+  },
+);
