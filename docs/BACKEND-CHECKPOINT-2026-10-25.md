@@ -1,139 +1,49 @@
-# 后端交付检查点 · 2026-10-26 12:39 UTC
+# 后端检查点 · 2026-10-26 14:22 UTC
 
-本文件是范围与证据清单，不是完整交付声明。尚未合入 main/develop、未部署、未新增前端或视觉工作。功能改动保持独立 draft PR，同功能修复留在原 PR；组合分支仅用于跨模块验收。
+本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
-## GitHub 保存与精确 CI
+## 本轮读取的 PR 状态
 
-| PR | 功能 | 最新远端提交 | 对应 CI |
-|---|---|---|---|
-| #1 | 基础 develop → main | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | 40136832590 success |
-| #2 | CLI 数据库临时授权 | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | 40275759477 success |
-| #3 | 脚本预算与诊断 | 306ab3225ec835ba72e21d2829747092f4a885a0 | 40281902175 success |
-| #4 | 活动项目自动导入 | 7f3d32ce91b6e09915778608dd95c65268d8aed3 | 40196468822 success |
-| #5 | 原版 Query 镜像导入 | 7167ce31e30ef356d51cc974c8b99940fe2cbe1e | 40199316420 success |
-| #6 | 原生目录导入 | 2d1654a10fd73db70e098d02138bca77464b5d76 | 40200210452 success |
-| #7 | 冻结计划与来源结果 | 408b1288f7a4b586b0bbd57eef4eb2c18fe25fdc | 40275731913 success |
-| #8 | 原版认证导入 | 562cda6fe9224f98cbff452b0043a097f12d9c95 | 新头待验证 |
-| #9 | 原生数据库任务与 Mongo TLS | 23871b56ff21905ab1f9c75dfef5bdbf6b365edd | 40311061527 success |
-| #10 | MCP 数据库临时授权 | 3024e59e5b6431d879164ca2272364fa79e0d1e9 | 40312763085 success |
-| #11 | 原版条件 Mock 与路径路由 | 5bb93908b177dbd880d340978b278dde1bf73f37 | 40308934342 success |
-| #12 | SSE/TCP 请求语义 | 19731690bafa368fbb5237799f5baab4e6792bdc | 40229568609 success |
-| #13 | 原版协议导入与消息计划 | f9ddb11510d79d8c3817d6ad2e403c6f580483dd | 40257510622 success |
-| #14 | 原生 JSON / 冻结 HTTP 目录导出 WIP | aa4f7c30de2e4ae7ce16ac3980a17319913dbd7f | 40321769848 success |
-| #15 | SQLite 进程与 HTTP 脱敏诊断 | 2a91c8e0dd0c13a56c04dbfd4fbd2cc1f383288b | 40244416727 success |
-| #16 | 原版输入形态 MCP 计划闭环 | ead0932daef9bfd9d24354f58e5b869c0b32b548 | 40261685328 success |
-| #17 | 项目提交结果不确定与恢复边界 | cdb9d2fee78ca366a9df747e312527655f3e3731 | 40283451178 success |
-| #18 | PostgreSQL 显式身份与 TLS 隔离 | 9a99f763159ed05f23e3bac46b714d51fe0a10c9 | 40280356717 success |
-| #19 | HTTP/stdio MCP 取消与终态证据 | 3049fb686e9d69ce227bb1ee7e62e2b92fde8010 | 40296009166 success |
-| #20 | Digest auth-int 实体与重发时限 | a4da6cb9d1e0aef718b333ebdc5c7034fd6e1750 | 40301093139 success |
-| #21 | 有界原生文档与目录生命周期 | 3b47ac0647ea8b7327ac72c09d049a5a095858c6 | 40317198737 success |
-| #22 | 有界S3 Query认证与Postman模式导入 | 7e1f5b78f00f50ab3e5258f71c113ae3e332316e | 40322324209 success |
+PR1、PR2、PR13、PR23 均为 open draft，未合并。
 
-CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接运行编号。PR 地址为 https://github.com/Hubujiu/local-api-workbench/pull/ 后接编号。
+| PR | 已读取的 head | 目标 |
+|---|---|---|
+| #1 | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | main |
+| #2 | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | develop |
+| #13 | f075e07fcb158f7dff639292cf7babfa931547d8 | feat/protocol-text-templates |
+| #23 | 2dbe12c868aa383850117a33528542e58c4972eb | feat/protocol-request-semantics |
 
-必要依赖采用堆叠 PR：#6 基于 #5，#7 基于 #6，#14 基于 #7，#9 基于 #18，#10 基于 #9，#13 基于 #12，#11/#19 基于 #3 的共享脚本运行时修复，#21 基于 #16 的原生MCP接口，#8 基于 #22 的Query签名runtime；其余功能以 develop 为目标。#14 的 API-key 再导入在组合中使用 #8，独立分支测试不假装具备该导入器。
+本轮没有执行 main/develop 合并、部署、前端功能开发或原版程序运行。
 
-PR CI默认检出测试合并提交，不能只凭head关联或BUILD_HEAD声明判断源码。已从全部job checkout日志与Git对象核对PR1/2/10/21/22的tested tree=head tree。PR14旧CI40314821175实际测试merge5ac73049/tree7e537def，非head51138749/tree1021aa87；差异为PR7后续Redis/Mongo惰性来源两文件。已同步基础并推送aa4f7c3，CI40321769848首轮通过，tested merge52dea0af/tree7e537def与当前head/local完全一致。旧口径已纠正；原组合CI本来包含该基础，不受此证据区分影响。
+## 已核实的 CI 证据
 
-本地与 GitHub Git Data API 提交的作者/时间可不同；发布时逐一核对 tree SHA 完全一致。不能用旧工作区、旧提交或单个功能分支的绿灯替代新组合提交验证。
+- PR1：CI40136832590，10个job成功；实际检出的测试合并提交 aca19f825ee65e923c20995d1340bba15ca8f7cc 的 tree 与 head 同为107767d4d92f69fc0b5a048d41371267fea5a568。
+- PR2：CI40275759477，10个job成功；实际测试合并提交209ae2df120ac7888135e29f9afe97553a0a4cec的tree与head同为75064180086a76d80e085f8226b568f946ff310f。
+- PR23：CI40333840510，10个job成功；实际测试合并提交dcc72d4da5df4c86654dda18e27ccdfef09c7ab6的tree与head同为d14e902cf978dbc8e84d4a165745a82e6609e504。
+- PR13：CI40334434565，10个job成功；实际测试合并提交0e7e08665b30425943b0b56c38829b6ff24775a6的tree与head同为c325a27cb85295b2b6319de2f8516ffc0a7855a8。
 
-历史组合 bb0492aa491fab5f05d3e342c6a68dae2536bae5（tree c6118d4a8f7d2b7c691b9c2e1cc3ebc7e585a0b1）完成真实 Redis HTTP/MCP SDK/CLI、来源与冻结计划隔离以及其他既有模块回归。CI40266415086首轮Linux metadata上传触发15分钟超时取消，其他9项成功；仅重跑该job后，attempt2 job121396174945成功且Linux metadata/portable两项artifact均已确认。首次失败不抹去，重跑成功不等于底层上传原因已证明修复。
+CI链接格式：https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接上述编号。PR CI默认检出测试合并提交；以上源码判断来自checkout日志和Git对象tree，不能仅凭关联head或BUILD_HEAD字段推断。
 
-后续组合 ba373734 已通过 PG/MySQL SSH CLI。组合 dc817970 的 CI40280440086 在 Windows 第六组默认 Faker 压力样本因活动预算先耗尽而失败；原断言与250ms/2秒限制保持。#3 增加 ASCII UTF-8 长度快速路径、保留 Unicode 检查与全部六样本，组合 0f4d2e79f70e15093c32b5afdd35e85bafe70910 的 CI40281969111 首轮全部成功。这证明当前优化与回归通过，不证明历史调度/初始化波动唯一根因已消除。
+上一份已核实的完整组合为3dacf4efebd645e2b8fb99ed316384a150dccb86：push CI40324535036的10个job成功，实际检出该SHA，tree9d534b5785b6f63f682fe7739bafeca6784bb2c9。它验证了此前AWS/native认证及既有后端回归，**不包含本次新增的协议模板组合，不能替代新组合验收**。
 
-Mongo TLS 三入口组合 3d855002 的 CI40283100626、存储ID修复组合 6d01ca9e 的 CI40283697877 均已成功。stdio 取消检查点 abbcdc0634caebfbb3901c17a5f17cff6e0fda71（tree 84a91640da498be31c5295744e3cdc9d711e954b），CI40296309130 首轮成功，包含 HTTP/stdio MCP 取消、原生名称与新项目授权隔离、三个生产依赖发行包 stdio 冒烟，以及真实 Mongo TLS HTTP/MCP/CLI。随后组合 0a59faa0adda331f2c19d97e1fd5bec09477acae（tree df7fdd761dbca2e24556284e4208f5d9b32dc813）的 CI40309744708 首轮全部成功，加入 Digest 与 Mock 媒体切片。stdio 数据库授权组合 b2e0b927aba07734aee9b37fa3fe896683bb2e45 / CI40312422914 与取消/EOF组合6aab5a6ee7997955ab88cdef2df6388402ace6ba / CI40313193269均首轮成功。最近已完成全部检查的是目录导出保护组合4b5a35449deff9b71f7ff48786d41ab944eb728e（tree9ce806aebf891f36dab5e5d93553aa49932beeec），CI40314971452首轮成功。文档目录组合568aaf1aa0836c734a6d945df830ce4a1414c3db（tree d32d9f5760c36c16c8063b12d6f7850bbea425b4）随后通过CI40317463779全部检查。当前新增AWS Query及native对接组合仍须自己的CI，不能借之前绿灯。
+## 本次协议模板范围
 
-stdio 首轮1ef6ef1的CI40291307223保留两项失败：macOS链接路径入口与旧基线Faker预算压力。旧入口本地回归红灯、真实路径修正后绿灯；PR19依赖PR3，06cb4e6与3049fb6分别通过精确CI，三个生产包均使用隔离目录验证，没有借用开发依赖。Mock媒体首轮83899f8的CI40304334425仅Windows旧Faker压力失败，新Mock流程通过；PR11也改为依赖PR3，保留原六组断言及安全预算，新头5bb939已通过CI40308934342。旧失败未重跑或抹去。
+PR23增加可选templateMode:variables/literal。缺省保留旧行为，只在固定端点的WS/TCP纯文本消息和SSE POST正文启用；URL、Query、Header、认证、host/port不自动替换。变量采用own标量、非递归解析，展开前执行UTF-8预算。live open固定项目环境/global私有快照，关闭后释放；不把整份私有变量表写进session GET或证据。
 
-gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧拒绝断言失败；已本地复现并将该项更新为受控 grpc-timeout 拒绝，另加合法 Authorization 声明迁移/去源值正例。未重跑失败 SHA 碰绿灯；旧失败保留，现精确新提交结果见表。
+PR13只在原生三个raw文本入口映射上述模式。字段来源、输入与惰性档案保持；运行时握手凭据仍须显式提供。函数/表达式和未支持的协议配置拒绝。独立PR CI覆盖实际WS/TCP/SSE、HTTP/SDK冻结计划、live隔离、错误路径、记录保存及备份恢复/重启。
 
-## 已有完整流程证据与真实剩余缺口
+初始实现的空WS文本帧遗漏和环境ID迟校验已有修复及回归。组合中更严格的存储保护会拒绝旧测试构造的非法ID，因此只将该测试改为受控legacy-read故障注入；仍验证真实HTTP零连接、磁盘不变和恢复后正常执行，没有放宽生产Store。
 
-### 项目存储与导入导出
+## 新组合尚未验收
 
-- 新发现并修复：不完整 UTF-16 ID 曾映射同一文件、154字节ASCII ID加临时后缀超255字节，分别可能覆盖记录或毒化恢复日志。现在提交日志前拒绝不完整Unicode、超长磁盘组件与大小写折叠冲突；既有文件映射不变。真实磁盘和HTTP恢复验证旧状态/列表不变、安全边界ID往返。尚不修复已经丢失的数据或旧损坏日志，需完整备份恢复。该修复已在PR17与6d01ca9e组合的三平台CI验收。
+本次本地组合验证包含上述runtime/native入口与已有握手、扩展协议和MCP取消回归。另增加真实CLI子进程：临时stdin绑定→冻结执行→退出码和新落盘结果→无绑定重启拒绝→备份恢复后重新授权执行。该CLI检查不是用HTTP或SDK结果代替。
 
-- 写事务日志前先校验集合、重复ID和文件名，避免无效输入毒化恢复日志。日志已发布后若应用/回读/清锁失败，HTTP/MCP返回明确提交不确定、项目ID及禁止盲重试标志；不会把失败一律当作回滚。
-- 真实磁盘夹具验证部分资源已写而清单仍旧的恢复、同revision重读、创建失败返回可恢复ID、未恢复项目阻止再次默认创建、主错误不被清锁错误覆盖、MCP不泄露未授权项目ID。此guard不是通用幂等/并发去重，也不承诺掉电durability。
+这些本地检查已通过，但新增组合仍须发布后核对自己的CI及实际代码树。此处不宣称它已经通过远端组合CI。
 
-- 自建真实原版 27 文件基础项目、9 文件扩展协议项目、10 文件 MySQL 项目、9 文件参数 Mock 项目均有有限导入、保存、重载、恢复与真实执行证据；来源运行档案始终与本工具新执行证据分开。
-- 原版正常 UI 已导入 Workbench 生成的 JSON，执行 JSON/Basic/环境变量，以及默认服务/前后脚本/urlencoded/Bearer、Path/Query/API-key、multipart 重复文本字段，再由原版 UI 导出回 Workbench 重载恢复执行。
-- 原版会丢弃仅存在于 URL 的 Query 和自定义 API service_id，已据实修正为显式 Query 行与单默认服务；多服务及无法保证字节保真的 raw Query 编码明确拒绝。
-- 活动项目 OpenAPI 自动导入含切换、撤销、重启、源认证和旧结果隔离。
-- 新增有界原生目录清单导出：最多50个strict200计划/200个启用HTTP步骤，冻结定义不随live API修改，步骤脚本与惰性来源分离，响应正文/头/延迟/内联schema保留，项目分域ID，返回前纯回读校验。真实HTTP跨导入、再导出、恢复、重启通过。原版重新打开/保存该目录尚未验证，team_id/正常目录接入路径仍需处理；原生来源档案、DB/继承来源等明确拒绝，不借普通JSON旧验证冒充此项。
-- 未完成：所有原生资源/版本/模型/样例/协议/高级配置的反向导出与往返。有限互操作不是任意原版项目迁移器；完整项目备份与原生定义导出是不同用途。
+## 明确剩余边界
 
-### 原生文档与目录生命周期（PR21，组合已通过）
-
-- 静态doc/description接口映射，现代/legacy输入正文原样保存；真正源文件中尚无原版文档fixture，不声称原版GUI往返。无法表达的字段/附件/执行任务、同路径目录身份折叠和文档保留ID冲突原子拒绝。
-- native列表/目录与文档详情、confirm:true混选子树删除；完整文档及四类现有Workbench目录声明移到有界apiResourceTrash，HTTP沿用deletedAt。旧HTTP恢复→再删仍可用，不恢复目录凭据；冻结计划/历史/来源档案不删。100批/10000资源/4MiB上限前置拒绝，不自动淘汰。
-- 已本地验证真实SDK/HTTP导入→详情→删除→落盘→旧PUT恢复→再删→备份恢复→重启/隔离。组合增加文件清单目录导入、原生导出明确拒绝active docs/trash、完整HTTP备份恢复与空TCP容器保护；本地18项通过，组合568aaf1的三平台/真实DB/生产stdio CI40317463779全部通过。
-- 无法可靠定位的原生协议来源存在时拒绝目录删除，不把无消息TCP连接容器当普通目录；仍允许明确HTTP/文档ID操作。目录配置原生继承仍沿原有HTTP快照，不冒充完整目录声明编辑/往返。没有新增文档/目录一键恢复工具，备份保留墓碑不等于自动复活。
-- PR14已修复冻结计划在导出时重新创建不存在活动目录的错误；不能无损表达时提示项目备份，保留快照。显式已有目录仍可往返，相关三平台和组合CI已通过。
-
-### 请求协议与认证
-
-- 新增独立PR22：修复Postman丢AWS addAuthDataToQuery:true而错误发送Header认证。复用已装Apache-2.0 Smithy5.7.4 public presign，限S3 GET/HEAD空正文，唯一X-Amz-Expires为1..604800/默认86400，规范路径/重复控制参数/hoist冲突/SDK __proto__缺陷前置拒绝。实际URL与头一起更新，旧Header模式保持；生产signer和独立crypto verifier均匹配AWS公开vector，真实HTTP1/2/过期/坏签名/冻结/恢复/身份隔离已通过PR22三平台CI。
-- PR8同功能继续更新native awsv4布尔映射并依赖PR22：明确S3服务，其他service或非法flag原子拒绝；两项目继承认证→真实HTTP计划与官方SDK API→证据→备份恢复→app重启本地通过。组合包含Digest重发及文档存储回归29项通过，新的原生/组合CI仍待验；没有新原版GUI或真实AWS账户访问，也没有扩展原生计划step auth override。
-- 安全边界：签名URL不写回请求/计划定义，但wire历史会保存签名URL/sessionToken，已有执行快照也可能保存显式auth.secretKey。项目、备份、历史按敏感数据处理，本批不是全面脱敏；不能把S3 UNSIGNED-PAYLOAD称为正文完整性保护（本版拒绝非空正文）。
-
-- Digest auth-int曾对首次multipart正文签名，却在挑战后生成新boundary导致实际验签失败。#20仅在私有重发状态复用实体和Content-Type，重新建立代理/连接，并沿用原网络/认证deadline，最多一次401重发。独立服务端按实际字节验证各正文类型、Cookie、代理、并发身份、取消/超时和保存恢复；请求/计划定义不携带临时重发状态，传输证据仍可记录实际正文。初始序列化/Cookie存储等待不被夸称为同一硬墙钟预算；没有原版新实跑对照。
-
-- WS 文本、TCP UTF-8 首段完成、GET/POST SSE、Socket.IO v4 事件/Ack、嵌入自写 Proto 的 gRPC Unary/服务端流，均有真实原版输入、保存消息计划、执行、恢复、错误与隔离证据。
-- 原版 gRPC 大整数丢精度和不支持客户端流的现象有静态/运行证据；本工具保持精确 int64，未把原版未执行的消息冒充成功计划。
-- 代表性 Query API-key、AWS/Hawk/EdgeGrid 对照保留正确签名与安全拒绝，不复制原版缺陷。
-- 新真实原版 Header Matrix 12文件覆盖 WS、SSE、Socket.IO Header/Cookie/Bearer/事件Ack，以及 gRPC Unary/服务端流 metadata。六种非凭据用途头可保存；所有未知/自定义头、Cookie/Auth 值均删除来源值，只保留临时运行绑定要求。整计划所有启用步骤在发网前预检，冻结定义不因原配置修改漂移，官方SDK/交互会话/恢复重启均验证。
-- Socket.IO v2/v4 polling 实测先复现 Accept 被覆盖成 */*，修复为仅缺省填默认并重新通过真实握手/Ack。SSE Accept 大小写归一与总50项/8KiB预算也包含默认头。
-- 原版两次Unary和一次服务端流调用均未发送已保存启用的gRPC metadata；Workbench不复制该观察缺陷，只迁移声明并要求显式运行时重绑定。完整目录导入后四次真实RPC证明metadata到达与int64精确保留，原版不同点明确记录，不称metadata线上字节等价。
-- 原生gRPC仅(tls:1,ssl:1)映射到验证证书的grpcs；显式运行时CA/客户端证书使用现有可信校验，真实TLS服务端流及mTLS夹具通过。其他组合仍拒绝；原版自身TLS调用未成功完成，不能称原版线上等价。
-- 未完成：原生协议脚本/模板/继承、其他原生TLS设置和外部Proto文件迁移、非默认连接选项、TCP自定义分帧、Socket.IO高级监听/消息、原生客户端流调度，以及全部真实账户授权与高级 NTLM/OAuth 部署。原生二进制metadata尚无等价证据，明确拒绝；独立canonical运行时Base64能力保留。
-
-### 前后置脚本与数据库
-
-- PostgreSQL 不再继承环境密码/密码文件、PGSSLMODE或启动参数；显式用户/库、空密码语义和纯JS驱动选择固定，读写共用连接工厂。虚构环境下实际协议/TLS探针与真实PG/SSH CI分别提供证据；未观察到实际凭据泄露。
-- 新增原生 Mongo findone 声明适配，文档/null与Extended JSON提取、三作用域、HTTP/MCP/CLI、保存恢复和授权隔离已用真实Mongo8验证。原版来源仅静态字段/链路，非原版Mongo实跑等价。有效只读账号+严格TLS的HTTP/MCP已过独立CI，CLI亦在3d855002及后续组合验收。
-- Mongo调用者取消会传至工作线程并停止其套接字；queryMongo等待线程退出，晚错误不覆盖interrupted。实际停滞TCP端点与HTTP取消/磁盘记录验证不是Mongo查询成功证据。外层响应不等待全部清理、撤销本身不主动取消全部在途IO，远端服务器计算回滚未承诺；后续MCP取消通知能力见MCP章节。
-
-- 普通原版 API 的 JS→数据库→JS 顺序、共享词法变量、临时/环境/全局提取与持久化已验证。PG 与 MySQL 原生结果形态分开处理，MySQL使用嵌套结果集路径；原版 MariaDB 协议实测与 CI MySQL8 是分别注明的证据。
-- 手工、CLI、MCP 临时数据库绑定分别授权；撤销、重启、策略代际及跨项目隔离不互相继承。原版连接凭据不随项目导入获得使用权限。
-- 新增原生Redis只读GET/HGET/EXISTS，复用现有RESP与临时授权。真实Redis7.2覆盖0/null/空串/JSON文本、前后阶段和三作用域、WRONGTYPE无HTTP、原始输入/变量/结果保存恢复重启。标量直接赋值，保留但不执行路径元数据，不复制原版静态发现的包装解析缺陷；无原版Redis实跑对照声明。
-- 新增原生PG/MySQL有效默认SSH要求，仅保留requiresSSH:true，原密钥文件路径及连接秘密丢弃。HTTP/MCP注册与每次查询前/结果后沿session.bindingId核对当前项目来源，UUID不能借旧直连授权绕过新要求；CLI从本次目录核对SSH及指纹。真实ssh2.Server（不是OpenSSH sshd）转发到PG/MySQL的HTTP/MCP保存、恢复、重启/重绑已在功能CI通过；CLI真实服务组合亦已在 ba373734 验收。
-- 未完成：其他原版数据库类型/SSH认证组合/独立环境连接定义/模板及写入联动、完整脚本 SDK 等价性。可信最小权限数据库仍是前提。
-- 已有间歇性脚本初始化与 Windows SQLite 子进程问题的唯一根因未证明修复。#15新增阶段/超时/退出/IPC脱敏证据，并接通HTTP和桌面CI日志，不放宽2秒/内存限制，不重试写入结果未知的操作。后续绿灯不是根因修复证明。
-
-### Mock
-
-- 当前新增可选持久化scalar-text/raw-xml策略：false/0/空串/null按声明转文本，原始XML字节不解析或插值，旧对象/数组JSON不改默认字段。显式Content-Type按大小写无关处理，隔离/传输控制头仍拒绝。真实HTTP、匹配/fallback、保存/恢复/重启、并发项目隔离与生成错误恢复已本地验证；已通过PR11与0a59faa组合精确CI。来源仅静态接口观察与独立夹具，不声称原版标量/XML线上等价。
-
-- 原版 fixed200/schema-first、条件匹配/回退、重复 Query、响应头、Schema 和有限路径/方法/{参数}/选择器路由均经实际 HTTP 对照；保存恢复后及重启后的正向请求重新执行，非仅验证404。
-- 同项目冲突报409、未知路径报404是明确安全差异，不复制原版泛200回退/首项选择。旧接口ID路由仍兼容。镜像配置仅在精确一致时合并，真实冲突原子拒绝。
-- 正则仍在有界隔离 VM；Mock不执行API脚本、不获取数据库权限，保留Host/Origin/响应头/大小/并发检查。
-- 未完成：任意路由正则、路径变量注入表达式、其他返回策略、Schema→XML生成、活动IP限制与完整Faker/Schema目录。
-
-### 执行计划与结果
-
-- 原生冻结重复步骤、显式脚本/输入/认证、失败继续/strict200和来源执行档案已有独立实现。接口任务与计划独立脚本的隔离有原版运行证据。
-- 修复原生目录计划误继承API可执行nativeTasks：清除API任务、断言、提取，保留有界importedNativeTaskSource惰性来源。源字段/访问器/体积校验覆盖存储、恢复、克隆前及整计划预算；PG、Redis与Mongo来源均经实际HTTP保存/恢复/重启隔离。
-- 新MCP输入计划按API ID冻结，旧step ID不刷新基础定义；完整JSON替换、显式空输入重置、禁用步骤、手工编辑转换及元数据一致性有验证。
-- 未完成：更多原版高级节点、二进制/文件覆盖、完整报告格式和所有跨入口并发语义。
-
-### MCP 后端
-
-- HTTP取消按临时会话、类型保真的请求ID与授权epoch分域；相同编号跨客户端不互相取消，满执行槽仍可取消，删除/改权限有终态，重复ID拒绝。取消不会因保存失败变成假成功，活动保留recordSaved与executionStatus。
-- stdio复用MIT SDK 1.32.1的有界分帧，保留同一dispatcher的调试变量/协议并发限制，每请求独立进度。支持并发API/计划与原生别名取消、EOF保存收尾、close/EPIPE/背压失败、排队回复取消检查；活动先落盘再发唯一回复。8MiB单帧、12MiB队列/输入、32待处理与10工具槽限制明确，外部强杀不保证落盘，已发送请求/已进入原子保存不回滚。
-- 生产依赖包复制到仓库外再启动stdio，三平台验证SDK许可证与实际握手/调用，修复符号链接入口误判。stdout失败不代表执行未发生，已保存结果不能自动重放。stdio仍不继承HTTP进程中的数据库grant。PR10新增显式 --database-grants-file 启动输入，固定初始项目白名单、严格文件/JSON/批次校验、私有别名与原生来源再校验；一次载入，不热加载。文件删除不撤销已载入授权；重启不带文件拒绝，带文件是显式重授。真实SQLite SDK→HTTP→落盘/跨项目/新建项目/重启已本地验证。PG/MySQL/Mongo TLS实际stdio流程在e4560c6的DB job通过，但该头旧MCP SSH fixture缺显式PG身份而失败；3024e59修复fixture并通过CI40312763085。PR10独立仍为串行transport，取消/EOF仅在含PR19组合验证后声明。
-
-- 本提交额外加入owner-file授权后的stdio数据库取消闭环：真实Mongo驱动连接本机stalled TCP，SDK取消API与原始EOF取消计划分别验证新鲜cancelled记录、interrupted查询、实际socket关闭、无后续HTTP/变量、无文件重启拒绝。与既有stdio/loader/SQLite流程本地及6aab5a6精确跨平台CI均通过；不是实际mongod取消或事务回滚证据。
-
-- 官方SDK HTTP/stdio覆盖项目/读写/执行权限、结果读取、临时数据库授权、撤销和重启。
-- #16提供已观察的30个原版工具名的有界适配，覆盖托管项目创建、环境/服务/变量、OpenAPI同步、API/文档发现、冻结计划、实际执行、历史、确认HTTP软删除及重启。单API保留自身脚本/断言/提取，计划不隐式继承；覆盖参数不会被旧动态值或SDK URL缓存替换。
-- 原版命名单API严格200、canonical原2xx政策保持；环境在执行入口固定，修复并发切换后的跨环境cache污染。请求已发出但历史保存失败时返回已执行证据与保存失败，不重放网络。
-- native新建项目授权单独保存在内存，remember:true后再canonical创建/配置保存不会偷偷持久化native授权；重启隔离实测通过。
-- MCP同一Store进程内锁覆盖异步读取、修改与执行全程；明确不冒充跨进程CLI/手工HTTP锁。嵌套快照/结果明确标为Workbench格式，工具名齐全不等于完整输出契约或交付率。自定义存储路径、clear同步、递归目录/文档删除等仍明确拒绝；历史取实际两个有界存储，非伪装成原版记录。
-- 原版MCP本身尚未开启/授予持久项目访问；这一部分使用REA静态接口证据与自建官方SDK测试，不冒充原版实际调用。尚需更完整参数/输出兼容与全部宿主客户端验证。
-
-## 证据与发布边界
-
-此前官方 Offline2 2.0.0 正常试用仅使用自建虚构项目与回环服务；本轮新增目录/Redis/SSH/Mongo/Mock媒体切片未进行新的原版GUI对照，不把历史证据或静态分析当作通过。REA静态分析，不绕过授权/付费检查，不复制无许可专有实现。新增原版原始目录、运行档案与内置目录保持私有；公开夹具和实现独立编写。
-
-桌面与浏览器CI只表示现有产品回归验证，不表示本轮新增前端或视觉验收。签名/公证分发、真实业务负载和完整产品交付仍有缺口。模块测试或工具数量不作为交付百分比。
+- 不新增Socket.IO/gRPC、端点或握手模板支持；不执行原版内置/自定义表达式。
+- 原版WS只有静态替换链证据，TCP没有原版模板wire对照；独立fixture不是原版GUI往返证明。
+- sourceDefinitionHash标识默认定义，不代表每条live send的原始模板来源；事件hash核对实际记录的数据。
+- 显式发送的正文、peer echo和既有计划变量可能进入历史。项目、备份和执行证据应按敏感数据处理，不作全面脱敏保证。
+- 原版目录重新打开/保存、其他协议/数据库高级配置、完整反向导出、分发签名及前端完整交付等未因此完成。没有交付百分比或全产品验收声明。

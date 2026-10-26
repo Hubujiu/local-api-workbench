@@ -128,7 +128,7 @@ function noHTTPExtras(request) {
     no(request?.[k]?.parameter, k + "参数");
   }
 }
-function rawBody(body, label) {
+function rawBody(body, label, textVariables = false) {
   if (!object(body)) fail(label);
   if (
     !["text", "raw", "json", "xml", "html", "javascript", "none"].includes(
@@ -146,8 +146,29 @@ function rawBody(body, label) {
   if (!Array.isArray(rows) || rows.some((r) => !object(r) || r.key || r.value))
     fail(label + "结构参数");
   const raw = text(body.raw ?? "", label);
-  if (raw.includes("{{")) fail(label + "模板");
+  if (raw.includes("{{") && !textVariables) fail(label + "模板");
   return raw;
+}
+// Native adapters deliberately accept a narrower name vocabulary than the
+// canonical runtime's own-key lookup. Dots/hyphens are names, not traversal or
+// operators. normalizeProtocol remains the final delimiter/size validator.
+function textTemplateMode(raw, label) {
+  if (!raw?.includes("{{")) return {};
+  let offset = 0;
+  while (offset < raw.length) {
+    const start = raw.indexOf("{{", offset);
+    if (start < 0) break;
+    const end = raw.indexOf("}}", start + 2);
+    if (end < 0) fail(label + "变量占位符格式");
+    const name = raw.slice(start + 2, end).trim();
+    if (
+      !/^[\p{L}\p{M}\p{N}_.-]{1,200}$/u.test(name) ||
+      ["__proto__", "prototype", "constructor"].includes(name)
+    )
+      fail(label + "变量名称（仅整键文本替换）");
+    offset = end + 2;
+  }
+  return { templateMode: "variables" };
 }
 export function prepareNativeProtocols(source, resource) {
   const nodes = source.apis,
@@ -314,12 +335,13 @@ export function prepareNativeProtocols(source, resource) {
       no(request.configs.func.request, "TCP请求加工");
       no(request.configs.func.response, "TCP响应加工");
       const u = new URL("tcp://" + parent.url),
-        message = rawBody(request.body, "TCP正文");
+        message = rawBody(request.body, "TCP正文", true);
       add(node.target_id, {
         type: "tcp",
         url: u.hostname.replace(/^\[|\]$/g, ""),
         port: Number(u.port),
         message: message ?? "",
+        ...textTemplateMode(message, "TCP正文"),
         completion: "first-data",
         duration: parent.request.timeout * 1000,
       });
@@ -367,13 +389,14 @@ export function prepareNativeProtocols(source, resource) {
         if (typeof message.param_id !== "string" || seen.has(message.param_id))
           fail("WebSocket消息ID");
         seen.add(message.param_id);
-        const payload = rawBody(message.request, "WebSocket正文");
+        const payload = rawBody(message.request, "WebSocket正文", true);
         if (message.request.mode !== "text") fail("WebSocket消息模式");
         add(node.target_id + ":" + message.param_id, {
           type: "websocket",
           ...(handshake ? { handshake } : {}),
           url: urlQuery(node),
           message: payload ?? "",
+          ...textTemplateMode(payload, "WebSocket正文"),
           name: name + " / " + text(message.name, "消息名称", 200),
         });
       }
@@ -399,13 +422,14 @@ export function prepareNativeProtocols(source, resource) {
       const handshake = nativeProtocolHandshake(request, sourceCopy, "sse");
       if (!["", "http/1.1", undefined].includes(node.protocol))
         fail("SSE协议版本");
-      const body = rawBody(request.body, "SSE正文");
+      const body = rawBody(request.body, "SSE正文", true);
       add(node.target_id, {
         type: "sse",
         ...(handshake ? { handshake } : {}),
         url: urlQuery(node),
         method: node.method,
         ...(body !== undefined ? { body } : {}),
+        ...textTemplateMode(body, "SSE正文"),
       });
     }
     sources.push({

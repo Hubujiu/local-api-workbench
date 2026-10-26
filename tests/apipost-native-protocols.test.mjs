@@ -16,6 +16,11 @@ test("native protocol import retains scoped definitions, exact mirrored query, T
     p = project();
   importIntoProject(p, source);
   assert.equal(p.protocols.length, 3);
+  assert(
+    p.protocols.every(
+      (definition) => !Object.hasOwn(definition, "templateMode"),
+    ),
+  );
   assert.equal(p.requests.length, 0);
   assert(p.folders.includes("TCP"));
   const tcp = p.protocols.find((p) => p.type === "tcp");
@@ -76,7 +81,7 @@ test("native protocol unsupported semantics and identity conflicts fail atomical
     (d) => (d.apis[0].project_id = "foreign"),
     (d) => (d.apis[2].parent_id = "missing"),
     (d) => d.apis[0].message.push(structuredClone(d.apis[0].message[0])),
-    (d) => (d.apis[3].request.body.raw = "{{variable}}"),
+    (d) => (d.apis[3].request.body.raw = "{{foo()}}"),
   ];
   for (const mutate of cases) {
     const source = nativeProtocolFixture();
@@ -86,6 +91,58 @@ test("native protocol unsupported semantics and identity conflicts fail atomical
     assert.throws(() => importIntoProject(p, source));
     assert.equal(JSON.stringify(p), before);
   }
+});
+test("native text payload templates map only bounded whole-key names and retain their source", () => {
+  const source = nativeProtocolFixture();
+  const payload =
+    "{{ 租户 }}|{{a.b}}|{{with-hyphen}}|{{zero}}|{{no}}|{{empty}}";
+  source.apis[0].message[0].request.raw = payload;
+  source.apis[2].request.body.raw = payload;
+  source.apis[3].request.body.raw = payload;
+  const before = JSON.stringify(source),
+    p = project();
+  importIntoProject(p, source);
+  assert(
+    p.protocols.every((definition) => definition.templateMode === "variables"),
+  );
+  assert(
+    p.protocols.every(
+      (definition) => (definition.message ?? definition.body) === payload,
+    ),
+  );
+  assert.equal(JSON.stringify(source), before);
+  assert.equal(
+    p.settings.apipostProtocolSources[0].source.message[0].request.raw,
+    payload,
+  );
+  for (const invalid of [
+    "{{foo()}}",
+    "{{a+b}}",
+    "{{$guid}}",
+    "{{two words}}",
+    "{{a/b}}",
+    "{{'quoted'}}",
+    "{{}}",
+    "{{missing",
+    "{{a{b}}",
+    "{{__proto__}}",
+    "{{constructor}}",
+    "{{prototype}}",
+    "{{" + "a".repeat(201) + "}}",
+  ])
+    for (const index of [0, 2, 3]) {
+      const bad = structuredClone(source),
+        candidate = project(),
+        original = JSON.stringify(candidate);
+      if (index === 0) bad.apis[0].message[0].request.raw = invalid;
+      else bad.apis[index].request.body.raw = invalid;
+      assert.throws(
+        () => importIntoProject(candidate, bad),
+        undefined,
+        invalid,
+      );
+      assert.equal(JSON.stringify(candidate), original);
+    }
 });
 
 test("native protocol ordering permits only the known zero inner default", async () => {

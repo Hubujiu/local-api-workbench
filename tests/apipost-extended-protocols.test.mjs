@@ -40,6 +40,7 @@ test("unsupported native RPC/Socket.IO options reject without mutating prior pro
     (d) => d.apis[0].request.query.parameter.push({ key: "token", value: "x" }),
     (d) => d.apis[0].request.event.parameter.push({ key: "fixture" }),
     (d) => (d.apis[0].message[0].request.mode = "json"),
+    (d) => (d.apis[0].message[0].request.raw = "{{variable}}"),
     (d) => (d.apis[0].msg_data = "connect"),
     (d) => d.apis[1].protos[0].include_dirs.push("/etc"),
     (d) => (d.apis[1].protos[0].proto_path = "/secret.proto"),

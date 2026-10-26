@@ -1,6 +1,7 @@
 # Native protocol resource import (work in progress)
 
-This feature depends on PR #12's bounded SSE request/TCP completion semantics.
+This feature depends on PR #12's bounded SSE request/TCP completion semantics
+and PR #23's explicit bounded protocol text-template runtime.
 It does not modify the frontend or copy vendor implementation code.
 
 ## Initial scope
@@ -15,8 +16,8 @@ It does not modify the frontend or copy vendor implementation code.
 - Source descriptions, response definitions and configuration are preserved as
   inert project metadata, not executed. Inactive auth provider editors are
   removed, so their forgotten credentials are not copied.
-- Unsupported active headers/cookies/auth/scripts/inheritance, binary modes,
-  TCP processing/other completion rules, templates, unknown resource fields and
+- Outside the bounded subsets below, active headers/cookies/auth/scripts/inheritance, binary modes,
+  TCP processing/other completion rules, endpoint/handshake templates, unknown resource fields and
   nondefault WS settings reject the whole import. Original insecure TLS and
   unlimited handshake defaults are not adopted; reconnection is not enabled.
 
@@ -43,9 +44,10 @@ compared across 18 HTTP calls with status/body/header equality after this merge.
 These local results are not a substitute for exact-commit CI.
 
 No full native protocol compatibility, complete resource migration or original
-reverse export is claimed. Headers/cookies/auth/scripts, variable templates,
-binary WS/TCP modes, custom TCP frame completion and nondefault WS settings
-remain unsupported. Source response examples/config are inert metadata, not an
+reverse export is claimed. The later sections define the bounded handshake and
+payload-template subsets; scripts, endpoint templates, binary WS/TCP modes,
+custom TCP frame completion and nondefault WS settings remain unsupported.
+Source response examples/config are inert metadata, not an
 editable or executable recreation of every original setting.
 
 ## Extended protocols (next checkpoint)
@@ -204,3 +206,58 @@ declaration with a real mTLS service: no CA fails, CA without required client
 identity fails, full per-run binding succeeds, insecure override rejects, official
 SDK executes, and restored/restarted projects do not inherit trust or client keys.
 Existing test certificates are fictional fixture identities, not production PKI.
+
+## Fixed-endpoint native text variables
+
+Only these native text payload fields opt into canonical `templateMode:
+"variables"` when they contain `{{`: `websocket2.message[].request.raw`,
+`socket_method.request.body.raw`, and POST SSE `request.body.raw`. A literal
+payload without that marker retains its old definition shape (no new mode).
+The final `normalizeProtocol` validation rejects malformed delimiters and
+non-text/oversize definitions. Import remains atomic and does not contact an
+endpoint. Input objects and the archived raw payload strings are unchanged;
+the existing detached archive credential removal remains in force.
+
+The native adapter accepts trimmed placeholder names of at most 200 characters
+using Unicode letters/combining marks/numbers, underscore, dot and hyphen.
+`__proto__`, `prototype`, `constructor`, internal spaces, `$` builtins,
+parentheses, quotes and operators such as `+` or `/` are rejected. Dots and
+hyphens are **whole-key names**, never property traversal or arithmetic. This is
+a conservative vocabulary, not a claim to recognize every expression intent.
+Wider original names are rejected rather than renamed or silently ignored.
+No custom function, JavaScript or recursive expansion is performed. Scalar
+values include numeric zero, false and empty text; a value containing another
+placeholder is sent literally.
+
+The endpoint, Query, Header, Cookie, Auth, TCP host and port remain fixed.
+Socket.IO/gRPC templates, scripts, inherited execution and advanced TCP framing
+are not opened by this mapping. HTTP/MCP execution permission and explicit
+temporary handshake bindings are still required; environment values do not
+become authentication grants. Runtime uses the existing 1 MiB WS/TCP and 64 KiB
+SSE expanded-text bounds (the native source payload keeps its existing 64 KiB
+import bound). A missing/oversize value before open produces no connection;
+the same error during an existing live session produces no additional write.
+
+Saved definition-ID execution and canonical frozen plans use current project
+environment/global scalar values. A frozen plan keeps its imported payload and
+endpoint despite later live definition edits. An open interactive session instead
+keeps its private open-time scalar snapshot, even after environment switching or
+editing. Evidence stores the resolved literal request plus its source-definition
+hash/environment identity, not the complete private variable context. This is
+not arbitrary-content redaction: the resolved messages and remote echoes can
+contain sensitive variable values and are retained in records/backups.
+
+The original WS static chain establishes the source text-field/variable path.
+There is **no original TCP variable-substitution wire observation**: this is
+Workbench's bounded variable semantics over the imported TCP text field, not
+full original TCP behavioral equivalence. No original application was run for
+this implementation and no proprietary implementation was copied.
+
+Independently authored fixtures exercise actual WS, TCP and POST SSE servers:
+native HTTP import, unchanged input/source text, save/reload, concurrent projects,
+whole-key Unicode/dot/hyphen names and zero/false/empty values, saved-ID execution,
+frozen plans over HTTP and the official SDK stdio client, explicit missing-grant
+denial, live open/send/stop, and records through backup/restore/server restart.
+Atomic endpoint/expression/script rejection and missing/oversize pre-open versus
+live-send failures are distinguished by real connection/write counters. Restored
+records do not resurrect sessions or grant removed handshake credentials.
