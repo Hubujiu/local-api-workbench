@@ -1,4 +1,6 @@
+import { Socket } from "node:net";
 import { openDatabaseSSH } from "./database-ssh.mjs";
+import { observeDatabaseStream } from "./database-read-cancellation.mjs";
 import { databaseParameters } from "./database-values.mjs";
 import {
   explicitPostgresOptions,
@@ -77,10 +79,11 @@ export async function mutatePostgres(input, dependencies = {}) {
   const boundParameters = databaseParameters(parameters, "postgres");
   const options = explicitPostgresOptions(input);
   const tunnel = await openDatabaseSSH(input);
+  const owner = tunnel || observeDatabaseStream(new Socket());
   try {
     const client = await createExplicitPostgresClient(options, {
       Client: dependencies.Client,
-      stream: tunnel?.stream,
+      stream: owner.stream,
     });
     client.on?.("error", () => {}); // Active operations report connection errors through their promises.
     let begun = false,
@@ -135,10 +138,12 @@ export async function mutatePostgres(input, dependencies = {}) {
         );
       }
       throw error;
-    } finally {
-      await client.end().catch(() => {});
     }
   } finally {
-    tunnel?.close();
+    // After a terminal ACK, pg.end() can wait forever for an idle peer's FIN.
+    // Own the public transport instead: cleanup must observe actual local close
+    // without changing an acknowledged COMMIT/ROLLBACK or retrying any write.
+    owner.close();
+    await owner.closed;
   }
 }
