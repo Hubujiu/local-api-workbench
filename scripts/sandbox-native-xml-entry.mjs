@@ -39,11 +39,18 @@ export function createNativeXMLExtractor(response) {
     textSize(text);
     if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(text))
       throw Error("pickVars XML禁止DTD和实体声明");
+    // Numeric references are not interpreted inside CDATA, comments or PIs.
+    // This conservative markup preflight is not the XML parser; the mature
+    // parser below remains responsible for validating the entire document.
+    const markup = text.replace(
+      /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g,
+      "",
+    );
     // xmldom intentionally recovers some invalid numeric references. Do not
     // allow that recovery to turn malformed XML into a successful token.
     const references = /&#(x[0-9a-fA-F]+|[0-9]+);/g;
     let reference;
-    while ((reference = references.exec(text))) {
+    while ((reference = references.exec(markup))) {
       const point =
         reference[1][0] === "x"
           ? parseInt(reference[1].slice(1), 16)
@@ -60,10 +67,6 @@ export function createNativeXMLExtractor(response) {
       )
         throw Error("pickVars XML包含无效字符引用");
     }
-    const markup = text.replace(
-      /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g,
-      "",
-    );
     if ((markup.match(/<(?![!?/])/g) || []).length > 2000)
       throw Error("pickVars XML节点超过2000");
     let document;

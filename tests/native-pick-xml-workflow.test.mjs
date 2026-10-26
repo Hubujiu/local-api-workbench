@@ -32,7 +32,7 @@ const pick = (variables, source = "responseXml", enabled = 1) => ({
 const tasks = (after, before = []) => ({ version: 1, before, after });
 const tokenPick = () => pick([row("token", "string(/login/token)")]);
 const xmlFor = (tenant) =>
-  `<login tenant="${tenant}" blank=""><token>wire-${tenant}</token><empty/><text><![CDATA[雪 & punctuation]]></text><escaped>&amp;&#x41;&#66;</escaped></login>`;
+  `<login tenant="${tenant}" blank=""><token>wire-${tenant}</token><empty/><text><![CDATA[雪 & punctuation]]></text><escaped>&amp;&#x41;&#66;</escaped><literal><![CDATA[&#0; &#xD800;]]></literal><!-- &#0; --><?note &#x110000;?></login>`;
 
 async function upstream(t, handler) {
   const server = http.createServer(handler);
@@ -109,6 +109,7 @@ function sourceFor(base) {
       row("emptyAttribute", "string(/login/@blank)"),
       row("escaped", "string(/login/escaped)"),
       row("cdata", "string(/login/text)"),
+      row("literal", "string(/login/literal)"),
     ]),
     script(
       "same-phase",
@@ -185,6 +186,7 @@ test("native responseXml real login closes import, current XML view, scopes, Bea
     assert.equal(env.variables.emptyAttribute, "");
     assert.equal(env.variables.escaped, "&AB");
     assert.equal(env.variables.cdata, "雪 & punctuation");
+    assert.equal(env.variables.literal, "&#0; &#xD800;");
     assert.equal(env.variables.order, "project,folder,api");
     assert.equal(saved.globalVariables.sharedToken, `wire-${tenant}-view`);
     assert(!Object.hasOwn(env.variables, "sameRequest"));

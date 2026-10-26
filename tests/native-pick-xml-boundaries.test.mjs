@@ -269,3 +269,19 @@ test("native XML repeated tasks share the original phase activity budget without
     },
   );
 });
+
+test("native XML preserves literal numeric-reference text in CDATA comments and processing instructions", async () => {
+  const body =
+    '<login note="valid &amp; text"><!-- &#0; &#xD800; --><?note &#x110000;?><token><![CDATA[&#0; &#xD800; &#xFFFF; &#x110000;]]></token></login>';
+  const result = await phase(body);
+  assert.equal(
+    result.scopes.environment.token,
+    "&#0; &#xD800; &#xFFFF; &#x110000;",
+  );
+  for (const bad of [
+    "<login><token>&#0;</token></login>",
+    '<login bad="&#xD800;"><token>ok</token></login>',
+    "<login><!-- benign &#0; --><token>&#x110000;</token></login>",
+  ])
+    await assert.rejects(phase(bad), /XML.*字符/);
+});

@@ -136,10 +136,12 @@ XML 提取的 first-node textContent；原版 parse/select 异常还可能吞错
   或 body getter；先前合法 setBody 有效，原始 wire 记录不变。所有行完成读取验证后
   才调用变量 setter，复用原有 post rollback / strict stop / completion。
 - 输入和字符串结果各最多 64KiB UTF-8，拒无效 Unicode、XML 1.0 控制字符和非法
-  数字引用（包括零、surrogate、FFFE/FFFF、超 Unicode 范围）。拒 DTD / ENTITY 声明，
-  strict onError 拒成熟 parser 的 warning/error/fatalError。预检对声明和非法数字引用
-  保守处理，即便它们出现在注释/CDATA 文字内也会拒绝。节点/属性不得含任何命名空间声明
-  或 URI/prefix，避免 unprefixed XPath 默默匹配 namespace 的兼容选项。
+  数字引用（包括零、surrogate、FFFE/FFFF、超 Unicode 范围）。数字引用预检只检查
+  会展开引用的正文/属性上下文；CDATA、注释和 PI 内字面 `&#0;` 等仍合法并保持原文。
+  拒 DTD / ENTITY 声明（沿用保守预检，CDATA/注释内的声明字面也拒绝），
+  strict onError 拒成熟 parser 的 warning/error/fatalError。整份文档的任何节点/属性
+  都不得含命名空间声明或 URI/prefix，不仅限于选中路径；即便无关分支的 namespace
+  声明、空 `xmlns=""` 或标准 `xml:lang` 也拒绝，避免隐式 namespace 匹配。
 - 本片节点及属性总上限收窄为 **2000**（含 Document、元素、文本、注释、属性等），
   元素深度最多 32。构 DOM 前另作元素数预检。既有 xml2Json 的 10,000 上限不变。
   真实 QuickJS 10,000 节点样本在原 250ms 预算超时；2048 样本约 123ms，故选 2000
