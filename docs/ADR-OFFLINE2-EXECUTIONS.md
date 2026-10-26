@@ -212,3 +212,49 @@ while native flows with/without independent step scripts execute real HTTP,
 persist only step variables, restore and restart without inheriting the API
 pipeline. That cross-feature test belongs to the combined validation snapshot,
 not a claim that this PR alone implements the separate database-task feature.
+
+## MCP-saved flows: inert comparison baseline
+
+A bounded static inspection of the already available Offline2 source establishes
+that saved MCP flows use `source: mcp` and optional `mcp_name`,
+`mcp_description`, `mcp_environment_id`, step `mcp_input` and
+`mcp_deleted_body_keys`. These are historical AI-versus-human comparison data.
+The saved-flow runner reads the current `input`, explicit step scripts,
+`api_snapshot` and actual `environment_id`, not the comparison baseline. This is
+static evidence, not a new original-application runtime observation. No vendor
+implementation or raw bundle is included here.
+
+The importer maps native `mcp` to canonical plan source `ai`, while retaining the
+native source in `importedNativeFlowSource` version 1. Ordinary manual/AI flows
+without comparison data keep their previous shape. The new source record contains
+only source project/flow IDs, optional comparison strings and step baseline data;
+never another raw API snapshot. Each `sourceStepId` / `importedStepId` pair is a
+**historical import-time mapping**, not a binding to current steps. Reordering,
+deleting or cloning current steps does not reinterpret or discard that history.
+Plan edits, snapshots, backup restore and Store writes validate/preserve it.
+Run provenance remains stamped by the actual HTTP/CLI/MCP entry point.
+
+The closed baseline input envelope supports body and Query/Path/Header/Cookie
+plain JSON data. It never invokes the normal input applicator, interpolates values,
+merges an old body, deletes a key, falls back to an old environment or activates an
+API task. Historical authentication only accepts exact `noauth`/`none` objects;
+credential-bearing/unsupported auth, target/file/TLS/connection/session/grant
+fields reject explicitly, rather than being discarded or acquiring authority.
+Body/header/cookie values may still contain user-provided sensitive data: this is
+not a general-purpose secret scrubber. The actual current input/auth contract is
+unchanged. An explicit existing `environment_id` is always required.
+
+Each baseline input is at most 64KiB, 5,000 JSON nodes and 20 levels deep. Maps and
+arrays contain at most 1,000 members; historical deleted-key arrays have at most
+1,000 strings of 1,000 UTF-8 bytes and 64KiB total. Optional metadata bounds are
+800/40,000/800 UTF-8 bytes for name/description/environment respectively. The
+source record is closed, rejects accessors, hidden/symbol keys, exotic objects,
+non-finite/non-JSON values and malformed UTF-16, and shares the existing 4MiB
+plan-provenance budget. Directory limits remain 4MiB, 50 flows and 200 steps.
+Omitted and explicitly empty baseline fields remain distinguishable.
+
+Full project JSON backup preserves the validated history. This independent PR
+base does not implement native reverse export. Combined native directory writers
+must explicitly reject plans carrying `importedNativeFlowSource` until they have
+a tested lossless mapping; silently dropping this field is not a round trip.
+Native API-only JSON export already rejects plans and must continue doing so.

@@ -1,3 +1,4 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
@@ -388,6 +389,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -396,6 +398,9 @@ export function snapshotPlan(plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   const snapshot = {
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -443,7 +448,10 @@ export function snapshotPlan(plan) {
               },
     ),
   };
-  let sourceBytes = 0;
+  let sourceBytes =
+    importedNativeFlowSource === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
   for (const step of snapshot.steps) {
     const source = step.request?.importedNativeTaskSource;
     if (source !== undefined)
@@ -474,6 +482,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  readImportedNativeFlowSource(plan);
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
@@ -1795,9 +1804,13 @@ export function restoreProject(document) {
   for (const request of document.requests) validateRequestTaskSource(request);
   for (const item of document.cases || [])
     validateRequestTaskSource(item.request);
-  for (const plan of document.plans || [])
+  for (const plan of document.plans || []) {
+    readImportedNativeFlowSource(plan);
     for (const step of plan.steps || [])
       validateRequestTaskSource(step.request);
+  }
+  for (const run of document.runs || [])
+    if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
