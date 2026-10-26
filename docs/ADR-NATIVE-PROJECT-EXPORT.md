@@ -93,11 +93,11 @@ fixed by exporter changes. The root cause remains under investigation; unknown
 writes are never retried automatically and the two-second process bound remains.
 
 Ordered nativeTasks are an executable pipeline, not interchangeable with the
-legacy beforeScript/afterScript strings. Until the exporter can faithfully encode
-that whole pipeline, any such field is explicitly rejected (including disabled
-tasks), even when an older normalizer would omit it. Actual HTTP regression first
-returned 200 with erased tasks; it now rejects without modifying the saved project.
-This guard does not claim native pipeline export is delivered.
+legacy beforeScript/afterScript strings. The initial guard rejected every such
+field after actual HTTP reproduced 200 with erased tasks. The bounded API-local
+non-database slice now preserves supported mixed pipelines; see
+ADR-NATIVE-TASK-EXPORT.md for its explicit rejection and verification boundaries.
+Unsupported and frozen-step pipelines still fail without modifying the project.
 
 ## Native directory definitions (work in progress, 2026-10-26)
 
