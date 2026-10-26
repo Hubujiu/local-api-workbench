@@ -55,8 +55,28 @@ test("execution receipts distinguish confirmed, unknown and generic save outcome
     "record",
     new ProjectCommitUncertain(secret, new Error(secret)),
   );
-  assert.equal(outsideScope.persistenceOutcome.project_id, undefined);
-  for (const receipt of [generic, uncertain, recovery, forged, outsideScope]) {
+  assert.deepEqual(outsideScope.persistenceOutcome, generic.persistenceOutcome);
+  const foreignRecovery = recordSaveFailure(
+    "project",
+    "record",
+    new ProjectRecoveryRequired(["other-private-project"]),
+  );
+  assert.deepEqual(
+    foreignRecovery.persistenceOutcome,
+    generic.persistenceOutcome,
+  );
+  assert.equal(
+    JSON.stringify(foreignRecovery).includes("other-private-project"),
+    false,
+  );
+  for (const receipt of [
+    generic,
+    uncertain,
+    recovery,
+    forged,
+    outsideScope,
+    foreignRecovery,
+  ]) {
     assert.equal(receipt.recordSaved, false);
     assert.equal(receipt.recordId, null);
     assert.equal(receipt.attemptedRecordId, "record");

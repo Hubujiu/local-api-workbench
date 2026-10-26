@@ -1,3 +1,4 @@
+import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
 import {
   appendExecutionRecord,
   recordSaveFailure,
@@ -718,33 +719,21 @@ export async function createApp({
               if (operation === "stop") {
                 if (Object.keys(data).length)
                   throw Error("Socket.IO停止不接受额外字段");
-                const session = socketioSessions.get(p.id, sessionId),
-                  result = socketioSessions.stop(p.id, sessionId);
+                const session = socketioSessions.get(p.id, sessionId);
+                socketioSessions.stop(p.id, sessionId);
+                session.finalSnapshot ??= socketioSessions.snapshot(
+                  p.id,
+                  sessionId,
+                );
+                const result = session.finalSnapshot;
                 if (session.recordSaved)
                   return json(res, 200, {
                     ...result,
                     ...recordSaveSuccess(sessionId),
                   });
-                session.recordPromise ||= (async () => {
-                  const record = {
-                    id: sessionId,
-                    type: "socketio",
-                    createdAt: result.createdAt,
-                    definition: result.definition,
-                    result,
-                    source: "manual",
-                    status:
-                      result.state === "error" ||
-                      result.events.some((x) =>
-                        ["ack-timeout", "disconnected"].includes(x.direction),
-                      )
-                        ? "failed"
-                        : result.connected
-                          ? "passed"
-                          : "cancelled",
-                  };
+                const pending = (session.recordPromise ??= (async () => {
                   try {
-                    await store.append(p.id, "protocolRuns", record);
+                    await finalizeSocketIOSession(store, p.id, session, result);
                     session.recordSaved = true;
                     return {
                       ...result,
@@ -756,9 +745,10 @@ export async function createApp({
                       ...recordSaveFailure(p.id, sessionId, error),
                     };
                   }
-                })();
-                const recorded = await session.recordPromise;
-                if (!session.recordSaved) session.recordPromise = null;
+                })());
+                const recorded = await pending;
+                if (!session.recordSaved && session.recordPromise === pending)
+                  session.recordPromise = null;
                 return json(res, 200, recorded);
               }
             }

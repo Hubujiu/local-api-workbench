@@ -22,15 +22,25 @@ The shared receipt adds:
 - `persistenceOutcome` uses `publicProjectCommitOutcome` for actual typed storage
   errors. `PROJECT_COMMIT_UNCERTAIN` retains `commit_outcome: "unknown"` and the
   scoped project ID. Recovery-required project IDs are limited to this execution's
-  project. Other failures use `RECORD_SAVE_FAILED`, without inventing a known
+  project. A typed outcome about a different project becomes generic, rather than
+  misattributing that project's commit state to this execution. These are project
+  storage outcomes, not proof that the attempted record reached the journal.
+  Other failures use `RECORD_SAVE_FAILED`, without inventing a known
   commit outcome. A message or arbitrary error `code` cannot impersonate a typed
   unknown-commit outcome.
 
 All failure receipts say `retry_safe: false`: repeating execution can repeat a
 remote mutation even when history persistence failed before journaling. There is
 no automatic execution replay or extra storage recovery in this projection.
-Store's existing optimistic conflict handling and protocol-session storage-only
-reconciliation remain unchanged. After repairing a storage obstacle, a fresh
+Store's existing optimistic conflict handling and wire-session storage-only
+reconciliation remain unchanged. Socket.IO stop now freezes its final snapshot
+and record once and reconciles the current project's history before appending.
+Only one same-ID record with the same full canonical-JSON SHA-256 evidence can
+confirm an earlier save: type, source, status, creation time, definition and the
+entire result are compared, not just the ID or a stored hash. Different evidence
+or duplicate IDs fail without overwriting or appending; concurrent stop calls
+still share one storage operation. No protocol format or transport changes.
+After repairing a storage obstacle, a fresh
 Store may recover a journal with the same `attemptedRecordId`; read and reconcile
 that record instead of executing again. A failed history save neither undoes nor
 mislabels an earlier variable-scope commit.
