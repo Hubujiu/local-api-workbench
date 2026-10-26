@@ -14,7 +14,7 @@ Unicode 偏移 9913 为默认数据，work 主 bundle 模块 693291 偏移 12244
 
 ## 有界实现
 
-- 启用任务仅限后置 responseJson / responseHeader。responseJson 为严格 JSON 对象/数组根和 own-property 单值路径。
+- 启用任务仅限后置 responseJson / responseHeader / responseXml。responseJson 为严格 JSON 对象/数组根和 own-property 单值路径。
   保留选中值的 `0`、`false`、`null`；缺失与 null 不混同。
 - 不执行 JSONPath wildcard/filter/function，不回退 XML，不插值路径；responseHeader 的有界契约见下节。
   禁用任务保留闭合、限额内的来源字段，但不执行、不要求路径有效。
@@ -107,3 +107,51 @@ set-cookie/超过 256 对/1000 对截断、断言/网络/前后置失败时不�
 闭合形状、全部行验证后才写入、零 getter/正文读取、原型/公开函数/map 篡改与 UTF-8
 值限额。测试没有原版 runtime parity 证据。原生反向导出与惰性来源仍由其独立模块
 负责整合，完整 Workbench backup 往返不等于原版导出往返。
+
+
+## responseXml：WIP 有界标量适配
+
+同一合法静态 sender SHA256 见上。Python 通用换行 Unicode 字符偏移：
+当前 `pm.response.text()` 来源 33594847；XML row 分支 33597075；
+trim / DOMParser / `String(xpath.select(...))` 为 33597666。
+原版裸节点集会经节点 XML serializer 再 String 转换，不是 Workbench 旧 host
+XML 提取的 first-node textContent；原版 parse/select 异常还可能吞错并赋空字符串。
+本适配不复刻这些行为，也不声称与原版 XML 全功能运行等价。
+
+- 仅 `source:"responseXml"`、后置启用任务；行和作用域仍复用同一闭合 normalizer。
+  表达式仅 trim 后 `string(P)`，P 为绝对 child ASCII NCName 路径，不能有冒号、
+  wildcard、predicate、descendant、变量/模板、其他函数或末尾 text()；末段可为
+  `/@NAME`。路径最多 32 段；整个表达式沿用 1000 字符限制。禁用声明保持惰性。
+- 用锁定的 MIT `@xmldom/xmldom 0.9.12` 和 `xpath 0.0.35` 执行真正 DOM/XPath。
+  先对同一 P 查询节点集，要求恰好一个 Element 或 Attr；Element 必须没有子元素。
+  再执行真正 `string(P)` 标量读取，保留空字符串、文本、CDATA、标准实体/数字引用。
+  标准 XPath 对零节点会返回空、对多节点会取首，本片明确更严格并拒绝这两种输入。
+  不以手写 XML/XPath 引擎替代成熟包。不新增 XML 断言、namespace resolver 或新公共 require。
+- 私有可复现 bundle 仅在存在启用 XML 提取时装入同一 QuickJS，初始化也计入现有
+  compatibility 活动预算；没有 host parse hook、第二 VM 或逐行独立计时器。
+  `build-native-xml.mjs --check` 比较 bundle、来源 hash manifest 和 MIT notices。
+  factory/readXML 与 pick installer 在同一个私有 IIFE 内，不留可被脚本直接调用的
+  全局 lexical parser；selector 内还复用同一表达式语法检查。
+- 读当前 response.body 的 own data descriptor，不调用公开 pm.response.text、xml2Json
+  或 body getter；先前合法 setBody 有效，原始 wire 记录不变。所有行完成读取验证后
+  才调用变量 setter，复用原有 post rollback / strict stop / completion。
+- 输入和字符串结果各最多 64KiB UTF-8，拒无效 Unicode、XML 1.0 控制字符和非法
+  数字引用（包括零、surrogate、FFFE/FFFF、超 Unicode 范围）。拒 DTD / ENTITY 声明，
+  strict onError 拒成熟 parser 的 warning/error/fatalError。预检对声明和非法数字引用
+  保守处理，即便它们出现在注释/CDATA 文字内也会拒绝。节点/属性不得含任何命名空间声明
+  或 URI/prefix，避免 unprefixed XPath 默默匹配 namespace 的兼容选项。
+- 本片节点及属性总上限收窄为 **2000**（含 Document、元素、文本、注释、属性等），
+  元素深度最多 32。构 DOM 前另作元素数预检。既有 xml2Json 的 10,000 上限不变。
+  真实 QuickJS 10,000 节点样本在原 250ms 预算超时；2048 样本约 123ms，故选 2000
+  留余量，不放宽 16MiB 内存、512KiB 栈、250ms phase 活动或 2s wall 预算。
+  各上限只是安全边界，并不承诺所有最大组合/多任务都能在共享预算内成功。
+- 成熟包依赖可变 JS 内建方法。bootstrap 捕获指定全局绑定、constructor/prototype、
+  方法函数自身和迭代器原型链的 descriptor/prototype 图；每次 XML 任务前用捕获的
+  descriptor/ownKeys/prototype/Object.is 检查，篡改即拒，不修复或冻结用户全局。
+  检查路径不调用脚本 getter；失败使用固定原语，不依赖可改的全局 Error。
+  这是针对锁定依赖的保守检查，不是对任意 JS 篡改的一般安全证明。
+
+检查点：真实 HTTP XML 登录→env/temp/global/同阶段→下一 Bearer→Store/备份/重启，
+冻结后编辑、项目/环境隔离、失败回滚/停止/取消、JSON/Header/XML 同阶段共存首批 20 项通过。
+独立审查已指出并复验关闭一个 global lexical parser 暴露缺陷；随后独立 guard 完整审查
+被平台中断，**尚未完成**，本片按 WIP 保存，不将局部修复证明宣称为完整独立安全验收。

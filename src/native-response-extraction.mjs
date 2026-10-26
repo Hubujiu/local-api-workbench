@@ -1,3 +1,4 @@
+import { nativeXMLPath } from "./native-xml-path.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 
 export function nativeDataObject(value, allowed) {
@@ -56,8 +57,8 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
   nativeDataObject(value, ["source", "variables"]);
   if (!["source", "variables"].every((key) => Object.hasOwn(value, key)))
     throw Error("pickVars缺少自有来源或变量字段");
-  if (!["responseJson", "responseHeader"].includes(value.source))
-    throw Error("pickVars仅支持responseJson/responseHeader，不支持XML等来源");
+  if (!["responseJson", "responseHeader", "responseXml"].includes(value.source))
+    throw Error("pickVars仅支持responseJson/responseHeader/responseXml来源");
   nativeDataArray(value.variables, 100);
   const variables = value.variables.map((row) => {
     nativeDataObject(row, ["name", "expression", "type"]);
@@ -73,6 +74,7 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
     if (enabled) {
       if (!safeName(row.name)) throw Error("pickVars变量名无效");
       if (value.source === "responseHeader") headerName(row.expression);
+      else if (value.source === "responseXml") nativeXMLPath(row.expression);
       else jsonPathSegments(row.expression.trim() || "$");
     }
     return { name: row.name, expression: row.expression, type: row.type };
@@ -94,7 +96,9 @@ export function compilePickVarsOperations(value = []) {
       scope: scopes[row.type],
       ...(data.source === "responseHeader"
         ? { header: headerName(row.expression) }
-        : { segments: jsonPathSegments(row.expression.trim() || "$") }),
+        : data.source === "responseXml"
+          ? { xmlPath: nativeXMLPath(row.expression) }
+          : { segments: jsonPathSegments(row.expression.trim() || "$") }),
     })),
   }));
 }
@@ -109,6 +113,7 @@ function installPickVars(
   environment,
   global,
   temporary,
+  readXML,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -197,13 +202,18 @@ function installPickVars(
       if (root === null || typeof root !== "object")
         throw Error("pickVars响应根须为JSON对象或数组");
     }
+    const selectXML = operation.source === "responseXml" ? readXML() : null;
     const rows = operation.variables,
       assignments = create(null);
     nodes = 0;
     for (let at = 0; at < rows.length; at++) {
       const row = rows[at];
       let value =
-        operation.source === "responseHeader" ? headerValue(row.header) : root;
+        operation.source === "responseHeader"
+          ? headerValue(row.header)
+          : operation.source === "responseXml"
+            ? selectXML(row.xmlPath)
+            : root;
       if (operation.source === "responseJson")
         for (let part = 0; part < row.segments.length; part++) {
           if (value === null || typeof value !== "object")

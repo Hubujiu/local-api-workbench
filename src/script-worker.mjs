@@ -83,6 +83,14 @@ try {
     new URL("./vendor/schema-library.js", import.meta.url),
     "utf8",
   );
+  const nativeXMLLibrary = workerData.responseExtractions?.some(
+    (operation) => operation.source === "responseXml",
+  )
+    ? await readFile(
+        new URL("./vendor/native-xml-library.js", import.meta.url),
+        "utf8",
+      )
+    : "";
   const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
@@ -553,9 +561,15 @@ try {
       context.setProp(context.global, "__nativePickVarsDataJSON", data);
       data.dispose();
       install(
-        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const state=(" +
+        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const readXML=" +
+          (nativeXMLLibrary
+            ? "(()=>{" +
+              nativeXMLLibrary +
+              ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
+            : "null") +
+          ";const state=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
