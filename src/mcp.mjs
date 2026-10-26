@@ -51,6 +51,7 @@ import {
 export function createMCP({
   store,
   projects = [],
+  sessionProjects = [],
   write = false,
   execute = false,
   debugEnvironments = new Map(),
@@ -59,7 +60,7 @@ export function createMCP({
   protocolExecutor = executeWireFlow,
   socketioExecutor,
 }) {
-  const allowed = new Set(projects);
+  const allowed = new Set([...projects, ...sessionProjects]);
   const socketioSessions = new SocketIOSessions();
   const executePlanSocketIO = (projectId, input, signal) => {
     if (!write || !execute) throw Error("Socket.IO执行未授权");
@@ -418,7 +419,7 @@ export function createMCP({
             : undefined,
         );
         allowed.add(output.id);
-        projects.push(output.id);
+        (nativeName ? sessionProjects : projects).push(output.id);
       } else {
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
         const lockedOperations = [
@@ -902,11 +903,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2),
     projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
     store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));
+  const sessionProjects = [];
   await store.init();
   let activity;
   const dispatch = createMCP({
     store,
     projects,
+    sessionProjects,
     write: argv.includes("--write"),
     execute: argv.includes("--execute"),
     onProgress: (progress) => activity?.update(progress),
@@ -925,7 +928,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         message.method === "tools/call" &&
         argv.includes("--execute") &&
         argv.includes("--write") &&
-        projects.includes(
+        [...projects, ...sessionProjects].includes(
           message.params?.arguments?.projectId ??
             message.params?.arguments?.project_id,
         ) &&
