@@ -1,21 +1,21 @@
-# 后端检查点 · 2026-10-26 16:47 UTC
+# 后端检查点 · 2026-10-26 17:36 UTC
 
 本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
 ## 本轮读取的 PR 状态
 
-PR1、PR2、PR3、PR13、PR23、PR24、PR25、PR26 均为 open draft，未合并。PR1/2 在15:48 UTC重新读取，head与原精确CI未变化，没有重跑旧版本。
+PR1、PR2、PR3、PR13、PR23、PR24、PR25、PR26、PR27 均为 open draft，未合并。PR1/2 在16:58 UTC重新读取，head与原精确CI未变化，没有重跑旧版本。
 
-| PR | 已读取的 head | 目标 |
-|---|---|---|
-| #1 | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | main |
-| #2 | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | develop |
-| #13 | f075e07fcb158f7dff639292cf7babfa931547d8 | feat/protocol-text-templates |
-| #23 | 2dbe12c868aa383850117a33528542e58c4972eb | feat/protocol-request-semantics |
+| PR  | 已读取的 head                            | 目标                              |
+| --- | ---------------------------------------- | --------------------------------- |
+| #1  | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | main                              |
+| #2  | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | develop                           |
+| #13 | f075e07fcb158f7dff639292cf7babfa931547d8 | feat/protocol-text-templates      |
+| #23 | 2dbe12c868aa383850117a33528542e58c4972eb | feat/protocol-request-semantics   |
 | #24 | 9cde529a25c5c5d985bc4574e4002176ea78f634 | fix/postgres-explicit-credentials |
-| #25 | eb323eb424eba2e0b2c6c969d7a4cd572333d43e | feat/apipost-database-tasks |
-| #3 | c5c588efd1a1f2b7153db7576b80776c916c7413 | develop |
-| #26 | aa95fd403b7561ff182145924704d2979d689ca5 | feat/native-response-extraction |
+| #25 | eb323eb424eba2e0b2c6c969d7a4cd572333d43e | feat/apipost-database-tasks       |
+| #3  | c5c588efd1a1f2b7153db7576b80776c916c7413 | develop                           |
+| #26 | aa95fd403b7561ff182145924704d2979d689ca5 | feat/native-response-extraction   |
 
 本轮没有执行 main/develop 合并、部署、前端功能开发或原版程序运行。
 
@@ -62,13 +62,23 @@ PR25首阶段080edd483183529d950eefd8ce22ac137268c668虽然CI40352851569通过�
 
 PR25修正测试为精确的generic/typed双分支（typed必须有unknown/retrySafe:false且脱敏），独立head eb323eb424eba2e0b2c6c969d7a4cd572333d43e的CI40358364565通过，实际merge31e7da4ffdce63bff37ac5e2774b78cceed093ee/tree6edfbddd55e34dde01c6dd2398a1fbb76741c210与head一致。PR3的c5c588efd1a1f2b7153db7576b80776c916c7413仅改测试分层与ADR：六个600+600样本仍用同真实Faker提供器/计数器，精确验证600/401；另有真实replaceIn双向混合配额测试与故意重置额度的红灯负例。250ms/2s/1000上限和生产代码未改。其CI40359028997通过，actual merge1a89ed1c37f3cc2708e7d7ca93f7ed06558f9c7a/tree7e18cdec73236be4b63480acee2735f7c9c308aa与head一致，不宣称解决所有系统调度延迟。
 
-最近完整全绿组合为4b26389c67bd20b80eeec94e3319ec69cce2f0ed：push CI40359410945首轮10个job成功，全部actual checkout该SHA，treeb50562570eda2970bdd1e3dfbd123a79aae011eb与本地一致。该组合覆盖提取、MCP/CLI/数据库混排及typed journal恢复，**尚不包含下述新原生断言**。
+此前完整全绿组合为4b26389c67bd20b80eeec94e3319ec69cce2f0ed：push CI40359410945首轮10个job成功，全部actual checkout该SHA，treeb50562570eda2970bdd1e3dfbd123a79aae011eb与本地一致。该组合覆盖提取、MCP/CLI/数据库混排及typed journal恢复，**尚不包含下述新原生断言**。
 
-## 原生响应断言组合尚待核验
+## 原生响应断言组合已核验
 
-独立draft PR26的后续修复head aa95fd403b7561ff182145924704d2979d689ca5、treeb661be22413f1f4ad549141bc0516e2dcfac38b7已保存，自己的CI待独立核对。首片仅后置responseCode/responseJson、eq/uneq和字面字符串预期；不冒充原版递归变量替换、XML/其他来源/JSONPath表达式。比较失败保留soft failed assertion与普通计划继续策略；与启用pickVars共存时沿用已声明的严格失败停止策略。私有结果与可信完成性检查避免公共test数组改写/重复索引/提前return伪造完成；保留共享配额，未新增主机能力。
+独立draft PR26的后续修复head aa95fd403b7561ff182145924704d2979d689ca5、treeb661be22413f1f4ad549141bc0516e2dcfac38b7已保存。独立CI40361312102全部10个job成功，actual merge f0392a1d7060d7abc8fb5b8e3ad8e0af77ad021f的tree与head一致。首片仅后置responseCode/responseJson、eq/uneq和字面字符串预期；不冒充原版递归变量替换、XML/其他来源/JSONPath表达式。比较失败保留soft failed assertion与普通计划继续策略；与启用pickVars共存时沿用已声明的严格失败停止策略。私有结果与可信完成性检查避免公共test数组改写/重复索引/提前return伪造完成；保留共享配额，未新增主机能力。
 
 组合解决scripts预算模块冲突时保留PR3预算校验/累计扣减，增加断言数预检。CLI DB collector识别并验证新类型，原生flow API来源仍是惰性数据。新真实CLI/恢复测试中加入JSON断言、禁用且未配置的模板来源，非JSON响应仍通过且变量不改，执行记录保留原来源，证明没有执行或插值它们。活动nativeTasks及旧脚本来源同样不再被普通wire字段插值；实际URL/Header/Body仍按原规则展开。新组合不得借用4b26389的旧绿灯。
+
+最新已核验组合为9d21b494a84ad3f047c1f4c0e6146465306a4085，tree b74b814c49658d5b3450681b1b5ad98106d5fb7e；push CI40363859110全部10个job首轮通过，实际checkout为该SHA。覆盖真实MCP/CLI的断言soft failure、与pickVars共存的严格停止、SQLite混排、备份恢复及惰性来源不插值。该绿灯不包含下面的新等待能力。
+
+## 原生有界等待：组合验证中
+
+独立draft PR27基于PR26，最终功能head d8ce3c9f0f7b6ba332a6e3078b88cc2cbb7cce88、tree 977603d81bc4d794d031a11da4870cd46b99b446。初始CI40366399379的三OS失败保留：旧测试仍把合法wait:10视为未知类型；已保留真正未知类型、字符串和超预算的原子拒绝检查，并增加合法输入正例。最终head的CI尚待核实，不借用前版结果。
+
+启用等待仅接受0..1000整数毫秒，同阶段累计不超过1000；0不调度timer、不让出微任务。正等待使用私有原始timer调度及可信完成检查，共用现有timer/活动/总时长限制。禁用来源保留有界JSON标量但不转换、不执行。不同于原版同步阻塞，安全异步等待期间既有回调可以运行；不宣称任意异步控制流等价。
+
+组合保留PR3预算模块，CLI collector闭合验证等待且不因此授予数据库权限，原生flow API来源仍惰性。本地真实SDK HTTP/stdio前后阶段取消、stdio EOF及CLI导入/冻结/备份恢复已通过；同时核对真实等待期间标记，取消后不提交未完成阶段变量、不执行后续请求，独立项目不受影响。组合仍需自身跨平台CI，不作已验收声明。
 
 ## 明确剩余边界
 

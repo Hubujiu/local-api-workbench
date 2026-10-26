@@ -1,3 +1,4 @@
+import { compileNativeWaits } from "./native-wait-tasks.mjs";
 import { compileNativeAssertions } from "./native-response-assertions.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
@@ -64,6 +65,7 @@ function scriptBudgets({
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
   const { signal, cookieSession, databaseQuery } = options;
+  const nativeWaits = compileNativeWaits(options.nativeWaits);
   const responseAssertions = compileNativeAssertions(
     options.responseAssertions,
   );
@@ -131,6 +133,7 @@ export function runScript(code, input, options = {}) {
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
         responseAssertions,
+        nativeWaits,
         code,
         input,
         activityBudgetMs,

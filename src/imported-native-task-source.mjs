@@ -1,3 +1,4 @@
+import { normalizeNativeWaitData } from "./native-wait-tasks.mjs";
 import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import { normalizePickVarsData } from "./native-response-extraction.mjs";
 // Frozen, canonical task provenance. No execution entry point reads this field.
@@ -108,6 +109,9 @@ export function normalizeImportedNativeTaskSource(value) {
         // Historical API tasks in native flows remain data, never declarations
         // to execute. Preserve disabled/unconfigured comparison shape too.
         data = normalizeNativeAssertionData(task.data, { enabled: false });
+      } else if (task.type === "wait") {
+        // Historical source is not a request to schedule a timer or coerce data.
+        data = normalizeNativeWaitData(task.data, { enabled: false });
       } else throw Error("未知任务来源类型");
       const metadata = {};
       for (const key of ["id", "name"])

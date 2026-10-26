@@ -1,3 +1,4 @@
+import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
 import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
@@ -226,7 +227,14 @@ try {
   context.setProp(context.global, "__fakerVariable", fakerFunction);
   fakerFunction.dispose();
 
+  if (workerData.nativeWaits?.length) {
+    const data = context.newString(JSON.stringify(workerData.nativeWaits));
+    context.setProp(context.global, "__nativeWaitDataJSON", data);
+    data.dispose();
+  }
   const setup = `
+    ${workerData.nativeWaits?.length ? "const __readNativeWaitCompletion=(()=>{const state=(" + nativeWaitInstallerSource + ")(globalThis.__nativeWaitDataJSON,__scheduleTimer);globalThis.__nativeWaitTask=state.run;return state.assertComplete;})();delete globalThis.__nativeWaitDataJSON;" : ""}
+
     const input = JSON.parse(__localapiInputJSON);
     delete globalThis.__localapiInputJSON;
     const pendingTasks=new Set();
@@ -762,6 +770,10 @@ try {
     nativeAssertionEvidence = JSON.parse(context.getString(result.value));
     result.value.dispose();
   }
+  if (workerData.nativeWaits?.length)
+    measuredBounded("native-wait-completion", "promiseStateMs", () =>
+      run("__readNativeWaitCompletion();"),
+    );
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";

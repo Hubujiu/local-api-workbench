@@ -1,3 +1,4 @@
+import { normalizeNativeWaitData } from "./native-wait-tasks.mjs";
 import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
@@ -20,8 +21,10 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
   const operations = [],
     responseExtractions = [],
     responseAssertions = [],
+    nativeWaits = [],
     code = [],
     prefix = "__db_" + randomBytes(16).toString("hex");
+  const waitPrefix = "__wait_" + randomBytes(16).toString("hex");
   const assertPrefix = "__assert_" + randomBytes(16).toString("hex");
   const pickPrefix = "__pick_" + randomBytes(16).toString("hex");
   let bytes = 0;
@@ -32,7 +35,9 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       typeof task !== "object" ||
       Array.isArray(task) ||
       ![1, 0, -1].includes(task.enabled) ||
-      !["customScript", "database", "pickVars", "assert"].includes(task.type)
+      !["customScript", "database", "pickVars", "assert", "wait"].includes(
+        task.type,
+      )
     )
       throw Error("原版任务类型或启停标识无效");
     if (task.type === "customScript") {
@@ -42,6 +47,16 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       )
         throw Error("任务脚本合计最多64KiB");
       if (task.enabled === 1) code.push("\n" + task.data + "\n");
+    } else if (task.type === "wait") {
+      const duration = normalizeNativeWaitData(task.data, {
+        enabled: task.enabled === 1,
+      });
+      if (task.enabled === 1) {
+        const index = nativeWaits.push(duration) - 1;
+        code.push(
+          `\n${duration > 0 ? "await " : ""}${waitPrefix}(${index});\n`,
+        );
+      }
     } else if (task.type === "assert") {
       const data = normalizeNativeAssertionData(task.data, {
         enabled: task.enabled === 1,
@@ -87,12 +102,16 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
     (responseAssertions.length
       ? `const ${assertPrefix}=globalThis.__nativeAssertionTask;delete globalThis.__nativeAssertionTask;\n`
       : "") +
+    (nativeWaits.length
+      ? `const ${waitPrefix}=globalThis.__nativeWaitTask;delete globalThis.__nativeWaitTask;\n`
+      : "") +
     code.join("");
   return runScript(source, input, {
     ...options,
     databaseOperations: operations,
     responseExtractions,
     responseAssertions,
+    nativeWaits,
   }).catch((error) => {
     // Only the host coordinator can mint this policy marker. VM exceptions are
     // reconstructed from allowlisted text/diagnostics and cannot forge Symbols.

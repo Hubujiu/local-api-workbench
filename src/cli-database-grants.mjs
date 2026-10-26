@@ -1,3 +1,7 @@
+import {
+  normalizeNativeWaitData,
+  compileNativeWaits,
+} from "./native-wait-tasks.mjs";
 import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import { normalizePickVarsData } from "./native-response-extraction.mjs";
 import { DatabaseSessions } from "./database-sessions.mjs";
@@ -87,11 +91,12 @@ export function prepareCLIDatabaseGrants(
     for (const phase of ["before", "after"]) {
       if (!Array.isArray(tasks[phase]) || tasks[phase].length > 16)
         throw Error("CLI 原版任务阶段最多16项");
+      const waits = [];
       for (const task of tasks[phase]) {
         if (
           !plain(task) ||
           ![1, 0, -1].includes(task.enabled) ||
-          !["customScript", "database", "pickVars", "assert"].includes(
+          !["customScript", "database", "pickVars", "assert", "wait"].includes(
             task.type,
           )
         )
@@ -107,6 +112,10 @@ export function prepareCLIDatabaseGrants(
           });
           if (phase === "before" && task.enabled === 1)
             throw Error("CLI原生断言仅支持后置响应阶段");
+        }
+        if (task.type === "wait") {
+          normalizeNativeWaitData(task.data, { enabled: task.enabled === 1 });
+          if (task.enabled === 1) waits.push(task.data);
         }
         if (task.type !== "database" || task.enabled !== 1) continue;
         if (
@@ -134,6 +143,7 @@ export function prepareCLIDatabaseGrants(
           inferredTypes.set(task.data.connectionId, engine);
         }
       }
+      compileNativeWaits(waits);
     }
   }
   if (

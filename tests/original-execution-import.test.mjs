@@ -581,9 +581,9 @@ test("native body inputs reject files, unknown form fields and non-text raw valu
   }
 });
 
-test("synthetic extraction and assertion API sources remain inert and uninterpolated through CLI restore", async (t) => {
-  // Existing directory/flow layout is a genuine fixture; the added extraction
-  // tasks are independently authored and do not claim original pickVars wire evidence.
+test("synthetic extraction assertion and wait API sources remain inert and uninterpolated through CLI restore", async (t) => {
+  // Existing directory/flow layout is a genuine fixture; the added tasks are
+  // independently authored, not original pickVars/assert/wait execution evidence.
   const root = await mkdtemp(path.join(os.tmpdir(), "native-pick-source-"));
   let calls = 0;
   const server = http.createServer((_req, res) => {
@@ -600,7 +600,22 @@ test("synthetic extraction and assertion API sources remain inert and uninterpol
   const document = await source();
   changeFile(document, flowPath, (flow) => {
     for (const step of flow.steps) {
-      step.api_snapshot.request.pre_tasks = [];
+      step.api_snapshot.request.pre_tasks = [
+        {
+          type: "wait",
+          id: "inert-pre-wait",
+          name: "Historical enabled pre wait",
+          enabled: 1,
+          data: 1000,
+        },
+        {
+          type: "wait",
+          id: "disabled-pre-wait",
+          name: "Literal disabled pre wait",
+          enabled: -1,
+          data: "{{WAIT_LITERAL}}",
+        },
+      ];
       step.api_snapshot.request.post_tasks = [
         {
           type: "pickVars",
@@ -648,6 +663,20 @@ test("synthetic extraction and assertion API sources remain inert and uninterpol
             },
           },
         },
+        {
+          type: "wait",
+          id: "inert-post-wait",
+          name: "Historical enabled post wait",
+          enabled: 1,
+          data: 1000,
+        },
+        {
+          type: "wait",
+          id: "disabled-post-wait",
+          name: "Literal disabled post wait",
+          enabled: 0,
+          data: "{{MISSING_WAIT_LITERAL}}",
+        },
       ];
       step.pre_script = "";
       step.post_script = "";
@@ -662,8 +691,29 @@ test("synthetic extraction and assertion API sources remain inert and uninterpol
   const plan = p.plans[0];
   const env = p.environments.find((item) => item.id === plan.environmentId);
   env.variables.token = "unchanged";
+  env.variables.WAIT_LITERAL = 7;
   for (const step of plan.steps) {
     assert.equal(step.request.nativeTasks, undefined);
+    assert.deepEqual(
+      step.request.importedNativeTaskSource.before.map((task) => [
+        task.type,
+        task.enabled,
+        task.data,
+      ]),
+      [
+        ["wait", 1, 1000],
+        ["wait", -1, "{{WAIT_LITERAL}}"],
+      ],
+    );
+    assert.deepEqual(
+      step.request.importedNativeTaskSource.after
+        .filter((task) => task.type === "wait")
+        .map((task) => [task.enabled, task.data]),
+      [
+        [1, 1000],
+        [0, "{{MISSING_WAIT_LITERAL}}"],
+      ],
+    );
     assert.equal(
       step.request.importedNativeTaskSource.after[0].type,
       "pickVars",
@@ -684,6 +734,7 @@ test("synthetic extraction and assertion API sources remain inert and uninterpol
     const run = JSON.parse(result.stdout);
     assert.equal(run.status, "passed");
     assert.equal(run.results.length, 2);
+    assert(run.results.every((step) => step.request.nativeTasks === undefined));
     assert.deepEqual(
       run.snapshot.steps.map((step) => step.request.importedNativeTaskSource),
       frozenSource,
