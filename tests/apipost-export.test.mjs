@@ -472,7 +472,12 @@ test("native task pipelines cannot be silently erased by native JSON export", ()
         {
           type: "database",
           enabled: 1,
-          data: { connectionId: "fixture", query: "SELECT 1", variables: [] },
+          data: {
+            connectionId: "fixture",
+            query: "SELECT 1",
+            variables: [],
+            isConsoleOutput: -1,
+          },
         },
       ],
       after: [],
