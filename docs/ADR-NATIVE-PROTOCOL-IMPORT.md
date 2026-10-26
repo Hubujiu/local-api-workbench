@@ -144,3 +144,38 @@ An actual regression test first showed both v2/v4 polling silently overwrote
 explicit Accept with _/_. The bounded polling adapter now supplies that default
 only when absent; real version-2/version-4 handshake and acknowledgment tests
 retain the caller's declared Accept without changing framing/encoding limits.
+
+## Native gRPC metadata declarations (intentional divergence)
+
+The original UI saved enabled text metadata rows for a fictional localhost Unary
+and Watch method. Two Unary calls and one server-stream call reached the service
+without those rows (only the library User-Agent arrived). This matches a static
+wrapper-shape mismatch suspicion, but does not establish every original build's
+behavior. Workbench does not replicate this observed omission or claim equivalent
+metadata wire output.
+
+Migrate only unique normalized application metadata names to optional
+requiredMetadata. Delete every original metadata row value in a detached source
+copy across all protos/services/methods, including disabled/blank rows, unconfigured
+methods and client/bidirectional streams that do not generate plans. The original
+input is unchanged. All values must be supplied explicitly for this invocation.
+No imported credential becomes authority and no source value is silently sent.
+
+The requirement survives frozen definitions, HTTP request construction, gRPC call
+validation and plan request construction. All enabled gRPC steps are preflighted
+before any plan transport. The existing runtime accepts bounded ASCII text or
+canonical Base64 for -bin; native -bin source interpretation is deliberately
+rejected because original encoding behavior is unverified. Duplicate native keys,
+templates, transport-controlled metadata, native TLS and external file references
+remain rejected. Old definitions without requirements retain their old shape.
+
+Independent real Unary/server-stream tests cover HTTP and official SDK permission
+denial, missing bindings with zero network, exact int64, source-value removal across
+all method branches, restored copies and process restart. Runtime binary parsing
+is verified separately and is not claimed as original binary-input compatibility.
+Response messages/status/source response examples may still echo sensitive data;
+this is not arbitrary-content redaction.
+
+requiredMetadata checks key presence, not nonempty values or successful server
+authentication. Empty text/binary values remain valid explicit metadata. Remote
+authentication status is still determined by the actual RPC result.

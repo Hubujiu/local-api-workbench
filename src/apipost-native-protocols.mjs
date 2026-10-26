@@ -1,3 +1,4 @@
+import { redactNativeGrpcMetadata } from "./apipost-grpc-metadata.mjs";
 import { nativeProtocolHandshake } from "./apipost-protocol-handshake.mjs";
 import { prepareExtendedProtocol } from "./apipost-extended-protocols.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
@@ -235,6 +236,10 @@ export function prepareNativeProtocols(source, resource) {
       fail("WebSocket方法");
     const sourceNotes = [];
     const sourceCopy = structuredClone(node);
+    if (node.target_type === "grpc" && redactNativeGrpcMetadata(sourceCopy))
+      sourceNotes.push(
+        "原版gRPC已启用metadata在观察样本中未上线路；仅迁移名称声明并删除所有源值，须显式运行时重绑定；不复现忽略metadata的行为",
+      );
     // Inactive provider editors can contain credentials; never retain them.
     if (sourceCopy.request?.auth)
       sourceCopy.request.auth = { type: sourceCopy.request.auth.type };
