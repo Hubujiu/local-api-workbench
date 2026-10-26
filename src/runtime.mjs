@@ -393,7 +393,11 @@ export class Store {
     }
   }
 }
-export async function executeRequest(input, signal, { cookieSession } = {}) {
+// Private retry state cannot be supplied through serialized request definitions.
+const digestEntityReplay = Symbol("digest-entity-replay");
+export async function executeRequest(input, signal, options = {}) {
+  const { cookieSession } = options;
+  const replay = options[digestEntityReplay];
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
@@ -435,7 +439,11 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     }
   }
   let body;
-  if (r.bodyType === "msgpack") {
+  if (replay) {
+    body = replay.body;
+    if (replay.contentType !== undefined)
+      headers["content-type"] = replay.contentType;
+  } else if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");
     body = Buffer.from(encode(JSON.parse(r.body || "{}"), { maxDepth: 64 }));
     headers["content-type"] ??= "application/msgpack";
@@ -514,10 +522,18 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     headers.connection = "keep-alive";
   }
   const start = performance.now();
-  const connection = await prepareConnection(u, r, headers, signal);
+  const deadline = replay?.deadline ?? start + r.timeout;
+  const connectionBudget = deadline - performance.now();
+  if (connectionBudget <= 0) throw Error("请求超时");
+  const connection = await prepareConnection(
+    u,
+    { ...r, timeout: Math.min(r.timeout, connectionBudget) },
+    headers,
+    signal,
+  );
   let authSocket;
   const requestOnce = async (headers, expectedSocket) => {
-    const remainingTimeout = r.timeout - (performance.now() - start);
+    const remainingTimeout = deadline - performance.now();
     if (remainingTimeout <= 0) {
       connection.cleanup();
       throw Error("请求超时");
@@ -676,7 +692,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     response.status === 401 &&
     /^Digest\s/i.test(response.headers["www-authenticate"] || "")
   ) {
-    const remaining = r.timeout - (performance.now() - start);
+    const remaining = deadline - performance.now();
     if (remaining <= 0) throw Error("Digest 认证超时");
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
@@ -698,7 +714,14 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         ],
       },
       signal,
-      { cookieSession },
+      {
+        cookieSession,
+        [digestEntityReplay]: {
+          body,
+          contentType: headers["content-type"],
+          deadline,
+        },
+      },
     );
     authenticated.authHandshake = {
       status: response.status,

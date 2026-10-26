@@ -104,12 +104,12 @@ export function prepareNativeMock(node, { projectId, headers, rewriteSchema }) {
       !Number.isInteger(status) ||
       status < 200 ||
       status > 599 ||
-      (expect.content_type ?? "json") !== "json" ||
+      !["json", "xml"].includes(expect.content_type ?? "json") ||
       (expect.mock !== undefined && expect.mock !== "") ||
       (example.raw_parameter !== undefined &&
         (!Array.isArray(example.raw_parameter) || example.raw_parameter.length))
     )
-      throw Error("原版Mock仅支持明确的JSON响应期望，无附加脚本");
+      throw Error("原版Mock仅支持JSON或原始XML响应期望，无附加脚本");
     const common = {
       status: 200,
       sourceStatus: status,
@@ -123,8 +123,26 @@ export function prepareNativeMock(node, { projectId, headers, rewriteSchema }) {
           typeof expect.schema.type !== "string"))
     )
       throw Error("原版Mock Schema需要明确根类型；不静默忽略根引用或未知格式");
-    if (typeof expect.schema?.type === "string")
-      return { ...common, schema: rewriteSchema(expect.schema) };
+    if (expect.content_type === "xml") {
+      if (expect.schema && Object.keys(expect.schema).length)
+        throw Error("原版XML Mock仅支持原始文本，不支持Schema生成");
+      if (typeof example.raw !== "string") throw Error("原版Mock响应正文缺失");
+      return { ...common, serialization: "raw-xml", body: example.raw };
+    }
+    if (typeof expect.schema?.type === "string") {
+      const scalar = [
+        "string",
+        "number",
+        "integer",
+        "boolean",
+        "null",
+      ].includes(expect.schema.type);
+      return {
+        ...common,
+        schema: rewriteSchema(expect.schema),
+        ...(scalar ? { serialization: "scalar-text" } : {}),
+      };
+    }
     if (typeof example.raw !== "string") throw Error("原版Mock响应正文缺失");
     return { ...common, body: example.raw };
   };

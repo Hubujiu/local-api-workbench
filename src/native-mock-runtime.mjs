@@ -1,4 +1,8 @@
-import { normalizeNativeMock, nativeRegex } from "./native-mock.mjs";
+import {
+  normalizeNativeMock,
+  nativeRegex,
+  nativeMockScalarText,
+} from "./native-mock.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import { sampleProjectSchema } from "./mock-fields.mjs";
 import { validateMockResponse } from "../public/response-example.js";
@@ -137,17 +141,27 @@ export async function nativeMockResponse(project, request, input) {
     candidates.find((candidate) =>
       candidate.indices.every((index) => results[index] === true),
     )?.rule.response || mock.fallback;
+  const headers = { ...selected.headers };
+  if (!Object.keys(headers).some((key) => key.toLowerCase() === "content-type"))
+    headers["content-type"] =
+      selected.serialization === "raw-xml"
+        ? "application/xml;charset=utf-8"
+        : selected.serialization === "scalar-text"
+          ? "text/plain"
+          : "application/json;charset=utf-8";
+  let body = selected.body;
+  if (selected.schema !== undefined) {
+    const value = sampleProjectSchema(project, selected.schema);
+    body =
+      selected.serialization === "scalar-text"
+        ? nativeMockScalarText(value, selected.schema.type)
+        : JSON.stringify(value);
+  }
   const response = {
     status: selected.status,
-    headers: {
-      "content-type": "application/json;charset=utf-8",
-      ...selected.headers,
-    },
+    headers,
     delayMs: selected.delayMs ?? 0,
-    body:
-      selected.schema === undefined
-        ? selected.body
-        : JSON.stringify(sampleProjectSchema(project, selected.schema)),
+    body,
   };
   return validateMockResponse(response);
 }
