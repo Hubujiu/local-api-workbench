@@ -1,3 +1,7 @@
+import {
+  resolveProtocolText,
+  validateProtocolTemplate,
+} from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
@@ -38,6 +42,7 @@ export class ProtocolSessions {
     });
   }
   finish(session, reason) {
+    delete session.templateContext;
     if (!session.finishedAt) {
       session.finishedAt = new Date().toISOString();
       session.closeReason = reason;
@@ -67,7 +72,10 @@ export class ProtocolSessions {
     });
     session.events = session.events.slice(-200);
   }
-  start(input) {
+  start(input, { templateContext } = {}) {
+    if (input.templateMode === "variables")
+      throw Error("协议模板会话须由项目入口解析");
+    validateProtocolTemplate(input);
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {
@@ -94,6 +102,7 @@ export class ProtocolSessions {
       bytes: 0,
       totalEvents: 0,
       createdAt: new Date().toISOString(),
+      ...(templateContext ? { templateContext } : {}),
     };
     this.sessions.set(session.id, session);
     session.deadline = setTimeout(
@@ -255,6 +264,15 @@ export class ProtocolSessions {
     const session = this.get(id);
     if (session.state !== "open" || session.type === "sse")
       throw Error("当前会话不可发送消息");
+    const context = session.templateContext;
+    message =
+      message !== undefined
+        ? message
+        : ((context ? context.defaultMessage : session.definition?.message) ??
+          "");
+    if (context) message = resolveProtocolText(message, context.variables);
+    else if (session.definition?.templateMode === "literal")
+      validateProtocolTemplate(session.definition, message);
     const payload = protocolPayload(message);
     this.event(
       session,

@@ -1,3 +1,4 @@
+import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
@@ -139,11 +140,15 @@ export function snapshotWireStep(step) {
       throw Error("SSE 计划不支持发送消息");
     protocol.maxEvents = step.protocol.maxEvents ?? 20;
   } else {
-    protocol.message = template(
+    const selectedMessage =
       step.protocol.message !== undefined
         ? step.protocol.message
-        : (savedMessage ?? ""),
-    );
+        : (savedMessage ?? "");
+    validateProtocolTemplate(definition, selectedMessage);
+    protocol.message =
+      definition.templateMode === undefined
+        ? template(selectedMessage)
+        : selectedMessage;
     if (step.protocol.maxEvents !== undefined)
       throw Error("非 SSE 计划不能设置事件限制");
     if (definition.type === "websocket")
@@ -252,6 +257,8 @@ export async function executeWireFlow(input, signal) {
     type = input.definition.type;
   try {
     signal?.throwIfAborted();
+    if (input.definition.templateMode === "variables")
+      throw Error("协议模板须由项目执行入口解析");
     const request = {
       ...protocolRequestOptions(input.definition),
       ...input,

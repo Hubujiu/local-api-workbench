@@ -340,7 +340,11 @@ export async function createApp({
           return json(res, 403, { error: "Session token required" });
         if (u.pathname === "/api/protocol-sessions" && req.method === "POST") {
           const input = await body(req);
-          if (input.projectId !== undefined)
+          if (
+            input.projectId !== undefined ||
+            input.templateMode !== undefined ||
+            input.environmentId !== undefined
+          )
             throw Error("项目会话请使用项目专属入口");
           return json(res, 200, protocolSessions.start(input));
         }
@@ -876,10 +880,14 @@ export async function createApp({
               )
                 throw Error("交互协议会话使用固定生命周期，不接受单次捕获选项");
               const prepared = prepareWireExecution(p, input),
-                result = protocolSessions.start(prepared.request),
+                result = protocolSessions.start(prepared.request, {
+                  templateContext: prepared.templateContext,
+                }),
                 session = protocolSessions.get(result.id);
               session.projectId = p.id;
               session.definition = prepared.definition;
+              if (prepared.templateProvenance)
+                session.templateProvenance = prepared.templateProvenance;
               return json(res, 200, {
                 ...protocolSessions.snapshot(session.id),
                 projectId: p.id,
@@ -901,12 +909,8 @@ export async function createApp({
             if (operation === "send") {
               if (Object.keys(input).some((key) => key !== "message"))
                 throw Error("协议会话发送字段无效");
-              const message =
-                input.message !== undefined
-                  ? input.message
-                  : (session.definition.message ?? "");
               return json(res, 200, {
-                ...protocolSessions.send(sessionId, message),
+                ...protocolSessions.send(sessionId, input.message),
                 projectId: p.id,
               });
             }

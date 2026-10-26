@@ -1,3 +1,4 @@
+import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { randomUUID } from "node:crypto";
@@ -48,6 +49,7 @@ export function normalizeProtocol(input) {
     protocolPayload(input.message);
   }
   const requestOptions = protocolRequestOptions(input);
+  validateProtocolTemplate(input);
   if (input.duration !== undefined) {
     if (
       !Number.isInteger(input.duration) ||
@@ -59,6 +61,9 @@ export function normalizeProtocol(input) {
   }
   return {
     ...requestOptions,
+    ...(input.templateMode !== undefined
+      ? { templateMode: input.templateMode }
+      : {}),
     ...(input.receiveEncoding !== undefined
       ? { receiveEncoding: input.receiveEncoding }
       : {}),
