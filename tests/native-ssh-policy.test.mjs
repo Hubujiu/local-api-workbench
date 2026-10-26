@@ -76,6 +76,8 @@ test("missing SSH and incompatible source policies reject without treating the m
       sessions.register("p", {
         name: "bad",
         type: "postgres",
+        user: "fixture",
+        database: "fixture",
         ssh: { host: "127.0.0.1", username: "fixture", password: "fixture" },
       }),
     /指纹/,
@@ -93,6 +95,8 @@ test("current catalog changes reject old direct grants by imported ID and by ses
   });
   const grant = sessions.register("p", {
     type: "postgres",
+    user: "fixture",
+    database: "fixture",
     name: "old direct",
     host: "127.0.0.1",
     port: 1,
@@ -131,6 +135,8 @@ test("revocation while current source is loading cannot start a database query",
   });
   const grant = sessions.register("p", {
     type: "postgres",
+    user: "fixture",
+    database: "fixture",
     name: "revoked",
     host: "127.0.0.1",
     port: 1,
@@ -167,6 +173,8 @@ test("HTTP uses the current source requirement even when a task references the o
   const config = {
     name: "old grant",
     type: "postgres",
+    user: "fixture",
+    database: "fixture",
     host: "127.0.0.1",
     port: 1,
     bindingId: p.settings.apipostDatabases[0].id,
