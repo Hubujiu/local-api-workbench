@@ -415,7 +415,8 @@ test("gRPC project APIs persist definitions, real results, cancellation and fail
     assert.equal(value.status.code, 0);
     assert.equal(value.recordSaved, false);
     assert.equal(value.recordId, null);
-    assert.match(value.persistenceError, /fixture disk failure/);
+    assert.equal(value.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+    assert.doesNotMatch(value.persistenceError, /fixture disk failure/);
     assert.equal(
       remote.seen.length,
       beforeRequests + 1,

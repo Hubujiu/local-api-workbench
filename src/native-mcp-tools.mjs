@@ -363,6 +363,7 @@ export function nativeRunResult(projectId, run, scope = "flow") {
         url: r.request?.url,
         status_code: r.response?.status,
         error: r.error || "",
+        ...(r.scopeCommit ? { scope_commit: r.scopeCommit } : {}),
       }));
   return {
     run_id: run.id,
@@ -374,8 +375,17 @@ export function nativeRunResult(projectId, run, scope = "flow") {
     passed: results.filter((r) => r.status === "passed").length,
     failed,
     record_saved: run.recordSaved,
+    ...(run.recordId !== undefined ? { record_id: run.recordId } : {}),
+    ...(run.attemptedRecordId !== undefined
+      ? { attempted_record_id: run.attemptedRecordId }
+      : {}),
     ...(run.recordSaved === false
-      ? { persistence_error: run.persistenceError }
+      ? {
+          persistence_error: run.persistenceError,
+          ...(run.persistenceOutcome
+            ? { persistence_outcome: run.persistenceOutcome }
+            : {}),
+        }
       : {}),
   };
 }

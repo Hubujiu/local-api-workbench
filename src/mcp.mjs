@@ -21,6 +21,8 @@ import {
   inputAuth,
 } from "./native-mcp-plan.mjs";
 import { lockMCPPlan } from "./mcp-plan-locks.mjs";
+import { appendExecutionRecord } from "./execution-evidence.mjs";
+
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { realpathSync } from "node:fs";
 import { executeWireFlow } from "./wire-plan.mjs";
@@ -853,22 +855,23 @@ export function createMCP({
                   variables: output.variables,
                 });
               output.environmentId = environmentId;
-              try {
-                await store.append(p.id, "history", {
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  ...output.results[0],
                   id: output.id,
+                  runId: output.id,
                   createdAt: output.createdAt,
                   name: request.name,
-                  ...output.results[0],
                   status: output.status,
                   source: "mcp",
                   durationMs: output.durationMs,
                   environmentId: output.environmentId,
-                });
-                output.recordSaved = true;
-              } catch {
-                output.recordSaved = false;
-                output.persistenceError = "执行记录保存失败；不会重新执行请求";
-              }
+                },
+              );
+              output = { ...output, ...receipt };
               break;
             }
             case "localapi_execute_flow":
