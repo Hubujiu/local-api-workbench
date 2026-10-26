@@ -503,6 +503,12 @@ test("native task pipelines cannot be silently erased by native JSON export", ()
     const before = structuredClone(p);
     assert.throws(() => exportApipost(p), /nativeTasks/);
     assert.deepEqual(p, before);
+    const inert = structuredClone(p);
+    inert.requests[0].importedNativeTaskSource = inert.requests[0].nativeTasks;
+    delete inert.requests[0].nativeTasks;
+    const inertBefore = structuredClone(inert);
+    assert.throws(() => exportApipost(inert), /importedNativeTaskSource/);
+    assert.deepEqual(inert, inertBefore);
   }
 });
 test("HTTP native export refuses a stored native pipeline without changing the project", async (t) => {
