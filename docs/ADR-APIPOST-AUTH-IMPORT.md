@@ -18,8 +18,9 @@ established; passing our contracts does not establish all original signing flags
 - Auth input is at most 64KiB. Only recognized active-section fields are accepted;
   values retain string types and templates rather than being coerced from objects.
 - kv maps header/query only. Invalid locations and header names reject.
-- awsv4 maps explicit access/secret/session keys, region and service. Query
-  presigning is rejected rather than silently turned into header signing.
+- awsv4 maps explicit access/secret/session keys, region and service. Explicit
+  S3 Query presigning now follows the bounded runtime dependency below; unsupported
+  services are rejected rather than silently turned into Header signing.
 - hawk maps authId/authKey, app/delegation, extraData, nonce and timestamp. The
   payload-hash choice is explicit. Only sha1/sha256 are supported; the unknown
   native user extension is rejected when nonempty.
@@ -42,7 +43,7 @@ Malformed objects, unsupported flags, oversized data and unknown active fields
 reject before destination mutation. Existing provider suites retain independently
 published AWS/Hawk/EdgeGrid signature vectors and actual HTTP verification.
 
-This is an isolated feature branch based on develop. Exact-head CI must be checked
+This feature now stacks on the separate Query runtime branch. Exact-head CI must be checked
 before acceptance; no main/develop merge or deployment is included.
 
 ## Original-runtime correction: native Query API-key encoding
@@ -95,3 +96,23 @@ eight real HTTP requests after the EdgeGrid edit. Frozen plan authentication did
 not inherit the newly changed live API authentication; source bytes were unchanged.
 Raw source archives remain local. These observations do not cover all optional
 signing settings, services or resource kinds.
+
+## Bounded S3 Query runtime dependency
+
+This native import feature now stacks on the independent AWS Query runtime PR22
+rather than duplicating its implementation. Native awsv4 explicitly retains the
+boolean addAuthDataToQuery flag; true requires a literal s3 service. Unsupported
+services/flags reject instead of changing to Header authentication. The runtime
+further requires GET/HEAD and an empty serialized body, canonical paths and a
+single bounded expiry parameter; it does not add native plan-step auth overrides.
+
+The independently authored modern-source fixture uses project-level inherited
+S3 Query authentication. Its actual HTTP frozen-plan and official MCP SDK API
+requests are verified by the same independent node:crypto loopback verifier as
+the runtime feature. Concurrent projects keep different identities; live API
+auth changes cannot replace frozen auth, full HTTP backup/restore and app restart
+preserve the definitions, and invalid flags/services leave the destination intact.
+No source URL is populated with generated signature parameters. This is not a
+new original GUI run or real AWS account verification. Definitions/history may
+contain explicitly configured secrets and wire session tokens; follow the
+sensitive-storage boundary in ADR-AWS-QUERY-PRESIGNING.md.

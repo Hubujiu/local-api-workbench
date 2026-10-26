@@ -25,4 +25,10 @@ export function validateAuth(auth = {}) {
     throw Error("不支持的API Key查询编码配置");
   if (auth.type !== undefined && !authTypes.includes(auth.type))
     throw Error("不支持的认证类型: " + String(auth.type));
+  if (
+    auth.type === "aws" &&
+    auth.addAuthDataToQuery !== undefined &&
+    typeof auth.addAuthDataToQuery !== "boolean"
+  )
+    throw Error("AWS addAuthDataToQuery必须为布尔值");
 }
