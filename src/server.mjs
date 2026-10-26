@@ -241,13 +241,15 @@ export async function createApp({
           incomingToken !== mcpToken
         )
           return json(res, 403, { error: "MCP authorization changed" });
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
         let sessionId = sessionHeader;
         if (message.method === "initialize" && message.id !== undefined) {
           if (sessionId !== undefined)
             return json(res, 400, { error: "Session already initialized" });
-          sessionId = mcpHTTPSessions.create();
+          sessionId = mcpHTTPSessions.create(message.id);
           res.setHeader("Mcp-Session-Id", sessionId);
         }
         if (
@@ -314,17 +316,30 @@ export async function createApp({
         }
         if (message.method === "tools/call") {
           const activity = mcpActivities.get(activityId);
-          let outcome;
+          let output;
           try {
-            outcome = JSON.parse(result?.result?.content?.[0]?.text)?.status;
+            output = JSON.parse(result?.result?.content?.[0]?.text);
           } catch {}
+          const outcome = output?.status;
           Object.assign(activity, {
             status:
-              outcome === "cancelled"
-                ? "cancelled"
-                : result?.result?.isError || outcome === "failed"
-                  ? "failed"
-                  : "completed",
+              output?.recordSaved === false
+                ? "failed"
+                : outcome === "cancelled"
+                  ? "cancelled"
+                  : result?.result?.isError || outcome === "failed"
+                    ? "failed"
+                    : "completed",
+            ...(typeof output?.recordSaved === "boolean"
+              ? { recordSaved: output.recordSaved }
+              : {}),
+            ...(output?.recordSaved === false
+              ? {
+                  executionStatus: outcome,
+                  persistenceError:
+                    "执行记录保存失败，请检查项目存储；不会重新执行请求",
+                }
+              : {}),
             finishedAt: new Date().toISOString(),
           });
           mcpLastActivity = activity;

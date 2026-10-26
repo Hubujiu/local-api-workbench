@@ -27,7 +27,9 @@ export class MCPHTTPSessions {
       if (!session.inflight && this.now() - session.lastUsed > this.idleMs)
         this.#sessions.delete(id);
   }
-  create() {
+  create(requestId) {
+    // Validate initialization before allocating a bounded session slot.
+    if (requestId !== undefined) requestKey(requestId);
     this.#prune();
     if (this.#sessions.size >= this.maxSessions)
       throw Error("MCP session limit reached");

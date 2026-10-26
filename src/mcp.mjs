@@ -638,15 +638,21 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              await store.append(p.id, "history", {
-                id: output.id,
-                createdAt: output.createdAt,
-                name: request.name,
-                ...output.results[0],
-                status: output.status,
-                source: "mcp",
-                durationMs: output.durationMs,
-              });
+              try {
+                await store.append(p.id, "history", {
+                  id: output.id,
+                  createdAt: output.createdAt,
+                  name: request.name,
+                  ...output.results[0],
+                  status: output.status,
+                  source: "mcp",
+                  durationMs: output.durationMs,
+                });
+                output.recordSaved = true;
+              } catch (error) {
+                output.recordSaved = false;
+                output.persistenceError = "执行记录保存失败；不会重新执行请求";
+              }
               break;
             }
             case "localapi_execute_flow":

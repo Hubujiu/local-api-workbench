@@ -123,6 +123,10 @@ test(
       second = await connect();
     assert(first.transport.sessionId && second.transport.sessionId);
     assert.notEqual(first.transport.sessionId, second.transport.sessionId);
+    const initialSessionIds = [
+      first.transport.sessionId,
+      second.transport.sessionId,
+    ];
     const abort = new AbortController();
     const one = first.client.callTool(
       {
@@ -199,8 +203,169 @@ test(
     assert.equal(stale.status, 404);
     // SDK clears its session header after DELETE; legacy stateless reads remain supported.
     await second.client.ping();
+    const cancelCall = async (name, args) => {
+      const previous = seen.filter((url) => url === "/slow-a").length;
+      const controller = new AbortController();
+      const pending = first.client.callTool(
+        { name, arguments: args },
+        undefined,
+        { signal: controller.signal },
+      );
+      const rejection = assert.rejects(pending, /abort|cancel/i);
+      await waitFor(
+        () => seen.filter((url) => url === "/slow-a").length > previous,
+      );
+      controller.abort();
+      await rejection;
+    };
+    await cancelCall("localapi_execute_api", {
+      projectId: a.id,
+      apiId: "slow",
+    });
+    await waitFor(async () =>
+      (await new Store(root).get(a.id)).history.some(
+        (record) => record.status === "cancelled",
+      ),
+    );
+
+    const append = app.store.append.bind(app.store);
+    app.store.append = async (projectId, group, record) => {
+      if (projectId === a.id && group === "runs")
+        throw Error("/private-storage-path/fixture-secret");
+      return append(projectId, group, record);
+    };
+    try {
+      await cancelCall("localapi_execute_flow", {
+        projectId: a.id,
+        planId: a.plans[0].id,
+      });
+      await waitFor(async () => {
+        const state = await fetch(app.url + "/api/mcp/config", {
+          headers,
+        }).then((r) => r.json());
+        return state.lastActivity?.recordSaved === false;
+      });
+      const state = await fetch(app.url + "/api/mcp/config", { headers }).then(
+        (r) => r.json(),
+      );
+      assert.equal(state.lastActivity.status, "failed");
+      assert.equal(state.lastActivity.executionStatus, "cancelled");
+      assert.match(state.lastActivity.persistenceError, /保存失败/);
+      assert(!JSON.stringify(state.lastActivity).includes("fixture-secret"));
+    } finally {
+      app.store.append = append;
+    }
+    const previous = seen.filter((url) => url === "/slow-a").length;
+    const deletionPending = first.client.callTool({
+      name: "localapi_execute_flow",
+      arguments: { projectId: a.id, planId: a.plans[0].id },
+    });
+    await waitFor(
+      () => seen.filter((url) => url === "/slow-a").length > previous,
+    );
+    await first.transport.terminateSession();
+    const deletionResult = JSON.parse((await deletionPending).content[0].text);
+    assert.equal(deletionResult.status, "cancelled");
+    assert.equal(deletionResult.recordSaved, true);
+
     const disk = await new Store(root).get(a.id);
     assert.equal(disk.runs[0].source, "mcp");
-    assert(!JSON.stringify(disk).includes(first.transport.sessionId));
+    for (const sessionId of initialSessionIds)
+      assert(!JSON.stringify(disk).includes(sessionId));
+
+    const capacityProjects = [];
+    for (let i = 0; i < 10; i++) {
+      const project = await app.store.create("capacity-" + i);
+      project.requests = [
+        {
+          id: "slow",
+          name: "capacity",
+          method: "GET",
+          url: base + "/slow-cap-" + i,
+          timeout: 10000,
+        },
+      ];
+      await app.store.save(project);
+      capacityProjects.push(project);
+    }
+    const configure = async (execute) => {
+      const response = await fetch(app.url + "/api/mcp/config", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          enabled: true,
+          projects: [a.id, b.id, ...capacityProjects.map((p) => p.id)],
+          write: execute,
+          execute,
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).token, config.token);
+    };
+    await configure(true);
+    const capacity = await connect();
+    const controllers = capacityProjects.map(() => new AbortController());
+    const rejections = capacityProjects.map((project, i) =>
+      assert.rejects(
+        capacity.client.callTool(
+          {
+            name: "localapi_execute_api",
+            arguments: { projectId: project.id, apiId: "slow" },
+          },
+          undefined,
+          { signal: controllers[i].signal },
+        ),
+        /abort|cancel/i,
+      ),
+    );
+    await waitFor(
+      () => seen.filter((url) => url.startsWith("/slow-cap-")).length === 10,
+    );
+    await assert.rejects(
+      capacity.client.callTool({ name: "localapi_list_projects" }),
+      /429|并发/,
+    );
+    controllers[0].abort();
+    await rejections[0];
+    await waitFor(async () =>
+      (await app.store.get(capacityProjects[0].id)).history.some(
+        (row) => row.status === "cancelled",
+      ),
+    );
+    controllers.slice(1).forEach((controller) => controller.abort());
+    await Promise.all(rejections);
+    await waitFor(async () => {
+      const state = await fetch(app.url + "/api/mcp/config", { headers }).then(
+        (r) => r.json(),
+      );
+      return !state.activities.some(
+        (activity) => activity.status === "running",
+      );
+    });
+    // The same session takes the next policy, while in-flight calls lose the old epoch.
+    const beforePolicy = seen.filter((url) => url === "/slow-a").length;
+    const previousRuns = (await app.store.get(a.id)).runs.length;
+    const policyPending = capacity.client.callTool({
+      name: "localapi_execute_flow",
+      arguments: { projectId: a.id, planId: a.plans[0].id },
+    });
+    const policyRejected = assert.rejects(
+      policyPending,
+      /authorization changed/i,
+    );
+    await waitFor(
+      () => seen.filter((url) => url === "/slow-a").length > beforePolicy,
+    );
+    await configure(false);
+    await policyRejected;
+    await waitFor(
+      async () => (await app.store.get(a.id)).runs.length > previousRuns,
+    );
+    assert.equal((await app.store.get(a.id)).runs[0].status, "cancelled");
+    assert(
+      !(await capacity.client.listTools()).tools.some(
+        (tool) => tool.name === "localapi_execute_api",
+      ),
+    );
   },
 );

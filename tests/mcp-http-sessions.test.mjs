@@ -71,3 +71,10 @@ test("MCP request IDs are bounded and invalid IDs consume no execution lease", (
   value.finish();
   assert.throws(() => registry.begin(id, "中".repeat(85), true), /reused/);
 });
+
+test("invalid initialize IDs cannot exhaust session slots", () => {
+  const registry = new MCPHTTPSessions({ maxSessions: 1 });
+  for (const invalid of [null, {}, "x".repeat(257), 1.5])
+    assert.throws(() => registry.create(invalid), /request ID/);
+  assert(registry.create(0));
+});
