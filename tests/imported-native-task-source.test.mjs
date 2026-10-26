@@ -251,7 +251,7 @@ test("pickVars provenance remains closed inert data and cannot introduce hidden 
       s.after[0].data.password = "not retained";
     },
     (s) => {
-      s.after[0].data.source = "responseXml";
+      s.after[0].data.source = "unsupportedResponseSource";
     },
     (s) => {
       s.after[0].data.variables[0].type = "unknown";
@@ -316,7 +316,7 @@ test("assert provenance preserves disabled defaults without compiling templates 
       s.after[0].data.expression.secret = "not retained";
     },
     (s) => {
-      s.after[0].data.type = "responseHeader";
+      s.after[0].data.type = "unsupportedResponseSource";
     },
     (s) => {
       Object.defineProperty(s.after[0].data.expression, "path", {
@@ -509,6 +509,17 @@ test("Header provenance preserves historical literal templates without compiling
     version: 1,
     before: [],
     after: [
+      {
+        type: "assert",
+        enabled: 1,
+        data: {
+          type: "responseHeader",
+          expression: {
+            path: "{{NOT_EXECUTED}}",
+            compareValue: "{{ALSO_NOT_EXECUTED}}",
+          },
+        },
+      },
       {
         type: "pickVars",
         enabled: 1,
