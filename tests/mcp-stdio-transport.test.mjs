@@ -174,3 +174,97 @@ test("stdio output frame and aggregate queue limits are separate and bounded", a
   assert.equal(writer.bytes, 0);
   writer.dispose();
 });
+
+test("stdio activity finalization failure emits only one error response", async () => {
+  const input = new PassThrough(),
+    output = new PassThrough();
+  let text = "";
+  output.on("data", (chunk) => (text += chunk));
+  const serving = serveMCPStdio({
+    input,
+    output,
+    dispatch: async (message) => ({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: {
+        content: [
+          { type: "text", text: '{"status":"passed","recordSaved":true}' },
+        ],
+      },
+    }),
+    activityFactory: () => ({
+      start: async () => {},
+      finish: async () => {
+        throw Error("private journal path");
+      },
+    }),
+  });
+  input.write(frame(request(1)));
+  await delay(20);
+  input.end();
+  await serving;
+  const messages = text
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.equal(messages.length, 1);
+  assert(messages[0].error);
+  assert(!text.includes("private journal path"));
+});
+
+test("stdio input close without end aborts and settles, including already destroyed inputs", async () => {
+  for (const beforeStart of [false, true]) {
+    const input = new PassThrough(),
+      output = new PassThrough();
+    output.resume();
+    if (beforeStart) input.destroy();
+    const serving = serveMCPStdio({
+      input,
+      output,
+      dispatch: async (message) => cancelled(message.id),
+    });
+    const rejected = assert.rejects(serving, /stdin closed/);
+    if (!beforeStart) input.destroy();
+    await rejected;
+  }
+});
+
+test("queued stdio replies recheck cancellation before writing a frame", async () => {
+  const input = new PassThrough();
+  let release,
+    text = "";
+  const output = new Writable({
+    write(chunk, _encoding, callback) {
+      text += chunk;
+      if (!release) release = callback;
+      else callback();
+    },
+  });
+  const serving = serveMCPStdio({
+    input,
+    output,
+    dispatch: async (message) => ({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: {
+        content: [
+          { type: "text", text: '{"status":"passed","recordSaved":true}' },
+        ],
+      },
+    }),
+  });
+  input.write(frame(request(1)) + frame(request(2)));
+  await delay(20);
+  input.write(frame(cancel(2)));
+  release();
+  await delay(10);
+  input.end();
+  await serving;
+  assert.deepEqual(
+    text
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line).id),
+    [1],
+  );
+});

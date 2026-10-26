@@ -10,6 +10,15 @@ import path from "node:path";
 import { renameProgress } from "./rename-progress.mjs";
 import { randomUUID } from "node:crypto";
 const folder = (root) => path.join(root, ".mcp-activities");
+const validMetadata = (value, limit = 200) =>
+  typeof value === "string" &&
+  value.isWellFormed() &&
+  Buffer.byteLength(value) <= limit &&
+  !/[\x00-\x1f\x7f]/.test(value);
+const metadata = (value, limit) => {
+  if (!validMetadata(value, limit)) throw Error("MCP活动元数据无效或过长");
+  return value;
+};
 const live = (pid) => {
   try {
     process.kill(pid, 0);
@@ -81,9 +90,9 @@ export class MCPActivity {
       id: randomUUID(),
       source: "stdio",
       pid: process.pid,
-      tool: String(info.tool),
-      projectId: String(info.projectId),
-      ...(typeof info.planId === "string" ? { planId: info.planId } : {}),
+      tool: metadata(info.tool, 128),
+      projectId: metadata(info.projectId),
+      ...(info.planId !== undefined ? { planId: metadata(info.planId) } : {}),
       status: "running",
       startedAt: new Date().toISOString(),
       completed: 0,
@@ -105,6 +114,7 @@ export class MCPActivity {
   flush() {
     this.record.updatedAt = new Date().toISOString();
     const content = JSON.stringify(this.record);
+    if (Buffer.byteLength(content) > 4096) throw Error("MCP活动记录超过4KiB");
     this.pending = this.pending
       .catch(() => {})
       .then(async () => {
@@ -124,8 +134,15 @@ export class MCPActivity {
     for (const key of ["completed", "total"])
       if (Number.isInteger(progress[key]) && progress[key] >= 0)
         this.record[key] = progress[key];
-    if (typeof progress.stepId === "string")
-      this.record.stepId = progress.stepId;
+    if (typeof progress.stepId === "string") {
+      if (validMetadata(progress.stepId)) {
+        this.record.stepId = progress.stepId;
+        delete this.record.stepIdOmitted;
+      } else {
+        delete this.record.stepId;
+        this.record.stepIdOmitted = true;
+      }
+    }
     const status = progress.stepStatus || progress.status;
     if (["passed", "failed", "cancelled"].includes(status))
       this.record.stepStatus = status;

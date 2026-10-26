@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, rename, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ const waitFor = async (predicate) => {
   }
   throw Error("stdio lifecycle observation timed out");
 };
-async function fixture(t) {
+async function fixture(t, count = 2) {
   const root = await mkdtemp(path.join(tmpdir(), "mcp-stdio-cancel-"));
   const held = new Map(),
     seen = [],
@@ -43,7 +43,9 @@ async function fixture(t) {
   const store = new Store(root),
     projects = [];
   const base = "http://127.0.0.1:" + server.address().port;
-  for (const suffix of ["a", "b"]) {
+  for (const suffix of Array.from({ length: count }, (_, i) =>
+    String.fromCharCode(97 + i),
+  )) {
     const p = await store.create(suffix);
     p.requests = [
       {
@@ -96,6 +98,8 @@ test(
     } = await fixture(t);
     const denied = await store.create("denied");
     const client = new Client({ name: "stdio-cancel", version: "1" });
+    const protocolErrors = [];
+    client.onerror = (error) => protocolErrors.push(error.message);
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [
@@ -185,6 +189,10 @@ test(
       true,
     );
     await client.ping();
+    assert(
+      !protocolErrors.some((message) => /unknown.*id/i.test(message)),
+      protocolErrors.join("\n"),
+    );
   },
 );
 
@@ -261,6 +269,174 @@ test(
       (await readMCPActivities(root)).some(
         (row) => row.projectId === p.id && row.status === "cancelled",
       ),
+    );
+  },
+);
+
+test(
+  "stdio cancellation remains available with ten occupied tool slots and all runs retain evidence",
+  { timeout: 20000 },
+  async (t) => {
+    const { root, store, projects, held, seen } = await fixture(t, 10);
+    const client = new Client({ name: "stdio-full-slots", version: "1" });
+    t.after(() => client.close().catch(() => {}));
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [
+          main,
+          ...projects.flatMap((p) => ["--project", p.id]),
+          "--write",
+          "--execute",
+        ],
+        env: { LOCAL_API_DATA: root },
+        stderr: "pipe",
+      }),
+    );
+    const controllers = projects.map(() => new AbortController());
+    const rejections = projects.map((p, i) =>
+      assert.rejects(
+        client.callTool(
+          {
+            name: "localapi_execute_flow",
+            arguments: { projectId: p.id, planId: p.plans[0].id },
+          },
+          undefined,
+          { signal: controllers[i].signal },
+        ),
+        /abort|cancel/i,
+      ),
+    );
+    await waitFor(() => held.size === 10);
+    await assert.rejects(
+      client.callTool({ name: "localapi_list_projects" }),
+      /concurrent tool limit/i,
+    );
+    controllers[0].abort();
+    await rejections[0];
+    await waitFor(async () =>
+      (await store.get(projects[0].id)).runs.some(
+        (run) => run.status === "cancelled",
+      ),
+    );
+    controllers.slice(1).forEach((controller) => controller.abort());
+    await Promise.all(rejections);
+    await waitFor(
+      async () =>
+        (await readMCPActivities(root)).filter(
+          (row) => row.status === "cancelled",
+        ).length === 10,
+    );
+    for (const p of projects)
+      assert.equal((await store.get(p.id)).runs[0].status, "cancelled");
+    assert(!seen.some((url) => url.startsWith("/later")));
+    await client.ping();
+    assert.equal(
+      decode(await client.callTool({ name: "localapi_list_projects" })).length,
+      10,
+    );
+  },
+);
+
+test(
+  "stdio cancelled execution exposes real disk save failure without replay and recovery retains its result",
+  { timeout: 18000 },
+  async (t) => {
+    const {
+      root,
+      store,
+      projects: [p],
+      held,
+      seen,
+    } = await fixture(t);
+    const client = new Client({ name: "stdio-save-failure", version: "1" });
+    t.after(() => client.close().catch(() => {}));
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [main, "--project", p.id, "--write", "--execute"],
+        env: { LOCAL_API_DATA: root },
+        stderr: "pipe",
+      }),
+    );
+    const controller = new AbortController();
+    const rejected = assert.rejects(
+      client.callTool(
+        {
+          name: "localapi_execute_flow",
+          arguments: { projectId: p.id, planId: p.plans[0].id },
+        },
+        undefined,
+        { signal: controller.signal },
+      ),
+      /abort|cancel/i,
+    );
+    await waitFor(() => held.size === 1);
+    const directory = store.directory(p.id),
+      history = path.join(directory, "history");
+    await rename(history, path.join(directory, "history-original"));
+    // Reads see ENOENT and retain defaults; atomic application cannot mkdir a
+    // dangling directory link, so failure is after journal publication.
+    await symlink(
+      path.join(directory, "missing-history-target"),
+      history,
+      "junction",
+    );
+    controller.abort();
+    await rejected;
+    await waitFor(async () =>
+      (await readMCPActivities(root)).some(
+        (row) => row.projectId === p.id && row.recordSaved === false,
+      ),
+    );
+    const activity = (await readMCPActivities(root)).find(
+      (row) => row.projectId === p.id && row.recordSaved === false,
+    );
+    assert.equal(activity.status, "failed");
+    assert.equal(activity.executionStatus, "cancelled");
+    assert.match(activity.persistenceError, /保存失败/);
+    assert(!JSON.stringify(activity).includes(root));
+    const journal = JSON.parse(
+      await readFile(path.join(directory, ".transaction.json"), "utf8"),
+    );
+    assert.equal(journal.runs[0].status, "cancelled");
+    await rm(history);
+    await rename(path.join(directory, "history-original"), history);
+    const recovered = await new Store(root).get(p.id);
+    assert.equal(recovered.runs[0].status, "cancelled");
+    assert.equal(seen.filter((url) => url === "/slow-a").length, 1);
+    assert(!seen.includes("/later-a"));
+    await client.ping();
+  },
+);
+
+test(
+  "stdio entrypoint starts through a symlinked directory",
+  { timeout: 12000 },
+  async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "mcp-stdio-entry-"));
+    const alias = path.join(root, "linked-app");
+    await symlink(path.resolve(import.meta.dirname, ".."), alias, "junction");
+    const data = path.join(root, "data"),
+      store = new Store(data);
+    const p = await store.create("linked entry");
+    const client = new Client({ name: "linked-stdio", version: "1" });
+    t.after(async () => {
+      await client.close().catch(() => {});
+      await rm(root, { recursive: true, force: true });
+    });
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [path.join(alias, "src", "mcp.mjs"), "--project", p.id],
+        env: { LOCAL_API_DATA: data },
+        stderr: "pipe",
+      }),
+    );
+    await client.ping();
+    assert.equal(
+      decode(await client.callTool({ name: "localapi_list_projects" }))[0].id,
+      p.id,
     );
   },
 );

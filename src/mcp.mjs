@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -710,7 +711,18 @@ export function createMCP({
     }
   };
 }
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+const isStdioEntrypoint = () => {
+  if (!process.argv[1]) return false;
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(import.meta.url))
+    );
+  } catch {
+    return false;
+  }
+};
+if (isStdioEntrypoint()) {
   const argv = process.argv.slice(2),
     projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
     store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));

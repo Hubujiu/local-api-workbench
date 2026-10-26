@@ -44,29 +44,45 @@ export class BoundedMCPWriter {
     output.on("error", this.onError);
     output.on("close", this.onClose);
   }
-  send(message) {
-    if (this.failure) return Promise.reject(this.failure);
+  prepare(message) {
+    if (this.failure) throw this.failure;
     const text = serializeMessage(message),
       bytes = Buffer.byteLength(text);
     if (bytes > this.maxFrameBytes)
-      return Promise.reject(
-        Error(
-          "MCP response exceeds frame limit; inspect saved history, do not replay",
-        ),
+      throw Error(
+        "MCP response exceeds frame limit; inspect saved history, do not replay",
       );
+    return { text, bytes };
+  }
+  send(message, options) {
+    try {
+      return this.enqueue(this.prepare(message), options);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  enqueue({ text, bytes }, { shouldSend = () => true } = {}) {
+    if (this.failure) return Promise.reject(this.failure);
     if (bytes + this.bytes > this.maxQueuedBytes) {
       this.fail(Error("MCP output queue exhausted"));
       return Promise.reject(this.failure);
     }
     this.bytes += bytes;
     return new Promise((resolve, reject) => {
-      this.queue.push({ text, bytes, resolve, reject });
+      this.queue.push({ text, bytes, resolve, reject, shouldSend });
       this.pump();
     });
   }
   pump() {
     if (this.current || this.failure || !this.queue.length) return;
     const entry = (this.current = this.queue.shift());
+    if (!entry.shouldSend()) {
+      this.current = null;
+      this.bytes -= entry.bytes;
+      entry.resolve();
+      this.pump();
+      return;
+    }
     entry.timer = setTimeout(
       () => this.fail(Error("MCP stdout write timed out")),
       this.timeoutMs,
@@ -145,6 +161,7 @@ export async function serveMCPStdio({
     input.off("data", onData);
     input.off("end", onEnd);
     input.off("error", onError);
+    input.off("close", onClose);
     input.pause();
     buffer.clear();
     registry.advance({ dropSessions: true });
@@ -170,7 +187,11 @@ export async function serveMCPStdio({
     track(writer.send(message).catch(stop));
   };
   const handle = async (message, lease, isTool, cancellable) => {
-    let activity, answer, executionStatus, recordSaved;
+    let activity,
+      answer,
+      executionStatus,
+      recordSaved,
+      replyStarted = false;
     try {
       if (cancellable) {
         activity = activityFactory(message);
@@ -188,22 +209,32 @@ export async function serveMCPStdio({
       recordSaved = cancellable
         ? (result?.recordSaved ?? result?.record_saved)
         : undefined;
-      if (answer && !lease.cancelledByNotification) await writer.send(answer);
+      const frame =
+        answer && !lease.cancelledByNotification
+          ? writer.prepare(answer)
+          : undefined;
       await activity?.finish(Boolean(answer?.result?.isError), {
         status: executionStatus,
         recordSaved,
       });
+      if (frame && !lease.cancelledByNotification) {
+        replyStarted = true;
+        await writer.enqueue(frame, {
+          shouldSend: () => !lease.cancelledByNotification,
+        });
+      }
     } catch {
       await activity
         ?.finish(true, { status: executionStatus, recordSaved })
         .catch(() => {});
-      if (!lease.cancelledByNotification && !writer.failure)
+      if (!replyStarted && !lease.cancelledByNotification && !writer.failure)
         await writer
           .send(
             rpcError(
               message.id,
               "Execution/progress/output failed; inspect history, do not replay",
             ),
+            { shouldSend: () => !lease.cancelledByNotification },
           )
           .catch(stop);
     } finally {
@@ -278,9 +309,14 @@ export async function serveMCPStdio({
   function onError() {
     stop(Error("MCP stdin failed"));
   }
+  function onClose() {
+    stop(Error("MCP stdin closed"));
+  }
   input.on("data", onData);
   input.once("end", onEnd);
   input.once("error", onError);
+  input.once("close", onClose);
   if (input.readableEnded) onEnd();
+  else if (input.destroyed) onClose();
   return done;
 }

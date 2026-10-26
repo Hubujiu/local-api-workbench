@@ -11,6 +11,7 @@ import { Store } from "../src/runtime.mjs";
 const root = await mkdtemp(path.join(tmpdir(), "localapi-production-stdio-"));
 const isolated = path.join(root, "app");
 const client = new Client({ name: "production-smoke", version: "1" });
+let stderr = "";
 try {
   // Outside the checkout: a missing production dependency cannot fall back to
   // this repository's development node_modules.
@@ -32,14 +33,17 @@ try {
   const data = path.join(root, "data"),
     store = new Store(data);
   const p = await store.create("production isolated");
-  await client.connect(
-    new StdioClientTransport({
-      command: process.execPath,
-      args: [path.join(isolated, "src", "mcp.mjs"), "--project", p.id],
-      env: { LOCAL_API_DATA: data },
-      stderr: "pipe",
-    }),
-  );
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(isolated, "src", "mcp.mjs"), "--project", p.id],
+    env: { LOCAL_API_DATA: data },
+    stderr: "pipe",
+  });
+  const connected = client.connect(transport);
+  transport.stderr?.on("data", (chunk) => {
+    stderr = (stderr + chunk).slice(-4000);
+  });
+  await connected;
   await client.ping();
   const result = await client.callTool({ name: "localapi_list_projects" });
   assert.notEqual(result.isError, true);
@@ -48,6 +52,11 @@ try {
     [p.id],
   );
   console.log("PRODUCTION_ONLY_STDIO_SDK_FRAMING_SMOKE_PASS");
+} catch (error) {
+  throw new Error(
+    "Production stdio smoke failed on " + process.platform + ": " + stderr,
+    { cause: error },
+  );
 } finally {
   await client.close().catch(() => {});
   await rm(root, { recursive: true, force: true });

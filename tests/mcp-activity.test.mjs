@@ -188,3 +188,31 @@ test(
     lines.close();
   },
 );
+
+test("MCP activity metadata is bounded and cancellation save failures remain readable", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mcp-activity-bounds-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const patch of [
+    { planId: "x".repeat(10000) },
+    { tool: "x".repeat(129) },
+    { projectId: "bad\nproject" },
+  ])
+    assert.throws(
+      () => new MCPActivity(root, { tool: "run", projectId: "p", ...patch }),
+      /元数据/,
+    );
+  const activity = await new MCPActivity(root, {
+    tool: "run",
+    projectId: "p",
+    planId: "plan",
+  }).start();
+  await activity.update({ stepId: "x".repeat(10000), completed: 1 });
+  await activity.finish(false, { status: "cancelled", recordSaved: false });
+  const [row] = await readMCPActivities(root);
+  assert.equal(row.status, "failed");
+  assert.equal(row.executionStatus, "cancelled");
+  assert.equal(row.recordSaved, false);
+  assert.equal(row.stepId, undefined);
+  assert.equal(row.stepIdOmitted, true);
+  assert(Buffer.byteLength(JSON.stringify(row)) <= 4096);
+});
