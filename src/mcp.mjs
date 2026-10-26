@@ -1,3 +1,4 @@
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -694,7 +695,17 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: Object.keys(publicProjectCommitOutcome(e)).length
+              ? JSON.stringify({
+                  error: e.message,
+                  ...publicProjectCommitOutcome(e),
+                })
+              : e.message,
+          },
+        ],
       });
     }
   };

@@ -1,3 +1,4 @@
+import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import {
   mkdir,
   readFile,
@@ -24,6 +25,15 @@ const filename = (id) => {
       : "key-" + Buffer.from(id).toString("base64url")) + ".json"
   );
 };
+function validateLayout(project) {
+  for (const key of Object.keys(groups)) {
+    const values = project[key] || [];
+    if (!Array.isArray(values)) throw Error("项目集合格式无效");
+    if (new Set(values.map((item) => item?.id)).size !== values.length)
+      throw Error("项目记录ID重复");
+    for (const item of values) filename(item?.id);
+  }
+}
 async function writeJSON(file, value) {
   const text = JSON.stringify(value, null, 2) + "\n";
   try {
@@ -100,16 +110,26 @@ export async function recoverProject(directory, expectedId) {
     throw error;
   }
   if (journal.id !== expectedId) throw Error("项目恢复日志ID不匹配");
-  await apply(directory, journal);
-  await rm(path.join(directory, ".transaction.json"));
+  validateLayout(journal);
+  try {
+    await apply(directory, journal);
+    await rm(path.join(directory, ".transaction.json"));
+  } catch (error) {
+    throw new ProjectCommitUncertain(expectedId, error);
+  }
 }
 export async function writeProject(directory, project) {
+  validateLayout(project);
   await mkdir(directory, { recursive: true });
   // The complete journal is written before separate files. Reads recover it under the same lock.
   // This covers process interruption, not a promise of power-loss durability.
   await writeJSON(path.join(directory, ".transaction.json"), project);
-  await apply(directory, project);
-  await rm(path.join(directory, ".transaction.json"));
+  try {
+    await apply(directory, project);
+    await rm(path.join(directory, ".transaction.json"));
+  } catch (error) {
+    throw new ProjectCommitUncertain(project.id, error);
+  }
 }
 export async function readProject(directory, expectedId) {
   await recoverProject(directory, expectedId);
