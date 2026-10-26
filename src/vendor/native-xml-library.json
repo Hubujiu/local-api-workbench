@@ -13,9 +13,9 @@
     "node_modules/@xmldom/xmldom/lib/index.js": "418c42598a45290498f4350b6b6f531ceeb25e8d4d9a107db2448a1c0b5b784e",
     "node_modules/@xmldom/xmldom/lib/sax.js": "324e8a0c7b475c645efcd1736b634733e133150849bff741fa0e2215e7017d02",
     "node_modules/xpath/xpath.js": "4ee74ef09301a2c5c5ce194367286fda65b65e589150456d5a9d19bc6b517224",
-    "scripts/sandbox-intrinsic-guard.mjs": "981fc958917179f0fbe695b0d7746d55cba7b9af52724a4dc1d69e3b1e03b104",
+    "scripts/sandbox-intrinsic-guard.mjs": "02b3d56d75b6ec74933bad1c5a02b6831bed6391f591178bef5380601dae2103",
     "scripts/sandbox-native-xml-entry.mjs": "fd60c85edc1fbc785cb8f82ad8368fe0f3c62c54c44c250bbf7e400c7580e5b8",
     "src/native-xml-path.mjs": "fdea3875ef5cf05c71fd8fc75a41d7511155de88dd07da3c05dcc4018215d0e3"
   },
-  "sha256": "15a78334915588e4e9a0d7b3d1fd816a4f8721aa1f9a4ea481dcda18bf18b15c"
+  "sha256": "7328c2f04724b951f3495e3f3dfdf67fe14a21f19410d8bf7a2e626a65018b50"
 }
