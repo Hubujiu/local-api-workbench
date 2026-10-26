@@ -18,7 +18,33 @@ const fields = new Set([
   "ssh",
 ]);
 /** Explicit stdin-only grants for this invocation; never persisted in a plan. */
-export function prepareCLIDatabaseGrants(projectId, plan, connections) {
+export function prepareCLIDatabaseGrants(
+  projectId,
+  plan,
+  connections,
+  sourceCatalog = [],
+) {
+  if (!Array.isArray(sourceCatalog) || sourceCatalog.length > 100)
+    throw Error("CLI 数据库来源目录无效");
+  const sourceTypes = new Map();
+  for (const source of sourceCatalog) {
+    if (
+      !plain(source) ||
+      typeof source.id !== "string" ||
+      sourceTypes.has(source.id) ||
+      ![
+        "postgres",
+        "mysql",
+        "redis",
+        "mongodb",
+        "sqlite",
+        "clickhouse",
+      ].includes(source.type)
+    )
+      throw Error("CLI 数据库来源标识或类型无效");
+    sourceTypes.set(source.id, source.type);
+  }
+  const inferredTypes = new Map();
   if (!plain(connections) || Object.keys(connections).length > 20)
     throw Error("CLI 数据库连接映射无效或超过20项");
   const required = new Set();
@@ -67,6 +93,20 @@ export function prepareCLIDatabaseGrants(projectId, plan, connections) {
         )
           throw Error("CLI 原版数据库任务缺少连接标识");
         required.add(task.data.connectionId);
+        const engine =
+          task.data.resultShape === "redis-value"
+            ? "redis"
+            : task.data.resultShape === "mysql-resultsets"
+              ? "mysql"
+              : undefined;
+        if (engine) {
+          if (
+            inferredTypes.has(task.data.connectionId) &&
+            inferredTypes.get(task.data.connectionId) !== engine
+          )
+            throw Error("CLI 数据库任务对同一连接声明了不同引擎");
+          inferredTypes.set(task.data.connectionId, engine);
+        }
       }
     }
   }
@@ -93,6 +133,13 @@ export function prepareCLIDatabaseGrants(projectId, plan, connections) {
         ].includes(config.type)
       )
         throw Error("CLI 数据库连接必须显式指定支持的类型");
+      if (
+        (sourceTypes.has(id) && sourceTypes.get(id) !== config.type) ||
+        (inferredTypes.has(id) && inferredTypes.get(id) !== config.type) ||
+        (/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(id) &&
+          !sourceTypes.has(id))
+      )
+        throw Error("CLI 数据库授权必须匹配当前项目来源及任务引擎");
       if (
         config.type !== "sqlite" &&
         (typeof config.host !== "string" || !config.host.trim())
