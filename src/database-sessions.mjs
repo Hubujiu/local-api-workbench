@@ -169,11 +169,14 @@ export class DatabaseSessions {
             operation.sql,
             operation.parameters,
           )
-        : await queryRemoteDatabase({
-            ...config,
-            sql: operation.sql,
-            parameters: operation.parameters,
-          });
+        : await queryRemoteDatabase(
+            {
+              ...config,
+              sql: operation.sql,
+              parameters: operation.parameters,
+            },
+            { signal },
+          );
     await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
     if (this.#connections.get(resolvedId) !== item)
