@@ -12,30 +12,40 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
   if (!["type", "expression"].every((key) => Object.hasOwn(value, key)))
     throw Error("原生断言缺少自有来源或表达式字段");
   if (
-    !["responseCode", "responseJson", "responseHeader", "responseXml"].includes(
-      value.type,
-    )
+    ![
+      "responseCode",
+      "responseJson",
+      "responseHeader",
+      "responseXml",
+      "responseText",
+    ].includes(value.type)
   )
     throw Error(
-      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml",
+      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText",
     );
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
-  if (!["path", "compareValue"].every((key) => Object.hasOwn(expression, key)))
+  const isText = value.type === "responseText",
+    hasPath = Object.hasOwn(expression, "path");
+  if (!Object.hasOwn(expression, "compareValue") || (!isText && !hasPath))
     throw Error("原生断言表达式缺少自有字段");
+  const path = hasPath ? expression.path : undefined;
   const compareType = Object.hasOwn(expression, "compareType")
     ? expression.compareType
     : undefined;
   if (
-    !text(expression.path, 1000) ||
+    (hasPath && !text(path, 1000)) ||
     !text(expression.compareValue, 65536) ||
-    (compareType !== undefined && !["eq", "uneq"].includes(compareType)) ||
+    (compareType !== undefined &&
+      !["eq", "uneq", "includes", "unincludes"].includes(compareType)) ||
     (enabled && compareType === undefined)
   )
-    throw Error("原生断言仅支持有界文字路径与eq/uneq字面字符串比较");
+    throw Error(
+      "原生断言仅支持有界文字路径与eq/uneq/includes/unincludes字面字符串比较",
+    );
   if (
     enabled &&
-    (/\{\{/.test(expression.path) || /\{\{/.test(expression.compareValue))
+    ((!isText && /\{\{/.test(path)) || /\{\{/.test(expression.compareValue))
   )
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
   if (enabled && value.type === "responseJson")
@@ -44,7 +54,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
   const result = {
     type: value.type,
     expression: {
-      path: expression.path,
+      ...(hasPath ? { path } : {}),
       ...(compareType !== undefined ? { compareType } : {}),
       compareValue: expression.compareValue,
     },
@@ -79,6 +89,13 @@ export function compileNativeAssertions(value = []) {
     ...(data.type === "responseXml"
       ? { xmlPath: nativeXMLPath(data.expression.path) }
       : {}),
+    ...(data.type === "responseText"
+      ? {
+          diagnostic: Object.hasOwn(data.expression, "path")
+            ? data.expression.path
+            : "",
+        }
+      : {}),
     comparison: data.expression.compareType,
     expected: data.expression.compareValue,
   }));
@@ -94,11 +111,13 @@ function installNativeAssertions(
   headers,
   headerEvidenceJSON,
   readXML,
+  readText,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
     hasOwn = Object.hasOwn,
     charCode = Function.prototype.call.bind(String.prototype.charCodeAt),
+    indexOf = Function.prototype.call.bind(String.prototype.indexOf),
     finite = Number.isFinite,
     string = String,
     Failure = Error,
@@ -163,10 +182,12 @@ function installNativeAssertions(
     failed = false;
   const perform = (index) => {
     const op = operations[index];
-    // Header and XML branches bypass the eager body/code reader. XML uses only
-    // the shared private current-body parser; existing Code/JSON stays unchanged.
+    // Header/XML/Text bypass the eager body/code reader. Text and XML share
+    // their private current-body readers with pick; Code/JSON stays unchanged.
     const response =
-      op.type === "responseHeader" || op.type === "responseXml"
+      op.type === "responseHeader" ||
+      op.type === "responseXml" ||
+      op.type === "responseText"
         ? null
         : readResponse();
     let value =
@@ -174,7 +195,9 @@ function installNativeAssertions(
         ? readHeader(op.header)
         : op.type === "responseXml"
           ? readXML()(op.xmlPath)
-          : response.status;
+          : op.type === "responseText"
+            ? readText()
+            : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);
@@ -210,16 +233,32 @@ function installNativeAssertions(
         "原生断言仅比较有限JSON原始值或缺失值，不隐式转换对象/数组",
       );
     const actual = string(value),
-      equal = actual === op.expected;
-    const passed = op.comparison === "eq" ? equal : !equal;
-    const message =
-      op.comparison === "eq" ? "响应值与预期不相等" : "响应值与预期相等";
+      equal = actual === op.expected,
+      contained =
+        op.comparison === "includes" || op.comparison === "unincludes"
+          ? indexOf(actual, op.expected) !== -1
+          : false;
+    const passed =
+      op.comparison === "eq"
+        ? equal
+        : op.comparison === "uneq"
+          ? !equal
+          : op.comparison === "includes"
+            ? contained
+            : !contained;
+    let message =
+      op.comparison === "eq"
+        ? "响应值与预期不相等"
+        : op.comparison === "uneq"
+          ? "响应值与预期相等"
+          : op.comparison === "includes"
+            ? "响应值不包含预期字符串"
+            : "响应值包含预期字符串";
+    if (op.type === "responseText" && op.diagnostic)
+      message = op.diagnostic + ": " + message;
     const before = publicTests.length;
     registerTest(op.name, () => {
-      if (op.comparison === "eq" ? !equal : equal)
-        throw Failure(
-          op.comparison === "eq" ? "响应值与预期不相等" : "响应值与预期相等",
-        );
+      if (!passed) throw Failure(message);
     });
     const record = create(null);
     record.name = op.name;
