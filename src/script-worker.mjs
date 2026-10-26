@@ -550,9 +550,9 @@ try {
       context.setProp(context.global, "__nativePickVarsDataJSON", data);
       data.dispose();
       install(
-        "globalThis.__nativePickVarsTask=(" +
+        "const __readNativePickVarsCompletion=(()=>{const state=(" +
           pickVarsInstallerSource +
-          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));delete globalThis.__nativePickVarsDataJSON;",
+          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
@@ -704,6 +704,10 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
+  if (workerData.responseExtractions?.length)
+    measuredBounded("pick-vars-completion", "promiseStateMs", () =>
+      run("__readNativePickVarsCompletion();"),
+    );
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";

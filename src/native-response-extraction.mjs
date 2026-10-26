@@ -126,11 +126,10 @@ function installPickVars(json, readBody, environment, global, temporary) {
     if (isArray(output)) define(output, "toJSON", { value: undefined });
     return output;
   };
-  let next = 0;
-  return (index) => {
-    if (index !== next || index >= operations.length)
-      throw Error("pickVars任务次序无效");
-    next++;
+  let consumed = 0,
+    completed = 0,
+    failed = false;
+  const perform = (index) => {
     let root;
     try {
       root = parse(readBody());
@@ -165,6 +164,26 @@ function installPickVars(json, readBody, environment, global, temporary) {
       const row = assignments[at];
       setters[row.scope](row.name, row.value);
     }
+  };
+  return {
+    run: (index) => {
+      if (failed || index !== consumed || index >= operations.length) {
+        failed = true;
+        throw Error("pickVars任务次序无效");
+      }
+      consumed++;
+      try {
+        perform(index);
+        completed++;
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    },
+    assertComplete: () => {
+      if (failed || completed !== operations.length)
+        throw Error("pickVars阶段存在未完成的提取任务");
+    },
   };
 }
 export const pickVarsInstallerSource = installPickVars.toString();

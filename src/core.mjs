@@ -489,7 +489,15 @@ export async function runPlan(
       extracted: {},
     };
     let scriptPhase,
-      stopAfterExtractionFailure = false;
+      stopAfterExtractionFailure = false,
+      extractionPostStarted = false;
+    // Policy is derived from the host-normalized frozen tasks, never VM output.
+    // Any failure of a step which promises new extracted values stops later
+    // steps. After a response arrives its whole processing stage must succeed
+    // before scopes may commit. Completed network effects cannot be rolled back.
+    const extractionPostPolicy = step.request?.nativeTasks?.after.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -501,6 +509,12 @@ export async function runPlan(
             scopes.environment = accepted.environment;
           }
         } catch (error) {
+          if (error?.code === "PROJECT_COMMIT_UNCERTAIN") {
+            record.scopeCommit = { outcome: "unknown", retrySafe: false };
+            throw Error(
+              "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
+            );
+          }
           throw Error("变量持久化失败：" + error.message);
         }
       }
@@ -766,6 +780,7 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        extractionPostStarted = extractionPostPolicy === true;
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -859,7 +874,7 @@ export async function runPlan(
             ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
           );
         }
-        await commitScopes();
+        if (!extractionPostPolicy) await commitScopes();
         const hasStatusAssertion = record.assertions.some(
           (a) => a.target === "status",
         );
@@ -874,9 +889,13 @@ export async function runPlan(
           statusOK && record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
+        if (extractionPostStarted && record.status !== "passed")
+          throw Error("原生响应提取阶段断言或原始响应状态失败，变量未提交");
+        if (extractionPostPolicy) await commitScopes();
       }
     } catch (error) {
-      stopAfterExtractionFailure = isNativeExtractionPhaseFailure(error);
+      stopAfterExtractionFailure =
+        extractionPostPolicy || isNativeExtractionPhaseFailure(error);
       record.status = "failed";
       if (error.databaseQueries?.length)
         (record.databaseQueries ||= []).push(
@@ -892,8 +911,11 @@ export async function runPlan(
             phase: scriptPhase,
           })),
         );
-      scopes.environment = committedScopes.environment;
-      scopes.globals = committedScopes.globals;
+      if (extractionPostStarted) scopes = structuredClone(committedScopes);
+      else {
+        scopes.environment = committedScopes.environment;
+        scopes.globals = committedScopes.globals;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
