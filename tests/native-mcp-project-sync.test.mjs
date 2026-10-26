@@ -206,3 +206,94 @@ test(
     assert.equal(state.enabled, false);
   },
 );
+
+test(
+  "remembered MCP configuration cannot persist native session grants through a later canonical create",
+  { timeout: 20000 },
+  async (t) => {
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "native-grant-boundary-"),
+    );
+    let app = await createApp({ root, port: 0 });
+    const clients = [];
+    t.after(async () => {
+      await Promise.all(clients.map((c) => c.close().catch(() => {})));
+      app.server.closeAllConnections();
+      await new Promise((r) => app.server.close(r));
+      await rm(root, { recursive: true, force: true });
+    });
+    const config = await (
+      await fetch(app.url + "/api/mcp/config", {
+        method: "POST",
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          enabled: true,
+          projects: [],
+          write: true,
+          execute: false,
+          remember: true,
+        }),
+      })
+    ).json();
+    const connect = async () => {
+      const c = new Client(
+        { name: "native-session-grants", version: "1" },
+        { capabilities: {} },
+      );
+      clients.push(c);
+      await c.connect(
+        new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+          requestInit: { headers: { Authorization: "Bearer " + config.token } },
+        }),
+      );
+      return c;
+    };
+    let client = await connect();
+    const native = decode(
+      await client.callTool({
+        name: "apipost_create_project",
+        arguments: { name: "Native session" },
+      }),
+    );
+    const canonical = decode(
+      await client.callTool({
+        name: "localapi_create_project",
+        arguments: { name: "Remembered canonical" },
+      }),
+    );
+    const listed = decode(
+      await client.callTool({ name: "apipost_list_projects", arguments: {} }),
+    );
+    assert.deepEqual(
+      new Set(listed.projects.map((p) => p.project_id)),
+      new Set([native.project_id, canonical.id]),
+    );
+    await client.close();
+    await new Promise((r) => app.server.close(r));
+    app = await createApp({ root, port: 0 });
+    client = await connect();
+    const restored = decode(
+      await client.callTool({ name: "apipost_list_projects", arguments: {} }),
+    );
+    assert.deepEqual(
+      restored.projects.map((p) => p.project_id),
+      [canonical.id],
+    );
+    assert.equal(
+      (
+        await client.callTool({
+          name: "apipost_list_apis",
+          arguments: { project_id: native.project_id },
+        })
+      ).isError,
+      true,
+    );
+    assert.equal(
+      (await app.store.get(native.project_id)).name,
+      "Native session",
+    );
+  },
+);

@@ -163,3 +163,15 @@ SDK acceptance covers managed creation, native environment address configuration
 sync and overwrite/ignore counts, actual API execution of mapped response scripts,
 history/result lookup, confirmed deletion, filesystem restart and noninherited
 MCP authorization; invalid mutations leave the saved project unchanged.
+
+Native-created project grants are held in a separate in-memory list. With
+remember enabled, a later canonical create/configuration write cannot accidentally
+persist those native grants. Reconfiguration/rotation replaces the session list;
+archive removes its ID. A dedicated SDK test creates native then canonical
+projects with remember enabled and restarts: only the explicit canonical
+remembered grant remains, while both project files persist.
+
+The atomicity tests above cover rejected input before saving. The underlying
+journaled storage can roll forward after a disk failure during apply: an error
+does not universally prove no state change. Do not automatically retry mutations
+whose commit outcome is uncertain. Power-loss durability is not claimed.

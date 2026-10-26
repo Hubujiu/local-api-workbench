@@ -109,6 +109,7 @@ export async function createApp({
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpSessionProjects = [],
     mcpToken = "",
     mcpLastActivity = null;
   const persistedMCP = await loadMCPConfig(path.resolve(root));
@@ -276,6 +277,7 @@ export async function createApp({
         const dispatch = createMCP({
           store,
           ...mcp,
+          sessionProjects: mcpSessionProjects,
           debugEnvironments,
           databaseExecutor: (projectId, operation, signal) =>
             mcpDatabaseGrants.query(mcpEpoch, projectId, operation, signal),
@@ -478,6 +480,7 @@ export async function createApp({
             });
             mcpDatabaseGrants.invalidate();
             mcp = next;
+            mcpSessionProjects = [];
             mcpToken = nextToken;
             mcpWarning = "";
           } else if (req.method !== "GET")
@@ -661,6 +664,10 @@ export async function createApp({
             const saved = await store.save(b);
             if (importSessionActive && importSessionChanged && !b.archived)
               await autoImports.reactivate(p.id);
+            if (b.archived)
+              mcpSessionProjects = mcpSessionProjects.filter(
+                (id) => id !== b.id,
+              );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
