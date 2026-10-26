@@ -9,7 +9,7 @@ const ca = await readFile(
   new URL("./fixtures/localhost.crt", import.meta.url),
   "utf8",
 );
-export const mongoTLSConfig = {
+const mongoTLSConfig = {
   type: "mongodb",
   host: "127.0.0.1",
   port: 27018,
