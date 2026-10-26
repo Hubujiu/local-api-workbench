@@ -80,7 +80,7 @@ function baselineInput(value) {
   for (const key of ["query", "path", "headers", "cookies"])
     if (Object.hasOwn(result, key)) plain(result[key]);
   if (Object.hasOwn(result, "auth")) {
-    plain(result.auth, ["type"]);
+    plain(result.auth, ["type"], ["type"]);
     if (!["noauth", "none"].includes(result.auth.type))
       throw Error("原生计划历史认证仅支持显式无需认证；不保留凭证或授权配置");
   }

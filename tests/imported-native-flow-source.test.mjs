@@ -290,3 +290,26 @@ test("history-only edits change the plan hash but never affect the executed requ
   );
   assert.equal(b.snapshot.importedNativeFlowSource.mcp_name, "history-only");
 });
+
+test("historical auth requires an own type without reading a prototype getter", () => {
+  const source = fixture();
+  source.steps[0].mcp_input = { auth: {} };
+  let reads = 0,
+    error;
+  Object.defineProperty(Object.prototype, "type", {
+    configurable: true,
+    get() {
+      reads++;
+      return "noauth";
+    },
+  });
+  try {
+    normalize(source);
+  } catch (caught) {
+    error = caught;
+  } finally {
+    delete Object.prototype.type;
+  }
+  assert.match(error?.message || "", /必需字段/);
+  assert.equal(reads, 0);
+});
