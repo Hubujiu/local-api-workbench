@@ -1,4 +1,4 @@
-# 后端检查点 · 2026-10-26 18:23 UTC
+# 后端检查点 · 2026-10-26 18:30 UTC
 
 本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
@@ -95,6 +95,10 @@ PR28独立final f9753d9db4855679b74f7787eb974170df15de89的CI40372605965首轮10
 独立draft PR29新增canonical MCP原生导入/导出工具，严格现有授权项目、write/read边界、两种显式格式、merge-only，无restore/newproject/扩权/隐式请求执行。最终功能remote c25897e7bb1c71f680c826502e26621799c4f4d5/tree270396551bba40355e8ef273c97464bc47beaf78已保存，自己的精确CI待核实。修复outer getter、数组prototype、error/ID有界及目录内嵌JSON预算双向一致；不把独立base说成已有PR17/19。
 
 组合真实HTTP/stdio journal发布后apply失败已验证typed unknown/retry_safe:false、脱敏、恢复可能完成一次导入且无自动重试，近限stdio拒后ping仍可用。初次组合19项中两项失败：合并错误分支误用未截断message已修；PR19早期拒非法ID仍回显或返回SDK不接受的null，需更新该原PR，不能松测试。当前组合仍WIP，不借旧49508全绿。发送前帧预算不保证发送成功；提交后断管不能推断回滚或自动重试。
+
+PR19已在原功能分支保存f31bdc83b2cf923c857514a30d76a03c7f45673a/treee2f8de578f09ffddaf20b380f57c61ad0e14fdf6，并合入其PR3最新依赖基线。非法ID错误不回显且省略不可关联ID；JSON解析和schema错误分别-32700/-32600，合法重复/配额错误仍保留关联ID。新真实SDK红例转绿；本地独立定向与审查通过，但新head与新组合的精确CI待核实。WIP35153组合已在Ubuntu/macOS复现唯一预期ID blocker，不能作绿灯。
+
+PR27诊断head15c75beb47c536dbc06bff02c0114b4b94999432/treee134ef4845f37dab702ad16d9e620eab68218d7d只增强失败事件、重启轮次及fixture锁存在性，不改生产、marker或预算。确定性持有Cookie锁可复现同一total-deadline签名，证明旧日志不能定位Windows实际原因；不证明那次CI就是Cookie锁，也不宣称根因已修。
 
 ## 明确剩余边界
 

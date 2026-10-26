@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-const requestKey = (id) => {
+export const requestKey = (id) => {
   if (typeof id === "string" && Buffer.byteLength(id) <= 256) return "s:" + id;
   if (typeof id === "number" && Number.isSafeInteger(id)) return "n:" + id;
   throw Error("Invalid MCP request ID");
