@@ -15,6 +15,8 @@ import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
 import { normalizeNativeMock } from "./native-mock.mjs";
 
 import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
+import { mergeImportedDocuments } from "./apipost-documents.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1339,8 +1341,12 @@ export function importDocument(doc) {
   }
   if (isModernApipost(apipostDocument(doc)))
     throw Error("Apipost现代JSON需要完整项目导入，不能丢弃环境依赖");
-  if (apipostDocument(doc))
-    return importApipost(doc).requests.map(normalizeRequest);
+  if (apipostDocument(doc)) {
+    const imported = importApipost(doc);
+    if (imported.documents.length)
+      throw Error("原生文档须使用完整项目导入，不会丢弃文档正文");
+    return imported.requests.map(normalizeRequest);
+  }
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
   throw Error("无法识别导入格式");
 }
@@ -1826,6 +1832,7 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  validateAPIResourceTrash(document);
   for (const environment of document.environments) {
     if (
       !environment.id ||
@@ -2053,6 +2060,9 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     modern.metadata.plans = plans;
   }
   const legacy = modern || (source ? importApipost(original) : null);
+  const importedDocuments = mergeImportedDocuments(project, legacy?.documents, {
+    sync,
+  });
   const requests = legacy
     ? legacy.requests.map(normalizeRequest)
     : importDocument(document);
@@ -2165,6 +2175,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     project.settings ??= {};
     project.settings.apipostDirectoryArtifacts = directoryArtifacts;
   }
+  if (importedDocuments) project.documents = importedDocuments;
   if (importedCases.length)
     project.cases = [...(project.cases || []), ...importedCases];
   if (importedCaseFolders.length)

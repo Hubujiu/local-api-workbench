@@ -13,6 +13,7 @@ import {
   ProjectRecoveryRequired,
 } from "./project-commit-outcome.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
@@ -228,6 +229,7 @@ export class Store {
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
+    validateAPIResourceTrash(p);
     if (p.settings?.autoImports !== undefined)
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
     validateEnvironmentModel(p);
