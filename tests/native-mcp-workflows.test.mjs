@@ -723,3 +723,38 @@ test("native frozen metadata preserves disabled steps, detaches explicit manual 
     /4MiB/,
   );
 });
+
+test("native MCP base snapshots reject inert API task provenance", async () => {
+  const { buildNativeMCPPlan, normalizeNativeMCPState } = await import(
+    "../src/native-mcp-plan.mjs"
+  );
+  const request = normalizeRequest({ id: "api", url: "http://127.0.0.1/" });
+  request.importedNativeTaskSource = { version: 1, before: [], after: [] };
+  const project = {
+    id: "p",
+    requests: [request],
+    environments: [{ id: "e", name: "E", variables: {} }],
+    settings: {},
+  };
+  const plan = buildNativeMCPPlan(
+    project,
+    { name: "N", steps: [{ target_id: "api" }] },
+    undefined,
+    normalizeRequest,
+  );
+  assert.equal(
+    plan.steps[0].nativeMCP.baseRequest.importedNativeTaskSource,
+    undefined,
+  );
+  const state = structuredClone(plan.steps[0].nativeMCP);
+  state.baseRequest.importedNativeTaskSource = {
+    version: 1,
+    before: [],
+    after: [],
+  };
+  assert.throws(
+    () =>
+      normalizeNativeMCPState(state, plan.steps[0].request, normalizeRequest),
+    /基础快照不能携带/,
+  );
+});
