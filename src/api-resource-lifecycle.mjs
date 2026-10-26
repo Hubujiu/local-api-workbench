@@ -36,15 +36,27 @@ function text(value, label, max = 200, empty = false) {
 // Check descriptors before reading values, cloning or JSON serialization.
 export function validateResourceJSON(value, maxBytes = 4 * 1024 * 1024) {
   const ancestors = new Set();
-  let nodes = 0;
+  let nodes = 0,
+    bytes = 0;
+  const charge = (count) => {
+    bytes += count;
+    if (bytes > maxBytes) fail("JSON体积超过" + maxBytes + "字节限制");
+  };
   function visit(item, depth) {
     if (++nodes > 100000 || depth > 40) fail("结构超限");
-    if (item === null || typeof item === "boolean") return;
-    if (typeof item === "string") {
-      if (!item.isWellFormed() || item.length > maxBytes) fail("文本超限");
+    if (item === null || typeof item === "boolean") {
+      charge(item === false ? 5 : 4);
       return;
     }
-    if (typeof item === "number" && Number.isFinite(item)) return;
+    if (typeof item === "string") {
+      if (!item.isWellFormed() || item.length > maxBytes) fail("文本超限");
+      charge(Buffer.byteLength(JSON.stringify(item)));
+      return;
+    }
+    if (typeof item === "number" && Number.isFinite(item)) {
+      charge(JSON.stringify(item).length);
+      return;
+    }
     if (!item || typeof item !== "object" || ancestors.has(item))
       fail("仅接受有限JSON数据");
     if (
@@ -54,6 +66,7 @@ export function validateResourceJSON(value, maxBytes = 4 * 1024 * 1024) {
     )
       fail("对象原型");
     ancestors.add(item);
+    charge(2); // Object/array delimiters, before expanding shared subtrees.
     const descriptors = Object.getOwnPropertyDescriptors(item);
     if (Reflect.ownKeys(descriptors).some((key) => typeof key !== "string"))
       fail("符号字段");
@@ -69,6 +82,7 @@ export function validateResourceJSON(value, maxBytes = 4 * 1024 * 1024) {
       for (let index = 0; index < item.length; index++)
         if (!own(item, index)) fail("稀疏数组");
     }
+    let fields = 0;
     for (const [key, descriptor] of Object.entries(descriptors)) {
       if (Array.isArray(item) && key === "length") continue;
       if (
@@ -77,12 +91,14 @@ export function validateResourceJSON(value, maxBytes = 4 * 1024 * 1024) {
         !descriptor.enumerable
       )
         fail("不安全字段或访问器");
+      if (fields++) charge(1);
+      if (!Array.isArray(item))
+        charge(Buffer.byteLength(JSON.stringify(key)) + 1);
       visit(descriptor.value, depth + 1);
     }
     ancestors.delete(item);
   }
   visit(value, 0);
-  if (Buffer.byteLength(JSON.stringify(value)) > maxBytes) fail("总计最多4MiB");
 }
 export function validateResourceFolder(path) {
   text(path, "目录路径", 500);
@@ -342,6 +358,12 @@ export function deleteAPIResources(project, selectedTargetIds) {
   const affected = (path) =>
     typeof path === "string" && roots.some((root) => within(path, root));
   if (roots.length) {
+    const sources = project.settings?.apipostProtocolSources;
+    // Native connection-only containers can be represented as ordinary folders
+    // without any executable protocol definition. Source parent IDs are not a
+    // trustworthy mapping to current Workbench paths; never guess or erase them.
+    if (sources !== undefined && (!Array.isArray(sources) || sources.length))
+      fail("无法定位原生协议来源的当前目录；仅允许单独HTTP或文档ID删除");
     if ((project.protocols || []).some((item) => affected(item.folder)))
       fail("目录包含尚未支持删除的协议资源");
     for (const key of ["socketioDefinitions", "grpcDefinitions"])

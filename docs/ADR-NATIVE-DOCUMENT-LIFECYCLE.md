@@ -17,6 +17,8 @@
 
 只支持 HTTP + 文档 + 普通目录。全批次预检后在 detached project 上修改并单次 Store.save；未知/重复 ID、协议子树、无法定位目录的 gRPC/Socket.IO 定义、未知活动 folder 设置等拒绝，不部分删除。
 
+PR13 的原生 TCP 空连接容器可能只有普通目录和 `apipostProtocolSources`，没有可执行 protocol。该来源记录没有可信的当前 Workbench 目录关联，因此只要此来源集合非空，本批保守拒绝任何目录删除（仍允许单独 HTTP/文档 ID 删除），来源档案保持原样；未来须由协议导入提供可靠关联才能放开精确子树判断。原生目录声明仍沿用既有导入边界，不宣称新增完整原生目录配置编辑/往返模型。
+
 `folders` 仍是活动字符串数组，不改变旧存储布局。新增可选 `apiResourceTrash: {version:1,batches:[...]}`：每批保存原选中 ID、时间、所有移出的目录路径、原显式目录、HTTP历史关联 ID、完整文档以及移出的四类目录声明（folderParameters/folderAuth/folderScripts/folderServices）。这些声明不留在活动继承作用域，也不被执行。HTTP继续使用现有 deletedAt；文档直接移出活动集合，避免既有导出/读取路径再次显示已删内容。仅从活动资源推导目录，已删 HTTP 后代不会令目录复活。路径边界是精确路径或 `path + "/"`，不会误删同前缀兄弟。
 
 HTTP批次关联是历史事实，不锁住现有 HTTP 恢复按钮：删除 deletedAt 后仍能普通 PUT 保存，再次删除产生新批次；旧批次中的文档和目录声明不丢失。现有 HTTP 恢复不恢复已删除目录的继承声明。本批不提供恢复删除资源的工具，不声称一键回收站恢复。

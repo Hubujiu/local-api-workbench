@@ -18,6 +18,7 @@ import {
 import {
   deleteAPIResources,
   validateAPIResourceTrash,
+  validateResourceJSON,
 } from "../src/api-resource-lifecycle.mjs";
 import { nativeAPIList, nativeAPIDetail } from "../src/native-mcp-tools.mjs";
 import { exportDocumentation } from "../public/document-export.js";
@@ -309,6 +310,34 @@ test("native subtree preflight rejects ambiguous/reserved/unknown IDs and unsupp
     () => deleteAPIResources(onlyProtocol, ["folder:Protocol"]),
     /协议/,
   );
+  const sourceOnly = structuredClone(p);
+  sourceOnly.settings.apipostProtocolSources = [
+    {
+      sourceProjectId: "native",
+      sourceTargetId: "tcp",
+      source: {
+        target_id: "tcp",
+        target_type: "socket",
+        parent_id: "0",
+        name: "A",
+      },
+    },
+  ];
+  sourceOnly.protocols = [];
+  const sourceBefore = structuredClone(sourceOnly);
+  assert.throws(
+    () => deleteAPIResources(sourceOnly, ["folder:A"]),
+    /无法定位原生协议来源/,
+  );
+  assert.deepEqual(sourceOnly, sourceBefore);
+  for (const id of [sourceOnly.requests[0].id, sourceOnly.documents[0].id]) {
+    const leaf = deleteAPIResources(sourceOnly, [id]).project;
+    assert.deepEqual(
+      leaf.settings.apipostProtocolSources,
+      sourceBefore.settings.apipostProtocolSources,
+    );
+    assert.deepEqual(leaf.folders, sourceBefore.folders);
+  }
   const overlap = deleteAPIResources(p, ["folder:A", p.requests[0].id]);
   assert.equal(overlap.selectedTargetIds.length, 2);
   assert.equal(
@@ -319,6 +348,11 @@ test("native subtree preflight rejects ambiguous/reserved/unknown IDs and unsupp
 });
 
 test("trash validation is bounded, descriptor-safe, retained by backup and rejects before a Store journal", async (t) => {
+  // Shared in-memory values must be budgeted before a large JSON expansion.
+  assert.throws(
+    () => validateResourceJSON(Array(10000).fill("x".repeat(1000000))),
+    /体积/,
+  );
   const root = await mkdtemp(path.join(os.tmpdir(), "native-doc-trash-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const store = new Store(root),
