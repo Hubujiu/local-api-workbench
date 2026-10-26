@@ -188,3 +188,23 @@ test("snapshot and restore validate source before cloning and reject malformed c
     /未知字段/,
   );
 });
+
+test("Redis canonical task source remains inert and preserves scalar shape without interpreting commands", async () => {
+  const source = fixture();
+  source.before[1].data.resultShape = "redis-value";
+  source.before[1].data.query = '["GET","literal-key"]';
+  const request = normalizeRequest({
+    url: "http://fixture.invalid",
+    importedNativeTaskSource: source,
+  });
+  assert.deepEqual(request.importedNativeTaskSource, source);
+  const result = await runPlan(
+    snapshotPlan({ steps: [{ request }] }),
+    {},
+    async () => ({ status: 200, headers: {}, body: "", duration: 1 }),
+  );
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.variables, {});
+  source.before[1].data.resultShape = "unknown";
+  assert.throws(() => normalize(source));
+});
