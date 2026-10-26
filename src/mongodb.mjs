@@ -199,7 +199,8 @@ export async function executeMongoQuery({ query, connection }) {
     await client.close();
   }
 }
-export async function queryMongo(input) {
+export async function queryMongo(input, { signal } = {}) {
+  if (signal?.aborted) throw Error("MongoDB查询已取消");
   const query = mongoQuery(input),
     connection = mongoConnection(input);
   return new Promise((resolve, reject) => {
@@ -211,17 +212,27 @@ export async function queryMongo(input) {
       },
     );
     let settled = false;
-    const finish = (error, result) => {
+    const finish = async (error, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      worker.terminate();
+      signal?.removeEventListener("abort", cancel);
+      // Do not claim cancellation/completion while its worker still owns sockets.
+      try {
+        await worker.terminate();
+      } catch (terminationError) {
+        reject(error || terminationError);
+        return;
+      }
       error ? reject(error) : resolve(result);
     };
+    const cancel = () => finish(Error("MongoDB查询已取消"));
     const timer = setTimeout(
       () => finish(Error("MongoDB查询超过5秒总时限，已终止")),
       5000,
     );
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
     worker.once("message", (message) =>
       finish(message.error ? Error(message.error) : null, message.result),
     );

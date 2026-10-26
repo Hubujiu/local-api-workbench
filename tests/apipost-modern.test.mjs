@@ -672,7 +672,18 @@ test("modern task imports reject mixed excessive or unknown semantics atomically
       ),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, enabled: 2 }),
     (d) =>
-      d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: 10 }),
+      d.apis[1].request.pre_tasks.push({ ...task, type: "wait", data: "10" }),
+    (d) =>
+      d.apis[1].request.pre_tasks.push({
+        ...task,
+        type: "unsupported-task",
+        data: 10,
+      }),
+    (d) =>
+      d.apis[1].request.pre_tasks.push(
+        { ...task, type: "wait", data: 1000 },
+        { ...task, id: "over-budget", type: "wait", data: 1 },
+      ),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, unknown: true }),
     (d) => d.apis[1].request.pre_tasks.push({ ...task, data: { code: "x" } }),
     (d) => (d.apis[0].request.pre_tasks = [{ ...task, type: "database" }]),
@@ -687,6 +698,23 @@ test("modern task imports reject mixed excessive or unknown semantics atomically
     assert.throws(() => importIntoProject(p, d));
     assert.deepEqual(p, original);
   }
+});
+
+test("modern integer wait 10 is imported and executes through the bounded native phase", async () => {
+  const { runNativeTaskPhase } = await import("../src/native-task-phase.mjs");
+  const d = fixture(),
+    p = project();
+  d.apis[1].request.pre_tasks = [
+    { type: "wait", id: "wait-ten", name: "Wait 10", enabled: 1, data: 10 },
+  ];
+  const source = structuredClone(d);
+  importIntoProject(p, d);
+  assert.equal(p.requests[0].nativeTasks.before[0].data, 10);
+  const result = await runNativeTaskPhase(p.requests[0].nativeTasks.before, {
+    request: p.requests[0],
+  });
+  assert.equal(result.usage.timers, 1);
+  assert.deepEqual(d, source);
 });
 
 test("empty modern task placeholders retain preexisting no-script import semantics", () => {

@@ -21,7 +21,10 @@ import {
   sdkCurlDefinition,
 } from "./script-url-export.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
-import { DatabaseSessions } from "./database-sessions.mjs";
+import {
+  DatabaseSessions,
+  assertDatabaseBindingRequirements,
+} from "./database-sessions.mjs";
 import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -91,7 +94,9 @@ export async function createApp({
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
-  const databaseSessions = new DatabaseSessions();
+  const databaseSessions = new DatabaseSessions({
+    resolveProject: (id) => store.get(id),
+  });
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
@@ -1059,12 +1064,16 @@ export async function createApp({
           if (action === "database-connections") {
             if (req.method === "GET")
               return json(res, 200, databaseSessions.list(p.id));
-            if (req.method === "POST")
-              return json(
-                res,
-                200,
-                databaseSessions.register(p.id, await body(req)),
-              );
+            if (req.method === "POST") {
+              const config = await body(req);
+              if (config.bindingId !== undefined) {
+                const source = p.settings?.apipostDatabases?.find(
+                  (item) => item.id === config.bindingId,
+                );
+                assertDatabaseBindingRequirements(source, config);
+              }
+              return json(res, 200, databaseSessions.register(p.id, config));
+            }
             if (req.method === "DELETE") {
               databaseSessions.revoke(p.id, (await body(req)).id);
               return json(res, 200, { revoked: true });
@@ -1272,6 +1281,7 @@ export async function createApp({
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
                 subrequests: result.subrequests,
+                databaseQueries: result.databaseQueries,
                 visualization: result.visualization,
                 scriptResponse: result.scriptResponse,
                 scriptStage: result.scriptStage,

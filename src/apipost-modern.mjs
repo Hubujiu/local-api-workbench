@@ -1,3 +1,11 @@
+import {
+  nativeDataArray,
+  nativeDataObject,
+} from "./native-response-extraction.mjs";
+import {
+  prepareApipostDatabases,
+  nativeDatabaseTasks,
+} from "./apipost-database-import.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -265,7 +273,57 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of ["db_link"]) reject(global[name], "global." + name);
+  const databaseImport = prepareApipostDatabases(
+    global.db_link,
+    source.project_id,
+    resource,
+  );
+  const parseTasks = (value, phase, origins = false) => {
+    if (Array.isArray(value)) {
+      nativeDataArray(value, 16);
+      for (const task of value)
+        nativeDataObject(task, [
+          "type",
+          "id",
+          "name",
+          "enabled",
+          "data",
+          ...(origins ? ["origin"] : []),
+        ]);
+    }
+    if (
+      !Array.isArray(value) ||
+      !value.some((task) =>
+        ["database", "pickVars", "assert", "wait"].includes(task?.type),
+      )
+    )
+      return scriptTasks(value, phase, origins);
+    const tasks = nativeDatabaseTasks(value, databaseImport.map, {
+      translated: origins,
+      connections: databaseImport.connections,
+      phase: phase === "后置" ? "after" : "before",
+    });
+    return {
+      native: true,
+      source: tasks,
+      code: "",
+      note:
+        phase +
+        " 原版混排任务保持同一词法作用域。" +
+        (tasks.some((task) => task.type === "database")
+          ? "数据库任务错误终止当前阶段，不沿用原版继续发送旧值的行为。"
+          : "") +
+        (tasks.some((task) => task.type === "wait")
+          ? "原生wait仅支持0至1000ms整数、同阶段合计1000ms；使用有界异步定时器而非原同步sleep，等待期间其他已授权回调可能运行；禁用数据仅惰性保存。"
+          : "") +
+        (tasks.some((task) => task.type === "assert")
+          ? "原生断言仅支持后置responseCode/严格responseJson与eq/uneq字面比较；不展开模板、转换对象、回退XML或执行路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
+          : "") +
+        (tasks.some((task) => task.type === "pickVars")
+          ? "pickVars仅支持后置严格JSON单值路径，不回退XML，不执行路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"
+          : ""),
+    };
+  };
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
     resource,
@@ -419,8 +477,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of ["script", "pre_script", "test"])
         reject(layer[task], task);
       // Validate every source layer before deriving a flattened execution snapshot.
-      scriptTasks(layer.pre_tasks, "前置");
-      scriptTasks(layer.post_tasks, "后置");
+      parseTasks(layer.pre_tasks, "前置");
+      parseTasks(layer.post_tasks, "后置");
     }
     const inheritedTasks = ["pre_tasks", "post_tasks"].some((phase) =>
       ancestry.slice(0, -1).some((layer) => !empty(layer[phase])),
@@ -435,10 +493,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       );
     const mergedTasks = (phase, label) => {
       if (node.target_type !== "api") return null;
-      if (!inheritedTasks) return scriptTasks(request[phase], label);
+      if (!inheritedTasks) return parseTasks(request[phase], label);
       const combined = [];
       for (const layer of ancestry) {
-        const parsed = scriptTasks(layer[phase], label);
+        const parsed = parseTasks(layer[phase], label);
         if (!parsed) continue;
         const owner = taskOwners.get(layer);
         const origin =
@@ -450,7 +508,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
               };
         for (const task of parsed.source) combined.push({ ...task, origin });
       }
-      return scriptTasks(combined, label, true);
+      return parseTasks(combined, label, true);
     };
     const beforeTask = mergedTasks("pre_tasks", "前置");
     const afterTask = mergedTasks("post_tasks", "后置");
@@ -688,13 +746,32 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     );
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
-      request.importedScriptTasks = normalizeImportedScriptTasks({
-        version: 1,
-        before: row.beforeTask?.source || [],
-        after: row.afterTask?.source || [],
-      });
-      request.beforeScript = row.beforeTask?.code || "";
-      request.afterScript = row.afterTask?.code || "";
+      if (row.beforeTask?.native || row.afterTask?.native) {
+        request.nativeTasks = {
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        };
+        request.inheritSharedScripts = false;
+        request.beforeScript = "";
+        request.afterScript = "";
+        if (
+          [...request.nativeTasks.before, ...request.nativeTasks.after].some(
+            (task) => task.type === "database",
+          )
+        )
+          request.importNotes.push(
+            "数据库地址、用户、密码及SSH配置未导入；仅保留连接标识。运行前须显式重新绑定当前项目临时会话，导入/恢复不会连接数据库。数据库错误立即终止，不沿用原版继续发送旧值的行为。",
+          );
+      } else {
+        request.importedScriptTasks = normalizeImportedScriptTasks({
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        });
+        request.beforeScript = row.beforeTask?.code || "";
+        request.afterScript = row.afterTask?.code || "";
+      }
       request.importNotes.push(
         "导入不执行脚本；运行前请审核。仅兼容现有 Apipost 8 脚本子集，不是完整 SDK 或任务列表往返迁移。",
       );
@@ -828,6 +905,15 @@ export function importModernApipost(source, project, { sync = false } = {}) {
             empty(global.mock_custom_rules) ? [] : global.mock_custom_rules,
             project.settings?.mockFieldRules || [],
             source.project_id,
+          ),
+        }
+      : {}),
+    ...(databaseImport.connections.length ||
+    project.settings?.apipostDatabases !== undefined
+      ? {
+          apipostDatabases: mergeResources(
+            project.settings?.apipostDatabases,
+            databaseImport.connections,
           ),
         }
       : {}),

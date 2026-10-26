@@ -8,6 +8,11 @@ import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
+import {
+  runNativeTaskPhase,
+  isNativeExtractionPhaseFailure,
+} from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -325,6 +330,9 @@ export function normalizeRequest(r = {}) {
             r.importedScriptTasks,
           ),
         }),
+    ...(r.nativeTasks === undefined
+      ? {}
+      : { nativeTasks: normalizeNativeTaskRequest(r) }),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],
@@ -484,6 +492,9 @@ export async function runPlan(
   for (const step of snapshot.steps)
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
+  for (const step of snapshot.steps)
+    if (step.request?.nativeTasks !== undefined)
+      step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -503,7 +514,16 @@ export async function runPlan(
       subrequests: [],
       extracted: {},
     };
-    let scriptPhase;
+    let scriptPhase,
+      stopAfterExtractionFailure = false,
+      extractionPostStarted = false;
+    // Policy is derived from the host-normalized frozen tasks, never VM output.
+    // Any failure of a step which promises new extracted values stops later
+    // steps. After a response arrives its whole processing stage must succeed
+    // before scopes may commit. Completed network effects cannot be rolled back.
+    const extractionPostPolicy = step.request?.nativeTasks?.after.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -515,6 +535,12 @@ export async function runPlan(
             scopes.environment = accepted.environment;
           }
         } catch (error) {
+          if (error?.code === "PROJECT_COMMIT_UNCERTAIN") {
+            record.scopeCommit = { outcome: "unknown", retrySafe: false };
+            throw Error(
+              "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
+            );
+          }
           throw Error("变量持久化失败：" + error.message);
         }
       }
@@ -682,7 +708,10 @@ export async function runPlan(
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
         const beforeStages = scriptStages(configuredRequest, "before");
-        if (beforeStages.length) {
+        if (
+          beforeStages.length ||
+          configuredRequest.nativeTasks?.before.length
+        ) {
           const templateRequest =
             ["query", "headers", "path", "cookies", "form"].some((group) =>
               (configuredRequest[group] || []).some((row) =>
@@ -697,13 +726,17 @@ export async function runPlan(
             : null;
           scriptPhase = "before";
           const scripted = await (
-            configuredRequest.sharedBeforeScripts?.length
-              ? runScriptSequence
-              : runScript
+            configuredRequest.nativeTasks
+              ? runNativeTaskPhase
+              : configuredRequest.sharedBeforeScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            configuredRequest.sharedBeforeScripts?.length
-              ? beforeStages
-              : configuredRequest.beforeScript,
+            configuredRequest.nativeTasks
+              ? configuredRequest.nativeTasks.before
+              : configuredRequest.sharedBeforeScripts?.length
+                ? beforeStages
+                : configuredRequest.beforeScript,
             {
               allowNetwork: true,
               executionContext,
@@ -713,8 +746,15 @@ export async function runPlan(
               functions: snapshot.functions || [],
               request: configuredRequest,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "before",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -729,6 +769,14 @@ export async function runPlan(
           );
           if (scripted.tests.some((test) => !test.passed))
             throw Error("前置脚本断言失败");
+          if (
+            configuredRequest.nativeTasks &&
+            !isDeepStrictEqual(
+              configuredRequest.nativeTasks,
+              scripted.request.nativeTasks,
+            )
+          )
+            throw Error("脚本不能改写本次冻结的原版任务列表");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           replaceVariables(localVariables, scripted.localVariables || {});
@@ -758,6 +806,7 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        extractionPostStarted = extractionPostPolicy === true;
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -800,16 +849,20 @@ export async function runPlan(
         }
         applyLegacyVariables(scopes, beforeAfterOperations, vars);
         const afterStages = scriptStages(record.request, "after");
-        if (afterStages.length) {
+        if (afterStages.length || record.request.nativeTasks?.after.length) {
           scriptPhase = "after";
           const scripted = await (
-            record.request.sharedAfterScripts?.length
-              ? runScriptSequence
-              : runScript
+            record.request.nativeTasks
+              ? runNativeTaskPhase
+              : record.request.sharedAfterScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            record.request.sharedAfterScripts?.length
-              ? afterStages
-              : record.request.afterScript,
+            record.request.nativeTasks
+              ? record.request.nativeTasks.after
+              : record.request.sharedAfterScripts?.length
+                ? afterStages
+                : record.request.afterScript,
             {
               allowNetwork: true,
               executionContext,
@@ -820,8 +873,15 @@ export async function runPlan(
               request: record.request,
               response: record.response,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "after",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -840,7 +900,7 @@ export async function runPlan(
             ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
           );
         }
-        await commitScopes();
+        if (!extractionPostPolicy) await commitScopes();
         const hasStatusAssertion = record.assertions.some(
           (a) => a.target === "status",
         );
@@ -855,9 +915,21 @@ export async function runPlan(
           statusOK && record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
+        if (extractionPostStarted && record.status !== "passed")
+          throw Error("原生响应提取阶段断言或原始响应状态失败，变量未提交");
+        if (extractionPostPolicy) await commitScopes();
       }
     } catch (error) {
+      stopAfterExtractionFailure =
+        extractionPostPolicy || isNativeExtractionPhaseFailure(error);
       record.status = "failed";
+      if (error.databaseQueries?.length)
+        (record.databaseQueries ||= []).push(
+          ...error.databaseQueries.map((item) => ({
+            ...item,
+            phase: scriptPhase,
+          })),
+        );
       if (error.networkRequests)
         record.subrequests.push(
           ...error.networkRequests.map((item) => ({
@@ -865,8 +937,11 @@ export async function runPlan(
             phase: scriptPhase,
           })),
         );
-      scopes.environment = committedScopes.environment;
-      scopes.globals = committedScopes.globals;
+      if (extractionPostStarted) scopes = structuredClone(committedScopes);
+      else {
+        scopes.environment = committedScopes.environment;
+        scopes.globals = committedScopes.globals;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
@@ -880,6 +955,7 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
+    if (stopAfterExtractionFailure) break;
   }
   return {
     id: id(),
