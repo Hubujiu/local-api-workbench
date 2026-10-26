@@ -1,3 +1,4 @@
+import { resolveNativeEnvironment } from "./native-mcp-environments.mjs";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { applyMCPInput } from "./mcp-request-input.mjs";
@@ -141,7 +142,7 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
   if (typeof description !== "string" || description.length > 10000)
     throw Error("计划说明无效");
   const environmentId = own(args, "environment_id")
-    ? selectedEnvironment(project, args.environment_id).id
+    ? resolveNativeEnvironment(project, args.environment_id).id
     : previous?.environmentId || selectedEnvironment(project).id;
   const source = own(args, "steps") ? args.steps : null;
   if (
