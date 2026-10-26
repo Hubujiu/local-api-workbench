@@ -1,4 +1,5 @@
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
+import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -567,9 +568,15 @@ try {
               nativeXMLLibrary +
               ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
             : "null") +
+          ";const readText=" +
+          (workerData.responseExtractions.some(
+            (operation) => operation.source === "responseText",
+          )
+            ? "(" + nativeResponseTextReaderSource + ")(response)"
+            : "null") +
           ";const state=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)

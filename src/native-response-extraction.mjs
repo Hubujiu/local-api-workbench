@@ -57,27 +57,42 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
   nativeDataObject(value, ["source", "variables"]);
   if (!["source", "variables"].every((key) => Object.hasOwn(value, key)))
     throw Error("pickVars缺少自有来源或变量字段");
-  if (!["responseJson", "responseHeader", "responseXml"].includes(value.source))
-    throw Error("pickVars仅支持responseJson/responseHeader/responseXml来源");
+  if (
+    !["responseJson", "responseHeader", "responseXml", "responseText"].includes(
+      value.source,
+    )
+  )
+    throw Error(
+      "pickVars仅支持responseJson/responseHeader/responseXml/responseText来源",
+    );
+  const isText = value.source === "responseText";
   nativeDataArray(value.variables, 100);
   const variables = value.variables.map((row) => {
     nativeDataObject(row, ["name", "expression", "type"]);
-    if (!["name", "expression", "type"].every((key) => Object.hasOwn(row, key)))
+    const required = isText ? ["name", "type"] : ["name", "expression", "type"];
+    if (!required.every((key) => Object.hasOwn(row, key)))
       throw Error("pickVars变量缺少自有字段");
     if (
       !text(row.name, 200) ||
-      !text(row.expression, 1000) ||
+      (Object.hasOwn(row, "expression") && !text(row.expression, 1000)) ||
       typeof row.type !== "string" ||
       !Object.hasOwn(scopes, row.type)
     )
       throw Error("pickVars变量字段或作用域无效");
     if (enabled) {
-      if (!safeName(row.name)) throw Error("pickVars变量名无效");
+      if (!safeName(isText ? row.name.trim() : row.name))
+        throw Error("pickVars变量名无效");
       if (value.source === "responseHeader") headerName(row.expression);
       else if (value.source === "responseXml") nativeXMLPath(row.expression);
-      else jsonPathSegments(row.expression.trim() || "$");
+      else if (!isText) jsonPathSegments(row.expression.trim() || "$");
     }
-    return { name: row.name, expression: row.expression, type: row.type };
+    return {
+      name: row.name,
+      ...(Object.hasOwn(row, "expression")
+        ? { expression: row.expression }
+        : {}),
+      type: row.type,
+    };
   });
   const result = { source: value.source, variables };
   if (Buffer.byteLength(JSON.stringify(result)) > 65536)
@@ -92,13 +107,15 @@ export function compilePickVarsOperations(value = []) {
   return normalized.map((data) => ({
     source: data.source,
     variables: data.variables.map((row) => ({
-      name: row.name,
+      name: data.source === "responseText" ? row.name.trim() : row.name,
       scope: scopes[row.type],
       ...(data.source === "responseHeader"
         ? { header: headerName(row.expression) }
         : data.source === "responseXml"
           ? { xmlPath: nativeXMLPath(row.expression) }
-          : { segments: jsonPathSegments(row.expression.trim() || "$") }),
+          : data.source === "responseText"
+            ? {}
+            : { segments: jsonPathSegments(row.expression.trim() || "$") }),
     })),
   }));
 }
@@ -114,6 +131,7 @@ function installPickVars(
   global,
   temporary,
   readXML,
+  readText,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -203,6 +221,8 @@ function installPickVars(
         throw Error("pickVars响应根须为JSON对象或数组");
     }
     const selectXML = operation.source === "responseXml" ? readXML() : null;
+    // Text is the entire current body, read once per task, never per row.
+    const currentText = operation.source === "responseText" ? readText() : null;
     const rows = operation.variables,
       assignments = create(null);
     nodes = 0;
@@ -213,7 +233,9 @@ function installPickVars(
           ? headerValue(row.header)
           : operation.source === "responseXml"
             ? selectXML(row.xmlPath)
-            : root;
+            : operation.source === "responseText"
+              ? currentText
+              : root;
       if (operation.source === "responseJson")
         for (let part = 0; part < row.segments.length; part++) {
           if (value === null || typeof value !== "object")

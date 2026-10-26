@@ -172,3 +172,38 @@ intrinsic 图。正常资源分段测量显示，约 200B 文档每次 DOM parse
 约 61–72ms 降至 33–37ms；真实 worker 的两项目并发资源回归继续使用原预算。
 数值是本机样本而非跨设备性能保证；正式全量 guard 回归保留，仍不代表已完成此前
 被中断的独立专项审查。
+
+## responseText：有界当前完整正文
+
+同一合法静态 sender SHA256 见上。按 Python 通用换行后的 Unicode 字符偏移，
+33594865 / 33594935 在整任务开始读取一次 `pm.response.text()`；33599541 的每行
+直接把该文本赋给 trim 后的 name，完全不读取 expression。SDK text 的 30688624
+优先解码当前 stream，否则返回当前 body；本片仅采用 Workbench 已有 decoded body /
+setBody 合同，不声称原 SDK 的 stream、charset 或缺失值持久化逐项等价。
+
+- 新增 `source:"responseText"`，仅启用后置任务；所有行取得同一份完整当前正文，
+  不 trim 正文、不做 String 强转、JSON/XML 解析、正则、子串或模板求值。空字符串、
+  空白、非 JSON 文本及合法 Unicode 原样保留，仍限每值 64KiB UTF-8。
+- Text 行仍为闭合 `{name,type,expression?}`。仅此来源的 expression 可以缺省；若自有
+  则必须是现有 1000 字符内的有效 Unicode 字符串，原样保存（包括模板字面），但不执行。
+  自有 undefined、非字符串、getter、隐藏字段、稀疏数组和未知来源继续拒绝。其他来源
+  的必填字段及表达式语义不变。原始 name 保存用于往返，仅编译时对 Text name trim，
+  并在 trim 后执行安全变量名校验，包括拒绝带空白的 `__proto__` 等保留名。
+- `native-response-text.mjs` 的可信 factory 在既有 installer 私有 IIFE 内创建 reader，
+  不留全局 lexical 入口，不增加 host 权限/依赖或 XML bundle/guard。bootstrap 捕获
+  原 response 对象和 descriptor / hasOwn / 字符读取器 / Error；每任务一次读取当前
+  own enumerable data primitive-string body，不调用公开 text()、getter 或 toString。
+  safe setBody 及原对象 body 的字符串更新对后续任务可见，原 wire response 不改变。
+- 缺失正文、非字符串、getter、无效 surrogate 或超限是阶段错误，不把 undefined
+  转为空串或字符串。原版可能把 undefined 继续交 setter，本片为避免伪成功/旧 token
+  后续请求明确更严格。仍复用全任务各行先验证再写入、整后置回滚、严格停止、完成性
+  和取消规则，不提升任务/值/阶段/VM/网络预算。
+- 冻结 nativeTasks 与既有脚本文本一样不参与 HTTP 字段的递归模板替换；否则惰性的
+  Text expression 或禁用任务会在登录请求之前被意外执行。任务中的脚本只在自身执行
+  时显式 replaceIn，HTTP URL/header/body 模板和数据库任务既有约束不变。
+
+`native-pick-text-boundaries.test.mjs` 覆盖闭合形状/optional 字段/trim 安全名、单任务
+单读取、零 getter/强转、原语捕获、空值/Unicode/64KiB、当前正文和私有 reader。
+真实 H1/H2 workflow 另覆盖原生导入→三个 scope→后续 Bearer、冻结定义、项目/环境隔离、
+Store/备份/重启，以及后置失败/取消不提交、不继续使用旧 token。Workbench backup
+往返不是原版 native export 等价证明；XML 未完成的独立 guard 专项状态保持不变。
