@@ -790,14 +790,40 @@ test("real scope persistence I/O failure stops later HTTP without assuming disk 
   assert.equal(obstructed, true);
   assert.equal(run.status, "failed");
   assert.equal(run.results.length, 1);
-  assert.match(run.results[0].error, /变量持久化失败/);
+  const result = run.results[0];
+  const uncertainMessage =
+    "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求";
+  if (result.error === uncertainMessage) {
+    // With the typed Store, a journal may already be published. Require its
+    // exact classification rather than treating any save error as uncertainty.
+    assert.deepEqual(result.scopeCommit, {
+      outcome: "unknown",
+      retrySafe: false,
+    });
+    const serialized = JSON.stringify(run);
+    assert.equal(serialized.includes(root), false);
+    assert.equal(serialized.includes(JSON.stringify(root).slice(1, -1)), false);
+    assert.equal(serialized.includes('"cause"'), false);
+  } else {
+    // Older storage, or an earlier read failure, reports the actual filesystem
+    // obstacle without inventing a journal outcome or a rollback guarantee.
+    assert.match(
+      result.error,
+      /^变量持久化失败：(ENOTDIR|ENOENT|EEXIST|EPERM|EACCES):/,
+    );
+    assert.equal(Object.hasOwn(result, "scopeCommit"), false);
+  }
+  assert.equal(result.response.status, 200);
+  assert.equal(JSON.parse(result.response.body).token, "fresh");
+  assert.equal(run.variables.token, "stale");
   assert.equal(run.recordSaved, false);
   assert.deepEqual(seen, ["/login"]);
   await rm(history);
   await rename(kept, history);
   const recovered = await new Store(root).get(project.id);
-  // A published journal may roll forward; a stronger Store can reject earlier.
-  // Neither outcome permits replaying a completed login automatically.
+  // Storage and OS read semantics determine whether the obstacle is seen before
+  // journaling (old token) or after publication (recovery may apply fresh token).
+  // Neither classification permits replaying a completed login automatically.
   assert(
     ["stale", "fresh"].includes(recovered.environments[0].variables.token),
   );
