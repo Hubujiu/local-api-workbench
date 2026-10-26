@@ -74,7 +74,13 @@ export async function verifyNativeMongoFlow(config) {
     assert.equal(seen.length, 0);
     assert.equal((await grant(p, { type: "postgres" })).status, 400);
     assert.equal(
-      (await grant(p, { user: "missing-user", password: "not-real" })).status,
+      (
+        await grant(p, {
+          user: "missing-user",
+          password: "not-real",
+          authSource: undefined,
+        })
+      ).status,
       400,
       "authenticated native grant requires explicit authSource",
     );
@@ -216,10 +222,21 @@ export async function verifyNativeMongoFlow(config) {
           run.results[0].databaseQueries[0].status === "completed",
       ),
     );
-    const disk = JSON.stringify(await app.store.get(p.id));
-    assert(!disk.includes("discard-this-fictional-password"));
-    assert(!disk.includes("not-real"));
-    assert(!disk.includes("source-auth-not-inherited"));
+    for (const id of [p.id, restored.id]) {
+      const disk = JSON.stringify(await app.store.get(id));
+      for (const forbidden of [
+        "discard-this-fictional-password",
+        "not-real",
+        "source-auth-not-inherited",
+        config.password,
+        config.ca,
+      ].filter(Boolean)) {
+        assert(
+          !disk.includes(JSON.stringify(forbidden).slice(1, -1)),
+          "runtime binding/source credentials must not enter persisted project or restored history",
+        );
+      }
+    }
     assert.deepEqual(source, original);
     console.log("REAL_NATIVE_MONGODB_DOCUMENT_NULL_SCOPES_HTTP_RESTORE_PASS");
   } finally {
