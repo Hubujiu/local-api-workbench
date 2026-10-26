@@ -1,4 +1,4 @@
-# 后端检查点 · 2026-10-26 17:36 UTC
+# 后端检查点 · 2026-10-26 17:53 UTC
 
 本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
@@ -72,13 +72,21 @@ PR25修正测试为精确的generic/typed双分支（typed必须有unknown/retry
 
 最新已核验组合为9d21b494a84ad3f047c1f4c0e6146465306a4085，tree b74b814c49658d5b3450681b1b5ad98106d5fb7e；push CI40363859110全部10个job首轮通过，实际checkout为该SHA。覆盖真实MCP/CLI的断言soft failure、与pickVars共存的严格停止、SQLite混排、备份恢复及惰性来源不插值。该绿灯不包含下面的新等待能力。
 
-## 原生有界等待：组合验证中
+## 原生有界等待：组合已核验
 
-独立draft PR27基于PR26，最终功能head d8ce3c9f0f7b6ba332a6e3078b88cc2cbb7cce88、tree 977603d81bc4d794d031a11da4870cd46b99b446。初始CI40366399379的三OS失败保留：旧测试仍把合法wait:10视为未知类型；已保留真正未知类型、字符串和超预算的原子拒绝检查，并增加合法输入正例。最终head的CI尚待核实，不借用前版结果。
+独立draft PR27基于PR26，最终功能head d8ce3c9f0f7b6ba332a6e3078b88cc2cbb7cce88、tree 977603d81bc4d794d031a11da4870cd46b99b446。初始CI40366399379的三OS失败保留：旧测试仍把合法wait:10视为未知类型；已保留真正未知类型、字符串和超预算的原子拒绝检查，并增加合法输入正例。最终head的CI40368410367首轮10个job成功，实际test merge421242c00913a3df6e8dd8f9d61ea46b0b560439的tree与head一致。
 
 启用等待仅接受0..1000整数毫秒，同阶段累计不超过1000；0不调度timer、不让出微任务。正等待使用私有原始timer调度及可信完成检查，共用现有timer/活动/总时长限制。禁用来源保留有界JSON标量但不转换、不执行。不同于原版同步阻塞，安全异步等待期间既有回调可以运行；不宣称任意异步控制流等价。
 
-组合保留PR3预算模块，CLI collector闭合验证等待且不因此授予数据库权限，原生flow API来源仍惰性。本地真实SDK HTTP/stdio前后阶段取消、stdio EOF及CLI导入/冻结/备份恢复已通过；同时核对真实等待期间标记，取消后不提交未完成阶段变量、不执行后续请求，独立项目不受影响。组合仍需自身跨平台CI，不作已验收声明。
+组合保留PR3预算模块，CLI collector闭合验证等待且不因此授予数据库权限，原生flow API来源仍惰性。本地真实SDK HTTP/stdio前后阶段取消、stdio EOF及CLI导入/冻结/备份恢复已通过；同时核对真实等待期间标记，取消后不提交未完成阶段变量、不执行后续请求，独立项目不受影响。等待组合49508b3598110095ad4c482132cc6cb81b2ca647、tree59a8424aeacb06b536a8335de841ef7eb301748b已通过push CI40370787451首轮全部10个job，全部actual checkout精确该SHA。既有DB/TLS/stdio和预算边界仍通过。这是有界等待范围的证据，不是完整产品交付。
+
+## API本地混排任务原生导出：新组合验证中
+
+独立draft PR28以仅连接PR14与PR27的依赖基线为临时目标，功能diff独立，不包含其他集成能力。基线remote2eded2761576222049651b31eda9f53b5ea2be9a、tree998d65126f1a5a0fac8255085422c8c59e1d7ad7；不是合入develop/main。
+
+首阶段2a84aef232dd44214e05207926789cf46cadfe51保存为WIP。审查真实发现request getter在校验前调用，以及纯脚本阶段metadata1800/拼接后64KiB限制导致JSON可导出但不可回读。修复head f9753d9db4855679b74f7787eb974170df15de89、tree d104c516587154c0a699487c90b5f74c6131c36b已推送同PR：先校验相关own descriptors，再复用现有纯phase parser预检，不放宽导入限制。独立定向54项及额外定义往返探针通过；最终head CI和新组合CI仍待核对。首阶段全量执行期间工作树变化，只能作为回归参考，不算最终提交证据。
+
+仅支持API-local customScript/pickVars/assert/wait混排定义；数据库、origin继承、惰性来源混用、纯脚本/空canonical管线及其他不可表达配置继续拒绝。目录冻结步骤显式拒绝nativeTasks，避免被覆写或回读为惰性来源而丢失行为。已跑真实HTTP导入→登录提取→Bearer→两格式导出→独立项目回读→执行→备份恢复/重启。只证明Workbench数据与执行往返；不宣称原版GUI往返、原版ID不变或原版执行安全语义相同。
 
 ## 明确剩余边界
 

@@ -76,6 +76,10 @@ export function exportApipostDirectory(project) {
         throw Error("原生目录步骤标识重复或缺失");
       stepIds.add(step.id);
       const request = step.request;
+      // Native flow snapshots do not execute API task lists. Exporting a live
+      // pipeline here would either erase it below or turn it into inert source.
+      if (request.nativeTasks !== undefined)
+        throw Error("原生目录尚不支持冻结步骤nativeTasks；请使用项目备份");
       if (step.name !== request.name)
         throw Error("原生目录不能分别保留步骤名与快照接口名；请使用项目备份");
       if (

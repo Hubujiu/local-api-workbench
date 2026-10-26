@@ -189,7 +189,7 @@ function responseHeaderMap(value) {
   validateMockResponse({ status: 200, body: "", headers });
   return headers;
 }
-function scriptTasks(value, phase, internalOrigins = false) {
+export function parseApipostScriptTasks(value, phase, internalOrigins = false) {
   if (empty(value)) return null;
   const tasks = list(value, phase, 16);
   const metadata = [];
@@ -310,7 +310,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         ["database", "pickVars", "assert", "wait"].includes(task?.type),
       )
     )
-      return scriptTasks(value, phase, origins);
+      return parseApipostScriptTasks(value, phase, origins);
     const tasks = nativeDatabaseTasks(value, databaseImport.map, {
       translated: origins,
       connections: databaseImport.connections,

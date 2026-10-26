@@ -1,3 +1,4 @@
+import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
@@ -270,9 +271,9 @@ export function exportApipost(project) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
+    const pipeline = exportApipostTaskPipeline(input);
     const r = normalizeRequest(input);
     for (const key of [
-      "nativeTasks",
       "importedNativeTaskSource",
       "bodyDynamic",
       "before",
@@ -384,8 +385,8 @@ export function exportApipost(project) {
           raw_schema: structuredClone(r.schema || {}),
           binary: null,
         },
-        pre_tasks: tasks(r, "before"),
-        post_tasks: tasks(r, "after"),
+        pre_tasks: pipeline?.before ?? tasks(r, "before"),
+        post_tasks: pipeline?.after ?? tasks(r, "after"),
       },
       response: exportApipostResponses(r),
     });
