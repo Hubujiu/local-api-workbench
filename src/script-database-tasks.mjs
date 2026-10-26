@@ -1,3 +1,4 @@
+import { redisCommand } from "./redis.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 
 const object = (value) =>
@@ -24,24 +25,35 @@ export function normalizeDatabaseOperations(value = []) {
           ].includes(key),
       ) ||
       (entry.resultShape !== undefined &&
-        entry.resultShape !== "mysql-resultsets") ||
+        !["mysql-resultsets", "redis-value"].includes(entry.resultShape)) ||
       !name(entry.connectionId) ||
       typeof entry.query !== "string" ||
       !entry.query.trim() ||
       entry.query.length > 50000 ||
       /\{\{/.test(entry.query) ||
-      !/^\s*(SELECT|WITH)\b/i.test(entry.query) ||
+      (entry.resultShape !== "redis-value" &&
+        !/^\s*(SELECT|WITH)\b/i.test(entry.query)) ||
       ![-1, 0, 1].includes(entry.isConsoleOutput) ||
       !Array.isArray(entry.variables) ||
       entry.variables.length > 100
     )
       throw Error("数据库任务仅支持显式连接、静态只读SQL和有界提取；不插值SQL");
+    let query = entry.query;
+    if (entry.resultShape === "redis-value") {
+      const command = redisCommand({ sql: query });
+      if (
+        !["GET", "HGET", "EXISTS"].includes(command[0]) ||
+        (command[0] === "EXISTS" && command.length !== 2)
+      )
+        throw Error("原生Redis任务仅支持单键GET/HGET/EXISTS只读标量查询");
+      query = JSON.stringify(command);
+    }
     return {
       ...(entry.resultShape !== undefined
         ? { resultShape: entry.resultShape }
         : {}),
       connectionId: entry.connectionId,
-      query: entry.query,
+      query,
       isConsoleOutput: entry.isConsoleOutput,
       variables: entry.variables.map((variable) => {
         if (
@@ -69,6 +81,21 @@ export function normalizeDatabaseOperations(value = []) {
 export function databaseResultRows(operation, result) {
   if (!object(result) || !Array.isArray(result.rows))
     throw Error("数据库任务结果缺少rows");
+  if (operation.resultShape === "redis-value") {
+    if (
+      result.rows.length !== 1 ||
+      !object(result.rows[0]) ||
+      !Object.hasOwn(result.rows[0], "value") ||
+      !(
+        result.rows[0].value === null ||
+        ["string", "number"].includes(typeof result.rows[0].value)
+      )
+    )
+      throw Error(
+        "Redis任务需要一个文本、数值或null结果；不解析JSON文本或二进制对象",
+      );
+    return result.rows[0].value;
+  }
   return operation.resultShape === "mysql-resultsets"
     ? [result.rows]
     : result.rows;
