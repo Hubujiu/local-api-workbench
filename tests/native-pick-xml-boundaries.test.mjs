@@ -71,6 +71,21 @@ test("native XML compiles only bounded string(P) and never compiles disabled ret
   );
 });
 
+const nativeXMLAttributeRules = [
+  "/scripts/sandbox-intrinsic-guard.mjs text eol=lf",
+  "/scripts/sandbox-native-xml-entry.mjs text eol=lf",
+  "/src/native-xml-path.mjs text eol=lf",
+  "/src/vendor/native-xml-library.js -text",
+  "/src/vendor/native-xml-library.json -text",
+  "/src/vendor/NATIVE-XML-LICENSES.txt -text",
+];
+const attributeLines = (text) => text.split(/\r?\n/);
+function assertNativeXMLAttributes(text) {
+  const lines = attributeLines(text);
+  for (const line of nativeXMLAttributeRules)
+    assert(lines.includes(line), line);
+}
+
 test("native XML private bundle and MIT notices reproduce byte-for-byte from pinned reviewed inputs", async () => {
   execFileSync(process.execPath, ["scripts/build-native-xml.mjs", "--check"], {
     cwd: fileURLToPath(new URL("..", import.meta.url)),
@@ -89,15 +104,37 @@ test("native XML private bundle and MIT notices reproduce byte-for-byte from pin
     new URL("../.gitattributes", import.meta.url),
     "utf8",
   );
-  for (const line of [
-    "/scripts/sandbox-intrinsic-guard.mjs text eol=lf",
-    "/scripts/sandbox-native-xml-entry.mjs text eol=lf",
-    "/src/native-xml-path.mjs text eol=lf",
-    "/src/vendor/native-xml-library.js -text",
-    "/src/vendor/native-xml-library.json -text",
-    "/src/vendor/NATIVE-XML-LICENSES.txt -text",
-  ])
-    assert(attributes.split("\n").includes(line), line);
+  assertNativeXMLAttributes(attributes);
+});
+
+test("native XML attribute rules accept LF and CRLF without weakening exact line checks", () => {
+  const lf = nativeXMLAttributeRules.join("\n") + "\n";
+  const crlf = nativeXMLAttributeRules.join("\r\n") + "\r\n";
+  assert.deepEqual(attributeLines(lf), attributeLines(crlf));
+  assert.doesNotThrow(() => assertNativeXMLAttributes(lf));
+  assert.doesNotThrow(() => assertNativeXMLAttributes(crlf));
+  for (const input of [lf, crlf]) {
+    for (const suffix of [" ", " # extra", "-unexpected"])
+      assert.throws(() =>
+        assertNativeXMLAttributes(
+          input.replace(
+            nativeXMLAttributeRules[0],
+            nativeXMLAttributeRules[0] + suffix,
+          ),
+        ),
+      );
+    assert.throws(() =>
+      assertNativeXMLAttributes(
+        input.replace(
+          nativeXMLAttributeRules[0],
+          "# " + nativeXMLAttributeRules[0],
+        ),
+      ),
+    );
+    assert.throws(() =>
+      assertNativeXMLAttributes(input.replace(nativeXMLAttributeRules[0], "")),
+    );
+  }
 });
 
 test("native XML reads only own body data, does not expose DOM/require, and preserves exact scalar text", async () => {
