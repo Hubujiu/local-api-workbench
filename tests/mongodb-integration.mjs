@@ -35,3 +35,24 @@ await assert.rejects(
 );
 assert.equal((await run({ collection: "items" })).rows.length, 3);
 console.log("REAL_MONGODB_FIXTURES_PASS");
+
+const { verifyNativeMongoFlow } = await import(
+  "./native-mongodb-integration.mjs"
+);
+await verifyNativeMongoFlow({
+  type: "mongodb",
+  host: "127.0.0.1",
+  port: 27017,
+  database: "fixture",
+});
+assert.equal((await run({ collection: "items" })).rows.length, 3);
+
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+const { nativeMongoFixture } = await import("./fixtures/apipost-mongodb.mjs");
+await verifyMCPDatabaseFlow(
+  { type: "mongodb", host: "127.0.0.1", port: 27017, database: "fixture" },
+  { nativeImport: true, sourceFactory: nativeMongoFixture },
+);
+console.log("REAL_DECLARED_MONGODB_MCP_SDK_SCOPE_RESTART_PASS");

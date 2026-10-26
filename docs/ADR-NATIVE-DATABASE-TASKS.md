@@ -228,3 +228,29 @@ JS→SQL→HTTP, result persistence, restored-project isolation and restart/regr
 This is not an OpenSSH sshd or original-application runtime claim. The new exact
 commit CI is pending; MCP and CLI policy integration are separate feature updates
 and must be included before cross-entrypoint acceptance.
+
+## Declared MongoDB findone schema (work in progress)
+
+Independent support for the observed UI declaration: type mongodb, method findone,
+separate collectionName and JSON filter text. The visible original task chain
+omits collectionName and reaches a module without an active Mongo handler. This
+is a static finding, not a successful/failed original runtime measurement; these
+fixtures are independently authored, not claimed genuine original Mongo exports.
+
+The adapter reuses the existing licensed Mongo driver/worker and readonly
+mongoQuery validation, with limit=1/skip=0 and an explicit mongodb-document result
+shape. One document or null is returned for extraction; the driver's extra-match
+truncation probe is not a findone failure. Document paths use the root, null
+assigns null, missing fields fail atomically. Canonical Extended JSON preserves
+BSON precision/type and is a stated Workbench representation, not original wire
+parity. Shell code, JS/write operators, other methods, templates, Mongo SSH and
+independent native environment connections reject. Imported targets/credentials/
+auth_source remain discarded; authenticated runtime binding must explicitly name
+its current authSource rather than infer a source default.
+
+The scalar-console bridge now preserves enabled output for zero/null/empty text.
+Local contract, shape, validation and console regressions pass. The existing real
+Mongo service CI is extended with document/null/multiple-match/Extended JSON,
+three scopes and after-tasks, server/auth/extraction errors with no HTTP, grant
+isolation/revocation, restore/restart/regrant and persisted results. Its exact CI,
+MCP/CLI combination and inert frozen-task source updates remain pending.

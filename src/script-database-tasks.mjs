@@ -1,3 +1,4 @@
+import { mongoQuery } from "./mongodb.mjs";
 import { redisCommand } from "./redis.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 
@@ -25,13 +26,15 @@ export function normalizeDatabaseOperations(value = []) {
           ].includes(key),
       ) ||
       (entry.resultShape !== undefined &&
-        !["mysql-resultsets", "redis-value"].includes(entry.resultShape)) ||
+        !["mysql-resultsets", "redis-value", "mongodb-document"].includes(
+          entry.resultShape,
+        )) ||
       !name(entry.connectionId) ||
       typeof entry.query !== "string" ||
       !entry.query.trim() ||
       entry.query.length > 50000 ||
       /\{\{/.test(entry.query) ||
-      (entry.resultShape !== "redis-value" &&
+      (!["redis-value", "mongodb-document"].includes(entry.resultShape) &&
         !/^\s*(SELECT|WITH)\b/i.test(entry.query)) ||
       ![-1, 0, 1].includes(entry.isConsoleOutput) ||
       !Array.isArray(entry.variables) ||
@@ -47,6 +50,12 @@ export function normalizeDatabaseOperations(value = []) {
       )
         throw Error("原生Redis任务仅支持单键GET/HGET/EXISTS只读标量查询");
       query = JSON.stringify(command);
+    }
+    if (entry.resultShape === "mongodb-document") {
+      const normalized = mongoQuery({ sql: query });
+      if (normalized.limit !== 1 || normalized.skip !== 0)
+        throw Error("原生MongoDB任务只支持limit=1、skip=0的单文档查找");
+      query = JSON.stringify(normalized);
     }
     return {
       ...(entry.resultShape !== undefined
@@ -96,6 +105,17 @@ export function databaseResultRows(operation, result) {
       );
     return result.rows[0].value;
   }
+  if (operation.resultShape === "mongodb-document") {
+    if (
+      result.format !== "extended-json" ||
+      result.rows.length > 1 ||
+      (result.rows.length === 1 && !object(result.rows[0]))
+    )
+      throw Error("MongoDB任务需要单个Extended JSON文档或空结果");
+    // The shared driver probes one extra match; findone intentionally selects
+    // one document, so truncated=true is not an extraction failure.
+    return result.rows.length ? result.rows[0] : null;
+  }
   return operation.resultShape === "mysql-resultsets"
     ? [result.rows]
     : result.rows;
@@ -107,7 +127,8 @@ export function databaseAssignments(operation, result) {
     let value = rows;
     // Native scalar database results assign directly. Retain the path as
     // provenance, but do not index strings into characters or expose .length.
-    for (const key of operation.resultShape === "redis-value"
+    for (const key of operation.resultShape === "redis-value" ||
+    (operation.resultShape === "mongodb-document" && rows === null)
       ? []
       : jsonPathSegments(variable.pattern)) {
       if (

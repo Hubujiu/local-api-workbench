@@ -11,7 +11,7 @@ import { snapshotPlan, importIntoProject } from "../src/core.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
 export async function verifyMCPDatabaseFlow(
   config,
-  { nativeImport = false, requiresSSH = false } = {},
+  { nativeImport = false, requiresSSH = false, sourceFactory } = {},
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "mcp-database-"));
   let app = await createApp({ root, port: 0 }),
@@ -27,8 +27,9 @@ export async function verifyMCPDatabaseFlow(
     const other = await app.store.create("other");
     let bindingId;
     if (nativeImport) {
-      const source =
-        config.type === "redis"
+      const source = sourceFactory
+        ? sourceFactory(`http://127.0.0.1:${echo.address().port}/`)
+        : config.type === "redis"
           ? nativeRedisFixture(`http://127.0.0.1:${echo.address().port}/`)
           : nativeDatabaseFixture(
               `http://127.0.0.1:${echo.address().port}/`,
@@ -256,6 +257,19 @@ export async function verifyMCPDatabaseFlow(
       });
       assert.equal(refused.status, 400);
       assert.match((await refused.json()).error, /SSH/);
+    }
+    if (config.type === "mongodb" && nativeImport) {
+      const missingAuth = await fetch(endpoint(), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          ...grantInput,
+          user: "fixture-user",
+          password: "fictional",
+        }),
+      });
+      assert.equal(missingAuth.status, 400);
+      assert.match((await missingAuth.json()).error, /authSource/);
     }
     let connection = await grant(),
       request = await putPlan(connection);
