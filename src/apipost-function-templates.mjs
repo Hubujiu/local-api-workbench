@@ -1,3 +1,4 @@
+import { base64EncodingPreflight } from "./base64-encoding-preflight.mjs";
 import {
   replaceExactApipostTemplate,
   replaceApipostFieldTemplate,
@@ -102,8 +103,10 @@ export async function resolveApipostFunctionTemplate(
   const base64Code = selected.some((fn) => isApipostBase64Stage(fn.name))
     ? String.raw`
     const __apipostEncodingLibrary=require("crypto-js");
+    const __apipostEncodingPreflight=(${base64EncodingPreflight.toString()});
     const __apipostBase64=(input,decode)=>{
       if(typeof input!=="string")throw Error("原版Base64加工链仅支持文本输入");
+      if(!decode)__apipostEncodingPreflight(input);
       try {
         const enc=__apipostEncodingLibrary.enc;
         if(!decode)return enc.Base64.stringify(enc.Utf8.parse(input));
