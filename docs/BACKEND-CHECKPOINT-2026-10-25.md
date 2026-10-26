@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 19:40 UTC
+# 后端检查点 · 2026-10-26 20:09 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：a1a892f8bf25999f6002a577a10ae923cdd0ef0d。
-- Tree：0c37c47700412425eb9f40f4dca6901c4a8946ca，与本地0f95b7c63889789c2ada25827796bc87d6cbbcdd一致。
-- Push CI：[40385995975](https://github.com/Hubujiu/local-api-workbench/actions/runs/40385995975)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：a1b99b1b3a0ff07f5afc4c048acf3f9ac780e17f。
+- Tree：0e9208e909b84ec49d07101ca034a09a26471bdc，与本地7bbc2af73349b42eadab4c160ad6b8f8ded55625一致。
+- Push CI：[40389099302](https://github.com/Hubujiu/local-api-workbench/actions/runs/40389099302)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含PR7 saved-flow来源及导出保护，不包含下述OAuth2生命周期与Base64早拒修复。**
+- **该基线包含OAuth2生命周期和Base64早拒，不包含下述MySQL显式写生命周期修复。**
 
 ## 最近功能PR与精确CI
 
@@ -25,9 +25,9 @@
 | #29 MCP项目往返     | c25897e7bb1c71f680c826502e26621799c4f4d5 | CI40377086009成功；merge535ae58c6d4d61b8e813e2ca212b930c14b2f1e7，tree270396551bba40355e8ef273c97464bc47beaf78=head  |
 | #30 执行保存收据    | a47d40b8041e96238c117b9e20d3a3792752bdb7 | tree9a06aba5c49b99369f990f967dd1f78a299eb9a8；CI40381534716进行中，不能算通过                                        |
 
-PR31 OAuth2生命周期当前head b8212924c139497196ebb28faa1742a75382c23d/tree640595564efa1f3aa82404b69e0db67b9c82233d，CI40388177786进行中。PR32 Base64早拒head2d5f390270e52037bc48f437eb45c52aeca54106/treec27663db3e9cc2689ef7bc673806230157527148，CI40387995935进行中。二者都直接基于develop88f70bb，独立功能diff，未把认证或模板生产修复塞进PR7。
+PR31 OAuth2生命周期当前head b8212924c139497196ebb28faa1742a75382c23d/tree640595564efa1f3aa82404b69e0db67b9c82233d，CI40388177786全部10个job成功（actual merge42d08a8dc50e90ace367b7164d9d1e161408f0de，tree=head）。PR32 Base64早拒head2d5f390270e52037bc48f437eb45c52aeca54106/treec27663db3e9cc2689ef7bc673806230157527148，CI40387995935全部10个job成功（actual merge5f691087ac8734879f0cb7031ed4719464786886，tree=head）。二者都直接基于develop88f70bb，独立功能diff，未把认证或模板生产修复塞进PR7。
 
-PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
+PR1/2最后重新读取于19:45 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
 
 ## PR30已验证：真实执行完成与保存结果分开
 
@@ -53,7 +53,7 @@ PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧
 
 功能final已保存，定向真实CLI/HTTP 503继续、输入/环境优先、取消、编辑/克隆/restore与独立getter回归通过。组合保留原active nativeMCP预算及手工编辑剥离语义，补原生SDK读写/执行授权隔离及导出guard。该导入组合已由a1a892自己的完整CI验证；静态来源+synthetic Workbench fixture不是原版GUI运行证明。独立PR7旧模板测试RED单独保留。
 
-## OAuth2与Base64：新组合待CI
+## OAuth2与Base64：组合已验证
 
 OAuth2严格按RFC6749逐项form编码client ID/secret再Basic，不改变普通HTTP Basic；显式basic/body/none放置，错误类型模式、坏Unicode授权码/刷新值在网络前拒绝。使用owned取消控制器停止真实token请求，已关闭/已消费/失效flow不接纳迟到结果，隔离并发flow，不自动重试或保存。返回显式非Bearer类型时明确拒绝，防止现有客户端误改成Bearer；缺省及Bearer大小写保持已有兼容，不新增MAC/DPoP或真实账户权限。原15秒网络截止和容量约束不放宽。
 
@@ -61,7 +61,17 @@ OAuth2严格按RFC6749逐项form编码client ID/secret再Basic，不改变普通
 
 Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 JSON字节；确定超出既有64KiB中间上限则早拒。保留原编码/解码、后置与最终field cap和250ms/2s执行预算。实际生成代码测试核对超限不调用编码器、合法仍调用；删除预检调用的mutant仍会调用编码器，原后置cap仍拒绝。不是把timeout当quota通过，也不声明原macOS具体超时成因已确定。
 
-本地39项相关组合及一条完整SDK/CLI/receipt链通过，独立审查也通过；**新组合仍需自身精确完整CI**，不能借a1a892绿灯。
+本地39项相关组合及一条完整SDK/CLI/receipt链通过，独立审查也通过；这些OAuth2/Base64组合范围已由a1b99自己的完整CI验证，不等于原PR7 macOS超时根因已确定。
+
+## MySQL显式写生命周期：新组合待CI
+
+独立draft PR33基于PR24最终只读传输修复，head567bc1ea1f037558367f1fcb8b3daebb8c9aaf18/tree91630d98e0c6a08cc1d637a6a9e3f9724adbeef4；CI40392670629进行中。没有把新write行为混入PR24，也不扩MCP/CLI写入授权。
+
+原真实owner HTTP回环红例证明：metadata COM_STMT_PREPARE可以绕过driver execute的2秒timeout；另SET超时虽然返回错误并释放write lease，mysql2.destroy仅end导致两个本地socket仍半开。本片拥有data/control公开stream，连接3秒、各事务阶段2秒，新增更严格8秒总工作期限，覆盖PREPARE+EXECUTE。最终清理强关owned transport并等actual close才放write/SSH lease，未用Promise.race冒充终止。
+
+保留allowWrite、单语句/绑定参数、InnoDB/元数据锁、1000行/warning/精度、TLS证书/SSH指纹检查。只有DML中允许有限自身thread KILL；COMMIT发出未ACK不再ROLLBACK/KILL或自动重试，明确结果未知；已观察COMMIT/ROLLBACK最终ACK不因后续时钟或清理改成未知。关闭本地连接仍不能证明远端回滚或触发器等副作用消失。owner断开不会新增取消已明确授权写入的行为。
+
+首阶段held TLS ClientHello关闭时暴露late error，最终通过public core connection先装error监听再await promise.connect修复，未读driver私有字段/升级依赖。真实wire、TLS、双SSH owner、ACK跨截止、容量/隔离/迟到回调与原两红例已本地通过。组合29项相关检查通过；**真实MySQL引擎写入/读回/回滚等及新组合自身完整CI仍待验证**，不能用协议peer代替真实服务。
 
 ## 历史失败与仍需调查的风险
 
