@@ -8,7 +8,11 @@ literal, and existing canonical plan messages retain their historical implicit
 interpolation (including its existing built-ins/encoding-object behavior).
 Explicit modes accept only UTF-8 text. WS/TCP messages are at most 1 MiB;
 SSE mode requires POST with a body of at most 64 KiB. Literal mode never expands
-placeholders, including in plans. No new dependency or frontend control is added.
+placeholders, including in plans. Explicit text modes send an empty WebSocket
+text frame when the resolved message is empty; unmarked empty one-shot/plan WS
+messages retain their old connect-only behavior. TCP has no zero-length message
+framing: an empty payload writes no data bytes and retains normal timeout/EOF
+outcomes. No new dependency or frontend control is added.
 
 Variables mode recognizes `{{ name }}` and uses only an own, data-property key
 from the selected project's global/environment scopes (environment wins); plans
@@ -58,8 +62,10 @@ message is not a claim that every send used that message. Prior record formats
 get no default provenance. Full Workbench backup/restore retains both definitions
 and inert evidence. Live sessions are not resumed after restart.
 
-This is not blanket secret redaction: explicitly transmitted message/body values
-and peer echoes are evidence; existing plan history also retains variable fields.
+This is not blanket secret redaction: open-time resolved default definitions can
+already contain referenced values even if WS/TCP send is never invoked. Actual
+message/body values and peer echoes are evidence; existing plan history also
+retains variable fields.
 Only private live variable context is newly excluded from serialization.
 
 ## Scope and evidence limitations
@@ -75,8 +81,10 @@ external endpoint is exercised by these tests.
 
 `node --test tests/protocol-text-templates.test.mjs` covers actual loopback
 WS/TCP/SSE HTTP, canonical plan/MCP dispatch, frozen edits and runtime extraction,
-live open/send/stop, scope isolation, zero-connect failures, bounded expansion,
-backup/restore, strict provenance validation and restart. The five existing
+live open/send/stop, concurrent project isolation, zero-connect/zero-write failures, bounded expansion,
+backup/restore, strict provenance validation, invalid legacy environment IDs and restart.
+The official SDK stdio test launches real authorized child processes twice and
+checks denied execution/cross-project calls without wire traffic. The five existing
 request-semantics/wire-plan/wire-evidence/wire-session-evidence/protocol-sessions
 files were also run (22 pre-existing tests). This checkpoint is not full CI or
 native-import acceptance; the parent publishes exact commit/test results.

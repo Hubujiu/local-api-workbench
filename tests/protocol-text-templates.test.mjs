@@ -1,3 +1,6 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -238,6 +241,11 @@ test("bounded explicit text modes preserve legacy forms and never evaluate repla
   assert.equal(context.variables.value, "fixed");
   assert.throws(() => protocolTemplateContext(project, ""));
   assert.throws(() => protocolTemplateContext(project, "foreign"));
+  for (const id of ["", 3, "x".repeat(201), "\ud800"])
+    assert.throws(
+      () => protocolTemplateContext({ environments: [{ id, variables: {} }] }),
+      /环境/,
+    );
   assert.throws(
     () =>
       protocolTemplateContext({
@@ -477,6 +485,7 @@ test("live WS TCP SSE uses one private open-time context and errors never send u
     );
     await until(() => f.received.length > count);
     assert.equal(f.received.at(-1).body, "environment/{{notExpanded}}");
+    const beforeFailure = f.received.length;
     assert.equal(
       (
         await f.post(`protocol-sessions/${sessionId}/send`, {
@@ -501,6 +510,12 @@ test("live WS TCP SSE uses one private open-time context and errors never send u
       "GET",
     );
     assert(!JSON.stringify(state).includes("not-in-session-evidence"));
+    assert.equal(
+      state.value.events.filter((event) => event.direction === "sent").length,
+      2,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(f.received.length, beforeFailure);
     const stopped = await f.post(`protocol-sessions/${sessionId}/stop`);
     assert.equal(stopped.value.recordSaved, true, JSON.stringify(stopped));
     const reset = await f.app.store.get(f.p.id);
@@ -568,5 +583,382 @@ test("live WS TCP SSE uses one private open-time context and errors never send u
   assert(sessions.get(local.id).templateContext);
   sessions.stop(local.id);
   assert.equal(sessions.get(local.id).templateContext, undefined);
+  const ssePrepared = prepareWireExecution(saved, { definitionId: "sse" });
+  const remote = sessions.start(ssePrepared.request, {
+    templateContext: ssePrepared.templateContext,
+  });
+  await until(() => sessions.get(remote.id).state === "closed");
+  assert.equal(sessions.get(remote.id).templateContext, undefined);
   sessions.close();
+  const beforeRestore = f.connections();
+  const backup = await f.request(
+    `/api/projects/${f.p.id}/export`,
+    undefined,
+    "GET",
+  );
+  const restore = await f.request("/api/restore", { document: backup.value });
+  assert.equal(restore.status, 201, JSON.stringify(restore));
+  assert.deepEqual(restore.value.protocolRuns, saved.protocolRuns);
+  await f.restart();
+  const reopened = await new Store(f.root).get(f.p.id);
+  assert.deepEqual(reopened.protocolRuns, saved.protocolRuns);
+  assert.equal(
+    (
+      await f.request(
+        `/api/projects/${f.p.id}/protocol-sessions/${sse.value.id}`,
+        undefined,
+        "GET",
+      )
+    ).status,
+    400,
+  );
+  assert.equal(f.connections(), beforeRestore);
+});
+
+test("official SDK stdio runs frozen template plans with explicit grants and restart", async (t) => {
+  const f = await fixture(t);
+  const response = await f.post("plans", {
+    steps: [
+      { id: "tcp", type: "protocol", protocol: { definitionId: "tcp" } },
+      {
+        id: "ws",
+        type: "protocol",
+        expectedStatus: "partial",
+        protocol: { definitionId: "ws", maxMessages: 1, duration: 150 },
+      },
+      { id: "sse", type: "protocol", protocol: { definitionId: "sse" } },
+    ],
+  });
+  assert.equal(response.status, 200);
+  const invoke = async (execute, projectId = f.p.id) => {
+    const client = new Client(
+      { name: "protocol-template-fixture", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [
+        fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+        "--project",
+        f.p.id,
+        ...(execute ? ["--write", "--execute"] : []),
+      ],
+      env: { LOCAL_API_DATA: f.root },
+      stderr: "pipe",
+    });
+    let stderr = "";
+    transport.stderr?.on("data", (part) => {
+      stderr += part.toString();
+    });
+    try {
+      await client.connect(transport);
+      return await client.callTool({
+        name: "localapi_run_plan",
+        arguments: { projectId, planId: response.value.id },
+      });
+    } finally {
+      await client.close();
+      assert(!stderr.includes("not-in-session-evidence"));
+    }
+  };
+  const before = f.connections();
+  assert.equal((await invoke(false)).isError, true);
+  assert.equal((await invoke(true, f.other.id)).isError, true);
+  assert.equal(f.connections(), before);
+  for (let restart = 0; restart < 2; restart++) {
+    const result = await invoke(true);
+    assert.equal(result.isError, undefined, result.content?.[0]?.text);
+    const run = JSON.parse(result.content[0].text);
+    assert.equal(run.status, "passed", JSON.stringify(run));
+    assert.equal(run.recordSaved, true);
+    assert.equal(
+      run.results[2].protocol.definition.body,
+      "environment/0/false//{{notExpanded}}",
+    );
+  }
+  assert.equal((await new Store(f.root).get(f.p.id)).runs.length, 2);
+});
+
+test("zero false empty and strict oversize errors across one-shot, plans and live preserve transport limits", async (t) => {
+  const f = await fixture(t);
+  for (const [variable, expected] of [
+    ["zero", "0"],
+    ["no", "false"],
+    ["empty", ""],
+  ]) {
+    const message = `{{${variable}}}`;
+    // Empty TCP has no framing/data byte: use WS/SSE for exact empty acceptance.
+    const direct = await f.post("protocol", {
+      definitionId: "ws",
+      message,
+      maxMessages: 1,
+      duration: 150,
+    });
+    assert.equal(direct.status, 200, JSON.stringify(direct));
+    assert.equal(f.received.at(-1).body, expected);
+    const plan = snapshotPlan({
+      steps: [
+        {
+          type: "protocol",
+          expectedStatus: "partial",
+          protocol: {
+            definition: { ...f.defs[0], templateMode: "variables" },
+            message,
+            maxMessages: 1,
+            duration: 150,
+          },
+        },
+      ],
+    });
+    const run = await runPlan(
+      plan,
+      f.p.environments[0].variables,
+      async () => {},
+      { executeProtocol: executeWireFlow },
+    );
+    assert.equal(run.status, "passed", JSON.stringify(run));
+    assert.equal(f.received.at(-1).body, expected);
+    const live = await f.post("protocol-sessions", {
+      definitionId: "ws",
+      message,
+    });
+    await until(
+      async () =>
+        (
+          await f.request(
+            `/api/projects/${f.p.id}/protocol-sessions/${live.value.id}`,
+            undefined,
+            "GET",
+          )
+        ).value.state === "open",
+    );
+    const count = f.received.length;
+    assert.equal(
+      (await f.post(`protocol-sessions/${live.value.id}/send`, {})).status,
+      200,
+    );
+    await until(() => f.received.length > count);
+    assert.equal(f.received.at(-1).body, expected);
+    assert.equal(
+      (await f.post(`protocol-sessions/${live.value.id}/stop`)).value
+        .recordSaved,
+      true,
+    );
+    const saved = await f.app.store.get(f.p.id);
+    saved.protocols.find((d) => d.id === "sse").body = message;
+    await f.app.store.save(saved);
+    assert.equal(
+      (await f.post("protocol", { definitionId: "sse" })).value.recordSaved,
+      true,
+    );
+    assert.equal(f.received.at(-1).body, expected);
+    const ssePlan = snapshotPlan({
+      steps: [
+        {
+          type: "protocol",
+          protocol: {
+            definition: {
+              ...f.defs[2],
+              templateMode: "variables",
+              body: message,
+            },
+          },
+        },
+      ],
+    });
+    assert.equal(
+      (
+        await runPlan(ssePlan, f.p.environments[0].variables, async () => {}, {
+          executeProtocol: executeWireFlow,
+        })
+      ).status,
+      "passed",
+    );
+    assert.equal(f.received.at(-1).body, expected);
+    const sseLive = await f.post("protocol-sessions", { definitionId: "sse" });
+    await until(
+      async () =>
+        (
+          await f.request(
+            `/api/projects/${f.p.id}/protocol-sessions/${sseLive.value.id}`,
+            undefined,
+            "GET",
+          )
+        ).value.state === "closed",
+    );
+    assert.equal(f.received.at(-1).body, expected);
+    assert.equal(
+      (await f.post(`protocol-sessions/${sseLive.value.id}/stop`)).value
+        .recordSaved,
+      true,
+    );
+  }
+  const project = await f.app.store.get(f.p.id);
+  project.environments[0].variables.big = "雪".repeat(349526);
+  project.environments[0].variables.sseBig = "x".repeat(65537);
+  project.protocols.find((d) => d.id === "sse").body = "{{sseBig}}";
+  await f.app.store.save(project);
+  const before = f.connections();
+  for (const route of ["protocol", "protocol-sessions"]) {
+    for (const definitionId of ["ws", "tcp"])
+      assert.equal(
+        (await f.post(route, { definitionId, message: "{{big}}" })).status,
+        400,
+      );
+    assert.equal((await f.post(route, { definitionId: "sse" })).status, 400);
+  }
+  const oversized = snapshotPlan({
+    steps: [
+      {
+        type: "protocol",
+        protocol: {
+          definition: { ...f.defs[1], templateMode: "variables" },
+          message: "{{big}}",
+        },
+      },
+    ],
+  });
+  assert.equal(
+    (
+      await runPlan(
+        oversized,
+        project.environments[0].variables,
+        async () => {},
+        { executeProtocol: executeWireFlow },
+      )
+    ).status,
+    "failed",
+  );
+  assert.equal(f.connections(), before);
+});
+
+test("simultaneous projects select independent environments; literal and legacy direct calls remain literal", async (t) => {
+  const f = await fixture(t);
+  const other = await f.app.store.get(f.other.id);
+  other.protocols = structuredClone(f.p.protocols);
+  other.environments[0].variables = { tenant: "other-project/雪🚀" };
+  await f.app.store.save(other);
+  const result = await Promise.all([
+    f.post("protocol", { definitionId: "tcp" }),
+    f.post("protocol", { definitionId: "tcp" }, f.other.id),
+    f.post("protocol", { definitionId: "tcp", environmentId: "alternate" }),
+  ]);
+  assert(result.every((r) => r.status === 200 && r.value.recordSaved));
+  assert.deepEqual(f.received.map((r) => r.body).sort(), [
+    "alternate",
+    "environment",
+    "other-project/雪🚀",
+  ]);
+  const project = await f.app.store.get(f.p.id);
+  project.protocols.push(
+    normalizeProtocol({ ...f.defs[0], id: "legacy", message: "{{missing}}" }),
+  );
+  project.protocols.push(
+    normalizeProtocol({
+      ...f.defs[0],
+      id: "literal",
+      templateMode: "literal",
+      message: "{{missing}}",
+    }),
+  );
+  await f.app.store.save(project);
+  for (const definitionId of ["legacy", "literal"]) {
+    assert.equal(
+      (
+        await f.post("protocol", {
+          definitionId,
+          maxMessages: 1,
+          duration: 150,
+        })
+      ).value.recordSaved,
+      true,
+    );
+    assert.equal(f.received.at(-1).body, "{{missing}}");
+    const live = await f.post("protocol-sessions", { definitionId });
+    await until(
+      async () =>
+        (
+          await f.request(
+            `/api/projects/${f.p.id}/protocol-sessions/${live.value.id}`,
+            undefined,
+            "GET",
+          )
+        ).value.state === "open",
+    );
+    const count = f.received.length;
+    assert.equal(
+      (await f.post(`protocol-sessions/${live.value.id}/send`, {})).status,
+      200,
+    );
+    await until(() => f.received.length > count);
+    assert.equal(f.received.at(-1).body, "{{missing}}");
+    assert.equal(
+      (await f.post(`protocol-sessions/${live.value.id}/stop`)).value
+        .recordSaved,
+      true,
+    );
+  }
+  const beforeEmpty = f.received.length;
+  const legacyEmpty = await f.post("protocol", {
+    definitionId: "legacy",
+    message: "",
+    duration: 100,
+  });
+  assert.equal(legacyEmpty.value.recordSaved, true);
+  assert.equal(f.received.length, beforeEmpty);
+  const literalEmpty = await f.post("protocol", {
+    definitionId: "literal",
+    message: "",
+    maxMessages: 1,
+    duration: 150,
+  });
+  assert.equal(literalEmpty.value.recordSaved, true);
+  assert.equal(f.received.length, beforeEmpty + 1);
+  assert.equal(f.received.at(-1).body, "");
+  const saved = await f.app.store.get(f.p.id);
+  for (const record of saved.protocolRuns.filter((r) =>
+    ["legacy", "literal"].includes(r.definition.id),
+  ))
+    assert(!Object.hasOwn(record, "templateProvenance"));
+});
+
+test("invalid legacy selected environment IDs and unscoped routes fail before any connection", async (t) => {
+  const f = await fixture(t);
+  const project = await f.app.store.get(f.p.id);
+  project.environments[0].id = "\ud800";
+  project.currentEnvironmentId = "\ud800";
+  await f.app.store.save(project);
+  const before = f.connections();
+  for (const route of ["protocol", "protocol-sessions"]) {
+    const result = await f.post(route, { definitionId: "tcp" });
+    assert.equal(result.status, 400);
+    assert.match(result.value.error, /选中环境ID/);
+  }
+  for (const route of ["tcp", "websocket", "sse"]) {
+    const result = await f.request("/api/" + route, {
+      templateMode: "variables",
+      message: "{{tenant}}",
+      url: f.defs[0].url,
+    });
+    assert.equal(result.status, 404);
+  }
+  for (let attempt = 0; attempt < 6; attempt++)
+    assert.equal(
+      (await f.post("protocol-sessions", { definitionId: "tcp" })).status,
+      400,
+    );
+  assert.equal(f.connections(), before);
+  const saved = await f.app.store.get(f.p.id);
+  assert.equal(saved.protocolRuns.length, 0);
+  saved.environments[0].id = f.p.environments[0].id;
+  saved.currentEnvironmentId = saved.environments[0].id;
+  await f.app.store.save(saved);
+  const opened = await f.post("protocol-sessions", { definitionId: "tcp" });
+  assert.equal(opened.status, 200, JSON.stringify(opened));
+  await until(() => f.connections() > before);
+  assert.equal(
+    (await f.post(`protocol-sessions/${opened.value.id}/stop`)).value
+      .recordSaved,
+    true,
+  );
 });

@@ -262,6 +262,9 @@ export async function executeWireFlow(input, signal) {
     const request = {
       ...protocolRequestOptions(input.definition),
       ...input,
+      ...(input.definition.templateMode !== undefined
+        ? { templateMode: input.definition.templateMode }
+        : {}),
       ...(type === "tcp"
         ? { host: input.definition.url, port: input.definition.port }
         : { url: input.definition.url }),

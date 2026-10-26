@@ -171,7 +171,11 @@ export function exchangeWebSocket(input, signal) {
       : 20;
     socket.once("open", () => {
       if (done) return;
-      if (payload.buffer.length || typeof message !== "string")
+      if (
+        payload.buffer.length ||
+        typeof message !== "string" ||
+        input.templateMode === "literal"
+      )
         socket.send(payload.buffer, { binary: payload.binary }, (error) => {
           if (error) finish(error);
         });

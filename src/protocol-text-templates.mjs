@@ -6,6 +6,11 @@ const plain = (value) =>
   [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 const limitFor = (type) => (type === "sse" ? 65536 : 1048576);
+const validEnvironmentId = (value) =>
+  typeof value === "string" &&
+  value.length > 0 &&
+  value.length <= 200 &&
+  value.isWellFormed();
 
 // Parse and account for every UTF-8 segment before constructing the result.
 // Values are data, never expressions, replacement patterns or another template.
@@ -103,6 +108,8 @@ export function protocolTemplateContext(project, environmentId) {
   )
     throw Error("协议模板环境ID无效");
   const environment = selectedEnvironment(project, environmentId);
+  if (!validEnvironmentId(environment.id))
+    throw Error("协议模板选中环境ID无效");
   const variables = Object.create(null);
   let entries = 0,
     bytes = 0;
@@ -139,15 +146,20 @@ export function validateTemplateProvenance(value, definition) {
   if (value === undefined) return;
   if (
     !plain(value) ||
-    Object.keys(value).length !== 2 ||
+    Reflect.ownKeys(value).length !== 2 ||
+    Reflect.ownKeys(value).some((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      return (
+        typeof key !== "string" ||
+        !descriptor.enumerable ||
+        !("value" in descriptor)
+      );
+    }) ||
     !Object.hasOwn(value, "sourceDefinitionHash") ||
     !Object.hasOwn(value, "environmentId") ||
     typeof value.sourceDefinitionHash !== "string" ||
     !/^[a-f0-9]{64}$/.test(value.sourceDefinitionHash) ||
-    typeof value.environmentId !== "string" ||
-    !value.environmentId ||
-    value.environmentId.length > 200 ||
-    !value.environmentId.isWellFormed() ||
+    !validEnvironmentId(value.environmentId) ||
     definition.templateMode !== "literal"
   )
     throw Error("协议模板来源记录无效");
