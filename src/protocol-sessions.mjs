@@ -1,3 +1,4 @@
+import { sseHeaders } from "./protocol-handshake.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
@@ -215,7 +216,7 @@ export class ProtocolSessions {
         (async () => {
           const response = await fetch(input.url, {
             ...options,
-            headers: { Accept: "text/event-stream", ...(input.headers || {}) },
+            headers: sseHeaders(input.headers),
             signal: session.controller.signal,
             redirect: "manual",
           });

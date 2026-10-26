@@ -1,3 +1,4 @@
+import { sseHeaders } from "./protocol-handshake.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -26,7 +27,7 @@ export async function captureSSE(
   try {
     const response = await fetch(target, {
       ...options,
-      headers: { Accept: "text/event-stream", ...headers },
+      headers: sseHeaders(headers),
       signal: controller.signal,
       redirect: "manual",
     });

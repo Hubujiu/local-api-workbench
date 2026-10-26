@@ -51,8 +51,9 @@ test("native protocol unsupported semantics and identity conflicts fail atomical
     (d) => (d.apis[3].request.header.arbitrary = true),
     (d) =>
       d.apis[0].request.header.parameter.push({
-        key: "Authorization",
-        value: "secret",
+        key: "Host",
+        value: "override.invalid",
+        is_checked: 1,
       }),
     (d) => (d.apis[0].message[0].request.mode = "binary"),
     (d) => (d.apis[0].config.reconnect_num = 99),
@@ -64,7 +65,7 @@ test("native protocol unsupported semantics and identity conflicts fail atomical
         type: "javascript",
         data: "throw 1",
       }),
-    (d) => (d.apis[3].request.auth.type = "basic"),
+    (d) => (d.apis[3].request.auth.type = "oauth2"),
     (d) => (d.apis[3].method = "DELETE"),
     (d) => (d.apis[3].request.query.parameter[0].is_checked = -1),
     (d) =>

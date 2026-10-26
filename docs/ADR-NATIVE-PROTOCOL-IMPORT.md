@@ -86,3 +86,40 @@ and restarted in the combined worktree, producing one Socket.IO definition,
 two gRPC definitions and three explicit message plans. Six actual executions
 verified Ack, exact int64/base64 and two-message server streams with unchanged
 source files. Precise-commit CI remains separately required.
+
+## Bounded WS/SSE handshake input
+
+Native WS and SSE Header/Cookie input can now be migrated through a frozen
+handshake description. Only accept, accept-language, content-type, cache-control,
+pragma and user-agent literal headers may persist. All other/custom headers,
+Cookie and supported SSE Basic/Bearer/header API-key authorization become required
+runtime header names; their source values are removed, including disabled and
+blank-key rows. Unknown templates/inheritance and ambiguous Cookie/header or
+auth/header overlap remain rejected. Socket.IO active headers remain unsupported.
+
+Execution must explicitly supply the complete runtime Header values. This adapter
+does not invent Cookie encoding, reconstruct removed credentials or acquire
+authority from imported settings. Original WS and SSE fictional localhost
+observations both sent fixtureCookie=a b%2F unchanged (SSE source cookie_encode:1);
+explicit runtime bytes preserve that observation without guessing a conversion.
+
+Normalize and combine headers case-insensitively with the existing 50-entry/8KiB
+bounds, including required names and SSE's default Accept. All enabled protocol
+steps are checked before any plan execution, so a missing later binding cannot
+allow an earlier network step. Single HTTP, interactive sessions and official
+MCP SDK calls share the fixed definition and ephemeral credentials path. No
+runtime binding may overwrite the frozen endpoint or persist into definitions.
+Old definitions without handshake retain their exact shape and evidence hash.
+
+Source credentials are not stored in definitions, provenance or snapshots.
+This is not arbitrary-data redaction: response bodies/messages/source response
+data may contain remote echoes and must be reviewed before sharing/exporting.
+The six-header whitelist is a conservative usage policy, not a secret detector.
+
+Independent real WS/SSE fixtures cover SDK project denial, absent binding with
+zero transport, stored/restarted/restored definitions, immutable plan inputs,
+case/size conflicts, original object preservation, interactive session finalizing,
+and source/request-credential removal. The new genuine original Header Matrix
+directory also contains settings requiring the combined importer; the isolated
+PR branch cannot import that whole directory by itself. Original full-directory
+acceptance is recorded separately only after the combined version is run.
