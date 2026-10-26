@@ -46,7 +46,7 @@ test("unsupported native RPC/Socket.IO options reject without mutating prior pro
     (d) => (d.apis[1].protos[0].services[0].methods[0].ssl = 1),
     (d) =>
       d.apis[1].protos[0].services[0].methods[0].request.metadata.parameter.push(
-        { key: "authorization", value: "secret" },
+        { key: "grpc-timeout", value: "10S" },
       ),
     (d) => (d.apis[1].protos[0].services[0].methods[0].request_stream = 1),
     (d) =>
@@ -88,4 +88,19 @@ test("native unsupported client-stream messages remain inert instead of creating
       .source.protos[0].services[0].methods[0].request.message[0].raw,
     source.apis[1].protos[0].services[0].methods[0].request.message[0].raw,
   );
+});
+
+test("native authorization metadata migrates only its requirement, not a stored credential", () => {
+  const source = extendedProtocolFixture();
+  source.apis[1].protos[0].services[0].methods[0].request.metadata.parameter.push(
+    { key: "authorization", value: "fixture-source-secret" },
+  );
+  const original = JSON.stringify(source),
+    p = project();
+  importIntoProject(p, source);
+  assert.deepEqual(p.settings.grpcDefinitions[0].requiredMetadata, [
+    "authorization",
+  ]);
+  assert.doesNotMatch(JSON.stringify(p), /fixture-source-secret/);
+  assert.equal(JSON.stringify(source), original);
 });
