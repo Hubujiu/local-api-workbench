@@ -5,7 +5,7 @@ const keys = new Set([
 ]);
 export async function readRuntimeCredentials(
   stream,
-  { signal, timeoutMs = 30000 } = {},
+  { signal, timeoutMs = 30000, allowDatabase = false } = {},
 ) {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000)
     throw Error("CLI 凭据读取期限无效");
@@ -43,7 +43,11 @@ export async function readRuntimeCredentials(
       typeof value !== "object" ||
       Array.isArray(value) ||
       Object.getPrototypeOf(value) !== Object.prototype ||
-      Object.keys(value).some((key) => !keys.has(key))
+      Object.keys(value).some(
+        (key) =>
+          !keys.has(key) &&
+          !(allowDatabase === true && key === "databaseConnections"),
+      )
     )
       throw Error("CLI 临时凭据只接受指定协议的步骤凭据映射");
     for (const map of Object.values(value))
