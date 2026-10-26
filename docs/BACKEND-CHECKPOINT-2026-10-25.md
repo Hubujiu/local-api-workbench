@@ -1,4 +1,4 @@
-# 后端交付检查点 · 2026-10-26 10:42 UTC
+# 后端交付检查点 · 2026-10-26 11:10 UTC
 
 本文件是范围与证据清单，不是完整交付声明。尚未合入 main/develop、未部署、未新增前端或视觉工作。功能改动保持独立 draft PR，同功能修复留在原 PR；组合分支仅用于跨模块验收。
 
@@ -14,9 +14,9 @@
 | #6 | 原生目录导入 | 2d1654a10fd73db70e098d02138bca77464b5d76 | 40200210452 success |
 | #7 | 冻结计划与来源结果 | 408b1288f7a4b586b0bbd57eef4eb2c18fe25fdc | 40275731913 success |
 | #8 | 原版认证导入 | 4716436e547ec28a7465251dadb0bed176a08fd4 | 40214404570 success |
-| #9 | 原生数据库任务与 Mongo TLS | 96f597c5c452ec0209de7cd11e398101446d3506 | 40282755388 success |
-| #10 | MCP 数据库临时授权 | ea3d98518f071b6754187da07987aca5ea287aa3 | 40282876321 success |
-| #11 | 原版条件 Mock 与路径路由 | 5bb93908b177dbd880d340978b278dde1bf73f37 | 40308934342 running |
+| #9 | 原生数据库任务与 Mongo TLS | 23871b56ff21905ab1f9c75dfef5bdbf6b365edd | 40311061527 success |
+| #10 | MCP 数据库临时授权 | 3024e59e5b6431d879164ca2272364fa79e0d1e9 | 40312763085 running |
+| #11 | 原版条件 Mock 与路径路由 | 5bb93908b177dbd880d340978b278dde1bf73f37 | 40308934342 success |
 | #12 | SSE/TCP 请求语义 | 19731690bafa368fbb5237799f5baab4e6792bdc | 40229568609 success |
 | #13 | 原版协议导入与消息计划 | f9ddb11510d79d8c3817d6ad2e403c6f580483dd | 40257510622 success |
 | #14 | 原生 JSON / 冻结 HTTP 目录导出 WIP | 7938e138da467f8721ff67377eb994bc41ecc2f0 | 40263622703 success |
@@ -29,7 +29,7 @@
 
 CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接运行编号。PR 地址为 https://github.com/Hubujiu/local-api-workbench/pull/ 后接编号。
 
-必要依赖采用堆叠 PR：#6 基于 #5，#7 基于 #6，#14 基于 #7，#10 基于 #9，#13 基于 #12，#11/#19 基于 #3 的共享脚本运行时修复；其余功能以 develop 为目标。#14 的 API-key 再导入在组合中使用 #8，独立分支测试不假装具备该导入器。
+必要依赖采用堆叠 PR：#6 基于 #5，#7 基于 #6，#14 基于 #7，#9 基于 #18，#10 基于 #9，#13 基于 #12，#11/#19 基于 #3 的共享脚本运行时修复；其余功能以 develop 为目标。#14 的 API-key 再导入在组合中使用 #8，独立分支测试不假装具备该导入器。
 
 本地与 GitHub Git Data API 提交的作者/时间可不同；发布时逐一核对 tree SHA 完全一致。不能用旧工作区、旧提交或单个功能分支的绿灯替代新组合提交验证。
 
@@ -37,9 +37,9 @@ CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 
 
 后续组合 ba373734 已通过 PG/MySQL SSH CLI。组合 dc817970 的 CI40280440086 在 Windows 第六组默认 Faker 压力样本因活动预算先耗尽而失败；原断言与250ms/2秒限制保持。#3 增加 ASCII UTF-8 长度快速路径、保留 Unicode 检查与全部六样本，组合 0f4d2e79f70e15093c32b5afdd35e85bafe70910 的 CI40281969111 首轮全部成功。这证明当前优化与回归通过，不证明历史调度/初始化波动唯一根因已消除。
 
-Mongo TLS 三入口组合 3d855002 的 CI40283100626、存储ID修复组合 6d01ca9e 的 CI40283697877 均已成功。最新已完成全套验证的是 abbcdc0634caebfbb3901c17a5f17cff6e0fda71（tree 84a91640da498be31c5295744e3cdc9d711e954b），CI40296309130 首轮成功，包含 HTTP/stdio MCP 取消、原生名称与新项目授权隔离、三个生产依赖发行包 stdio 冒烟，以及真实 Mongo TLS HTTP/MCP/CLI。它不含本提交新增的 Digest 和 Mock 媒体切片，当前组合仍须自己的 CI。
+Mongo TLS 三入口组合 3d855002 的 CI40283100626、存储ID修复组合 6d01ca9e 的 CI40283697877 均已成功。stdio 取消检查点 abbcdc0634caebfbb3901c17a5f17cff6e0fda71（tree 84a91640da498be31c5295744e3cdc9d711e954b），CI40296309130 首轮成功，包含 HTTP/stdio MCP 取消、原生名称与新项目授权隔离、三个生产依赖发行包 stdio 冒烟，以及真实 Mongo TLS HTTP/MCP/CLI。随后组合 0a59faa0adda331f2c19d97e1fd5bec09477acae（tree df7fdd761dbca2e24556284e4208f5d9b32dc813）的 CI40309744708 首轮全部成功，加入 Digest 与 Mock 媒体切片。新的 stdio 数据库授权组合 b2e0b927aba07734aee9b37fa3fe896683bb2e45 正在 CI40312422914 验证，不借上一组合绿灯代替。
 
-stdio 首轮1ef6ef1的CI40291307223保留两项失败：macOS链接路径入口与旧基线Faker预算压力。旧入口本地回归红灯、真实路径修正后绿灯；PR19依赖PR3，06cb4e6与3049fb6分别通过精确CI，三个生产包均使用隔离目录验证，没有借用开发依赖。Mock媒体首轮83899f8的CI40304334425仅Windows旧Faker压力失败，新Mock流程通过；PR11也改为依赖PR3，保留原六组断言及安全预算，当前表列新头仍在验证。旧失败未重跑或抹去。
+stdio 首轮1ef6ef1的CI40291307223保留两项失败：macOS链接路径入口与旧基线Faker预算压力。旧入口本地回归红灯、真实路径修正后绿灯；PR19依赖PR3，06cb4e6与3049fb6分别通过精确CI，三个生产包均使用隔离目录验证，没有借用开发依赖。Mock媒体首轮83899f8的CI40304334425仅Windows旧Faker压力失败，新Mock流程通过；PR11也改为依赖PR3，保留原六组断言及安全预算，新头5bb939已通过CI40308934342。旧失败未重跑或抹去。
 
 gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧拒绝断言失败；已本地复现并将该项更新为受控 grpc-timeout 拒绝，另加合法 Authorization 声明迁移/去源值正例。未重跑失败 SHA 碰绿灯；旧失败保留，现精确新提交结果见表。
 
@@ -87,7 +87,7 @@ gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧�
 
 ### Mock
 
-- 当前新增可选持久化scalar-text/raw-xml策略：false/0/空串/null按声明转文本，原始XML字节不解析或插值，旧对象/数组JSON不改默认字段。显式Content-Type按大小写无关处理，隔离/传输控制头仍拒绝。真实HTTP、匹配/fallback、保存/恢复/重启、并发项目隔离与生成错误恢复已本地验证；新精确CI待验。来源仅静态接口观察与独立夹具，不声称原版标量/XML线上等价。
+- 当前新增可选持久化scalar-text/raw-xml策略：false/0/空串/null按声明转文本，原始XML字节不解析或插值，旧对象/数组JSON不改默认字段。显式Content-Type按大小写无关处理，隔离/传输控制头仍拒绝。真实HTTP、匹配/fallback、保存/恢复/重启、并发项目隔离与生成错误恢复已本地验证；已通过PR11与0a59faa组合精确CI。来源仅静态接口观察与独立夹具，不声称原版标量/XML线上等价。
 
 - 原版 fixed200/schema-first、条件匹配/回退、重复 Query、响应头、Schema 和有限路径/方法/{参数}/选择器路由均经实际 HTTP 对照；保存恢复后及重启后的正向请求重新执行，非仅验证404。
 - 同项目冲突报409、未知路径报404是明确安全差异，不复制原版泛200回退/首项选择。旧接口ID路由仍兼容。镜像配置仅在精确一致时合并，真实冲突原子拒绝。
@@ -105,7 +105,9 @@ gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧�
 
 - HTTP取消按临时会话、类型保真的请求ID与授权epoch分域；相同编号跨客户端不互相取消，满执行槽仍可取消，删除/改权限有终态，重复ID拒绝。取消不会因保存失败变成假成功，活动保留recordSaved与executionStatus。
 - stdio复用MIT SDK 1.32.1的有界分帧，保留同一dispatcher的调试变量/协议并发限制，每请求独立进度。支持并发API/计划与原生别名取消、EOF保存收尾、close/EPIPE/背压失败、排队回复取消检查；活动先落盘再发唯一回复。8MiB单帧、12MiB队列/输入、32待处理与10工具槽限制明确，外部强杀不保证落盘，已发送请求/已进入原子保存不回滚。
-- 生产依赖包复制到仓库外再启动stdio，三平台验证SDK许可证与实际握手/调用，修复符号链接入口误判。stdout失败不代表执行未发生，已保存结果不能自动重放。stdio暂不承接HTTP进程中的数据库grant；独立数据库授权输入仍是剩余缺口，不借HTTP绑定自动扩大权限。
+- 生产依赖包复制到仓库外再启动stdio，三平台验证SDK许可证与实际握手/调用，修复符号链接入口误判。stdout失败不代表执行未发生，已保存结果不能自动重放。stdio仍不继承HTTP进程中的数据库grant。PR10新增显式 --database-grants-file 启动输入，固定初始项目白名单、严格文件/JSON/批次校验、私有别名与原生来源再校验；一次载入，不热加载。文件删除不撤销已载入授权；重启不带文件拒绝，带文件是显式重授。真实SQLite SDK→HTTP→落盘/跨项目/新建项目/重启已本地验证。PG/MySQL/Mongo TLS实际stdio流程在e4560c6的DB job通过，但该头旧MCP SSH fixture缺显式PG身份而失败；3024e59修复fixture且待完整CI。PR10独立仍为串行transport，取消/EOF仅在含PR19组合验证后声明。
+
+- 本提交额外加入owner-file授权后的stdio数据库取消闭环：真实Mongo驱动连接本机stalled TCP，SDK取消API与原始EOF取消计划分别验证新鲜cancelled记录、interrupted查询、实际socket关闭、无后续HTTP/变量、无文件重启拒绝。与既有stdio/loader/SQLite流程26项本地通过，仍须本提交跨平台CI；不是实际mongod取消或事务回滚证据。
 
 - 官方SDK HTTP/stdio覆盖项目/读写/执行权限、结果读取、临时数据库授权、撤销和重启。
 - #16提供已观察的30个原版工具名的有界适配，覆盖托管项目创建、环境/服务/变量、OpenAPI同步、API/文档发现、冻结计划、实际执行、历史、确认HTTP软删除及重启。单API保留自身脚本/断言/提取，计划不隐式继承；覆盖参数不会被旧动态值或SDK URL缓存替换。
