@@ -1,10 +1,10 @@
-# 后端检查点 · 2026-10-26 16:03 UTC
+# 后端检查点 · 2026-10-26 16:47 UTC
 
 本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
 ## 本轮读取的 PR 状态
 
-PR1、PR2、PR13、PR23、PR24、PR25 均为 open draft，未合并。PR1/2 在15:48 UTC重新读取，head与原精确CI未变化，没有重跑旧版本。
+PR1、PR2、PR3、PR13、PR23、PR24、PR25、PR26 均为 open draft，未合并。PR1/2 在15:48 UTC重新读取，head与原精确CI未变化，没有重跑旧版本。
 
 | PR | 已读取的 head | 目标 |
 |---|---|---|
@@ -13,7 +13,9 @@ PR1、PR2、PR13、PR23、PR24、PR25 均为 open draft，未合并。PR1/2 在1
 | #13 | f075e07fcb158f7dff639292cf7babfa931547d8 | feat/protocol-text-templates |
 | #23 | 2dbe12c868aa383850117a33528542e58c4972eb | feat/protocol-request-semantics |
 | #24 | 9cde529a25c5c5d985bc4574e4002176ea78f634 | fix/postgres-explicit-credentials |
-| #25 | 84d02f7e69e2234feb06b0dc11ba8001f6a38aac | feat/apipost-database-tasks |
+| #25 | eb323eb424eba2e0b2c6c969d7a4cd572333d43e | feat/apipost-database-tasks |
+| #3 | c5c588efd1a1f2b7153db7576b80776c916c7413 | develop |
+| #26 | aa95fd403b7561ff182145924704d2979d689ca5 | feat/native-response-extraction |
 
 本轮没有执行 main/develop 合并、部署、前端功能开发或原版程序运行。
 
@@ -48,13 +50,25 @@ PR13只在原生三个raw文本入口映射上述模式。字段来源、输入�
 
 传输关闭只证明本地资源清理，不保证远端SQL已停止或回滚。直接数据库读取HTTP断开会取消，但该检查端点原本就不创建计划/history记录。脚本记录落盘和底层连接关闭需分别观察。
 
-## 响应提取的新组合仍待验收
+## 响应提取组合及后续CI修正
 
 PR25首阶段080edd483183529d950eefd8ce22ac137268c668虽然CI40352851569通过，但独立错误路径验证发现断言与变量保存冲突后仍可能沿用旧token继续请求，因此该阶段明确不能验收。后续84d02f7e69e2234feb06b0dc11ba8001f6a38aac已保存修复，其tree为7e0d50bbd334f53ab7a6cb1f12e7385223a2e0ff；自己的远端CI需独立核对。
 
 支持原生post pickVars responseJson的有界单值提取，保留同阶段词法顺序、当前处理响应视图与原wire区别。包含启用提取的请求失败时停止后续计划步骤；未启用该能力的旧继续策略不变。可信出口检查捕获提前return和吞掉提取异常，失败后置阶段不提交内存scope。进入存储提交后的I/O失败仍可能是不确定提交，恢复可能完成journal，不能声称磁盘回滚或重放请求。
 
 本地新组合补齐PR2 CLI collector对新任务的闭合校验及PR7惰性来源保留，未激活原生flow里的API来源任务。实际SDK HTTP MCP、CLI登录→Bearer、CLI混排SQLite授权/提取、错误预检、重启已通过定向检查；修改原生flow fixture加入的synthetic pickVars在CLI与恢复项目中保持惰性，非JSON响应仍成功且变量不改写。它们不能借用2ec2的旧绿灯；新组合发布后仍须核对自己的完整CI。
+
+提取组合a1c46e7434b4f71972f5ca54ba8c32d529a08a61的CI40356149275保留为失败历史：Windows旧I/O fixture只接受generic错误，未识别typed unknown；另Faker计数测试先碰到activity截止。新增六项真实组合流程三OS通过并不能抵消这些失败。
+
+PR25修正测试为精确的generic/typed双分支（typed必须有unknown/retrySafe:false且脱敏），独立head eb323eb424eba2e0b2c6c969d7a4cd572333d43e的CI40358364565通过，实际merge31e7da4ffdce63bff37ac5e2774b78cceed093ee/tree6edfbddd55e34dde01c6dd2398a1fbb76741c210与head一致。PR3的c5c588efd1a1f2b7153db7576b80776c916c7413仅改测试分层与ADR：六个600+600样本仍用同真实Faker提供器/计数器，精确验证600/401；另有真实replaceIn双向混合配额测试与故意重置额度的红灯负例。250ms/2s/1000上限和生产代码未改。其CI40359028997通过，actual merge1a89ed1c37f3cc2708e7d7ca93f7ed06558f9c7a/tree7e18cdec73236be4b63480acee2735f7c9c308aa与head一致，不宣称解决所有系统调度延迟。
+
+最近完整全绿组合为4b26389c67bd20b80eeec94e3319ec69cce2f0ed：push CI40359410945首轮10个job成功，全部actual checkout该SHA，treeb50562570eda2970bdd1e3dfbd123a79aae011eb与本地一致。该组合覆盖提取、MCP/CLI/数据库混排及typed journal恢复，**尚不包含下述新原生断言**。
+
+## 原生响应断言组合尚待核验
+
+独立draft PR26的后续修复head aa95fd403b7561ff182145924704d2979d689ca5、treeb661be22413f1f4ad549141bc0516e2dcfac38b7已保存，自己的CI待独立核对。首片仅后置responseCode/responseJson、eq/uneq和字面字符串预期；不冒充原版递归变量替换、XML/其他来源/JSONPath表达式。比较失败保留soft failed assertion与普通计划继续策略；与启用pickVars共存时沿用已声明的严格失败停止策略。私有结果与可信完成性检查避免公共test数组改写/重复索引/提前return伪造完成；保留共享配额，未新增主机能力。
+
+组合解决scripts预算模块冲突时保留PR3预算校验/累计扣减，增加断言数预检。CLI DB collector识别并验证新类型，原生flow API来源仍是惰性数据。新真实CLI/恢复测试中加入JSON断言、禁用且未配置的模板来源，非JSON响应仍通过且变量不改，执行记录保留原来源，证明没有执行或插值它们。活动nativeTasks及旧脚本来源同样不再被普通wire字段插值；实际URL/Header/Body仍按原规则展开。新组合不得借用4b26389的旧绿灯。
 
 ## 明确剩余边界
 

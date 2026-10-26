@@ -581,7 +581,7 @@ test("native body inputs reject files, unknown form fields and non-text raw valu
   }
 });
 
-test("synthetic pickVars added to native flow API snapshots stays inert through CLI and restored projects", async (t) => {
+test("synthetic extraction and assertion API sources remain inert and uninterpolated through CLI restore", async (t) => {
   // Existing directory/flow layout is a genuine fixture; the added extraction
   // tasks are independently authored and do not claim original pickVars wire evidence.
   const root = await mkdtemp(path.join(os.tmpdir(), "native-pick-source-"));
@@ -620,6 +620,33 @@ test("synthetic pickVars added to native flow API snapshots stays inert through 
           name: "Inert script",
           enabled: 1,
           data: 'throw Error("API source must not execute")',
+        },
+        {
+          type: "assert",
+          id: "inert-assert",
+          name: "Inert JSON assertion",
+          enabled: 1,
+          data: {
+            type: "responseJson",
+            expression: {
+              path: "$.business",
+              compareType: "eq",
+              compareValue: "true",
+            },
+          },
+        },
+        {
+          type: "assert",
+          id: "disabled-template",
+          name: "Disabled incomplete source",
+          enabled: -1,
+          data: {
+            type: "responseJson",
+            expression: {
+              path: "{{DO_NOT_INTERPOLATE}}",
+              compareValue: "{{MISSING_SOURCE_VALUE}}",
+            },
+          },
         },
       ];
       step.pre_script = "";
@@ -660,6 +687,11 @@ test("synthetic pickVars added to native flow API snapshots stays inert through 
     assert.deepEqual(
       run.snapshot.steps.map((step) => step.request.importedNativeTaskSource),
       frozenSource,
+    );
+    assert.deepEqual(
+      run.results.map((step) => step.request.importedNativeTaskSource),
+      frozenSource,
+      "execution must not interpolate or activate opaque source fields",
     );
     const saved = await new Store(root).get(project.id);
     assert.equal(

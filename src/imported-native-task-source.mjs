@@ -1,3 +1,4 @@
+import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import { normalizePickVarsData } from "./native-response-extraction.mjs";
 // Frozen, canonical task provenance. No execution entry point reads this field.
 // Validate data descriptors before reading values: source records never run code.
@@ -103,6 +104,10 @@ export function normalizeImportedNativeTaskSource(value) {
         // Provenance only: retain bounded closed data without compiling paths or
         // enabling a native flow's original API tasks.
         data = normalizePickVarsData(task.data, { enabled: false });
+      } else if (task.type === "assert") {
+        // Historical API tasks in native flows remain data, never declarations
+        // to execute. Preserve disabled/unconfigured comparison shape too.
+        data = normalizeNativeAssertionData(task.data, { enabled: false });
       } else throw Error("未知任务来源类型");
       const metadata = {};
       for (const key of ["id", "name"])

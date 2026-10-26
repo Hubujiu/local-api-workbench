@@ -1,4 +1,4 @@
-// Combined acceptance: PR25 pickVars + existing MCP/CLI/native database branches.
+// Combined acceptance: native pickVars/assert + MCP/CLI/database branches.
 // Fictional loopback data only. SQLite tasks below are canonical, not a claim of
 // native vendor SQLite import. Extracted values are execution evidence; transient
 // database configurations and MCP bearer grants must not enter project evidence.
@@ -36,6 +36,20 @@ const pick = (variables) => ({
   enabled: 1,
   data: { source: "responseJson", variables },
 });
+const nativeAssert = (id, responsePath, expected, type = "responseJson") => ({
+  type: "assert",
+  id,
+  name: id,
+  enabled: 1,
+  data: {
+    type,
+    expression: {
+      path: responsePath,
+      compareType: "eq",
+      compareValue: expected,
+    },
+  },
+});
 function nativeSource(base) {
   const source = modernApipostFixture();
   source.global.envs = [];
@@ -55,6 +69,11 @@ function nativeSource(base) {
     script(
       "before-pick",
       'order.push("api");const prefix="derived:";const view=pm.response.json();view.session.token+="-view";apt.response.setBody(view);',
+    ),
+    nativeAssert(
+      "native-current-response",
+      "$.session.token",
+      "wire-entry-view",
     ),
     pick([
       row("token", "$.session.token"),
@@ -198,6 +217,12 @@ function assertPassedWire(f, start, token = "wire-entry-view") {
 async function assertSaved(f, projectId, run, source, frozen) {
   assert.equal(run.status, "passed", JSON.stringify(run.results));
   assert.equal(run.recordSaved, true);
+  assert.equal(
+    run.results[0].assertions.find(
+      (item) => item.name === "native-current-response",
+    )?.passed,
+    true,
+  );
   assert.deepEqual(
     run.results.map((item) => item.status),
     ["passed", "passed"],
@@ -455,6 +480,11 @@ test(
         ],
         after: [
           script("post-prefix", 'const postPrefix="post:";'),
+          nativeAssert(
+            "native-sqlite-response",
+            "$.session.token",
+            "wire-entry",
+          ),
           pick([
             row("token", "$.session.token"),
             row("localToken", "$.session.token", "tempVars"),
@@ -522,6 +552,12 @@ test(
       run = cliResult(passedOutput, 0);
     assert.equal(run.status, "passed", JSON.stringify(run.results));
     assert.equal(run.recordSaved, true);
+    assert.equal(
+      run.results[0].assertions.find(
+        (item) => item.name === "native-sqlite-response",
+      )?.passed,
+      true,
+    );
     assertPassedWire(f, start, "wire-entry");
     assert.equal(f.received[start].db, "sql:from-sqlite");
     assert.equal(run.results[0].databaseQueries[0].status, "completed");
@@ -589,3 +625,206 @@ test(
     assert.equal(JSON.stringify(saved).includes(filename), false);
   },
 );
+
+function nativeAssertionEvidence(record) {
+  return record.assertions
+    .filter((item) => ["native-false", "native-true"].includes(item.name))
+    .map((item) => [item.name, item.passed, item.phase]);
+}
+async function assertionProject(f, withPick) {
+  const project = await f.app.store.create("Native assertion entrypoint");
+  const source = nativeSource(f.base),
+    api = source.apis[1];
+  api.request.pre_tasks = [
+    script("before-proof", 'pm.environment.set("beforeProof","committed");'),
+  ];
+  api.request.post_tasks = [
+    script(
+      "ordered-start",
+      'order.push("api");const afterProof="same-phase-after-assert";',
+    ),
+    nativeAssert("native-false", "$.no", "true"),
+    nativeAssert("native-true", "$.zero", "0"),
+    ...(withPick ? [pick([row("token", "$.session.token")])] : []),
+    script(
+      "tamper-public-tests",
+      'for(const item of tests)item.passed=true;tests.length=0;tests.push({name:"forged-public-success",passed:true});pm.environment.set("afterNative",afterProof);pm.globals.set("afterGlobal",afterProof);pm.environment.set("order",order.join(","));console.log("same-phase-after-assert-ran");',
+    ),
+  ];
+  const original = structuredClone(source);
+  importIntoProject(project, source);
+  assert.deepEqual(source, original);
+  Object.assign(project.environments[0].variables, {
+    tenant: "entry",
+    token: "STALE_MUST_NOT_SEND",
+    afterNative: "prior-environment",
+  });
+  project.globalVariables.afterGlobal = "prior-global";
+  project.plans = [
+    snapshotPlan({
+      id: "assertion-flow",
+      steps: [
+        { request: project.requests[0] },
+        {
+          request: {
+            method: "GET",
+            url: f.base + "/resource",
+            auth: { type: "bearer", token: "{{token}}" },
+            inheritSharedScripts: false,
+            nativeTasks: {
+              version: 1,
+              before: [],
+              after: [
+                nativeAssert("next-native-success", "", "200", "responseCode"),
+              ],
+            },
+          },
+        },
+      ],
+    }),
+  ];
+  await f.app.store.save(project);
+  return project;
+}
+async function assertAssertionRun(f, project, run, start, withPick, source) {
+  assert.equal(run.status, "failed", JSON.stringify(run.results));
+  assert.equal(run.recordSaved, true);
+  assert.equal(run.results.length, withPick ? 1 : 2);
+  assert.equal(run.results[0].status, "failed");
+  assert.equal(run.results[0].response.status, 200);
+  assert.deepEqual(nativeAssertionEvidence(run.results[0]), [
+    ["native-false", false, "after"],
+    ["native-true", true, "after"],
+  ]);
+  assert.ok(
+    run.results[0].logs.some(
+      (item) =>
+        item.phase === "after" &&
+        item.message.includes("same-phase-after-assert-ran"),
+    ),
+    "native comparison false remains soft within the ordered VM phase",
+  );
+  assert.deepEqual(
+    f.received.slice(start).map((item) => item.path),
+    withPick ? ["/login/entry"] : ["/login/entry", "/resource"],
+  );
+  if (withPick) assert.match(run.results[0].error, /断言/);
+  else {
+    assert.equal(
+      run.results[0].error,
+      undefined,
+      "comparison false is not a thrown script failure",
+    );
+    assert.equal(run.results[1].status, "passed");
+    assert.deepEqual(
+      run.results[1].assertions.map((item) => [item.name, item.passed]),
+      [["next-native-success", true]],
+    );
+    assert.equal(f.received.at(-1).authorization, "Bearer STALE_MUST_NOT_SEND");
+  }
+  const saved = await new Store(f.data).get(project.id),
+    env = saved.environments[0].variables;
+  assert.equal(env.beforeProof, "committed");
+  assert.equal(env.token, "STALE_MUST_NOT_SEND");
+  assert.equal(
+    env.afterNative,
+    withPick ? "prior-environment" : "same-phase-after-assert",
+  );
+  assert.equal(
+    saved.globalVariables.afterGlobal,
+    withPick ? "prior-global" : "same-phase-after-assert",
+  );
+  if (!withPick) assert.equal(env.order, "project,folder,api");
+  const evidence = saved.runs.find((item) => item.id === run.id);
+  assert.equal(evidence.status, "failed");
+  assert.equal(evidence.source, source);
+  assert.deepEqual(
+    nativeAssertionEvidence(evidence.results[0]),
+    nativeAssertionEvidence(run.results[0]),
+  );
+  return saved;
+}
+for (const entrypoint of ["mcp", "cli"])
+  for (const withPick of [false, true])
+    test(
+      `native assertions: actual ${entrypoint} ${withPick ? "pick coexists: rollback and stop" : "assert-only: commit and continue"}, immutable failure evidence and backup/restart`,
+      { timeout: 30000 },
+      async (t) => {
+        const f = await fixture(t),
+          project = await assertionProject(f, withPick),
+          start = f.received.length;
+        const run =
+          entrypoint === "mcp"
+            ? await mcpRun(
+                (await f.connect(project.id)).client,
+                project.id,
+                "assertion-flow",
+                project.environments[0].id,
+              )
+            : cliResult(await cli(f, project, "assertion-flow"), 1);
+        const saved = await assertAssertionRun(
+          f,
+          project,
+          run,
+          start,
+          withPick,
+          entrypoint,
+        );
+        // Exercise the real backup/restore routes, not only an in-memory clone.
+        const backupResponse = await fetch(
+          `${f.app.url}/api/projects/${project.id}/export`,
+          { headers: { "x-local-token": f.app.token } },
+        );
+        assert.equal(backupResponse.status, 200);
+        const document = await backupResponse.json();
+        assert.deepEqual(
+          document.runs.find((item) => item.id === run.id).results,
+          saved.runs.find((item) => item.id === run.id).results,
+        );
+        const restoreResponse = await fetch(f.app.url + "/api/restore", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-local-token": f.app.token,
+          },
+          body: JSON.stringify({ document }),
+        });
+        assert.equal(
+          restoreResponse.status,
+          201,
+          await restoreResponse.clone().text(),
+        );
+        const restored = await restoreResponse.json();
+        assert.notEqual(restored.id, project.id);
+        const calls = f.received.length;
+        await f.restart();
+        assert.equal(
+          f.received.length,
+          calls,
+          "restore/restart cannot replay the saved flow",
+        );
+        for (const projectId of [project.id, restored.id]) {
+          const disk = await new Store(f.data).get(projectId),
+            evidence = disk.runs.find((item) => item.id === run.id);
+          assert.equal(evidence.status, "failed");
+          assert.equal(evidence.source, entrypoint);
+          assert.deepEqual(nativeAssertionEvidence(evidence.results[0]), [
+            ["native-false", false, "after"],
+            ["native-true", true, "after"],
+          ]);
+          assert.equal(evidence.results.length, withPick ? 1 : 2);
+          assert.deepEqual(
+            disk.plans[0].steps[0].request.nativeTasks,
+            project.plans[0].steps[0].request.nativeTasks,
+          );
+          assert.equal(
+            disk.environments[0].variables.afterNative,
+            withPick ? "prior-environment" : "same-phase-after-assert",
+          );
+          assert.equal(
+            disk.globalVariables.afterGlobal,
+            withPick ? "prior-global" : "same-phase-after-assert",
+          );
+        }
+      },
+    );

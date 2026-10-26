@@ -1,3 +1,4 @@
+import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
@@ -566,6 +567,18 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.responseAssertions?.length) {
+      const data = context.newString(
+        JSON.stringify(workerData.responseAssertions),
+      );
+      context.setProp(context.global, "__nativeAssertionDataJSON", data);
+      data.dispose();
+      install(
+        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const state=(" +
+          nativeAssertionsInstallerSource +
+          ")(globalThis.__nativeAssertionDataJSON,((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests);globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
+      );
+    }
     if (workerData.responseExtractions?.length) {
       const data = context.newString(
         JSON.stringify(workerData.responseExtractions),
@@ -731,6 +744,24 @@ try {
     measuredBounded("pick-vars-completion", "promiseStateMs", () =>
       run("__readNativePickVarsCompletion();"),
     );
+  if (workerData.responseAssertions?.length)
+    measuredBounded("native-assertion-completion", "promiseStateMs", () =>
+      run("__readNativeAssertionCompletion();"),
+    );
+  let nativeAssertionEvidence = [];
+  if (workerData.responseAssertions?.length) {
+    const result = measuredBounded(
+      "native-assertion-evidence",
+      "promiseStateMs",
+      () => context.evalCode("__readNativeAssertionEvidence()"),
+    );
+    if (result.error) {
+      result.error.dispose();
+      throw Error("原生断言证据不可读取");
+    }
+    nativeAssertionEvidence = JSON.parse(context.getString(result.value));
+    result.value.dispose();
+  }
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
@@ -751,9 +782,32 @@ try {
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
     throw Error("脚本输出超过 1 MiB");
+  const serializedResult = JSON.parse(json);
+  if (nativeAssertionEvidence.length) {
+    if (!Array.isArray(serializedResult.tests))
+      throw Error("脚本断言输出格式无效");
+    const claimed = new Set();
+    for (const entry of nativeAssertionEvidence) {
+      const target =
+        entry.index >= 0 &&
+        entry.index < serializedResult.tests.length &&
+        !claimed.has(entry.index)
+          ? entry.index
+          : serializedResult.tests.length;
+      serializedResult.tests[target] = entry.record;
+      claimed.add(target);
+    }
+    if (serializedResult.tests.length > workerData.assertionLimit)
+      throw Error("脚本断言输出超过本次共享断言预算");
+    if (
+      Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
+      1024 * 1024
+    )
+      throw Error("脚本输出超过 1 MiB");
+  }
   outcome = {
     result: {
-      ...JSON.parse(json),
+      ...serializedResult,
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
       activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {

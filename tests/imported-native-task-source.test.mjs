@@ -287,3 +287,53 @@ test("pickVars provenance remains closed inert data and cannot introduce hidden 
   }
   assert.equal(reads, 0);
 });
+
+test("assert provenance preserves disabled defaults without compiling templates or accepting hidden fields", () => {
+  const source = {
+    version: 1,
+    before: [],
+    after: [
+      {
+        type: "assert",
+        enabled: -1,
+        data: {
+          type: "responseJson",
+          expression: {
+            path: "{{unresolved}}",
+            compareValue: "{{also_unresolved}}",
+          },
+        },
+      },
+    ],
+  };
+  assert.deepEqual(normalize(source), source);
+  let reads = 0;
+  for (const alter of [
+    (s) => {
+      s.after[0].data.expression.compareType = "regexp";
+    },
+    (s) => {
+      s.after[0].data.expression.secret = "not retained";
+    },
+    (s) => {
+      s.after[0].data.type = "responseHeader";
+    },
+    (s) => {
+      Object.defineProperty(s.after[0].data.expression, "path", {
+        enumerable: true,
+        get() {
+          reads++;
+          return "$";
+        },
+      });
+    },
+  ]) {
+    const invalid = structuredClone(source);
+    alter(invalid);
+    assert.throws(() => normalize(invalid));
+    assert.throws(() =>
+      normalizeRequest({ importedNativeTaskSource: invalid }),
+    );
+  }
+  assert.equal(reads, 0);
+});

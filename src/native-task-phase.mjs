@@ -1,3 +1,4 @@
+import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -18,8 +19,10 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
     throw Error("原版任务阶段最多16项");
   const operations = [],
     responseExtractions = [],
+    responseAssertions = [],
     code = [],
     prefix = "__db_" + randomBytes(16).toString("hex");
+  const assertPrefix = "__assert_" + randomBytes(16).toString("hex");
   const pickPrefix = "__pick_" + randomBytes(16).toString("hex");
   let bytes = 0;
   for (const task of tasks) {
@@ -29,7 +32,7 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       typeof task !== "object" ||
       Array.isArray(task) ||
       ![1, 0, -1].includes(task.enabled) ||
-      !["customScript", "database", "pickVars"].includes(task.type)
+      !["customScript", "database", "pickVars", "assert"].includes(task.type)
     )
       throw Error("原版任务类型或启停标识无效");
     if (task.type === "customScript") {
@@ -39,6 +42,19 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       )
         throw Error("任务脚本合计最多64KiB");
       if (task.enabled === 1) code.push("\n" + task.data + "\n");
+    } else if (task.type === "assert") {
+      const data = normalizeNativeAssertionData(task.data, {
+        enabled: task.enabled === 1,
+      });
+      if (task.enabled === 1) {
+        if (!input.response) throw Error("启用原生断言仅支持后置响应阶段");
+        const index =
+          responseAssertions.push({
+            name: task.name ?? "Native response assertion",
+            data,
+          }) - 1;
+        code.push(`\n${assertPrefix}(${index});\n`);
+      }
     } else if (task.type === "pickVars") {
       const data = normalizePickVarsData(task.data, {
         enabled: task.enabled === 1,
@@ -68,11 +84,15 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
     (responseExtractions.length
       ? `const ${pickPrefix}=globalThis.__nativePickVarsTask;delete globalThis.__nativePickVarsTask;\n`
       : "") +
+    (responseAssertions.length
+      ? `const ${assertPrefix}=globalThis.__nativeAssertionTask;delete globalThis.__nativeAssertionTask;\n`
+      : "") +
     code.join("");
   return runScript(source, input, {
     ...options,
     databaseOperations: operations,
     responseExtractions,
+    responseAssertions,
   }).catch((error) => {
     // Only the host coordinator can mint this policy marker. VM exceptions are
     // reconstructed from allowlisted text/diagnostics and cannot forge Symbols.

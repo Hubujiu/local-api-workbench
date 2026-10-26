@@ -1,3 +1,4 @@
+import { compileNativeAssertions } from "./native-response-assertions.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
@@ -63,6 +64,11 @@ function scriptBudgets({
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
   const { signal, cookieSession, databaseQuery } = options;
+  const responseAssertions = compileNativeAssertions(
+    options.responseAssertions,
+  );
+  if (responseAssertions.length && !input.response)
+    throw Error("原生断言需要后置响应");
   const responseExtractions = compilePickVarsOperations(
     options.responseExtractions,
   );
@@ -82,6 +88,9 @@ export function runScript(code, input, options = {}) {
     jobLimit,
     assertionLimit,
   } = scriptBudgets(options);
+  if (responseAssertions.length > assertionLimit)
+    throw Error("声明的原生断言超过本次共享断言预算");
+
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -121,6 +130,7 @@ export function runScript(code, input, options = {}) {
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
+        responseAssertions,
         code,
         input,
         activityBudgetMs,
