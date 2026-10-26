@@ -1,8 +1,8 @@
-# 后端检查点 · 2026-10-26 23:06 UTC
+# 后端检查点 · 2026-10-26 23:27 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
-## 最新完整验证基线
+## 最新全项 CI 通过的组合（不是完整交付）
 
 - 组合：9d6730d29bdc0ad13554c72fdd2b89c48f22ae39。
 - Tree：86ee4917ea85128bc1f874c558acdb38a0424a05，与本地39820272e32e274017f375776d7756651d2d1558一致。
@@ -154,3 +154,20 @@ PR25修复head203a78b25f84bedfe44a0f2480d37601e56787de/tree2f4b907dbc15b2593dbc1
 完整正式三来源96项通过，原7XML断言A/C并发工作流在PR26定向19项、边界34项均通过；root新组合的原七断言并发及20条真实SDK/CLI/receipt入口共32项通过。250ms/2s/16MiB及所有正式安全测试不变，新组合仍待自己的CI，独立guard专项未完成状态仍如实保留。
 
 macOS schema问题没有被当作XML回归：原smoke/schema-entry/schema bundle与旧树字节相同、该请求不加载XML，promise-state只是后续预算检查位置。本地原完整script+真实loopback通过，未复现原超时。optimize0无明显收益；按选项懒解析固定meta的/tmp原型虽144条结果/错误一致，但仅约35→30ms、bundle增加2.6%、全选项样本反更慢，故未落生产/未新建PR。历史根因仍未知，后续CI即使绿也不宣称已证明修复；未提高预算、删schema或盲重跑。
+
+
+## Text 提取与包含断言整模块（23:27 UTC，组合待CI）
+
+PR25 Text head05ba1cb103f02f4096b068190c755e54933e4992/tree039de4c3558350ca4d627bc2e4dc02d908b516aa=locale902e6fc08ba65fea37f0bb13a27f66b2c1ef16c，CI40418282816首轮全部10job通过；实际merge4626d937a012f32d4e7300b5f2197ffba4f709e2/tree=head。PR26 Text head51cbaa7883bc123c19f64f5cb38bc167ecf540fe/treee1737a4213ead30d316516e12ec773861628c290=local27f1148a4559a5cfc8700059671ade909f5cc9fd，CI40418436180首轮全部10job通过，实际merge tree=head。独立绿不能替代新组合验证。
+
+新增responseText复用Workbench当前decoded body/setBody合同，不仿造原SDK stream/charset：只读bootstrap捕获对象的当前自有string正文，不调用可替换text()或getter；空文本保留，严格Unicode/UTF8 64KiB，缺失/非string明确stageerror。Text提取每task只读一次，各行赋同正文，name trim后安全校验但来源原样保存；expression可缺省，若存在则有界字面string不执行/插值。其他source既有字段要求不变。
+
+Text断言path可缺省，存在则只作有界字面诊断，不作为选择器；expected仍literal-only拒模板。新增generic includes/unincludes对Code/JSON/Header/XML/Text五来源按现有限primitive域的String值比较，捕获indexOf，大小写敏感、不trim、不Unicode归一化、不执行regex；空expected始终包含。eq/uneq、私有结果/完成性/配额、softfalse与activepick严格后置rollback/stop保持。native声明与历史来源不经wire插值；真正URL/header/body与显式replaceIn仍正常。Text-only不加载XMLbundle或其严格intrinsic guard。
+
+本地正式Text/inert/nativeexport57项及新增单文件完整入口10项通过（commit2a83b08187db6dd405f5b225ba7ebaed9822754a）：H1/H2、官方HTTP/stdio SDK、真CLI、native API回读、backup/restart、optional字段缺省/字面模板、Unicode/空值、五来源混排、严格错误/晚期post回滚、getter零调用、真实等待中SDK取消和另项目隔离、真实journal unknown恢复不重放、原生flow来源惰性/非法输入原子拒绝。新夹具初期超过16task被既有上限正确拒绝，改成两条真实请求覆盖而未提高上限或删比较检查；不是生产修复。
+
+### 不掩盖仍存的预算失败
+
+XML-only成本修复组合aeef3c71c2ea1f809c1595fa9ecc1c5c82726e65/treeddd6e015be076b22324c035ce988adc12bc8138f的CI40418205448最终9success/1Mac core失败，Mac1654/1657，Ubuntu/Windows1657/1657。三项分别为新增七task双phase、XMLassert资源边界、旧script-xml nodes拒绝case，均触及原活动预算；资源case日志未分子阶段，不能断定具体输入。原七assert并发生命周期此次三OS通过，不抵消其他RED。新203/50c独立CI同样保留Mac compatibility/旧XMLcase的RED。
+
+CPU时间与计费elapsed存在差距，只能说明观测差异，不证明系统争用是唯一原因；没有把timeout当预期内容拒绝、串行化隔离测试、改变预算或盲重跑。新Text虽增加真实功能且独立绿，不能称已修复这些历史问题。新组合等aeef终态后才发布，避免取消仍在验证的旧组合；完整独立XML guard专项仍未完成。

@@ -17,8 +17,9 @@ JSON 解析/路径读取在测试回调外，出错是阶段错误。UI chunk
 
 ## 有界实现
 
-- 启用 POST 任务仅支持 responseCode/responseJson/responseHeader/responseXml、eq/uneq，预期值必须为字面字符串。
-  主动拒绝 `{{` 模板；原版递归变量替换与 Workbench 不同，不猜测映射。
+- 启用 POST 任务仅支持 responseCode/responseJson/responseHeader/responseXml/responseText、
+  eq/uneq/includes/unincludes，预期值必须为字面字符串。主动拒绝 expected 的 `{{` 模板；
+  非 Text 来源的路径也拒绝模板，Text 的 path 仅作惰性字面诊断。原版递归变量替换与 Workbench 不同，不猜测映射。
   JSON 路径仅 own-property 单值段，空路径为 `$`，不 trim，不执行表达式、wildcard/filter。
 - JSON 根必须为对象/数组，不回退 XML。选中 undefined/null/false/0 分别比较
   `undefined`/`null`/`false`/`0` 字符串；对象/数组及非有限数字明确拒绝，不隐式 stringify。
@@ -94,7 +95,7 @@ API-local export/reimport 与惰性来源仍须另外验收，不声称本片独
 `null` 或空字符串而误判成功。独立 intrinsic-guard 完整专项审查此前被平台中断，
 **仍未完成，本增量不重启该专项，也不把正常正式回归当作其替代品**。
 
-- 仅 `data.type:"responseXml"`、后置启用、字面字符串 expected 和 eq/uneq。
+- 仅 `data.type:"responseXml"`、后置启用、字面字符串 expected 和 eq/uneq/includes/unincludes（后两者见下节）。
   `expression.path` 原样保存；编译时允许最外层空白，内部语法严格为 `string(P)`。
   P 仅绝对 ASCII 无冒号 child 名称路径，可用末段 `/@NAME`；最多 32 段/1000 字符。
   不支持裸节点集、count/boolean、wildcard、predicate、descendant、namespace、
@@ -120,3 +121,42 @@ API-local export/reimport 与惰性来源仍须另外验收，不声称本片独
 失败计划/变量持久化、手工 execute receipt、冻结、备份恢复重启、项目环境隔离及取消；
 资源矩阵覆盖 64 KiB UTF-8、2000 节点属性、32 层、共享测试及输出限额。现有正式安全
 回归与构建重现检查保持启用。此处不宣称原版完整 XML parity 或独立安全专项已完成。
+
+
+## responseText 与通用 includes/unincludes
+
+合法静态 sender 的 Text 读取位置为归一 Unicode 字符偏移 33584606，path 作为
+pm.expect 诊断文本的位置 33586595；includes/unincludes 分别为 33589409/33589847。
+SDK text() 在 30688624 优先当前 stream/charset，再返回 body。这些静态事实不证明
+Workbench 与完整原 SDK charset/stream 等价；本片仅复用已支持的当前 decoded body /
+setBody 合同，不新增编码、stream、HTML/XML 自动识别或公开 text() 信任。
+
+- 新增启用后置 `data.type:"responseText"`，读取整个当前正文，无 selector。
+  expression.path 可以缺省；若为自有字段，必须是最多1000字符的有效Unicode字符串，
+  原样保留。即使含 `{{...}}`、空白或路径样式也不展开/执行；非空 path 仅原样作为失败
+  诊断前缀。缺省仍保持缺省，不能从 prototype getter 取值。expected 仍是有界字面字符串，
+  启用任务拒绝 `{{`；禁用 known-source 声明有界惰性保存，不改变来源插值边界。
+- 断言和 Text pick 在同一私有 installer IIFE 中共用 PR25 的单个 readText factory。
+  它捕获原 response 对象和安全 own descriptor/hasOwn/charCode/Error，按每任务位置
+  读取当前自有、可枚举、primitive-string body；不调用 public text()、不触发 getter、
+  不读 code/Header 证明、不因为 Text 装载 XML bundle/guard，不新增公开或全局 lexical 入口。
+  缺失正文、非字符串、getter、无效Unicode、超过64KiB UTF-8均为阶段错误；不会将
+  undefined 转成可比较/可持久化正文。这是比原 SDK 缺失 body 行为更严格的显式子集。
+- 空正文、空白、CRLF、NUL以及合法 Unicode 文本原样保留，不 trim/normalize，
+  不应用 XML 专属控制字符规则。先前 setBody 或捕获 response 的合法正文编辑会被观察，
+  原始 wire 记录不变。
+- `includes` / `unincludes` 是所有已支持来源的通用字符串比较器，不限 Text。
+  使用 bootstrap 捕获的 String 与 String.prototype.indexOf；大小写敏感，无正则、
+  Unicode规范化、trim或隐式数字比较。空 expected 的 includes 必真、unincludes 必假。
+  原 Code/JSON/Header/XML 选值拒绝域不变：对象/数组/非有限值或不可信Header、无效XML
+  不会因为比较器而变成可比较值。未增加 contains/regex别名、数值、集合或empty操作。
+- eq/uneq 与新比较器共享捕获的 quota-wrapped pm.test、权威私有结果、claimed-index
+  合并和完成性检查。替换公开 indexOf/includes/String/pm.test 或清空 tests 不会擦掉
+  原生失败。普通比较 false 算完成并继续任务/计划/作用域提交；仅启用 pick 保持原严格
+  post rollback/stop。原16项任务、1000共享测试、64KiB项/256KiB源、1MiB输出、
+  16MiB VM/250ms active/2s wall不变。
+
+新增正常正式 fixture 覆盖真实HTTP→当前Text→包含真假/空字符串/Unicode→后续脚本
+和请求→失败run/作用域保存→receipt→冻结/恢复/重启及项目环境隔离、取消；混排五种来源，
+并验证 Text pick 共用正文、缺失/类型错误、getter零调用、模板样式诊断的来源往返及配额。
+现有XML独立guard专项仍保持中断未完成状态，本增量没有重启该审查；既有正式安全测试保留。

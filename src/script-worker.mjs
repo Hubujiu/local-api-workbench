@@ -1,6 +1,7 @@
 import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
 import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
+import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -609,11 +610,20 @@ try {
               nativeXMLLibrary +
               ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
             : "null") +
+          ";const readText=" +
+          (workerData.responseExtractions?.some(
+            (operation) => operation.source === "responseText",
+          ) ||
+          workerData.responseAssertions?.some(
+            (operation) => operation.type === "responseText",
+          )
+            ? "(" + nativeResponseTextReaderSource + ")(response)"
+            : "null") +
           ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
           nativeAssertionsInstallerSource +
-          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response.headers,JSON.stringify(data.evidence),readXML);globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
+          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response.headers,JSON.stringify(data.evidence),readXML,readText);globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
+          ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
