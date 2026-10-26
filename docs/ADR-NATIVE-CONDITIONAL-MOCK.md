@@ -118,3 +118,12 @@ Local verification on 2026-10-26: the following targeted command passed 95 tests
 ```sh
 node --test --test-concurrency=2 tests/{native-mock-media,native-mock,native-mock-route,mock-examples,mock-isolation,mock-response-schema,mock-fields,apipost-modern,apipost-directory,apipost-mock-rules,schema-sample}.test.mjs
 ```
+
+### Shared runtime prerequisite
+
+This PR is stacked on PR3 (fix/script-sequence-budgets), keeping its existing
+script-budget validation/diagnostics/ASCII optimization outside the Mock feature
+diff. The first media checkpoint CI (40304334425, head 83899f8) passed the new
+Mock tests but failed the older baseline Windows Faker quota stress assertion.
+That failure is retained; no time budget or assertion is relaxed and no old run
+is retried to manufacture a pass. Exact new-head CI remains required.
