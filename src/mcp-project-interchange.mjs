@@ -110,6 +110,12 @@ function boundedDirectoryText(text) {
   }
 }
 
+function boundedDirectoryDocument(document) {
+  if (isApipostDirectoryDocument(document) && Array.isArray(document.files))
+    for (const entry of document.files)
+      if (typeof entry?.text === "string") boundedDirectoryText(entry.text);
+}
+
 function toolResult(output, requestId) {
   const result = { content: [{ type: "text", text: JSON.stringify(output) }] };
   // Count the real doubly-escaped JSON-RPC envelope, including its stdio newline.
@@ -128,6 +134,7 @@ export function exportMCPProject(project, args, requestId) {
       ? exportApipost(project)
       : exportApipostDirectory(project);
   boundedDocument(document);
+  boundedDirectoryDocument(document);
   return toolResult(
     { projectId: project.id, format: args.format, document },
     requestId,
@@ -145,9 +152,7 @@ export async function importMCPProject(store, project, args, requestId) {
       : directory || !apipostDocument(args.document)
   )
     throw Error("document 与显式 format 不匹配；不自动识别其他格式");
-  if (directory && Array.isArray(args.document.files))
-    for (const entry of args.document.files)
-      if (typeof entry?.text === "string") boundedDirectoryText(entry.text);
+  boundedDirectoryDocument(args.document);
   const draft = structuredClone(project);
   importIntoProject(draft, structuredClone(args.document), { sync: false });
   const imported = {};

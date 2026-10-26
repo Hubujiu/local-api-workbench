@@ -440,3 +440,34 @@ test("real Store optimistic conflicts and malformed imports leave persisted stat
   );
   assert.deepEqual(await store.get(created.id), before);
 });
+
+test("directory exports obey the same embedded JSON budget as their imports", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mcp-project-depth-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = new Store(root);
+  const p = await store.create("Deep saved variables");
+  let deep = {};
+  for (let i = 0; i < 65; i++) deep = { child: deep };
+  p.environments[0].variables.deep = deep;
+  await store.save(p);
+  const before = await store.get(p.id);
+  assert.throws(
+    () => exportMCPProject(before, { format: "apipost" }, 1),
+    /64层/,
+  );
+  assert.throws(
+    () => exportMCPProject(before, { format: "apipost-directory" }, 1),
+    /64层/,
+  );
+  assert.deepEqual(await store.get(p.id), before);
+  const large = await store.get(p.id);
+  // Native env rows carry initial and current values, doubling this collection.
+  large.environments[0].variables = { many: Array(60000).fill({}) };
+  await store.save(large);
+  const wide = await store.get(p.id);
+  assert.throws(
+    () => exportMCPProject(wide, { format: "apipost-directory" }, 1),
+    /结构过大/,
+  );
+  assert.deepEqual(await store.get(p.id), wide);
+});
