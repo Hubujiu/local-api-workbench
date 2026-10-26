@@ -460,18 +460,26 @@ test(
         .replace(/=$/, "");
     const clients = new Set(),
       peers = [],
-      records = [];
+      records = [],
+      heldAuthentication = [];
+    let holdAuthentication = false;
     const server = new ssh2.Server({ hostKeys: [privateKey] }, (client) => {
       clients.add(client);
       client.on("error", () => {});
       client.once("close", () => clients.delete(client));
-      client.on("authentication", (ctx) =>
-        ctx.method === "password" &&
-        ctx.username === "fictional" &&
-        ctx.password === "fictional"
-          ? ctx.accept()
-          : ctx.reject(),
-      );
+      client.on("authentication", (ctx) => {
+        if (holdAuthentication) {
+          heldAuthentication.push(ctx);
+          return;
+        }
+        if (
+          ctx.method === "password" &&
+          ctx.username === "fictional" &&
+          ctx.password === "fictional"
+        )
+          ctx.accept();
+        else ctx.reject();
+      });
       client.on("tcpip", (accept) =>
         peers.push(pgPeer(accept(), records, "handshake")),
       );
@@ -531,6 +539,33 @@ test(
     await until(() => clients.size === 0, "all SSH transports close");
     for (const item of [...pending, next])
       assert.match(item.error?.message ?? "", /已取消/);
+    holdAuthentication = true;
+    const openingController = new AbortController();
+    const opening = settle(
+      queryRemoteDatabase(input, { signal: openingController.signal }),
+    );
+    await until(
+      () => heldAuthentication.length === 1,
+      "SSH authentication is held before forwarding",
+    );
+    const beforeOpening = peers.length;
+    openingController.abort();
+    // Release a racing response while the peer still exists, not after the
+    // server has closed (ssh2 would start its own post-close keepalive timer).
+    heldAuthentication[0].accept();
+    await until(
+      () => opening.done && clients.size === 0,
+      "abort must close an opening SSH transport",
+    );
+    await opening.promise;
+    assert.match(opening.error?.message ?? "", /已取消/);
+    await delay(20);
+    assert.equal(
+      peers.length,
+      beforeOpening,
+      "late authentication must never forward after cancellation",
+    );
+    holdAuthentication = false;
     const before = peers.length;
     await assert.rejects(
       queryRemoteDatabase(input, { signal: nextController.signal }),

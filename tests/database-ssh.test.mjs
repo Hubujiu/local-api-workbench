@@ -224,6 +224,7 @@ test("SSH five-channel limit is released after close and forwarding failure", as
     await assert.rejects(openDatabaseSSH(input), /并发最多5/);
   } finally {
     for (const tunnel of tunnels) tunnel.close();
+    await Promise.all(tunnels.map((tunnel) => tunnel.closed));
   }
   await assert.rejects(
     openDatabaseSSH({ ...input, host: "denied.fixture" }),

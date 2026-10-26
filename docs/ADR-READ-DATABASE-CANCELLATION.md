@@ -37,8 +37,10 @@ connection/authentication has a three-second bound. Each SQL initialization and
 query phase has a two-second deadline. In particular MySQL's existing execute
 timeout does not cover PREPARE; the owned-stream deadline now does. Existing PG
 server statement_timeout=2000, driver query_timeout=3000, MySQL connectTimeout=3000
-and execute timeout=2000 remain set. These deadlines are not extensions or proof
-that a database engine stopped executing SQL.
+remain set. SQL reads use only the owned two-second phase deadline, not mysql2's
+redundant command timer (which survives forced disconnect in the installed driver
+and delays process exit). The query budget is not increased. These deadlines
+are not extensions or proof that a database engine stopped executing SQL.
 
 SSH uses its public `sock` option with a caller-owned transport. The existing
 five-connection process-wide lease is released only after transport close. Abort

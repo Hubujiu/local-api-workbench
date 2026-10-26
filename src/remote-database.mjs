@@ -122,19 +122,16 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
       await connection.connect();
       check();
       phase(2000, "MySQL只读事务初始化");
-      await connection.query({
-        sql: "SET TRANSACTION READ ONLY",
-        timeout: 2000,
-      });
+      await connection.query("SET TRANSACTION READ ONLY");
       check();
       phase(2000, "MySQL事务初始化");
-      await connection.query({ sql: "START TRANSACTION", timeout: 2000 });
+      await connection.query("START TRANSACTION");
       check();
-      // mysql2's execute timeout starts only after PREPARE. The owned-stream
-      // deadline also covers a stalled PREPARE response.
+      // One owned deadline includes PREPARE. mysql2's per-command timeout
+      // otherwise survives forced closure and can keep a cancelled process alive.
       phase(2000, "MySQL只读查询");
       const [value, fields] = await connection.execute(
-        { sql: boundedSQL, timeout: 2000 },
+        { sql: boundedSQL },
         parameters,
       );
       check();
