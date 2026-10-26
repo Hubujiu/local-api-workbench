@@ -358,7 +358,7 @@ export function createMCP({
     tool.description += "；必须显式传入 confirm: true";
   }
   tools.push(...nativeMCPTools(write, execute));
-  return async function dispatch(message) {
+  return async function dispatch(message, { signal } = {}) {
     const { id: requestId, method, params: incomingParams = {} } = message;
     let params = incomingParams;
     const nativeName =
@@ -772,6 +772,7 @@ export function createMCP({
                 debugEnvironment(p, environmentId, debugEnvironments).variables,
                 executeRequest,
                 {
+                  signal,
                   databaseQuery: databaseExecutor
                     ? (operation, signal) =>
                         databaseExecutor(p.id, operation, signal)
@@ -798,7 +799,7 @@ export function createMCP({
                 environmentId,
                 debugEnvironments,
               );
-              if (output.results[0]?.response)
+              if (!signal?.aborted && output.results[0]?.response)
                 debugEnvironments.set(context.cacheKey, {
                   fingerprint: context.fingerprint,
                   variables: output.variables,
@@ -810,6 +811,7 @@ export function createMCP({
                   createdAt: output.createdAt,
                   name: request.name,
                   ...output.results[0],
+                  status: output.status,
                   source: "mcp",
                   durationMs: output.durationMs,
                   environmentId: output.environmentId,
@@ -817,8 +819,7 @@ export function createMCP({
                 output.recordSaved = true;
               } catch {
                 output.recordSaved = false;
-                output.persistenceError =
-                  "执行已完成，但历史记录保存失败；请勿自动重放请求";
+                output.persistenceError = "执行记录保存失败；不会重新执行请求";
               }
               break;
             }
@@ -836,6 +837,7 @@ export function createMCP({
                 environmentVariables(p, environmentId),
                 executeRequest,
                 {
+                  signal,
                   ...scopedExecution(store, p, environmentId),
                   databaseQuery: databaseExecutor
                     ? (operation, signal) =>

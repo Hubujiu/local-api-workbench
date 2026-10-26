@@ -548,10 +548,11 @@ export async function runPlan(
     let scriptPhase;
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
+      if (signal?.aborted) throw Error("执行已取消，未开始新的变量提交");
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes);
+          const accepted = await onScopeChanges(changes, signal);
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
