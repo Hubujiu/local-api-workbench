@@ -44,5 +44,6 @@ test(
     }).finally(() => clearTimeout(timer));
     assert.equal(code, 0, stdout + stderr);
     assert.match(stdout, /EXPLICIT_PG_IDENTITY_WIRE_NO_AMBIENT_NO_PGPASS_PASS/);
+    assert.match(stdout, /EXPLICIT_PG_TLS_NEGOTIATION_CA_IDENTITY_PASS/);
   },
 );
