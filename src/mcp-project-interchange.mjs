@@ -10,6 +10,25 @@ const maxDepth = 64;
 const maxValues = 200000;
 const formats = ["apipost", "apipost-directory"];
 
+export function validateMCPProjectArguments(args) {
+  if (
+    !args ||
+    typeof args !== "object" ||
+    Array.isArray(args) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(args))
+  )
+    throw Error("项目导入导出参数必须为普通 JSON 对象");
+  for (const key of Reflect.ownKeys(args)) {
+    const descriptor = Object.getOwnPropertyDescriptor(args, key);
+    if (
+      typeof key !== "string" ||
+      !descriptor.enumerable ||
+      !Object.hasOwn(descriptor, "value")
+    )
+      throw Error("项目导入导出参数必须为普通 JSON 数据字段");
+  }
+}
+
 function format(value) {
   if (!formats.includes(value))
     throw Error("format 必须明确为 apipost 或 apipost-directory");
@@ -102,6 +121,7 @@ function toolResult(output, requestId) {
 }
 
 export function exportMCPProject(project, args, requestId) {
+  validateMCPProjectArguments(args);
   format(args.format);
   const document =
     args.format === "apipost"
@@ -115,6 +135,7 @@ export function exportMCPProject(project, args, requestId) {
 }
 
 export async function importMCPProject(store, project, args, requestId) {
+  validateMCPProjectArguments(args);
   format(args.format);
   boundedDocument(args.document);
   const directory = isApipostDirectoryDocument(args.document);

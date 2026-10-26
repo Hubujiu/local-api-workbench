@@ -11,6 +11,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { normalizeRequest, snapshotPlan } from "../src/core.mjs";
+import { exportApipost } from "../src/apipost-export.mjs";
 
 const decode = (result) => {
   assert.notEqual(result.isError, true, result.content?.[0]?.text);
@@ -442,3 +443,123 @@ for (const transport of ["http", "stdio"])
         assert.deepEqual(await store.get(second.id), secondState);
       },
     );
+
+test(
+  "official SDK stdio rejects the full escaped output frame and oversized error text without losing the session",
+  { timeout: 30000 },
+  async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "mcp-frame-sdk-"));
+    const store = new Store(root);
+    const project = await store.create("P");
+    project.environments = [{ id: "e", name: "E", variables: {} }];
+    await store.save(project);
+    const documentLimit = 4 * 1024 * 1024;
+    const frameLimit = 8 * 1024 * 1024;
+    const baseline = Buffer.byteLength(JSON.stringify(exportApipost(project)));
+    // JSON escaping doubles each backslash at both the document/text and RPC
+    // envelope layers. The document itself fits, but the entire frame may not.
+    project.description = "\\".repeat(
+      Math.floor((documentLimit - baseline) / 2),
+    );
+    await store.save(project);
+    const before = await store.get(project.id);
+    const document = exportApipost(before);
+    assert.equal(Buffer.byteLength(JSON.stringify(document)), documentLimit);
+    const output = { projectId: project.id, format: "apipost", document };
+    const result = {
+      content: [{ type: "text", text: JSON.stringify(output) }],
+    };
+    const controlId = "\0".repeat(256);
+    const frameBytes = (id) =>
+      Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", id, result })) + 1;
+    assert(frameBytes(10) < frameLimit);
+    assert(frameBytes(controlId) > frameLimit);
+
+    const client = new Client(
+      { name: "project-frame-sdk", version: "1.0.0" },
+      { capabilities: {} },
+    );
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [
+        fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+        "--project",
+        project.id,
+        "--write",
+      ],
+      env: { LOCAL_API_DATA: root },
+      stderr: "pipe",
+    });
+    t.after(async () => {
+      await client.close().catch(() => {});
+      await rm(root, { recursive: true, force: true });
+    });
+    await client.connect(transport);
+    const args = { projectId: project.id, format: "apipost" };
+    const normal = decode(
+      await client.callTool({
+        name: "localapi_export_project",
+        arguments: args,
+      }),
+    );
+    assert.deepEqual(normal, output);
+
+    // Use only the transport's public API to choose a boundary request ID.
+    // All unrelated messages still go to the official SDK's existing handler.
+    const rawCall = async (id, arguments_) => {
+      const previous = transport.onmessage;
+      let timer;
+      try {
+        const response = new Promise((resolve, reject) => {
+          timer = setTimeout(
+            () => reject(Error("Raw SDK response timeout")),
+            10000,
+          );
+          transport.onmessage = (message) => {
+            if (
+              message.id === id ||
+              (!Object.hasOwn(message, "id") && message.error?.code === -32600)
+            )
+              resolve(message);
+            else previous?.(message);
+          };
+        });
+        await transport.send({
+          jsonrpc: "2.0",
+          id,
+          method: "tools/call",
+          params: { name: "localapi_export_project", arguments: arguments_ },
+        });
+        return await response;
+      } finally {
+        clearTimeout(timer);
+        transport.onmessage = previous;
+      }
+    };
+    const rejected = await rawCall(controlId, args);
+    assert.equal(rejected.result.isError, true);
+    assert.match(rejected.result.content[0].text, /8MiB/);
+    assert(Buffer.byteLength(JSON.stringify(rejected)) < 16384);
+    await client.ping();
+    const invalidId = await rawCall("x".repeat(257), args);
+    assert.equal(Object.hasOwn(invalidId, "id"), false);
+    assert.equal(invalidId.error.code, -32600);
+    assert(Buffer.byteLength(JSON.stringify(invalidId)) < 16384);
+    await client.ping();
+    const unknown = await client.callTool({
+      name: "localapi_export_project",
+      arguments: { ...args, ["x".repeat(20000)]: true },
+    });
+    assert.equal(unknown.isError, true);
+    assert(Buffer.byteLength(unknown.content[0].text) < 16384);
+    await client.ping();
+    const again = decode(
+      await client.callTool({
+        name: "localapi_export_project",
+        arguments: args,
+      }),
+    );
+    assert.deepEqual(again, normal);
+    assert.deepEqual(await store.get(project.id), before);
+  },
+);

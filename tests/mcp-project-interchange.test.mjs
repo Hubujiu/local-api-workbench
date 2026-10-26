@@ -146,10 +146,69 @@ test("canonical project tool schema is closed and respects read/write, allowlist
     null,
   ]) {
     const response = await write(call("import_project", args(), id));
-    assert.equal(response.id, null);
+    assert.equal(Object.hasOwn(response, "id"), false);
     assert.equal(response.error.code, -32600);
     assert(Buffer.byteLength(JSON.stringify(response)) < 1024);
   }
+  assert.equal(saves, 0);
+});
+
+test("outer descriptor and error envelopes stay bounded before any store read or write", async () => {
+  let reads = 0,
+    saves = 0,
+    getters = 0;
+  const dispatch = createMCP({
+    store: {
+      get: async () => {
+        reads++;
+        return project();
+      },
+      save: async () => {
+        saves++;
+      },
+    },
+    projects: ["allowed"],
+    write: true,
+  });
+  for (const name of ["import_project", "export_project"]) {
+    const parameters =
+      name === "import_project"
+        ? args()
+        : { projectId: "allowed", format: "apipost" };
+    const accessor = { ...parameters };
+    Object.defineProperty(accessor, "format", {
+      enumerable: true,
+      get() {
+        getters++;
+        return "apipost";
+      },
+    });
+    const hidden = { ...parameters };
+    Object.defineProperty(hidden, "hidden", { value: true });
+    const custom = Object.assign(Object.create({}), parameters);
+    const giantKey = { ...parameters, ["x".repeat(8 * 1024 * 1024)]: true };
+    for (const rejected of [accessor, hidden, custom, giantKey]) {
+      const response = await dispatch(call(name, rejected));
+      assert.equal(response.result.isError, true);
+      assert(Buffer.byteLength(JSON.stringify(response)) < 16 * 1024);
+    }
+    if (name === "import_project")
+      await assert.rejects(
+        importMCPProject(
+          {
+            save: async () => {
+              saves++;
+            },
+          },
+          project(),
+          accessor,
+          1,
+        ),
+      );
+    else assert.throws(() => exportMCPProject(project(), accessor, 1));
+  }
+  assert.equal(getters, 0);
+  assert.equal(reads, 0);
   assert.equal(saves, 0);
 });
 
@@ -277,7 +336,8 @@ test("full UTF-8 JSON-RPC frame is checked before save and includes both escapin
   const native = exportApipost(p);
   const bytes = Buffer.byteLength(JSON.stringify(native));
   assert(bytes <= MCP_PROJECT_DOCUMENT_BYTES);
-  const requestId = "id".repeat(8192);
+  const requestId = "\0".repeat(256);
+  assert.equal(Buffer.byteLength(requestId), 256);
   const unbounded = {
     jsonrpc: "2.0",
     id: requestId,

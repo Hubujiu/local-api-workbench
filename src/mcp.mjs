@@ -11,6 +11,7 @@ import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
 import {
   importMCPProject,
   exportMCPProject,
+  validateMCPProjectArguments,
 } from "./mcp-project-interchange.mjs";
 import { applyMCPInput } from "./mcp-request-input.mjs";
 import {
@@ -386,10 +387,12 @@ export function createMCP({
       };
     // These bounded interchange tools cannot echo an unbounded/structured ID
     // even in their error envelope. Other tools retain their existing contract.
+    const projectInterchange = [
+      "localapi_import_project",
+      "localapi_export_project",
+    ].includes(params?.name);
     if (
-      ["localapi_import_project", "localapi_export_project"].includes(
-        params?.name,
-      ) &&
+      projectInterchange &&
       !(
         (typeof requestId === "string" &&
           Buffer.byteLength(requestId) <= 256) ||
@@ -398,7 +401,6 @@ export function createMCP({
     )
       return {
         jsonrpc: "2.0",
-        id: null,
         error: {
           code: -32600,
           message: "项目导入导出请求ID必须为数字或最多256字节的字符串",
@@ -410,6 +412,7 @@ export function createMCP({
       const args = params.arguments === undefined ? {} : params.arguments;
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
+      if (projectInterchange) validateMCPProjectArguments(args);
       for (const key of tool.inputSchema.required)
         if (!Object.hasOwn(args, key)) throw Error("缺少参数 " + key);
       for (const [key, value] of Object.entries(args)) {
@@ -780,7 +783,16 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: projectInterchange
+              ? typeof e.message === "string"
+                ? e.message.slice(0, 2048)
+                : "项目导入导出失败"
+              : e.message,
+          },
+        ],
       });
     }
   };
