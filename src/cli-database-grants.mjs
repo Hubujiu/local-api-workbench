@@ -106,7 +106,9 @@ export function prepareCLIDatabaseGrants(
             ? "redis"
             : task.data.resultShape === "mysql-resultsets"
               ? "mysql"
-              : undefined;
+              : task.data.resultShape === "mongodb-document"
+                ? "mongodb"
+                : undefined;
         if (engine) {
           if (
             inferredTypes.has(task.data.connectionId) &&
@@ -148,6 +150,12 @@ export function prepareCLIDatabaseGrants(
           !sourceTypes.has(id))
       )
         throw Error("CLI 数据库授权必须匹配当前项目来源及任务引擎");
+      if (
+        sourceTypes.get(id) === "mongodb" &&
+        config.user &&
+        (typeof config.authSource !== "string" || !config.authSource.trim())
+      )
+        throw Error("CLI 导入MongoDB认证须明确authSource");
       if (sshRequired.has(id) && !config.ssh)
         throw Error("CLI 此数据库来源要求显式SSH临时通道和已核对主机指纹");
       if (
