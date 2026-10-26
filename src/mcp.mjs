@@ -12,6 +12,7 @@ import {
   nativeAPIList,
   nativeAPIDetail,
   nativeRunResult,
+  nativeExecutionHistory,
 } from "./native-mcp-tools.mjs";
 import {
   buildNativeMCPPlan,
@@ -424,7 +425,23 @@ export function createMCP({
         );
       else if (params.name === "localapi_create_project") {
         if (!args.name.trim()) throw Error("项目名称不能为空");
-        output = await store.create(args.name);
+        if (nativeName) {
+          if (args.name.trim().length > 64) throw Error("项目名称最多64字符");
+          if (
+            args.description !== undefined &&
+            args.description.trim().length > 1024
+          )
+            throw Error("项目描述最多1024字符");
+          if (args.storage_path?.trim())
+            throw Error("MCP仅允许托管存储根目录；不接受自定义storage_path");
+        }
+        output = await store.create(
+          nativeName ? args.name.trim() : args.name,
+          undefined,
+          nativeName
+            ? { description: args.description?.trim() || "" }
+            : undefined,
+        );
         allowed.add(output.id);
         projects.push(output.id);
       } else {
@@ -627,7 +644,7 @@ export function createMCP({
               if (!output) throw Error("记录不存在");
               break;
             case "localapi_sync_openapi":
-              output = syncMCPOpenAPI(p, args);
+              output = syncMCPOpenAPI(p, args, { native: !!nativeName });
               await store.save(p);
               break;
             case "localapi_create_execution_flow":
@@ -660,6 +677,21 @@ export function createMCP({
               break;
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
+              if (
+                nativeName &&
+                (!args.apiIds.length ||
+                  args.apiIds.length > 1000 ||
+                  new Set(args.apiIds).size !== args.apiIds.length ||
+                  args.apiIds.some(
+                    (id) =>
+                      typeof id !== "string" ||
+                      !id.trim() ||
+                      !p.requests.some((r) => r.id === id && !r.deletedAt),
+                  ))
+              )
+                throw Error(
+                  "仅支持现有HTTP接口的非重复ID；目录和文档删除尚未支持",
+                );
               output = [];
               for (const r of p.requests)
                 if (args.apiIds.includes(r.id)) {
@@ -699,7 +731,9 @@ export function createMCP({
               output = { deletedId: args.planId };
               break;
             case "localapi_list_execution_runs":
-              output = listExecutionHistory(p, args);
+              output = nativeName
+                ? nativeExecutionHistory(p, args)
+                : listExecutionHistory(p, args);
               break;
             case "localapi_execute_api": {
               const request = p.requests.find(
@@ -832,7 +866,21 @@ export function createMCP({
       }
       if (nativeName) {
         const kind = nativeName.slice(8);
-        if (kind === "list_projects")
+        if (kind === "create_project")
+          output = {
+            project_id: output.id,
+            name: output.name,
+            description: output.description,
+            storage_path: store.directory(output.id),
+            authorized: true,
+          };
+        else if (kind === "delete_apis")
+          output = {
+            project_id: args.projectId,
+            deleted: output.length,
+            target_ids: output,
+          };
+        else if (kind === "list_projects")
           output = {
             projects: output.map((p) => ({
               project_id: p.id,

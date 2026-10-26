@@ -111,7 +111,7 @@ function defaults(p) {
     }
   );
 }
-function ensureDefaults(p) {
+export function ensureNativeDefaults(p) {
   const d = defaults(p);
   p.servers ??= [];
   if (!p.servers.some((s) => s.id === d.serverId))
@@ -179,7 +179,7 @@ export async function executeNativeEnvironmentTool(store, p, kind, args) {
   validateEnvironmentModel(p);
   if (kind.startsWith("delete_") && args.confirm !== true)
     throw Error("删除操作必须显式confirm:true");
-  const d = spec[3] ? ensureDefaults(p) : defaults(p);
+  const d = spec[3] ? ensureNativeDefaults(p) : defaults(p);
   let result;
   if (kind === "list_environments")
     return {

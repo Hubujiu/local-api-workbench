@@ -156,11 +156,12 @@ export class Store {
       await release();
     }
   }
-  async create(name, directory) {
+  async create(name, directory, { description } = {}) {
     const p = {
       version: 1,
       id: id(),
       name: String(name || "新项目").slice(0, 100),
+      ...(description === undefined ? {} : { description }),
       requests: [],
       environments: [
         {

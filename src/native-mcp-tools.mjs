@@ -1,3 +1,4 @@
+import { filteredExecutionHistory } from "./execution-history.mjs";
 import {
   nativeEnvironmentTools,
   isNativeEnvironmentTool,
@@ -35,6 +36,49 @@ const steps = {
   },
 };
 const definitions = [
+  [
+    "sync_openapi",
+    {
+      ...project,
+      openapi: {},
+      folder_id: str,
+      api_cover_mode: str,
+      base_path: { type: "boolean" },
+      host_path: { type: "boolean" },
+      api_scripts: { type: "array" },
+    },
+    ["project_id", "openapi"],
+    "write",
+  ],
+  [
+    "create_project",
+    { name: str, description: str, storage_path: str },
+    ["name"],
+    "write",
+  ],
+  [
+    "delete_apis",
+    {
+      ...project,
+      target_ids: { type: "array", items: str, minItems: 1, maxItems: 1000 },
+      confirm: { type: "boolean", const: true },
+    },
+    ["project_id", "target_ids", "confirm"],
+    "write",
+  ],
+  [
+    "list_execution_runs",
+    {
+      ...project,
+      scope: { type: "string", enum: ["api", "flow"] },
+      source: { type: "string", enum: ["manual", "mcp"] },
+      status: { type: "string", enum: ["passed", "failed"] },
+      flow_id: str,
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+    },
+    ["project_id"],
+    "read",
+  ],
   [
     "execute_api",
     { ...project, target_id: str, environment_id: str, input },
@@ -138,12 +182,58 @@ export function translateNativeCall(name, args) {
       args: { projectId: args.project_id },
       planArgs: args,
     };
+  if (kind === "sync_openapi") {
+    if (
+      (args.base_path !== undefined && typeof args.base_path !== "boolean") ||
+      (args.host_path !== undefined && typeof args.host_path !== "boolean")
+    )
+      throw Error("路径选项必须为布尔值");
+    if (args.base_path || args.host_path)
+      throw Error("原版路径选项尚未支持；请显式使用相对路径");
+    let folder = args.folder_id || "0";
+    if (folder !== "0" && (!folder.startsWith("folder:") || !folder.slice(7)))
+      throw Error("目录ID无效");
+    if (args.api_scripts !== undefined && !Array.isArray(args.api_scripts))
+      throw Error("api_scripts必须为数组");
+    return {
+      name: "localapi_sync_openapi",
+      args: {
+        projectId: args.project_id,
+        document: args.openapi,
+        folder: folder === "0" ? "" : folder.slice(7),
+        coverMode: args.api_cover_mode,
+        apiScripts: (args.api_scripts || []).map((x) => {
+          if (
+            !x ||
+            typeof x !== "object" ||
+            Array.isArray(x) ||
+            Object.keys(x).some(
+              (k) =>
+                !["method", "url", "pre_script", "post_script"].includes(k),
+            )
+          )
+            throw Error("脚本映射字段无效");
+          return {
+            method: x.method,
+            url: x.url,
+            ...(Object.hasOwn(x, "pre_script")
+              ? { beforeScript: x.pre_script }
+              : {}),
+            ...(Object.hasOwn(x, "post_script")
+              ? { afterScript: x.post_script }
+              : {}),
+          };
+        }),
+      },
+    };
+  }
   const converted = {};
   for (const [key, value] of Object.entries(args))
     converted[
       {
         project_id: "projectId",
         target_id: "apiId",
+        target_ids: "apiIds",
         flow_id: "planId",
         run_id: "runId",
         environment_id: "environmentId",
@@ -259,5 +349,52 @@ export function nativeRunResult(projectId, run, scope = "flow") {
     ...(run.recordSaved === false
       ? { persistence_error: run.persistenceError }
       : {}),
+  };
+}
+
+export function nativeExecutionHistory(project, args) {
+  if (args.source !== undefined && !["manual", "mcp"].includes(args.source))
+    throw Error("原版记录来源无效");
+  if (args.status !== undefined && !["passed", "failed"].includes(args.status))
+    throw Error("原版记录状态无效");
+  const rows = filteredExecutionHistory(project, args);
+  return {
+    total: rows.length,
+    records: rows.slice(0, args.limit ?? 20).map(({ record, scope }) => {
+      const results = scope === "api" ? [record] : record.results || [];
+      const failed = results.filter((r) => r.status !== "passed");
+      const finished = Date.parse(record.createdAt);
+      const elapsed =
+        Number.isFinite(record.durationMs) && record.durationMs >= 0
+          ? record.durationMs
+          : undefined;
+      return {
+        run_id: record.id,
+        source: ["manual", "mcp", "cli"].includes(record.source)
+          ? record.source
+          : "unknown",
+        scope,
+        ...(scope === "flow"
+          ? { flow_id: record.planId, flow_name: record.planName }
+          : {}),
+        environment_id: record.environmentId,
+        status: record.status,
+        finished_at: record.createdAt,
+        ...(Number.isFinite(finished) &&
+        elapsed !== undefined &&
+        Number.isFinite(new Date(finished - elapsed).getTime())
+          ? { started_at: new Date(finished - elapsed).toISOString() }
+          : {}),
+        elapsed_ms: elapsed,
+        total: results.length,
+        passed: results.length - failed.length,
+        failed: failed.length,
+        failed_steps: failed.map((r) => ({
+          step_id: r.stepId,
+          name: r.name,
+          status: r.status,
+        })),
+      };
+    }),
   };
 }
