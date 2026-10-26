@@ -75,7 +75,6 @@ URL Query plus Path and query API-key, and repeated multipart text fields.
 Do not generalize this to multiple native service bindings or arbitrary raw Query
 encoding.
 
-
 The original UI re-exported only those three corrected requests and Matrix Fixed
 environment. Its exported current variables confirmed both pre-script and
 post-script changes. The combined backend imported generated and original
@@ -92,3 +91,10 @@ process test (SQLITE_WRITE_OUTCOME_UNKNOWN, run40239943970), not the exporter.
 Later c3dd0de and combined c512ab1 passed their exact CI, but no SQLite cause was
 fixed by exporter changes. The root cause remains under investigation; unknown
 writes are never retried automatically and the two-second process bound remains.
+
+Ordered nativeTasks are an executable pipeline, not interchangeable with the
+legacy beforeScript/afterScript strings. Until the exporter can faithfully encode
+that whole pipeline, any such field is explicitly rejected (including disabled
+tasks), even when an older normalizer would omit it. Actual HTTP regression first
+returned 200 with erased tasks; it now rejects without modifying the saved project.
+This guard does not claim native pipeline export is delivered.
