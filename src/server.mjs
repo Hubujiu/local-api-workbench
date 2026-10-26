@@ -267,6 +267,8 @@ export async function createApp({
             "localapi_execute_api",
             "localapi_execute_flow",
             "localapi_run_plan",
+            "apipost_execute_api",
+            "apipost_execute_flow",
           ].includes(message.params?.name);
         const execution =
           sessionId !== undefined && message.id !== undefined
@@ -284,8 +286,12 @@ export async function createApp({
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
@@ -334,20 +340,21 @@ export async function createApp({
           try {
             output = JSON.parse(result?.result?.content?.[0]?.text);
           } catch {}
-          const outcome = output?.status;
+          const outcome = cancellable ? output?.status : undefined;
+          const recordSaved = cancellable
+            ? (output?.recordSaved ?? output?.record_saved)
+            : undefined;
           Object.assign(activity, {
             status:
-              output?.recordSaved === false
+              recordSaved === false
                 ? "failed"
                 : outcome === "cancelled"
                   ? "cancelled"
                   : result?.result?.isError || outcome === "failed"
                     ? "failed"
                     : "completed",
-            ...(typeof output?.recordSaved === "boolean"
-              ? { recordSaved: output.recordSaved }
-              : {}),
-            ...(output?.recordSaved === false
+            ...(typeof recordSaved === "boolean" ? { recordSaved } : {}),
+            ...(recordSaved === false
               ? {
                   executionStatus: outcome,
                   persistenceError:
