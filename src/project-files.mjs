@@ -17,13 +17,17 @@ const groups = {
   protocols: "protocols",
 };
 const filename = (id) => {
-  if (typeof id !== "string" || !id || id.length > 200)
+  if (typeof id !== "string" || !id || id.length > 200 || !id.isWellFormed())
     throw Error("记录ID无效");
-  return (
+  const name =
     (/^[a-f0-9-]{36}$/i.test(id)
       ? id
-      : "key-" + Buffer.from(id).toString("base64url")) + ".json"
-  );
+      : "key-" + Buffer.from(id).toString("base64url")) + ".json";
+  // Atomic writes add "." + a 36-character UUID + ".tmp". Validate the
+  // complete component before publishing a journal, on every supported OS.
+  if (Buffer.byteLength(name) + 41 > 255)
+    throw Error("记录ID编码后的文件名过长");
+  return name;
 };
 function validateLayout(project) {
   for (const key of Object.keys(groups)) {
@@ -31,7 +35,13 @@ function validateLayout(project) {
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
     if (new Set(values.map((item) => item?.id)).size !== values.length)
       throw Error("项目记录ID重复");
-    for (const item of values) filename(item?.id);
+    const diskNames = new Set();
+    for (const item of values) {
+      // Encoded names are ASCII; account for case-insensitive filesystems.
+      const name = filename(item?.id).toLowerCase();
+      if (diskNames.has(name)) throw Error("项目记录ID映射到重复文件名");
+      diskNames.add(name);
+    }
   }
 }
 async function writeJSON(file, value) {

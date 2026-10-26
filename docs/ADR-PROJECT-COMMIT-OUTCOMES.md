@@ -45,3 +45,11 @@ recovery/commit failure even if subsequent lock cleanup also fails.
 MCP recovery-guard errors filter project_ids through that dispatch's allowed
 projects. A caller can learn that recovery is required, but cannot enumerate IDs
 of unrelated damaged projects. The local-token HTTP owner retains recovery IDs.
+
+## Portable record-ID layout validation
+
+Malformed UTF-16 record IDs previously collapsed to replacement-character UTF-8 names, allowing two records to overwrite the same file. A 154-byte ASCII ID also passed the logical 200-character limit but exceeded the filesystem's 255-byte component limit once the atomic-write suffix was appended; this could publish a journal that recovery could never apply.
+
+Layout validation now rejects malformed Unicode, encoded filenames whose complete temporary component exceeds 255 bytes, and case-folded filename collisions before publishing a transaction. Existing filename encoding is unchanged; no records are silently renamed or truncated. Well-formed long IDs exceeding this stricter disk limit are rejected with an ordinary precommit error. Safe 153-byte ASCII and distinct Unicode IDs have disk save/read/restore tests; invalid saves and HTTP restore preserve the old revision/list and publish no journal.
+
+This prevents new corrupt layouts. It does not repair already overwritten records or automatically discard a pre-existing invalid journal; such data requires explicit recovery from a known intact backup. The limits are per filename component, not a promise that every possible full filesystem path is writable.
