@@ -1,4 +1,4 @@
-# 后端检查点 · 2026-10-26 17:53 UTC
+# 后端检查点 · 2026-10-26 18:23 UTC
 
 本文只记录下列已核实的提交及范围，不是完整交付声明。此前更长的历史说明保留在 Git 历史和对应 ADR/PR 中，不再把历史阶段的“最新”状态混列为当前结果。
 
@@ -87,6 +87,14 @@ PR25修正测试为精确的generic/typed双分支（typed必须有unknown/retry
 首阶段2a84aef232dd44214e05207926789cf46cadfe51保存为WIP。审查真实发现request getter在校验前调用，以及纯脚本阶段metadata1800/拼接后64KiB限制导致JSON可导出但不可回读。修复head f9753d9db4855679b74f7787eb974170df15de89、tree d104c516587154c0a699487c90b5f74c6131c36b已推送同PR：先校验相关own descriptors，再复用现有纯phase parser预检，不放宽导入限制。独立定向54项及额外定义往返探针通过；最终head CI和新组合CI仍待核对。首阶段全量执行期间工作树变化，只能作为回归参考，不算最终提交证据。
 
 仅支持API-local customScript/pickVars/assert/wait混排定义；数据库、origin继承、惰性来源混用、纯脚本/空canonical管线及其他不可表达配置继续拒绝。目录冻结步骤显式拒绝nativeTasks，避免被覆写或回读为惰性来源而丢失行为。已跑真实HTTP导入→登录提取→Bearer→两格式导出→独立项目回读→执行→备份恢复/重启。只证明Workbench数据与执行往返；不宣称原版GUI往返、原版ID不变或原版执行安全语义相同。
+
+## 当前组合RED与MCP新片WIP
+
+PR28独立final f9753d9db4855679b74f7787eb974170df15de89的CI40372605965首轮10个job成功，actual merge4efd8c03e4a113b5b1effaf23a9a2d147ef5c72c/tree d104c516587154c0a699487c90b5f74c6131c36b与head相同。组合99122的CI40373619646终态cancelled，不算全绿。CLI fixture真实UTF8分块问题已修后，组合985b955fa2b8c2069df53f715598f675067e2a31/tree3e36cf58cfc75a0863f9f1c5689de3a0a3f782ac的CI40374549274为RED：Windows重启第二轮后置子请求未完成，触发既有2秒wall，后续wait120尚未调度。不能认定native wait计时器错误或已经修复；保持预算，继续诊断。新两格式导出入口三OS通过不抵消组合失败。
+
+独立draft PR29新增canonical MCP原生导入/导出工具，严格现有授权项目、write/read边界、两种显式格式、merge-only，无restore/newproject/扩权/隐式请求执行。最终功能remote c25897e7bb1c71f680c826502e26621799c4f4d5/tree270396551bba40355e8ef273c97464bc47beaf78已保存，自己的精确CI待核实。修复outer getter、数组prototype、error/ID有界及目录内嵌JSON预算双向一致；不把独立base说成已有PR17/19。
+
+组合真实HTTP/stdio journal发布后apply失败已验证typed unknown/retry_safe:false、脱敏、恢复可能完成一次导入且无自动重试，近限stdio拒后ping仍可用。初次组合19项中两项失败：合并错误分支误用未截断message已修；PR19早期拒非法ID仍回显或返回SDK不接受的null，需更新该原PR，不能松测试。当前组合仍WIP，不借旧49508全绿。发送前帧预算不保证发送成功；提交后断管不能推断回滚或自动重试。
 
 ## 明确剩余边界
 
