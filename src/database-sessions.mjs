@@ -89,12 +89,16 @@ export class DatabaseSessions {
             config.filename,
             operation.sql,
             operation.parameters,
+            { signal },
           )
-        : await queryRemoteDatabase({
-            ...config,
-            sql: operation.sql,
-            parameters: operation.parameters,
-          });
+        : await queryRemoteDatabase(
+            {
+              ...config,
+              sql: operation.sql,
+              parameters: operation.parameters,
+            },
+            { signal },
+          );
     if (signal?.aborted) throw Error("数据库操作已取消");
     if (this.#connections.get(operation.connectionId) !== item)
       throw Error("数据库会话连接已撤销，结果未应用");
