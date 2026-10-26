@@ -294,6 +294,13 @@ export async function verifyNativeImportHTTPFlow(
     assert.equal((await execute()).outcome, "failed");
     assert.equal(count, expectedCount);
     if (requiresSSH) {
+      const persisted = await app.store.get(restoredState.id);
+      assert.equal(persisted.settings.apipostDatabases[0].requiresSSH, true);
+      assert.equal(
+        persisted.environments[0].variables.native_value,
+        "from-database",
+      );
+      assert(persisted.runs.some((run) => run.status === "passed"));
       assert.equal((await execute(restoredState.id)).outcome, "failed");
       assert.equal(count, expectedCount);
       const granted = await fetch(endpoint(restoredState.id), {

@@ -243,3 +243,56 @@ test("completed query results are discarded if the source policy changes during 
   assert.equal(reads, 2);
   sessions.close();
 });
+
+for (const mode of ["resolver-error", "cancelled"])
+  test(`completed query discards results when final policy check is ${mode}`, async (t) => {
+    const { DatabaseSync } = await import("node:sqlite"),
+      { mkdtemp, rm } = await import("node:fs/promises"),
+      os = await import("node:os"),
+      path = await import("node:path");
+    const root = await mkdtemp(path.join(os.tmpdir(), "source-outcome-")),
+      filename = path.join(root, "fixture.db");
+    const db = new DatabaseSync(filename);
+    db.exec(
+      "CREATE TABLE fixture(value TEXT); INSERT INTO fixture VALUES('private-value')",
+    );
+    db.close();
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const bindingId = "apipost-" + "a".repeat(20) + "-db-" + "b".repeat(20),
+      controller = new AbortController();
+    let reads = 0;
+    const sessions = new DatabaseSessions({
+      resolveProject: async (id) => {
+        if (++reads === 2) {
+          if (mode === "resolver-error")
+            throw Error("/private/filesystem/secret");
+          controller.abort();
+        }
+        return {
+          id,
+          settings: { apipostDatabases: [{ id: bindingId, type: "sqlite" }] },
+        };
+      },
+    });
+    const grant = sessions.register("p", {
+      name: "outcome gate",
+      type: "sqlite",
+      filename,
+      bindingId,
+    });
+    await assert.rejects(
+      sessions.query(
+        "p",
+        { connectionId: grant.id, sql: "SELECT value FROM fixture" },
+        controller.signal,
+      ),
+      (error) => {
+        assert(!error.message.includes("private"));
+        return mode === "resolver-error"
+          ? /不可核对/.test(error.message)
+          : /取消/.test(error.message);
+      },
+    );
+    assert.equal(reads, 2);
+    sessions.close();
+  });
