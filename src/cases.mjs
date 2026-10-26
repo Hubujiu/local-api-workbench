@@ -1,3 +1,4 @@
+import { cloneRequestWithTaskSource } from "./imported-native-task-source.mjs";
 import { randomUUID } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
 export function snapshotCase(input) {
@@ -11,7 +12,7 @@ export function snapshotCase(input) {
     sourceRequestId: input.sourceRequestId,
     ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
     request: {
-      ...normalizeRequest(structuredClone(input.request)),
+      ...normalizeRequest(cloneRequestWithTaskSource(input.request)),
       serviceSnapshot: true,
       parametersSnapshot: true,
       authSnapshot: true,

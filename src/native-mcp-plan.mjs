@@ -24,6 +24,7 @@ function stripTasks(r) {
   const copy = snapshotInterfaceForPlan(r);
   delete copy.nativeTasks;
   delete copy.importedScriptTasks;
+  delete copy.importedNativeTaskSource;
   copy.assertions = [];
   copy.extract = [];
   return copy;
@@ -101,7 +102,11 @@ export function normalizeNativeMCPState(
     if (budget.bytes > 4 * 1024 * 1024)
       throw Error("原版MCP计划展开快照超过4MiB");
   }
-  if (value.baseRequest?.nativeTasks || value.baseRequest?.importedScriptTasks)
+  if (
+    value.baseRequest?.nativeTasks ||
+    value.baseRequest?.importedScriptTasks ||
+    value.baseRequest?.importedNativeTaskSource !== undefined
+  )
     throw Error("原版MCP基础快照不能携带接口任务");
   const base = normalizeRequest(value.baseRequest);
   if (
@@ -114,6 +119,7 @@ export function normalizeNativeMCPState(
     base.extract.length ||
     base.nativeTasks ||
     base.importedScriptTasks ||
+    base.importedNativeTaskSource !== undefined ||
     base.sharedBeforeScripts.length ||
     base.sharedAfterScripts.length
   )

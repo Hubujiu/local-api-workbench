@@ -258,6 +258,8 @@ export function exportApipost(project) {
     requestIds.add(input.id);
     const r = normalizeRequest(input);
     for (const key of [
+      "nativeTasks",
+      "importedNativeTaskSource",
       "bodyDynamic",
       "before",
       "after",

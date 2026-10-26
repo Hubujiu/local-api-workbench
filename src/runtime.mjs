@@ -1,3 +1,7 @@
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+} from "./imported-native-task-source.mjs";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeAutoImports } from "./active-project-import.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
@@ -281,6 +285,7 @@ export class Store {
       );
     }
     for (const request of p.requests || []) {
+      validateRequestTaskSource(request);
       validateMockRules(request.mockRules || []);
       if (request.nativeTasks !== undefined)
         request.nativeTasks = normalizeNativeTaskRequest(request);
@@ -289,6 +294,10 @@ export class Store {
           throw Error("原版Mock与普通Mock规则不能混用");
         request.nativeMock = normalizeNativeMock(request.nativeMock);
       }
+      if (request.importedNativeTaskSource !== undefined)
+        request.importedNativeTaskSource = normalizeImportedNativeTaskSource(
+          request.importedNativeTaskSource,
+        );
     }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)

@@ -1,3 +1,8 @@
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+  cloneRequestWithTaskSource,
+} from "./imported-native-task-source.mjs";
 import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
   mergeDirectoryArtifacts,
@@ -200,6 +205,7 @@ export function normalizeRequest(r = {}) {
     throw Error("Mock路由与响应来源接口不一致");
   if (r.nativeMock !== undefined && r.mockRules?.length)
     throw Error("原版Mock与普通Mock规则不能混用");
+  validateRequestTaskSource(r);
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -324,6 +330,13 @@ export function normalizeRequest(r = {}) {
             : {}),
         }
       : {}),
+    ...(r.importedNativeTaskSource === undefined
+      ? {}
+      : {
+          importedNativeTaskSource: normalizeImportedNativeTaskSource(
+            r.importedNativeTaskSource,
+          ),
+        }),
     ...(r.importedScriptTasks === undefined
       ? {}
       : {
@@ -411,7 +424,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
-  return {
+  const snapshot = {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -449,7 +462,7 @@ export function snapshotPlan(plan) {
                 name: s.name || s.request?.name || "步骤",
                 enabled: s.enabled !== false,
                 request: {
-                  ...normalizeRequest(structuredClone(s.request)),
+                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
@@ -469,6 +482,14 @@ export function snapshotPlan(plan) {
               },
     ),
   };
+  let sourceBytes = 0;
+  for (const step of snapshot.steps) {
+    const source = step.request?.importedNativeTaskSource;
+    if (source !== undefined)
+      sourceBytes += Buffer.byteLength(JSON.stringify(source));
+    if (sourceBytes > 4 * 1024 * 1024) throw Error("计划任务来源合计最多4MiB");
+  }
+  return snapshot;
 }
 export async function runPlan(
   plan,
@@ -1852,6 +1873,13 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  // Validate task provenance before cloning can invoke source accessors.
+  for (const request of document.requests) validateRequestTaskSource(request);
+  for (const item of document.cases || [])
+    validateRequestTaskSource(item.request);
+  for (const plan of document.plans || [])
+    for (const step of plan.steps || [])
+      validateRequestTaskSource(step.request);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

@@ -441,3 +441,114 @@ test("native export matrix preserves service, URL-only query, path and multipart
   }
   assert.deepEqual(source, before);
 });
+
+test("native task pipelines cannot be silently erased by native JSON export", () => {
+  for (const nativeTasks of [
+    {
+      version: 1,
+      before: [
+        {
+          type: "customScript",
+          enabled: 1,
+          data: 'apt.environment.set("owned","before");',
+        },
+      ],
+      after: [],
+    },
+    {
+      version: 1,
+      before: [],
+      after: [
+        {
+          type: "customScript",
+          enabled: -1,
+          data: "disabled source must survive",
+        },
+      ],
+    },
+    {
+      version: 1,
+      before: [
+        {
+          type: "database",
+          enabled: 1,
+          data: {
+            connectionId: "fixture",
+            query: "SELECT 1",
+            variables: [],
+            isConsoleOutput: -1,
+          },
+        },
+      ],
+      after: [],
+    },
+  ]) {
+    const p = {
+      id: "p",
+      name: "P",
+      environments: [],
+      settings: {},
+      requests: [
+        {
+          ...normalizeRequest({
+            id: "r",
+            url: "http://127.0.0.1/echo",
+            inheritSharedScripts: false,
+            scriptDialect: "apipost8",
+          }),
+          nativeTasks,
+        },
+      ],
+    };
+    const before = structuredClone(p);
+    assert.throws(() => exportApipost(p), /nativeTasks/);
+    assert.deepEqual(p, before);
+    const inert = structuredClone(p);
+    inert.requests[0].importedNativeTaskSource = inert.requests[0].nativeTasks;
+    delete inert.requests[0].nativeTasks;
+    const inertBefore = structuredClone(inert);
+    assert.throws(() => exportApipost(inert), /importedNativeTaskSource/);
+    assert.deepEqual(inert, inertBefore);
+  }
+});
+test("HTTP native export refuses a stored native pipeline without changing the project", async (t) => {
+  const { createApp } = await import("../src/server.mjs"),
+    root = await mkdtemp(path.join(os.tmpdir(), "native-task-export-")),
+    app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    app.server.closeAllConnections();
+    await new Promise((r) => app.server.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  const p = await app.store.create("Task export");
+  p.requests = [
+    {
+      ...normalizeRequest({
+        id: "r",
+        url: "http://127.0.0.1/echo",
+        inheritSharedScripts: false,
+        scriptDialect: "apipost8",
+      }),
+      nativeTasks: {
+        version: 1,
+        before: [
+          {
+            type: "customScript",
+            enabled: 1,
+            data: 'apt.environment.set("mustNotDisappear","yes");',
+          },
+        ],
+        after: [],
+      },
+    },
+  ];
+  await app.store.save(p);
+  const before = JSON.stringify(await app.store.get(p.id));
+  const response = await fetch(
+    app.url + "/api/projects/" + p.id + "/export?format=apipost",
+    { headers: { "x-local-token": app.token } },
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /nativeTasks/);
+  assert.equal(JSON.stringify(await app.store.get(p.id)), before);
+});
