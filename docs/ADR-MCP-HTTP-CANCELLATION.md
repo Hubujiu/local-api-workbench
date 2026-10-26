@@ -35,3 +35,5 @@ The first production smoke failed on macOS, while Ubuntu/Windows passed. A regre
 ### Shared runtime prerequisite
 
 This cancellation PR is now stacked on PR3 (fix/script-sequence-budgets), not duplicating its budget validation, diagnostics or ASCII optimization. The first stdio CI used the older develop runtime and hit its known Faker budget race. Keeping PR3 as the explicit base preserves feature-only diffs and the original six default-limit assertions; it does not change or enlarge safety budgets and is not a merge into develop/main.
+
+ExecutionStatus remains explicit even when the output path later fails. An activity completed after execution/history persistence does not acknowledge client receipt; a frame already being written cannot be recalled. The recorded operation must never be replayed solely because the reply channel failed.

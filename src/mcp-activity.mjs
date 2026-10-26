@@ -161,10 +161,10 @@ export class MCPActivity {
           : status === "failed" || this.failed
             ? "failed"
             : "completed";
+    if (["passed", "failed", "cancelled"].includes(status))
+      this.record.executionStatus = status;
     if (typeof recordSaved === "boolean") this.record.recordSaved = recordSaved;
     if (recordSaved === false) {
-      if (["passed", "failed", "cancelled"].includes(status))
-        this.record.executionStatus = status;
       this.record.persistenceError = "执行记录保存失败；不会重新执行请求";
     }
     this.record.finishedAt = new Date().toISOString();

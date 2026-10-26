@@ -215,4 +215,19 @@ test("MCP activity metadata is bounded and cancellation save failures remain rea
   assert.equal(row.stepId, undefined);
   assert.equal(row.stepIdOmitted, true);
   assert(Buffer.byteLength(JSON.stringify(row)) <= 4096);
+  const deliveredFailure = await new MCPActivity(root, {
+    tool: "run",
+    projectId: "q",
+  }).start();
+  await deliveredFailure.finish(true, {
+    status: "cancelled",
+    recordSaved: true,
+  });
+  const outputFailed = (await readMCPActivities(root)).find(
+    (record) => record.projectId === "q",
+  );
+  assert.equal(outputFailed.status, "failed");
+  assert.equal(outputFailed.executionStatus, "cancelled");
+  assert.equal(outputFailed.recordSaved, true);
+  assert.equal(outputFailed.persistenceError, undefined);
 });
