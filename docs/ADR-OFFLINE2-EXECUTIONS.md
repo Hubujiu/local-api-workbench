@@ -187,3 +187,28 @@ escaping, multipart field preservation, second-step isolation and backup snapsho
 Unknown form fields, file overrides, non-string raw values and unsupported body
 modes reject atomically. URL-encoded/multipart/XML coverage is synthetic real HTTP,
 not a claim of an additional original runtime observation.
+
+### Cross-feature executable task isolation
+
+The native flow adapter now removes the executable nativeTasks pipeline as well
+as API-owned assertions/extraction before assigning explicit step scripts. Legacy
+before/after operations and shared script inheritance remain cleared. This avoids
+both accidentally invoking an API's database task and rejecting a legitimate
+step script as a mixed-pipeline request.
+
+ImportedScriptTasks remains inert per-step provenance for the established source
+inspection contract; runtime never executes it directly. Mixed task pipelines are
+retained separately as importedNativeTaskSource after canonical normalization,
+including their order, enabled flags and scope. Raw API snapshots are not retained:
+they can contain discarded connection secrets. Neither source field is converted
+back into nativeTasks. The source validator is bounded and rejects accessors,
+unknown fields and connection credentials; it does not grant execution permission.
+Canonical plans explicitly containing nativeTasks are unchanged.
+
+The isolated feature test checks the normalization boundary and actual step-owned
+HTTP/script execution. A separate combined acceptance test joins the native API
+database-task importer: the ordinary API still fails without its database grant,
+while native flows with/without independent step scripts execute real HTTP,
+persist only step variables, restore and restart without inheriting the API
+pipeline. That cross-feature test belongs to the combined validation snapshot,
+not a claim that this PR alone implements the separate database-task feature.

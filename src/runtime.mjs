@@ -1,3 +1,4 @@
+import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -247,8 +248,13 @@ export class Store {
         normalizeParameterEntry,
       );
     }
-    for (const request of p.requests || [])
+    for (const request of p.requests || []) {
       validateMockRules(request.mockRules || []);
+      if (request.importedNativeTaskSource !== undefined)
+        request.importedNativeTaskSource = normalizeImportedNativeTaskSource(
+          request.importedNativeTaskSource,
+        );
+    }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)
         throw Error("用例最多1000个");

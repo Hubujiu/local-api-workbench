@@ -1,3 +1,4 @@
+import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
 import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
   mergeDirectoryArtifacts,
@@ -305,6 +306,13 @@ export function normalizeRequest(r = {}) {
             : {}),
         }
       : {}),
+    ...(r.importedNativeTaskSource === undefined
+      ? {}
+      : {
+          importedNativeTaskSource: normalizeImportedNativeTaskSource(
+            r.importedNativeTaskSource,
+          ),
+        }),
     ...(r.importedScriptTasks === undefined
       ? {}
       : {
@@ -382,7 +390,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
-  return {
+  const snapshot = {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -430,6 +438,14 @@ export function snapshotPlan(plan) {
               },
     ),
   };
+  let sourceBytes = 0;
+  for (const step of snapshot.steps) {
+    const source = step.request?.importedNativeTaskSource;
+    if (source !== undefined)
+      sourceBytes += Buffer.byteLength(JSON.stringify(source));
+    if (sourceBytes > 4 * 1024 * 1024) throw Error("计划任务来源合计最多4MiB");
+  }
+  return snapshot;
 }
 export async function runPlan(
   plan,

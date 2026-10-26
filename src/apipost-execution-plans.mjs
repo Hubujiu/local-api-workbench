@@ -1,3 +1,4 @@
+import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
 import { createHash } from "node:crypto";
 import {
   importModernApipost,
@@ -63,7 +64,8 @@ export function prepareDirectoryPlans(
     throw Error("执行计划数量超过200");
   const resource = apipostResourceFactory(source.project_id),
     planIds = new Set((project.plans || []).map((p) => p.id));
-  let total = 0;
+  let total = 0,
+    sourceBytes = 0;
   return flows.map((flow) => {
     fields(flow, [
       "created_at",
@@ -207,8 +209,22 @@ export function prepareDirectoryPlans(
           throw Error("原版步骤正文覆盖类型尚未支持");
       }
       request = applyMCPInput(request, overrides);
-      // The original flow entry skips API pre/post tasks. Preserve their source
-      // provenance, but do not silently activate them in a migrated plan.
+      // Native flows skip API tasks. Preserve only normalized inert task provenance,
+      // never a raw API snapshot that can contain discarded connection secrets.
+      if (request.nativeTasks !== undefined)
+        request.importedNativeTaskSource = normalizeImportedNativeTaskSource(
+          request.nativeTasks,
+        );
+      if (request.importedNativeTaskSource !== undefined) {
+        sourceBytes += Buffer.byteLength(
+          JSON.stringify(request.importedNativeTaskSource),
+        );
+        if (sourceBytes > 4 * 1024 * 1024)
+          throw Error("导入计划任务来源合计最多4MiB");
+      }
+      delete request.nativeTasks;
+      request.assertions = [];
+      request.extract = [];
       request.beforeScript = step.pre_script || "";
       request.afterScript = step.post_script || "";
       if (request.beforeScript || request.afterScript)
@@ -220,7 +236,7 @@ export function prepareDirectoryPlans(
       request.after = [];
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版执行计划跳过接口前后置操作；原接口脚本仅保留来源，不执行；步骤自身的显式脚本独立执行。请核对所选环境的当前值；目录可能仅保存初始值。",
+        "原版执行计划跳过接口前后置操作；原接口任务仅保留惰性来源，不执行；步骤自身的显式脚本独立执行。请核对所选环境的当前值；目录可能仅保存初始值。",
       ];
 
       if (hasBody && request.bodyType === "json")
