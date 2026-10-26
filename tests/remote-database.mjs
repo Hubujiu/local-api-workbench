@@ -148,6 +148,56 @@ try {
       .value,
     "updated",
   );
+  // Acquire the real row lock before dispatching the HTTP write: no sleeps,
+  // driver substitution or shortened production timeout creates this failure.
+  const blocker = new Client({
+    ...common,
+    port: 5432,
+    ssl: false,
+    connectionTimeoutMillis: 3000,
+    query_timeout: 3000,
+  });
+  let blockerBegun = false;
+  try {
+    await blocker.connect();
+    await blocker.query("BEGIN");
+    blockerBegun = true;
+    const locked = await blocker.query(
+      `SELECT value FROM ${table} WHERE id = $1 FOR UPDATE`,
+      [1],
+    );
+    assert.deepEqual(locked.rows, [{ value: "updated" }]);
+    // Keep the lock until the production writer receives server statement_timeout
+    // and acknowledges ROLLBACK; client query_timeout remains the original 3s.
+    await assert.rejects(
+      write(`UPDATE ${table} SET value = $1 WHERE id = $2`, [
+        "must-not-survive-timeout",
+        1,
+      ]),
+      /写入事务已回滚.*statement timeout/i,
+    );
+  } finally {
+    try {
+      if (blockerBegun) await blocker.query("ROLLBACK");
+    } finally {
+      await blocker.end();
+    }
+  }
+  // Read after releasing the fixture lock; the server timeout and acknowledged
+  // rollback are required separately above. This verifies this row, not arbitrary
+  // trigger/sequence/external effects or the result of a lost COMMIT response.
+  assert.deepEqual(
+    (
+      await queryRemoteDatabase({
+        ...common,
+        type: "postgres",
+        sql: `SELECT id,value FROM ${table} WHERE id = $1`,
+        parameters: [1],
+      })
+    ).rows,
+    [{ id: 1, value: "updated" }],
+  );
+  console.log("REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS");
   assert.equal(
     (await write(`DELETE FROM ${table} WHERE id = $1`, [1])).affectedRows,
     1,
