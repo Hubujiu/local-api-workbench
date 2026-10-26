@@ -255,3 +255,5 @@ try {
   for (const socket of sockets) socket.destroy();
   await new Promise((r) => server.close(r));
 }
+const { verifyPostgresTLS } = await import("./postgres-tls-probe.mjs");
+await verifyPostgresTLS();

@@ -36,3 +36,7 @@ process defaults. Native-import/CLI/MCP combination fixtures must do the same.
 This does not claim to sandbox arbitrary PostgreSQL functions or replace a
 least-privilege database role. Existing manual writes remain separately opt-in;
 no sessions or imported task gain write rights, persistent credentials, or retries.
+
+## TLS wire follow-up
+
+The isolated synthetic-environment child also negotiates the actual PostgreSQL SSLRequest and upgrades the same TCP socket to TLS. Explicit fixture CA plus localhost succeeds and authenticates; missing CA and a mismatched logical hostname reject before PostgreSQL startup or password transmission. Only the fixture socket's TCP destination is redirected to loopback, leaving the actual driver's TLS hostname verification intact. No global trust, DNS, or TLS configuration is changed. This is protocol/TLS evidence, not an SQL server.
