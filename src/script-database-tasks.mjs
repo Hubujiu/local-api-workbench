@@ -1,3 +1,4 @@
+import { normalizeNativeWaitData } from "./native-wait-tasks.mjs";
 import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
@@ -180,7 +181,8 @@ export function normalizeNativeTaskRequest(request) {
     if (!Array.isArray(tasks) || tasks.length > 16)
       throw Error("原版任务阶段最多16项");
     let bytes = 0,
-      databases = 0;
+      databases = 0,
+      waitMilliseconds = 0;
     result[phase] = tasks.map((task) => {
       nativeDataObject(task, [
         "type",
@@ -197,7 +199,9 @@ export function normalizeNativeTaskRequest(request) {
             !["type", "enabled", "data", "id", "name", "origin"].includes(key),
         ) ||
         ![1, 0, -1].includes(task.enabled) ||
-        !["customScript", "database", "pickVars", "assert"].includes(task.type)
+        !["customScript", "database", "pickVars", "assert", "wait"].includes(
+          task.type,
+        )
       )
         throw Error("原版执行任务配置无效");
       for (const key of ["id", "name"])
@@ -225,6 +229,12 @@ export function normalizeNativeTaskRequest(request) {
         )
           throw Error("任务脚本合计最多64KiB");
         data = task.data;
+      } else if (task.type === "wait") {
+        data = normalizeNativeWaitData(task.data, {
+          enabled: task.enabled === 1,
+        });
+        if (task.enabled === 1 && (waitMilliseconds += data) > 1000)
+          throw Error("原生wait每阶段合计最多1000毫秒");
       } else if (task.type === "assert") {
         if (task.enabled === 1 && phase !== "after")
           throw Error("启用原生断言仅支持后置响应阶段");

@@ -1,3 +1,4 @@
+import { normalizeNativeWaitData } from "./native-wait-tasks.mjs";
 import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
@@ -146,6 +147,8 @@ export function nativeDatabaseTasks(
       (!translated && task.origin !== undefined)
     )
       throw Error("Apipost任务无效");
+    if (task.type === "wait")
+      normalizeNativeWaitData(task.data, { enabled: task.enabled === 1 });
     if (task.type === "assert")
       normalizeNativeAssertionData(task.data, { enabled: task.enabled === 1 });
     if (task.type === "pickVars")
