@@ -164,7 +164,8 @@ export function validateAPIResourceTrash(project) {
     project,
     "apiResourceTrash",
   );
-  if (descriptor && !own(descriptor, "value")) fail("回收字段访问器");
+  if (descriptor && (!own(descriptor, "value") || !descriptor.enumerable))
+    fail("回收字段访问器或不可序列化属性");
   const trash = descriptor?.value;
   if (trash === undefined) return;
   validateResourceJSON(trash);
@@ -222,9 +223,12 @@ export function validateAPIResourceTrash(project) {
         id === "0" ||
         id.startsWith("folder:") ||
         matches.length > 1 ||
-        [...(project.documents || []), ...(project.protocols || [])].some(
-          (item) => item.id === id,
-        )
+        [
+          ...(project.documents || []),
+          ...(project.protocols || []),
+          ...(project.settings?.socketioDefinitions || []),
+          ...(project.settings?.grpcDefinitions || []),
+        ].some((item) => item.id === id)
       )
         fail("HTTP历史引用ID冲突");
     }
@@ -238,6 +242,8 @@ export function validateAPIResourceTrash(project) {
           ...(project.documents || []),
           ...(project.requests || []),
           ...(project.protocols || []),
+          ...(project.settings?.socketioDefinitions || []),
+          ...(project.settings?.grpcDefinitions || []),
         ].some((item) => item.id === document.id)
       )
         fail("文档墓碑ID冲突");
@@ -256,6 +262,11 @@ export function validateAPIResourceTrash(project) {
       batch.documents.length +
       batch.folderPaths.length;
   }
+  const historicalHTTPIds = new Set(
+    trash.batches.flatMap((batch) => batch.requestIds),
+  );
+  if ([...documentIds].some((id) => historicalHTTPIds.has(id)))
+    fail("跨批次文档与HTTP历史ID冲突");
   if (total > 10000) fail("回收资源总数最多10000项；请先备份，不会自动淘汰");
 }
 export function activeAPIFolders(project) {

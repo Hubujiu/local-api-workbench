@@ -131,6 +131,9 @@ test("bounded legacy/modern documents preserve source/body and reject semantic l
   importIntoProject(p, input);
   assert.deepEqual(p.documents, originalDocs);
   for (const change of [
+    (d) => {
+      d.project_id = {};
+    },
     (d) => d.apis.push({ ...d.apis.at(-1) }),
     (d) => {
       d.apis.at(-1).parent_id = "missing";
@@ -332,6 +335,31 @@ test("trash validation is bounded, descriptor-safe, retained by backup and rejec
   for (const tamper of [
     (d) => {
       d.apiResourceTrash.version = 2;
+    },
+    (d) => {
+      Object.defineProperty(d, "apiResourceTrash", {
+        value: d.apiResourceTrash,
+        enumerable: false,
+      });
+    },
+    (d) => {
+      d.settings.grpcDefinitions = [
+        { id: d.apiResourceTrash.batches[0].documents[0].id },
+      ];
+    },
+    (d) => {
+      const first = d.apiResourceTrash.batches[0],
+        id = first.documents[0].id;
+      d.apiResourceTrash.batches.push({
+        id: "historical-http",
+        deletedAt: first.deletedAt,
+        selectedTargetIds: [id],
+        folderPaths: [],
+        explicitFolders: [],
+        requestIds: [id],
+        documents: [],
+        folderSettings: {},
+      });
     },
     (d) => {
       d.apiResourceTrash.extra = true;

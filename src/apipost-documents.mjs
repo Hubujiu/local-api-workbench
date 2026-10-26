@@ -11,6 +11,15 @@ import {
 // No Markdown rendering, attachment fetching, interpolation or task execution.
 export function importApipostDocument(node, folder, sourceProjectId) {
   validateResourceJSON(node, 1024 * 1024);
+  if (
+    sourceProjectId !== undefined &&
+    (typeof sourceProjectId !== "string" ||
+      !sourceProjectId.trim() ||
+      sourceProjectId.length > 200 ||
+      !sourceProjectId.isWellFormed() ||
+      /\0/.test(sourceProjectId))
+  )
+    throw Error("Apipost文档项目来源标识无效");
   const fields = [
     "target_id",
     "target_type",
