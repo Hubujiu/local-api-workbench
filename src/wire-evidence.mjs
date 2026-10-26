@@ -1,3 +1,4 @@
+import { resolveHandshake } from "./protocol-handshake.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
 import { decodeISO8583 } from "./iso8583-codec.mjs";
@@ -100,6 +101,8 @@ export function prepareWireExecution(project, input) {
       : { url: definition.url }),
     ...(type !== "sse" ? { message: definition.message } : {}),
   };
+  if (type !== "tcp")
+    request.headers = resolveHandshake(definition, input.headers);
   if (type === "websocket") {
     const config = websocketConfiguration(request);
     options.requestedProtocols = [...config.protocols];

@@ -1,3 +1,4 @@
+import { nativeProtocolHandshake } from "./apipost-protocol-handshake.mjs";
 import { prepareExtendedProtocol } from "./apipost-extended-protocols.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 const types = new Set([
@@ -314,7 +315,12 @@ export function prepareNativeProtocols(source, resource) {
       });
     } else if (node.target_type === "websocket2") {
       keys(request, ["header", "query", "cookie"], "WebSocket请求");
-      noHTTPExtras(request);
+      noTasks(request, "WebSocket");
+      const handshake = nativeProtocolHandshake(
+        request,
+        sourceCopy,
+        "websocket",
+      );
       keys(
         node.config ?? {},
         [
@@ -355,6 +361,7 @@ export function prepareNativeProtocols(source, resource) {
         if (message.request.mode !== "text") fail("WebSocket消息模式");
         add(node.target_id + ":" + message.param_id, {
           type: "websocket",
+          ...(handshake ? { handshake } : {}),
           url: urlQuery(node),
           message: payload ?? "",
           name: name + " / " + text(message.name, "消息名称", 200),
@@ -375,12 +382,17 @@ export function prepareNativeProtocols(source, resource) {
         ],
         "SSE请求",
       );
-      noHTTPExtras(request);
+      noTasks(request, "SSE");
+      if (request.restful !== undefined)
+        keys(request.restful, ["parameter"], "SSE路径配置");
+      no(request.restful?.parameter, "SSE路径参数");
+      const handshake = nativeProtocolHandshake(request, sourceCopy, "sse");
       if (!["", "http/1.1", undefined].includes(node.protocol))
         fail("SSE协议版本");
       const body = rawBody(request.body, "SSE正文");
       add(node.target_id, {
         type: "sse",
+        ...(handshake ? { handshake } : {}),
         url: urlQuery(node),
         method: node.method,
         ...(body !== undefined ? { body } : {}),
@@ -393,6 +405,16 @@ export function prepareNativeProtocols(source, resource) {
       source: sourceCopy,
       notes: [
         ...sourceNotes,
+        ...(["websocket2", "sse"].includes(node.target_type) &&
+        (sourceCopy.request?.header?.parameter?.some(
+          (r) => r.value === undefined,
+        ) ||
+          sourceCopy.request?.cookie?.parameter?.length ||
+          !["inherit", "noauth", undefined].includes(node.request?.auth?.type))
+          ? [
+              "握手凭据/未知Header源值已移除，执行前须显式提供运行时Headers；来源记录不可直接重放",
+            ]
+          : []),
         "原生协议受限迁移；源描述/响应示例与配置保留为惰性元数据，不执行。",
         "不导入认证编辑器中的停用提供方秘密；不自动继承Header/Cookie/认证/脚本。",
         "保持TLS校验与有界采集，不沿用无限握手或关闭证书校验；重连配置仅保留，不自动重连。",

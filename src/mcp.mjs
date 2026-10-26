@@ -318,6 +318,7 @@ export function createMCP({
           planId: str,
           environmentId: str,
           grpcCredentials: { type: "object" },
+          protocolCredentials: { type: "object" },
           socketioCredentials: { type: "object" },
         },
         ["projectId", "planId"],
