@@ -255,3 +255,25 @@ test("recovery outcome survives a secondary lock cleanup failure in both get and
   await rm(apis);
   assert.equal((await store.get(p.id)).name, "Journaled");
 });
+
+test("MCP recovery guard never enumerates damaged project IDs outside its grant", async (t) => {
+  const root = await temporary(t),
+    store = new Store(root),
+    p = await store.create("Private broken project");
+  const apis = path.join(store.directory(p.id), "apis");
+  await rm(apis, { recursive: true });
+  await writeFile(apis, "blocked");
+  p.name = "Pending";
+  await assert.rejects(store.save(p), { code: "PROJECT_COMMIT_UNCERTAIN" });
+  const d = createMCP({ store, projects: [], write: true });
+  const result = await d({
+    id: 1,
+    method: "tools/call",
+    params: { name: "localapi_create_project", arguments: { name: "New" } },
+  });
+  assert.equal(result.result.isError, true);
+  const error = JSON.parse(result.result.content[0].text);
+  assert.equal(error.code, "PROJECT_RECOVERY_REQUIRED");
+  assert.deepEqual(error.project_ids, []);
+  assert.equal(JSON.stringify(error).includes(p.id), false);
+});

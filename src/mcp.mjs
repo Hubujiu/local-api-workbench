@@ -693,15 +693,20 @@ export function createMCP({
         content: [{ type: "text", text: JSON.stringify(output) }],
       });
     } catch (e) {
+      const outcome = publicProjectCommitOutcome(e);
+      if (outcome.project_ids)
+        outcome.project_ids = outcome.project_ids.filter((id) =>
+          allowed.has(id),
+        );
       return result({
         isError: true,
         content: [
           {
             type: "text",
-            text: Object.keys(publicProjectCommitOutcome(e)).length
+            text: Object.keys(outcome).length
               ? JSON.stringify({
                   error: e.message,
-                  ...publicProjectCommitOutcome(e),
+                  ...outcome,
                 })
               : e.message,
           },

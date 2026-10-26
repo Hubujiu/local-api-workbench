@@ -41,3 +41,7 @@ deduplicator: once recovery succeeds, a separately requested create can make a
 new ID. Creation also conservatively blocks on an unrelated unreadable/archived
 project and can wait for its existing lock. Error propagation preserves a primary
 recovery/commit failure even if subsequent lock cleanup also fails.
+
+MCP recovery-guard errors filter project_ids through that dispatch's allowed
+projects. A caller can learn that recovery is required, but cannot enumerate IDs
+of unrelated damaged projects. The local-token HTTP owner retains recovery IDs.
