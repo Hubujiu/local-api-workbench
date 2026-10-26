@@ -31,7 +31,7 @@ function name(value) {
     ].includes(key) ||
     key.startsWith("sec-websocket-")
   )
-    throw Error("协议Header属于保留字段");
+    throw Error("协议Header属于保留字段，不可覆盖");
   return key;
 }
 export function protocolHeaders(input = {}) {
@@ -54,7 +54,7 @@ export function protocolHeaders(input = {}) {
 export function normalizeHandshake(input, type) {
   if (input === undefined) return undefined;
   if (
-    !["sse", "websocket"].includes(type) ||
+    !["sse", "websocket", "socketio"].includes(type) ||
     !plain(input) ||
     Object.keys(input).some((k) => !["headers", "requiredHeaders"].includes(k))
   )
@@ -66,6 +66,13 @@ export function normalizeHandshake(input, type) {
   if (!Array.isArray(required) || required.length > 50)
     throw Error("协议所需Header无效");
   const requiredHeaders = required.map(name);
+  if (
+    type === "socketio" &&
+    [...Object.keys(headers), ...requiredHeaders].some((key) =>
+      ["content-type", "accept-encoding"].includes(key),
+    )
+  )
+    throw Error("Socket.IO协议控制头不可覆盖");
   if (
     new Set(requiredHeaders).size !== requiredHeaders.length ||
     requiredHeaders.some((key) => Object.hasOwn(headers, key))

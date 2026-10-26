@@ -95,7 +95,7 @@ pragma and user-agent literal headers may persist. All other/custom headers,
 Cookie and supported SSE Basic/Bearer/header API-key authorization become required
 runtime header names; their source values are removed, including disabled and
 blank-key rows. Unknown templates/inheritance and ambiguous Cookie/header or
-auth/header overlap remain rejected. Socket.IO active headers remain unsupported.
+auth/header overlap remain rejected. Socket.IO uses the same ephemeral requirements, with its additional transport-control header restrictions.
 
 Execution must explicitly supply the complete runtime Header values. This adapter
 does not invent Cookie encoding, reconstruct removed credentials or acquire
@@ -123,3 +123,24 @@ and source/request-credential removal. The new genuine original Header Matrix
 directory also contains settings requiring the combined importer; the isolated
 PR branch cannot import that whole directory by itself. Original full-directory
 acceptance is recorded separately only after the combined version is run.
+
+### Socket.IO handshake extension
+
+The same source-value removal and runtime requirements now cover native
+Socket.IO. Its definition carries only safe literal headers and required names;
+normalization preserves the exact old shape when handshake is absent. The
+connection builder merges/validates the complete runtime set, retaining
+Socket.IO transport-control header exclusions and TLS verification. Both HTTP
+sessions and saved-plan/MCP calls use that builder. Every enabled Socket.IO step
+is checked before the plan starts, not only steps receiving a credentials object.
+
+An independent real Socket.IO fixture verifies native import → persisted frozen
+event/Ack plan → SDK permission denial/missing binding (zero connections) →
+authorized Ack → restored copy execution → restart. A separate original UI
+fixture confirms polling handshake X-Fixture and raw Cookie values before its
+event/Ack exchange. Response data is still not a secret-redaction system.
+
+An actual regression test first showed both v2/v4 polling silently overwrote
+explicit Accept with _/_. The bounded polling adapter now supplies that default
+only when absent; real version-2/version-4 handshake and acknowledgment tests
+retain the caller's declared Accept without changing framing/encoding limits.

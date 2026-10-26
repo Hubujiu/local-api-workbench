@@ -248,7 +248,12 @@ export function prepareNativeProtocols(source, resource) {
         }),
       );
     if (["socketio", "grpc"].includes(node.target_type)) {
+      const handshake =
+        node.target_type === "socketio"
+          ? nativeProtocolHandshake(request, sourceCopy, "socketio")
+          : undefined;
       const extended = prepareExtendedProtocol(node, {
+        handshake,
         resource,
         text,
         no,
@@ -405,7 +410,7 @@ export function prepareNativeProtocols(source, resource) {
       source: sourceCopy,
       notes: [
         ...sourceNotes,
-        ...(["websocket2", "sse"].includes(node.target_type) &&
+        ...(["websocket2", "sse", "socketio"].includes(node.target_type) &&
         (sourceCopy.request?.header?.parameter?.some(
           (r) => r.value === undefined,
         ) ||

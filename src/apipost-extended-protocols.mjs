@@ -4,7 +4,17 @@ import { normalizeGrpcDefinition, inspectGrpcSchema } from "./grpc.mjs";
 import { snapshotGrpcStep } from "./grpc-plan.mjs";
 export function prepareExtendedProtocol(
   node,
-  { resource, text, no, keys, fail, noInherited, noHTTPExtras, rawBody },
+  {
+    resource,
+    text,
+    no,
+    keys,
+    fail,
+    noInherited,
+    noHTTPExtras,
+    rawBody,
+    handshake,
+  },
 ) {
   if (Buffer.byteLength(JSON.stringify(node)) > 1024 * 1024)
     fail("扩展协议来源超过1MiB");
@@ -25,7 +35,7 @@ export function prepareExtendedProtocol(
       ["header", "query", "cookie", "event"],
       "Socket.IO请求",
     );
-    noHTTPExtras(node.request);
+
     no(node.request.query?.parameter, "Socket.IO Query");
     keys(
       node.config ?? {},
@@ -57,6 +67,7 @@ export function prepareExtendedProtocol(
     // Nonempty native listener row semantics require separate evidence.
     no(rows, "Socket.IO监听事件行");
     const definition = normalizeSocketIODefinition({
+      ...(handshake ? { handshake } : {}),
       id: resource("socketio", node.target_id),
       name: node.name,
       url: text(node.url, "Socket.IO地址", 8192),
