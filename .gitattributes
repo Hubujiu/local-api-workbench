@@ -14,3 +14,10 @@
 /src/vendor/native-mock-library.js -text
 /src/vendor/native-mock-library.json -text
 /src/vendor/APIPOST-MOCK-LICENSE.txt -text
+# Native XML has an exact-source manifest and a reproducible private bundle.
+/scripts/sandbox-intrinsic-guard.mjs text eol=lf
+/scripts/sandbox-native-xml-entry.mjs text eol=lf
+/src/native-xml-path.mjs text eol=lf
+/src/vendor/native-xml-library.js -text
+/src/vendor/native-xml-library.json -text
+/src/vendor/NATIVE-XML-LICENSES.txt -text

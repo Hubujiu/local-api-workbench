@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 22:11 UTC
+# 后端检查点 · 2026-10-26 22:42 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：baacade2b53d095945d7b361928ef9241b549db8。
-- Tree：c7037abef79a5da2a37b537116e5b1fbce8807bd，与本地f3b94057a84ba688a89f449bd001c889754636d2一致。
-- Push CI：[40409275790](https://github.com/Hubujiu/local-api-workbench/actions/runs/40409275790)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：9d6730d29bdc0ad13554c72fdd2b89c48f22ae39。
+- Tree：86ee4917ea85128bc1f874c558acdb38a0424a05，与本地39820272e32e274017f375776d7756651d2d1558一致。
+- Push CI：[40410899298](https://github.com/Hubujiu/local-api-workbench/actions/runs/40410899298)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含PostgreSQL ACK后清理、真实持锁超时及PR25响应头提取；不包含下述PR26响应头断言扩展。**
+- **该基线包含PostgreSQL ACK后清理、真实持锁超时、PR25响应头提取与PR26响应头断言；不包含下述新的XML提取扩展。**
 
 ## 最近功能PR与精确CI
 
@@ -110,10 +110,34 @@ Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 
 - 更完整的协议/数据库高级配置、原生资源往返、分发签名和前端完整交付仍未完成；本轮没有新增前端或视觉工作。
 
 
-## Header 组合修正与 PR26 断言增量（尚未完整验收）
+## Header 组合修正与 PR26 断言增量（有界组合已验证）
 
 Header 提取组合760cc2d2f5da31af2323d434613f051d16554608的CI40407071290最终失败，三个OS均仅旧惰性来源负例失败：它仍将新增支持的responseHeader视作未知来源。其他job及新增真实入口均通过，但不抵消失败。修正仅将未知来源改为responseXml，并添加canonical Header来源保存、快照、计划运行仍不激活/插值的正例，未放宽raw enabled字段校验。修正remote baacade2b53d095945d7b361928ef9241b549db8/tree c7037abef79a5da2a37b537116e5b1fbce8807bd，本地f3b94057a84ba688a89f449bd001c889754636d2，CI40409275790首轮10个job成功，三OS完整核心、真实数据库与production stdio均通过，实际checkout精确匹配。
 
-现有PR26增量head b6268807eafa9605202bef5c5a6cf4feb27f4e50/tree c4d4916078c223787e37b387710c97009836c1f4与本地60da309b19052f45a57b8eef0889c6d759a1520a一致，独立CI40409348742首轮10个job成功；全部实际checkout为merge1c344aed13c9eb58d4eabd28fe32ea208a37bf87，tree与head一致。包含最新PR25依赖，没有重复PR。新增Header eq/uneq只casefold原path，不trim、不当JSONPath；与提取器缺失即错误不同，可信缺失/已观察字段删除按String(undefined)比较，真实空值保留。重复/截断/伪造/投影丢失证据、getter、数组和非字符串拒绝；Header分支不读取body/code。比较false保持软失败和普通后续步骤，启用pickVars才沿用严格回滚/stop。私有断言结果与完成性检查、共享配额均保留。
+现有PR26增量head b6268807eafa9605202bef5c5a6cf4feb27f4e50/tree c4d4916078c223787e37b387710c97009836c1f4与本地60da309b19052f45a57b8eef0889c6d759a1520a一致，独立CI40409348742首轮10个job成功；全部实际checkout为merge1c344aed13c9eb58d4eabd28fe32ea208a37bf87，tree与head一致。此证据包含当时PR25 Header依赖bbed，不包含之后XML依赖；没有重复PR。新增Header eq/uneq只casefold原path，不trim、不当JSONPath；与提取器缺失即错误不同，可信缺失/已观察字段删除按String(undefined)比较，真实空值保留。重复/截断/伪造/投影丢失证据、getter、数组和非字符串拒绝；Header分支不读取body/code。比较false保持软失败和普通后续步骤，启用pickVars才沿用严格回滚/stop。私有断言结果与完成性检查、共享配额均保留。
 
-本地组合f4224891a66c3511928d4bfb1c00a9d748711c41仅保留既有nativeWaits的两处merge冲突，scripts/runtime相对第一父没有字节变化；77项Header/等待/真实入口回归及格式检查通过。新断言完整入口已在0de45e1528f9a80f58cbbee019b3ddfa22278606完成：H1/H2及官方HTTP/stdio SDK、真实CLI、API-local导出回读与backup/restart、私有软失败证据、active/disabled pick四策略、真实final activity journal未知提交同ID恢复且不重放、原生flow来源惰性与错误导入原子性，共8项本地通过。独立组合审查另确认wait+Header断言+Header提取与scope journal unknown交互。含该断言的新组合仍待自身push CI，不借提取器或独立断言绿灯代验。
+本地组合f4224891a66c3511928d4bfb1c00a9d748711c41仅保留既有nativeWaits的两处merge冲突，scripts/runtime相对第一父没有字节变化；77项Header/等待/真实入口回归及格式检查通过。新断言完整入口已在0de45e1528f9a80f58cbbee019b3ddfa22278606完成：H1/H2及官方HTTP/stdio SDK、真实CLI、API-local导出回读与backup/restart、私有软失败证据、active/disabled pick四策略、真实final activity journal未知提交同ID恢复且不重放、原生flow来源惰性与错误导入原子性，共8项本地通过。独立组合审查另确认wait+Header断言+Header提取与scope journal unknown交互。随后组合997a340的CI40410606948被修正提交替代而取消，三OS在取消前均观察另一旧assert来源负例错误地拒绝Header。test-only修正为真正unsupportedResponseSource并新增Header assert惰性正例，保留regexp/隐藏字段/getter/启用语法拒绝。最终组合9d6730自己的CI40410899298首轮10个job成功，三OS完整核心、上述8入口、真实PG/MySQL及production stdio均通过；实际checkout/tree已核实。997的取消与失败历史不删除。
+
+
+## PR25 XML 标量提取增量（WIP，组合待验）
+
+同一PR25最新headfbabb04189301d9b82937df6ede3fc0969f72989/tree81ccaebd605c36871385a74843846ddcbb143b26，与local65ca68adecdef90574fdaaf1fd826adaead0d1da一致。CI40413869629待完成，不借旧Header或构建阶段绿灯。此前992f159的CI40412497011最终取消，Windows取消前观察到可复现产物检查失败；后续ab07补LF属性和metafile跨平台路径规范，但不猜测旧日志没有显示的具体差异。
+
+仅支持responseXml的string(P)，绝对ASCII无冒号子路径、可末属性，恰好一个leaf Element/Attr。零/多匹配、裸node-set、其他XPath函数、整文namespace（含无关分支及声明）均拒绝；与标准XPath零匹配空串/多匹配取首及原版吞错赋空串明确不同，不伪造成功token。
+
+使用现有锁定MIT xmldom0.9.12/xpath0.0.35私有可复现QuickJS bundle，随包保留许可。不新增host hook、公开DOM/require；普通JSON/Header不加载XML。64KiB Unicode XML/结果，2000节点与属性、深度32、path1000/32steps；原xml2Json10000节点规则不变。仍共用16MiB/250ms active/2s wall，不逐row重启预算；超限仍失败。DTD/ENTITY、解析错误、非法literal/NCR字符严拒，CDATA/comment/PI里的字面引用不错误展开/拒绝，真实登录与持久化往返已验证。
+
+初次独立审查发现global lexical reader可被用户代码调用，已封闭在同一installer IIFE并加路径复验；修复及正式不可见测试已提交。此前有限dirty-tree检查与正式回归均有证据，但完整独立intrinsic guard审查被平台中断，未重启或换入口重试；**该专项仍未完成，不以正常测试或CI替代完整安全验收**。必要正式安全检查/CI不禁用、不删减。
+
+当前本地最终XML/inert模块41项与新增8条实际入口通过：H1/H2、官方HTTP/stdio SDK、真CLI、原生API导出/回读、backup/restart、错误与多行原子回滚阻止stale Bearer、Header assert/wait混排、真实post-journal unknown保留响应且恢复不重放、原生flow来源惰性/非法导入零变更。新入口commit d661bf4287a1c2ca6e493f056d76e6eb7b3d60c5；含XML的新组合仍需自身CI。
+
+
+## XML 断言与提取整模块组合（当前新增待CI）
+
+PR25旧ab07及8fe均被替代取消；Windows仍观察可复现test失败，但其build --check已通过，失败的是.gitattributes按LF-only分行的完整行判断。本地CRLF字符串复现旧误报，不能说已直接取得runner文件字节。最终65ca/fbabb仅测试修正LF/CRLF解析，保留全部六条精确规则、真实产物字节重建及缺行/注释/额外字符拒绝，不修改生产和预算。
+
+同PR26最新head5b6f27df988462afb4a71dc0b0851a6268c1c32d/treec8a5308ad5bbe5cf3567ed30b35afa8aaf6db1fa，对应local9c34dd17654d4082b6e3a9fe4b6534f5d14bd3df；parent b626 + PR25fbabb，独立CI40413998798进行中。新增responseXml的string(P)字面eq/uneq，严格唯一leaf/Attr及解析资源边界沿用PR25；不复制原版异常变null的假通过。来源path原样保存，支持的外围空白仅由语法处理，不重写历史字段。
+
+同一phase的XML断言与提取只初始化一次私有bundle/factory，共享原预算；reader只在同IIFE内传递，不新增global lexical解析入口。XML读取当前位置的处理正文，不读code或Header证据，Header/Code/JSON原语义保留。比较false保持普通继续，读取错误为stageerror，只有启用pick的既有严格策略才要求后置回滚/fail-stop；私有断言证据、完成性、配额与scope/record receipts继续生效。
+
+最终本地组合无冲突合入65ca及9c34；XMLassert/inert/真实XMLpick入口39项通过，新增XMLassert完整入口commit9d490b548f389326bf46c4d00a39da7633cff006的12项通过：两协议及官方SDK/CLI、native往返/恢复、零code getter读取、Header/wait/JSON/XML同阶段、严格错误分类与activepick矩阵、真实final journal unknown同ID恢复不重放、来源惰性/原子拒绝。此前XMLpick最终41+8入口独立记录保留。为避免相邻两轮组合全量CI，本次将提取与断言一并作XML整模块验证；组合待其自身push CI。独立guard专项未完成的WIP限制仍适用，任何CI通过不消除这一缺口。

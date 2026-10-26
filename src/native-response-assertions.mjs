@@ -1,3 +1,4 @@
+import { nativeXMLPath } from "./native-xml-path.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import {
   nativeDataArray,
@@ -10,8 +11,14 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
   nativeDataObject(value, ["type", "expression"]);
   if (!["type", "expression"].every((key) => Object.hasOwn(value, key)))
     throw Error("原生断言缺少自有来源或表达式字段");
-  if (!["responseCode", "responseJson", "responseHeader"].includes(value.type))
-    throw Error("原生断言仅支持responseCode/responseJson/responseHeader");
+  if (
+    !["responseCode", "responseJson", "responseHeader", "responseXml"].includes(
+      value.type,
+    )
+  )
+    throw Error(
+      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml",
+    );
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
   if (!["path", "compareValue"].every((key) => Object.hasOwn(expression, key)))
@@ -33,6 +40,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
   if (enabled && value.type === "responseJson")
     jsonPathSegments(expression.path || "$");
+  if (enabled && value.type === "responseXml") nativeXMLPath(expression.path);
   const result = {
     type: value.type,
     expression: {
@@ -68,6 +76,9 @@ export function compileNativeAssertions(value = []) {
     ...(data.type === "responseHeader"
       ? { header: data.expression.path.toLowerCase() }
       : {}),
+    ...(data.type === "responseXml"
+      ? { xmlPath: nativeXMLPath(data.expression.path) }
+      : {}),
     comparison: data.expression.compareType,
     expected: data.expression.compareValue,
   }));
@@ -82,6 +93,7 @@ function installNativeAssertions(
   publicTests,
   headers,
   headerEvidenceJSON,
+  readXML,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -151,11 +163,18 @@ function installNativeAssertions(
     failed = false;
   const perform = (index) => {
     const op = operations[index];
-    // A header assertion must never touch body/code, even through a reader that
-    // eagerly creates a response object. Existing Code/JSON behavior is unchanged.
-    const response = op.type === "responseHeader" ? null : readResponse();
+    // Header and XML branches bypass the eager body/code reader. XML uses only
+    // the shared private current-body parser; existing Code/JSON stays unchanged.
+    const response =
+      op.type === "responseHeader" || op.type === "responseXml"
+        ? null
+        : readResponse();
     let value =
-      op.type === "responseHeader" ? readHeader(op.header) : response.status;
+      op.type === "responseHeader"
+        ? readHeader(op.header)
+        : op.type === "responseXml"
+          ? readXML()(op.xmlPath)
+          : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);
