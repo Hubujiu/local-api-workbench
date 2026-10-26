@@ -1,4 +1,4 @@
-# 后端交付检查点 · 2026-10-25 23:31 UTC
+# 后端交付检查点 · 2026-10-26 01:44 UTC
 
 本文件是范围与证据清单，不是完整交付声明。尚未合入 main/develop、未部署、未新增前端或视觉工作。功能改动保持独立 draft PR，同功能修复留在原 PR；组合分支仅用于跨模块验收。
 
@@ -18,20 +18,26 @@
 | #10 | MCP 数据库临时授权 | 9a61edda03241c7bdb6bb1aabe38377e40156780 | 40235121362 success |
 | #11 | 原版条件 Mock 与路径路由 | d3d3d520dee31ad71e6f6ec739c72478f1bd9d85 | 40238628575 success |
 | #12 | SSE/TCP 请求语义 | 19731690bafa368fbb5237799f5baab4e6792bdc | 40229568609 success |
-| #13 | 原版协议导入与消息计划 | 8c82e04f5a0d58f87b819d8b1750aeacf899ba93 | 40232660540 success |
+| #13 | 原版协议导入与消息计划 | 1779e516ab4e1c6ab619aebd5e4bf6c58d7abd4b | 40254989465 success |
 | #14 | 有限原生 JSON 反向导出 | 4985b66a8e228970ccbc559e066828013e643fc1 | 40241216105 success |
 | #15 | SQLite 进程与 HTTP 脱敏诊断 | 2a91c8e0dd0c13a56c04dbfd4fbd2cc1f383288b | 40244416727 success |
-| #16 | 原版输入形态 MCP 计划闭环 | 3fcd020ce3bfa9ffecd4c3d65301dc53013c8ca6 | 40244993491 尚在运行，不能借旧00564952绿灯 |
+| #16 | 原版输入形态 MCP 计划闭环 | 7e0cb79963c131e2d3becba1424fefa1f0bff47d | 40249603195 success |
+| #17 | 项目提交结果不确定与恢复边界 | 9856024753d4cda3ced9696994dcfa11614e0fb3 | 40250383219 success |
 
 CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 后接运行编号。PR 地址为 https://github.com/Hubujiu/local-api-workbench/pull/ 后接编号。
 
 必要依赖采用堆叠 PR：#6/#14 基于 #5，#7 基于 #6，#10 基于 #9，#13 基于 #12；其余功能以 develop 为目标。#14 的 API-key 再导入在组合中使用 #8，独立分支测试不假装具备该导入器。
 
-本地与 GitHub Git Data API 提交的作者/时间可不同；发布时逐一核对 tree SHA 完全一致。不能用旧工作区、旧提交或单个功能分支的绿灯替代新组合提交验证。本报告所在组合提交仍须取得自己的 CI。
+本地与 GitHub Git Data API 提交的作者/时间可不同；发布时逐一核对 tree SHA 完全一致。不能用旧工作区、旧提交或单个功能分支的绿灯替代新组合提交验证。本报告之前的产品组合 a3716199238061bf6f174363666bb14e5a333007（tree 1818572a89fa7189302a90a0bd8c993a638768a4）独立通过 CI 40255086657。该精确组合重新完成十组真实原版输入闭环，包括独立 PG/MariaDB、协议/Mock、原生导出往返、MCP 和恢复重启。本报告仅更新文档，不将之前代码验证冒称新文档提交自身的 CI。
+
+gRPC metadata 首次提交 2f1bb72 的 CI 40254450148 三平台 core 同一旧拒绝断言失败；已本地复现并将该项更新为受控 grpc-timeout 拒绝，另加合法 Authorization 声明迁移/去源值正例。未重跑失败 SHA 碰绿灯；旧失败保留，现精确新提交结果见表。
 
 ## 已有完整流程证据与真实剩余缺口
 
 ### 项目存储与导入导出
+
+- 写事务日志前先校验集合、重复ID和文件名，避免无效输入毒化恢复日志。日志已发布后若应用/回读/清锁失败，HTTP/MCP返回明确提交不确定、项目ID及禁止盲重试标志；不会把失败一律当作回滚。
+- 真实磁盘夹具验证部分资源已写而清单仍旧的恢复、同revision重读、创建失败返回可恢复ID、未恢复项目阻止再次默认创建、主错误不被清锁错误覆盖、MCP不泄露未授权项目ID。此guard不是通用幂等/并发去重，也不承诺掉电durability。
 
 - 自建真实原版 27 文件基础项目、9 文件扩展协议项目、10 文件 MySQL 项目、9 文件参数 Mock 项目均有有限导入、保存、重载、恢复与真实执行证据；来源运行档案始终与本工具新执行证据分开。
 - 原版正常 UI 已导入 Workbench 生成的 JSON，执行 JSON/Basic/环境变量，以及默认服务/前后脚本/urlencoded/Bearer、Path/Query/API-key、multipart 重复文本字段，再由原版 UI 导出回 Workbench 重载恢复执行。
@@ -44,7 +50,10 @@ CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 
 - WS 文本、TCP UTF-8 首段完成、GET/POST SSE、Socket.IO v4 事件/Ack、嵌入自写 Proto 的 gRPC Unary/服务端流，均有真实原版输入、保存消息计划、执行、恢复、错误与隔离证据。
 - 原版 gRPC 大整数丢精度和不支持客户端流的现象有静态/运行证据；本工具保持精确 int64，未把原版未执行的消息冒充成功计划。
 - 代表性 Query API-key、AWS/Hawk/EdgeGrid 对照保留正确签名与安全拒绝，不复制原版缺陷。
-- 未完成：原生活动协议认证/Header/Cookie/脚本/模板、非默认连接选项、TCP自定义分帧、Socket.IO高级监听/消息、gRPC外部文件/TLS/客户端流调度，以及全部真实账户授权与高级 NTLM/OAuth 部署。
+- 新真实原版 Header Matrix 12文件覆盖 WS、SSE、Socket.IO Header/Cookie/Bearer/事件Ack，以及 gRPC Unary/服务端流 metadata。六种非凭据用途头可保存；所有未知/自定义头、Cookie/Auth 值均删除来源值，只保留临时运行绑定要求。整计划所有启用步骤在发网前预检，冻结定义不因原配置修改漂移，官方SDK/交互会话/恢复重启均验证。
+- Socket.IO v2/v4 polling 实测先复现 Accept 被覆盖成 */*，修复为仅缺省填默认并重新通过真实握手/Ack。SSE Accept 大小写归一与总50项/8KiB预算也包含默认头。
+- 原版两次Unary和一次服务端流调用均未发送已保存启用的gRPC metadata；Workbench不复制该观察缺陷，只迁移声明并要求显式运行时重绑定。完整目录导入后四次真实RPC证明metadata到达与int64精确保留，原版不同点明确记录，不称metadata线上字节等价。
+- 未完成：原生协议脚本/模板/继承、原生TLS设置和外部Proto文件迁移、非默认连接选项、TCP自定义分帧、Socket.IO高级监听/消息、原生客户端流调度，以及全部真实账户授权与高级 NTLM/OAuth 部署。原生二进制metadata尚无等价证据，明确拒绝；独立canonical运行时Base64能力保留。
 
 ### 前后置脚本与数据库
 
@@ -69,9 +78,11 @@ CI 地址统一为 https://github.com/Hubujiu/local-api-workbench/actions/runs/ 
 ### MCP 后端
 
 - 官方SDK HTTP/stdio覆盖项目/读写/执行权限、结果读取、临时数据库授权、撤销和重启。
-- #16提供有限原版 snake_case 输入别名，补文档详情读取，以及创建→更新→执行→证据→恢复流程。原API任务/断言/提取不隐式进入新计划；覆盖参数不会再被旧动态值或SDK URL缓存替换。
-- MCP同一Store进程内锁覆盖异步读取、修改与执行全程；明确不冒充跨进程CLI/手工HTTP锁。嵌套快照/结果明确标为Workbench格式，不声称完整原版输出契约或全部30工具。
-- 原版MCP本身尚未开启/授予持久项目访问；这一部分使用REA静态接口证据与自建官方SDK测试，不冒充原版实际调用。尚需完整工具/输出兼容与全部宿主客户端验证。
+- #16提供已观察的30个原版工具名的有界适配，覆盖托管项目创建、环境/服务/变量、OpenAPI同步、API/文档发现、冻结计划、实际执行、历史、确认HTTP软删除及重启。单API保留自身脚本/断言/提取，计划不隐式继承；覆盖参数不会被旧动态值或SDK URL缓存替换。
+- 原版命名单API严格200、canonical原2xx政策保持；环境在执行入口固定，修复并发切换后的跨环境cache污染。请求已发出但历史保存失败时返回已执行证据与保存失败，不重放网络。
+- native新建项目授权单独保存在内存，remember:true后再canonical创建/配置保存不会偷偷持久化native授权；重启隔离实测通过。
+- MCP同一Store进程内锁覆盖异步读取、修改与执行全程；明确不冒充跨进程CLI/手工HTTP锁。嵌套快照/结果明确标为Workbench格式，工具名齐全不等于完整输出契约或交付率。自定义存储路径、clear同步、递归目录/文档删除等仍明确拒绝；历史取实际两个有界存储，非伪装成原版记录。
+- 原版MCP本身尚未开启/授予持久项目访问；这一部分使用REA静态接口证据与自建官方SDK测试，不冒充原版实际调用。尚需更完整参数/输出兼容与全部宿主客户端验证。
 
 ## 证据与发布边界
 
