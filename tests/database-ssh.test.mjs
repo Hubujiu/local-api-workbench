@@ -116,6 +116,8 @@ test("SSH session credentials remain project-scoped, redacted and nonpersistent"
   const grant = sessions.register("a", {
     name: "private",
     type: "postgres",
+    user: "fixture",
+    database: "fixture",
     host: "localhost",
     ssh,
   });
