@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 19:18 UTC
+# 后端检查点 · 2026-10-26 19:40 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新完整验证基线
 
-- 组合：d0aa0994a0cced97548dd4c3847a11a5cfa96d6c。
-- Tree：2f9bec23adc873d92162cba90bf28ff7a6c8815c，与本地f14444cda06e1a9dd5c7527919626285578a80dd一致。
-- Push CI：[40382971082](https://github.com/Hubujiu/local-api-workbench/actions/runs/40382971082)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：a1a892f8bf25999f6002a577a10ae923cdd0ef0d。
+- Tree：0c37c47700412425eb9f40f4dca6901c4a8946ca，与本地0f95b7c63889789c2ada25827796bc87d6cbbcdd一致。
+- Push CI：[40385995975](https://github.com/Hubujiu/local-api-workbench/actions/runs/40385995975)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含PR30保存收据及原生MCP结果适配，不包含下述PR7新saved-flow来源导入。**
+- **该基线包含PR7 saved-flow来源及导出保护，不包含下述OAuth2生命周期与Base64早拒修复。**
 
 ## 最近功能PR与精确CI
 
@@ -24,6 +24,8 @@
 | #28 原生任务往返    | f9753d9db4855679b74f7787eb974170df15de89 | CI40372605965成功；merge4efd8c03e4a113b5b1effaf23a9a2d147ef5c72c，tree d104c516587154c0a699487c90b5f74c6131c36b=head |
 | #29 MCP项目往返     | c25897e7bb1c71f680c826502e26621799c4f4d5 | CI40377086009成功；merge535ae58c6d4d61b8e813e2ca212b930c14b2f1e7，tree270396551bba40355e8ef273c97464bc47beaf78=head  |
 | #30 执行保存收据    | a47d40b8041e96238c117b9e20d3a3792752bdb7 | tree9a06aba5c49b99369f990f967dd1f78a299eb9a8；CI40381534716进行中，不能算通过                                        |
+
+PR31 OAuth2生命周期当前head b8212924c139497196ebb28faa1742a75382c23d/tree640595564efa1f3aa82404b69e0db67b9c82233d，CI40388177786进行中。PR32 Base64早拒head2d5f390270e52037bc48f437eb45c52aeca54106/treec27663db3e9cc2689ef7bc673806230157527148，CI40387995935进行中。二者都直接基于develop88f70bb，独立功能diff，未把认证或模板生产修复塞进PR7。
 
 PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧CI。PR28临时基线仅连接PR14与PR27依赖，PR29基于PR28，PR30基于PR17；功能差异隔离，没有把新功能累积到PR1。依赖可用后才适合改以develop为目标，不自行合并。
 
@@ -49,10 +51,21 @@ PR1/2最后重新读取于17:53 UTC，head/test merge未变化，未重复跑旧
 
 历史auth仅明确none/noauth；带凭证/连接/文件等不支持字段拒绝，不静默删除或恢复权限。body/header/cookie仍可能含用户输入敏感数据，不承诺自动去秘。旧manual/ai且无mcp元数据保持旧shape；组合原生目录导出对新历史来源明确拒绝并提示项目备份，不能静默丢失，旧无元数据目录往返继续支持。
 
-功能final已保存，定向真实CLI/HTTP 503继续、输入/环境优先、取消、编辑/克隆/restore与独立getter回归通过。组合保留原active nativeMCP预算及手工编辑剥离语义，补原生SDK读写/执行授权隔离及导出guard。**该新组合尚待自身完整CI**；静态来源+synthetic Workbench fixture不是原版GUI运行证明。
+功能final已保存，定向真实CLI/HTTP 503继续、输入/环境优先、取消、编辑/克隆/restore与独立getter回归通过。组合保留原active nativeMCP预算及手工编辑剥离语义，补原生SDK读写/执行授权隔离及导出guard。该导入组合已由a1a892自己的完整CI验证；静态来源+synthetic Workbench fixture不是原版GUI运行证明。独立PR7旧模板测试RED单独保留。
+
+## OAuth2与Base64：新组合待CI
+
+OAuth2严格按RFC6749逐项form编码client ID/secret再Basic，不改变普通HTTP Basic；显式basic/body/none放置，错误类型模式、坏Unicode授权码/刷新值在网络前拒绝。使用owned取消控制器停止真实token请求，已关闭/已消费/失效flow不接纳迟到结果，隔离并发flow，不自动重试或保存。返回显式非Bearer类型时明确拒绝，防止现有客户端误改成Bearer；缺省及Bearer大小写保持已有兼容，不新增MAC/DPoP或真实账户权限。原15秒网络截止和容量约束不放宽。
+
+新完整组合用真实token/resource服务验证owner交换→显式项目保存→SDK API/冻结flow→CLI→备份恢复/重启，活动请求编辑不影响冻结token；MCP权限不因此扩张，错误token类型不覆盖已有合法配置。Bearer已发后真实journal故障仍保留实际响应与unknown receipt，恢复核对同ID，不重放。关闭本地请求不保证服务端未签发或已撤销token。
+
+Base64在CryptoJS编码前计算有效Unicode的UTF8长度与4\*ceil(bytes/3)+2 JSON字节；确定超出既有64KiB中间上限则早拒。保留原编码/解码、后置与最终field cap和250ms/2s执行预算。实际生成代码测试核对超限不调用编码器、合法仍调用；删除预检调用的mutant仍会调用编码器，原后置cap仍拒绝。不是把timeout当quota通过，也不声明原macOS具体超时成因已确定。
+
+本地39项相关组合及一条完整SDK/CLI/receipt链通过，独立审查也通过；**新组合仍需自身精确完整CI**，不能借a1a892绿灯。
 
 ## 历史失败与仍需调查的风险
 
+- PR7独立8ece的macOS Base64测试超时仍为RED；2111ms是多个resolve所在整test累计，不能据此推断单worker2秒或精确阶段。PR32是确定性工作量早拒优化，非猜测性放宽预算。
 - 985b955f / CI40374549274为真实RED：Windows重启第二轮后置pm.sendRequest尚未完成即到2秒wall，后续wait120尚未调度。不能由此认定native wait计时器错误。
 - 确定性持有Cookie锁可复现同一签名，只证明旧日志不足，不能证明该次Windows原因。PR27增加上游接收/完成/关闭、重启轮次和fixture锁存在性诊断；没有提高预算、删除marker或放宽断言。9194和独立PR27本次通过仍不等于历史根因已修复。
 - PR30旧a47的Windows故障fixture未保证提交前失败，真实返回typed unknown，保留RED。新89a使用真实损坏history JSON确保parser在journal前拒绝；严格generic/零journal/修复后零记录/revision不变/网络一次，生产分类不变。Windows底层errno未观测，不能把源码推断当实测。
