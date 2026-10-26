@@ -166,6 +166,23 @@ test(
     assert.equal(calls, 1);
     assert.equal((await run(first.client, b)).status, "failed");
     assert.equal(calls, 1);
+    const created = decode(
+      await first.client.callTool({
+        name: "localapi_create_project",
+        arguments: { name: "session-created without database grant" },
+      }),
+    );
+    decode(
+      await first.client.callTool({
+        name: "localapi_save_plan",
+        arguments: {
+          projectId: created.id,
+          plan: { id: "db-flow", steps: [{ request }] },
+        },
+      }),
+    );
+    assert.equal((await run(first.client, created)).status, "failed");
+    assert.equal(calls, 1);
     // Editing the file does not alter the already explicit, process-local snapshot.
     await writeFile(grantsFile, "invalid-after-start");
     assert.equal((await run(first.client, a)).status, "passed");

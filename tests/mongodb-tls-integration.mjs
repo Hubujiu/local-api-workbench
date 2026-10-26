@@ -65,3 +65,11 @@ await verifyMCPDatabaseFlow(mongoTLSConfig, {
   sourceFactory: nativeMongoFixture,
 });
 console.log("REAL_MONGODB_TLS_READONLY_AUTH_MCP_SDK_PASS");
+
+const { verifyMCPStdioNativeDatabaseFlow } = await import(
+  "./mcp-stdio-native-database-integration.mjs"
+);
+await verifyMCPStdioNativeDatabaseFlow(mongoTLSConfig, {
+  sourceFactory: nativeMongoFixture,
+});
+console.log("REAL_MONGODB_TLS_READONLY_AUTH_MCP_STDIO_PASS");

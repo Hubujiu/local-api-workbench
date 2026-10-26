@@ -318,3 +318,17 @@ await verifyMCPDatabaseFlow(
   { ...common, type: "mysql", port: 3306 },
   { nativeImport: true },
 );
+
+const { verifyMCPStdioNativeDatabaseFlow } = await import(
+  "./mcp-stdio-native-database-integration.mjs"
+);
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "mysql",
+  port: 3306,
+});
