@@ -1,4 +1,5 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import { exportExtendedApipostAuth } from "./apipost-auth-export.mjs";
 import { prepareApipostModelExport } from "./apipost-model-export.mjs";
 import { exportApipostDocuments } from "./apipost-document-export.mjs";
 import { exportApipostMock } from "./apipost-mock-export.mjs";
@@ -74,6 +75,8 @@ function rows(values, kind) {
   });
 }
 function auth(value) {
+  const extended = exportExtendedApipostAuth(value);
+  if (extended) return extended;
   switch (value.type) {
     case "none":
       return { type: "noauth" };

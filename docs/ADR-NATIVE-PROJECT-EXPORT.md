@@ -319,3 +319,46 @@ without freezing a new model-library snapshot or changing schema execution. Inva
 options, repeated export query options, and options for nonnative formats reject
 before persistence. Existing reference-graph and unsupported-data limits remain.
 Full Workbench backups continue preserving identity and all names without this option.
+
+### Bounded native signing-auth definitions
+
+AWSv4, Hawk and EdgeGrid definitions now reverse-map only the fields already
+accepted by `importExtendedApipostAuth`, with pure importer readback equality.
+No signer, credential acquisition or network operation runs during export.
+AWS accessKey/secretKey/sessionToken/region/service and optional Boolean
+addAuthDataToQuery are retained; query mode remains limited to explicit S3.
+Hawk id/key/dlg/ext map to authId/authKey/delegation/extraData. Workbench's default
+algorithm sha256 is explicit, and payloadHash default enabled is emitted as
+includePayloadHash=true: omission would incorrectly import as disabled. Explicit
+disabled emits false. EdgeGrid baseURL maps to the established `baseURi` spelling;
+its existing token/secret/header-list/nonce/timestamp strings remain unchanged.
+
+Unknown authentication fields, AWS signingDate and EdgeGrid maxBodySize (even an
+explicit runtime-default value) have no proven native slot and reject rather than
+vanish. Nonstring timestamps/header arrays and invalid hash modes reject. Optional
+missing string fields normalize to the importer's empty-string definition, while
+Hawk's runtime defaults become explicit. This preserves supported behavior, not
+property-presence identity; full Workbench backup preserves exact stored objects.
+Saved secrets can appear in the authorized export; no secret-free claim is made.
+
+The dependency-only base adds existing PR8 and its PR22 S3-query prerequisite to
+the prior base, without PR14/root business ancestry. No new library or signing
+runtime is introduced. Real fictional localhost tests independently verify AWS
+header and S3-query HMAC, Hawk SHA256/hash-enabled and SHA1/hash-disabled MAC,
+and EdgeGrid HMAC using node:crypto (not production signer output). Owner JSON and
+directory import/export two generations remain network-free until explicit plan
+execution; frozen auth survives later live auth edits, backup/restore and restart.
+Unrelated projects and input documents stay unchanged; unmapped fields return
+owner400 without altering persisted definitions. The first fixture's stale-revision
+cleanup PUT was correctly refused by Store; the fixture was corrected, not the
+optimistic-lock policy. The old blanket-Hawk rejection test now rejects an unmapped
+user extension instead, preserving its unsupported-data error path.
+
+Wire coverage also asserts fixed AWS region/service/date-scope, Hawk timestamp,
+nonce/ext/app/delegation, and EdgeGrid timestamp/nonce rather than merely accepting
+self-consistent signatures. A Workbench-edited Hawk definition without algorithm
+or payloadHash is exported with explicit defaults and authenticates its actual
+POST payload after both roundtrips and restart. AWS templated secret credentials
+remain templates in exported/frozen definitions and resolve against the selected
+saved environment only at explicit execution. EdgeGrid's nonempty signing baseURL
+uses a fictional host for the MAC while all HTTP traffic stays on loopback.

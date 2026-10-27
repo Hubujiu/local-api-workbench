@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-27 10:08 UTC
+# 后端检查点 · 2026-10-27 10:23 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 10:23 签名认证定义往返组合候选
+
+- 最近完整根 GREEN 为 `b6ce7214` / tree `44fd3270`，CI `40486948698` 首次 19/19 成功；三平台各1894通过，12份实际产物覆盖364文件（四分片各91），清单hash `3bd8c94ca8475d21de351cd7c12d1ee832e0c382b9adc058dcf787bbc5263f6c`。该结果不包含本次签名认证出口与组合测试。
+- 本候选合入 PR14 local `83df0089ff496647d3e47393cf345e72538fa629`，根生产合并点 `fa5dbc2df272f32a9b6cf5d959e8842ade47301a`。功能 remote `d1bd46d3b4699e976a9c84128d3ae76f00b67210` 的独立 CI 尚待核验；本候选根组合 CI 也尚待，不能提前标绿。纯依赖基线增加PR8认证导入及既有AWS Query基础，没有倒灌根业务；合并保持现有runtime逐字不变。
+- AWSv4 Header／受限S3 Query、Hawk、EdgeGrid定义可在有界子集反向映射，转换后由现有导入器读回核验。Hawk缺省算法/载荷散列显式映射为sha256/启用；AWS signingDate、EdgeGrid maxBodySize、非字符串headersToSign和其他无法保留字段拒绝，不静默丢失。导出不签名、不获取凭据、不自动发送请求；原始模板凭据保留。
+- 共享测试helper只用独立crypto验签和自建输入，不依赖生产签名器或转换器。六路包括AWS Header/S3 Query、Hawk sha256载荷散列/sha1无散列、EdgeGrid及Workbench缺省Hawk；AWS密钥模板取环境current值，EdgeGrid非空baseURi只参与MAC而实际请求仍到loopback。固定scope、timestamp、nonce和Hawk扩展字段均核对fixture，不仅检查签名自洽。
+- 根新增官方SDK HTTP+JSON与stdio+目录两条完整链：只读能导出但不能导入、越项目拒绝、write无execute不能执行；两代导入导出保持零wire；冻结后修改live/global认证，再真实MCP执行、CLI执行，实际持久记录非空；备份恢复重启再次CLI验签，记录由2条变3条。每次六路顺序与错误数组为空均检查，源与第三项目不变。Owner原测试改为复用同一oracle，避免重复实现验签逻辑。
+- 五个完整相关测试文件23/23通过，含owner两输入×两输出、签名SDK/CLI、既有认证导入和四格式noauth及出口拒绝。全库format、check和diff检查通过。初版组合fixture在第二代导出前设置非空globalAuth，被既有不可表达设置保护正确拒绝；只调整测试时序，将globalAuth变更放到冻结后，不算生产bug，不放宽出口。
+- 历史 f83/8b5 Windows XML RED仍未修复或改判；原版GUI及独立专项未完成，PR37实验仍关闭。本候选不新增前端、签名runtime、host权限或预算，不合main/develop、不部署。
 
 ## 10:08 显式模型名称模式组合候选
 
@@ -143,16 +153,16 @@
 
 所有PR仍draft，未合入develop/main、未部署。PR检出test merge，以下均核对实际checkout与Git tree，不只看关联head。
 
-| PR | 当前head | 精确独立CI与内容 |
-| --- | --- | --- |
-| #1 | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | 40136832590，首轮成功；02:41重读仍open/draft/unmerged |
-| #2 | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | 40275759477，首轮成功；02:41重读未变化 |
-| #3 终态预算 | b7fc0df3ca74abf56a583d122af57b214f2951e5 | 40434429389，10/10；mergea438ffd8f188f646a54cb5ffc22d4152e1a54513/tree6c4d77a008c8feeb310d39acd525d3850969ceaf=head；三OS1038 |
-| #26 原生断言 | 73feb85b2b9c4d1d9302871df70b8f93c6efb262 | 40444849052，19/19；mergec92d78fde00436f9feb1b1d5c18333fbdca7451b/tree8191bc287c0fc049a95e2dbb93bae04fc230b0a4=head；三OS1360；262文件66/66/65/65完整无重漏 |
-| #35 CI文件隔离 | e13d60afa9e6f7dad3bebd3de6cc033e640f5bbd | 40439898640，19/19；mergeb8c7e4b57a3e24e3581c5231786c69bb62794d07/tree3f36b15ba5cef3266863e49b580e5b617822f968=head；三OS1033 |
-| #36 实际堆计费 | 355bf9a2c68766a56769ba5359922dbff9432f5b | 40434252890，10/10；mergee10d71ced849a111ecd8b3d80ff18bb8c13a2ce9/tree46f52d3d0c13791d89a42488748c9a95bbe9beb3=head；三OS1028 |
-| #38 正则中断/OOM修复 | 05c8f5834285b0dce866f4b8703fc4d7ba63c94e | 40443229089，10/10；merge8aaaafff50bfc779ea7b6c07b9b919215fad6b97/tree88195a31c9e7f02c89ef6772baef4dbf7e99ad88=head；三OS1039 |
-| #39 OAuth1回调 | 5aa96e820186e30bde00f1aeecda4f580da5561a | 40440442949，10/10；merge4ed5e5a199bbadef6e9712dcc68431e58f235920/tree6e2ddea51467ab6d73f8c91a10060693346ba160=head；三OS1038 |
+| PR                   | 当前head                                 | 精确独立CI与内容                                                                                                                                            |
+| -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1                   | 88f70bb515c48b93536b28b7fe3ec780f2e150f3 | 40136832590，首轮成功；02:41重读仍open/draft/unmerged                                                                                                       |
+| #2                   | a3ffbcd00134d5846b2a8550a5d096cec9139b7f | 40275759477，首轮成功；02:41重读未变化                                                                                                                      |
+| #3 终态预算          | b7fc0df3ca74abf56a583d122af57b214f2951e5 | 40434429389，10/10；mergea438ffd8f188f646a54cb5ffc22d4152e1a54513/tree6c4d77a008c8feeb310d39acd525d3850969ceaf=head；三OS1038                               |
+| #26 原生断言         | 73feb85b2b9c4d1d9302871df70b8f93c6efb262 | 40444849052，19/19；mergec92d78fde00436f9feb1b1d5c18333fbdca7451b/tree8191bc287c0fc049a95e2dbb93bae04fc230b0a4=head；三OS1360；262文件66/66/65/65完整无重漏 |
+| #35 CI文件隔离       | e13d60afa9e6f7dad3bebd3de6cc033e640f5bbd | 40439898640，19/19；mergeb8c7e4b57a3e24e3581c5231786c69bb62794d07/tree3f36b15ba5cef3266863e49b580e5b617822f968=head；三OS1033                               |
+| #36 实际堆计费       | 355bf9a2c68766a56769ba5359922dbff9432f5b | 40434252890，10/10；mergee10d71ced849a111ecd8b3d80ff18bb8c13a2ce9/tree46f52d3d0c13791d89a42488748c9a95bbe9beb3=head；三OS1028                               |
+| #38 正则中断/OOM修复 | 05c8f5834285b0dce866f4b8703fc4d7ba63c94e | 40443229089，10/10；merge8aaaafff50bfc779ea7b6c07b9b919215fad6b97/tree88195a31c9e7f02c89ef6772baef4dbf7e99ad88=head；三OS1039                               |
+| #39 OAuth1回调       | 5aa96e820186e30bde00f1aeecda4f580da5561a | 40440442949，10/10；merge4ed5e5a199bbadef6e9712dcc68431e58f235920/tree6e2ddea51467ab6d73f8c91a10060693346ba160=head；三OS1038                               |
 
 PR26现依赖deps/native-assertions-runtime-base：4a79927b16f7691bb85f5dbf124b1e6a8af4f4f1/tree2fbe5546e22ebc089024d5810f1430f937f2b909，仅合PR25/3/35/38，不含PR26；feature diff仅23个断言相关文件，无runtime/vendor/CI。PR38依赖PR36；其他本轮功能优先develop为base。PR37固定库bytecode仍为独立实验，依赖PR36，未进入默认运行时；实验自身检查不能算生产优化已交付。
 

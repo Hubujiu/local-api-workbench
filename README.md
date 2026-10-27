@@ -19,6 +19,8 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
+当前签名认证定义往返候选新增 AWSv4（Header／受限 S3 Query）、Hawk、EdgeGrid 的有界原生 JSON／目录反向映射；已有本地真实 owner／MCP／CLI、冻结与恢复流程证据，**本候选根组合 CI 与 PR14 新头独立 CI 尚待核验**。不支持字段明确拒绝，导出本身不签名、不获取凭据、不发送请求；最新精确状态见后端检查点。
+
 ## 已实现的核心
 
 - 多级目录树与整棵子树原子改名/移除；可明确开启祖先参数/认证/脚本继承，默认保持精确目录，旧快照不变。
@@ -26,7 +28,6 @@ npm start
 - Schema支持常用约束、局部引用、元组以及保守的allOf交集样例；无法安全求解时明确要求example。
 - 文档可插入有大小/像素限制的本地PNG/JPEG，离线HTML/Markdown保留图片；不自动加载远程图片或执行原始HTML。
 - OAuth1 提供显式 OOB/PIN 和有界本机回调流程，包含单次领取、取消和过期处理；临时秘密仅在内存，交换后仍须显式保存接口，不自动取得第三方账号授权。
-
 
 - 项目/精确目录共享前后置脚本：异步完成后再进入下一作用域、单独关闭继承、用例冻结；计划仅执行显式代码，不自动加入共享脚本。见 [顺序与隔离边界](docs/ADR-SHARED-SCRIPTS.md)。
 
@@ -116,7 +117,7 @@ SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体
 
 ## 脚本工具库
 
-隔离脚本可直接使用 lodash（_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
+隔离脚本可直接使用 lodash（\_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
 
 ### 响应可视化
 

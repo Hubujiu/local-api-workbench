@@ -124,7 +124,7 @@ test("unsupported native export dependencies reject rather than create silently 
     (p) => (p.protocols = [{ id: "ws" }]),
     (p) => (p.settings.globalScripts = { beforeScript: "danger()" }),
     (p) => (p.requests[0].bodyDynamic = { a: { source: "x" } }),
-    (p) => (p.requests[0].auth = { type: "hawk" }),
+    (p) => (p.requests[0].auth = { type: "hawk", user: "unmapped-extension" }),
     (p) => (p.requests[0].timeout = 1000),
     (p) => (p.requests[0].beforeScript = "danger()"),
     (p) => (p.requests[0].examples = [{ status: 200, body: "x" }]),
