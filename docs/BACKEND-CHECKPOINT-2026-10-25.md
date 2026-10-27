@@ -1,6 +1,15 @@
-# 后端检查点 · 2026-10-27 22:48 UTC
+# 后端检查点 · 2026-10-27 23:07 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 23:07 备份恢复记录身份完整性候选
+
+- 上一根 remote `ba3b2c38832f01709afa2d8604ff1b63cc96199e` / local `3f9e31a61306b2eacf15e6d0f241b506cfd3049b` / tree `f5c848f15f0de8b9fccad4b585b2b3fb0dd0149f` 已完成首次CI `40597961268` 19/19 GREEN。全部19实际checkout、12实际core ZIP大小/SHA256/CRC/完整TAP及401文件互斥manifest已核；manifest hash `3acb0dea13bb3522cfb532d6f1eb504c8855c779f86bb23b48d3ebcfa3045cd5`。Linux/macOS各2136 pass，Windows2129 pass与7明确平台skip，无fail/cancel/todo。20服务上下文/解析器用例全部三平台通过，真实DB和packaged stdio/shutdown/smoke等均有本次日志。未核portable/UI ZIP字节；旧间歇中断原因仍未知。
+- 新的真实RED：PR17旧c303dc6执行API和计划后导出备份，注入重复history记录ID；owner restore返回201，重启仍保存重复记录，官方SDK列出两条但详情拒绝“记录ID不唯一”。已有读取歧义保护是正确的，修复的是新恢复输入允许不可寻址记录落盘。
+- 原PR17更新，local `12a8534ea125231a9a9f166b407ea208844fbdd6` / remote `82336c421e9702b258228c2cdfd95197c1eb8125` / tree `2c5ae3d2324129fb9f1ba6594b92a574e6a09e1f`，仍draft→develop。仅restore增加10行校验，检查完整history+runs输入的非空/共享唯一record.id后才截取50条；不trim/重写ID，不改变关联runId、protocolRuns命名空间或既有磁盘项目读取。
+- 四个完整真实工作流覆盖owner执行、备份恢复重启、SDK HTTP/stdio逐条读回、拒绝前后全部文件字节与列表不变、零网络重放、合法旧字段缺省、同runId不同id、opaque空白/Unicode ID、不同项目同id、实际SSE独立namespace及first50保留规则。六完整文件37/37通过；独立review及固定树新文件4/4通过。独立review限定：legacy用例的改名ID授权拒绝不是独立隔离证据，真正隔离由正常往返用例的原项目真实存在ID证明。
+- 根合并 `1a01ab44b0042678919f6d00fcde186bf4329bfb` / tree `b3fdcbb4c57ba291e6cce5d9c7dd63a1c46caeaf` 自动无冲突。七完整文件54/54通过，无fail/cancel/skip，12.87秒；包括完整服务上下文与六入口unknown-save/no-replay。固定HEAD/tree运行前后一致，check/全量format/diff通过；之后仅本文更新。新功能提交和新根仍等待各自CI，不能借上一根GREEN。
+- 无新前端、Store迁移、执行器、回执或运行预算改动，无main/develop合并或部署。PR17旧Windows SQLite未知写结果及其他历史RED保留，不因新增恢复校验而宣称修复。SQLServer依赖审计/许可、完整原生自动化格式证据等剩余缺口不变。
 
 ## 22:48 执行期间服务地址隔离修复候选
 
