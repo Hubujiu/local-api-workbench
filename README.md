@@ -19,7 +19,7 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-当前签名认证定义往返候选新增 AWSv4（Header／受限 S3 Query）、Hawk、EdgeGrid 的有界原生 JSON／目录反向映射；已有本地真实 owner／MCP／CLI、冻结与恢复流程证据，**本候选根组合 CI 与 PR14 新头独立 CI 尚待核验**。不支持字段明确拒绝，导出本身不签名、不获取凭据、不发送请求；最新精确状态见后端检查点。
+签名认证定义往返已随上一根组合 `0de7ffd1` 通过其精确提交 CI，覆盖有界 AWSv4（Header／受限 S3 Query）、Hawk、EdgeGrid 原生 JSON／目录及真实 MCP／CLI、冻结与恢复流程；导出本身不签名或发送请求。当前新增项目 TCP／WebSocket／SSE 会话终态自动保存候选，已有本地原生导入、模板快照、真实远端结束、只读 MCP 历史与恢复证据，**本候选根组合 CI 与 PR40 最终功能头独立 CI 尚待核验**。保存失败保留真实收据，只允许显式重试存储，不重放网络；显式等待后端 `app.close()` 可观察保存结果，桌面退出与信号终止尚未接入，不宣称耐崩溃保存。最新精确状态见后端检查点。
 
 ## 已实现的核心
 

@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 10:23 UTC
+# 后端检查点 · 2026-10-27 10:42 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 10:23 签名认证定义往返组合候选
+## 10:42 项目协议会话终态自动保存组合候选
+
+- 最近完整根 GREEN 为 remote `0de7ffd1212b13c59231bd24dad3d718991a61e9` / local `fccfb590bdbedb3ede9f1333d4fcef3940aebb0b` / tree `26ea9eb4afba3d91466b44ef91b6779c81522a9f`。首次 CI `40488258072` 全19项成功，实际checkout均为该远端SHA；12份实际产物覆盖366文件（92/92/91/91），完整无重叠，清单hash `72eda2ff338a3f969d0cc07e2c4ac67a23ffaccdc946306b01924677c18b2928`。三平台各1898通过，无失败/取消/跳过；数据库、production stdio与固定引擎通过。此结果包含上一节签名认证往返组合，但不包含本次会话增量。
+- 本次合入新独立 PR40 的 local `a781b5540e22214d73a2021db5d2a3d48a46d081`，根代码合并点 `f3c25d11e92b475669f8929cb679199bdb572dc6` / tree `976cf357759c2085fb0dda8a2988f88e4b300f5b`。PR40 最终 remote `6d59b88b4042629a0934606c52beb58e75aefa07` / tree `b25cfff93db1170813a8bb18d27da2812ff008f7` 与该功能local同树；base `7c5afb162c6814964ea7cc7ce8047caddcadc603`，目标 `fix/execution-save-receipts`，draft仅五个功能文件，无根倒灌。最终独立 CI 和本候选根 CI 均待验；阶段 d495 的 CI `40489516885` GREEN只代表阶段提交，不能替代最终头或根组合。
+- 项目 TCP/WebSocket/SSE 会话在远端结束、错误、deadline、stop及生命周期清理时进入统一终态保存；成功前不声称已保存，失败/未知提交保留真实receipt。显式重试只重试存储，多个重试共享进行中的提交，不重连或重发；真实 journal 前/后文件系统故障下仍能读取会话收据并协调恢复。显式等待后端幂等 `app.close()` 返回 `{allRecordsSaved, protocolSessions}`，调用方可观察各项目/会话的真实保存收据；关闭开始后不再启动新的存储重试，已有保存尝试排空。Node server.close回调只保留原语义，不把settled称为durable。桌面before-quit尚未等待此接口，服务入口尚无SIGINT/SIGTERM排空处理，强制退出、崩溃及失败内存收据的跨进程恢复不在本次保证内。备份和重启不复活连接，保留现有 OAuth 关闭中断与 MCP 清理。
+- 根新增原生输入到两个项目的完整链：同名环境变量生成不同payload；按保存定义打开会话后编辑live定义、变量与当前环境，后续TCP/WS发送仍用打开时快照；SSE在修改后由远端结束。六个实际会话全程无stop调用，以独立new Store确认exact ID各一条落盘，再核真实收据、remote终态、完整事件、来源definition hash和原选中环境。完整变量快照、未使用秘密及临时Authorization不进入历史；实际已发送普通payload仍保留为执行证据。
+- 官方SDK HTTP/stdio仅只读项目授权即可列出和读取自动保存详情，与磁盘逐条相同；外项目访问拒绝。备份恢复、重启后读取仍一致，旧session ID不可用，网络计数保持六次，未因读取或恢复重放。历史状态与恢复对象均有非空和精确ID断言，不使用空集合通过。
+- 在上述最终代码树重新运行七个完整相关测试文件55/55通过，覆盖新增原生SDK链、既有原生模板/CLI/冻结、协议导入、底层生命周期、真实存储故障、并发storage-only retry及可观察shutdown收据；额外完整OAuth生命周期和OAuth1回调文件核验关闭时实际socket中断、无迟到状态复活及原15秒总deadline。全库format、check、diff检查通过。早期阶段12/12和21/21仅记为旧阶段结果，本节依据合入最终生产修复后的新运行。
+- 历史 f83/8b5 Windows XML RED仍未修复或改判；原版GUI与独立专项未完成，PR37实验仍关闭。本次不新增前端、不修改脚本引擎/预算或签名runtime，不合main/develop、不部署。
+
+## 10:23 历史签名认证定义往返组合候选
 
 - 最近完整根 GREEN 为 `b6ce7214` / tree `44fd3270`，CI `40486948698` 首次 19/19 成功；三平台各1894通过，12份实际产物覆盖364文件（四分片各91），清单hash `3bd8c94ca8475d21de351cd7c12d1ee832e0c382b9adc058dcf787bbc5263f6c`。该结果不包含本次签名认证出口与组合测试。
 - 本候选合入 PR14 local `83df0089ff496647d3e47393cf345e72538fa629`，根生产合并点 `fa5dbc2df272f32a9b6cf5d959e8842ade47301a`。功能 remote `d1bd46d3b4699e976a9c84128d3ae76f00b67210` 的独立 CI 尚待核验；本候选根组合 CI 也尚待，不能提前标绿。纯依赖基线增加PR8认证导入及既有AWS Query基础，没有倒灌根业务；合并保持现有runtime逐字不变。
