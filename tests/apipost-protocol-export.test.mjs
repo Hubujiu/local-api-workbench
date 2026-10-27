@@ -75,6 +75,9 @@ function fixture(tcp = "127.0.0.1:1", sse = "http://127.0.0.1:2/events?x=one") {
   nodes[1].request.body.raw = "{{payload}}";
   nodes[1].description = "keep TCP description";
   nodes[1].response = { raw: "inert example" };
+  nodes[2].request.header.parameter = [
+    { key: "Accept-Language", value: "zh-CN", is_checked: 1 },
+  ];
   nodes[2].parent_id = "a";
   nodes[2].request.body.raw = "{{payload}}";
   const second = structuredClone(nodes[2]);
@@ -229,6 +232,18 @@ test("current ordinary folder paths remap consistently but shared source IDs rem
   for (const node of other.apis)
     if (node.project_id) node.project_id = other.project_id;
   // Same container path across distinct imported sources is ambiguous, not silently merged.
+  const nonconflicting = structuredClone(other);
+  nonconflicting.apis.find((n) => n.target_id === "a").name = "Other";
+  const combined = imported();
+  importIntoProject(combined, nonconflicting, { modelNameMode: "preserve" });
+  assert.equal(combined.protocols.length, 6);
+  for (const exporter of exporters) {
+    const next = blank();
+    importIntoProject(next, exporter(combined, { modelNameMode: "preserve" }), {
+      modelNameMode: "preserve",
+    });
+    verifyProtocolDefinitions(combined.protocols, next.protocols);
+  }
   const collision = imported();
   importIntoProject(collision, other, { modelNameMode: "preserve" });
   for (const exporter of exporters)
@@ -258,6 +273,7 @@ test(
       for await (const b of req) body += b;
       seen.push(["sse", body]);
       assert.equal(req.headers.authorization, undefined);
+      assert.equal(req.headers["accept-language"], "zh-CN");
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end("data: " + body + "\n\n");
     });
