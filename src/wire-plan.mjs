@@ -1,3 +1,6 @@
+import { resolveHandshake } from "./protocol-handshake.mjs";
+import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
@@ -126,7 +129,7 @@ export function snapshotWireStep(step) {
   const { message: savedMessage, ...rawDefinition } =
     step.protocol.definition || {};
   const definition = normalizeProtocol(rawDefinition);
-  const duration = step.protocol.duration ?? 3000;
+  const duration = step.protocol.duration ?? definition.duration ?? 3000;
   if (!Number.isInteger(duration) || duration < 100 || duration > 30000)
     throw Error("协议计划超时须为100至30000毫秒");
   const protocol = { definition, duration };
@@ -138,11 +141,15 @@ export function snapshotWireStep(step) {
       throw Error("SSE 计划不支持发送消息");
     protocol.maxEvents = step.protocol.maxEvents ?? 20;
   } else {
-    protocol.message = template(
+    const selectedMessage =
       step.protocol.message !== undefined
         ? step.protocol.message
-        : (savedMessage ?? ""),
-    );
+        : (savedMessage ?? "");
+    validateProtocolTemplate(definition, selectedMessage);
+    protocol.message =
+      definition.templateMode === undefined
+        ? template(selectedMessage)
+        : selectedMessage;
     if (step.protocol.maxEvents !== undefined)
       throw Error("非 SSE 计划不能设置事件限制");
     if (definition.type === "websocket")
@@ -244,6 +251,16 @@ export function wirePlanCredentials(plan, input = {}) {
       websocketConfiguration({ url: definition.url, ...value });
     bindings.set(stepId, structuredClone(value));
   }
+  for (const step of plan.steps)
+    if (
+      step.enabled !== false &&
+      step.type === "protocol" &&
+      step.protocol.definition.type !== "tcp"
+    )
+      resolveHandshake(
+        step.protocol.definition,
+        bindings.get(step.id)?.headers,
+      );
   return bindings;
 }
 export async function executeWireFlow(input, signal) {
@@ -251,12 +268,20 @@ export async function executeWireFlow(input, signal) {
     type = input.definition.type;
   try {
     signal?.throwIfAborted();
+    if (input.definition.templateMode === "variables")
+      throw Error("协议模板须由项目执行入口解析");
     const request = {
+      ...protocolRequestOptions(input.definition),
       ...input,
+      ...(input.definition.templateMode !== undefined
+        ? { templateMode: input.definition.templateMode }
+        : {}),
       ...(type === "tcp"
         ? { host: input.definition.url, port: input.definition.port }
         : { url: input.definition.url }),
     };
+    if (type !== "tcp")
+      request.headers = resolveHandshake(input.definition, input.headers);
     if (type !== "sse") protocolPayload(request.message);
     const fn = {
       tcp: exchangeTCP,

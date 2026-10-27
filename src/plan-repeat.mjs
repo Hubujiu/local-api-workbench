@@ -174,6 +174,21 @@ export function planLeaves(steps) {
     step.type === "repeat" ? step.steps : [step],
   );
 }
+// Active definitions, once each: grants are not duplicated per iteration.
+export function activePlanLeaves(steps) {
+  validateRepeatGraph(steps, { requireIds: true });
+  return steps
+    .filter((step) => step.enabled !== false)
+    .flatMap((step) =>
+      step.type === "repeat"
+        ? step.steps.filter((child) => child.enabled !== false)
+        : [step],
+    );
+}
+export const REPEAT_EVIDENCE_BYTES = 8 * 1024 * 1024;
+export function repeatEvidenceExceeded(bytes) {
+  return bytes > REPEAT_EVIDENCE_BYTES;
+}
 export function mapPlanLeaves(steps, map) {
   return steps.map((step) =>
     step.type === "repeat"

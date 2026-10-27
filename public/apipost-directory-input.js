@@ -1,3 +1,9 @@
+export function nativeMockTargetId(path) {
+  const match = /^settings\/mock_([A-Za-z0-9_-]+)\.json$/.exec(path);
+  return match && !["inner_rules", "custom_rules"].includes(match[1])
+    ? match[1]
+    : null;
+}
 export const directorySettings = {
   custom_funcs: "custom_func",
   db_links: "db_link",
@@ -11,9 +17,14 @@ export function allowedDirectoryPath(path) {
   return (
     typeof path === "string" &&
     path.length <= 300 &&
-    (["project.json", "global_params.json", "global_vars.json"].includes(
-      path,
-    ) ||
+    ([
+      "project.json",
+      "global_params.json",
+      "global_vars.json",
+      "settings/mock_inner_rules.json",
+    ].includes(path) ||
+      /^executions\/(flows|runs)\/[A-Za-z0-9_-]+\.json$/.test(path) ||
+      Boolean(nativeMockTargetId(path)) ||
       /^(apis|envs|samples|schemas)\/[A-Za-z0-9_-]+\.json$/.test(path) ||
       Object.keys(directorySettings).some(
         (key) => path === "settings/" + key + ".json",

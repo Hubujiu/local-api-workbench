@@ -10,6 +10,15 @@ import path from "node:path";
 import { renameProgress } from "./rename-progress.mjs";
 import { randomUUID } from "node:crypto";
 const folder = (root) => path.join(root, ".mcp-activities");
+const validMetadata = (value, limit = 200) =>
+  typeof value === "string" &&
+  value.isWellFormed() &&
+  Buffer.byteLength(value) <= limit &&
+  !/[\x00-\x1f\x7f]/.test(value);
+const metadata = (value, limit) => {
+  if (!validMetadata(value, limit)) throw Error("MCP活动元数据无效或过长");
+  return value;
+};
 const live = (pid) => {
   try {
     process.kill(pid, 0);
@@ -56,7 +65,7 @@ export async function readMCPActivities(root, now = Date.now()) {
         record.source !== "stdio" ||
         !Number.isInteger(record.pid) ||
         record.pid <= 0 ||
-        !["running", "completed", "failed"].includes(record.status)
+        !["running", "completed", "failed", "cancelled"].includes(record.status)
       )
         continue;
       const row = { ...record };
@@ -81,9 +90,9 @@ export class MCPActivity {
       id: randomUUID(),
       source: "stdio",
       pid: process.pid,
-      tool: String(info.tool),
-      projectId: String(info.projectId),
-      ...(typeof info.planId === "string" ? { planId: info.planId } : {}),
+      tool: metadata(info.tool, 128),
+      projectId: metadata(info.projectId),
+      ...(info.planId !== undefined ? { planId: metadata(info.planId) } : {}),
       status: "running",
       startedAt: new Date().toISOString(),
       completed: 0,
@@ -105,6 +114,7 @@ export class MCPActivity {
   flush() {
     this.record.updatedAt = new Date().toISOString();
     const content = JSON.stringify(this.record);
+    if (Buffer.byteLength(content) > 4096) throw Error("MCP活动记录超过4KiB");
     this.pending = this.pending
       .catch(() => {})
       .then(async () => {
@@ -124,20 +134,26 @@ export class MCPActivity {
     for (const key of ["completed", "total"])
       if (Number.isInteger(progress[key]) && progress[key] >= 0)
         this.record[key] = progress[key];
-    if (typeof progress.stepId === "string")
-      this.record.stepId = progress.stepId;
+    if (typeof progress.stepId === "string") {
+      if (validMetadata(progress.stepId)) {
+        this.record.stepId = progress.stepId;
+        delete this.record.stepIdOmitted;
+      } else {
+        delete this.record.stepId;
+        this.record.stepIdOmitted = true;
+      }
+    }
     if (
       progress.repeat &&
-      ["groupId", "childId"].every(
-        (key) =>
-          typeof progress.repeat[key] === "string" &&
-          progress.repeat[key].length <= 200,
+      ["groupId", "childId"].every((key) =>
+        validMetadata(progress.repeat[key]),
       ) &&
       Number.isInteger(progress.repeat.iteration) &&
       progress.repeat.iteration >= 0 &&
       progress.repeat.iteration < 100 &&
       typeof progress.repeat.occurrenceId === "string" &&
-      progress.repeat.occurrenceId.length <= 2500
+      validMetadata(progress.repeat.occurrenceId, 1500) &&
+      Buffer.byteLength(JSON.stringify(progress.repeat)) <= 2048
     )
       this.record.repeat = {
         groupId: progress.repeat.groupId,
@@ -146,17 +162,33 @@ export class MCPActivity {
         occurrenceId: progress.repeat.occurrenceId,
       };
     else delete this.record.repeat;
+    if (progress.repeat && !this.record.repeat)
+      this.record.repeatOmitted = true;
+    else delete this.record.repeatOmitted;
     const status = progress.stepStatus || progress.status;
     if (["passed", "failed", "cancelled"].includes(status))
       this.record.stepStatus = status;
     if (status === "failed") this.failed = true;
     return this.flush();
   }
-  async finish(error = false) {
+  async finish(error = false, { status, recordSaved } = {}) {
     if (this.finished) return this.pending;
     this.finished = true;
     clearInterval(this.timer);
-    this.record.status = error || this.failed ? "failed" : "completed";
+    this.record.status =
+      error || recordSaved === false
+        ? "failed"
+        : status === "cancelled"
+          ? "cancelled"
+          : status === "failed" || this.failed
+            ? "failed"
+            : "completed";
+    if (["passed", "failed", "cancelled"].includes(status))
+      this.record.executionStatus = status;
+    if (typeof recordSaved === "boolean") this.record.recordSaved = recordSaved;
+    if (recordSaved === false) {
+      this.record.persistenceError = "执行记录保存失败；不会重新执行请求";
+    }
     this.record.finishedAt = new Date().toISOString();
     await this.flush();
   }

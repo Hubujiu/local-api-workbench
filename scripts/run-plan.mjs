@@ -1,3 +1,4 @@
+import { prepareCLIDatabaseGrants } from "../src/cli-database-grants.mjs";
 import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
 import { executeWireFlow } from "../src/wire-plan.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
@@ -18,10 +19,11 @@ const args = process.argv.slice(2),
   option = (key) => args[args.indexOf(key) + 1];
 if (!args.includes("--project") || !args.includes("--plan")) {
   console.error(
-    "Usage: node scripts/run-plan.mjs --project ID --plan ID [--environment ID] [--output evidence.json] [--credentials-stdin]",
+    "Usage: node scripts/run-plan.mjs --project ID --plan ID [--environment ID] [--output evidence.json] [--credentials-stdin] [--database-stdin]",
   );
   process.exitCode = 2;
 } else {
+  let databaseGrants;
   try {
     const store = new Store(
         path.resolve(process.env.LOCAL_API_DATA || ".local-api"),
@@ -31,11 +33,22 @@ if (!args.includes("--project") || !args.includes("--plan")) {
     if (!plan) throw Error("Plan not found");
     const controller = new AbortController();
     process.once("SIGINT", () => controller.abort());
-    const credentials = args.includes("--credentials-stdin")
-      ? await readRuntimeCredentials(process.stdin, {
-          signal: controller.signal,
-        })
-      : {};
+    const databaseEnabled = args.includes("--database-stdin");
+    const credentials =
+      args.includes("--credentials-stdin") || databaseEnabled
+        ? await readRuntimeCredentials(process.stdin, {
+            signal: controller.signal,
+            allowDatabase: databaseEnabled,
+          })
+        : {};
+    if (databaseEnabled)
+      databaseGrants = prepareCLIDatabaseGrants(
+        project.id,
+        plan,
+        credentials.databaseConnections || {},
+        project.settings?.apipostDatabases || [],
+      );
+    delete credentials.databaseConnections;
     const environmentId = selectedEnvironment(
       project,
       args.includes("--environment")
@@ -49,6 +62,9 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       {
         ...scopedExecution(store, project, environmentId),
         ...credentials,
+        databaseQuery: databaseGrants
+          ? (operation, signal) => databaseGrants.query(operation, signal)
+          : undefined,
         executeGrpc,
         executeProtocol: executeWireFlow,
         executeSocketIO: (input, signal) =>
@@ -71,5 +87,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
   } catch (e) {
     process.stderr.write(e.message + "\n");
     process.exitCode = 2;
+  } finally {
+    databaseGrants?.close();
   }
 }

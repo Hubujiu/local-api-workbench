@@ -1,5 +1,12 @@
+import { executionRecords } from "./apipost-execution-files.mjs";
+import {
+  directoryArtifactPath,
+  normalizeDirectoryArtifacts,
+} from "./apipost-directory-artifacts.mjs";
+import { isDeepStrictEqual } from "node:util";
 import {
   allowedDirectoryPath,
+  nativeMockTargetId,
   directorySettings as settings,
 } from "../public/apipost-directory-input.js";
 // Read-only assembly of a bounded, explicitly selected original JSON file set.
@@ -62,6 +69,13 @@ export function assembleApipostDirectory(document) {
   )
     throw Error("Apipost目录缺少有效project.json");
   const projectId = project.project_id;
+  const artifact = document.files.find(
+    (file) => file.path === directoryArtifactPath,
+  );
+  if (artifact)
+    normalizeDirectoryArtifacts([
+      { sourceProjectId: projectId, files: [artifact] },
+    ]);
   const collection = (dir, field, wrapped) => {
     const index = files.get(dir + "/index.json");
     const paths = [...files.keys()].filter(
@@ -125,6 +139,18 @@ export function assembleApipostDirectory(document) {
         if (Object.hasOwn(row, name)) {
           if (
             Object.hasOwn(data, name) &&
+            !(
+              name === "sort" &&
+              data.sort === 0 &&
+              [
+                "websocket2",
+                "socket",
+                "socket_method",
+                "sse",
+                "socketio",
+                "grpc",
+              ].includes(row.target_type)
+            ) &&
             JSON.stringify(data[name]) !== JSON.stringify(row[name])
           )
             throw Error(
@@ -138,6 +164,8 @@ export function assembleApipostDirectory(document) {
       throw Error("Apipost目录存在未列入索引的记录: " + dir);
     return rows;
   };
+  const flows = executionRecords(files, "flows", projectId);
+  executionRecords(files, "runs", projectId);
   const envs = collection("envs", "env_id", false);
   const servers = new Map();
   for (const env of envs) {
@@ -161,12 +189,50 @@ export function assembleApipostDirectory(document) {
   };
   for (const [file, field] of Object.entries(settings))
     global[field] = files.get("settings/" + file + ".json") ?? [];
+  const apis = collection("apis", "target_id", true);
+  for (const [path, value] of files) {
+    const targetId = nativeMockTargetId(path);
+    if (!targetId) continue;
+    const target = apis.find(
+      (node) => node.target_id === targetId && node.target_type === "api",
+    );
+    if (
+      !id(targetId) ||
+      !target ||
+      !object(value) ||
+      value.project_id !== projectId ||
+      value.target_id !== targetId ||
+      target.nativeMockConfig !== undefined
+    )
+      throw Error("Apipost Mock文件身份冲突、重复或引用不存在的接口");
+    if (target.ai_expect !== undefined) {
+      const mirror = (tree) =>
+        object(tree)
+          ? { ...tree, none_math_example: tree.none_math_example ?? null }
+          : tree;
+      if (!isDeepStrictEqual(mirror(target.ai_expect), mirror(value.ai_expect)))
+        throw Error("Apipost内联与独立Mock条件配置冲突");
+    }
+    for (const key of [
+      "mock_server_enable",
+      "mock_ip_white_list_enable",
+      "mock_ip_white_list",
+      "mock_show_target_id",
+    ])
+      if (
+        Object.hasOwn(target, key) &&
+        !isDeepStrictEqual(target[key], value[key])
+      )
+        throw Error("Apipost内联与独立Mock开关配置冲突");
+    target.nativeMockConfig = structuredClone(value);
+  }
   return {
+    ...(flows.length ? { nativeExecutionFlows: flows } : {}),
     project_id: projectId,
     name: project.name,
     intro: project.intro || "",
     global,
-    apis: collection("apis", "target_id", true),
+    apis,
     samples: collection("samples", "sample_id", true),
     models: collection("schemas", "model_id", true),
     automated_testings: [],

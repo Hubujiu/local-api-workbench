@@ -4,8 +4,12 @@ This is a Workbench control-flow extension, not an importer for native
 `automated_testings`. Legal, previously extracted static materials establish a
 native fixed-count loop, but not the complete saved automation graph/paid-service
 contract. No original executable, license flow or proprietary implementation is
-used. The feature depends only on PR41 (including PR30/17) and PR42; the pure
-dependency join does not contain the backend integration branch.
+used. The pure dependency join contains PR41 (including PR30/17), PR42, PR43
+(frozen inheritance consumers/native MCP), PR28 (native task failure policy and
+source validation/export guards), PR2 (explicit CLI database grants), and PR19
+(bounded/cancellable MCP transport). It contains neither this feature nor the
+backend integration branch as ancestors. This joins existing consumers without
+reverting PR43 engine/budget fixes or importing newer XML feature work.
 
 ## Definition and freeze contract
 
@@ -38,17 +42,24 @@ groupId, childId and zero-based iteration. Occurrences do not mutate definitions
 Groups run serially, in definition order. Runtime/environment/global scopes and
 cookies continue across leaves and iterations, exactly as ordinary plan steps.
 This is not the isolated-iteration load runner. Existing ordinary failure
-continuation and atomic extraction semantics stay unchanged. In the combined
-native-task runtime, strict extraction failure still stops the remaining run.
+continuation and atomic extraction semantics stay unchanged. The inherited native-task runtime keeps strict extraction failure as a stop for
+all remaining iterations and trailing steps; the first successful iteration
+remains committed.
 Cancellation starts no later leaf and does not imply rollback of completed
 network operations or confirmed scope commits. There is no automatic retry.
 
 Final evidence uses the existing bounded save receipts: execution status remains
 distinct from recordSaved; typed unknown remains unknown and does not authorize
 replaying the group. Backup/restore preserves the graph and validates it again.
-Native writers/adapters must reject unsupported repeat nodes rather than flatten
-them or silently discard children. They are separately composed when absent from
-this minimal dependency base. Existing write/execute permissions are unchanged.
+Native directory export and native MCP flow create/update/view/execute reject
+unsupported repeat nodes rather than flatten them. Native flow lists and filtered
+execution-history/result projections reject repeat-containing results rather than
+dropping occurrence identities; canonical history/result tools remain available.
+CLI grants scan only enabled definitions once, not once per iteration; subsequent
+queries retain the existing invocation grant/TTL/query limits. Stored graph
+bindings and provenance are validated through child definitions, including on
+restore; only an exact same-project stored frozen leaf can be reused without a
+live graph binding. Existing write/execute permissions are unchanged.
 
 No while, conditions, datasets, parallelism, nested loops, new frontend, changed
 script budget, or original native automation compatibility is included.
@@ -70,7 +81,32 @@ and truthful distinct receipts; repair/recovery does not send any new request.
 The specification's two RED tests now pass. Original linear plan/protocol and
 HTTP atomic extraction regressions also pass in focused batches.
 
-This remains WIP: exact-head CI, native consumer guards/leaf-aware grant and
-restore adapters, combined strict native extraction, and aggregate result-growth
-policy still require completion. No root combination is represented by these
-standalone tests, and no unimplemented native export path is called supported.
+The expanded independent base additionally verifies native strict extraction in
+iteration two stopping all later HTTP, exact grants through a real CLI subprocess
+and SQLite then HTTP, no-grant restart rejection, native projection/export
+rejection without mutation, and stored inheritance leaf reuse after restore.
+No root combination is represented by these standalone tests.
+
+## Repeat-only evidence growth and output
+
+Serialized completed leaf records are accumulated as UTF-8 bytes. Once this
+exceeds 8MiB, the runner checks before the next occurrence and stops without
+starting it. The final real record is retained unchanged. `status:failed`,
+`stopReason:"evidence-limit"`, and `evidenceBudget` identify the executed count,
+remaining count and last/next occurrence. No unexecuted result is synthesized.
+If the threshold is crossed only by the final leaf, there is no evidence-limit
+failure. Cancellation and strict native extraction failure take precedence.
+
+This is **not an 8MiB hard output limit**: one existing bounded leaf record may
+cross the threshold, and snapshots/variables/envelopes add bytes. Existing HTTP
+response and script budgets are not raised; ordinary linear plans do not acquire
+this new stop rule. Store uses the same save receipt and journal limits as before.
+Owner HTTP/CLI retain full available evidence; CLI stdout has no new hard size cap.
+The existing MCP stdio 8MiB serialized-frame limit may reject the full output
+**after execution and saving**. Its bounded error says to inspect history and not
+replay. Canonical history includes a small stop summary and run ID; a too-large
+full result may still require owner HTTP or on-disk evidence access. Such an
+output error never means the network did not run, nor grants permission to retry.
+
+Exact-head CI and root composition remain pending; local focused acceptance is
+not a claim that all backend modules or native automation formats are complete.

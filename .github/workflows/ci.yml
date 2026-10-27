@@ -14,10 +14,12 @@ env:
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
 jobs:
   core:
+    name: core (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        shard: [1, 2, 3, 4]
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     steps:
@@ -27,13 +29,15 @@ jobs:
           node-version: "24"
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - run: node --test --test-concurrency=2 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=core-test-results.tap tests/*.test.mjs
+      - run: node scripts/run-core-tests.mjs --shard=${{ matrix.shard }}/4 --label=${{ matrix.os }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           retention-days: 7
-          name: core-test-diagnostics-${{ matrix.os }}
-          path: core-test-results.tap
+          name: core-test-diagnostics-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4
+          path: |
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.json
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.tap
   browser:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -88,6 +92,7 @@ jobs:
           node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production --no-audit
       - run: node scripts/build-desktop.mjs
+      - run: node tests/mcp-production-smoke.mjs
       - run: node scripts/build-manifest.mjs
         env:
           BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -206,6 +211,22 @@ jobs:
       - name: Seed isolated MongoDB fixtures
         run: docker exec ${{ job.services.mongodb.id }} mongosh --quiet --eval 'db.getSiblingDB("fixture").items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}])'
       - run: node tests/mongodb-integration.mjs
+      - name: Start isolated authenticated TLS MongoDB
+        run: |
+          mkdir -p "$RUNNER_TEMP/mongo-tls"
+          cat tests/fixtures/localhost.crt tests/fixtures/localhost.key > "$RUNNER_TEMP/mongo-tls/server.pem"
+          cp tests/fixtures/localhost.crt "$RUNNER_TEMP/mongo-tls/ca.crt"
+          docker run -d --name localapi-mongo-tls -p 127.0.0.1:27018:27017 -v "$RUNNER_TEMP/mongo-tls:/tls:ro" mongo:8.0 mongod --bind_ip_all --auth --tlsMode requireTLS --tlsCertificateKeyFile /tls/server.pem --tlsCAFile /tls/ca.crt --tlsAllowConnectionsWithoutCertificates
+          for attempt in $(seq 1 30); do
+            if docker exec localapi-mongo-tls mongosh --quiet --host localhost --tls --tlsCAFile /tls/ca.crt --eval 'quit(db.runCommand({ping:1}).ok === 1 ? 0 : 1)'; then break; fi
+            sleep 1
+          done
+          docker exec localapi-mongo-tls mongosh --quiet --host localhost --tls --tlsCAFile /tls/ca.crt --eval 'db.getSiblingDB("admin").createUser({user:"fixture-admin",pwd:"public-ci-admin-only",roles:["root"]})'
+          docker exec localapi-mongo-tls mongosh --quiet --host localhost --tls --tlsCAFile /tls/ca.crt --username fixture-admin --password public-ci-admin-only --authenticationDatabase admin --eval 'const d=db.getSiblingDB("fixture");d.items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}]);d.createUser({user:"readonly-fixture",pwd:"public-ci-fixture-only",roles:[{role:"read",db:"fixture"}]})'
+      - run: node tests/mongodb-tls-integration.mjs
+      - name: Remove isolated TLS MongoDB
+        if: always()
+        run: docker rm -f localapi-mongo-tls || true
       - run: node tests/clickhouse-integration.mjs
 
   quickjs-reproducible:

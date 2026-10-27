@@ -1,10 +1,36 @@
 import {
   validateRepeatGraph,
+  REPEAT_EVIDENCE_BYTES,
+  repeatEvidenceExceeded,
   mapPlanLeaves,
   planLeaves,
   planOccurrences,
 } from "./plan-repeat.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
+import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+  cloneRequestWithTaskSource,
+} from "./imported-native-task-source.mjs";
+import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
+import {
+  mergeDirectoryArtifacts,
+  normalizeDirectoryArtifacts,
+} from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
+import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
+import { mergeImportedDocuments } from "./apipost-documents.mjs";
+import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
+import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
+import {
+  runNativeTaskPhase,
+  isNativeExtractionPhaseFailure,
+} from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -27,6 +53,12 @@ import {
 } from "./apipost-directory.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
+import { importPreservedNativeInheritance } from "./native-inheritance-import.mjs";
+import {
+  inheritanceMode as resolveInheritanceMode,
+  normalizeNativeInheritanceBinding,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
 import {
   openAPIURLQuery,
   openAPIEmptyQueryValue,
@@ -40,7 +72,11 @@ import {
   normalizeCookieEncoding,
   requestCookieHeader,
 } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
@@ -183,6 +219,18 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  const nativeInheritance = normalizeNativeInheritanceBinding(
+    r.nativeInheritance,
+  );
+  validateRequestTaskSource(r);
+  if (
+    r.nativeMock !== undefined &&
+    r.nativeMockRoute !== undefined &&
+    r.nativeMock.sourceTargetId !== r.nativeMockRoute.sourceTargetId
+  )
+    throw Error("Mock路由与响应来源接口不一致");
+  if (r.nativeMock !== undefined && r.mockRules?.length)
+    throw Error("原版Mock与普通Mock规则不能混用");
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -256,6 +304,7 @@ export function normalizeRequest(r = {}) {
   )
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
+    ...(nativeInheritance === undefined ? {} : { nativeInheritance }),
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
@@ -307,6 +356,13 @@ export function normalizeRequest(r = {}) {
             : {}),
         }
       : {}),
+    ...(r.importedNativeTaskSource === undefined
+      ? {}
+      : {
+          importedNativeTaskSource: normalizeImportedNativeTaskSource(
+            r.importedNativeTaskSource,
+          ),
+        }),
     ...(r.importedScriptTasks === undefined
       ? {}
       : {
@@ -314,10 +370,19 @@ export function normalizeRequest(r = {}) {
             r.importedScriptTasks,
           ),
         }),
+    ...(r.nativeTasks === undefined
+      ? {}
+      : { nativeTasks: normalizeNativeTaskRequest(r) }),
     beforeScript: r.beforeScript || "",
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    ...(r.nativeMockRoute === undefined
+      ? {}
+      : { nativeMockRoute: normalizeNativeMockRoute(r.nativeMockRoute) }),
+    ...(r.nativeMock === undefined
+      ? {}
+      : { nativeMock: normalizeNativeMock(r.nativeMock) }),
     mockRules: r.mockRules || [],
     schema: r.schema ?? {},
     responses: r.responses || [],
@@ -378,6 +443,11 @@ export function evaluateAssertions(response, assertions = []) {
 }
 export function snapshotPlan(plan) {
   const repeated = validateRepeatGraph(plan.steps);
+  for (const step of planLeaves(plan.steps || []))
+    if (step.request?.nativeInheritance !== undefined)
+      throw Error("冻结计划须先解析原生继承图，不能保留live绑定");
+  const importedNativeFlowSource = readImportedNativeFlowSource(plan);
+  const nativeMCPBudget = { bytes: 0 };
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -386,6 +456,9 @@ export function snapshotPlan(plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   const snapshot = {
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -423,12 +496,22 @@ export function snapshotPlan(plan) {
                 name: s.name || s.request?.name || "步骤",
                 enabled: s.enabled !== false,
                 request: {
-                  ...normalizeRequest(structuredClone(s.request)),
+                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
                   sharedScriptsSnapshot: true,
                 },
+                ...(s.nativeMCP === undefined
+                  ? {}
+                  : {
+                      nativeMCP: normalizeNativeMCPState(
+                        s.nativeMCP,
+                        s.request,
+                        normalizeRequest,
+                        nativeMCPBudget,
+                      ),
+                    }),
                 expectedStatus: s.expectedStatus,
               },
     ),
@@ -449,6 +532,16 @@ export function snapshotPlan(plan) {
     validateRepeatGraph(snapshot.steps, { requireIds: true });
     if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
       throw Error("循环计划冻结定义最多4MiB");
+  }
+  let sourceBytes =
+    importedNativeFlowSource === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
+  for (const step of planLeaves(snapshot.steps)) {
+    const source = step.request?.importedNativeTaskSource;
+    if (source !== undefined)
+      sourceBytes += Buffer.byteLength(JSON.stringify(source));
+    if (sourceBytes > 4 * 1024 * 1024) throw Error("计划任务来源合计最多4MiB");
   }
   return snapshot;
 }
@@ -474,6 +567,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
   const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
@@ -485,6 +579,9 @@ export async function runPlan(
   for (const step of planLeaves(snapshot.steps))
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
+  for (const step of planLeaves(snapshot.steps))
+    if (step.request?.nativeTasks !== undefined)
+      step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -492,8 +589,14 @@ export async function runPlan(
   if (!occurrences.length) {
     throw Error("计划没有可执行步骤");
   }
+  let evidenceBytes = 0,
+    evidenceStopped = false;
   for (const { step, repeat } of occurrences) {
     if (signal?.aborted) break;
+    if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
+      evidenceStopped = true;
+      break;
+    }
     if (step.enabled === false) continue;
     const record = {
       stepId: step.id,
@@ -506,18 +609,34 @@ export async function runPlan(
       subrequests: [],
       extracted: {},
     };
-    let scriptPhase;
+    let scriptPhase,
+      stopAfterExtractionFailure = false,
+      extractionPostStarted = false;
+    // Policy is derived from the host-normalized frozen tasks, never VM output.
+    // Any failure of a step which promises new extracted values stops later
+    // steps. After a response arrives its whole processing stage must succeed
+    // before scopes may commit. Completed network effects cannot be rolled back.
+    const extractionPostPolicy = step.request?.nativeTasks?.after.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
+      if (signal?.aborted) throw Error("执行已取消，未开始新的变量提交");
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes);
+          const accepted = await onScopeChanges(changes, signal);
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
           }
         } catch (error) {
+          if (error?.code === "PROJECT_COMMIT_UNCERTAIN") {
+            record.scopeCommit = { outcome: "unknown", retrySafe: false };
+            throw Error(
+              "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
+            );
+          }
           throw Error("变量持久化失败：" + error.message);
         }
       }
@@ -556,13 +675,27 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
+          const mode = validated.protocol.definition.templateMode;
+          const definition = resolveProtocolDefinition(
+            validated.protocol.definition,
+            vars,
+            validated.protocol.message,
+          );
           const message =
             validated.protocol.message === undefined
               ? undefined
-              : interpolate(validated.protocol.message, vars);
+              : mode === "variables"
+                ? definition.message
+                : mode === "literal"
+                  ? validated.protocol.message
+                  : interpolate(validated.protocol.message, vars);
+          // SSE body and WS/TCP message in the result are the actual resolved payload.
+          if (definition.type !== "sse") delete definition.message;
+          record.protocol.definition = definition;
           if (message !== undefined) record.protocol.message = message;
           request = {
             ...validated.protocol,
+            definition,
             ...(message !== undefined ? { message } : {}),
             ...wireCredentials.get(step.id),
           };
@@ -724,7 +857,10 @@ export async function runPlan(
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
         const beforeStages = scriptStages(configuredRequest, "before");
-        if (beforeStages.length) {
+        if (
+          beforeStages.length ||
+          configuredRequest.nativeTasks?.before.length
+        ) {
           const templateRequest =
             ["query", "headers", "path", "cookies", "form"].some((group) =>
               (configuredRequest[group] || []).some((row) =>
@@ -739,13 +875,17 @@ export async function runPlan(
             : null;
           scriptPhase = "before";
           const scripted = await (
-            configuredRequest.sharedBeforeScripts?.length
-              ? runScriptSequence
-              : runScript
+            configuredRequest.nativeTasks
+              ? runNativeTaskPhase
+              : configuredRequest.sharedBeforeScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            configuredRequest.sharedBeforeScripts?.length
-              ? beforeStages
-              : configuredRequest.beforeScript,
+            configuredRequest.nativeTasks
+              ? configuredRequest.nativeTasks.before
+              : configuredRequest.sharedBeforeScripts?.length
+                ? beforeStages
+                : configuredRequest.beforeScript,
             {
               allowNetwork: true,
               executionContext,
@@ -755,8 +895,15 @@ export async function runPlan(
               functions: snapshot.functions || [],
               request: configuredRequest,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "before",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -771,6 +918,14 @@ export async function runPlan(
           );
           if (scripted.tests.some((test) => !test.passed))
             throw Error("前置脚本断言失败");
+          if (
+            configuredRequest.nativeTasks &&
+            !isDeepStrictEqual(
+              configuredRequest.nativeTasks,
+              scripted.request.nativeTasks,
+            )
+          )
+            throw Error("脚本不能改写本次冻结的原版任务列表");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           replaceVariables(localVariables, scripted.localVariables || {});
@@ -800,6 +955,7 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        extractionPostStarted = extractionPostPolicy === true;
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -854,16 +1010,20 @@ export async function runPlan(
         }
         applyLegacyVariables(scopes, beforeAfterOperations, vars);
         const afterStages = scriptStages(record.request, "after");
-        if (afterStages.length) {
+        if (afterStages.length || record.request.nativeTasks?.after.length) {
           scriptPhase = "after";
           const scripted = await (
-            record.request.sharedAfterScripts?.length
-              ? runScriptSequence
-              : runScript
+            record.request.nativeTasks
+              ? runNativeTaskPhase
+              : record.request.sharedAfterScripts?.length
+                ? runScriptSequence
+                : runScript
           )(
-            record.request.sharedAfterScripts?.length
-              ? afterStages
-              : record.request.afterScript,
+            record.request.nativeTasks
+              ? record.request.nativeTasks.after
+              : record.request.sharedAfterScripts?.length
+                ? afterStages
+                : record.request.afterScript,
             {
               allowNetwork: true,
               executionContext,
@@ -874,8 +1034,15 @@ export async function runPlan(
               request: record.request,
               response: record.response,
             },
-            { signal, cookieSession },
+            { signal, cookieSession, databaseQuery },
           );
+          if (scripted.databaseQueries?.length)
+            (record.databaseQueries ||= []).push(
+              ...scripted.databaseQueries.map((item) => ({
+                ...item,
+                phase: "after",
+              })),
+            );
           record.subrequests.push(
             ...scripted.networkRequests.map((item) => ({
               ...item,
@@ -894,7 +1061,7 @@ export async function runPlan(
             ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
           );
         }
-        await commitScopes();
+        if (!extractionPostPolicy) await commitScopes();
         const hasStatusAssertion = record.assertions.some(
           (a) => a.target === "status",
         );
@@ -909,9 +1076,21 @@ export async function runPlan(
           statusOK && record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
+        if (extractionPostStarted && record.status !== "passed")
+          throw Error("原生响应提取阶段断言或原始响应状态失败，变量未提交");
+        if (extractionPostPolicy) await commitScopes();
       }
     } catch (error) {
+      stopAfterExtractionFailure =
+        extractionPostPolicy || isNativeExtractionPhaseFailure(error);
       record.status = "failed";
+      if (error.databaseQueries?.length)
+        (record.databaseQueries ||= []).push(
+          ...error.databaseQueries.map((item) => ({
+            ...item,
+            phase: scriptPhase,
+          })),
+        );
       if (error.networkRequests)
         record.subrequests.push(
           ...error.networkRequests.map((item) => ({
@@ -919,8 +1098,11 @@ export async function runPlan(
             phase: scriptPhase,
           })),
         );
-      scopes.environment = committedScopes.environment;
-      scopes.globals = committedScopes.globals;
+      if (extractionPostStarted) scopes = structuredClone(committedScopes);
+      else {
+        scopes.environment = committedScopes.environment;
+        scopes.globals = committedScopes.globals;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
@@ -933,7 +1115,9 @@ export async function runPlan(
     }
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
+    if (repeated) evidenceBytes += Buffer.byteLength(JSON.stringify(record));
     await onStep?.(record);
+    if (stopAfterExtractionFailure) break;
   }
   return {
     id: id(),
@@ -947,9 +1131,32 @@ export async function runPlan(
     createdAt: new Date().toISOString(),
     status: signal?.aborted
       ? "cancelled"
-      : results.every((r) => r.status === "passed")
+      : !evidenceStopped && results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
+    ...(evidenceStopped
+      ? {
+          stopReason: "evidence-limit",
+          evidenceBudget: {
+            limitBytes: REPEAT_EVIDENCE_BYTES,
+            recordedBytes: evidenceBytes,
+            executed: results.length,
+            remaining: occurrences.length - results.length,
+            last: {
+              stepId: results.at(-1).stepId,
+              ...(results.at(-1).repeat
+                ? { repeat: results.at(-1).repeat }
+                : {}),
+            },
+            next: {
+              stepId: occurrences[results.length].step.id,
+              ...(occurrences[results.length].repeat
+                ? { repeat: occurrences[results.length].repeat }
+                : {}),
+            },
+          },
+        }
+      : {}),
     results,
     initialVariables: structuredClone(variables),
     variables: vars,
@@ -1023,7 +1230,13 @@ export function importDocument(doc) {
               ),
             ).values(),
           ];
+          const selectedSecurity = Object.hasOwn(op, "security")
+            ? op.security
+            : doc.security;
           return normalizeRequest({
+            ...(Array.isArray(selectedSecurity) && selectedSecurity.length === 0
+              ? { inheritAuth: false }
+              : {}),
             name: op.summary || op.operationId || path,
             sourceOperationId: op.operationId || "",
             method,
@@ -1124,6 +1337,12 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (
+        config.type === "awsv4" &&
+        (config.awsv4 || []).filter((item) => item.key === "addAuthDataToQuery")
+          .length > 1
+      )
+        throw Error("Postman AWS Query认证开关重复");
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1177,7 +1396,14 @@ export function importDocument(doc) {
         return {
           type: "aws",
           ...Object.fromEntries(
-            ["accessKey", "secretKey", "sessionToken", "region", "service"]
+            [
+              "accessKey",
+              "secretKey",
+              "sessionToken",
+              "region",
+              "service",
+              "addAuthDataToQuery",
+            ]
               .filter((key) => values[key] !== undefined)
               .map((key) => [key, values[key]]),
           ),
@@ -1266,6 +1492,9 @@ export function importDocument(doc) {
                 ? req.description
                 : req.description?.content || "",
             auth: auth(req.auth || inheritedAuth),
+            ...((req.auth || inheritedAuth)?.type === "noauth"
+              ? { inheritAuth: false }
+              : {}),
             headers: (req.header || []).map((h) => ({
               key: h.key,
               value: h.value,
@@ -1310,8 +1539,12 @@ export function importDocument(doc) {
   }
   if (isModernApipost(apipostDocument(doc)))
     throw Error("Apipost现代JSON需要完整项目导入，不能丢弃环境依赖");
-  if (apipostDocument(doc))
-    return importApipost(doc).requests.map(normalizeRequest);
+  if (apipostDocument(doc)) {
+    const imported = importApipost(doc);
+    if (imported.documents.length)
+      throw Error("原生文档须使用完整项目导入，不会丢弃文档正文");
+    return imported.requests.map(normalizeRequest);
+  }
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
   throw Error("无法识别导入格式");
 }
@@ -1752,7 +1985,7 @@ export function toCurl(input) {
   if (["bearer", "oauth2"].includes(r.auth.type))
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
@@ -1797,6 +2030,8 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  validateNativeInheritanceProject(document);
+  validateAPIResourceTrash(document);
   for (const environment of document.environments) {
     if (
       !environment.id ||
@@ -1823,6 +2058,8 @@ export function restoreProject(document) {
     )
       throw Error("备份中的 " + key + " 格式无效");
   }
+  if (document.settings?.apipostDirectoryArtifacts !== undefined)
+    normalizeDirectoryArtifacts(document.settings.apipostDirectoryArtifacts);
   validateModelFolders(document);
   validateCaseFolders(document);
   if (
@@ -1843,7 +2080,23 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
-  for (const plan of document.plans || []) validateRepeatGraph(plan.steps);
+  // Validate task provenance before cloning can invoke source accessors.
+  for (const request of document.requests) validateRequestTaskSource(request);
+  for (const item of document.cases || [])
+    validateRequestTaskSource(item.request);
+  for (const plan of document.plans || []) {
+    validateRepeatGraph(plan.steps);
+    readImportedNativeFlowSource(plan);
+    for (const step of planLeaves(plan.steps || []))
+      validateRequestTaskSource(step.request);
+  }
+  for (const run of document.runs || [])
+    if (run.snapshot) {
+      if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
+      readImportedNativeFlowSource(run.snapshot);
+      for (const step of planLeaves(run.snapshot.steps || []))
+        validateRequestTaskSource(step.request);
+    }
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
@@ -1855,6 +2108,7 @@ export function restoreProject(document) {
   copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
+  validateNativeInheritanceProject(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {
@@ -1960,7 +2214,16 @@ function replaceVariables(target, source) {
 }
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
-export function importIntoProject(project, document, { sync = false } = {}) {
+export function importIntoProject(
+  project,
+  document,
+  { sync = false, modelNameMode, inheritanceMode } = {},
+) {
+  const preserveInheritance =
+    resolveInheritanceMode(inheritanceMode) === "preserve";
+  if (project.settings?.nativeInheritance !== undefined)
+    throw Error("原生继承图项目暂不支持追加导入；请导入空项目");
+  resolveModelNameMode(modelNameMode);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -1975,13 +2238,78 @@ export function importIntoProject(project, document, { sync = false } = {}) {
       }
     }
   }
+  if (preserveInheritance) validateResourceJSON(original);
   const fromDirectory = isApipostDirectoryDocument(original);
+  const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  if (preserveInheritance) {
+    if (sync || !isModernApipost(apipostDocument(original)))
+      throw Error("inheritanceMode preserve仅支持完整原生HTTP项目，不支持同步");
+    if (
+      fromDirectory &&
+      directoryDocument.files.some(
+        (file) =>
+          (file.path.startsWith("executions/") &&
+            file.path !== "executions/flows/index.json") ||
+          file.path === "settings/mock.json" ||
+          (/^settings\/mock_/.test(file.path) &&
+            file.path !== "settings/mock_custom_rules.json"),
+      )
+    )
+      throw Error("原生继承图首片不导入执行档案或独立Mock配置");
+    return importPreservedNativeInheritance(
+      project,
+      apipostDocument(original),
+      { modelNameMode },
+    );
+  }
+  if (
+    modelNameMode !== undefined &&
+    !isModernApipost(apipostDocument(original))
+  )
+    throw Error("modelNameMode仅支持现代Apipost原生格式");
+  const directoryFlows = fromDirectory
+    ? original.nativeExecutionFlows || []
+    : [];
+  if (fromDirectory) delete original.nativeExecutionFlows;
+  const directoryPlans = fromDirectory
+    ? prepareDirectoryPlans(original, directoryFlows, project, {
+        normalizeRequest,
+        snapshotPlan,
+        modelNameMode,
+      })
+    : [];
+  const directoryArtifacts = fromDirectory
+    ? mergeDirectoryArtifacts(
+        project.settings?.apipostDirectoryArtifacts,
+        directoryDocument,
+        original.project_id,
+      )
+    : null;
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
-    ? importModernApipost(source, project, { sync })
+    ? importModernApipost(source, project, { sync, modelNameMode })
     : null;
+  if (modern?.nativeProtocolPlans?.length) {
+    const plans = structuredClone(project.plans || []);
+    for (const raw of modern.nativeProtocolPlans) {
+      const previous = plans.find((p) => p.id === raw.id);
+      const plan = snapshotPlan({
+        ...raw,
+        createdAt: previous?.createdAt,
+        updatedAt: previous?.updatedAt,
+      });
+      if (previous && JSON.stringify(previous) !== JSON.stringify(plan))
+        throw Error("原生协议消息计划冲突，请导入新项目");
+      if (!previous) plans.push(plan);
+    }
+    if (plans.length > 1000) throw Error("计划最多1000个");
+    modern.metadata.plans = plans;
+  }
   const legacy = modern || (source ? importApipost(original) : null);
+  const importedDocuments = mergeImportedDocuments(project, legacy?.documents, {
+    sync,
+  });
   const requests = legacy
     ? legacy.requests.map(normalizeRequest)
     : importDocument(document);
@@ -1989,7 +2317,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     for (const request of requests)
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版目录JSON子集（实验性）：仅按已核对的静态文件结构组装，不代表完整原生迁移或原版运行验证；未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。",
+        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置或回收站。内置规则及原执行报告仅保留为来源备份数据，不启用、不执行，不作为本工具新运行。",
       ];
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
@@ -2088,6 +2416,13 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     output.push(value);
   }
   if (modern) Object.assign(project, modern.metadata);
+  if (directoryPlans.length)
+    project.plans = [...(project.plans || []), ...directoryPlans];
+  if (directoryArtifacts?.length) {
+    project.settings ??= {};
+    project.settings.apipostDirectoryArtifacts = directoryArtifacts;
+  }
+  if (importedDocuments) project.documents = importedDocuments;
   if (importedCases.length)
     project.cases = [...(project.cases || []), ...importedCases];
   if (importedCaseFolders.length)

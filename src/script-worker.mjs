@@ -1,3 +1,6 @@
+import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
+import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
+import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -36,13 +39,36 @@ const activityMetrics = {
   promiseStateMs: 0,
   serializationMs: 0,
 };
+// Diagnostics only: all admission/interruption budgets still use wall time.
+const threadCPU = () => {
+  try {
+    return typeof process.threadCpuUsage === "function"
+      ? process.threadCpuUsage()
+      : null;
+  } catch {
+    return null;
+  }
+};
+const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
-  const started = Date.now();
+  const started = Date.now(),
+    cpuStarted = threadCPU();
   try {
     return fn();
   } finally {
     activityMetrics[metric] += Math.max(0, Date.now() - started);
+    const cpuFinished = threadCPU();
+    if (cpuStarted && cpuFinished)
+      activityCPUTimeUs[metric.replace(/Ms$/, "Us")] =
+        (activityCPUTimeUs[metric.replace(/Ms$/, "Us")] || 0) +
+        Math.max(
+          0,
+          cpuFinished.user +
+            cpuFinished.system -
+            cpuStarted.user -
+            cpuStarted.system,
+        );
   }
 };
 const callbacks = new Map(),
@@ -53,7 +79,7 @@ let wake,
   requestCount = 0,
   fakerCalls = 0;
 const receive = (message) => {
-  if (message.kind === "http") {
+  if (message.kind === "http" || message.kind === "database") {
     replies.push(message);
     wake?.();
     wake = null;
@@ -121,6 +147,30 @@ try {
   context.setProp(context.global, "__sendRequest", sendFunction);
   sendFunction.dispose();
 
+  if (workerData.databaseTaskCount) {
+    let nextDatabase = 0;
+    const databaseFunction = context.newFunction(
+      "__nativeDatabaseBridge",
+      (indexHandle, callback) => {
+        const index = context.getNumber(indexHandle);
+        if (
+          finalizing ||
+          index !== nextDatabase ||
+          index >= workerData.databaseTaskCount ||
+          context.typeof(callback) !== "function"
+        )
+          return { error: context.newError("数据库任务次序无效") };
+        nextDatabase++;
+        const id = "database:" + index;
+        callbacks.set(id, callback.dup());
+        parentPort.postMessage({ kind: "database", id, index });
+        return context.undefined;
+      },
+    );
+    context.setProp(context.global, "__nativeDatabaseBridge", databaseFunction);
+    databaseFunction.dispose();
+  }
+
   const scheduleTimer = context.newFunction(
     "__scheduleTimer",
     (callback, delay) => {
@@ -177,7 +227,14 @@ try {
   context.setProp(context.global, "__fakerVariable", fakerFunction);
   fakerFunction.dispose();
 
+  if (workerData.nativeWaits?.length) {
+    const data = context.newString(JSON.stringify(workerData.nativeWaits));
+    context.setProp(context.global, "__nativeWaitDataJSON", data);
+    data.dispose();
+  }
   const setup = `
+    ${workerData.nativeWaits?.length ? "const __readNativeWaitCompletion=(()=>{const state=(" + nativeWaitInstallerSource + ")(globalThis.__nativeWaitDataJSON,__scheduleTimer);globalThis.__nativeWaitTask=state.run;return state.assertComplete;})();delete globalThis.__nativeWaitDataJSON;" : ""}
+
     const input = JSON.parse(__localapiInputJSON);
     delete globalThis.__localapiInputJSON;
     const pendingTasks=new Set();
@@ -518,6 +575,35 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.responseAssertions?.length) {
+      const data = context.newString(
+        JSON.stringify(workerData.responseAssertions),
+      );
+      context.setProp(context.global, "__nativeAssertionDataJSON", data);
+      data.dispose();
+      install(
+        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence]=(()=>{const state=(" +
+          nativeAssertionsInstallerSource +
+          ")(globalThis.__nativeAssertionDataJSON,((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests);globalThis.__nativeAssertionTask=state.run;return [state.assertComplete,state.readEvidence];})();delete globalThis.__nativeAssertionDataJSON;",
+      );
+    }
+    if (workerData.responseExtractions?.length) {
+      const data = context.newString(
+        JSON.stringify(workerData.responseExtractions),
+      );
+      context.setProp(context.global, "__nativePickVarsDataJSON", data);
+      data.dispose();
+      install(
+        "const __readNativePickVarsCompletion=(()=>{const state=(" +
+          pickVarsInstallerSource +
+          ")(globalThis.__nativePickVarsDataJSON,()=>response.body,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+      );
+    }
+    if (workerData.databaseTaskCount)
+      install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
+    if(errorJSON){reject(Error(errorJSON));return;}
+    try{const result=JSON.parse(responseJSON);for(const entry of result.assignments)({environment,global,temporary})[entry.type](entry.name,entry.value);if(Object.prototype.hasOwnProperty.call(result,"rows"))log(JSON.stringify(result.rows));resolve();}catch(error){reject(error);}
+  })))(globalThis.__nativeDatabaseBridge,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),console.log.bind(console));delete globalThis.__nativeDatabaseBridge;`);
     run(compatibilitySources.join(";\n"));
   });
   let remaining = deadline - Date.now();
@@ -662,6 +748,32 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
+  if (workerData.responseExtractions?.length)
+    measuredBounded("pick-vars-completion", "promiseStateMs", () =>
+      run("__readNativePickVarsCompletion();"),
+    );
+  if (workerData.responseAssertions?.length)
+    measuredBounded("native-assertion-completion", "promiseStateMs", () =>
+      run("__readNativeAssertionCompletion();"),
+    );
+  let nativeAssertionEvidence = [];
+  if (workerData.responseAssertions?.length) {
+    const result = measuredBounded(
+      "native-assertion-evidence",
+      "promiseStateMs",
+      () => context.evalCode("__readNativeAssertionEvidence()"),
+    );
+    if (result.error) {
+      result.error.dispose();
+      throw Error("原生断言证据不可读取");
+    }
+    nativeAssertionEvidence = JSON.parse(context.getString(result.value));
+    result.value.dispose();
+  }
+  if (workerData.nativeWaits?.length)
+    measuredBounded("native-wait-completion", "promiseStateMs", () =>
+      run("__readNativeWaitCompletion();"),
+    );
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
@@ -682,10 +794,34 @@ try {
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
     throw Error("脚本输出超过 1 MiB");
+  const serializedResult = JSON.parse(json);
+  if (nativeAssertionEvidence.length) {
+    if (!Array.isArray(serializedResult.tests))
+      throw Error("脚本断言输出格式无效");
+    const claimed = new Set();
+    for (const entry of nativeAssertionEvidence) {
+      const target =
+        entry.index >= 0 &&
+        entry.index < serializedResult.tests.length &&
+        !claimed.has(entry.index)
+          ? entry.index
+          : serializedResult.tests.length;
+      serializedResult.tests[target] = entry.record;
+      claimed.add(target);
+    }
+    if (serializedResult.tests.length > workerData.assertionLimit)
+      throw Error("脚本断言输出超过本次共享断言预算");
+    if (
+      Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
+      1024 * 1024
+    )
+      throw Error("脚本输出超过 1 MiB");
+  }
   outcome = {
     result: {
-      ...JSON.parse(json),
+      ...serializedResult,
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {
         ...activityMetrics,
         fakerLoadMs: fakerProviderLoadMs(),
@@ -697,11 +833,17 @@ try {
         serializationStart,
     },
   };
+  // Native JSON/string conversion can finish between QuickJS interrupt checks.
+  // The already charged serialization and host parsing tail must not publish
+  // a successful result after consuming more than the requested active budget.
+  if (outcome.result.activityMs > workerData.activityBudgetMs)
+    throw Error("脚本执行超时");
 } catch (error) {
   outcome = {
     error: error.message,
     scriptStage,
     activityOperation,
+    activityCPUTimeUs: { ...activityCPUTimeUs },
     activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
     scriptDiagnostics: {
       activityBudgetMs: workerData.activityBudgetMs,

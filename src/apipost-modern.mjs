@@ -1,3 +1,14 @@
+import { nativeMockRouteFromSource } from "./native-mock-route.mjs";
+import { prepareNativeMock } from "./apipost-native-mock.mjs";
+import { prepareNativeProtocols } from "./apipost-native-protocols.mjs";
+import {
+  nativeDataArray,
+  nativeDataObject,
+} from "./native-response-extraction.mjs";
+import {
+  prepareApipostDatabases,
+  nativeDatabaseTasks,
+} from "./apipost-database-import.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -53,6 +64,11 @@ const safe = (value) => {
 };
 const digest = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 20);
+export function apipostResourceFactory(projectId) {
+  const prefix = "apipost-" + digest(safe(projectId));
+  return (kind, value) =>
+    prefix + "-" + kind + "-" + digest(safe(String(value)));
+}
 export function isModernApipost(source) {
   return (
     object(source) &&
@@ -63,6 +79,37 @@ export function isModernApipost(source) {
       Array.isArray(source[k]),
     )
   );
+}
+// Offline2 exports mirror visible Query rows in the URL. Preserve each row
+// exactly once, without collapsing duplicate rows or rewriting unrelated bytes.
+function withoutMirroredQuery(url, rows) {
+  const hash = url.indexOf("#");
+  const suffix = hash < 0 ? "" : url.slice(hash);
+  const head = hash < 0 ? url : url.slice(0, hash);
+  const query = head.indexOf("?");
+  if (query < 0 || !rows.length) return url;
+  const counts = new Map();
+  for (const row of rows) {
+    if (!row.key) continue;
+    const pair = JSON.stringify([String(row.key), String(row.value ?? "")]);
+    counts.set(pair, (counts.get(pair) || 0) + 1);
+  }
+  let removed = false;
+  const rest = head
+    .slice(query + 1)
+    .split("&")
+    .filter((token) => {
+      const entry = [...new URLSearchParams(token)][0];
+      const pair = JSON.stringify(entry);
+      const count = counts.get(pair) || 0;
+      if (!count) return true;
+      counts.set(pair, count - 1);
+      removed = true;
+      return false;
+    });
+  return removed
+    ? head.slice(0, query) + (rest.length ? "?" + rest.join("&") : "") + suffix
+    : url;
 }
 function variables(map = {}) {
   if (!object(map) || Object.keys(map).length > 5000)
@@ -113,16 +160,26 @@ function responseHeaderMap(value) {
             "description",
             "field_type",
             "not_null",
+            "schema",
           ].includes(k),
       ) ||
       row.is_checked !== 1 ||
       (row.description !== undefined && row.description !== "") ||
-      (row.field_type !== undefined && row.field_type !== "String") ||
-      (row.not_null !== undefined && ![-1, 0].includes(row.not_null)) ||
+      (row.field_type !== undefined &&
+        !["String", "string"].includes(row.field_type)) ||
+      (row.not_null !== undefined && ![-1, 0, 1].includes(row.not_null)) ||
       typeof row.key !== "string" ||
       typeof row.value !== "string"
     )
       throw Error("Apipost响应示例头仅支持启用的普通文本行；其他语义不会丢弃");
+    if (
+      row.schema !== undefined &&
+      (!object(row.schema) ||
+        Object.keys(row.schema).some((key) => key !== "type") ||
+        row.schema.type !== "string")
+    )
+      throw Error("Apipost响应头仅支持普通字符串Schema");
+    if (row.key === "" && row.value === "") continue;
     const name = row.key.toLowerCase();
     if (names.has(name)) throw Error("Apipost响应头名称重复");
     names.add(name);
@@ -132,7 +189,7 @@ function responseHeaderMap(value) {
   validateMockResponse({ status: 200, body: "", headers });
   return headers;
 }
-function scriptTasks(value, phase, internalOrigins = false) {
+export function parseApipostScriptTasks(value, phase, internalOrigins = false) {
   if (empty(value)) return null;
   const tasks = list(value, phase, 16);
   const metadata = [];
@@ -193,7 +250,11 @@ function scriptTasks(value, phase, internalOrigins = false) {
       provenance,
   };
 }
-export function importModernApipost(source, project, { sync = false } = {}) {
+export function importModernApipost(
+  source,
+  project,
+  { sync = false, modelNameMode } = {},
+) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
   if (!isModernApipost(source)) throw Error("Apipost现代JSON结构不完整");
   for (const [key, value] of Object.entries(source))
@@ -210,11 +271,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       ].includes(key)
     )
       reject(value, key);
-  const prefix = "apipost-" + digest(safe(source.project_id));
-  const resource = (kind, id) =>
-    prefix + "-" + kind + "-" + digest(safe(String(id)));
+  const resource = apipostResourceFactory(source.project_id);
   for (const name of ["automated_testings"]) reject(source[name], name);
-  const models = prepareApipostModels(source.models, resource, source.name);
+  const models = prepareApipostModels(source.models, resource, source.name, {
+    modelNameMode,
+  });
   const global = source.global;
   const knownGlobal = new Set([
     "envs",
@@ -231,7 +292,57 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   ]);
   for (const [key, value] of Object.entries(global))
     if (!knownGlobal.has(key)) reject(value, "global." + key);
-  for (const name of ["db_link"]) reject(global[name], "global." + name);
+  const databaseImport = prepareApipostDatabases(
+    global.db_link,
+    source.project_id,
+    resource,
+  );
+  const parseTasks = (value, phase, origins = false) => {
+    if (Array.isArray(value)) {
+      nativeDataArray(value, 16);
+      for (const task of value)
+        nativeDataObject(task, [
+          "type",
+          "id",
+          "name",
+          "enabled",
+          "data",
+          ...(origins ? ["origin"] : []),
+        ]);
+    }
+    if (
+      !Array.isArray(value) ||
+      !value.some((task) =>
+        ["database", "pickVars", "assert", "wait"].includes(task?.type),
+      )
+    )
+      return parseApipostScriptTasks(value, phase, origins);
+    const tasks = nativeDatabaseTasks(value, databaseImport.map, {
+      translated: origins,
+      connections: databaseImport.connections,
+      phase: phase === "后置" ? "after" : "before",
+    });
+    return {
+      native: true,
+      source: tasks,
+      code: "",
+      note:
+        phase +
+        " 原版混排任务保持同一词法作用域。" +
+        (tasks.some((task) => task.type === "database")
+          ? "数据库任务错误终止当前阶段，不沿用原版继续发送旧值的行为。"
+          : "") +
+        (tasks.some((task) => task.type === "wait")
+          ? "原生wait仅支持0至1000ms整数、同阶段合计1000ms；使用有界异步定时器而非原同步sleep，等待期间其他已授权回调可能运行；禁用数据仅惰性保存。"
+          : "") +
+        (tasks.some((task) => task.type === "assert")
+          ? "原生断言仅支持后置responseCode/严格responseJson与eq/uneq字面比较；不展开模板、转换对象、回退XML或执行路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
+          : "") +
+        (tasks.some((task) => task.type === "pickVars")
+          ? "pickVars仅支持后置严格JSON单值路径，不回退XML，不执行路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"
+          : ""),
+    };
+  };
   const attributes = prepareApipostAttributes(
     empty(global.attributes) ? [] : global.attributes,
     resource,
@@ -288,7 +399,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     color: mark.color,
   }));
   const marks = new Set((global.marks ?? []).map((m) => String(m.mark_id)));
-  const apiNodes = list(source.apis, "apis");
+  list(source.apis, "apis");
+  const nativeProtocols = prepareNativeProtocols(source, resource);
+  const apiNodes = nativeProtocols.nodes;
   const samples = prepareModernSamples(
     source.samples,
     apiNodes,
@@ -299,7 +412,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const nodes = [...apiNodes, ...samples.nodes];
   const ids = new Map();
   for (const node of nodes) {
-    if (!object(node) || !["api", "folder"].includes(node.target_type))
+    if (!object(node) || !["api", "folder", "doc"].includes(node.target_type))
       throw Error("Apipost包含未支持的资源类型");
     const id = safe(String(node.target_id));
     if (ids.has(id)) throw Error("Apipost资源ID重复");
@@ -307,7 +420,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     reject(node.children, "嵌套资源");
     if (node.target_type === "folder") reject(node.attribute_info, "目录属性");
     reject(node.tags, "接口标签");
-    reject(node.ai_expect?.list, "AI条件Mock");
+    if (
+      node.target_type === "folder" &&
+      (node.ai_expect || node.nativeMockConfig)
+    )
+      throw Error("目录Mock配置不支持");
     if (node.mock_ip_white_list_enable && node.mock_ip_white_list_enable !== -1)
       throw Error("Apipost Mock IP白名单需手工迁移");
   }
@@ -354,6 +471,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   )
     throw Error("Apipost空项目表单参数尚不能保留，不会丢弃来源");
   const mapped = nodes.map((node) => {
+    if (node.target_type === "doc") {
+      if (node.mark_id && !marks.has(String(node.mark_id)))
+        throw Error("Apipost文档状态引用不存在");
+      // Keep documents out of all request/task/inheritance conversion paths.
+      return { node, legacy: node };
+    }
     const request = node.request ?? {};
     if (!object(request)) throw Error("Apipost请求无效");
     if (request.body !== undefined && !object(request.body))
@@ -385,8 +508,8 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of ["script", "pre_script", "test"])
         reject(layer[task], task);
       // Validate every source layer before deriving a flattened execution snapshot.
-      scriptTasks(layer.pre_tasks, "前置");
-      scriptTasks(layer.post_tasks, "后置");
+      parseTasks(layer.pre_tasks, "前置");
+      parseTasks(layer.post_tasks, "后置");
     }
     const inheritedTasks = ["pre_tasks", "post_tasks"].some((phase) =>
       ancestry.slice(0, -1).some((layer) => !empty(layer[phase])),
@@ -401,10 +524,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       );
     const mergedTasks = (phase, label) => {
       if (node.target_type !== "api") return null;
-      if (!inheritedTasks) return scriptTasks(request[phase], label);
+      if (!inheritedTasks) return parseTasks(request[phase], label);
       const combined = [];
       for (const layer of ancestry) {
-        const parsed = scriptTasks(layer[phase], label);
+        const parsed = parseTasks(layer[phase], label);
         if (!parsed) continue;
         const owner = taskOwners.get(layer);
         const origin =
@@ -416,7 +539,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
               };
         for (const task of parsed.source) combined.push({ ...task, origin });
       }
-      return scriptTasks(combined, label, true);
+      return parseTasks(combined, label, true);
     };
     const beforeTask = mergedTasks("pre_tasks", "前置");
     const afterTask = mergedTasks("post_tasks", "后置");
@@ -559,7 +682,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
         },
       };
     }
-    let url = String(node.url ?? "");
+    let url = withoutMirroredQuery(
+      String(node.url ?? ""),
+      parameterRows(request.query, "query"),
+    );
     if (url.startsWith("//")) throw Error("Apipost接口路径不能覆盖服务主机");
     let serviceId = "";
     if (
@@ -641,23 +767,63 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   });
   const legacy = importApipost(
     { apis: mapped.map((x) => x.legacy) },
-    { preserveEmptyExamples: true },
+    { preserveEmptyExamples: true, documentProjectId: source.project_id },
   );
+  for (const document of legacy.documents) {
+    const markId = document.apipostSource.mark_id;
+    if (markId) document.statusId = resource("mark", markId);
+  }
   const sampleCases = [],
     ordinaryRequests = [];
   for (const request of legacy.requests) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
     );
+    const route = nativeMockRouteFromSource(row.node, source.project_id);
+    if (route) request.nativeMockRoute = route;
+    else
+      request.importNotes.push(
+        "源标识或URL不满足原生Mock路径路由约束；保留HTTP定义与原接口ID的Mock入口，不启用路径别名。",
+      );
+    const nativeMock = prepareNativeMock(row.node, {
+      projectId: source.project_id,
+      headers: responseHeaderMap,
+      rewriteSchema: models.rewrite,
+    });
+    if (nativeMock) {
+      request.nativeMock = nativeMock;
+      request.importNotes.push(
+        "原版条件Mock以固定HTTP 200和优先JSON Schema策略迁移；期望状态码仅保留为来源元数据。运行时保留工作台接口ID地址，并支持工作台项目ID下的原生方法/路径路由；未知路径失败而不返回伪成功。IP限制/其他返回策略不自动丢弃或启用。",
+      );
+    }
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
-      request.importedScriptTasks = normalizeImportedScriptTasks({
-        version: 1,
-        before: row.beforeTask?.source || [],
-        after: row.afterTask?.source || [],
-      });
-      request.beforeScript = row.beforeTask?.code || "";
-      request.afterScript = row.afterTask?.code || "";
+      if (row.beforeTask?.native || row.afterTask?.native) {
+        request.nativeTasks = {
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        };
+        request.inheritSharedScripts = false;
+        request.beforeScript = "";
+        request.afterScript = "";
+        if (
+          [...request.nativeTasks.before, ...request.nativeTasks.after].some(
+            (task) => task.type === "database",
+          )
+        )
+          request.importNotes.push(
+            "数据库地址、用户、密码及SSH配置未导入；仅保留连接标识。运行前须显式重新绑定当前项目临时会话，导入/恢复不会连接数据库。数据库错误立即终止，不沿用原版继续发送旧值的行为。",
+          );
+      } else {
+        request.importedScriptTasks = normalizeImportedScriptTasks({
+          version: 1,
+          before: row.beforeTask?.source || [],
+          after: row.afterTask?.source || [],
+        });
+        request.beforeScript = row.beforeTask?.code || "";
+        request.afterScript = row.afterTask?.code || "";
+      }
       request.importNotes.push(
         "导入不执行脚本；运行前请审核。仅兼容现有 Apipost 8 脚本子集，不是完整 SDK 或任务列表往返迁移。",
       );
@@ -668,6 +834,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of [row.beforeTask, row.afterTask])
         if (task) request.importNotes.push(task.note);
     }
+    // Native project/folder inheritance was already resolved above. A resolved
+    // none must not acquire unrelated credentials from the destination project.
+    request.inheritAuth = false;
     request.attributes = attributes.values(
       empty(row.node.attribute_info) ? {} : row.node.attribute_info,
     );
@@ -794,6 +963,39 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           ),
         }
       : {}),
+    ...(nativeProtocols.sources.length
+      ? {
+          apipostProtocolSources: mergeResources(
+            project.settings?.apipostProtocolSources,
+            nativeProtocols.sources,
+          ),
+        }
+      : {}),
+    ...(nativeProtocols.socketio.length
+      ? {
+          socketioDefinitions: mergeResources(
+            project.settings?.socketioDefinitions,
+            nativeProtocols.socketio,
+          ),
+        }
+      : {}),
+    ...(nativeProtocols.grpc.length
+      ? {
+          grpcDefinitions: mergeResources(
+            project.settings?.grpcDefinitions,
+            nativeProtocols.grpc,
+          ),
+        }
+      : {}),
+    ...(databaseImport.connections.length ||
+    project.settings?.apipostDatabases !== undefined
+      ? {
+          apipostDatabases: mergeResources(
+            project.settings?.apipostDatabases,
+            databaseImport.connections,
+          ),
+        }
+      : {}),
     statuses: mergeResources(project.settings?.statuses, statuses),
     parameterDescriptions: mergeApipostDescriptions(
       empty(global.describe_library) ? [] : global.describe_library,
@@ -898,13 +1100,27 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     components.schemas[key] = schema;
   }
   const dictionary = mergeResources(project.dictionary, models.dictionary);
+  if (
+    modelNameMode === "preserve" &&
+    new Set(dictionary.map((m) => m.name)).size !== dictionary.length
+  )
+    throw Error("Apipost模型名称冲突，请导入新项目");
   const modelFolders = mergeResources(project.modelFolders, models.folders);
   validateModelFolders({ dictionary, modelFolders });
   return {
     ...legacy,
+    nativeProtocolPlans: nativeProtocols.plans,
     samples: sampleCases,
     caseFolders: samples.folders,
     metadata: {
+      ...(nativeProtocols.protocols.length
+        ? {
+            protocols: mergeResources(
+              project.protocols,
+              nativeProtocols.protocols,
+            ),
+          }
+        : {}),
       openapiComponents: components,
       dictionary,
       ...(modelFolders.length ? { modelFolders } : {}),

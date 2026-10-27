@@ -1,6 +1,9 @@
 import { openDatabaseSSH } from "./database-ssh.mjs";
 import { databaseParameters } from "./database-values.mjs";
-import { remoteConnectionConfig } from "./remote-database.mjs";
+import {
+  explicitPostgresOptions,
+  createExplicitPostgresClient,
+} from "./postgres-client.mjs";
 
 // Conservative subset, not a complete PostgreSQL parser. Parameter binding is
 // required for dollar-quoted/backslash-escaped data. Balance is essential: the
@@ -72,15 +75,12 @@ export async function mutatePostgres(input, dependencies = {}) {
   )
     throw Error("绑定参数必须是数组，最多1000项、1MiB");
   const boundParameters = databaseParameters(parameters, "postgres");
-  const { Client } = dependencies.Client ? dependencies : await import("pg");
+  const options = explicitPostgresOptions(input);
   const tunnel = await openDatabaseSSH(input);
   try {
-    const client = new Client({
-      ...remoteConnectionConfig(input),
-      ...(tunnel ? { stream: tunnel.stream } : {}),
-      connectionTimeoutMillis: 3000,
-      statement_timeout: 2000,
-      query_timeout: 3000,
+    const client = await createExplicitPostgresClient(options, {
+      Client: dependencies.Client,
+      stream: tunnel?.stream,
     });
     client.on?.("error", () => {}); // Active operations report connection errors through their promises.
     let begun = false,

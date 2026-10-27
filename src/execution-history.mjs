@@ -1,5 +1,5 @@
 // A summary never contains requests, responses, assertions, variables, or logs.
-export function listExecutionHistory(project, options = {}) {
+export function filteredExecutionHistory(project, options = {}) {
   const { scope, source, status, planId, limit = 20 } = options;
   for (const [value, choices, label] of [
     [scope, ["api", "flow"], "范围"],
@@ -32,8 +32,11 @@ export function listExecutionHistory(project, options = {}) {
     )
     .sort((a, b) =>
       time(a.record) === time(b.record) ? 0 : time(b.record) - time(a.record),
-    )
-    .slice(0, limit)
+    );
+}
+export function listExecutionHistory(project, options = {}) {
+  return filteredExecutionHistory(project, options)
+    .slice(0, options.limit ?? 20)
     .map(({ record, scope }) => {
       const failures = (
         scope === "api" ? [record] : record.results || []
@@ -41,12 +44,20 @@ export function listExecutionHistory(project, options = {}) {
       return {
         id: record.id,
         scope,
-        source: origin(record),
+        source: ["manual", "mcp", "cli"].includes(record.source)
+          ? record.source
+          : "unknown",
         name: scope === "api" ? record.name : record.planName,
         planId: scope === "flow" ? record.planId : undefined,
         planName: scope === "flow" ? record.planName : undefined,
         planHash: scope === "flow" ? record.planHash : undefined,
         status: record.status,
+        ...(record.stopReason === "evidence-limit"
+          ? {
+              stopReason: record.stopReason,
+              evidenceBudget: structuredClone(record.evidenceBudget),
+            }
+          : {}),
         createdAt: record.createdAt,
         durationMs:
           Number.isFinite(record.durationMs) && record.durationMs >= 0
@@ -55,6 +66,7 @@ export function listExecutionHistory(project, options = {}) {
         failedStepCount: failures.length,
         failedSteps: failures.slice(0, 5).map((step) => ({
           stepId: step.stepId,
+          ...(step.repeat ? { repeat: structuredClone(step.repeat) } : {}),
           name: step.name,
           status: step.status,
         })),
