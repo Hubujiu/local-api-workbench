@@ -40,56 +40,57 @@ async function close(app) {
   await new Promise((r) => app.server.close(r));
 }
 
-test(
-  "native Mock scalar schemas and raw text preserve two-format two-generation wire, plans and restarted isolation",
-  { timeout: 30000 },
-  async (t) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "mock-media-export-"));
-    let app = await createApp({ root, port: 0 });
-    t.after(async () => {
-      await close(app);
-      await rm(root, { recursive: true, force: true });
-    });
-    const api = async (route, body) => {
-      const r = await fetch(app.url + route, {
-        method: body === undefined ? "GET" : "POST",
-        headers: {
-          "x-local-token": app.token,
-          "content-type": "application/json",
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+for (const [label, schema, expected] of variants)
+  test(
+    `native Mock ${label} preserves two-format two-generation wire, plans and restarted isolation`,
+    { timeout: 30000 },
+    async (t) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "mock-media-export-"));
+      let app = await createApp({ root, port: 0 });
+      t.after(async () => {
+        await close(app);
+        await rm(root, { recursive: true, force: true });
       });
-      const value = await r.json();
-      assert.equal(r.status, 200, JSON.stringify(value));
-      return value;
-    };
-    const third = await app.store.create("unrelated");
-    const untouched = await app.store.get(third.id);
-    const records = [];
-    const check = async (p, expected) => {
-      for (const [query, header] of [
-        ["fail", "matched"],
-        ["other", "fallback"],
-      ]) {
-        const started = performance.now();
-        const r = await fetch(
-          `${app.url}/mock/${p.id}/${p.requests[0].id}?mode=${query}`,
+      const api = async (route, body) => {
+        const r = await fetch(app.url + route, {
+          method: body === undefined ? "GET" : "POST",
+          headers: {
+            "x-local-token": app.token,
+            "content-type": "application/json",
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+        const value = await r.json();
+        assert.equal(r.status, 200, JSON.stringify(value));
+        return value;
+      };
+      const third = await app.store.create("unrelated");
+      const untouched = await app.store.get(third.id);
+      const records = [];
+      const check = async (p, expected) => {
+        for (const [query, header] of [
+          ["fail", "matched"],
+          ["other", "fallback"],
+        ]) {
+          const started = performance.now();
+          const r = await fetch(
+            `${app.url}/mock/${p.id}/${p.requests[0].id}?mode=${query}`,
+          );
+          assert.equal(r.status, 200);
+          assert.equal(r.headers.get("x-native-rule"), header);
+          assert.equal(await r.text(), expected);
+          assert.ok(
+            performance.now() - started >= 7,
+            "configured 10ms delay must reach the wire",
+          );
+        }
+        assert.equal(
+          p.requests[0].nativeMock.rules[1].response.sourceStatus,
+          404,
         );
-        assert.equal(r.status, 200);
-        assert.equal(r.headers.get("x-native-rule"), header);
-        assert.equal(await r.text(), expected);
-        assert.ok(
-          performance.now() - started >= 7,
-          "configured 10ms delay must reach the wire",
-        );
-      }
-      assert.equal(
-        p.requests[0].nativeMock.rules[1].response.sourceStatus,
-        404,
-      );
-      assert.equal(p.requests[0].nativeMock.fallback.delayMs, 10);
-    };
-    for (const [label, schema, expected] of variants) {
+        assert.equal(p.requests[0].nativeMock.fallback.delayMs, 10);
+      };
+      const started = performance.now();
       const { doc, config } = nativeMockFixture();
       for (const e of doc.apis[1].response.example) {
         e.expect.schema = structuredClone(schema);
@@ -198,16 +199,18 @@ test(
       }
       assert.deepEqual(await app.store.get(p.id), original);
       assert.equal(JSON.stringify(source), sourceBytes);
-    }
-    assert.deepEqual(await app.store.get(third.id), untouched);
-    await close(app);
-    app = await createApp({ root, port: 0 });
-    for (const record of records) {
-      await check(await app.store.get(record.project.id), record.expected);
-      const disk = await new Store(root).get(record.consumer);
-      assert.equal(disk.runs[0].id, record.runId);
-      assert.equal(disk.runs[0].status, "passed");
-    }
-    assert.deepEqual(await app.store.get(third.id), untouched);
-  },
-);
+      assert.deepEqual(await app.store.get(third.id), untouched);
+      await close(app);
+      app = await createApp({ root, port: 0 });
+      for (const record of records) {
+        await check(await app.store.get(record.project.id), record.expected);
+        const disk = await new Store(root).get(record.consumer);
+        assert.equal(disk.runs[0].id, record.runId);
+        assert.equal(disk.runs[0].status, "passed");
+      }
+      assert.deepEqual(await app.store.get(third.id), untouched);
+      t.diagnostic(
+        `${label}: both formats/two generations, four wire plan responses, backup records and restarted isolation completed in ${Math.round(performance.now() - started)}ms`,
+      );
+    },
+  );
