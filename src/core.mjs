@@ -1,3 +1,4 @@
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
@@ -2095,7 +2096,12 @@ function replaceVariables(target, source) {
 }
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
-export function importIntoProject(project, document, { sync = false } = {}) {
+export function importIntoProject(
+  project,
+  document,
+  { sync = false, modelNameMode } = {},
+) {
+  resolveModelNameMode(modelNameMode);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -2113,6 +2119,11 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  if (
+    modelNameMode !== undefined &&
+    !isModernApipost(apipostDocument(original))
+  )
+    throw Error("modelNameMode仅支持现代Apipost原生格式");
   const directoryFlows = fromDirectory
     ? original.nativeExecutionFlows || []
     : [];
@@ -2121,6 +2132,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     ? prepareDirectoryPlans(original, directoryFlows, project, {
         normalizeRequest,
         snapshotPlan,
+        modelNameMode,
       })
     : [];
   const directoryArtifacts = fromDirectory
@@ -2132,7 +2144,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     : null;
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
-    ? importModernApipost(source, project, { sync })
+    ? importModernApipost(source, project, { sync, modelNameMode })
     : null;
   if (modern?.nativeProtocolPlans?.length) {
     const plans = structuredClone(project.plans || []);

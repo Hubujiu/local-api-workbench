@@ -239,7 +239,12 @@ export function createMCP({
   addTool(
     "export_project",
     "导出已授权项目的 Apipost 定义 JSON；可能包含已保存的凭据，不执行请求",
-    { ...projectArg, format: projectFormat },
+    {
+      ...projectArg,
+      format: projectFormat,
+      modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+    },
+    ["projectId", "format"],
   );
   if (write)
     addTool(
@@ -248,12 +253,14 @@ export function createMCP({
       {
         ...projectArg,
         format: projectFormat,
+        modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
         document: {
           type: "object",
           description:
             "内联 JSON 对象，序列化 UTF-8 最多4MiB、64层；不是路径或URL",
         },
       },
+      ["projectId", "format", "document"],
     );
   addTool(
     "list_grpc_definitions",

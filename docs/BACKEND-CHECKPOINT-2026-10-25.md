@@ -1,6 +1,15 @@
-# 后端检查点 · 2026-10-27 09:55 UTC
+# 后端检查点 · 2026-10-27 10:08 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 10:08 显式模型名称模式组合候选
+
+- 本候选在 JSON5 检查点 local `44c71e16f40ec419356cbf51e52022126da20cf7`（remote `f5aa0478bf16bbd03ba97bfad98d5d02efe8f9a0` / tree `c507aac3449050f50cba3e4ad0cbe382f8838f00`）之上合入 PR14 与 PR29。功能组合代码 local `9f4d1903c69c69eaa98e0f01eb5de7363f9dc390` / tree `e47cebb6bb79af7dda3ff226faafe35e28faf082`；此记录随后的文档提交仍属新候选，根组合 CI 尚待，不能拿独立功能 GREEN 当组合验收。
+- 可选 `modelNameMode: "preserve"` 由调用方在 owner import body/export query 或两个 MCP 项目工具明确选择；JSON、目录、冻结步骤子转换与最终回读一致传播。缺省或显式 namespaced 维持原名称空间规则，两端各自选择，不读取文件里的 mode、不保存项目设置、不添加私有原生格式字段。合法原样名称通过既有 name/display_name 承载；非空、有效 Unicode、原生200单位上限及冲突限制保持。项目改名和多来源样式名称可往返，历史身份仍重映射；静态模型图拒绝与执行权限不变。
+- owner 非法/null/非原生格式选项、重复歧义 mode 查询在持久化前拒绝。MCP 默认与显式模式的响应键均不变，完整帧预算仍按原形状检查；不扩大 write/execute/项目授权、不自动执行导入。保留默认 namespaced 的完整 SDK 对照，增加 preserve 的 HTTP/stdio × JSON/目录完整模型、文档、冻结、真实请求、备份重启与隔离链。五整文件29/29通过，含真实 journal 未知写不重试及完整8MiB帧拒绝后会话恢复；JSON5/Cookie/任务出口/条件Mock四整文件16/16通过。
+- 冲突处理保留根现有协议、JSON5、Cookie、任务、Mock、保存顺序和预算。相对44c71e1，scripts/worker/runtime、原生请求快照、提取及断言实现逐字无变化；本次仅模型名调用契约和组合证据。不新增 schema 执行、原版运行、前端、main/develop合并或部署，不进入暂停审查。
+- PR14 remote `c08e281b7219df0a09c26ef47ccbdc940799e900` / local `3d2bfbaf6078c8cc28f96b335f9957257dae51c7` / tree `f5a12f074b83ab53647bbbffca58ffadf7f92317`；独立 CI40484023548 首次19/19成功，实际checkout b43d0afc2159ea74a88f15594b7b99c7e3cc7268 同树，三平台各1160通过，12产物255文件完整互斥。PR29 remote `272d6276b9f7eeb6fd17e5813b29b9b7e08f795d` / local `88509ceef32bfc95588e8b824a26a7e282e489a2` / tree `a120b69f5be08ab34b5d7bab6914c44c85fc6256`；纯依赖base de88071a仅PR28+新PR14，feature仅7个MCP文件。独立 CI40484723094 首次19/19成功，实际checkout5e965d7928ffc2578a4415ddbe58ec0a82cb8ded（retarget前merge）同树，三平台各1275，12产物270文件完整互斥；retarget后56b443bd虽同树但不是实际checkout。上述均只验证各自功能树。
+- 历史 f83/8b5 Windows XML RED 保留；本次通过不证明其根因修复，没有重跑或放宽预算。最近已核完整根GREEN仍按下方历史精确记录，不提升新候选状态。
 
 ## 09:55 JSON5 与空正文快照候选
 

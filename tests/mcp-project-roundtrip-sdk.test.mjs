@@ -39,16 +39,15 @@ const documentDefinitions = (project) =>
       ),
     };
   });
-const verifyModelGraph = (project) => {
-  const req = project.dictionary.find(
-    (model) => model.name === "SDK source / Request",
-  );
-  const res = project.dictionary.find(
-    (model) => model.name === "SDK source / Response",
-  );
-  const never = project.dictionary.find(
-    (model) => model.name === "SDK source / Never",
-  );
+const modelNames = (mode) =>
+  mode === "preserve"
+    ? ["雪 / arbitrary Request", "Another source / Response", "Never"]
+    : ["SDK source / Request", "SDK source / Response", "SDK source / Never"];
+const verifyModelGraph = (project, mode) => {
+  const names = modelNames(mode);
+  const req = project.dictionary.find((model) => model.name === names[0]);
+  const res = project.dictionary.find((model) => model.name === names[1]);
+  const never = project.dictionary.find((model) => model.name === names[2]);
   assert(req && res && never);
   for (const model of [req, res, never])
     assert.deepEqual(project.openapiComponents.schemas[model.id], model.schema);
@@ -105,612 +104,657 @@ const closeServer = async (server) => {
 
 for (const transport of ["http", "stdio"])
   for (const format of ["apipost", "apipost-directory"])
-    test(
-      `official SDK ${transport} ${format} interchange is permission-scoped, atomic, persistent and execution-free`,
-      { timeout: 45000 },
-      async (t) => {
-        const root = await mkdtemp(path.join(tmpdir(), "mcp-interchange-"));
-        const wire = [];
-        const upstream = http.createServer(async (request, response) => {
-          let body = "";
-          for await (const chunk of request) body += chunk;
-          wire.push({
-            url: request.url,
-            method: request.method,
-            body,
-            authorization: request.headers.authorization,
-            proof: request.headers["x-proof"],
+    for (const mode of [undefined, "preserve"])
+      test(
+        `official SDK ${transport} ${format} ${mode || "default namespaced"} interchange is permission-scoped, atomic, persistent and execution-free`,
+        { timeout: 45000 },
+        async (t) => {
+          const root = await mkdtemp(path.join(tmpdir(), "mcp-interchange-"));
+          const wire = [];
+          const upstream = http.createServer(async (request, response) => {
+            let body = "";
+            for await (const chunk of request) body += chunk;
+            wire.push({
+              url: request.url,
+              method: request.method,
+              body,
+              authorization: request.headers.authorization,
+              proof: request.headers["x-proof"],
+            });
+            response.setHeader("content-type", "application/json");
+            response.end('{"ok":true}');
           });
-          response.setHeader("content-type", "application/json");
-          response.end('{"ok":true}');
-        });
-        await new Promise((resolve) =>
-          upstream.listen(0, "127.0.0.1", resolve),
-        );
-        const upstreamURL = `http://127.0.0.1:${upstream.address().port}`;
-        let app =
-          transport === "http" ? await createApp({ root, port: 0 }) : null;
-        const store = app?.store || new Store(root);
-        await store.init();
-        let client;
-        t.after(async () => {
-          await client?.close().catch(() => {});
-          if (app) await closeServer(app.server);
-          await closeServer(upstream);
-          await rm(root, { recursive: true, force: true });
-        });
+          await new Promise((resolve) =>
+            upstream.listen(0, "127.0.0.1", resolve),
+          );
+          const upstreamURL = `http://127.0.0.1:${upstream.address().port}`;
+          let app =
+            transport === "http" ? await createApp({ root, port: 0 }) : null;
+          const store = app?.store || new Store(root);
+          await store.init();
+          let client;
+          t.after(async () => {
+            await client?.close().catch(() => {});
+            if (app) await closeServer(app.server);
+            await closeServer(upstream);
+            await rm(root, { recursive: true, force: true });
+          });
 
-        const source = await store.create("SDK source"),
-          target = await store.create("SDK merge target"),
-          second = await store.create("SDK second import"),
-          denied = await store.create("SDK denied"),
-          archived = await store.create("SDK archived");
-        archived.archived = true;
-        await store.save(archived);
-        source.environments[0].variables.value = "saved-value";
-        source.environments[0].variableDefinitions = {
-          value: { initialValue: "initial-value", description: "SDK fixture" },
-        };
-        const request = normalizeRequest({
-          id: "sdk-saved-request",
-          name: "SDK saved request",
-          method: "POST",
-          url: upstreamURL + "/frozen",
-          bodyType: "json",
-          body: '{"value":"{{value}}"}',
-          auth: {
-            type: "basic",
-            username: "fixture",
-            password: "fictional-saved-secret",
-          },
-          inheritSharedScripts: false,
-          scriptDialect: "apipost8",
-          beforeScript:
-            'apt.setRequestHeader("x-proof","frozen");apt.environment.set("executed","yes");',
-        });
-        // Native model names are reversible only under this explicit project
-        // namespace precondition. Identity remaps must not inline the graph.
-        target.name = source.name;
-        second.name = source.name;
-        await store.save(second);
-        const reqSchema = {
-          type: "object",
-          $defs: { Name: { type: "string" } },
-          properties: {
-            value: { type: "string" },
-            response: { $ref: "#/components/schemas/response-model" },
-            self: { $ref: "#/components/schemas/request-model" },
-            local: { $ref: "#/components/schemas/request-model/$defs/Name" },
-          },
-          example: { $ref: "https://literal.invalid", ref: "literal" },
-        };
-        const resSchema = {
-          type: "object",
-          properties: {
-            ok: { type: "boolean" },
-            request: { $ref: "#/components/schemas/request-model" },
-          },
-        };
-        source.modelFolders = [
-          {
-            id: "types",
-            name: "Types",
-            parentId: "",
-            sort: 0,
-            description: "kept",
-          },
-          { id: "empty-model-folder", name: "Empty", parentId: "types" },
-        ];
-        source.dictionary = [
-          {
-            id: "request-model",
-            name: "SDK source / Request",
-            folderId: "types",
-            schema: reqSchema,
-          },
-          {
-            id: "response-model",
-            name: "SDK source / Response",
-            schema: resSchema,
-          },
-          { id: "false-model", name: "SDK source / Never", schema: false },
-        ];
-        source.openapiComponents = {
-          schemas: Object.fromEntries(
-            source.dictionary.map((model) => [
-              model.id,
-              structuredClone(model.schema),
-            ]),
-          ),
-        };
-        request.schema = { $ref: "#/components/schemas/request-model" };
-        const responseRef = { $ref: "#/components/schemas/response-model" };
-        request.responses = [
-          {
-            status: "200",
-            description: "OK",
-            schema: structuredClone(responseRef),
-            content: {
-              "application/json": { schema: structuredClone(responseRef) },
+          const source = await store.create("SDK source"),
+            target = await store.create("SDK merge target"),
+            second = await store.create("SDK second import"),
+            denied = await store.create("SDK denied"),
+            archived = await store.create("SDK archived");
+          archived.archived = true;
+          await store.save(archived);
+          source.environments[0].variables.value = "saved-value";
+          source.environments[0].variableDefinitions = {
+            value: {
+              initialValue: "initial-value",
+              description: "SDK fixture",
             },
-          },
-        ];
-        request.examples = [
-          {
-            name: "OK",
-            status: 200,
-            headers: { "content-type": "application/json" },
-            body: '{"ok":true}',
-          },
-        ];
-        source.requests = [request];
-        source.settings.statuses = [
-          { id: "state-a", name: "Same label", color: "#112233" },
-          { id: "state-b", name: "Same label", color: "#445566" },
-        ];
-        source.folders = ["Guides", "Guides/深层", "Other"];
-        source.documents = [
-          {
-            id: "owned-document",
-            title: "Guide",
-            content:
-              "# 中文🌏\r\n{{inert}} <script>literal only</script> https://invalid.example/a",
-            folder: "Guides/深层",
-            statusId: "state-b",
-            apipostSource: {
-              projectId: "old-project",
-              targetId: "old-document",
-              parentId: "old-folder",
-              mark_id: "old-mark",
-              sort: 7,
-              version: 3,
-              status: 0,
+          };
+          const request = normalizeRequest({
+            id: "sdk-saved-request",
+            name: "SDK saved request",
+            method: "POST",
+            url: upstreamURL + "/frozen",
+            bodyType: "json",
+            body: '{"value":"{{value}}"}',
+            auth: {
+              type: "basic",
+              username: "fixture",
+              password: "fictional-saved-secret",
             },
-          },
-          {
-            id: "plain-document",
-            title: "Guide",
-            content: "",
-            folder: "Other",
-          },
-        ];
-        const expectedDocuments = documentDefinitions(source);
+            inheritSharedScripts: false,
+            scriptDialect: "apipost8",
+            beforeScript:
+              'apt.setRequestHeader("x-proof","frozen");apt.environment.set("executed","yes");',
+          });
+          // Keep the original namespace workflow as the default-mode control.
+          // Preserve mode has different target names and survives owner project rename.
+          if (mode === undefined) {
+            target.name = source.name;
+            second.name = source.name;
+          }
+          await store.save(second);
+          const reqSchema = {
+            type: "object",
+            $defs: { Name: { type: "string" } },
+            properties: {
+              value: { type: "string" },
+              response: { $ref: "#/components/schemas/response-model" },
+              self: { $ref: "#/components/schemas/request-model" },
+              local: { $ref: "#/components/schemas/request-model/$defs/Name" },
+            },
+            example: { $ref: "https://literal.invalid", ref: "literal" },
+          };
+          const resSchema = {
+            type: "object",
+            properties: {
+              ok: { type: "boolean" },
+              request: { $ref: "#/components/schemas/request-model" },
+            },
+          };
+          source.modelFolders = [
+            {
+              id: "types",
+              name: "Types",
+              parentId: "",
+              sort: 0,
+              description: "kept",
+            },
+            { id: "empty-model-folder", name: "Empty", parentId: "types" },
+          ];
+          source.dictionary = [
+            {
+              id: "request-model",
+              name: modelNames(mode)[0],
+              folderId: "types",
+              schema: reqSchema,
+            },
+            {
+              id: "response-model",
+              name: modelNames(mode)[1],
+              schema: resSchema,
+            },
+            { id: "false-model", name: modelNames(mode)[2], schema: false },
+          ];
+          source.openapiComponents = {
+            schemas: Object.fromEntries(
+              source.dictionary.map((model) => [
+                model.id,
+                structuredClone(model.schema),
+              ]),
+            ),
+          };
+          request.schema = { $ref: "#/components/schemas/request-model" };
+          const responseRef = { $ref: "#/components/schemas/response-model" };
+          request.responses = [
+            {
+              status: "200",
+              description: "OK",
+              schema: structuredClone(responseRef),
+              content: {
+                "application/json": { schema: structuredClone(responseRef) },
+              },
+            },
+          ];
+          request.examples = [
+            {
+              name: "OK",
+              status: 200,
+              headers: { "content-type": "application/json" },
+              body: '{"ok":true}',
+            },
+          ];
+          if (mode === "preserve") source.name = "Renamed source";
+          source.requests = [request];
+          source.settings.statuses = [
+            { id: "state-a", name: "Same label", color: "#112233" },
+            { id: "state-b", name: "Same label", color: "#445566" },
+          ];
+          source.folders = ["Guides", "Guides/深层", "Other"];
+          source.documents = [
+            {
+              id: "owned-document",
+              title: "Guide",
+              content:
+                "# 中文🌏\r\n{{inert}} <script>literal only</script> https://invalid.example/a",
+              folder: "Guides/深层",
+              statusId: "state-b",
+              apipostSource: {
+                projectId: "old-project",
+                targetId: "old-document",
+                parentId: "old-folder",
+                mark_id: "old-mark",
+                sort: 7,
+                version: 3,
+                status: 0,
+              },
+            },
+            {
+              id: "plain-document",
+              title: "Guide",
+              content: "",
+              folder: "Other",
+            },
+          ];
+          const expectedDocuments = documentDefinitions(source);
 
-        if (format === "apipost-directory")
-          source.plans = [
-            snapshotPlan({
-              id: "sdk-frozen-plan",
-              name: "SDK frozen plan",
-              environmentId: source.environments[0].id,
-              statusPolicy: "strict200",
-              steps: [{ request }],
+          if (format === "apipost-directory")
+            source.plans = [
+              snapshotPlan({
+                id: "sdk-frozen-plan",
+                name: "SDK frozen plan",
+                environmentId: source.environments[0].id,
+                statusPolicy: "strict200",
+                steps: [{ request }],
+              }),
+            ];
+          await store.save(source);
+          verifyModelGraph(source, mode);
+          target.requests = [
+            normalizeRequest({
+              id: "keep-existing",
+              name: "Keep existing",
+              url: upstreamURL + "/keep",
             }),
           ];
-        await store.save(source);
-        verifyModelGraph(source);
-        target.requests = [
-          normalizeRequest({
-            id: "keep-existing",
-            name: "Keep existing",
-            url: upstreamURL + "/keep",
-          }),
-        ];
-        await store.save(target);
-        const originalTarget = await store.get(target.id),
-          originalDenied = await store.get(denied.id),
-          originalArchived = await store.get(archived.id),
-          originalSource = await store.get(source.id);
-        const projects = [source.id, target.id, second.id, archived.id];
+          await store.save(target);
+          const originalTarget = await store.get(target.id),
+            originalDenied = await store.get(denied.id),
+            originalArchived = await store.get(archived.id),
+            originalSource = await store.get(source.id);
+          const projects = [source.id, target.id, second.id, archived.id];
 
-        const connect = async ({ write = false, execute = false } = {}) => {
-          await client?.close().catch(() => {});
-          client = new Client(
-            { name: "project-interchange-sdk", version: "1.0.0" },
-            { capabilities: {} },
-          );
-          if (transport === "http") {
-            const configured = await fetch(app.url + "/api/mcp/config", {
-              method: "POST",
-              headers: {
-                "x-local-token": app.token,
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                enabled: true,
-                projects,
-                write,
-                execute,
-                remember: false,
-              }),
-            });
-            assert.equal(configured.status, 200);
-            const { token } = await configured.json();
-            await client.connect(
-              new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
-                requestInit: { headers: { Authorization: "Bearer " + token } },
-              }),
+          const connect = async ({ write = false, execute = false } = {}) => {
+            await client?.close().catch(() => {});
+            client = new Client(
+              { name: "project-interchange-sdk", version: "1.0.0" },
+              { capabilities: {} },
             );
-          } else {
-            await client.connect(
-              new StdioClientTransport({
-                command: process.execPath,
-                args: [
-                  fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
-                  ...projects.flatMap((projectId) => ["--project", projectId]),
-                  ...(write ? ["--write"] : []),
-                  ...(execute ? ["--execute"] : []),
-                ],
-                env: { LOCAL_API_DATA: root },
-                stderr: "pipe",
-              }),
-            );
-          }
-        };
-        const call = (name, args = {}) =>
-          client.callTool({ name: "localapi_" + name, arguments: args });
-        const success = async (name, args) => decode(await call(name, args));
-        const failure = async (name, args) => {
-          const result = await call(name, args);
-          assert.equal(result.isError, true, JSON.stringify(result));
-          assert.equal(result.content[0].type, "text");
-          assert(Buffer.byteLength(result.content[0].text) < 4096);
-          return result;
-        };
-
-        await connect();
-        let tools = (await client.listTools()).tools;
-        assert(tools.some((tool) => tool.name === "localapi_export_project"));
-        assert(!tools.some((tool) => tool.name === "localapi_import_project"));
-        assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
-        const exported = await success("export_project", {
-          projectId: source.id,
-          format,
-        });
-        assert.equal(exported.projectId, source.id);
-        assert.equal(exported.format, format);
-        assert(exported.document && typeof exported.document === "object");
-        assert.match(
-          JSON.stringify(exported.document),
-          /fictional-saved-secret/,
-        );
-        assert.deepEqual(await store.get(source.id), originalSource);
-        const exportedNodes =
-          format === "apipost"
-            ? exported.document.apis
-            : exported.document.files
-                .filter(
-                  (file) =>
-                    file.path.startsWith("apis/") &&
-                    file.path !== "apis/index.json",
-                )
-                .map((file) => JSON.parse(file.text).data);
-        const marks =
-          format === "apipost"
-            ? exported.document.global.marks
-            : JSON.parse(
-                exported.document.files.find(
-                  (file) => file.path === "settings/marks.json",
-                ).text,
+            if (transport === "http") {
+              const configured = await fetch(app.url + "/api/mcp/config", {
+                method: "POST",
+                headers: {
+                  "x-local-token": app.token,
+                  "content-type": "application/json",
+                },
+                body: JSON.stringify({
+                  enabled: true,
+                  projects,
+                  write,
+                  execute,
+                  remember: false,
+                }),
+              });
+              assert.equal(configured.status, 200);
+              const { token } = await configured.json();
+              await client.connect(
+                new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+                  requestInit: {
+                    headers: { Authorization: "Bearer " + token },
+                  },
+                }),
               );
-        const documentNodes = exportedNodes.filter(
-          (node) => node.target_type === "doc",
-        );
-        assert.equal(documentNodes.length, 2);
-        const marked = documentNodes.find(
-          (node) => node.description === source.documents[0].content,
-        );
-        assert.equal(
-          marks.find((mark) => mark.mark_id === marked.mark_id).color,
-          "#445566",
-        );
-        for (const node of documentNodes) {
+            } else {
+              await client.connect(
+                new StdioClientTransport({
+                  command: process.execPath,
+                  args: [
+                    fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+                    ...projects.flatMap((projectId) => [
+                      "--project",
+                      projectId,
+                    ]),
+                    ...(write ? ["--write"] : []),
+                    ...(execute ? ["--execute"] : []),
+                  ],
+                  env: { LOCAL_API_DATA: root },
+                  stderr: "pipe",
+                }),
+              );
+            }
+          };
+          const call = (name, args = {}) =>
+            client.callTool({ name: "localapi_" + name, arguments: args });
+          const success = async (name, args) => decode(await call(name, args));
+          const failure = async (name, args) => {
+            const result = await call(name, args);
+            assert.equal(result.isError, true, JSON.stringify(result));
+            assert.equal(result.content[0].type, "text");
+            assert(Buffer.byteLength(result.content[0].text) < 4096);
+            return result;
+          };
+
+          await connect();
+          let tools = (await client.listTools()).tools;
+          assert(tools.some((tool) => tool.name === "localapi_export_project"));
           assert(
-            exportedNodes.some(
-              (parent) =>
-                parent.target_type === "folder" &&
-                parent.target_id === node.parent_id,
-            ),
+            !tools.some((tool) => tool.name === "localapi_import_project"),
           );
-          assert.notEqual(node.target_id, "old-document");
-          assert.notEqual(node.project_id, "old-project");
-        }
-
-        await failure("import_project", {
-          projectId: target.id,
-          format,
-          document: exported.document,
-        });
-        assert.deepEqual(await store.get(target.id), originalTarget);
-
-        await connect({ write: true });
-        tools = (await client.listTools()).tools;
-        for (const name of [
-          "localapi_import_project",
-          "localapi_export_project",
-        ]) {
-          const tool = tools.find((item) => item.name === name);
-          assert(tool);
-          assert.equal(tool.inputSchema.additionalProperties, false);
-          assert.deepEqual(tool.inputSchema.properties.format.enum, [
-            "apipost",
-            "apipost-directory",
+          assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
+          if (mode === "preserve")
+            await failure("export_project", { projectId: source.id, format });
+          const exported = await success("export_project", {
+            projectId: source.id,
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
+          });
+          assert.deepEqual(Object.keys(exported).sort(), [
+            "document",
+            "format",
+            "projectId",
           ]);
-          assert(tool.inputSchema.required.includes("projectId"));
-          assert(tool.inputSchema.required.includes("format"));
-        }
-        assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
-        const importArgs = {
-          projectId: target.id,
-          format,
-          document: exported.document,
-        };
-        for (const projectId of [denied.id, archived.id, "missing-project"])
-          for (const name of ["import_project", "export_project"])
-            await failure(name, {
-              projectId,
-              format,
-              ...(name === "import_project"
-                ? { document: exported.document }
-                : {}),
-            });
-        for (const invalidFormat of [
-          "auto",
-          "openapi",
-          "postman",
-          "backup",
-          "",
-        ])
-          for (const name of ["import_project", "export_project"])
-            await failure(name, {
-              projectId: target.id,
-              format: invalidFormat,
-              ...(name === "import_project"
-                ? { document: exported.document }
-                : {}),
-            });
-        for (const key of [
-          "sync",
-          "clear",
-          "path",
-          "url",
-          "grants",
-          "credentials",
-          "newProject",
-        ])
-          await failure("import_project", { ...importArgs, [key]: true });
-        await failure("export_project", {
-          projectId: target.id,
-          format,
-          path: "/tmp/not-an-export-destination",
-        });
-        for (const name of ["import_project", "export_project"])
-          for (const args of [{}, { projectId: target.id }, { format }])
-            await failure(name, args);
-        for (const document of [
-          null,
-          [],
-          JSON.stringify(exported.document),
-          { openapi: "3.1.0", paths: {} },
-          { requests: [] },
-          format === "apipost"
-            ? { format: "apipost-offline-directory-v1", files: [] }
-            : { apis: [] },
-        ])
-          await failure("import_project", { ...importArgs, document });
-        await failure("import_project", {
-          projectId: target.id,
-          format: "apipost",
-          document: { apis: [], padding: "界".repeat(1400000) },
-        });
-        let nested = {};
-        for (let depth = 0; depth < 70; depth++) nested = { child: nested };
-        await failure("import_project", {
-          projectId: target.id,
-          format: "apipost",
-          document: { apis: [], nested },
-        });
-        const lateInvalid = structuredClone(exported.document);
-        if (format === "apipost")
-          lateInvalid.apis.push({
-            target_id: "invalid-late-resource",
-            target_type: "unrecognized-resource",
-          });
-        else
-          lateInvalid.files.push({
-            path: "../../not-a-host-file.json",
-            text: "{}",
-          });
-        await failure("import_project", {
-          ...importArgs,
-          document: lateInvalid,
-        });
-        if (format === "apipost-directory") {
-          const deepDirectory = structuredClone(exported.document);
-          const projectFile = deepDirectory.files.find(
-            (entry) => entry.path === "project.json",
+          assert.equal(exported.projectId, source.id);
+          assert.equal(exported.format, format);
+          assert(exported.document && typeof exported.document === "object");
+          assert.match(
+            JSON.stringify(exported.document),
+            /fictional-saved-secret/,
           );
-          projectFile.text = JSON.stringify({
-            ...JSON.parse(projectFile.text),
-            nested,
+          assert.deepEqual(await store.get(source.id), originalSource);
+          const exportedNodes =
+            format === "apipost"
+              ? exported.document.apis
+              : exported.document.files
+                  .filter(
+                    (file) =>
+                      file.path.startsWith("apis/") &&
+                      file.path !== "apis/index.json",
+                  )
+                  .map((file) => JSON.parse(file.text).data);
+          const marks =
+            format === "apipost"
+              ? exported.document.global.marks
+              : JSON.parse(
+                  exported.document.files.find(
+                    (file) => file.path === "settings/marks.json",
+                  ).text,
+                );
+          const documentNodes = exportedNodes.filter(
+            (node) => node.target_type === "doc",
+          );
+          assert.equal(documentNodes.length, 2);
+          const marked = documentNodes.find(
+            (node) => node.description === source.documents[0].content,
+          );
+          assert.equal(
+            marks.find((mark) => mark.mark_id === marked.mark_id).color,
+            "#445566",
+          );
+          for (const node of documentNodes) {
+            assert(
+              exportedNodes.some(
+                (parent) =>
+                  parent.target_type === "folder" &&
+                  parent.target_id === node.parent_id,
+              ),
+            );
+            assert.notEqual(node.target_id, "old-document");
+            assert.notEqual(node.project_id, "old-project");
+          }
+
+          await failure("import_project", {
+            projectId: target.id,
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
+            document: exported.document,
           });
+          assert.deepEqual(await store.get(target.id), originalTarget);
+
+          await connect({ write: true });
+          tools = (await client.listTools()).tools;
+          for (const name of [
+            "localapi_import_project",
+            "localapi_export_project",
+          ]) {
+            const tool = tools.find((item) => item.name === name);
+            assert(tool);
+            assert.equal(tool.inputSchema.additionalProperties, false);
+            assert.deepEqual(tool.inputSchema.properties.format.enum, [
+              "apipost",
+              "apipost-directory",
+            ]);
+            assert(tool.inputSchema.required.includes("projectId"));
+            assert(tool.inputSchema.required.includes("format"));
+            assert(!tool.inputSchema.required.includes("modelNameMode"));
+            assert.deepEqual(tool.inputSchema.properties.modelNameMode.enum, [
+              "namespaced",
+              "preserve",
+            ]);
+          }
+          assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
+          const importArgs = {
+            projectId: target.id,
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
+            document: exported.document,
+          };
+          for (const modelNameMode of [null, "", false, "bad"]) {
+            await failure("import_project", { ...importArgs, modelNameMode });
+            await failure("export_project", {
+              projectId: source.id,
+              format,
+              modelNameMode,
+            });
+          }
+          for (const projectId of [denied.id, archived.id, "missing-project"])
+            for (const name of ["import_project", "export_project"])
+              await failure(name, {
+                projectId,
+                format,
+                ...(mode === undefined ? {} : { modelNameMode: mode }),
+                ...(name === "import_project"
+                  ? { document: exported.document }
+                  : {}),
+              });
+          for (const invalidFormat of [
+            "auto",
+            "openapi",
+            "postman",
+            "backup",
+            "",
+          ])
+            for (const name of ["import_project", "export_project"])
+              await failure(name, {
+                projectId: target.id,
+                format: invalidFormat,
+                ...(name === "import_project"
+                  ? { document: exported.document }
+                  : {}),
+              });
+          for (const key of [
+            "sync",
+            "clear",
+            "path",
+            "url",
+            "grants",
+            "credentials",
+            "newProject",
+          ])
+            await failure("import_project", { ...importArgs, [key]: true });
+          await failure("export_project", {
+            projectId: target.id,
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
+            path: "/tmp/not-an-export-destination",
+          });
+          for (const name of ["import_project", "export_project"])
+            for (const args of [{}, { projectId: target.id }, { format }])
+              await failure(name, args);
+          for (const document of [
+            null,
+            [],
+            JSON.stringify(exported.document),
+            { openapi: "3.1.0", paths: {} },
+            { requests: [] },
+            format === "apipost"
+              ? { format: "apipost-offline-directory-v1", files: [] }
+              : { apis: [] },
+          ])
+            await failure("import_project", { ...importArgs, document });
+          await failure("import_project", {
+            projectId: target.id,
+            format: "apipost",
+            document: { apis: [], padding: "界".repeat(1400000) },
+          });
+          let nested = {};
+          for (let depth = 0; depth < 70; depth++) nested = { child: nested };
+          await failure("import_project", {
+            projectId: target.id,
+            format: "apipost",
+            document: { apis: [], nested },
+          });
+          const lateInvalid = structuredClone(exported.document);
+          if (format === "apipost")
+            lateInvalid.apis.push({
+              target_id: "invalid-late-resource",
+              target_type: "unrecognized-resource",
+            });
+          else
+            lateInvalid.files.push({
+              path: "../../not-a-host-file.json",
+              text: "{}",
+            });
           await failure("import_project", {
             ...importArgs,
-            document: deepDirectory,
+            document: lateInvalid,
           });
-        }
-        await client.ping();
-        assert.deepEqual(await store.get(target.id), originalTarget);
-        assert.deepEqual(await store.get(denied.id), originalDenied);
-        assert.deepEqual(await store.get(archived.id), originalArchived);
-        assert.equal(wire.length, 0);
+          if (format === "apipost-directory") {
+            const deepDirectory = structuredClone(exported.document);
+            const projectFile = deepDirectory.files.find(
+              (entry) => entry.path === "project.json",
+            );
+            projectFile.text = JSON.stringify({
+              ...JSON.parse(projectFile.text),
+              nested,
+            });
+            await failure("import_project", {
+              ...importArgs,
+              document: deepDirectory,
+            });
+          }
+          await client.ping();
+          assert.deepEqual(await store.get(target.id), originalTarget);
+          assert.deepEqual(await store.get(denied.id), originalDenied);
+          assert.deepEqual(await store.get(archived.id), originalArchived);
+          assert.equal(wire.length, 0);
 
-        const imported = await success("import_project", importArgs);
-        assert.equal(imported.projectId, target.id);
-        assert.equal(imported.format, format);
-        assert(Buffer.byteLength(JSON.stringify(imported)) < 65536);
-        assert(!JSON.stringify(imported).includes("fictional-saved-secret"));
-        let saved = await store.get(target.id);
-        assert.deepEqual(
-          saved.requests.find((item) => item.id === "keep-existing"),
-          originalTarget.requests[0],
-        );
-        const importedRequest = saved.requests.find(
-          (item) => item.name === "SDK saved request",
-        );
-        assert(importedRequest);
-        assert.deepEqual(Object.keys(imported.imported).sort(), [
-          "caseIds",
-          "documentIds",
-          "environmentIds",
-          "planIds",
-          "protocolIds",
-          "requestIds",
-        ]);
-        assert.deepEqual(imported.imported.requestIds, [importedRequest.id]);
-        assert.deepEqual(
-          imported.imported.planIds,
-          saved.plans.map((item) => item.id),
-        );
-        assert.deepEqual(
-          imported.imported.environmentIds,
-          saved.environments
-            .filter(
-              (item) =>
-                !originalTarget.environments.some((old) => old.id === item.id),
-            )
-            .map((item) => item.id),
-        );
-        for (const key of ["caseIds", "protocolIds"])
-          assert.deepEqual(imported.imported[key], []);
-        assert.deepEqual(
-          imported.imported.documentIds,
-          saved.documents.map((doc) => doc.id),
-        );
-        assert.deepEqual(documentDefinitions(saved), expectedDocuments);
-        verifyModelGraph(saved);
-        assert(
-          saved.documents.every(
-            (doc) => !saved.requests.some((request) => request.id === doc.id),
-          ),
-        );
-        assert.deepEqual(importedRequest.auth, request.auth);
-        assert.equal(importedRequest.url, request.url);
-        assert.equal(saved.history.length, 0);
-        assert.equal(saved.runs.length, 0);
-        assert(
-          saved.environments.every(
-            (env) => env.variables.executed === undefined,
-          ),
-        );
-        assert.equal(wire.length, 0);
-        const targetExport = await success("export_project", {
-          projectId: target.id,
-          format,
-        });
-        assert.deepEqual(await store.get(target.id), saved);
-        await success("import_project", {
-          projectId: second.id,
-          format,
-          document: targetExport.document,
-        });
-        const secondState = await store.get(second.id);
-        assert.equal(secondState.requests.length, 2);
-        assert.deepEqual(documentDefinitions(secondState), expectedDocuments);
-        verifyModelGraph(secondState);
-        assert.equal(secondState.runs.length, 0);
-        assert.equal(wire.length, 0);
-        assert.deepEqual(
-          (await success("list_projects")).map((item) => item.id).sort(),
-          [source.id, target.id, second.id].sort(),
-        );
-
-        let plan = saved.plans[0];
-        if (format === "apipost") {
-          const environment = saved.environments.find(
-            (env) => env.variables.value === "saved-value",
+          const imported = await success("import_project", importArgs);
+          assert.equal(imported.projectId, target.id);
+          assert.equal(imported.format, format);
+          assert(Buffer.byteLength(JSON.stringify(imported)) < 65536);
+          assert(!JSON.stringify(imported).includes("fictional-saved-secret"));
+          let saved = await store.get(target.id);
+          assert.deepEqual(
+            saved.requests.find((item) => item.id === "keep-existing"),
+            originalTarget.requests[0],
           );
-          assert(environment);
-          plan = await success("save_plan", {
+          const importedRequest = saved.requests.find(
+            (item) => item.name === "SDK saved request",
+          );
+          assert(importedRequest);
+          assert.deepEqual(Object.keys(imported.imported).sort(), [
+            "caseIds",
+            "documentIds",
+            "environmentIds",
+            "planIds",
+            "protocolIds",
+            "requestIds",
+          ]);
+          assert.deepEqual(imported.imported.requestIds, [importedRequest.id]);
+          assert.deepEqual(
+            imported.imported.planIds,
+            saved.plans.map((item) => item.id),
+          );
+          assert.deepEqual(
+            imported.imported.environmentIds,
+            saved.environments
+              .filter(
+                (item) =>
+                  !originalTarget.environments.some(
+                    (old) => old.id === item.id,
+                  ),
+              )
+              .map((item) => item.id),
+          );
+          for (const key of ["caseIds", "protocolIds"])
+            assert.deepEqual(imported.imported[key], []);
+          assert.deepEqual(
+            imported.imported.documentIds,
+            saved.documents.map((doc) => doc.id),
+          );
+          assert.deepEqual(documentDefinitions(saved), expectedDocuments);
+          verifyModelGraph(saved, mode);
+          assert(
+            saved.documents.every(
+              (doc) => !saved.requests.some((request) => request.id === doc.id),
+            ),
+          );
+          assert.deepEqual(importedRequest.auth, request.auth);
+          assert.equal(importedRequest.url, request.url);
+          assert.equal(saved.history.length, 0);
+          assert.equal(saved.runs.length, 0);
+          assert(
+            saved.environments.every(
+              (env) => env.variables.executed === undefined,
+            ),
+          );
+          assert.equal(wire.length, 0);
+          const targetExport = await success("export_project", {
             projectId: target.id,
-            plan: {
-              name: "SDK frozen after JSON import",
-              environmentId: environment.id,
-              statusPolicy: "strict200",
-              steps: [{ request: importedRequest }],
-            },
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
           });
-        }
-        assert(plan);
-        await failure("run_plan", { projectId: target.id, planId: plan.id });
-        saved = await store.get(target.id);
-        saved.requests.find((item) => item.id === importedRequest.id).url =
-          upstreamURL + "/edited-live";
-        await store.save(saved);
-        const beforeRestart = await store.get(target.id);
-        await client.close();
-        client = undefined;
-        if (app) {
-          await closeServer(app.server);
-          app = await createApp({ root, port: 0 });
-        }
-        await connect({ write: true, execute: true });
-        await failure("execute_api", {
-          projectId: target.id,
-          apiId: beforeRestart.documents[0].id,
-        });
-        assert.deepEqual(await store.get(target.id), beforeRestart);
-        assert.deepEqual(
-          documentDefinitions(await store.get(target.id)),
-          expectedDocuments,
-        );
-        assert.equal(wire.length, 0);
-        const result = await success("run_plan", {
-          projectId: target.id,
-          planId: plan.id,
-        });
-        assert.equal(result.status, "passed", JSON.stringify(result));
-        assert.equal(result.results[0].response.status, 200);
-        assert.deepEqual(wire, [
-          {
-            url: "/frozen",
-            method: "POST",
-            body: '{"value":"saved-value"}',
-            authorization:
-              "Basic " +
-              Buffer.from("fixture:fictional-saved-secret").toString("base64"),
-            proof: "frozen",
-          },
-        ]);
-        const executed = await store.get(target.id);
-        assert.equal(executed.runs.length, 1);
-        assert.deepEqual(documentDefinitions(executed), expectedDocuments);
-        verifyModelGraph(executed);
-        const restored = restoreProject(executed);
-        await store.save(restored);
-        assert.deepEqual(
-          (await store.get(restored.id)).documents,
-          executed.documents,
-        );
-        await failure("export_project", { projectId: restored.id, format });
-        verifyModelGraph(await store.get(restored.id));
-        const changedNamespace = await store.get(target.id);
-        changedNamespace.name = "Unrepresentable renamed namespace";
-        await store.save(changedNamespace);
-        const beforeRejectedExport = await store.get(target.id);
-        await failure("export_project", { projectId: target.id, format });
-        assert.deepEqual(await store.get(target.id), beforeRejectedExport);
+          assert.deepEqual(await store.get(target.id), saved);
+          await success("import_project", {
+            projectId: second.id,
+            format,
+            ...(mode === undefined ? {} : { modelNameMode: mode }),
+            document: targetExport.document,
+          });
+          const secondState = await store.get(second.id);
+          assert.equal(secondState.requests.length, 2);
+          assert.deepEqual(documentDefinitions(secondState), expectedDocuments);
+          verifyModelGraph(secondState, mode);
+          assert.equal(secondState.runs.length, 0);
+          assert.equal(wire.length, 0);
+          assert.deepEqual(
+            (await success("list_projects")).map((item) => item.id).sort(),
+            [source.id, target.id, second.id].sort(),
+          );
 
-        assert.equal(
-          executed.environments.find((env) => env.id === plan.environmentId)
-            .variables.executed,
-          "yes",
-        );
-        assert.deepEqual(await store.get(denied.id), originalDenied);
-        assert.deepEqual(await store.get(archived.id), originalArchived);
-        assert.deepEqual(await store.get(source.id), originalSource);
-        assert.deepEqual(await store.get(second.id), secondState);
-      },
-    );
+          let plan = saved.plans[0];
+          if (format === "apipost") {
+            const environment = saved.environments.find(
+              (env) => env.variables.value === "saved-value",
+            );
+            assert(environment);
+            plan = await success("save_plan", {
+              projectId: target.id,
+              plan: {
+                name: "SDK frozen after JSON import",
+                environmentId: environment.id,
+                statusPolicy: "strict200",
+                steps: [{ request: importedRequest }],
+              },
+            });
+          }
+          assert(plan);
+          await failure("run_plan", { projectId: target.id, planId: plan.id });
+          saved = await store.get(target.id);
+          saved.requests.find((item) => item.id === importedRequest.id).url =
+            upstreamURL + "/edited-live";
+          await store.save(saved);
+          const beforeRestart = await store.get(target.id);
+          await client.close();
+          client = undefined;
+          if (app) {
+            await closeServer(app.server);
+            app = await createApp({ root, port: 0 });
+          }
+          await connect({ write: true, execute: true });
+          await failure("execute_api", {
+            projectId: target.id,
+            apiId: beforeRestart.documents[0].id,
+          });
+          assert.deepEqual(await store.get(target.id), beforeRestart);
+          assert.deepEqual(
+            documentDefinitions(await store.get(target.id)),
+            expectedDocuments,
+          );
+          assert.equal(wire.length, 0);
+          const result = await success("run_plan", {
+            projectId: target.id,
+            planId: plan.id,
+          });
+          assert.equal(result.status, "passed", JSON.stringify(result));
+          assert.equal(result.results[0].response.status, 200);
+          assert.deepEqual(wire, [
+            {
+              url: "/frozen",
+              method: "POST",
+              body: '{"value":"saved-value"}',
+              authorization:
+                "Basic " +
+                Buffer.from("fixture:fictional-saved-secret").toString(
+                  "base64",
+                ),
+              proof: "frozen",
+            },
+          ]);
+          const executed = await store.get(target.id);
+          assert.equal(executed.runs.length, 1);
+          assert.deepEqual(documentDefinitions(executed), expectedDocuments);
+          verifyModelGraph(executed, mode);
+          const restored = restoreProject(executed);
+          await store.save(restored);
+          assert.deepEqual(
+            (await store.get(restored.id)).documents,
+            executed.documents,
+          );
+          await failure("export_project", { projectId: restored.id, format });
+          verifyModelGraph(await store.get(restored.id), mode);
+          const changedNamespace = await store.get(target.id);
+          changedNamespace.name = "Unrepresentable renamed namespace";
+          await store.save(changedNamespace);
+          const beforeRejectedExport = await store.get(target.id);
+          await failure("export_project", { projectId: target.id, format });
+          assert.deepEqual(await store.get(target.id), beforeRejectedExport);
+
+          assert.equal(
+            executed.environments.find((env) => env.id === plan.environmentId)
+              .variables.executed,
+            "yes",
+          );
+          assert.deepEqual(await store.get(denied.id), originalDenied);
+          assert.deepEqual(await store.get(archived.id), originalArchived);
+          assert.deepEqual(await store.get(source.id), originalSource);
+          assert.deepEqual(await store.get(second.id), secondState);
+        },
+      );
 
 test(
   "official SDK stdio rejects the full escaped output frame and oversized error text without losing the session",

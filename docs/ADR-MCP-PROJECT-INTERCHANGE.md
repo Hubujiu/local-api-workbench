@@ -39,3 +39,16 @@
 `tests/mcp-project-interchange.test.mjs` 覆盖闭合参数与枚举、授权/归档、原子拒绝、深层及多字节超限、描述符/原型零执行、重复导入不清空、完整双层转义帧、Store 错误身份与不重试、真实 Store 并发冲突。
 
 `tests/mcp-project-roundtrip-sdk.test.mjs` 通过官方 SDK 的真实 HTTP 和 stdio 子进程覆盖两种格式往返、读写权限、错误后状态不变、持久化/重启、其他项目隔离、导入导出零上游请求、后续单独授权的冻结计划真实执行。它不运行原版 GUI，也不扩大既有导入器支持范围。
+
+## Optional explicit model-name preservation
+
+Both project tools accept optional `modelNameMode` enum `namespaced` / `preserve`.
+Omission retains existing defaults. The mode is caller input, not a document field,
+project setting, permission or automatic execution request; callers choose it
+independently for export and import. `preserve` forwards to the bounded native
+adapter, including directory frozen conversion and readback. Invalid/null modes
+reject before save. It changes neither the default nor explicit-mode result keys:
+export remains `{projectId, format, document}`, import remains
+`{projectId, format, imported}`. No additional frame bytes or model-ID summary is
+introduced, so existing response-frame acceptance thresholds remain meaningful.
+The native adapter's name, graph and conflict limits apply unchanged.

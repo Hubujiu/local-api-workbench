@@ -1,3 +1,7 @@
+import {
+  modelNameMode as resolveModelNameMode,
+  validatePreservedModelName,
+} from "./apipost-model-name-mode.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { validateModelFolders } from "../public/model-folders.js";
@@ -39,7 +43,9 @@ const exists = (root, path) => {
 };
 
 // A bounded definition adapter, never a schema evaluator or reference expander.
-export function prepareApipostModelExport(project, id) {
+export function prepareApipostModelExport(project, id, options = {}) {
+  const mode = resolveModelNameMode(options.modelNameMode);
+  const names = new Set();
   const dictionary = project.dictionary ?? [],
     folders = project.modelFolders ?? [],
     components = project.openapiComponents ?? {};
@@ -68,7 +74,11 @@ export function prepareApipostModelExport(project, id) {
       ["__proto__", "prototype", "constructor"].includes(m.id)
     )
       fail("模型ID无效或冲突");
-    if (
+    if (mode === "preserve") {
+      validatePreservedModelName(m.name);
+      if (names.has(m.name)) fail("模型名称冲突");
+      names.add(m.name);
+    } else if (
       typeof m.name !== "string" ||
       !m.name.startsWith(prefix) ||
       !m.name.slice(prefix.length).trim() ||
@@ -156,7 +166,7 @@ export function prepareApipostModelExport(project, id) {
     ...dictionary.map((m) => ({
       model_id: models.get(m.id),
       model_type: "model",
-      name: m.name.slice(prefix.length),
+      name: mode === "preserve" ? m.name : m.name.slice(prefix.length),
       parent_id: m.folderId ? folderIds.get(m.folderId) : "0",
       ...(m.sort !== undefined ? { sort: m.sort } : {}),
       schema: rewrite(m.schema, m.id),
@@ -167,6 +177,7 @@ export function prepareApipostModelExport(project, id) {
     native,
     (_kind, key) => reverse.get(key),
     project.name,
+    { modelNameMode: mode },
   );
   if (!isDeepStrictEqual(read.schemas, schemas)) fail("模型图回读不一致");
   const normalizedFolders = folders.map((f) => ({

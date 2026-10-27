@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
-import { importIntoProject } from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
 import { saveModel } from "../public/model-edit.js";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
@@ -330,4 +330,213 @@ test("boolean models remain definitions while direct API booleans reject before 
     for (const exporter of exporters)
       assert.throws(() => exporter(q), /直接布尔schema/);
   }
+});
+
+test("explicit preserve names survives project renames, both formats and frozen directory snapshots without changing defaults", () => {
+  const native = fixture("http://127.0.0.1/unused");
+  native.models.find((m) => m.model_id === "a").display_name =
+    "雪 / arbitrary A";
+  native.models.find((m) => m.model_id === "b").name = "Other Source / B";
+  native.modelNameMode = "preserve"; // Untrusted file cannot opt in.
+  const fresh = (name) => ({
+    id: name,
+    name,
+    requests: [],
+    environments: [],
+    settings: {},
+  });
+  const legacy = fresh("Model Project");
+  assert.throws(() => importIntoProject(legacy, native), /modelNameMode/);
+  delete native.modelNameMode;
+  importIntoProject(legacy, native);
+  assert.equal(legacy.dictionary[0].name, "Model Project / 雪 / arbitrary A");
+  const p = fresh("Renamed project");
+  importIntoProject(p, native, { modelNameMode: "preserve" });
+  const names = p.dictionary.map((m) => m.name);
+  assert.deepEqual(names, ["雪 / arbitrary A", "Other Source / B"]);
+  const before = structuredClone(p);
+  for (const exporter of exporters) {
+    assert.throws(() => exporter(p), /名称空间/);
+    let doc = exporter(p, { modelNameMode: "preserve" });
+    for (let generation = 0; generation < 2; generation++) {
+      const target = fresh("Changed " + generation);
+      importIntoProject(target, doc, { modelNameMode: "preserve" });
+      assert.deepEqual(
+        target.dictionary.map((m) => m.name),
+        names,
+      );
+      assert.equal(
+        target.requests[0].schema.$ref,
+        "#/components/schemas/" + target.dictionary[0].id,
+      );
+      assert.equal(
+        target.dictionary[0].schema.properties.next.$ref,
+        "#/components/schemas/" + target.dictionary[1].id,
+      );
+      assert.equal(target.modelFolders.length, 2);
+      doc = exporter(target, { modelNameMode: "preserve" });
+    }
+  }
+  assert.deepEqual(p, before);
+  const planned = structuredClone(p);
+  planned.plans = [
+    snapshotPlan({
+      id: "plan",
+      name: "Frozen",
+      environmentId: p.environments[0].id,
+      statusPolicy: "strict200",
+      steps: [{ id: "step", request: p.requests[0] }],
+    }),
+  ];
+  const frozenOutput = exportApipostDirectory(planned, {
+    modelNameMode: "preserve",
+  });
+  const frozenTarget = fresh("Frozen renamed");
+  importIntoProject(frozenTarget, frozenOutput, { modelNameMode: "preserve" });
+  assert.deepEqual(
+    frozenTarget.dictionary.map((m) => m.name),
+    names,
+  );
+  assert.equal(
+    frozenTarget.plans[0].steps[0].request.schema.$ref,
+    frozenTarget.requests[0].schema.$ref,
+  );
+  for (const mode of [null, "", "other", false]) {
+    assert.throws(
+      () => importIntoProject(p, native, { modelNameMode: mode }),
+      /modelNameMode/,
+    );
+    assert.throws(
+      () => exportApipost(p, { modelNameMode: mode }),
+      /modelNameMode/,
+    );
+  }
+  assert.throws(
+    () =>
+      importIntoProject(
+        p,
+        { openapi: "3.0.0", paths: {} },
+        { modelNameMode: "namespaced" },
+      ),
+    /modelNameMode/,
+  );
+  for (const value of ["x".repeat(201), "\ud800", 7]) {
+    const invalid = structuredClone(native);
+    invalid.models.find((m) => m.model_id === "a").display_name = value;
+    assert.throws(
+      () => importIntoProject(p, invalid, { modelNameMode: "preserve" }),
+      /模型名称/,
+    );
+  }
+  const duplicate = structuredClone(native);
+  duplicate.models.find((m) => m.model_id === "b").name = "雪 / arbitrary A";
+  assert.throws(
+    () =>
+      importIntoProject(fresh("Q"), duplicate, { modelNameMode: "preserve" }),
+    /名称冲突/,
+  );
+  assert.deepEqual(p, before);
+});
+
+test("owner preserve option is explicit, atomic, persisted through backup/restart and isolated", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "model-name-mode-"));
+  let app = await createApp({ root, port: 0 });
+  const stop = async () => {
+    app.server.closeAllConnections();
+    await new Promise((r) => app.server.close(r));
+  };
+  t.after(async () => {
+    await stop();
+    await rm(root, { recursive: true, force: true });
+  });
+  const call = async (route, method = "GET", body, expected = 200) => {
+    const response = await fetch(app.url + route, {
+      method,
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const value = await response.json();
+    assert.equal(response.status, expected, JSON.stringify(value));
+    return value;
+  };
+  const p = await app.store.create("Destination"),
+    other = await app.store.create("Other");
+  const untouched = await app.store.get(other.id);
+  const native = fixture("http://127.0.0.1/unused");
+  native.models.find((m) => m.model_id === "a").name = "雪 / unprefixed";
+  native.models.find((m) => m.model_id === "b").name = "x".repeat(200);
+  const source = structuredClone(native);
+  let current = await call(`/api/projects/${p.id}/import`, "POST", {
+    document: native,
+    modelNameMode: "preserve",
+  });
+  current.name = "Owner renamed";
+  await call(`/api/projects/${p.id}`, "PUT", current);
+  current = await app.store.get(p.id);
+  const names = current.dictionary.map((m) => m.name);
+  for (const format of ["apipost", "apipost-directory"]) {
+    const route = `/api/projects/${p.id}/export?format=${format}`;
+    await call(route, "GET", undefined, 400);
+    let document = await call(route + "&modelNameMode=preserve");
+    for (let generation = 0; generation < 2; generation++) {
+      const target = await app.store.create("Arbitrary " + generation);
+      const imported = await call(`/api/projects/${target.id}/import`, "POST", {
+        document,
+        modelNameMode: "preserve",
+      });
+      assert.deepEqual(
+        imported.dictionary.map((m) => m.name),
+        names,
+      );
+      document = await call(
+        `/api/projects/${target.id}/export?format=${format}&modelNameMode=preserve`,
+      );
+    }
+    await call(
+      route + "&modelNameMode=preserve&modelNameMode=namespaced",
+      "GET",
+      undefined,
+      400,
+    );
+    await call(route + "&modelNameMode=invalid", "GET", undefined, 400);
+  }
+  for (const format of ["openapi", "backup", ""])
+    await call(
+      `/api/projects/${p.id}/export?format=${format}&modelNameMode=preserve`,
+      "GET",
+      undefined,
+      400,
+    );
+  for (const mode of [null, "", false, "bad"])
+    await call(
+      `/api/projects/${p.id}/import`,
+      "POST",
+      { document: native, modelNameMode: mode },
+      400,
+    );
+  await call(
+    `/api/projects/${p.id}/import`,
+    "POST",
+    { document: { openapi: "3.0.0", paths: {} }, modelNameMode: "preserve" },
+    400,
+  );
+  assert.deepEqual(await app.store.get(p.id), current);
+  const backup = await call(`/api/projects/${p.id}/export`);
+  assert.equal(backup.settings.modelNameMode, undefined);
+  const restored = await call(
+    "/api/restore",
+    "POST",
+    { document: backup },
+    201,
+  );
+  await stop();
+  app = await createApp({ root, port: 0 });
+  const disk = await app.store.get(restored.id);
+  assert.deepEqual(disk.dictionary, backup.dictionary);
+  assert.deepEqual(disk.openapiComponents, backup.openapiComponents);
+  assert.deepEqual(await app.store.get(other.id), untouched);
+  assert.deepEqual(native, source);
 });

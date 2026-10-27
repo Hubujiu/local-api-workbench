@@ -1,3 +1,4 @@
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { importIntoProject } from "./core.mjs";
 import { apipostDocument } from "./apipost-import.mjs";
 import { isApipostDirectoryDocument } from "./apipost-directory.mjs";
@@ -129,10 +130,11 @@ function toolResult(output, requestId) {
 export function exportMCPProject(project, args, requestId) {
   validateMCPProjectArguments(args);
   format(args.format);
+  resolveModelNameMode(args.modelNameMode);
   const document =
     args.format === "apipost"
-      ? exportApipost(project)
-      : exportApipostDirectory(project);
+      ? exportApipost(project, { modelNameMode: args.modelNameMode })
+      : exportApipostDirectory(project, { modelNameMode: args.modelNameMode });
   boundedDocument(document);
   boundedDirectoryDocument(document);
   return toolResult(
@@ -144,6 +146,7 @@ export function exportMCPProject(project, args, requestId) {
 export async function importMCPProject(store, project, args, requestId) {
   validateMCPProjectArguments(args);
   format(args.format);
+  resolveModelNameMode(args.modelNameMode);
   boundedDocument(args.document);
   const directory = isApipostDirectoryDocument(args.document);
   if (
@@ -154,7 +157,10 @@ export async function importMCPProject(store, project, args, requestId) {
     throw Error("document 与显式 format 不匹配；不自动识别其他格式");
   boundedDirectoryDocument(args.document);
   const draft = structuredClone(project);
-  importIntoProject(draft, structuredClone(args.document), { sync: false });
+  importIntoProject(draft, structuredClone(args.document), {
+    sync: false,
+    modelNameMode: args.modelNameMode,
+  });
   const imported = {};
   for (const [collection, key] of [
     ["requests", "requestIds"],
