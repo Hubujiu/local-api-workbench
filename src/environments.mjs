@@ -101,6 +101,25 @@ export function resolveServiceRequest(project, request, environmentId) {
       String(request.url || "").replace(/^\//, ""),
   };
 }
+// Scope commits refresh the caller's project object. Keep routing configuration
+// private and detached for this execution without snapshotting variable values.
+export function createServiceRequestResolver(project, environmentId) {
+  const selected = selectedEnvironment(project, environmentId);
+  const selectedId = selected.id;
+  const context = {
+    environments: [
+      {
+        id: selectedId,
+        serverUrls: { ...(selected.serverUrls || {}) },
+      },
+    ],
+    servers: (project.servers || []).map(({ id }) => ({ id })),
+    settings: {
+      folderServices: { ...(project.settings?.folderServices || {}) },
+    },
+  };
+  return (request) => resolveServiceRequest(context, request, selectedId);
+}
 export function manageEnvironment(project, operation, args = {}) {
   project.environments ??= [];
   project.servers ??= [];

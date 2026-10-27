@@ -23,7 +23,7 @@ import {
   environmentVariables,
   selectedEnvironment,
   debugEnvironment,
-  resolveServiceRequest,
+  createServiceRequestResolver,
 } from "./environments.mjs";
 import {
   environmentTools,
@@ -590,11 +590,10 @@ export function createMCP({
                 steps: [
                   {
                     request: applyMCPInput(
-                      resolveServiceRequest(
+                      createServiceRequestResolver(
                         p,
-                        freezeServiceBinding(p, request),
                         args.environmentId,
-                      ),
+                      )(freezeServiceBinding(p, request)),
                       args.input,
                     ),
                   },
@@ -678,8 +677,10 @@ export function createMCP({
                       stepId: step.stepId,
                       stepStatus: step.status,
                     }),
-                  prepareRequest: (request) =>
-                    resolveServiceRequest(p, request, environmentId),
+                  prepareRequest: createServiceRequestResolver(
+                    p,
+                    environmentId,
+                  ),
                 },
               );
               output.environmentId = environmentId;
