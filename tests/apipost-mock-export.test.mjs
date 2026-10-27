@@ -228,14 +228,14 @@ test("conditional Mock export rejects unsupported semantics atomically and never
         sourceStatus: 200,
         headers: {},
         delayMs: 0,
-        serialization: "scalar-text",
+        serialization: "unknown",
         schema: { type: "string", const: "x" },
       }),
     (p) =>
       (p.requests[0].nativeMock.fallback = {
         status: 200,
         sourceStatus: 200,
-        body: "plain",
+        schema: { type: "string", const: "missing scalar serialization" },
       }),
     (p) => (p.settings.mockFieldRules = [{ name: "dependency" }]),
     (p) =>

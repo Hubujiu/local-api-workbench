@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-27 16:43 UTC
+# 后端检查点 · 2026-10-27 17:03 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 17:03 Mock媒体定义往返组合候选
+
+- 最近完整根 `4fe9edb4e08f9680973a4153552afaf0d8f33dd0` / local `df484ae374d2bb9c26f14fbb436a1aab892f2022` / tree `cb8801eb2f28b6c3c16ba86329dd8a4cf0ba8c43`，首次CI `40545009149` 19/19 GREEN。全19实际checkout精确同根；12实际manifest／TAP391文件98/98/98/97完整互斥，hash `1e2ac66e105f9552e1ec79f58fa517217d2e8e6442ff106085f59467cb69e010`。Linux／macOS各2016通过，Windows2012通过加4POSIX skip，0fail/cancel。新增身份原子拒绝、扩展协议双格式双代SDK／CLI／恢复、图＋HTTP flow及旧任务／样例／模型／form／repeat、DB／stdio／ac4822、新旧桌面smoke通过；不包含本次Mock媒体扩展。
+- PR14前一扩展协议最终 local `3cf614c9f5371d5c95acc168cb8429745c5eaff3` / remote `0fcf194b4ccd5e63378e662318e0a92650561655` / tree `ee0cb09f70dab09b4d5f509c8d16355d9465f433` 的独立CI `40544142159` 首次19/19 GREEN。actual `6d781f0e666db0254501e83a8f5ecdbea10f7c60` 精确同树；12ZIP摘要／275文件69/69/69/68完整，hash `5edceb122262f78d8dc4a3951b4b88df9321f3d4c97d5efab830d23bb02d341d`，三OS各1234通过无skip。旧415c的CI `40543466237` cancelled，不作绿色验收。
+- 新Mock媒体同PR14 local `c99807044481f0199482578ba72f42996676ccb2` / remote `e545009a54b974be937babff4a1a792d10604933` / tree `29f598844c2d712d11c75a479d9aaf5e18b02b5d`；5完整文件20/20及check／format／diff通过，独立CI `40545977209` 首次19/19 GREEN，19实际checkout `c01c64dc5f1b020cfbc2548924f10b11db9b451b`，parentsad1e9e90+e545且tree与local同；12实际ZIP摘要核完，276文件四分片各69完整互斥，manifest `ec79284610fc7e3ab7d70014e5f4f80f0f70d475305db08d785b5af2ff607d9d`，三OS各1235通过、无失败／取消／跳过，新整链均在实际TAP通过。根生产合并点 `a099d4deb4848124400940e7f9ae665020ebaa01` / tree `29999f01fd3dba7d3112222d2d7e00203216d250`；根测试提交 `8b2d34b1` 扩充既有HTTP+JSON、stdio+目录两条代表链：对象匹配、false标量、Unicode／JSON5-looking原文fallback，经两代重导、3步CLI消费、真实保存收据与新Store／备份重启；没有宣称四组合。最新测试组织修正仅PR14 local `16d0fddbccb55133b87ca655b0963199d2b08948` / remote `64167a694fcf1dc8c8f65ad204db7a0d1de83e0a` / tree `d4a0e8cf3ee1b29fa7b632bf7b296fcd1315ed20`，独立新CI `40547887355` 尚待。根最终 `66bccf35ba0af26548f946f54950356127268f84` / tree `081a4cf3ae8b651c730da9bc5632cc4563208bb1` 上14个完整文件81/81通过、0fail/cancel/skip，check／format／diff均过；后续仅本文文档变化，新根跨平台CI尚待。
+- 复现原先能导入／真实服务／计划执行／保存恢复但两出口400的schema false、raw0及Unicode文本；数组对照原已200，不算新增。现在仅接受既有scalar-text及无serialization的raw；五种标量根schema保原定义、不采样，raw逐字映射schema{}，完整prepareNativeMock回读深等保护保留。错误schema仍在实际执行报错，不在出口改成常量、成功或fallback；未知serialization、raw-xml/XML、引用及脚本依赖继续拒绝。
+- 真实条件规则顺序／disabled／fallback、显式headers、10ms延迟、声明sourceStatus与wire固定200合同保持，消费者计划保存真实结果；两格式两代与备份／真正服务器重启、另一项目隔离已在功能批次覆盖。根扩充既有HTTP+JSON、stdio+目录两条官方SDK代表链，不冒称四组合全矩阵。
+- 合法Mock asar成员server.js SHA256 `317c5e22d425790f4ee677ab6b9d5e4a5bbe0c6d3bf0c943e0c4e7f9c339ff88` 的242–322支持标量文本，329–334 raw先JSON5.parse、失败才原文，95–101成功后JSON.stringify；来源archive SHA256 `615038524b769a7bd5233ae200fb263e13195ef814f38c7fa00a105ee9cfdee8`。仅静态结构事实，不复制实现、不运行原版；定义可逆和Workbench实际响应往返不等于原版逐字wire兼容，不改变既有正文行为。
+- 保留初次14整文件68pass／1cancel及独立owner文件再次30s取消的真实结果；有界阶段诊断证实最后媒体在约30s才到第二格式末代，尚未全体重启，不能借未完成步骤验收。随后拆为13种媒体各自完整双格式／两代／恢复流程，每case仍30s且顺序执行、全部原断言保留；文件累计可用时间确实增加，不笼统称所有测试预算不变。应用／VM安全预算和CI job10分钟未放宽。最终媒体13case耗时累计15.89s、完整14文件46.83s，均有恢复完成诊断；这是夹具组织修正，不是产品性能根因已修证明。
+- 不用测试数折算产品完成度；保图结构编辑生命周期仍是明确能力限制，另在PR43按现有CRUD合同评估。原生automated_testings／安全TLS与凭据来源范围缺证、SQLServer许可、原版新GUI及暂停专项未完成；前端暂缓。未合main/develop或部署。
 
 ## 16:43 原生定义迁移组合候选
 

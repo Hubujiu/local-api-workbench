@@ -19,11 +19,11 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最近完整根 `bfdd6a38` / CI `40538559764` 首次19项GREEN，实际checkout及树、12份测试产物已核。正常Node SIGINT／SIGTERM与Electron确认退出等待会话保存；取消退出不提前关闭后端，保存未确认退出2且不重放。Windows不支持可捕获POSIX child signals的四项单列跳过，三平台真实桌面正常退出均验证；不承诺强杀、断电或系统注销／关机耐久。
+最近完整根 `4fe9edb4` / CI `40545009149` 首次19项GREEN，实际checkout/树及12份产物已核；验证原生协议身份歧义拒绝、受限gRPC／Socket.IO定义与派生消息往返、HTTP继承图＋独立冻结目录flow，连同此前完整后端链。Linux／macOS全通过；Windows四项不可捕获POSIX child signal测试明确跳过，真实桌面正常退出三平台均验证。原生交换只覆盖明确可逆的子集，不代表任意项目迁移；完整Workbench备份保留不可表达的历史和元数据。
 
-当前候选把原生协议身份歧义拒绝、source-backed gRPC／Socket.IO定义及派生消息往返、HTTP继承图与独立冻结目录flow一起组合。gRPC仅plaintext内联Proto的已证unary／server-stream，Socket.IO仅HTTP v4字面文本／Ack受限配置；不导出TLS秘密、不补造已剥离metadata或握手凭据，来源与当前定义／派生plan不一致拒绝。HTTP图＋flow完整回读核冻结请求；父新增字段会注入旧快照时仍拒绝。原生目录是定义迁移而非编辑历史备份，仅已知manual／ai编辑归因可按明确合同投影；未知metadata、原生历史、repeat／samples混合和不可表示资源继续拒绝。**新根组合CI尚待**，不借独立PR或旧根绿灯验收。
+当前候选补原生Mock标量schema及原始文本出口：保原schema，不在导出时采样；raw字符串逐字保存，不新增解析或规范化。数组／对象原已支持，继续回归。条件顺序、禁用、fallback、头、延迟、sourceStatus与实际固定200的旧合同不改，XML／未知序列化／引用等仍拒绝。两格式两代及真实响应／消费者计划／保存恢复正在做根组合验收；**新Mock组合CI尚待**。原版raw分支可能JSON5规范化，本功能不承诺与原版逐字响应等价。
 
-canonical有界repeat、文本表单继承等既有能力保持；原生automated_testings仍缺保存图到执行树证据，不猜测解锁，见[静态缺口](docs/NATIVE-AUTOMATION-STATIC-GAPS.md)。历史XML／桌面脚本RED根因未修复或改判。最新精确提交、验收边界及遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
+正常退出保存、canonical有界repeat、文本表单继承等既有能力保持；强杀／断电／系统注销不在正常退出保证内。原生automated_testings仍缺执行树装配证据，不猜测解锁。历史XML／桌面脚本RED根因未修复或改判，原版GUI／第三方许可和暂停专项未由后续绿灯替代。当前六模块范围与最新精确证据见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
 
 ## 已实现的核心
 
