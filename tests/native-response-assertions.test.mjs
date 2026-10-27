@@ -76,7 +76,6 @@ test("native assert data keeps disabled defaults inert and rejects active unsafe
   for (const patch of [
     { path: "$[*]" },
     { compareType: "unsupportedComparison" },
-    { compareValue: "{{token}}" },
     { compareValue: 0 },
   ])
     assert.throws(() =>

@@ -81,8 +81,9 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     throw Error("原生正则断言需要非空有界字面模式（1024字符/4096字节）");
   if (
     enabled &&
-    ((!isText && !isNativeVariableAssertion(value.type) && /\{\{/.test(path)) ||
-      (hasExpected && /\{\{/.test(expression.compareValue)))
+    !isText &&
+    !isNativeVariableAssertion(value.type) &&
+    /\{\{/.test(path)
   )
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
   if (enabled && value.type === "responseCookie" && !nativeCookieName(path))
@@ -245,7 +246,7 @@ function installNativeAssertions(
     }
     return value;
   };
-  const boundedString = (value) => {
+  const utf8Bytes = (value) => {
     if (typeof value === "string") {
       if (value.length > 65536) throw Failure("原生断言字符串超过64KiB");
       let bytes = 0;
@@ -261,7 +262,12 @@ function installNativeAssertions(
         else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
         if (bytes > 65536) throw Failure("原生断言字符串超过64KiB");
       }
+      return bytes;
     }
+    return 0;
+  };
+  const boundedString = (value) => {
+    utf8Bytes(value);
     return value;
   };
   const readCookie = (name) => {
@@ -292,6 +298,66 @@ function installNativeAssertions(
     if (!property.enumerable || !hasOwn(property, "value"))
       throw Failure("原生变量断言只读取当前自有数据字段");
     return boundedString(property.value);
+  };
+  // Fixed grammar only; user patterns are never used by this scanner.
+  const marker = new Pattern("\\{\\{([^{}]*?)\\}\\}", "g"),
+    reserved = create(null);
+  const reservedKeys = ownKeys(Object.prototype);
+  for (let at = 0; at < reservedKeys.length; at++)
+    reserved[reservedKeys[at]] = true;
+  reserved.prototype = true;
+  let expansionAttempts = 0;
+  const expandExpected = (input) => {
+    utf8Bytes(input);
+    let current = input;
+    for (let round = 0; round < 19; round++) {
+      marker.lastIndex = 0;
+      let match,
+        output = "",
+        bytes = 0,
+        cursor = 0;
+      const append = (part) => {
+        const count = utf8Bytes(part);
+        if (bytes + count > 65536) throw Failure("原生断言变量展开超过64KiB");
+        bytes += count;
+        output += part;
+      };
+      while ((match = executePattern(marker, current)) !== null) {
+        if (++expansionAttempts > 1000)
+          throw Failure("原生断言阶段变量展开最多1000次");
+        const name = match[1];
+        if (name.length > 1000) throw Failure("原生断言变量名称最多1000字符");
+        if (charCode(name, 0) === 36 || hasOwn(reserved, name))
+          throw Failure("原生断言变量展开不支持内置或保留名称");
+        append(slice(current, cursor, match.index));
+        const local = descriptor(variableMaps.local, name),
+          property = local || descriptor(variableMaps.effective, name);
+        let replacement = match[0];
+        if (property) {
+          if (!property.enumerable || !hasOwn(property, "value"))
+            throw Failure("原生断言变量展开只读取自有数据字段");
+          const value = property.value,
+            kind = typeof value;
+          if (
+            (value !== null &&
+              kind !== "undefined" &&
+              kind !== "string" &&
+              kind !== "boolean" &&
+              kind !== "number") ||
+            (kind === "number" && !finite(value))
+          )
+            throw Failure("原生断言变量展开只接受有限原始值");
+          replacement = value === undefined ? "" : string(value);
+          utf8Bytes(replacement);
+        }
+        append(replacement);
+        cursor = match.index + match[0].length;
+      }
+      append(slice(current, cursor));
+      if (output === current) return output;
+      current = output;
+    }
+    return current;
   };
   const readMetric = (name) => {
     const property = descriptor(metricResponse, name);
@@ -374,7 +440,10 @@ function installNativeAssertions(
       throw Failure(
         "原生断言仅比较有限JSON原始值或缺失值，不隐式转换对象/数组",
       );
-    const actual = string(value);
+    const actual = string(value),
+      expected = hasOwn(op, "expected")
+        ? expandExpected(op.expected)
+        : undefined;
     let passed = false,
       message = "响应值不满足声明比较";
     switch (op.comparison) {
@@ -382,11 +451,19 @@ function installNativeAssertions(
         // Pattern syntax is evaluated only after this task reads a safe source.
         // No flags grammar: remove all literal edge slashes, not whitespace.
         boundedString(actual);
+        if (
+          !expected.length ||
+          expected.length > 1024 ||
+          utf8Bytes(expected) > 4096
+        )
+          throw Failure(
+            "原生正则断言展开后需要非空有界模式（1024字符/4096字节）",
+          );
         let first = 0,
-          last = op.expected.length;
-        while (first < last && charCode(op.expected, first) === 47) first++;
-        while (last > first && charCode(op.expected, last - 1) === 47) last--;
-        const pattern = slice(op.expected, first, last);
+          last = expected.length;
+        while (first < last && charCode(expected, first) === 47) first++;
+        while (last > first && charCode(expected, last - 1) === 47) last--;
+        const pattern = slice(expected, first, last);
         // Normalization already bounds the raw pattern; trimming only shrinks it.
         const expression = new Pattern(pattern);
         passed = executePattern(expression, actual) !== null;
@@ -394,19 +471,19 @@ function installNativeAssertions(
         break;
       }
       case "eq":
-        passed = actual === op.expected;
+        passed = actual === expected;
         message = "响应值与预期不相等";
         break;
       case "uneq":
-        passed = actual !== op.expected;
+        passed = actual !== expected;
         message = "响应值与预期相等";
         break;
       case "includes":
-        passed = indexOf(actual, op.expected) !== -1;
+        passed = indexOf(actual, expected) !== -1;
         message = "响应值不包含预期字符串";
         break;
       case "unincludes":
-        passed = indexOf(actual, op.expected) === -1;
+        passed = indexOf(actual, expected) === -1;
         message = "响应值包含预期字符串";
         break;
       case "lt":
@@ -416,7 +493,7 @@ function installNativeAssertions(
         // Raw permitted primitives, not String(value). Conversion may produce
         // NaN/Infinity; these stay internal and ordinary comparisons are total.
         const left = number(value),
-          right = number(op.expected);
+          right = number(expected);
         passed =
           op.comparison === "lt"
             ? left < right
@@ -448,7 +525,7 @@ function installNativeAssertions(
         // split token can never contain one. No split array or CSV interpretation.
         const member =
           indexOf(actual, ",") === -1 &&
-          indexOf("," + op.expected + ",", "," + actual + ",") !== -1;
+          indexOf("," + expected + ",", "," + actual + ",") !== -1;
         passed = op.comparison === "belongscollection" ? member : !member;
         break;
       }

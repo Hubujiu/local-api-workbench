@@ -141,9 +141,9 @@ test("four unary comparators alone preserve omitted expected fields; active and 
       assert.throws(() =>
         normalizeNativeAssertionData(data(comparison, invalid)),
       );
-    assert.throws(
-      () => normalizeNativeAssertionData(data(comparison, "{{inert}}")),
-      /模板/,
+    assert.deepEqual(
+      normalizeNativeAssertionData(data(comparison, "{{$unsupported}}")),
+      data(comparison, "{{$unsupported}}"),
     );
     assert.deepEqual(
       normalizeNativeAssertionData(data(comparison, "{{inert}}"), {

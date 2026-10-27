@@ -44,7 +44,6 @@ test("metric paths are optional inert diagnostics; only declared bounded compari
     for (const expression of [
       { compareType: "eq" },
       { compareType: "eq", compareValue: 4 },
-      { compareType: "eq", compareValue: "{{active}}" },
       { compareType: "unsupportedComparison", compareValue: "4" },
       { compareType: "exist", path: undefined },
     ])

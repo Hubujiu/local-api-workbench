@@ -56,6 +56,7 @@ async function response(t) {
 test("regularmatch literal bounds preserve syntax lazily without host compilation", () => {
   for (const raw of [
     "[",
+    "{{dynamic}}",
     "///",
     "/abc/i",
     "//abc//",
@@ -73,13 +74,7 @@ test("regularmatch literal bounds preserve syntax lazily without host compilatio
       raw,
     );
   }
-  for (const raw of [
-    "",
-    "x".repeat(1025),
-    "汉".repeat(1025),
-    "\ud800",
-    "{{dynamic}}",
-  ])
+  for (const raw of ["", "x".repeat(1025), "汉".repeat(1025), "\ud800"])
     assert.throws(() =>
       normalizeNativeAssertionData(match("envVars", "value", raw).data),
     );
@@ -306,15 +301,17 @@ test("regularmatch imported HTTP lifecycle preserves before failure, post soft/s
   api.request.query.parameter = [];
   api.request.header.parameter = [];
   api.request.pre_tasks = [
-    script("pm.environment.set('candidate','before');"),
-    match("envVars", "{{candidate}}", "/^before$/", "before match"),
+    script(
+      "pm.environment.set('candidate','before');pm.variables.set('beforePattern','/^before$/');",
+    ),
+    match("envVars", "{{candidate}}", "{{beforePattern}}", "before match"),
   ];
   api.request.post_tasks = [
     script(
-      "pm.response.setBody('{\"value\":\"edited\"}');pm.environment.set('candidate','after');",
+      "pm.response.setBody('{\"value\":\"edited\"}');pm.environment.set('candidate','after');pm.variables.set('afterPattern','/^edited$/');pm.variables.set('falsePattern','^deliberate-false$');",
     ),
-    match("responseJson", "$.value", "/^edited$/", "current match"),
-    match("responseJson", "$.value", "^deliberate-false$", "soft false"),
+    match("responseJson", "$.value", "{{afterPattern}}", "current match"),
+    match("responseJson", "$.value", "{{falsePattern}}", "soft false"),
     script("pm.globals.set('finished','yes');"),
   ];
   for (const key of ["pre_tasks", "post_tasks"])
@@ -367,7 +364,7 @@ test("regularmatch imported HTTP lifecycle preserves before failure, post soft/s
   assert.equal(disk.environments[0].variables.candidate, "after");
   assert.equal(disk.globalVariables.finished, "yes");
   const syntax = structuredClone(request);
-  syntax.nativeTasks.after[1].data.expression.compareValue = "[";
+  syntax.nativeTasks.after[0].data += "pm.variables.set('afterPattern', '[');";
   const syntaxPlan = await post(`/api/projects/${p.id}/plans`, {
     steps: [
       { request: syntax },

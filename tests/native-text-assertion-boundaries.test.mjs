@@ -56,7 +56,6 @@ test("native Text assertion keeps optional inert diagnostic paths and closes act
   const missingPath = normalizeNativeAssertionData(data());
   assert(!Object.hasOwn(missingPath.expression, "path"));
   for (const sample of [
-    data("{{expected}}"),
     data(42),
     data("real", "regex"),
     data("real", "unsupportedComparison"),
