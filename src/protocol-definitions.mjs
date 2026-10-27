@@ -1,3 +1,6 @@
+import { normalizeHandshake } from "./protocol-handshake.mjs";
+import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { randomUUID } from "node:crypto";
 export function normalizeProtocol(input) {
@@ -46,7 +49,24 @@ export function normalizeProtocol(input) {
     if (input.type === "sse") throw Error("SSE 定义不支持发送消息");
     protocolPayload(input.message);
   }
+  const handshake = normalizeHandshake(input.handshake, input.type);
+  const requestOptions = protocolRequestOptions(input);
+  validateProtocolTemplate(input);
+  if (input.duration !== undefined) {
+    if (
+      !Number.isInteger(input.duration) ||
+      input.duration < 100 ||
+      input.duration > 30000
+    )
+      throw Error("协议默认时限须为100至30000毫秒");
+    requestOptions.duration = input.duration;
+  }
   return {
+    ...requestOptions,
+    ...(handshake === undefined ? {} : { handshake }),
+    ...(input.templateMode !== undefined
+      ? { templateMode: input.templateMode }
+      : {}),
     ...(input.receiveEncoding !== undefined
       ? { receiveEncoding: input.receiveEncoding }
       : {}),

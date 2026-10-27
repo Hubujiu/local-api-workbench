@@ -1,3 +1,4 @@
+import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
 import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
 import { exportApipost, apipostExportId } from "./apipost-export.mjs";
 import { importIntoProject, snapshotPlan } from "./core.mjs";
@@ -18,6 +19,19 @@ export function exportApipostDirectory(project, options = {}) {
     project.updatedAt || project.createdAt || new Date().toISOString();
   if (!Number.isFinite(Date.parse(timestamp))) throw Error("原生目录时间无效");
   const folders = new Map();
+  const nativeIds = new Map(
+    document.apis.map((node) => [
+      node.target_id,
+      scoped(
+        node.target_type === "folder"
+          ? "f"
+          : node.target_type === "doc"
+            ? "d"
+            : "a",
+        node.target_id,
+      ),
+    ]),
+  );
   const mapNode = (node) => {
     const copy = structuredClone(node);
     copy.target_id = scoped(
@@ -28,7 +42,9 @@ export function exportApipostDirectory(project, options = {}) {
           : "a",
       node.target_id,
     );
-    copy.parent_id = node.parent_id === "0" ? "0" : scoped("f", node.parent_id);
+    copy.parent_id =
+      node.parent_id === "0" ? "0" : nativeIds.get(node.parent_id);
+    if (copy.parent_id === undefined) throw Error("原生目录父资源不存在");
     if (node.mark_id) copy.mark_id = scoped("m", node.mark_id);
     for (const phase of ["pre_tasks", "post_tasks"])
       for (const [i, task] of (copy.request?.[phase] || []).entries())
@@ -289,6 +305,7 @@ export function exportApipostDirectory(project, options = {}) {
     dictionary: [],
   };
   importIntoProject(check, result, options);
+  verifyProtocolDefinitions(project.protocols, check.protocols);
   const withStatus = (p) =>
     (p.documents || []).map((d) => ({
       ...d,
