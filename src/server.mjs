@@ -1,3 +1,4 @@
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { exportApipostDirectory } from "./apipost-directory-export.mjs";
 import { exportApipost } from "./apipost-export.mjs";
 import {
@@ -646,22 +647,36 @@ export async function createApp({
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
-            importIntoProject(p, b.document);
+            importIntoProject(p, b.document, {
+              modelNameMode: b.modelNameMode,
+            });
             await store.save(p);
             return json(res, 200, p);
           }
-          if (action === "export" && req.method === "GET")
+          if (action === "export" && req.method === "GET") {
+            const values = u.searchParams.getAll("modelNameMode");
+            if (values.length > 1) throw Error("modelNameMode查询参数重复");
+            const modelNameMode = values[0];
+            resolveModelNameMode(modelNameMode);
+            if (
+              values.length &&
+              !["apipost", "apipost-directory"].includes(
+                u.searchParams.get("format"),
+              )
+            )
+              throw Error("modelNameMode仅支持Apipost原生格式");
             return json(
               res,
               200,
               u.searchParams.get("format") === "apipost-directory"
-                ? exportApipostDirectory(p)
+                ? exportApipostDirectory(p, { modelNameMode })
                 : u.searchParams.get("format") === "apipost"
-                  ? exportApipost(p)
+                  ? exportApipost(p, { modelNameMode })
                   : u.searchParams.get("format") === "openapi"
                     ? exportOpenAPI(p)
                     : p,
             );
+          }
           if (action === "grpc-reflection" && req.method === "POST") {
             const { runId, ...input } = await body(req);
             return await withGrpcTask(runId, async (runId, signal) =>

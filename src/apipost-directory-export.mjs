@@ -5,12 +5,12 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
-export function exportApipostDirectory(project) {
+export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
-  const document = exportApipost(base);
+  const document = exportApipost(base, options);
   const projectId = document.project_id;
   const scoped = (kind, value) =>
     apipostExportId(kind, projectId + "\0" + value);
@@ -112,7 +112,10 @@ export function exportApipostDirectory(project) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
-      const frozen = exportApipost({ ...base, requests: [snapshotRequest] });
+      const frozen = exportApipost(
+        { ...base, requests: [snapshotRequest] },
+        options,
+      );
       for (const folder of frozen.apis.filter(
         (n) => n.target_type === "folder",
       )) {
@@ -285,7 +288,7 @@ export function exportApipostDirectory(project) {
     documents: [],
     dictionary: [],
   };
-  importIntoProject(check, result);
+  importIntoProject(check, result, options);
   const withStatus = (p) =>
     (p.documents || []).map((d) => ({
       ...d,

@@ -137,7 +137,7 @@ function tasks(request, phase) {
       ]
     : [];
 }
-export function exportApipost(project) {
+export function exportApipost(project, options = {}) {
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -209,8 +209,10 @@ export function exportApipost(project) {
       }
     }
   const projectId = apipostExportId("project", project.id);
-  const modelExport = prepareApipostModelExport(project, (kind, value) =>
-    apipostExportId(kind, projectId + "\0" + value),
+  const modelExport = prepareApipostModelExport(
+    project,
+    (kind, value) => apipostExportId(kind, projectId + "\0" + value),
+    options,
   );
   if ((project.servers || []).length > 1)
     throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");

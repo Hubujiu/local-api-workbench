@@ -300,3 +300,22 @@ normalization, which would otherwise replace false with `{}`; it does not change
 generic normalization or recover information already discarded on earlier input.
 The response exporter retains its existing object-schema contract. No boolean
 schema execution acceptance is claimed.
+
+### Explicit model-name mode
+
+Native import and export now accept the caller option `modelNameMode: "preserve"`.
+Owner imports supply it in the request body beside `document`; owner exports use
+one `modelNameMode=preserve` query parameter. Each side must select it independently.
+Omission or `namespaced` keeps the existing namespace behavior and its export
+preconditions. Imported file fields never opt in; no project setting or private
+native extension is added. The existing native `name` / effective `display_name`
+carry the exact current name in preserve mode (valid Unicode, nonblank, <=200
+UTF-16 units). No guessed truncation or prefix removal occurs. Duplicate effective
+names reject rather than silently rename. Project renaming and mixed-source names
+are thus reversible only when both callers explicitly choose preserve.
+
+The option propagates through directory frozen API conversion and final readback,
+without freezing a new model-library snapshot or changing schema execution. Invalid
+options, repeated export query options, and options for nonnative formats reject
+before persistence. Existing reference-graph and unsupported-data limits remain.
+Full Workbench backups continue preserving identity and all names without this option.
