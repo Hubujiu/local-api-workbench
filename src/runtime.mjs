@@ -1,3 +1,4 @@
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -242,8 +243,14 @@ export class Store {
         normalizeParameterEntry,
       );
     }
-    for (const request of p.requests || [])
+    for (const request of p.requests || []) {
       validateMockRules(request.mockRules || []);
+      if (request.nativeMock !== undefined) {
+        if (request.mockRules?.length)
+          throw Error("原版Mock与普通Mock规则不能混用");
+        request.nativeMock = normalizeNativeMock(request.nativeMock);
+      }
+    }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)
         throw Error("用例最多1000个");
