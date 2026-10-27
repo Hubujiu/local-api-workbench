@@ -75,7 +75,7 @@ test("native assert data keeps disabled defaults inert and rejects active unsafe
   assert.throws(() => normalizeNativeAssertionData(data));
   for (const patch of [
     { path: "$[*]" },
-    { compareType: "lt" },
+    { compareType: "regularmatch" },
     { compareValue: "{{token}}" },
     { compareValue: 0 },
   ])

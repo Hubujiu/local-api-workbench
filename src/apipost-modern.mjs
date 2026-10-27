@@ -330,7 +330,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           ? "原生wait仅支持0至1000ms整数、同阶段合计1000ms；使用有界异步定时器而非原同步sleep，等待期间其他已授权回调可能运行；禁用数据仅惰性保存。"
           : "") +
         (tasks.some((task) => task.type === "assert")
-          ? "原生断言仅支持后置responseCode/严格responseJson/有可信传输证据的responseHeader/有界string(P) responseXml/当前responseText与eq/uneq/includes/unincludes字面比较；不展开模板、转换对象、自动回退XML或执行任意路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
+          ? "原生断言仅支持后置responseCode/严格responseJson/有可信传输证据的responseHeader/有界string(P) responseXml/当前responseText与14种非正则字面比较（四种一元比较可省预期值）；不展开模板、转换对象、自动回退XML或执行任意路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
           : "") +
         (tasks.some((task) => task.type === "pickVars")
           ? "pickVars仅支持后置严格JSON单值路径、有完整唯一传输证据的字面响应头、有界XML string(P)唯一叶元素/属性或完整当前Text字符串正文，不回退其他来源，不执行任意路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"

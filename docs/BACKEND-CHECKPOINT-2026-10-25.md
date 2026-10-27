@@ -1,15 +1,15 @@
-# 后端检查点 · 2026-10-26 23:27 UTC
+# 后端检查点 · 2026-10-27 00:12 UTC
 
 这是精确提交及已验证范围的检查点，不是完整产品交付声明。更早阶段的实现、RED 和修复证据保留在 Git 历史、各 ADR 与 PR 正文，不以旧绿灯替代新组合。
 
 ## 最新全项 CI 通过的组合（不是完整交付）
 
-- 组合：9d6730d29bdc0ad13554c72fdd2b89c48f22ae39。
-- Tree：86ee4917ea85128bc1f874c558acdb38a0424a05，与本地39820272e32e274017f375776d7756651d2d1558一致。
-- Push CI：[40410899298](https://github.com/Hubujiu/local-api-workbench/actions/runs/40410899298)，首轮全部10个job成功；全部实际checkout为该SHA。
+- 组合：280779dfc966b4b40da1de5cd2003e7f4f5a6b75。
+- Tree：d02c72d38b0cb7ef041da0f3d988a643f87c3cab，与本地4c909bb8899b470d2620b872a73636455e470b75一致。
+- Push CI：[40420157346](https://github.com/Hubujiu/local-api-workbench/actions/runs/40420157346)，首轮全部10个job成功；全部实际checkout为该SHA。
 - 覆盖原生混排任务定义导出/回读、真实HTTP/MCP/CLI执行、隔离/冻结/备份恢复；MCP两种原生格式导入导出、权限边界、真实journal未知提交恢复及stdio完整转义帧限制。
 - 既有真实数据库/TLS、三平台production-only stdio、脚本累计预算仍通过。测试结果不是交付百分比。
-- **该基线包含PostgreSQL ACK后清理、真实持锁超时、PR25响应头提取与PR26响应头断言；不包含下述新的XML提取扩展。**
+- **该基线包含PostgreSQL ACK后清理、真实持锁超时、Header/XML/Text提取与断言以及includes/unincludes；不包含下述新增10种比较器。独立XML专项审查尚未完成，历史Mac预算失败未证明根因修复。**
 
 ## 最近功能PR与精确CI
 
@@ -171,3 +171,18 @@ Text断言path可缺省，存在则只作有界字面诊断，不作为选择器
 XML-only成本修复组合aeef3c71c2ea1f809c1595fa9ecc1c5c82726e65/treeddd6e015be076b22324c035ce988adc12bc8138f的CI40418205448最终9success/1Mac core失败，Mac1654/1657，Ubuntu/Windows1657/1657。三项分别为新增七task双phase、XMLassert资源边界、旧script-xml nodes拒绝case，均触及原活动预算；资源case日志未分子阶段，不能断定具体输入。原七assert并发生命周期此次三OS通过，不抵消其他RED。新203/50c独立CI同样保留Mac compatibility/旧XMLcase的RED。
 
 CPU时间与计费elapsed存在差距，只能说明观测差异，不证明系统争用是唯一原因；没有把timeout当预期内容拒绝、串行化隔离测试、改变预算或盲重跑。新Text虽增加真实功能且独立绿，不能称已修复这些历史问题。新组合等aeef终态后才发布，避免取消仍在验证的旧组合；完整独立XML guard专项仍未完成。
+
+
+## PR26 非正则比较器整批增量（2026-10-27 00:12 UTC）
+
+head098510c0220156694c1df342965e9bc374a42d12/tree39e8090aaf7878fd4fce4a2889be7f245b264215=localf087f2dfed656ecfadcfd72ec82efacce151a20b，singleparent51cbaa，继续原PR26。共14种非regex比较：既有eq/uneq/includes/unincludes，加lt/lte/gt/gte、null/notnull、exist/notexist、belongscollection/notbelongscollection；regex与原五来源外类型仍拒绝，不扩大来源有限primitive/absence域。
+
+数值按捕获Number(raw actual)与字面expected转换；NaN关系比较是已完成softfalse，合法字符串转出的内部Infinity可比较，但来源直接非finite number仍拒绝，内部Infinity不作为变量JSON值写出。null仅空string通过，其他已允许primitive对应原Chai callback类型失败而非stageerror；notnull先String，exist/notexist以null/undefined存在性判断。collection是精确字面逗号成员，不trim、无CSV引号，空成员保留；candidate含comma为不属于而非异常。诊断是Workbench固定有界文案，非原Chai逐字错误复刻。
+
+四unary允许compareValue缺省且保持缺省；若提供仍自有有界literal string、启用时拒模板。binary必填string；disabled未配置类型保持原界限。源获取/解析错误仍stageerror，notexist不能把不可信Header、XML无节点或Text缺body转为通过；私有证据/完成性/配额及assert-only普通继续、activepick严格rollback/stop都保留。
+
+独立CI40422822104终态9success/1Mac core失败，Mac1290/1291，Ubuntu/Windows1291/1291；实际merge78f7987797053e6c5c7a860340cb361effcbf499/tree=head。唯一失败为真实A/C并发生命周期第二XML/Text阶段活动预算超时，两run首步12条Code/Header/JSON断言与后续普通步骤通过，但不能把stage timeout当比较false或接受通过。全部预算与并发保持，没有重跑。
+
+本地正式16+25+81定向通过；root新比较器+惰性来源28项通过，正确文件名的既有原生任务导出两文件另9项通过。澄清此前root命令中的native-task-export.test.mjs不存在而被Node忽略，不能将该pattern计为已执行；实际导出覆盖来自独立入口/full CI及本次apipost-task-export.test.mjs与native-task-export-entrypoints.test.mjs。新增完整入口commit e6bb3bf5e9cf2c481923c57126f898524e87363f的15项通过：H1/H2官方HTTP/stdio SDK、真CLI、native API回读、backup/restart、44条比较证据、unary缺值、NaN soft/strict、7种源读取错误、原子拒绝/权限隔离、四unary来源惰性、真实final journal unknown同ID恢复不重放。新组合仍待自身CI，不借280或上述本地结果代验。
+
+可信固定库bytecode仅在隔离原型分支评估/构建，不改变当前生产默认加载或预算；需要私有C桥、source/ABI/hash白名单、正确内存计费与句柄所有权及性能实证，不能把方案当已优化或绕过现有检查。活动250ms仍为同步段墙钟累计，thread CPU仅诊断，不改CPU计费来掩盖失败。
