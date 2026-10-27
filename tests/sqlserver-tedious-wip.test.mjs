@@ -113,7 +113,13 @@ function fixture(t, behavior = {}) {
 }
 test("Tedious WIP binds real TYPES, checks same-connection probe, maps nullable int64 and closes owned socket", async (t) => {
   const f = fixture(t);
-  const r = await runSQLServerReadWIP(input, { factory: f.factory });
+  const r = await runSQLServerReadWIP(
+    {
+      ...input,
+      connection: { ...input.connection, ca: "contract-only CA bytes" },
+    },
+    { factory: f.factory },
+  );
   assert.equal(r.rows[0].id, "9223372036854775807");
   assert.equal(f.connections.length, 1);
   assert.equal(f.connections[0].closes, 1);
@@ -132,6 +138,12 @@ test("Tedious WIP binds real TYPES, checks same-connection probe, maps nullable 
   const config = f.connections[0].config;
   assert.equal(config.authentication.type, "default");
   assert.equal(config.options.encrypt, true);
+  assert.equal(config.options.serverName, "fixture.invalid");
+  assert.deepEqual(config.options.cryptoCredentialsDetails, {
+    ca: "contract-only CA bytes",
+    rejectUnauthorized: true,
+    minVersion: "TLSv1.2",
+  });
   assert.equal(config.options.trustServerCertificate, false);
   assert.equal(config.options.fallbackToDefaultDb, false);
   assert.equal(config.options.readOnlyIntent, false);
@@ -275,4 +287,71 @@ test("Tedious WIP real installed driver constructs/closes without connect and re
       authentication: { type: "azure-active-directory-default" },
     }),
   );
+});
+
+test("Tedious WIP success waits for owned socket close even after driver end", async (t) => {
+  let releaseClose;
+  const f = fixture(t, {
+    query: (r) => {
+      const socket = f.sockets[0];
+      const emit = socket.emit;
+      t.mock.method(socket, "emit", function (name, ...args) {
+        if (name === "close") {
+          releaseClose = () => emit.call(this, name, ...args);
+          return true;
+        }
+        return emit.call(this, name, ...args);
+      });
+      result(r, [col()], [["1"]]);
+    },
+  });
+  let settled = false;
+  const promise = runSQLServerReadWIP(input, { factory: f.factory });
+  promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await new Promise(setImmediate);
+  assert.equal(f.connections[0].closes, 1);
+  assert.equal(typeof releaseClose, "function");
+  assert.equal(settled, false);
+  releaseClose();
+  assert.equal((await promise).rows[0].id, "1");
+});
+
+test("Tedious WIP adapter events preserve truncation sentinel and reject row/byte overflow", async (t) => {
+  for (const count of [1001, 1002]) {
+    const f = fixture(t, {
+      query: (r) =>
+        result(
+          r,
+          [col("IntN", 4)],
+          Array.from({ length: count }, (_, i) => [i]),
+        ),
+    });
+    const promise = runSQLServerReadWIP(input, { factory: f.factory });
+    if (count === 1001) {
+      const r = await promise;
+      assert.equal(r.rows.length, 1000);
+      assert.equal(r.truncated, true);
+    } else await assert.rejects(promise, /no result published/);
+    t.mock.restoreAll();
+  }
+  const f = fixture(t, {
+    query: (r) =>
+      result(
+        r,
+        [col("NVarChar", 8000)],
+        Array.from({ length: 300 }, () => ["x".repeat(4000)]),
+      ),
+  });
+  await assert.rejects(
+    runSQLServerReadWIP(input, { factory: f.factory }),
+    /no result published/,
+  );
+  assert.equal(f.requests[1].cancels, 1);
 });

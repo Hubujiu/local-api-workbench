@@ -128,12 +128,15 @@ that driver `end` can precede the owned socket's actual `close`. Accordingly:
   memory bound: Tedious buffers TDS tokens/rows internally before application
   events, and hostile/large wire input remains an explicit acceptance gap.
 
-Six new ordinary adapter tests inject only Connection/Request classes and replace
+Eight new ordinary adapter tests inject only Connection/Request classes and replace
 Node Socket.connect before running, so no DNS/TCP connection can occur. They
 exercise mapping/parameters, probe ordering, routing's independent second-call
 gate, cancellation/late callbacks, metadata rejection and closure deadlines.
+They independently hold driver end or socket close, assert custom CA/hostname/TLS
+options, and exercise the truncation sentinel and row/byte overflow through the
+actual adapter event mapping (still not actual TDS input).
 One test constructs/closes the installed real driver without calling connect.
-Together with seven existing compiler/port tests: 13 passed, no skips. These are
+Together with seven existing compiler/port tests: 15 passed, no skips. These are
 NOT real TDS, TLS/certificate, SQL read-only, server timeout or cancellation tests.
 
 ### Known dependency audit blocker (not waived)
