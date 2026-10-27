@@ -28,6 +28,11 @@ import { SocketIOSessions } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { executeGrpc } from "./grpc.mjs";
 import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
+import {
+  importMCPProject,
+  exportMCPProject,
+  validateMCPProjectArguments,
+} from "./mcp-project-interchange.mjs";
 import { applyMCPInput } from "./mcp-request-input.mjs";
 import {
   listExecutionHistory,
@@ -225,6 +230,37 @@ export function createMCP({
   }
   const str = { type: "string" },
     projectArg = { projectId: str };
+  const projectFormat = {
+    type: "string",
+    enum: ["apipost", "apipost-directory"],
+  };
+  addTool(
+    "export_project",
+    "导出已授权项目的 Apipost 定义 JSON；可能包含已保存的凭据，不执行请求",
+    {
+      ...projectArg,
+      format: projectFormat,
+      modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+    },
+    ["projectId", "format"],
+  );
+  if (write)
+    addTool(
+      "import_project",
+      "向已授权项目合并 Apipost 定义 JSON；不清空、不新建项目、不执行请求",
+      {
+        ...projectArg,
+        format: projectFormat,
+        inheritanceMode: { type: "string", enum: ["flatten", "preserve"] },
+        modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+        document: {
+          type: "object",
+          description:
+            "内联 JSON 对象，序列化 UTF-8 最多4MiB、64层；不是路径或URL",
+        },
+      },
+      ["projectId", "format", "document"],
+    );
   addTool(
     "list_grpc_definitions",
     "读取项目gRPC定义摘要，不连接远端",
@@ -386,12 +422,34 @@ export function createMCP({
         id: requestId,
         error: { code: -32601, message: "Method not found" },
       };
+    // These bounded interchange tools cannot echo an unbounded/structured ID
+    // even in their error envelope. Other tools retain their existing contract.
+    const projectInterchange = [
+      "localapi_import_project",
+      "localapi_export_project",
+    ].includes(params?.name);
+    if (
+      projectInterchange &&
+      !(
+        (typeof requestId === "string" &&
+          Buffer.byteLength(requestId) <= 256) ||
+        (typeof requestId === "number" && Number.isSafeInteger(requestId))
+      )
+    )
+      return {
+        jsonrpc: "2.0",
+        error: {
+          code: -32600,
+          message: "项目导入导出请求ID必须为安全整数或最多256字节的字符串",
+        },
+      };
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
+      if (projectInterchange) validateMCPProjectArguments(args);
       for (const key of tool.inputSchema.required)
         if (!Object.hasOwn(args, key)) throw Error("缺少参数 " + key);
       for (const [key, value] of Object.entries(args)) {
@@ -502,6 +560,10 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_import_project":
+              return result(await importMCPProject(store, p, args, requestId));
+            case "localapi_export_project":
+              return result(exportMCPProject(p, args, requestId));
             case "localapi_list_protocol_runs":
               output = (p.protocolRuns || []).map(
                 ({ id, runId, type, mode, status, createdAt, durationMs }) => ({
@@ -928,7 +990,16 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: projectInterchange
+              ? typeof e.message === "string"
+                ? e.message.slice(0, 2048)
+                : "项目导入导出失败"
+              : e.message,
+          },
+        ],
       });
     } finally {
       unlockPlan?.();
