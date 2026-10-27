@@ -1,3 +1,9 @@
+import {
+  validateRepeatGraph,
+  mapPlanLeaves,
+  planLeaves,
+  planOccurrences,
+} from "./plan-repeat.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
@@ -371,6 +377,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const repeated = validateRepeatGraph(plan.steps);
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -378,7 +385,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
-  return {
+  const snapshot = {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -389,7 +396,7 @@ export function snapshotPlan(plan) {
     provenance: plan.provenance || { fields: {}, steps: {} },
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
-    steps: plan.steps.map((s) =>
+    steps: mapPlanLeaves(plan.steps, (s) =>
       s.type === "grpc"
         ? {
             ...snapshotGrpcStep(s),
@@ -426,6 +433,24 @@ export function snapshotPlan(plan) {
               },
     ),
   };
+  if (repeated) {
+    snapshot.steps = snapshot.steps.map((step) =>
+      step.type === "repeat"
+        ? {
+            type: "repeat",
+            id: step.id || id(),
+            name: step.name ?? "循环组",
+            enabled: step.enabled !== false,
+            count: step.count,
+            steps: step.steps,
+          }
+        : step,
+    );
+    validateRepeatGraph(snapshot.steps, { requireIds: true });
+    if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
+      throw Error("循环计划冻结定义最多4MiB");
+  }
+  return snapshot;
 }
 export async function runPlan(
   plan,
@@ -449,27 +474,30 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
-  const snapshot = structuredClone(plan);
+  const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
-  for (const step of snapshot.steps)
+  for (const step of planLeaves(snapshot.steps))
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
-  if (!snapshot.steps.some((step) => step.enabled !== false)) {
+  const occurrences = planOccurrences(snapshot.steps);
+  if (!occurrences.length) {
     throw Error("计划没有可执行步骤");
   }
-  for (const step of snapshot.steps) {
+  for (const { step, repeat } of occurrences) {
     if (signal?.aborted) break;
     if (step.enabled === false) continue;
     const record = {
       stepId: step.id,
+      ...(repeat ? { repeat: { ...repeat } } : {}),
       name: step.name,
       startedAt: new Date().toISOString(),
       status: "failed",
@@ -1815,6 +1843,7 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  for (const plan of document.plans || []) validateRepeatGraph(plan.steps);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

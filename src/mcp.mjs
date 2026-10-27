@@ -1,3 +1,4 @@
+import { activePlanStepCount } from "./plan-repeat.mjs";
 import { appendExecutionRecord } from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
@@ -682,8 +683,8 @@ export function createMCP({
                   onStep: (step) =>
                     onProgress({
                       completed: ++completed,
-                      total: plan.steps.filter((s) => s.enabled !== false)
-                        .length,
+                      total: activePlanStepCount(plan),
+                      ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,
                     }),

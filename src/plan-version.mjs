@@ -1,19 +1,27 @@
+import {
+  validateRepeatGraph,
+  mapPlanLeaves,
+  planLeaves,
+} from "./plan-repeat.mjs";
 import { freezeWireStep } from "./wire-plan.mjs";
 import { freezeSocketIOStep } from "./socketio-plan.mjs";
 import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  validateRepeatGraph(input.steps);
   if (project && Array.isArray(input.steps))
     input = {
       ...input,
-      steps: input.steps.map((step) => {
+      steps: mapPlanLeaves(input.steps, (step) => {
         if (step.type === "protocol") return freezeWireStep(project, step);
         if (step.type === "grpc") return freezeGrpcStep(project, step);
         if (step.type === "socketio") return freezeSocketIOStep(project, step);
-        const oldStep = previous?.steps?.find(
-          (item) => item.id && item.id === step.id,
-        );
+        const oldStep =
+          previous?.steps &&
+          planLeaves(previous.steps).find(
+            (item) => item.id && item.id === step.id,
+          );
         const request =
           oldStep && !Object.hasOwn(step.request || {}, "serviceSnapshot")
             ? { ...step.request, serviceSnapshot: true }
