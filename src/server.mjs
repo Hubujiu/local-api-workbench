@@ -770,6 +770,18 @@ export async function createApp({
             ((req.method === "GET" && !parts[5]) ||
               (req.method === "POST" && parts[5] === "stop"));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
+          if (
+            action === "native-inheritance-edit" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("继承图操作不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.editNativeInheritance(p.id, await body(req)),
+            );
+          }
           if (action === "imported-execution-runs") {
             if (req.method !== "GET")
               return json(res, 405, { error: "原始记录查询仅支持GET" });

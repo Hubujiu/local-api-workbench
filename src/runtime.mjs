@@ -2,6 +2,7 @@ import { hasRepeatSteps } from "./plan-repeat.mjs";
 import {
   validateNativeInheritanceProject,
   assertNativeInheritanceIdentity,
+  editNativeInheritance,
 } from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
@@ -239,7 +240,26 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async save(p, { activity = false, signal } = {}) {
+  async editNativeInheritance(projectId, input) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (k) => !["configRevision", "operation"].includes(k),
+      ) ||
+      !Number.isSafeInteger(input.configRevision) ||
+      input.configRevision < 0
+    )
+      throw Error("继承图操作必须提供有效configRevision和operation");
+    const current = await this.get(projectId);
+    if (input.configRevision !== current.configRevision)
+      throw Error("项目已有其他修改，请重新加载");
+    const next = editNativeInheritance(current, input.operation);
+    const operation = structuredClone(input.operation);
+    return this.save(next, { nativeInheritanceEdit: operation });
+  }
+  async save(p, { activity = false, signal, nativeInheritanceEdit } = {}) {
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
@@ -346,7 +366,21 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
-          assertNativeInheritanceIdentity(previous, p);
+          // Disk JSON omits optional undefined fields. Compare both sides after
+          // the same existing snapshot normalization, not raw disk vs JS shape.
+          const identityPrevious =
+            nativeInheritanceEdit && previous
+              ? {
+                  ...previous,
+                  plans: previous.plans.map(snapshotPlan),
+                  cases: previous.cases?.map(snapshotCase),
+                }
+              : previous;
+          assertNativeInheritanceIdentity(
+            identityPrevious,
+            p,
+            nativeInheritanceEdit,
+          );
           if (
             previous &&
             p._diskFingerprint &&

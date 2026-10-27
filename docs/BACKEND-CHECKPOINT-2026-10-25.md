@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-27 17:03 UTC
+# 后端检查点 · 2026-10-27 17:24 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 17:24 保图结构编辑与冻结证据组合候选
+
+- 最后完整已核根仍为 `4fe9edb4`，完整证据见下节；Mock组合 remote `da97a0e92045fca96538092b1d624816fac17924` / local `0ce480a84498d1b474c1c2e2b9e893a98b92f8c5` / tree `d869200a5daa57fd404e2567303835fd35071bd0` 的精确CI `40549158177` 在本节记录时尚未全部终态，不能提前改判。新结构编辑先在本地组合，不混用该仍在跑的树。
+- PR14最新测试组织头 local `16d0fddbccb55133b87ca655b0963199d2b08948` / remote `64167a694fcf1dc8c8f65ad204db7a0d1de83e0a` / tree `d4a0e8cf3ee1b29fa7b632bf7b296fcd1315ed20` 独立CI `40547887355` 首次19/19 GREEN；19actual `7f9d4c01746990ebf3226ac33660d67be3145138` 精确同树，12ZIP摘要与276文件四分片69完整核验，hash `ec79284610fc7e3ab7d70014e5f4f80f0f70d475305db08d785b5af2ff607d9d`。三OS各1247通过，13个媒体恢复完成诊断齐全；原聚合30s取消和累计测试预算增加说明保留，不冒充性能修复。
+- 结构编辑同PR43 local `32352984c74762c04587e7a347be4cfcd93f429d` / remote `445a2aca780d7f2a7c4e1ba5214dc46edd056711` / tree `91e4147cf5ae73bc08d4c462ea4832bbc2670255`，仍以固定旧PR14 `9c66155` 纯依赖为base，无root倒灌。独立CI `40548657394` 首次19/19 GREEN；19actual `b29d74459491ea6a67a75f890b5890aa0b180aec` 精确同树；12ZIP摘要／278文件70/70/69/69完整互斥，hash `29776f37f4778074a5835a04469b678382cccb3d8411a11e7189b4da8c389c96`，三OS各1242通过无失败／取消／跳过。旧修复头CI `40548354532` cancelled，不作绿色；更早2075684阶段虽有绿色CI，但后来真实case／plan历史链暴露误拒，保留该失败而不借阶段绿验收。
+- owner `POST /api/projects/:id/native-inheritance-edit` 仅接受显式当前configRevision及move-folder／move-request精确操作；同项目已有父目录、root父0、名称/冲突/循环边界严格校验。Store锁内依据previous重算，按允许变更与候选完整比对，普通PUT仍拒结构改动，内部选项不能从body注入。保留source ID和绑定闭合，移动后有效form／auth继续验证；回收／恢复／解绑不在本片，不建立新的tombstone信任合同，不级联删旧快照。
+- 初次实际带case／plan／history移动400，原因是Store保存再次snapshot正规化引入磁盘JSON省略的undefined字段，原盘态与候选形状不同。修复为锁内两侧同样走既有snapshot正规化再比较，不移除证据保护。独立原RED已转PASS；旧用例／计划仍用旧父配置，live使用新父层，未授权、旧revision、缺ID／跨项目父、循环、冲突与注入原子拒绝。
+- 根生产合并点 `fa371fbcb651a73dc4ded4057fc1041f818ed2d0` / tree `0627849cd7dc26811badb424af5042aee28cd0f8`：runtime保留activity／signal及两次取消检查后加入操作；server保留损坏存储下protocol证据读取路径再加owner动作。根仅测试提交 `0c8bb4b9f96a4d2b79b2a49626faa72734c8c848` / tree `54f0fd6a9cba04f06580521bb93ce0114e3da7eb` 补真实repeat交叉，18完整文件91/91通过，0fail/cancel/skip，42.393秒；check／format／diff及代码树一致均过，生产0额外修改。后续仅本文及README变化，新根CI尚待。
+- 同一真实长链先保存并执行普通plan／repeat及case，目录/API移动中核plans／cases／history／runs不变；重复组leaf/group/occurrence及planHash保持，移动后和完整backup真重启后继续执行并用新Store核保存收据。native repeat出口仍明确拒。旧冻结folder消失时plan-only目录出口仍拒，不重建被移走的目录；仅API移动且旧目录保留时graph＋HTTP flow可往返，live新父与冻结旧父分别验证。含cases完整原生出口仍拒，definition-only双代使用明确拷贝去cases/plans，不冒称含全部历史的迁移；完整Workbench备份保全部。
+- 未新增前端界面或将普通UI PUT改为新动作；这是owner后端闭环。VM／预算与暂停专项、原版运行／许可边界未动；无main/develop合并、无部署。原生automated_testings及其余未证范围继续单列。
 
 ## 17:03 Mock媒体定义往返组合候选
 
