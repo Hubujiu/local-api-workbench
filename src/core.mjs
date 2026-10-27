@@ -925,23 +925,35 @@ export async function runPlan(
             (assertion) => ({ ...assertion, phase: "response" }),
           ),
         );
+        // Resolve and validate the entire list before publishing any values.
+        // HTTP status/assertion failures still permit extraction, and successful
+        // lists remain visible to the existing post operations and script phase.
+        const resolvedExtractions = [];
         for (const extraction of record.request.extract) {
           const value = await extractResponse(record.response, extraction);
           const destination = extraction.scope || "runtime";
-          if (destination === "local") localVariables[extraction.name] = value;
-          else if (destination === "environment")
-            scopes.environment[extraction.name] = value;
-          else if (destination === "global")
-            scopes.globals[extraction.name] = value;
-          else if (destination === "runtime") {
-            scopes.runtime[extraction.name] = value;
-            scopes.hidden = scopes.hidden.filter(
-              (name) => name !== extraction.name,
-            );
-          } else throw Error("未知提取变量作用域");
-          replaceVariables(vars, effectiveScopes(scopes));
-          record.extracted[extraction.name] = value;
+          if (
+            !["local", "environment", "global", "runtime"].includes(destination)
+          )
+            throw Error("未知提取变量作用域");
+          resolvedExtractions.push({
+            name: extraction.name,
+            destination,
+            value,
+          });
         }
+        for (const { name, destination, value } of resolvedExtractions) {
+          if (destination === "local") localVariables[name] = value;
+          else if (destination === "environment")
+            scopes.environment[name] = value;
+          else if (destination === "global") scopes.globals[name] = value;
+          else {
+            scopes.runtime[name] = value;
+            scopes.hidden = scopes.hidden.filter((hidden) => hidden !== name);
+          }
+          record.extracted[name] = value;
+        }
+        replaceVariables(vars, effectiveScopes(scopes));
         const beforeAfterOperations = { ...vars };
         const afterDatabaseBudget = {
           count: 0,

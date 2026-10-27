@@ -1,6 +1,15 @@
-# 后端检查点 · 2026-10-27 11:25 UTC
+# 后端检查点 · 2026-10-27 11:37 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 11:37 普通 HTTP 提取列表原子性组合候选
+
+- 上一根 `40b6` 首次 CI `40496321790` 全19项 GREEN，实际 checkout `40b6` / tree `cced3b82`；三 OS 各1944通过，12份实际诊断清单覆盖371文件（93/93/93/92），hash `bd735e295e628b4c23a28cb2fd27d88b0cb66485b49f976d9fbb7027d5c7b0e4`。该树包含协议提取修复，不包含本次普通 HTTP 修复。
+- 本候选生产与 owner 测试最终合并点 `6712fdc9bc17f7ccd046b9bf17206db127a602fb` / tree `004ac6d9b8fbff213e0f0bf924c0859691175c9b`，合入 PR42 local `484e1660d23dc6cea087356dfefa5613ae4f5543` / remote `8f14ba761da673120a0b4864932301d2c19807dd` / feature tree `efb7fa3c34a59445bcaa06b69f8c4133255baf75`。PR42 独立 CI `40497295089` 与新根组合 CI 在此记录时尚待，不能以之前绿色结果替代。
+- 普通 HTTP 的声明式 `request.extract` 仅列表自身原子：先解析校验所有行，再按原顺序应用，后行缺失时 extracted 为空且候选不会进入后续请求。HTTP 500／响应断言失败仍能提取；完整列表可供后置操作／脚本读取，后续独立 after 操作或持久化 callback 失败不扩大回滚语义。原生 native pick 严格阶段、协议计划 passed-only、解析器、VM 与预算均保持各自合同。
+- 根新增官方 SDK HTTP／stdio 两条五步冻结整链：prime 提交三个独立作用域值→合法前项与缺失末项失败→真实 HTTP 回显 committed→HTTP 500 合法整批提取→真实 HTTP 回显 fresh，并验证500后的脚本确实可见完整提取。冻结后改 live URL／提取列表，执行仍用冻结定义。每条继续真实 CLI exit1，failed 结果同时 recordSaved=true，attemptedRecordId／recordId／run.id 与独立新 Store 中历史精确一致；备份恢复重启后再次 CLI，原项目和恢复副本历史分离、第三项目不变，不把CLI任意非零码误当通过。
+- PR41 最终独立 CI `40495941454` 首次全10项 GREEN，全部实际 checkout `26e8c8e0f27efc06de06c4a2949ce39aba210e88` / tree `2d34a0d978221d2f15c4e4deb3ba352d17a5824f`，三 OS 各1080通过；三份实际 ZIP digest 与 TAP 已核，新增24项协议整链均存在且通过。这只确认该功能头，不代替本候选组合。
+- 本候选八个完整相关测试文件71/71通过，包含普通HTTP提取、协议提取及既有native comparator阶段／SDK回归；全库check、format:check与diff检查通过。本次根改动仅组合测试与说明，不修改生产实现。历史 f83/8b5 Windows XML RED仍未修复或改判；原版GUI与暂停专项不在本次范围，PR37实验仍关闭；未合 main/develop、未部署。
 
 ## 11:25 协议提取批次原子性组合候选
 
