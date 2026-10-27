@@ -571,9 +571,8 @@ export async function runPlan(
           record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
+        if (signal?.aborted) throw Error("执行已取消，未开始新的协议变量提交");
         if (record.status === "passed") {
-          if (signal?.aborted)
-            throw Error("执行已取消，未开始新的协议变量提交");
           // Resolve the entire ordinary protocol extraction batch without
           // publishing any scope or receipt. A later missing path must not
           // expose earlier values to the next (still permitted) HTTP step.
