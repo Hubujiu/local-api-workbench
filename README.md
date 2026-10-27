@@ -19,7 +19,9 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-有完整来源图、执行定义未改变且未丢握手凭据的 TCP／SSE 原生 JSON／目录往返、协议提取批次原子性和普通 HTTP 提取列表原子性，已纳入上一根 `bd127` 的首次 CI `40497772310`（19项通过）。当前新候选支持有限 HTTP 样例／样例分组定义的双格式往返：冻结请求、API归属、父组／空组及实际执行顺序保持；分组样例若会重新继承 live API 的额外参数／任务则明确拒绝，根级样例不误套该继承规则。共享脚本／任务／schema等无无损合同的样例仍拒绝；身份重映射、历史时间与原sample数字sort不承诺原样保真，精确历史使用Workbench备份。组合测试使用真正 `caseRunOrder` 校验顺序，不把全局数组排序冒充分组执行顺序。官方 MCP HTTP／stdio 双格式、真实 CLI、冻结计划及备份重启已有本地组合证据，**PR14 最终头独立 CI 已通过；根组合 `047d` 因 SSH 测试 peer 身份错配仍为 RED**。当前候选仅修测试的身份绑定和确定反序验证，生产零改，新根与 PR24 新头 CI 尚待；不借独立功能或旧根绿灯验收。WS/WSS及原生协议计划出口仍拒绝；HTTP 500／断言失败仍可提取，与协议passed-only及原生严格阶段分别保持旧合同。项目会话失败只显式重试存储；`app.close()` 可观察保存结果，但桌面退出／信号终止尚未接入，不宣称耐崩溃保存。最新精确状态见后端检查点。
+最后完整根GREEN仍为 `bd127` / CI `40497772310`。较新的根 `d9cd5c0e` / CI `40503613446` 为 **17/19 RED**（macOS桌面脚本超时及native XML assertion链失败），本轮不将其改判或宣称已修。当前候选增加有界原生HTTP继承图：owner／MCP导入可显式选 `inheritanceMode: preserve`，默认flatten不变；只在空业务项目保留项目／目录／接口认证及Header/Query/Cookie层，出口自动保图，无法表达的样例、任务、协议等在该模式继续拒绝。默认模式既有样例图、任务、模型、签名和TCP/SSE出口能力保持各自范围，不因此全部获得继承图支持。
+
+真实SDK双传输／双格式两代、live与冻结case／plan执行、CLI及恢复已有本地组合证据；PR43／PR29独立CI通过，**新根组合CI尚待**，不借独立结果替代根验收。来源身份可能重映射，原始历史用Workbench备份；WS/WSS及原生协议计划出口仍拒绝。HTTP500／断言失败仍可提取，与协议passed-only和原生严格阶段分别保持旧合同。项目会话失败只显式重试存储；`app.close()`可观察保存结果，但桌面退出／信号终止尚未接入，不宣称耐崩溃保存。最新精确提交、验证与遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
 
 ## 已实现的核心
 
@@ -128,6 +130,10 @@ SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体
 数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限；CLI/MCP 可分别显式获得限定临时只读权限，凭据不随项目备份恢复。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
 
 ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
+
+### 显式保留原生 HTTP 继承图
+
+后端 owner `POST /api/projects/:id/import` 可传 `{document, inheritanceMode:"preserve"}`，仅向空业务项目导入有界 HTTP 项目→目录→API 的认证和 Header/Query/Cookie 自有层；不传仍按原方式导入时展开。保存的父层修改影响后续 live 请求，创建计划/用例时保存当时合并后的配置并移除 live 绑定；环境占位符仍按运行时所选环境解析。原生 JSON/目录出口自动保图，首片含计划/用例的图项目须用完整项目备份，不静默丢图。暂不支持图资源移动/删除/解绑、追加导入、共享 Body、源任务或其他未知继承字段；不从旧展开项目猜父值。保存/恢复验证项目内完整绑定，来源 ID 不是跨项目授权。无新增前端。详见 [继承图合同](docs/ADR-NATIVE-INHERITANCE-GRAPH.md)。
 
 ### Apipost Faker 占位符
 

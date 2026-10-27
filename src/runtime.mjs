@@ -1,3 +1,7 @@
+import {
+  validateNativeInheritanceProject,
+  assertNativeInheritanceIdentity,
+} from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
@@ -156,9 +160,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateNativeInheritanceProject(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validateNativeInheritanceProject(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -235,6 +243,8 @@ export class Store {
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
+    validateNativeInheritanceProject(p);
+
     validateAPIResourceTrash(p);
     if (p.settings?.autoImports !== undefined)
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
@@ -332,6 +342,7 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
+          assertNativeInheritanceIdentity(previous, p);
           if (
             previous &&
             p._diskFingerprint &&
@@ -409,6 +420,9 @@ const digestEntityReplay = Symbol("digest-entity-replay");
 export async function executeRequest(input, signal, options = {}) {
   const { cookieSession } = options;
   const replay = options[digestEntityReplay];
+  if (input?.nativeInheritance !== undefined)
+    throw Error("请求须先按当前项目解析原生继承图");
+
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))

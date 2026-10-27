@@ -1,3 +1,4 @@
+import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
@@ -48,6 +49,12 @@ import {
 } from "./apipost-directory.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
+import { importPreservedNativeInheritance } from "./native-inheritance-import.mjs";
+import {
+  inheritanceMode as resolveInheritanceMode,
+  normalizeNativeInheritanceBinding,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
 import {
   openAPIURLQuery,
   openAPIEmptyQueryValue,
@@ -208,6 +215,9 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  const nativeInheritance = normalizeNativeInheritanceBinding(
+    r.nativeInheritance,
+  );
   if (
     r.nativeMock !== undefined &&
     r.nativeMockRoute !== undefined &&
@@ -290,6 +300,7 @@ export function normalizeRequest(r = {}) {
   )
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
+    ...(nativeInheritance === undefined ? {} : { nativeInheritance }),
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
@@ -427,6 +438,9 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  for (const step of plan.steps || [])
+    if (step.request?.nativeInheritance !== undefined)
+      throw Error("冻结计划须先解析原生继承图，不能保留live绑定");
   const nativeMCPBudget = { bytes: 0 };
   const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   if (
@@ -1973,6 +1987,7 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
   for (const environment of document.environments) {
     if (
@@ -2044,6 +2059,7 @@ export function restoreProject(document) {
   copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
+  validateNativeInheritanceProject(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {
@@ -2152,8 +2168,12 @@ function replaceVariables(target, source) {
 export function importIntoProject(
   project,
   document,
-  { sync = false, modelNameMode } = {},
+  { sync = false, modelNameMode, inheritanceMode } = {},
 ) {
+  const preserveInheritance =
+    resolveInheritanceMode(inheritanceMode) === "preserve";
+  if (project.settings?.nativeInheritance !== undefined)
+    throw Error("原生继承图项目暂不支持追加导入；请导入空项目");
   resolveModelNameMode(modelNameMode);
   let original = document;
   if (typeof original === "string") {
@@ -2169,9 +2189,31 @@ export function importIntoProject(
       }
     }
   }
+  if (preserveInheritance) validateResourceJSON(original);
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  if (preserveInheritance) {
+    if (sync || !isModernApipost(apipostDocument(original)))
+      throw Error("inheritanceMode preserve仅支持完整原生HTTP项目，不支持同步");
+    if (
+      fromDirectory &&
+      directoryDocument.files.some(
+        (file) =>
+          (file.path.startsWith("executions/") &&
+            file.path !== "executions/flows/index.json") ||
+          file.path === "settings/mock.json" ||
+          (/^settings\/mock_/.test(file.path) &&
+            file.path !== "settings/mock_custom_rules.json"),
+      )
+    )
+      throw Error("原生继承图首片不导入执行档案或独立Mock配置");
+    return importPreservedNativeInheritance(
+      project,
+      apipostDocument(original),
+      { modelNameMode },
+    );
+  }
   if (
     modelNameMode !== undefined &&
     !isModernApipost(apipostDocument(original))

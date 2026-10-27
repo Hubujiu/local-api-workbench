@@ -186,6 +186,32 @@ test("outer descriptor and error envelopes stay bounded before any store read or
         return "apipost";
       },
     });
+    if (name === "import_project") {
+      const modeAccessor = { ...parameters };
+      Object.defineProperty(modeAccessor, "inheritanceMode", {
+        enumerable: true,
+        get() {
+          getters++;
+          return "preserve";
+        },
+      });
+      assert.equal(
+        (await dispatch(call(name, modeAccessor))).result.isError,
+        true,
+      );
+      await assert.rejects(
+        importMCPProject(
+          {
+            save: async () => {
+              saves++;
+            },
+          },
+          project(),
+          modeAccessor,
+          1,
+        ),
+      );
+    }
     const hidden = { ...parameters };
     Object.defineProperty(hidden, "hidden", { value: true });
     const custom = Object.assign(Object.create({}), parameters);

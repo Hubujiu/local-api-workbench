@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-27 12:23 UTC
+# 后端检查点 · 2026-10-27 13:20 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 13:20 有界原生 HTTP 继承图与 MCP 导入组合候选
+
+- **最近根结果仍是RED**：`d9cd5c0e241eb855db0d6d82f09b2293c86b44ff` / tree `94c7a6d24e50d15e06b7c14a8564f0f292cb595a`，首次CI `40503613446` 为17/19。macOS desktop job `122187225600` 在final-body脚本链报“脚本执行超时”；macOS core shard4 job `122187226127` 的native XML assertion完整链失败。本轮不复跑或诊断暂停专项，不把独立PR绿灯、本地通过或新的继承功能说成这些失败已修复。更早047d的18/19 RED也保留。
+- **最后完整根GREEN仍为** `bd127a4778253a085d7a105812e7fa095b3fb92d` / tree `36986b95`，CI `40497772310` 首次19/19；三OS各1950通过，12份实际清单373文件（94/93/93/93），hash `33197e543331cb238a146cec82d4b30593b8cb9d18748a651fe4f1228979685d`。它不包含后续样例图／继承图组合，不能当本候选验收。
+- 本候选生产合并点 `f8477696c039fea2183e210fd71ba05e5443e63d` / tree `2a0f644e5ec52acf46db9f5866c10269ea139e2c`，包含PR43 local `565173cdc196fcb51509ff856040615a6fd1cf13` / remote `78983e8a7fdc246be497ba9b05ad74ab3ff28117` / tree `2a9331aa53b8c52a938410104162b4fbf18ffac5`，及PR29 local `8ca7b808a1f75c0f490c3a759c13e0a5b74bd1c6` / remote `1ef5fc2f5a329b7fcfafacd098a5f2d6cb66a044` / tree `7ee8745c68c29cd0dae39c92502535ae88e57315`。后续根仅加交叉测试和本文，**新根CI尚待**。
+- owner与MCP `import_project` 可显式选 `inheritanceMode: preserve`，缺省／flatten保持旧导入快照语义；export自动保留已存图，不增加工具、权限或响应字段，文档4MiB／完整帧8MiB限制不变。首片仅现代原生JSON／目录HTTP项目、目录、接口的auth/Header/Query/Cookie层及既有变量目录，必须导入空业务项目（只允许替换Store原始默认环境），已有图不允许追加或同步。非HTTP、samples、flows、tasks、继承正文等不能表达的内容拒绝，不把默认模式其他已支持能力误称已支持保图模式。
+- 真实SDK HTTP／stdio × JSON／目录两代保留层语义与重映射后父绑定；读权限、跨项目、非法mode、坏图及非空目标拒绝时磁盘和网络均不变。owner、MCP、真实CLI分别验证live父层修改与冻结计划隔离、当前环境变量、服务器重启和恢复。保存的冻结case／plan仅在同项目已存完整请求精确匹配时识别，不凭caller flags或live API ID放行；篡改请求和删除可信保存源继续拒绝，原生流程不重复冻结。
+- 在上述最终组合树先跑三个继承完整文件11/11，再跑十个完整交叉文件44/44：native任务出口、samples、模型与默认MCP交换、独立签名验签、HTTP／协议提取原子性入口、Digest重放、真实提交收据和scope取消。继续两个存储完整文件4/4：既有官方SDK真实journal未知提交／不重试、8MiB完整帧拒绝后会话可用；新单条交叉回归用真实项目文件锁确认保图Store保存已进入后取消，明确STORE_SAVE_ABORTED且磁盘旧图不变，后续显式保存及恢复正常、其他项目不变。合计15个完整文件59/59，未用碎片函数或重复全量代替流程；全库check、format:check、diff通过。本次未发现需在根补生产实现的组合问题。
+- PR43最终独立CI `40508813117` 19/19 GREEN；PR29最终独立CI `40509016977` 首次19/19，全部实际checkout `a0290ef4e33ce0a12b8db4b0bb2bd5294d93d4a5` 与其功能tree相同，三OS各1348通过，12份实际ZIP digest及291文件（73/73/73/72）完整清单已核，hash `a92c7c25960abd604d28ea215de55f14b561ba7a6a357c5256b9a1502ed23d8f`。这两项只验证各自独立树；PR29旧49b3阶段GREEN不替代最终saved-case修复头，独立GREEN也不替代根组合。
+- 历史f83/8b5 Windows XML RED及上述d9失败均未修复或改判；原版GUI、暂停专项未开展，PR37仍关闭。未新增前端、改变执行预算、合main/develop或部署。
 
 ## 12:23 SSH 取消测试身份绑定修正候选（生产零改）
 

@@ -1,4 +1,10 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import { validateNativeInheritanceProject } from "./native-inheritance.mjs";
+import {
+  applyNativeInheritanceExport,
+  verifyNativeInheritanceExport,
+} from "./native-inheritance-export.mjs";
+
 import {
   prepareSampleExport,
   verifySampleDefinitions,
@@ -151,6 +157,7 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  validateNativeInheritanceProject(project);
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -173,9 +180,12 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (
-      !["statuses", "recursiveFolderScopes", "apipostProtocolSources"].includes(
-        key,
-      )
+      ![
+        "statuses",
+        "recursiveFolderScopes",
+        "apipostProtocolSources",
+        "nativeInheritance",
+      ].includes(key)
     )
       unsupported(value, `设置 ${key}`);
   if (
@@ -485,6 +495,17 @@ export function exportApipost(project, options = {}) {
     models: modelExport.models,
     automated_testings: [],
   };
+  applyNativeInheritanceExport(project, document, {
+    id: apipostExportId,
+    auth,
+    rows,
+  });
+  verifyNativeInheritanceExport(
+    project,
+    document,
+    (id) => apipostExportId("a", id),
+    options,
+  );
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);

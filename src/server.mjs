@@ -1,3 +1,4 @@
+import { resolveNativeInheritance } from "./native-inheritance.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { exportApipostDirectory } from "./apipost-directory-export.mjs";
 import { exportApipost } from "./apipost-export.mjs";
@@ -987,6 +988,7 @@ export async function createApp({
             const b = await body(req);
             importIntoProject(p, b.document, {
               modelNameMode: b.modelNameMode,
+              inheritanceMode: b.inheritanceMode,
             });
             await store.save(p);
             return json(res, 200, p);
@@ -1558,10 +1560,11 @@ export async function createApp({
           }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req);
+            const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
-              data.request?.scriptURLMode === "sdk"
-                ? applySharedScripts(p, data.request)
-                : data.request;
+              inheritedRequest?.scriptURLMode === "sdk"
+                ? applySharedScripts(p, inheritedRequest)
+                : inheritedRequest;
             assertSDKCurlDefinition(exportRequest);
             const context = debugEnvironment(
               p,
@@ -1689,7 +1692,11 @@ export async function createApp({
               throw Error("来源接口不存在");
             const item = snapshotCase({
               ...data,
-              request: freezeServiceBinding(p, data.request),
+              request: freezeServiceBinding(p, data.request, {
+                allowNativeSnapshot: Boolean(
+                  p.cases?.some((item) => item.id === data.id),
+                ),
+              }),
               functions: data.functions || p.settings?.functions || [],
             });
             p.cases ??= [];

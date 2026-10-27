@@ -1,3 +1,4 @@
+import { verifyNativeInheritanceExport } from "./native-inheritance-export.mjs";
 import { verifySampleDefinitions } from "./apipost-sample-export.mjs";
 import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
 import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
@@ -9,6 +10,8 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
+  if (project.settings?.nativeInheritance && plans.length)
+    throw Error("原生继承图出口首片不支持冻结计划；请使用完整项目备份");
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
@@ -359,7 +362,18 @@ export function exportApipostDirectory(project, options = {}) {
     documents: [],
     dictionary: [],
   };
-  importIntoProject(check, result, options);
+  importIntoProject(check, result, {
+    ...options,
+    ...(project.settings?.nativeInheritance
+      ? { inheritanceMode: "preserve" }
+      : {}),
+  });
+  verifyNativeInheritanceExport(
+    project,
+    result,
+    (id) => nativeIds.get(apipostExportId("a", id)),
+    options,
+  );
   verifyProtocolDefinitions(project.protocols, check.protocols);
   verifySampleDefinitions(project, check, (id) =>
     nativeIds.get(apipostExportId("a", id)),
