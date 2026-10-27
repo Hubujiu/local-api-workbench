@@ -251,3 +251,45 @@ plain and native documents, mixed and document-only projects, current status
 edits, same titles in different folders, source/project isolation, exact backup
 restore and restart. Deleted archives and unsupported metadata fail closed.
 Source fixtures are independently authored, not original GUI roundtrip evidence.
+
+## Bounded reusable model definition graph
+
+The exporter now uses the existing model importer, model folder validator and
+schema-position classifier as a static reverse adapter and readback oracle. It
+never executes, samples, compiles, expands or fetches a schema. Model/folder IDs
+are generated together; API body and response schema references use the same
+mapping. JSON `models` and directory `schemas/index.json` plus wrapped
+`schemas/<id>.json` carry the definitions, including empty model folders. The
+previous intermediate guard rejected modelFolders explicitly rather than silently
+losing them; supported folders now actually roundtrip.
+
+Only a one-to-one exact dictionary/schema-component graph is accepted, with
+existing bounds (100 models plus folders, 20 folder levels, 50000 schema traversal
+nodes, 40 schema levels and project byte limits). Unknown fields and other
+component categories remain unsupported. Source sort and folder relationships
+remain data. Model object/boolean definitions, whole-model references, static
+self/mutual references and same-model local pointers are preserved without
+inlining. Cross-model subpaths, unresolved aliases, external references, dynamic
+anchors and custom model-combination extensions reject. Literal example/default/
+enum/extension objects are copied as data, even if they contain `$ref`-looking
+keys. Parameter schema and conditional-Mock reference limits remain unchanged.
+
+Naming is intentionally narrow: existing native import prefixes every dictionary
+name with the source project name plus `/`. Export requires that exact current
+project namespace and a nonempty native suffix no longer than 200 characters.
+It removes exactly that prefix and verifies the original name on readback. It
+never guesses, changes generic import naming, or repeatedly adds prefixes.
+Importing into an arbitrarily named destination is allowed, but that destination
+may not satisfy the next native export precondition; rename mismatches explicitly
+reject. Arbitrary names and historical IDs are preserved by Workbench backup,
+not promised by this subset. Two-generation tests deliberately keep the required
+project name and separately test mismatch rejection.
+
+The regression workflow imports both source formats, edits the linked model with
+existing saveModel, saves through owner PUT, checks request/response links, exports
+both formats twice, sends a small literal body to fictional loopback HTTP, then
+backs up/restores/restarts. The schema remains a definition; no new schema runtime
+or generation path is enabled. It also checks empty directories, literal reference
+annotations, persisted source identity in backup, unrelated-project isolation and
+atomic refusal of unrepresentable graphs. No original program or special runtime
+stress/audit was used.

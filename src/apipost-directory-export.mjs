@@ -241,7 +241,17 @@ export function exportApipostDirectory(project) {
     put("settings/" + file + ".json", value);
   }
   put("samples/index.json", { project_id: projectId, items: [] });
-  put("schemas/index.json", { project_id: projectId, items: [] });
+  put("schemas/index.json", {
+    project_id: projectId,
+    items: document.models.map(({ schema, ...metadata }) => metadata),
+  });
+  for (const model of document.models)
+    put("schemas/" + model.model_id + ".json", {
+      model_id: model.model_id,
+      project_id: projectId,
+      name: model.name,
+      data: model,
+    });
   put("executions/flows/index.json", {
     version: 2,
     updated_at: timestamp,
