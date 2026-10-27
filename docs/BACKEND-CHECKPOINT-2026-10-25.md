@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-27 11:06 UTC
+# 后端检查点 · 2026-10-27 11:25 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 11:25 协议提取批次原子性组合候选
+
+- 上一根 `adf14` 首次 CI `40493836918` 全19项 GREEN，tree `0dcc7d3c`；三 OS 各1918通过，12份实际诊断产物完整覆盖369文件（93/92/92/92），清单hash `64f8804ccf1a542c922e1974f2a9a5102dc6040f9f56d67f3a9cba95c87835c1`。该结果包含 TCP/SSE 原生图往返，不包含本次提取原子性修复。
+- 本候选最终生产合并点 `bf9f10f6c913b751c87397463adca0dc89be25dd` / tree `7f791c4e7bc3609ab66524877b461329dc9146a1`，合入 PR41 local `d5910dd216d03f7bb034950dfd9417ddab4f051d` / remote `c9b902ecde8448da1b344de9cdfdf530f1763d4b` / feature tree `2d34a0d978221d2f15c4e4deb3ba352d17a5824f`。独立功能 CI 与新根组合 CI 在此记录时均尚待，不将阶段结果当最终验收。
+- 修复普通 gRPC、Socket.IO 与 protocol 执行计划的整批提取：先解析全部行，再提交作用域及 extracted 收据。后行缺失时不能把前行候选暴露给后续 HTTP；真实 RPC 结果保留，之前成功步骤已提交的 runtime/environment/global 不误回滚。持久化失败、未知提交及取消保留各自明确语义，不把本地变量回滚说成撤销远端操作，也不自动重放网络。既有 HTTP/原生任务提交路径和失败继续策略不因此扩大或收紧。
+- 新根组合使用官方 SDK HTTP/stdio 导入原生 Socket.IO/gRPC 与 SSE 定义，导入零网络；建立七步冻结计划后修改 live 定义。首步成功提交三个不同名称的作用域值，后三族分别先取得 fresh-runtime、fresh-environment、fresh-global 再遇缺失路径；每个失败 extracted 均为空，实际成功 RPC/Ack/SSE 内容仍在，随后三个真实 HTTP 均收到前序 committed 值。独立新 Store 读取持久 environment/global，避免 runtime 遮蔽掩盖错误。
+- 每条 SDK 链继续运行真实 CLI，明确要求 exit 1、failed 状态且 recordSaved=true；recordId、attemptedRecordId、run.id 与磁盘记录精确一致，不将任意非零返回吞作通过。备份、恢复、重启后再次 CLI 执行同一冻结计划，保留三条非空历史及原环境身份；未授权项目执行/读取拒绝，第三项目不变，源项目历史不被恢复项目追加污染。网络计数证明读取/恢复没有自动重放。
+- 在上述最终生产树重跑六个完整相关文件53/53通过，含三族提取故障/取消/真实存储失败、原生导入/模板/协议往返及现有原生断言/提取 SDK 主链；全库 format:check、check 与 diff 检查通过。早期阶段10/10不是本次最终树验收依据；本次仅增加组合测试与状态文档，不修改生产预算、前端或继续策略。初次测试夹具假定 currentEnvironmentId 必填及回执叫 attemptId，已按真实已有环境与 attemptedRecordId 契约纠正，未为测试改变生产字段。
+- 历史 f83/8b5 Windows XML RED仍未修复或改判；原版GUI、独立专项未完成，PR37实验仍关闭。未触碰暂停范围，不合 main/develop、不部署。
 
 ## 11:06 TCP/SSE 原生资源图往返组合候选
 
