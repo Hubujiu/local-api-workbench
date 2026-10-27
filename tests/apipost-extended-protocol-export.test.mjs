@@ -94,8 +94,16 @@ test("extended source ambiguity and all unrepresentable mutations reject without
   a.protos[0].services[0].methods[0].grpc_method_id = "c";
   b.target_id = "a";
   b.protos[0].services[0].methods[0].grpc_method_id = "b:c";
-  const collision = blank();
-  importIntoProject(collision, { ...source, apis: [a, b] });
+  const collision = blank(),
+    second = blank();
+  importIntoProject(collision, { ...source, apis: [a] });
+  importIntoProject(second, { ...source, apis: [b] });
+  // Explicit historical archive: old import versions collapsed these two
+  // source roots into one definition/plan. Do not require a modern importer
+  // to accept the ambiguity in order to test the export guard.
+  collision.settings.apipostProtocolSources.push(
+    ...second.settings.apipostProtocolSources,
+  );
   assert.equal(collision.settings.grpcDefinitions.length, 1);
   for (const encode of exporters)
     assert.throws(() => encode(collision), /身份冲突/);
