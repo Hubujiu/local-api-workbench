@@ -59,7 +59,10 @@ export function versionPlan(previous, input, source = "manual", project) {
                 ? { parametersSnapshot: true }
                 : {}),
             },
-            { includeSharedScripts: false },
+            {
+              includeSharedScripts: false,
+              allowNativeSnapshot: Boolean(oldStep),
+            },
           ),
         };
       }),

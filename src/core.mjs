@@ -1,3 +1,4 @@
+import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
@@ -20,6 +21,7 @@ import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { mergeImportedDocuments } from "./apipost-documents.mjs";
+import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -42,6 +44,12 @@ import {
 } from "./apipost-directory.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
+import { importPreservedNativeInheritance } from "./native-inheritance-import.mjs";
+import {
+  inheritanceMode as resolveInheritanceMode,
+  normalizeNativeInheritanceBinding,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
 import {
   openAPIURLQuery,
   openAPIEmptyQueryValue,
@@ -55,7 +63,11 @@ import {
   normalizeCookieEncoding,
   requestCookieHeader,
 } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
@@ -198,6 +210,9 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  const nativeInheritance = normalizeNativeInheritanceBinding(
+    r.nativeInheritance,
+  );
   validateRequestTaskSource(r);
   if (
     r.nativeMock !== undefined &&
@@ -280,6 +295,7 @@ export function normalizeRequest(r = {}) {
   )
     throw Error("仅支持 HTTP/HTTPS URL");
   return {
+    ...(nativeInheritance === undefined ? {} : { nativeInheritance }),
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
@@ -417,6 +433,9 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  for (const step of plan.steps || [])
+    if (step.request?.nativeInheritance !== undefined)
+      throw Error("冻结计划须先解析原生继承图，不能保留live绑定");
   const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   const nativeMCPBudget = { bytes: 0 };
   if (
@@ -619,13 +638,27 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
+          const mode = validated.protocol.definition.templateMode;
+          const definition = resolveProtocolDefinition(
+            validated.protocol.definition,
+            vars,
+            validated.protocol.message,
+          );
           const message =
             validated.protocol.message === undefined
               ? undefined
-              : interpolate(validated.protocol.message, vars);
+              : mode === "variables"
+                ? definition.message
+                : mode === "literal"
+                  ? validated.protocol.message
+                  : interpolate(validated.protocol.message, vars);
+          // SSE body and WS/TCP message in the result are the actual resolved payload.
+          if (definition.type !== "sse") delete definition.message;
+          record.protocol.definition = definition;
           if (message !== undefined) record.protocol.message = message;
           request = {
             ...validated.protocol,
+            definition,
             ...(message !== undefined ? { message } : {}),
             ...wireCredentials.get(step.id),
           };
@@ -1085,7 +1118,13 @@ export function importDocument(doc) {
               ),
             ).values(),
           ];
+          const selectedSecurity = Object.hasOwn(op, "security")
+            ? op.security
+            : doc.security;
           return normalizeRequest({
+            ...(Array.isArray(selectedSecurity) && selectedSecurity.length === 0
+              ? { inheritAuth: false }
+              : {}),
             name: op.summary || op.operationId || path,
             sourceOperationId: op.operationId || "",
             method,
@@ -1186,6 +1225,12 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (
+        config.type === "awsv4" &&
+        (config.awsv4 || []).filter((item) => item.key === "addAuthDataToQuery")
+          .length > 1
+      )
+        throw Error("Postman AWS Query认证开关重复");
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1239,7 +1284,14 @@ export function importDocument(doc) {
         return {
           type: "aws",
           ...Object.fromEntries(
-            ["accessKey", "secretKey", "sessionToken", "region", "service"]
+            [
+              "accessKey",
+              "secretKey",
+              "sessionToken",
+              "region",
+              "service",
+              "addAuthDataToQuery",
+            ]
               .filter((key) => values[key] !== undefined)
               .map((key) => [key, values[key]]),
           ),
@@ -1328,6 +1380,9 @@ export function importDocument(doc) {
                 ? req.description
                 : req.description?.content || "",
             auth: auth(req.auth || inheritedAuth),
+            ...((req.auth || inheritedAuth)?.type === "noauth"
+              ? { inheritAuth: false }
+              : {}),
             headers: (req.header || []).map((h) => ({
               key: h.key,
               value: h.value,
@@ -1818,7 +1873,7 @@ export function toCurl(input) {
   if (["bearer", "oauth2"].includes(r.auth.type))
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
@@ -1863,6 +1918,7 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
   for (const environment of document.environments) {
     if (
@@ -1934,6 +1990,7 @@ export function restoreProject(document) {
   copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
+  validateNativeInheritanceProject(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {
@@ -2042,8 +2099,12 @@ function replaceVariables(target, source) {
 export function importIntoProject(
   project,
   document,
-  { sync = false, modelNameMode } = {},
+  { sync = false, modelNameMode, inheritanceMode } = {},
 ) {
+  const preserveInheritance =
+    resolveInheritanceMode(inheritanceMode) === "preserve";
+  if (project.settings?.nativeInheritance !== undefined)
+    throw Error("原生继承图项目暂不支持追加导入；请导入空项目");
   resolveModelNameMode(modelNameMode);
   let original = document;
   if (typeof original === "string") {
@@ -2059,9 +2120,31 @@ export function importIntoProject(
       }
     }
   }
+  if (preserveInheritance) validateResourceJSON(original);
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  if (preserveInheritance) {
+    if (sync || !isModernApipost(apipostDocument(original)))
+      throw Error("inheritanceMode preserve仅支持完整原生HTTP项目，不支持同步");
+    if (
+      fromDirectory &&
+      directoryDocument.files.some(
+        (file) =>
+          (file.path.startsWith("executions/") &&
+            file.path !== "executions/flows/index.json") ||
+          file.path === "settings/mock.json" ||
+          (/^settings\/mock_/.test(file.path) &&
+            file.path !== "settings/mock_custom_rules.json"),
+      )
+    )
+      throw Error("原生继承图首片不导入执行档案或独立Mock配置");
+    return importPreservedNativeInheritance(
+      project,
+      apipostDocument(original),
+      { modelNameMode },
+    );
+  }
   if (
     modelNameMode !== undefined &&
     !isModernApipost(apipostDocument(original))
@@ -2089,6 +2172,22 @@ export function importIntoProject(
   const modern = isModernApipost(source)
     ? importModernApipost(source, project, { sync, modelNameMode })
     : null;
+  if (modern?.nativeProtocolPlans?.length) {
+    const plans = structuredClone(project.plans || []);
+    for (const raw of modern.nativeProtocolPlans) {
+      const previous = plans.find((p) => p.id === raw.id);
+      const plan = snapshotPlan({
+        ...raw,
+        createdAt: previous?.createdAt,
+        updatedAt: previous?.updatedAt,
+      });
+      if (previous && JSON.stringify(previous) !== JSON.stringify(plan))
+        throw Error("原生协议消息计划冲突，请导入新项目");
+      if (!previous) plans.push(plan);
+    }
+    if (plans.length > 1000) throw Error("计划最多1000个");
+    modern.metadata.plans = plans;
+  }
   const legacy = modern || (source ? importApipost(original) : null);
   const importedDocuments = mergeImportedDocuments(project, legacy?.documents, {
     sync,

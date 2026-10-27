@@ -1,3 +1,7 @@
+import {
+  validateNativeInheritanceProject,
+  assertNativeInheritanceIdentity,
+} from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
@@ -12,7 +16,11 @@ import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { requestCookieHeader } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import { asapAuthorization } from "./asap-auth.mjs";
 import { jwtAuthorization } from "./jwt-auth.mjs";
@@ -26,7 +34,8 @@ import {
 import { ntlmType1, parseNtlmChallenge, ntlmType3 } from "./ntlm.mjs";
 import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
-import { awsSignatureHeaders } from "./aws-signature.mjs";
+import { awsSignatureRequest, validateAWSQueryURL } from "./aws-signature.mjs";
+import { validateAuth } from "../public/auth-model.js";
 import { oauth1Authorization } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
@@ -140,9 +149,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateNativeInheritanceProject(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validateNativeInheritanceProject(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -202,6 +215,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validateNativeInheritanceProject(p);
     validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
@@ -260,6 +274,7 @@ export class Store {
       );
     }
     for (const request of p.requests || []) {
+      validateAuth(request.auth);
       validateRequestTaskSource(request);
       validateMockRules(request.mockRules || []);
       if (request.importedNativeTaskSource !== undefined)
@@ -294,6 +309,7 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
+          assertNativeInheritanceIdentity(previous, p);
           if (
             previous &&
             p._diskFingerprint &&
@@ -344,10 +360,14 @@ export class Store {
   }
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
+  if (input?.nativeInheritance !== undefined)
+    throw Error("请求须先按当前项目解析原生继承图");
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
+  if (r.auth.type === "aws" && r.auth.addAuthDataToQuery === true)
+    validateAWSQueryURL(raw);
   const u = new URL(raw);
   if (!["http:", "https:"].includes(u.protocol))
     throw Error("仅支持 HTTP/HTTPS");
@@ -365,7 +385,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         "base64",
       );
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(u, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(u, r.auth);
     else headers[r.auth.key] = r.auth.value;
   }
   if (r.auth.type === "asap")
@@ -438,11 +458,21 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       body,
       r.auth,
     ).header;
-  if (r.auth.type === "aws")
-    Object.assign(
+  if (r.auth.type === "aws") {
+    const signed = await awsSignatureRequest(
+      u.href,
+      r.method,
       headers,
-      await awsSignatureHeaders(u.href, r.method, headers, body, r.auth),
+      body,
+      r.auth,
     );
+    u.href = signed.url;
+    // Query signing removes/hoists authentication headers. Object.assign alone
+    // would leave old Authorization or session-token headers on the wire.
+    if (r.auth.addAuthDataToQuery === true)
+      for (const key of Object.keys(headers)) delete headers[key];
+    Object.assign(headers, signed.headers);
+  }
   if (r.auth.type === "hawk")
     headers.authorization = hawkAuthorization(
       u.href,

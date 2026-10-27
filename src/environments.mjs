@@ -5,6 +5,7 @@ import {
 import { applySharedScripts } from "./shared-scripts.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
+import { resolveNativeInheritance } from "./native-inheritance.mjs";
 import { randomUUID } from "node:crypto";
 function name(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 200)
@@ -61,10 +62,13 @@ export function effectiveServiceId(project, request) {
 export function freezeServiceBinding(
   project,
   request,
-  { includeSharedScripts = true } = {},
+  { includeSharedScripts = true, allowNativeSnapshot = false } = {},
 ) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
+  request = resolveNativeInheritance(project, request, {
+    allowFrozen: allowNativeSnapshot,
+  });
   return {
     ...applySharedAuth(
       project,

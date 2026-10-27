@@ -113,6 +113,9 @@ export function grpcPlanRequest(step, messages) {
   const d = step.grpc.definition;
   return {
     target: d.target,
+    ...(d.requiredMetadata === undefined
+      ? {}
+      : { requiredMetadata: d.requiredMetadata }),
     ...grpcSource(d),
     service: d.service,
     method: d.method,
@@ -142,8 +145,17 @@ export function grpcPlanCredentials(plan, input = {}) {
       Object.keys(value).some((key) => !["metadata", "tls"].includes(key))
     )
       throw Error("gRPC临时凭据仅支持metadata与tls，不能覆盖目标或定义");
-    grpcTransport(steps[0].grpc.definition.target, value);
+    grpcTransport(steps[0].grpc.definition.target, {
+      ...value,
+      requiredMetadata: steps[0].grpc.definition.requiredMetadata,
+    });
     bindings.set(stepId, structuredClone(value));
   }
+  for (const step of plan.steps)
+    if (step.enabled !== false && step.type === "grpc")
+      grpcTransport(step.grpc.definition.target, {
+        ...bindings.get(step.id),
+        requiredMetadata: step.grpc.definition.requiredMetadata,
+      });
   return bindings;
 }
