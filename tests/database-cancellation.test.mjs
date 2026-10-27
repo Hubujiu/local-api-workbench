@@ -94,6 +94,17 @@ function pgPeer(socket, records, stage) {
         records.push(body.subarray(1).toString().split("\0")[0]);
         peer.phase = "query";
       }
+      if (tag === "S" && peer.completeQuery) {
+        send(
+          Buffer.concat([
+            pgPacket("1", Buffer.alloc(0)),
+            pgPacket("2", Buffer.alloc(0)),
+            pgPacket("n", Buffer.alloc(0)),
+            pgPacket("C", Buffer.from("SELECT 0\0")),
+            pgPacket("Z", Buffer.from("T")),
+          ]),
+        );
+      }
     }
   });
   return peer;
@@ -460,13 +471,20 @@ test(
         .replace(/=$/, "");
     const clients = new Set(),
       peers = [],
-      records = [],
+      peersByIdentity = new Map(),
+      initialAuthentication = new Map(),
       heldAuthentication = [];
     let holdAuthentication = false;
     const server = new ssh2.Server({ hostKeys: [privateKey] }, (client) => {
       clients.add(client);
       client.on("error", () => {});
-      client.once("close", () => clients.delete(client));
+      let identity;
+      const transportClosed = new Promise((resolve) =>
+        client.once("close", () => {
+          clients.delete(client);
+          resolve();
+        }),
+      );
       client.on("authentication", (ctx) => {
         if (holdAuthentication) {
           heldAuthentication.push(ctx);
@@ -474,15 +492,22 @@ test(
         }
         if (
           ctx.method === "password" &&
-          ctx.username === "fictional" &&
+          (ctx.username === "fictional" ||
+            /^fictional-[0-4]$/.test(ctx.username)) &&
           ctx.password === "fictional"
-        )
-          ctx.accept();
-        else ctx.reject();
+        ) {
+          identity = ctx.username;
+          if (identity !== "fictional")
+            initialAuthentication.set(identity, ctx);
+          else ctx.accept();
+        } else ctx.reject();
       });
-      client.on("tcpip", (accept) =>
-        peers.push(pgPeer(accept(), records, "handshake")),
-      );
+      client.on("tcpip", (accept) => {
+        const peer = pgPeer(accept(), [], "handshake");
+        Object.assign(peer, { identity, transportClosed });
+        peers.push(peer);
+        peersByIdentity.set(identity, peer);
+      });
     });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -507,8 +532,38 @@ test(
       },
     };
     const controllers = Array.from({ length: 5 }, () => new AbortController());
-    const pending = controllers.map((controller) =>
-      settle(queryRemoteDatabase(input, { signal: controller.signal })),
+    const pending = controllers.map((controller, index) =>
+      settle(
+        queryRemoteDatabase(
+          { ...input, ssh: { ...input.ssh, username: `fictional-${index}` } },
+          { signal: controller.signal },
+        ),
+      ),
+    );
+    await until(
+      () => initialAuthentication.size === 5,
+      "five individually identified authentication gates",
+      4000,
+    );
+    // Deterministically invert arrival order without relying on scheduler delays.
+    for (const index of [4, 3, 2, 1, 0]) {
+      const identity = `fictional-${index}`;
+      initialAuthentication.get(identity).accept();
+      await until(
+        () => peersByIdentity.get(identity)?.phase === "handshake",
+        "identified SSH channel reaches PostgreSQL handshake",
+        4000,
+      );
+    }
+    assert.deepEqual(
+      peers.map((peer) => peer.identity),
+      [4, 3, 2, 1, 0].map((i) => `fictional-${i}`),
+    );
+    const cancelledPeer = peersByIdentity.get("fictional-0");
+    assert.notEqual(
+      peers[0],
+      cancelledPeer,
+      "arrival index is not controller identity",
     );
     await until(
       () =>
@@ -522,9 +577,9 @@ test(
       () => pending[0].done && clients.size === 4,
       "first SSH connection actually closed",
     );
-    peers[0].release();
-    await delay(20);
-    assert.equal(records.length, 0);
+    await cancelledPeer.transportClosed;
+    cancelledPeer.release();
+    assert.equal(cancelledPeer.records.length, 0);
     const nextController = new AbortController(),
       next = settle(
         queryRemoteDatabase(input, { signal: nextController.signal }),
@@ -533,11 +588,27 @@ test(
       () => peers.length === 6,
       "closed lease permits replacement connection",
     );
+    // The old index-based release would instead unblock this live invocation.
+    // Let that separately identified peer finish: its wire SQL is a positive
+    // control, while the cancelled peer must still have zero SQL afterward.
+    const activePeer = peersByIdentity.get("fictional-4");
+    activePeer.completeQuery = true;
+    activePeer.release();
+    await pending[4].promise;
+    assert.equal(pending[4].error, undefined);
+    assert.deepEqual(pending[4].value.rows, []);
+    assert.equal(activePeer.records[0], "BEGIN READ ONLY");
+    assert.match(activePeer.records[1], /SELECT.*localapi_result/s);
+    assert.equal(
+      cancelledPeer.records.length,
+      0,
+      "late release never sends SQL on the cancelled invocation",
+    );
     nextController.abort();
     for (const controller of controllers) controller.abort();
     await Promise.all([...pending, next].map((item) => item.promise));
     await until(() => clients.size === 0, "all SSH transports close");
-    for (const item of [...pending, next])
+    for (const item of [...pending.slice(0, 4), next])
       assert.match(item.error?.message ?? "", /已取消/);
     holdAuthentication = true;
     const openingController = new AbortController();

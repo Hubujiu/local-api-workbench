@@ -1,6 +1,15 @@
-# 后端检查点 · 2026-10-27 12:02 UTC
+# 后端检查点 · 2026-10-27 12:23 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 12:23 SSH 取消测试身份绑定修正候选（生产零改）
+
+- 上一根 `047d` / tree `bb36d1c` 首次 CI `40501200864` 为 **18/19，RED**，不能作为样例图组合验收。macOS job `122179026514` 的 test 527 报 `records.length` 实际2、预期0；Linux／Windows各1958通过，macOS1957通过、1失败。19个job实际checkout均为同一047d；12份实际诊断产物覆盖375文件（94/94/94/93），清单hash `a6bed60fd799cdc1324f6d82564f0ab4a1fbcf1835dd9b25cf43b20d402cc7bf`。样例及任务流程在三OS已通过，但不能因此把整个组合改判GREEN。
+- 真SSH确定反序验证了测试假设错误：controllers创建顺序不等于远端peer到达顺序；旧测试的peer0可以是另一条仍活跃连接，记录中的BEGIN不证明被取消连接继续发SQL。修正以虚构认证身份绑定controller和peer，以显式认证gates确定反序；等待被取消peer真实close后释放迟到响应，核该peer零SQL，同时另一条活跃连接正常完成，避免仅靠全部连接失效取得假阳性。本次不是生产取消逻辑修复，不改变驱动、协议、预算或取消合同。
+- 当前根合并点 `3922e491f2bc91e5847f548ecbd245fb3727e2e6` / tree `d77f1b8b3f938e6fe6c9073192cafd7c9c9ca7ad`，合入PR24 local `89b9ec20792c782d6c6e22d77b7c563329536527` / remote `5e78cf27d5611810c32eb8157727aece5ad849b9` / feature tree `5f4f5fe29d40f2e391871fb6b83777e8bfe31868`。合并差异仅一个测试文件，生产零改；随后仅更新本状态文档。**PR24新头独立CI及新根候选CI仍待**，不盲目重跑旧CI，不借旧绿色替代。
+- 在该精确根树完整重跑 `database-cancellation.test.mjs`，6/6通过、无失败／取消／跳过；覆盖实际PG/MySQL、Redis/ClickHouse、SQLite、SSH及项目HTTP断开链。全库check、format:check与diff检查通过，未重复无关全量。这是新树本地证据，尚非跨平台验收。
+- PR14样例图最终remote `9c66155ceeff7f57afda1b2368004cb3cf355f02` / tree `a3a609b57b66e59371b01e46f75064d2737b7a20` 的独立CI `40500490883` 首次19/19 GREEN；实际checkout `9aa22b29d6079c62db094dc9221e30100852c4da` 与该功能树相同，三OS各1222通过，12份实际产物273文件（69/68/68/68）清单hash `43971b749f970eb381ad29a5c82582028ab3ead350a3bd4eff9fe51f12b7ed06`。该独立功能证据不替代上述失败根组合或新候选CI。
+- 历史f83/8b5 Windows XML RED继续保留，未修复或改判；原版GUI及暂停专项未开展，PR37仍关闭，未合main/develop或部署。
 
 ## 12:02 HTTP 样例／分组原生图往返组合候选
 
