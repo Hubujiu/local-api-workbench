@@ -1,3 +1,4 @@
+import { verifySampleDefinitions } from "./apipost-sample-export.mjs";
 import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
 import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
 import { exportApipost, apipostExportId } from "./apipost-export.mjs";
@@ -137,7 +138,7 @@ export function exportApipostDirectory(project, options = {}) {
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
       const frozen = exportApipost(
-        { ...base, requests: [snapshotRequest] },
+        { ...base, requests: [snapshotRequest], cases: [], caseFolders: [] },
         options,
       );
       for (const folder of frozen.apis.filter(
@@ -267,7 +268,53 @@ export function exportApipostDirectory(project, options = {}) {
       }));
     put("settings/" + file + ".json", value);
   }
-  put("samples/index.json", { project_id: projectId, items: [] });
+  const sampleIds = new Map(
+    document.samples.map((sample) => [
+      sample.sample_id,
+      scoped("sample", sample.sample_id),
+    ]),
+  );
+  const samples = document.samples.map((sample) => ({
+    ...sample,
+    sample_id: sampleIds.get(sample.sample_id),
+    target_id: nativeIds.get(sample.target_id),
+    parent_id: sample.parent_id === "0" ? "0" : sampleIds.get(sample.parent_id),
+  }));
+  const sampleMetadata = ({
+    sample_id,
+    project_id,
+    parent_id,
+    target_id,
+    name,
+    type,
+    method,
+    url,
+    sort,
+  }) => ({
+    sample_id,
+    project_id,
+    parent_id,
+    target_id,
+    name,
+    type,
+    method,
+    url,
+    sort,
+  });
+  put("samples/index.json", {
+    project_id: projectId,
+    items: samples.map(sampleMetadata),
+  });
+  for (const sample of samples) {
+    if (!sample.target_id || sample.parent_id === undefined)
+      throw Error("原生目录样例身份映射缺失");
+    put("samples/" + sample.sample_id + ".json", {
+      ...sampleMetadata(sample),
+      created_at: timestamp,
+      updated_at: timestamp,
+      data: sample,
+    });
+  }
   put("schemas/index.json", {
     project_id: projectId,
     items: document.models.map(({ schema, ...metadata }) => metadata),
@@ -314,6 +361,9 @@ export function exportApipostDirectory(project, options = {}) {
   };
   importIntoProject(check, result, options);
   verifyProtocolDefinitions(project.protocols, check.protocols);
+  verifySampleDefinitions(project, check, (id) =>
+    nativeIds.get(apipostExportId("a", id)),
+  );
   const withStatus = (p) =>
     (p.documents || []).map((d) => ({
       ...d,

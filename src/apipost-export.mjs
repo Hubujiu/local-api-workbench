@@ -1,5 +1,9 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import {
+  prepareSampleExport,
+  verifySampleDefinitions,
+} from "./apipost-sample-export.mjs";
+import {
   prepareProtocolExport,
   verifyProtocolDocument,
 } from "./apipost-protocol-export.mjs";
@@ -10,7 +14,7 @@ import { exportApipostDocuments } from "./apipost-document-export.mjs";
 import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
-import { normalizeRequest } from "./core.mjs";
+import { normalizeRequest, importIntoProject } from "./core.mjs";
 import { variableRows } from "../public/variable-definitions.js";
 
 // Independently written interchange adapter. No original code or runtime is used.
@@ -158,7 +162,6 @@ export function exportApipost(project, options = {}) {
   // This is a definition interchange, not a backup, execution archive or grant.
   for (const key of [
     "plans",
-    "cases",
     "apiResourceTrash",
     "parameterDictionary",
     "models",
@@ -282,7 +285,7 @@ export function exportApipost(project, options = {}) {
   }
   for (const name of project.folders || []) folder(name);
   const requestIds = new Set();
-  for (const input of project.requests.filter((r) => !r.deletedAt)) {
+  function requestNode(input) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
@@ -369,7 +372,7 @@ export function exportApipost(project, options = {}) {
       (queryIndex < 0 ? r.url : r.url.slice(0, queryIndex)) +
       (suffix ? "?" + suffix : "");
 
-    apis.push({
+    return {
       target_id: apipostExportId("a", r.id),
       project_id: projectId,
       parent_id: folder(r.folder),
@@ -415,8 +418,15 @@ export function exportApipost(project, options = {}) {
         projectId,
         targetId: apipostExportId("a", r.id),
       }),
-    });
+    };
   }
+  for (const input of project.requests.filter((r) => !r.deletedAt))
+    apis.push(requestNode(input));
+  const samples = prepareSampleExport(project, {
+    projectId,
+    id: apipostExportId,
+    encodeRequest: requestNode,
+  });
   apis.push(
     ...exportApipostDocuments(project, {
       projectId,
@@ -471,12 +481,23 @@ export function exportApipost(project, options = {}) {
       custom_func: [],
     },
     apis,
-    samples: [],
+    samples,
     models: modelExport.models,
     automated_testings: [],
   };
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
+  if (samples.length) {
+    const check = {
+      requests: [],
+      environments: [],
+      folders: [],
+      servers: [],
+      settings: {},
+    };
+    importIntoProject(check, document, options);
+    verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
+  }
   return document;
 }

@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-27 11:37 UTC
+# 后端检查点 · 2026-10-27 12:02 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 12:02 HTTP 样例／分组原生图往返组合候选
+
+- 上一根 `bd127` 首次 CI `40497772310` 精确全19项 GREEN，tree `36986b95`；三 OS 各1950通过，12份实际诊断产物清单373文件（94/93/93/93），hash `33197e543331cb238a146cec82d4b30593b8cb9d18748a651fe4f1228979685d`。该结果包含普通HTTP提取修复，不包含本次样例出口。
+- 本候选最终生产合并点 `0d0bdccaa54195d0b1f581d96bf94aced52c2f16` / tree `a572eeeb710a9e5d779b9cdd141c5d933237c877`，包含 PR14 local `eefb09e341a856d321f063374c24265cd3053d27` / remote `9c66155ceeff7f57afda1b2368004cb3cf355f02` / feature tree `a3a609b57b66e59371b01e46f75064d2737b7a20`。该功能头及根候选独立CI尚待；`035c`旧头不是最终验收。
+- 样例复用既有请求编码器，保留四个冻结flags及当前定义关系；API归属、父分组、空组、分组sort及双格式最终project／target／sample ID图经完整回读核验。grouped sample 会隐式继承live API，所以新增参数／任务导致语义变化时明确拒绝，而非无声灌回；显式noauth及root sample保持各自合同。样例脚本／任务／schema等无无损映射继续拒绝，不执行或获取原生内容。普通API原有native tasks、签名认证、模型、文档与协议出口能力不能因requestNode重构丢失。
+- 本批发现并修复真实排序缺陷：带数值sort与无sort的跨API交错样例，原helper按全局index排序，而实际 `caseRunOrder` 按API／分组bucket内局部index排序；旧内部oracle复用同一算法会掩盖改变。最终fix经独立两格式两代反例核验，根组合也直接调用真实 `public/case-folders.js` 的 `caseRunOrder` 构建定义比较及执行计划，不复制出口oracle。仅承诺当前有效执行顺序，不伪造已经丢失的历史sample数字sort。
+- 四条官方SDK组合覆盖HTTP／stdio × JSON／目录，各自双代export/import核完整样例关系且零网络。在创建计划前加入live-only Header，确认出口因冻结语义失配拒绝且项目不变，避免plans出口限制掩盖目标guard。之后从真实 `case.request` 创建冻结HTTP计划（不存在execute_case工具，不虚构调用），再编辑live API的auth/header/query/body；SDK、真实CLI及备份恢复重启后的CLI均发送原样例body／环境值，无live凭据或参数注入。
+- 每条三轮各3个真实请求；CLI明确exit0、记录passed且recordSaved=true，attemptedRecordId／recordId／run.id与新Store历史一致。源项目及第三项目不变，第二代项目保留2条历史、恢复副本追加为3条，恢复不自动联网，四个快照flags与case定义保持。
+- 本候选最终八个完整相关文件30/30通过，包含样例、native任务出口SDK／CLI、独立签名验签、模型、文档、协议资源图和MCP流程；全库check、format:check及diff检查通过。根仅新增组合测试和候选说明，不改生产／解析器／VM／预算。历史f83/8b5 Windows XML RED仍未修复或改判；原版GUI及暂停专项未开展，PR37仍关闭，未合main/develop或部署。
 
 ## 11:37 普通 HTTP 提取列表原子性组合候选
 
