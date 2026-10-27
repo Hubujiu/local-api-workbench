@@ -1,6 +1,7 @@
 import {
   validateNativeInheritanceProject,
   assertNativeInheritanceIdentity,
+  editNativeInheritance,
 } from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
@@ -213,7 +214,26 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async save(p, { activity = false } = {}) {
+  async editNativeInheritance(projectId, input) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (k) => !["configRevision", "operation"].includes(k),
+      ) ||
+      !Number.isSafeInteger(input.configRevision) ||
+      input.configRevision < 0
+    )
+      throw Error("继承图操作必须提供有效configRevision和operation");
+    const current = await this.get(projectId);
+    if (input.configRevision !== current.configRevision)
+      throw Error("项目已有其他修改，请重新加载");
+    const next = editNativeInheritance(current, input.operation);
+    const operation = structuredClone(input.operation);
+    return this.save(next, { nativeInheritanceEdit: operation });
+  }
+  async save(p, { activity = false, nativeInheritanceEdit } = {}) {
     validateNativeInheritanceProject(p);
     validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
@@ -306,7 +326,7 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
-          assertNativeInheritanceIdentity(previous, p);
+          assertNativeInheritanceIdentity(previous, p, nativeInheritanceEdit);
           if (
             previous &&
             p._diskFingerprint &&

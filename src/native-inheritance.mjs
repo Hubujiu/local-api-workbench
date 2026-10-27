@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { moveFolderTree } from "../public/folder-tree.js";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { importApipostAuth, importApipostRows } from "./apipost-import.mjs";
 import { validateGlobalParameters } from "../public/global-parameters.js";
@@ -709,12 +710,104 @@ export function resolveNativeInheritance(
   return result;
 }
 
+// Explicit owner operations preserve identities; generic project saves remain
+// unable to detach or replace a graph. Recomputed again against locked storage.
+export function editNativeInheritance(project, operation) {
+  validateResourceJSON(operation, 4096);
+  const state = validateNativeInheritanceProject(project);
+  if (!state) fail("当前项目没有可编辑的继承图");
+  fields(
+    operation,
+    operation?.type === "move-folder"
+      ? ["type", "sourceId", "parentId", "name"]
+      : ["type", "requestId", "parentId"],
+    "结构操作",
+  );
+  if (!["move-folder", "move-request"].includes(operation.type))
+    fail("仅支持目录改名/移动或接口移动");
+  identifier(operation.parentId);
+  if (operation.parentId !== "0" && !state.folders.has(operation.parentId))
+    fail("目标父目录不属于当前项目");
+  const parentPath =
+    operation.parentId === "0"
+      ? ""
+      : state.folders.get(operation.parentId).path;
+  let next;
+  if (operation.type === "move-folder") {
+    identifier(operation.sourceId);
+    const folder = state.folders.get(operation.sourceId);
+    if (!folder) fail("源目录不属于当前项目");
+    const name = operation.name;
+    if (
+      typeof name !== "string" ||
+      !name ||
+      name !== name.trim() ||
+      name.length > 200 ||
+      !name.isWellFormed() ||
+      /[\\/\r\n\0]/.test(name) ||
+      [".", "..", "__proto__", "constructor", "prototype"].includes(name)
+    )
+      fail("目录名称无效");
+    if (
+      state
+        .ancestry(operation.parentId)
+        .some((f) => f.sourceId === folder.sourceId)
+    )
+      fail("不能移入自己的子目录");
+    const destination = parentPath ? parentPath + "/" + name : name;
+    next = moveFolderTree(project, folder.path, destination);
+    const graph = next.settings.nativeInheritance;
+    const moved = graph.folders.find((f) => f.sourceId === folder.sourceId);
+    moved.name = name;
+    moved.parentId = operation.parentId;
+    for (const f of graph.folders) {
+      if (f.path === folder.path || f.path.startsWith(folder.path + "/"))
+        f.path = destination + f.path.slice(folder.path.length);
+    }
+  } else {
+    if (
+      typeof operation.requestId !== "string" ||
+      !state.bound.has(operation.requestId)
+    )
+      fail("源接口不属于当前项目");
+    next = structuredClone(project);
+    next.settings.nativeInheritance.bindings.find(
+      (b) => b.requestId === operation.requestId,
+    ).parentId = operation.parentId;
+    next.requests.find((r) => r.id === operation.requestId).folder = parentPath;
+  }
+  validateNativeInheritanceProject(next);
+  return next;
+}
+
 // Structural edits need a deliberate graph-aware operation, not a partial CRUD
 // update. Value-only layer/own-request changes remain allowed.
-export function assertNativeInheritanceIdentity(previous, next) {
+export function assertNativeInheritanceIdentity(previous, next, operation) {
   const prior = validateNativeInheritanceProject(previous || {});
   if (!prior) return;
   const current = validateNativeInheritanceProject(next);
+  const edited =
+    operation === undefined
+      ? undefined
+      : editNativeInheritance(previous, operation);
+  const expected = edited ? edited.settings.nativeInheritance : prior.graph;
+  if (edited) {
+    // A dedicated structural operation cannot edit live values or snapshots.
+    for (const key of [
+      "settings",
+      "folders",
+      "requests",
+      "documents",
+      "protocols",
+      "cases",
+      "plans",
+      "runs",
+      "history",
+      "protocolRuns",
+    ])
+      if (!isDeepStrictEqual(edited[key], next[key]))
+        fail("结构操作不能夹带其他配置或冻结证据修改");
+  }
   const identity = (g) => ({
     sourceProjectId: g.sourceProjectId,
     folders: g.folders.map(({ sourceId, parentId, name, path }) => ({
@@ -727,7 +820,7 @@ export function assertNativeInheritanceIdentity(previous, next) {
   });
   if (
     !current ||
-    !isDeepStrictEqual(identity(prior.graph), identity(current.graph))
+    !isDeepStrictEqual(identity(expected), identity(current.graph))
   )
     fail("本片不支持移除、移动或替换已绑定资源图；请使用独立项目");
 }

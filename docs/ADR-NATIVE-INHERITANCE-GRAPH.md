@@ -133,7 +133,6 @@ shape may be replaced. Reads as well as saves/restores validate graph closure;
 manual graph damage on disk fails closed, rather than silently running own-only
 requests. No partial resource detach/move/delete operation is implemented.
 
-
 ### Saved frozen-case execution
 
 A frozen case retains its original request ID but has no live binding. Direct
@@ -190,7 +189,6 @@ existing encoder's inert binary:null field (nonempty binary still rejects), then
 a test incorrectly referenced src/cli.mjs instead of the actual run-plan entry;
 both were corrected before the first five-case PASS. Final CI remains pending.
 
-
 ### Review corrections before final form acceptance
 
 The first form stage f45c1d2b / tree ff6a8228 passed its own CI 40526742319,
@@ -233,7 +231,6 @@ final graph-preserving reimport is acceptance evidence. Workbench backup remains
 the fallback for unrepresentable combinations. This section is a candidate until
 its exact implementation and end-to-end tests pass.
 
-
 This directory operation migrates definitions, not Workbench editor history.
 Only versionPlan-shaped edit attribution is projected: provenance has exactly
 fields/steps objects, known name/description/environmentId/statusPolicy field
@@ -242,7 +239,6 @@ not encode that attribution; complete Workbench backup retains it. Unknown keys,
 external attribution, imported historical MCP metadata and executable metadata
 still reject. Real owner and official SDK-created strict plans are covered, not
 only already-imported native flow fixtures.
-
 
 Stage evidence: the initial public guard rejected the new nonempty directory
 fixture (RED). A later raw-source check initially reused the editable layer's
@@ -276,3 +272,36 @@ snapshot duplicate-row rejection, and macOS desktop separately reported a script
 activity timeout after HTTP 200 (compatibility 275 ms against a 250 ms budget),
 followed by shutdown watchdog timeout. This is not an artifact-upload failure;
 this feature does not change the script engine or its limits to hide it.
+
+## Graph-aware structural edits (work in progress)
+
+Owner POST `/api/projects/:id/native-inheritance-edit` takes the current
+`configRevision` and one `operation`: `move-folder` with `sourceId`, existing
+`parentId` (`"0"` means root), and a single `name`; or `move-request` with
+`requestId` and existing `parentId`. It never adds implicit ancestors. Source
+identities stay unchanged; paths and parent bindings change together. Ordinary
+project PUT still cannot change graph identity. Store replays the bounded
+operation against its locked previous state, checks the exact permitted graph,
+live-resource and frozen-evidence projection, and retains revision conflicts.
+No caller-controlled validation bypass is accepted by the owner route.
+
+Canonical folder moves already preserve plans/cases while moving live paths;
+this adapter follows that rule and revalidates effective inherited form/auth
+contracts. New live execution follows the new parent; stored snapshots and
+history do not. Moves neither execute nor reconnect anything. Cross-project
+IDs, missing parents, collisions, cycles, invalid resulting layers and stale
+revisions reject before disk writes. Existing source IDs may happen to coincide
+in independent projects; they select only within the authenticated URL project,
+not an external registry.
+
+Deletion, recycling/restoration, detach, folder creation and append-import remain
+unsupported for preserved graphs. Ordinary API tombstones and batch trash do
+not encode a saved graph parent/layer contract; weakening graph validation or
+silently deleting dependent cases/plans is not an acceptable implementation.
+Backups remain the complete snapshot/history format. Native exports retain their
+existing representability checks, including refusals for unsupported frozen
+combinations. This is a backend operation, with no new UI or MCP authority.
+
+Initial owner rename specification failed with 404 before implementation; its
+first path now passes. Full lifecycle/roundtrip/entrypoint verification and exact
+CI remain pending at this stage; this is not final acceptance.
