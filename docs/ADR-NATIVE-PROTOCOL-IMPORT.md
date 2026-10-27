@@ -261,3 +261,21 @@ denial, live open/send/stop, and records through backup/restore/server restart.
 Atomic endpoint/expression/script rejection and missing/oversize pre-open versus
 live-send failures are distinguished by real connection/write counters. Restored
 records do not resurrect sessions or grant removed handshake credentials.
+
+## Legacy composed identity collision rejection
+
+Persisted derived IDs remain unchanged, including colon-containing source IDs.
+Before any project mutation, imports now compare structured identity tuples
+against their legacy colon-joined keys. Distinct tuples cannot silently become
+one equal gRPC definition or one message plan. The check includes existing
+redacted protocol sources from the same source-project namespace, so splitting
+an ambiguous archive into successive imports (including after restart) cannot
+bypass it. Reimport of the same tuple is still idempotent; different source
+projects remain separate namespaces. Inert method/message identities reserve
+that namespace too. No archived credentials are reconstructed or transmitted.
+
+This rejects new ambiguous imports; it does not repair or reinterpret a project
+that already lost definitions before this check. Native export must independently
+reject historical collapsed graphs. Full HTTP import/Store/restart tests prove
+atomic rejection and zero endpoint connections; existing real gRPC/Socket.IO,
+TCP/WS/SSE, frozen-template and restore chains remain part of the batch.

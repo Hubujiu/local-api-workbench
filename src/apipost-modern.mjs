@@ -1,3 +1,4 @@
+import { assertNativeProtocolIdentities } from "./apipost-protocol-identities.mjs";
 import { prepareNativeProtocols } from "./apipost-native-protocols.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
@@ -291,6 +292,10 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const marks = new Set((global.marks ?? []).map((m) => String(m.mark_id)));
   list(source.apis, "apis");
   const nativeProtocols = prepareNativeProtocols(source, resource);
+  assertNativeProtocolIdentities(
+    source,
+    project.settings?.apipostProtocolSources,
+  );
   const apiNodes = nativeProtocols.nodes;
   const samples = prepareModernSamples(
     source.samples,
