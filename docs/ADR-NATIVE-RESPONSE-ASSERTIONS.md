@@ -428,3 +428,93 @@ export verification belongs to the combined tree, not this standalone claim.
 The independent XML intrinsic-guard audit remains incomplete and was not
 restarted. Passing regularmatch tests or dependency CI does not complete that
 separate audit or explain historical activity-budget intermittency.
+
+## Bounded expected-variable expansion increment (2026-10-27)
+
+This section supersedes earlier **compareValue** literal-only/template-rejection
+statements, not the selector/path or broader scope limitations. Raw definitions
+remain unchanged in imports, frozen plans, source export, backup and saved runs.
+Disabled tasks and inert provenance never expand or compile anything.
+
+### Evidence and independent implementation
+
+The same legally obtained sender SHA256 above, LF-normalized character offset
+**33586490**, calls `pm.variables.replaceIn` on `data.expression.compareValue`
+after reading the selected actual source and before the comparator dispatch.
+Additional original offsets: VariableScope.replaceIn30699275; Substitutor module
+30721909, token grammar30722882, 19-round limit30722918, replacer30723104;
+Variable.toString30701035.
+This increment does not execute or copy that proprietary implementation.
+
+Independent open-source behavioral reference is Postman's Apache-2.0
+[postman-collection v5.3.1 superstring](https://github.com/postmanlabs/postman-collection/blob/e2453a5c1eb23f92f09df68712b30a87f775bb6d/lib/superstring/index.js),
+commit `e2453a5c1eb23f92f09df68712b30a87f775bb6d`, blob
+`a2701670467743368e93525ee7062bffcdacba8a`, and its
+[Variable conversion](https://github.com/postmanlabs/postman-collection/blob/e2453a5c1eb23f92f09df68712b30a87f775bb6d/lib/collection/variable.js).
+[License](https://github.com/postmanlabs/postman-collection/blob/e2453a5c1eb23f92f09df68712b30a87f775bb6d/LICENSE.md)
+blob `d9a10c0d8e868ebf8da0b3dc95bb0be634c34bfe`.
+The fixed token grammar and 19-pass algorithm are independently adapted with our
+existing scalar/descriptor readers and a separately written bounded append loop;
+no third-party source was copied or newly bundled. Static agreement does **not**
+prove the original embedded SDK version is v5.3.1.
+
+### Supported contract
+
+Every enabled task reads its safe actual source first. If compareValue is present,
+it then expands that string before any of the fifteen comparisons, including
+supplied unary operands. Omitted unary operands remain omitted. Each of at most
+**19 rounds** scans the string as it stood at the start of that round. The fixed
+`{{([^{}]*?)}}` grammar reads exact keys: Unicode, spaces, empty names, dots and
+brackets are literal names, not paths and not trimmed. Nested, newly introduced,
+and cross-piece markers are naturally processed in following rounds. Backslash
+is not an escape. `$&` and `$1` replacement values are appended literally.
+
+Private map references and captured own-property descriptors read current values,
+not replaceable public `pm.variables.get/replaceIn` methods. Local own values,
+including undefined, shadow the effective scope. Missing markers remain intact;
+present undefined becomes empty, null becomes `null`, finite number/boolean/string
+uses captured String conversion. Current set/unset/clear edits and scope refreshes
+are observed. This does not add original iteration/collection scope layers.
+
+Only actually encountered tokens are inspected: names beginning `$`, all captured
+Object.prototype own names plus `prototype`, accessors, non-enumerable fields,
+functions, objects/arrays, symbols, bigint and nonfinite numbers are errors. No
+getter, callback or object conversion executes. The original normal VariableList
+uses a plain-object reference map (sender offsets26168907/30696555); prototype
+names therefore have unsafe inheritance semantics that this subset rejects.
+There is no twentieth-round scan: a builtin marker newly produced by round19 is
+left untouched. Cycles preserve their round19 result rather than throw. A pure
+scalar unchanged fixed point may stop early, with the same output.
+
+Input, every selected value and each output are valid Unicode and at most
+**64KiB UTF-8**. Each fragment is measured and its cumulative size checked **before**
+concatenation. Token names are capped at **1000 UTF-16 code units**, matching the
+existing native selector/name resource envelope; this is an explicit bounded
+subset, not an original SDK limit. At most **1000 matched attempts across the
+entire native phase**, including missing keys and unary operands, not per task
+or round. Fixed points charge only actual scans. The bootstrap captures the
+fixed token RegExp and direct exec; mutable String.replace/Symbol.replace are
+not invoked. User regex construction remains solely at its native task execution.
+
+After expansion, regularmatch again requires a nonempty raw pattern within
+1024 UTF-16 units/4096 UTF-8 bytes; empty expansion is a deliberate error rather
+than original silent omission. Slash-only remains allowed and edge-slash/no-flags
+semantics remain. Source/expansion/syntax errors fail the stage outside pm.test;
+softfalse, before failure blocking, strict enabled-pick rollback and private
+completion/quota rules are unchanged. No VM, activity or wall budget is relaxed;
+no new host evaluation, asynchronous helper or XML-special audit is introduced.
+
+### Validation scope
+
+Formal fixtures cover exact scalar/key conversion, nesting/cross-piece/triple
+braces, 19-round cycles and final-marker retention, current scope edits, local
+undefined shadowing, clear/unset, isolated fresh stages, public helper/intrinsic
+replacement, getter refusal, shared1001st attempt, invalid Unicode and UTF8 growth,
+all fifteen comparisons and post-expansion regularmatch bounds/syntax. Existing
+real HTTP modern import lifecycle now uses expanded before/after patterns and
+expanded invalid syntax while retaining frozen definitions, before-zero-HTTP
+rollback, after soft continuation, enabled-pick strict stop, durable results,
+project isolation, backup restore and restart. Earlier import-time template
+negatives become runtime unsupported-builtin cases; structural/unknown comparator
+and data-type rejection remain. Exact local and CI results are recorded in PR26,
+not inferred from historical GREEN checkpoints.

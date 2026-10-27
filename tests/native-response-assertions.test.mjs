@@ -601,7 +601,7 @@ test("native assertion closed data and aggregate limits reject atomically withou
     for (const alter of [
       (task) => (task.data.type = "responseXml"),
       (task) => (task.data.expression.compareType = "regex"),
-      (task) => (task.data.expression.compareValue = "{{secret}}"),
+      (task) => (task.data.expression.compareValue = { unsafe: "{{secret}}" }),
       (task) => (task.data.expression.path = "$[?(@.secret)]"),
       (task) => (task.data.expression.unknown = true),
       (task) => (task.data.expression.compareValue = "雪".repeat(30000)),

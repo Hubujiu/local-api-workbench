@@ -1,4 +1,6 @@
 import test from "node:test";
+import http from "node:http";
+import { executeRequest } from "../src/runtime.mjs";
 import assert from "node:assert/strict";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
 import { normalizeNativeAssertionData } from "../src/native-response-assertions.mjs";
@@ -88,6 +90,8 @@ test("expected expansion handles exact scalar keys, undefined shadowing and lite
 test("expected expansion uses round snapshots, nested cross-piece tokens and exactly nineteen rounds", async () => {
   const rows = [
     ["{{a}}", "final", { a: "{{b}}", b: "final" }],
+    ["{{{x}}}", "{v}", { x: "v" }],
+    ["{{a{{b}}}}", "done", { b: "x", ax: "done" }],
     ["{{a}}{{b}}", "final", { a: "{{", b: "c}}", c: "final" }],
     ["{{a}}", "{{b}}", { a: "{{b}}", b: "{{a}}" }],
     ["{{x}}", "{{x}}", { x: "{{x}}" }],
@@ -265,4 +269,116 @@ test("expected expansion applies to every comparison, including supplied unary o
     result.tests.every((x) => x.passed),
     JSON.stringify(result.tests),
   );
+});
+
+test("expected expansion reads source first, never invokes accessors, and keeps local/effective changes isolated", async () => {
+  await assert.rejects(
+    phase([
+      script('pm.environment.set("actual", {});'),
+      check("{{$unsupported}}"),
+    ]),
+    /有限JSON原始值/,
+  );
+  for (const target of ["localVariables", "variables"])
+    await assert.rejects(
+      phase(
+        [
+          script(
+            `Object.defineProperty(${target},"value",{get(){throw Error("getter invoked")},enumerable:true});`,
+          ),
+          check("{{value}}"),
+        ],
+        { actual: "x" },
+      ),
+      /只读取自有数据/,
+    );
+  const result = await phase(
+    [
+      check("{{value}}"),
+      script(
+        'pm.environment.set("value","new");pm.environment.set("actual","new");',
+      ),
+      check("{{value}}"),
+      script(
+        'pm.variables.set("value",undefined);pm.environment.set("actual","");',
+      ),
+      check("{{value}}"),
+      script('pm.variables.clear();pm.environment.set("actual","new");'),
+      check("{{value}}"),
+      script('pm.variables.set("value","local");pm.variables.unset("value");'),
+      check("{{value}}"),
+    ],
+    { actual: "old", value: "old" },
+  );
+  assert(result.tests.every((x) => x.passed));
+  const fresh = await phase([check("{{value}}")], { actual: "{{value}}" });
+  assert.equal(fresh.tests[0].passed, true);
+});
+
+test("expected expansion closes all eleven real-response sources and runtime builtin error paths", async (t) => {
+  const server = http.createServer((_req, res) => {
+    res.setHeader("x-value", "header");
+    res.setHeader("set-cookie", "session=cookie");
+    res.end('{"value":"json"}');
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const wire = await executeRequest({
+    url: `http://127.0.0.1:${server.address().port}/`,
+  });
+  const rows = [
+    ["responseCode", "", "200"],
+    ["responseJson", "$.value", "json"],
+    ["responseHeader", "x-value", "header"],
+    ["responseCookie", "session", "cookie"],
+    ["responseTime", "", String(wire.duration)],
+    ["responseSize", "", String(wire.size)],
+    ["tempVars", "value", "current"],
+    ["envVars", "value", "current"],
+    ["globalVars", "value", "current"],
+    ["responseXml", "string(/root/value)", "xml"],
+    ["responseText", "", "<root><value>xml</value></root>"],
+  ];
+  const run = (tasks) =>
+    runNativeTaskPhase(tasks, {
+      request: {},
+      response: wire,
+      scopes: {
+        globals: { value: "current" },
+        environment: { value: "current" },
+      },
+    });
+  const setup = script(
+    rows
+      .map(
+        (row, i) =>
+          `pm.variables.set("expected${i}",${JSON.stringify(row[2])});`,
+      )
+      .join(""),
+  );
+  const tasks = [setup];
+  rows.forEach(([type, path], i) => {
+    if (type === "responseXml")
+      tasks.push(
+        script('pm.response.setBody("<root><value>xml</value></root>");'),
+      );
+    tasks.push(check(`{{expected${i}}}`, "eq", path, type));
+  });
+  const result = await run(tasks);
+  assert.equal(result.tests.length, 11);
+  assert(
+    result.tests.every((x) => x.passed),
+    JSON.stringify(result.tests),
+  );
+  for (const [type, path] of rows) {
+    const tasks =
+      type === "responseXml"
+        ? [script('pm.response.setBody("<root><value>xml</value></root>");')]
+        : [];
+    tasks.push(check("{{$unsupported}}", "exist", path, type));
+    await assert.rejects(run(tasks), /内置或保留/);
+  }
 });

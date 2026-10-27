@@ -81,7 +81,7 @@ test("native Header assertion literal paths are raw casefold, not pick normaliza
   }
   for (const invalid of [
     data("{{token}}", "value"),
-    data("x-token", "{{token}}"),
+    data("x-token", ["{{token}}"]),
     data("x", "v", "regex"),
     data("x", 1),
     data("x".repeat(1001), "v"),

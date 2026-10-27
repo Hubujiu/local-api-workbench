@@ -665,7 +665,7 @@ test("native comparator malformed imports and API plan creation reject atomicall
   for (const alter of [
     (entry) => delete entry.data.expression.compareValue,
     (entry) => (entry.data.expression.compareValue = 10),
-    (entry) => (entry.data.expression.compareValue = "{{secret}}"),
+    (entry) => (entry.data.expression.compareValue = ["{{secret}}"]),
     (entry) => (entry.data.expression.compareType = "regex"),
     (entry) => (entry.data.expression.unexpected = true),
     (entry) => {

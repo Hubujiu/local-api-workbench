@@ -299,6 +299,8 @@ function installNativeAssertions(
       throw Failure("原生变量断言只读取当前自有数据字段");
     return boundedString(property.value);
   };
+  // Independently implemented bounded adapter for Postman superstring's
+  // 19-round token grammar; provenance and deliberate differences are in ADR.
   // Fixed grammar only; user patterns are never used by this scanner.
   const marker = new Pattern("\\{\\{([^{}]*?)\\}\\}", "g"),
     reserved = create(null);
