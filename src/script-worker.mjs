@@ -1,3 +1,4 @@
+import { nativeRequestSnapshotSource } from "./native-request-snapshot.mjs";
 import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
 import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
@@ -596,6 +597,7 @@ try {
         JSON.stringify({
           assertions: workerData.responseAssertions || [],
           extractions: workerData.responseExtractions || [],
+          requestSnapshot: workerData.requestSnapshot,
           evidence: workerData.responseHeaderEvidence,
           cookieEvidence: workerData.responseCookieEvidence,
         }),
@@ -620,11 +622,17 @@ try {
           )
             ? "(" + nativeResponseTextReaderSource + ")(response)"
             : "null") +
+          ";const readRequest=" +
+          (workerData.requestSnapshot
+            ? "(" +
+              nativeRequestSnapshotSource +
+              ')(data.requestSnapshot,data.extractions.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source))'
+            : "null") +
           ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
           nativeAssertionsInstallerSource +
           ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response?.headers,JSON.stringify(data.evidence),readXML,readText,pm.response,{local:localVariables,effective:variables,environment:scopeState.environment,globals:scopeState.globals},response?.cookies,JSON.stringify(data.cookieEvidence));globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText,pm.response);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
+          ")(JSON.stringify(data.extractions),()=>response.body,response?.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText,pm.response,readRequest);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)

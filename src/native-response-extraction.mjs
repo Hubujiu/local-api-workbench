@@ -46,6 +46,8 @@ const scopes = {
   globalVars: "global",
 };
 
+export const isNativeRequestPick = (source) =>
+  ["requestHeader", "requestBody"].includes(source);
 const metadataSources = ["responseCode", "responseTime", "responseSize"];
 const wholeValueSource = (source) =>
   source === "responseText" || metadataSources.includes(source);
@@ -63,6 +65,8 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
     throw Error("pickVars缺少自有来源或变量字段");
   if (
     ![
+      "requestHeader",
+      "requestBody",
       "responseJson",
       "responseHeader",
       "responseXml",
@@ -71,7 +75,7 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
     ].includes(value.source)
   )
     throw Error(
-      "pickVars仅支持responseJson/responseHeader/responseXml/responseText/responseCode/responseTime/responseSize来源",
+      "pickVars仅支持requestHeader/requestBody/responseJson/responseHeader/responseXml/responseText/responseCode/responseTime/responseSize来源",
     );
   const isText = wholeValueSource(value.source);
   nativeDataArray(value.variables, 100);
@@ -90,7 +94,8 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
     if (enabled) {
       if (!safeName(isText ? row.name.trim() : row.name))
         throw Error("pickVars变量名无效");
-      if (value.source === "responseHeader") headerName(row.expression);
+      if (["responseHeader", "requestHeader"].includes(value.source))
+        headerName(row.expression);
       else if (value.source === "responseXml") nativeXMLPath(row.expression);
       else if (!isText) jsonPathSegments(row.expression.trim() || "$");
     }
@@ -117,7 +122,7 @@ export function compilePickVarsOperations(value = []) {
     variables: data.variables.map((row) => ({
       name: wholeValueSource(data.source) ? row.name.trim() : row.name,
       scope: scopes[row.type],
-      ...(data.source === "responseHeader"
+      ...(["responseHeader", "requestHeader"].includes(data.source)
         ? { header: headerName(row.expression) }
         : data.source === "responseXml"
           ? { xmlPath: nativeXMLPath(row.expression) }
@@ -141,6 +146,7 @@ function installPickVars(
   readXML,
   readText,
   metricResponse,
+  readRequest,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -255,6 +261,11 @@ function installPickVars(
       if (root === null || typeof root !== "object")
         throw Error("pickVars响应根须为JSON对象或数组");
     }
+    if (
+      operation.source === "requestBody" ||
+      operation.source === "requestHeader"
+    )
+      root = readRequest(operation.source);
     const selectXML = operation.source === "responseXml" ? readXML() : null;
     // Text is the entire current body, read once per task, never per row.
     const currentText = operation.source === "responseText" ? readText() : null;
@@ -270,16 +281,26 @@ function installPickVars(
     for (let at = 0; at < rows.length; at++) {
       const row = rows[at];
       let value =
-        operation.source === "responseHeader"
-          ? headerValue(row.header)
-          : operation.source === "responseXml"
-            ? selectXML(row.xmlPath)
-            : operation.source === "responseText"
-              ? currentText
-              : isMetadata
-                ? currentMetadata
-                : root;
-      if (operation.source === "responseJson")
+        operation.source === "requestHeader"
+          ? (() => {
+              const item = descriptor(root, row.header);
+              if (!item?.enumerable || !hasOwn(item, "value"))
+                throw Error("请求Header提取字段不存在");
+              return item.value;
+            })()
+          : operation.source === "responseHeader"
+            ? headerValue(row.header)
+            : operation.source === "responseXml"
+              ? selectXML(row.xmlPath)
+              : operation.source === "responseText"
+                ? currentText
+                : isMetadata
+                  ? currentMetadata
+                  : root;
+      if (
+        operation.source === "responseJson" ||
+        operation.source === "requestBody"
+      )
         for (let part = 0; part < row.segments.length; part++) {
           if (value === null || typeof value !== "object")
             throw Error("pickVars响应路径不存在");

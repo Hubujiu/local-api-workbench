@@ -69,7 +69,7 @@ const invoke = (client, name, args) =>
   client.callTool({ name, arguments: args });
 const forge =
   'for(const entry of tests)entry.passed=true;tests.length=0;tests.push({name:"forged success",passed:true});';
-function sourceFor(base, version = "1.1") {
+function sourceFor(base, version = "1.1", requestSnapshots = false) {
   const source = modernApipostFixture();
   source.global.envs = [];
   source.global.servers = [];
@@ -86,12 +86,83 @@ function sourceFor(base, version = "1.1") {
     api.request.header.parameter = [];
     api.request.pre_tasks = before;
     api.request.post_tasks = after;
+    if (id === "numbers" && requestSnapshots) {
+      api.method = "POST";
+      api.request.header.parameter = [
+        { key: "X-Configured", value: "initial-header", is_checked: 1 },
+        { key: "Content-Type", value: "application/json", is_checked: 1 },
+      ];
+      api.request.body = {
+        mode: "raw",
+        raw: '{"count":7,"label":"initial-body"}',
+      };
+      const requestPick = (id, source, expression, name, type) =>
+        task(id, "pickVars", {
+          source,
+          variables: [{ name, type, expression }],
+        });
+      api.request.pre_tasks.push(
+        requestPick(
+          "initial request header",
+          "requestHeader",
+          " X-CONFIGURED ",
+          "pickedHeader",
+          "envVars",
+        ),
+        requestPick(
+          "initial request body",
+          "requestBody",
+          "$.count",
+          "pickedCount",
+          "globalVars",
+        ),
+        script(
+          "change SDK not snapshot",
+          'pm.request.headers.upsert({key:"X-Configured",value:"wire-header"});pm.request.body.update("{\\"count\\":99}");',
+        ),
+        requestPick(
+          "snapshot after SDK header",
+          "requestHeader",
+          "x-configured",
+          "snapshotHeader",
+          "tempVars",
+        ),
+        requestPick(
+          "snapshot after SDK body",
+          "requestBody",
+          "$.count",
+          "snapshotCount",
+          "tempVars",
+        ),
+        assertion(
+          "pre snapshot header remains initial",
+          "tempVars",
+          "snapshotHeader",
+          "eq",
+          "{{pickedHeader}}",
+        ),
+        assertion(
+          "pre snapshot number remains initial",
+          "tempVars",
+          "snapshotCount",
+          "eq",
+          "{{pickedCount}}",
+        ),
+        assertion(
+          "pre snapshot count not wire",
+          "globalVars",
+          "pickedCount",
+          "eq",
+          "7",
+        ),
+      );
+    }
     if (id === "text") {
       api.request.auth = { type: "bearer", bearer: { key: "{{token}}" } };
       api.request.pre_tasks.push(
         script(
           "metadata to wire",
-          'pm.setRequestHeader("X-Meta-Code",String(pm.environment.get("metaCode")));pm.setRequestHeader("X-Meta-Time",String(pm.globals.get("globalTime")));pm.setRequestHeader("X-Meta-Size",String(pm.environment.get("metaSize")));',
+          'pm.setRequestHeader("X-Request-Picked",pm.environment.get("pickedHeader")+"/"+pm.globals.get("pickedCount"));pm.setRequestHeader("X-Meta-Code",String(pm.environment.get("metaCode")));pm.setRequestHeader("X-Meta-Time",String(pm.globals.get("globalTime")));pm.setRequestHeader("X-Meta-Size",String(pm.environment.get("metaSize")));',
         ),
       );
     }
@@ -381,68 +452,91 @@ async function fixture(t, version = "1.1") {
     session.once("close", () => sessions.delete(session));
   });
   peer.on("request", (req, res) => {
-    wire.push({ path: req.url, authorization: req.headers.authorization });
-    res.setHeader("x-num", "10");
-    res.setHeader("x-choice", "blue");
-    res.setHeader(
-      "x-meta-echo",
-      [
-        req.headers["x-meta-code"] ?? "-",
-        req.headers["x-meta-time"] ?? "-",
-        req.headers["x-meta-size"] ?? "-",
-      ].join("|"),
-    );
-    if (req.url === "/duplicate") res.setHeader("x-duplicate", ["one", "two"]);
-    if (req.url === "/collection")
-      res.setHeader("set-cookie", [
-        "native-cookie=token%3D%E9%9B%AA; Path=/",
-        "Another=two; HttpOnly",
-      ]);
-    if (req.url === "/duplicate-cookie")
-      res.setHeader("set-cookie", ["native-cookie=one", "native-cookie=two"]);
-    const body = req.url.startsWith("/numbers/")
-      ? JSON.stringify({
-          token: "wire-" + req.url.split("/").at(-1),
-          binary: "0b11",
-          octal: "0o10",
-          hex: "0x10",
-          space: " ",
-          inf: "Infinity",
-          neg: "-Infinity",
-          empty: "",
-          nil: null,
-          no: false,
-        })
-      : req.url === "/collection"
+    let requestBody = "";
+    req.on("data", (chunk) => {
+      requestBody += chunk;
+    });
+    req.on("end", () => {
+      res.setHeader(
+        "x-request-body-echo",
+        Buffer.from(requestBody).toString("base64") || "-",
+      );
+      res.setHeader(
+        "x-request-header-echo",
+        req.headers["x-configured"] || "-",
+      );
+      res.setHeader(
+        "x-request-pick-echo",
+        req.headers["x-request-picked"] || "-",
+      );
+      wire.push({ path: req.url, authorization: req.headers.authorization });
+      res.setHeader("x-num", "10");
+      res.setHeader("x-choice", "blue");
+      res.setHeader(
+        "x-meta-echo",
+        [
+          req.headers["x-meta-code"] ?? "-",
+          req.headers["x-meta-time"] ?? "-",
+          req.headers["x-meta-size"] ?? "-",
+        ].join("|"),
+      );
+      if (req.url === "/duplicate")
+        res.setHeader("x-duplicate", ["one", "two"]);
+      if (req.url === "/collection")
+        res.setHeader("set-cookie", [
+          "native-cookie=token%3D%E9%9B%AA; Path=/",
+          "Another=two; HttpOnly",
+        ]);
+      if (req.url === "/duplicate-cookie")
+        res.setHeader("set-cookie", ["native-cookie=one", "native-cookie=two"]);
+      const body = req.url.startsWith("/numbers/")
         ? JSON.stringify({
+            token: "wire-" + req.url.split("/").at(-1),
+            binary: "0b11",
+            octal: "0o10",
+            hex: "0x10",
+            space: " ",
+            inf: "Infinity",
+            neg: "-Infinity",
             empty: "",
-            space: " blue",
-            plain: "blue",
-            quoted: '\"blue\"',
-            comma: "one,two",
+            nil: null,
             no: false,
           })
-        : req.url === "/xml"
-          ? "<root><value>Alpha</value><empty/></root>"
-          : req.url === "/soft"
-            ? JSON.stringify({ value: "NaN", nil: null, token: "fresh-token" })
-            : req.url === "/object"
-              ? '{"value":{}}'
-              : req.url === "/array"
-                ? '{"value":[]}'
-                : req.url === "/nonfinite"
-                  ? '{"value":1e999}'
-                  : req.url === "/malformed"
-                    ? "{not-json"
-                    : req.url === "/text"
-                      ? " Alpha 雪 "
-                      : "fixture response";
-    res.setHeader(
-      "content-type",
-      req.url === "/xml" ? "application/xml" : "application/json",
-    );
-    responses.push(body);
-    res.end(body);
+        : req.url === "/collection"
+          ? JSON.stringify({
+              empty: "",
+              space: " blue",
+              plain: "blue",
+              quoted: '\"blue\"',
+              comma: "one,two",
+              no: false,
+            })
+          : req.url === "/xml"
+            ? "<root><value>Alpha</value><empty/></root>"
+            : req.url === "/soft"
+              ? JSON.stringify({
+                  value: "NaN",
+                  nil: null,
+                  token: "fresh-token",
+                })
+              : req.url === "/object"
+                ? '{"value":{}}'
+                : req.url === "/array"
+                  ? '{"value":[]}'
+                  : req.url === "/nonfinite"
+                    ? '{"value":1e999}'
+                    : req.url === "/malformed"
+                      ? "{not-json"
+                      : req.url === "/text"
+                        ? " Alpha 雪 "
+                        : "fixture response";
+      res.setHeader(
+        "content-type",
+        req.url === "/xml" ? "application/xml" : "application/json",
+      );
+      responses.push(body);
+      res.end(body);
+    });
   });
   await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
   let app = await createApp({ root, port: 0 });
@@ -668,6 +762,25 @@ function successfulRun(run, names) {
   assert.equal(run.results[3].request.auth.token, "wire-selected");
   assert.equal(run.results[3].response.body, " Alpha 雪 ");
   assert.equal(run.results[3].scriptResponse.body, "16");
+  assert.equal(run.variables.pickedHeader, "initial-header");
+  assert.equal(run.variables.pickedCount, 7);
+  assert.deepEqual(
+    JSON.parse(
+      Buffer.from(
+        run.results[0].response.headers["x-request-body-echo"],
+        "base64",
+      ).toString("utf8"),
+    ),
+    { count: 99 },
+  );
+  assert.equal(
+    run.results[0].response.headers["x-request-header-echo"],
+    "wire-header",
+  );
+  assert.equal(
+    run.results[3].response.headers["x-request-pick-echo"],
+    "initial-header/7",
+  );
   assert.equal(run.variables.metaCode, 201);
   assert.equal(run.variables.metaTime, 12.5);
   assert.equal(run.variables.metaSize, 2048);
@@ -702,14 +815,14 @@ for (const [version, transport] of [
     { timeout: 30000 },
     async (t) => {
       const f = await fixture(t, version),
-        source = sourceFor(f.base, version),
+        source = sourceFor(f.base, version, true),
         untouched = structuredClone(source);
       const names = source.apis.flatMap((api) =>
         [...(api.request.pre_tasks ?? []), ...(api.request.post_tasks ?? [])]
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 59);
+      assert.equal(names.length, 62);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])
