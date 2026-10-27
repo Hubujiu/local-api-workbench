@@ -947,7 +947,13 @@ export function importDocument(doc) {
               ),
             ).values(),
           ];
+          const selectedSecurity = Object.hasOwn(op, "security")
+            ? op.security
+            : doc.security;
           return normalizeRequest({
+            ...(Array.isArray(selectedSecurity) && selectedSecurity.length === 0
+              ? { inheritAuth: false }
+              : {}),
             name: op.summary || op.operationId || path,
             sourceOperationId: op.operationId || "",
             method,
@@ -1203,6 +1209,9 @@ export function importDocument(doc) {
                 ? req.description
                 : req.description?.content || "",
             auth: auth(req.auth || inheritedAuth),
+            ...((req.auth || inheritedAuth)?.type === "noauth"
+              ? { inheritAuth: false }
+              : {}),
             headers: (req.header || []).map((h) => ({
               key: h.key,
               value: h.value,
