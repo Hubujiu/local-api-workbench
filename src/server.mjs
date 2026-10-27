@@ -1,3 +1,9 @@
+import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
+import {
+  appendExecutionRecord,
+  recordSaveFailure,
+  recordSaveSuccess,
+} from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
@@ -713,51 +719,36 @@ export async function createApp({
               if (operation === "stop") {
                 if (Object.keys(data).length)
                   throw Error("Socket.IO停止不接受额外字段");
-                const session = socketioSessions.get(p.id, sessionId),
-                  result = socketioSessions.stop(p.id, sessionId);
+                const session = socketioSessions.get(p.id, sessionId);
+                socketioSessions.stop(p.id, sessionId);
+                session.finalSnapshot ??= socketioSessions.snapshot(
+                  p.id,
+                  sessionId,
+                );
+                const result = session.finalSnapshot;
                 if (session.recordSaved)
                   return json(res, 200, {
                     ...result,
-                    recordSaved: true,
-                    recordId: sessionId,
+                    ...recordSaveSuccess(sessionId),
                   });
-                session.recordPromise ||= (async () => {
-                  const record = {
-                    id: sessionId,
-                    type: "socketio",
-                    createdAt: result.createdAt,
-                    definition: result.definition,
-                    result,
-                    source: "manual",
-                    status:
-                      result.state === "error" ||
-                      result.events.some((x) =>
-                        ["ack-timeout", "disconnected"].includes(x.direction),
-                      )
-                        ? "failed"
-                        : result.connected
-                          ? "passed"
-                          : "cancelled",
-                  };
+                const pending = (session.recordPromise ??= (async () => {
                   try {
-                    await store.append(p.id, "protocolRuns", record);
+                    await finalizeSocketIOSession(store, p.id, session, result);
                     session.recordSaved = true;
                     return {
                       ...result,
-                      recordSaved: true,
-                      recordId: sessionId,
+                      ...recordSaveSuccess(sessionId),
                     };
                   } catch (error) {
                     return {
                       ...result,
-                      recordSaved: false,
-                      recordId: null,
-                      persistenceError: error.message,
+                      ...recordSaveFailure(p.id, sessionId, error),
                     };
                   }
-                })();
-                const recorded = await session.recordPromise;
-                if (!session.recordSaved) session.recordPromise = null;
+                })());
+                const recorded = await pending;
+                if (!session.recordSaved && session.recordPromise === pending)
+                  session.recordPromise = null;
                 return json(res, 200, recorded);
               }
             }
@@ -842,22 +833,16 @@ export async function createApp({
                       ? "cancelled"
                       : "failed",
               };
-              try {
-                await store.append(p.id, "protocolRuns", record);
-              } catch (error) {
-                return json(res, 200, {
-                  ...result,
-                  runId,
-                  recordId: null,
-                  recordSaved: false,
-                  persistenceError: String(error.message).slice(0, 500),
-                });
-              }
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "protocolRuns",
+                record,
+              );
               return json(res, 200, {
                 ...result,
                 runId,
-                recordId: record.id,
-                recordSaved: true,
+                ...receipt,
               });
             });
           }
@@ -920,8 +905,7 @@ export async function createApp({
                 return json(res, 200, {
                   ...session.finalSnapshot,
                   projectId: p.id,
-                  recordSaved: true,
-                  recordId: sessionId,
+                  ...recordSaveSuccess(sessionId),
                 });
               const pending = (session.recordPromise ??= (async () => {
                 try {
@@ -935,16 +919,17 @@ export async function createApp({
                   return {
                     ...session.finalSnapshot,
                     projectId: p.id,
-                    recordSaved: true,
-                    recordId,
+                    ...recordSaveSuccess(recordId),
                   };
                 } catch (error) {
                   return {
                     ...session.finalSnapshot,
                     projectId: p.id,
-                    recordSaved: false,
-                    recordId: null,
-                    persistenceError: String(error.message).slice(0, 500),
+                    ...recordSaveFailure(
+                      p.id,
+                      session.finalRecord?.id ?? null,
+                      error,
+                    ),
                   };
                 }
               })());
@@ -989,10 +974,9 @@ export async function createApp({
               } catch (failure) {
                 error = failure;
               }
-              let recordId = null,
-                persistenceError;
+              let record, receipt;
               try {
-                const record = makeWireRecord(
+                record = makeWireRecord(
                   prepared,
                   runId,
                   startedAt,
@@ -1001,17 +985,15 @@ export async function createApp({
                   controller.signal.aborted,
                 );
                 await store.append(p.id, "protocolRuns", record);
-                recordId = record.id;
+                receipt = recordSaveSuccess(record.id);
               } catch (failure) {
-                persistenceError = String(failure.message).slice(0, 500);
+                receipt = recordSaveFailure(p.id, record?.id ?? null, failure);
               }
               return json(res, error ? 400 : 200, {
                 ...(result || {}),
                 ...(error ? { error: error.message } : {}),
                 runId,
-                recordId,
-                recordSaved: Boolean(recordId),
-                ...(persistenceError ? { persistenceError } : {}),
+                ...receipt,
               });
             } finally {
               controllers.delete(runId);
@@ -1217,16 +1199,24 @@ export async function createApp({
                   variables: structuredClone(single.variables),
                 });
               if (!result) throw Error("请求已取消");
-              await store.append(p.id, "history", {
-                id: id(),
-                createdAt: new Date().toISOString(),
-                name: request.name,
-                ...result,
-                source: "manual",
-                durationMs: single.durationMs,
-              });
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  id: id(),
+                  runId,
+                  createdAt: new Date().toISOString(),
+                  name: request.name,
+                  ...result,
+                  source: "manual",
+                  durationMs: single.durationMs,
+                },
+              );
               return json(res, 200, {
                 ...result.response,
+                runId,
+                ...receipt,
                 outcome: result.status,
                 variableWrites: scoped.receipt(),
                 assertions: result.assertions,
@@ -1308,7 +1298,10 @@ export async function createApp({
             const controller = new AbortController();
             controllers.set(runId, controller);
             try {
-              const environmentId = b.environmentId || plan.environmentId;
+              const environmentId = selectedEnvironment(
+                p,
+                b.environmentId || plan.environmentId,
+              ).id;
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
@@ -1329,6 +1322,7 @@ export async function createApp({
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
               });
+              run.environmentId = environmentId;
               return json(
                 res,
                 200,

@@ -257,7 +257,8 @@ test("uncertain session storage outcome is reconciled on retry without a duplica
   };
   const first = await f.post("/" + id + "/stop");
   assert.equal(first.value.recordSaved, false);
-  assert.match(first.value.persistenceError, /acknowledgement lost/);
+  assert.equal(first.value.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(first.value.persistenceError, /acknowledgement lost/);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, 1);
   const second = await f.post("/" + id + "/stop");
   assert.equal(second.value.recordSaved, true, JSON.stringify(second));

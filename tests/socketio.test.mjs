@@ -267,7 +267,8 @@ test("Socket.IO HTTP project APIs persist definitions and final evidence, isolat
     await post("socketio-sessions/" + session.id + "/stop", {})
   ).json();
   assert.equal(failed.recordSaved, false);
-  assert.match(failed.persistenceError, /fixture storage failure/);
+  assert.equal(failed.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(failed.persistenceError, /fixture storage failure/);
   assert.equal(failed.state, "closed");
   const [a, b] = await Promise.all([
     post("socketio-sessions/" + session.id + "/stop", {}),

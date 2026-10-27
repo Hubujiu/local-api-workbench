@@ -381,7 +381,8 @@ test("MCP plan persistence failure returns actual RPC evidence without retrying 
   const result = JSON.parse(response.result.content[0].text);
   assert.equal(result.status, "passed");
   assert.equal(result.recordSaved, false);
-  assert.match(result.persistenceError, /fixture disk failure/);
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(result.persistenceError, /fixture disk failure/);
   assert.equal(result.results[0].grpcResult.messages[0].text, "once");
   assert.equal(f.seen.length, 1);
 });
