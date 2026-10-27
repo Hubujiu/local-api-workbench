@@ -262,6 +262,36 @@ export async function createApp({
           });
         return json(res, 200, { token, version: "0.1.0" });
       }
+      if (/^\/oauth1\/callback\/[a-f0-9]{48}$/.test(u.pathname)) {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'none'; frame-ancestors 'none'",
+        );
+        if (req.method !== "GET") {
+          res.setHeader("Allow", "GET");
+          res.writeHead(405);
+          return res.end("OAuth1 callback requires GET.");
+        }
+        try {
+          if (u.origin !== base || u.hash || !req.url.startsWith("/"))
+            throw Error("Invalid callback target");
+          await withOAuthCaller(req, res, (signal) =>
+            oauth1.callback(u.pathname, u.search, signal),
+          );
+          res.writeHead(200);
+          return res.end(
+            "OAuth1 authorization completed. Return to Local API Workbench.",
+          );
+        } catch {
+          // Never reflect verifier, temporary credentials, provider errors or local token.
+          res.writeHead(400);
+          return res.end(
+            "OAuth1 callback failed or expired. Return to Local API Workbench.",
+          );
+        }
+      }
       if (u.pathname === "/oauth/callback" && req.method === "GET") {
         for (const key of ["state", "code", "error", "error_description"])
           if (u.searchParams.getAll(key).length > 1)
@@ -571,9 +601,30 @@ export async function createApp({
           }
         }
         if (u.pathname === "/api/oauth1/start" && req.method === "POST")
-          return json(res, 200, await oauth1.start(await body(req)));
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, async (signal) =>
+              oauth1.start(await body(req), base, signal),
+            ),
+          );
         if (u.pathname === "/api/oauth1/complete" && req.method === "POST")
-          return json(res, 200, await oauth1.complete(await body(req)));
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, async (signal) =>
+              oauth1.complete(await body(req), signal),
+            ),
+          );
+        if (
+          parts[1] === "oauth1" &&
+          parts[2] === "status" &&
+          parts.length === 4 &&
+          req.method === "GET"
+        )
+          return json(res, 200, oauth1.status(parts[3]));
+        if (u.pathname === "/api/oauth1/cancel" && req.method === "POST")
+          return json(res, 200, oauth1.cancel((await body(req)).id));
         if (u.pathname === "/api/oauth/start" && req.method === "POST")
           return json(res, 200, oauth.start(await body(req), base));
         if (
@@ -1760,6 +1811,7 @@ export async function createApp({
   const closeServer = server.close;
   server.close = function (...args) {
     oauth.close();
+    oauth1.close();
     return closeServer.apply(this, args);
   };
   server.on("close", () => {

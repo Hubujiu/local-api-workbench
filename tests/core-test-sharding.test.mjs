@@ -18,6 +18,7 @@ import {
   discoverCoreTests,
   parseOptions,
   runNode,
+  runtimeDiagnostics,
 } from "../scripts/run-core-tests.mjs";
 
 const runner = fileURLToPath(
@@ -59,7 +60,7 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
   const baseline = globSync("tests/*.test.mjs", { cwd: root })
     .map((file) => file.split(path.sep).join("/"))
     .sort();
-  for (const total of [1, 2, 3]) {
+  for (const total of [1, 2, 3, 4]) {
     const plans = await Promise.all(
       Array.from({ length: total }, (_, i) =>
         createPlan(root, { index: i + 1, total }),
@@ -71,6 +72,7 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
     assert.equal(new Set(selected).size, baseline.length);
     for (const plan of plans) {
       assert(plan.selected.length > 0);
+      assert.equal(plan.fileConcurrency, 1);
       assert.equal(plan.filesSha256, plans[0].filesSha256);
       assert.deepEqual(plan.shards, plans[0].shards);
     }
@@ -181,8 +183,9 @@ test("real shards execute every file and nested concurrent test exactly once wit
   const names = ["z", "a space", "中", "A", "é"];
   for (const name of names) {
     const source = `import test from 'node:test';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, unlink } from 'node:fs/promises';
 test(${JSON.stringify(name)}, { concurrency: true, timeout: 5000 }, async (t) => {
+  await writeFile('file-active', 'exclusive outer file', {flag: 'wx'});
   let started = 0, release;
   const ready = new Promise(r => release = r);
   await Promise.all([1, 2].map(n => t.test('concurrent ' + n, async () => {
@@ -190,16 +193,17 @@ test(${JSON.stringify(name)}, { concurrency: true, timeout: 5000 }, async (t) =>
     await ready;
     await writeFile(${JSON.stringify(`seen/${name}-`)} + n, 'once', {flag: 'wx'});
   })));
+  await unlink('file-active');
 });\n`;
     await writeFile(path.join(cwd, "tests", `${name}.test.mjs`), source);
   }
   const observed = [];
-  for (const shard of [1, 2]) {
-    const result = invoke(cwd, [`--shard=${shard}/2`, "--label=fixture"]);
+  for (const shard of [1, 2, 3, 4]) {
+    const result = invoke(cwd, [`--shard=${shard}/4`, "--label=fixture"]);
     successful(result);
     const prefix = path.join(
       cwd,
-      `test-results/core-fixture-shard-${shard}-of-2`,
+      `test-results/core-fixture-shard-${shard}-of-4`,
     );
     const manifest = JSON.parse(await readFile(`${prefix}.json`, "utf8"));
     observed.push(...manifest.selected);
@@ -270,4 +274,44 @@ process.exitCode = await runNode(['-e', ${JSON.stringify(child)}]);\n`,
   assert.ifError(result.error);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(await readFile(path.join(cwd, "ready"), "utf8"), "yes");
+});
+
+test("CI isolation has no selection filter and runtime diagnostics expose only explicit fields", async () => {
+  const workflow = await readFile(
+    path.join(root, ".github/workflows/ci.yml"),
+    "utf8",
+  );
+  const core = workflow.split("  core:")[1].split("  browser:")[0];
+  assert.match(core, /shard: \[1, 2, 3, 4\]/);
+  assert.match(core, /timeout-minutes: 10/);
+  assert.match(core, /fail-fast: false/);
+  assert.match(core, /node-version: "24"/);
+  assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
+  assert.match(
+    core,
+    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/4 --label=\$\{\{ matrix\.os \}\}/,
+  );
+  assert.doesNotMatch(
+    core,
+    /--list|test-name|continue-on-error|retry|timeout-minutes: (?:[2-9]\d)/,
+  );
+  const diagnostics = runtimeDiagnostics();
+  assert.deepEqual(
+    Object.keys(diagnostics).sort(),
+    [
+      "node",
+      "platform",
+      "arch",
+      "availableParallelism",
+      "cpus",
+      "totalmem",
+      "ImageOS",
+      "ImageVersion",
+    ].sort(),
+  );
+  assert.equal(diagnostics.node, process.version);
+  assert.equal(diagnostics.arch, process.arch);
+  assert(diagnostics.availableParallelism > 0);
+  assert(diagnostics.cpus > 0);
+  assert(diagnostics.totalmem > 0);
 });

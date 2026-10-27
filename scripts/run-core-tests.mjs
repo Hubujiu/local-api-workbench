@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { pathToFileURL } from "node:url";
 
 export function parseOptions(args) {
@@ -50,7 +51,8 @@ export async function createPlan(cwd, options) {
     shards[position % options.total].push(file),
   );
   return {
-    version: 1,
+    version: 2,
+    fileConcurrency: 1,
     pattern: "tests/*.test.mjs",
     order: "UTF-16 code-unit ascending; forward-slash relative paths",
     filesSha256: createHash("sha256")
@@ -96,7 +98,21 @@ export async function runNode(
   }
 }
 
+export function runtimeDiagnostics() {
+  return {
+    node: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    availableParallelism: os.availableParallelism(),
+    cpus: os.cpus().length,
+    totalmem: os.totalmem(),
+    ImageOS: process.env.ImageOS ?? null,
+    ImageVersion: process.env.ImageVersion ?? null,
+  };
+}
+
 export async function main(args, cwd = process.cwd()) {
+  console.log("Core runtime " + JSON.stringify(runtimeDiagnostics()));
   const options = parseOptions(args);
   const plan = await createPlan(cwd, options);
   const prefix = `test-results/core-${options.label}-shard-${options.index}-of-${options.total}`;
@@ -115,7 +131,7 @@ export async function main(args, cwd = process.cwd()) {
   return runNode(
     [
       "--test",
-      "--test-concurrency=2",
+      `--test-concurrency=${plan.fileConcurrency}`,
       "--test-reporter=spec",
       "--test-reporter-destination=stdout",
       "--test-reporter=tap",
