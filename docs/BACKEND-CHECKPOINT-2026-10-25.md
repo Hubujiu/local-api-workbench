@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-27 19:46 UTC
+# 后端检查点 · 2026-10-27 21:03 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 21:03 多认证挑战 Digest 闭环候选
+
+- 20:42重新核对PR1/2/13/14/17/45与集成分支：head及精确CI未变，工作区源码无回退。最后完整组合GREEN仍为 `8fb3f5616560c0d84e10dcdddbfa0bff1ce77884` / local `e621ebd09365d12d7ff9f7443dd3b79c5e2340d8` / tree `785afcab0a3499936415a4d8b5b034cba8d698fe`；首次CI `40572206620` 19/19，全部实际checkout同树，12实际ZIP摘要/397文件manifest及完整TAP已核对，hash `34b67aeda095eca528a4ec2a8e5f71ffbd27446e2148a425cc1ed7ceaabeb453`。Linux/macOS2065通过，Windows2058通过+7明确skip（3权限/4 POSIX），无fail/cancel。旧独立SQLite写结果未知、桌面脚本超时和配额失败仍未确定根因，不被该GREEN消除。
+- 真实loopback复现：配置Digest时，401的Basic-first/Digest-second只发生一次请求且返回401；顺序反转会把Basic的realm混入Digest签名。初始复现第二请求仅检查header、不算服务端验签通过。同PR20保存RED回归 local `9bbed33` / remote `23f253cc0911865a73125cf85e1debb8acd92b01` / tree `8d172ce1c51c59148fec065ea57003ba005d1bdf`，27项9pass/18fail，未拿它验收。
+- 最终修复同PR20 local `f18c7b0824c71f89259f5a0bc04c5a9791e68850` / remote `3bbbbdd0d9b8a550ddd32458bdf3a6febc7d0dbf` / tree `60ef7f2c9ead1ca1d5ae8d3422bcc9ff16033a01`，基于develop，无集成根依赖，首次CI `40582243792` 已10/10 GREEN：all actual checkout `0988c99b4ff7fff2d095757371c1ce7ae25fd5c5` 与最终功能tree一致，parents develop88f70bb+3bbbbdd；三个实际core ZIP SHA256与CRC/TAP完整性核对通过，三OS各1069通过、0fail/cancel/skip，1064顶层加2/3嵌套计划完整，测试身份hash `32c1055ea9241684a0fb7348690152fb079fc3e93138299716a343eca2769064`。按RFC9110认证语法隔离challenge/auth-param/token68/quoted-pair及有界空列表；按RFC7616服务端顺序选择首个支持的Digest，不自动降级Basic，也不是任意改排算法强度。重复/歧义参数及空/仅逗号qop明确拒绝，不能跳过坏的首选挑战去签后面的MD5。
+- 保留一次且仅一次授权重发、原始multipart/binary/body与Content-Type、全局绝对deadline和取消语义。真实独立服务端hash oracle覆盖两种header顺序、未知算法/合法qop跳过、带逗号及转义字段、所有现有sess算法、跨身份/正文隔离、owner及官方MCP HTTP/stdio。拒绝项目夹具含真实可执行接口并检查明确未授权，排除“接口不存在”假阴性。最终功能批次68/68及check/fullformat通过，独立固定ref三整文件48/48。另一次1067/1067全量本地运行过程中工作区有修改，仅保留诊断日志，不属于c800或f18任一固定提交的通过证据，不再重复全量本地跑数。
+- 根生产合并 `235ac8f54ef07001a55afecb6f8ac0fddf4f484e` / tree `b562d046033297c1849968ae5b3edb1f9443bd72` 自动无冲突，18完整文件117/117通过、0fail/cancel/skip、26.136秒，涵盖认证/共享认证/cookie/原生继承/MCP/repeat/保存收据等。随后仅增强根完整流程测试：单/多challenge各四次owner执行经恢复/重启，再修改活动接口密码及URL，各自两次真实CLI执行冻结计划；每链12请求、6独立multipart boundary，所有owner/CLI结果显式200且服务端验签valid=true，已保存source=cli收据/原始冻结计划，定义不存重发准备态。
+- 根最终测试点 `caf6ee952fc75de19d42a64490d23d04d948419f` / tree `5c6486f1745cc9e85531dc1e0edbd52c6685efc3`，三完整文件49/49通过、0fail/cancel/skip、2.990秒，check/全量format/diff通过；独立审查指出2dc时只有全局wire oracle、没有逐run body.valid，随后caf6实际补齐三个显式断言并重新运行；不将旧描述冒充已存在的断言。不把重叠批次相加成产品交付率。此后仅本文记录修改，新组合仍须自身CI；不借8fb结果。
+- PR45独立驱动草稿已推进至 `5ad68c19d155b7ccbda0adac7b5682418c00a288` / tree `e5187f4d4976b84a8bbc37692ddbda46d70c28c4`，CI `40574144922` 6 GREEN/4 mandatory-audit RED（同一Azure identity/msal-node依赖链2个HIGH条目）。三OS各1038核心通过不抵消审计失败；public provider仍关闭，未连接真实SQL Server、未纳入根。许可问题仍未答，未接受或启动服务；Oracle/达梦及原生自动化平级图证明等缺口仍在。无main/develop合并或部署。
 
 ## 19:46 读回故障夹具修正，独立桌面失败仍待解释
 

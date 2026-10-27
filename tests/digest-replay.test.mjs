@@ -9,6 +9,10 @@ import { createApp } from "../src/server.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+const executeCLI = promisify(execFile);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const auth = {
   type: "digest",
@@ -25,7 +29,10 @@ const multipart = [
     type: "file",
   },
 ];
-async function origin(t, { requireCookie = false, finalDelay = 0 } = {}) {
+async function origin(
+  t,
+  { requireCookie = false, finalDelay = 0, multipleChallenges = false } = {},
+) {
   const requests = [],
     challenges = new Map(),
     failures = [];
@@ -38,6 +45,7 @@ async function origin(t, { requireCookie = false, finalDelay = 0 } = {}) {
         record = {
           body,
           headers: req.headers,
+          method: req.method,
           url: req.url,
           socket: req.socket,
         };
@@ -45,11 +53,18 @@ async function origin(t, { requireCookie = false, finalDelay = 0 } = {}) {
       if (!req.headers.authorization) {
         const nonce = "nonce-" + ++sequence;
         challenges.set(nonce, record);
+        const challenge =
+          'Digest realm="fixture", nonce="' +
+          nonce +
+          '", algorithm=SHA-256, qop="auth-int"';
         res.writeHead(401, {
-          "WWW-Authenticate":
-            'Digest realm="fixture", nonce="' +
-            nonce +
-            '", algorithm=SHA-256, qop="auth-int"',
+          "WWW-Authenticate": multipleChallenges
+            ? [
+                'Basic realm="not-the-digest-realm"',
+                challenge,
+                'Bearer realm="also-not-digest"',
+              ]
+            : challenge,
           "Set-Cookie": "challenge=" + nonce + "; Path=/",
           Connection: "close",
         });
@@ -308,101 +323,147 @@ test("Digest proxy retry carries the authenticated header and the original entit
   assert.deepEqual(target.requests[1].body, target.requests[0].body);
 });
 
-test("Digest plan execution saves, restores and restarts without persisting prepared retry state", async (t) => {
-  const target = await origin(t);
-  const root = await mkdtemp(path.join(tmpdir(), "digest-plan-"));
-  let app = await createApp({ root, port: 0 });
-  t.after(async () => {
-    app.server.closeAllConnections();
-    await new Promise((resolve) => app.server.close(resolve));
-    await rm(root, { recursive: true, force: true });
-  });
-  const p = await app.store.create("Digest workflow");
-  p.requests = [
-    {
-      id: "digest",
-      name: "Digest multipart",
-      url: target.url + "/persisted",
-      method: "POST",
-      bodyType: "form-data",
-      form: multipart,
-      auth,
-      timeout: 2000,
-    },
-  ];
-  p.plans = [
-    snapshotPlan({
-      id: "plan",
-      name: "Digest plan",
-      steps: [{ request: p.requests[0] }],
-    }),
-  ];
-  await app.store.save(p);
-  const original = structuredClone((await app.store.get(p.id)).requests);
-  const run = async (project) => {
-    const response = await fetch(
-      app.url + "/api/projects/" + project.id + "/run",
-      {
-        method: "POST",
-        headers: {
-          "x-local-token": app.token,
-          "content-type": "application/json",
+for (const multipleChallenges of [false, true])
+  test(
+    `Digest ${multipleChallenges ? "multi-challenge" : "single-challenge"} plan and real CLI freeze auth across save restore and restart`,
+    { timeout: 30000 },
+    async (t) => {
+      const target = await origin(t, { multipleChallenges });
+      const root = await mkdtemp(path.join(tmpdir(), "digest-plan-"));
+      let app = await createApp({ root, port: 0 });
+      t.after(async () => {
+        app.server.closeAllConnections();
+        await new Promise((resolve) => app.server.close(resolve));
+        await rm(root, { recursive: true, force: true });
+      });
+      const p = await app.store.create("Digest workflow");
+      p.requests = [
+        {
+          id: "digest",
+          name: "Digest multipart",
+          url: target.url + "/persisted",
+          method: "POST",
+          bodyType: "form-data",
+          form: multipart,
+          auth,
+          timeout: 2000,
         },
-        body: JSON.stringify({ planId: project.plans[0].id }),
-      },
-    );
-    assert.equal(response.status, 200);
-    const result = await response.json();
-    assert.equal(result.status, "passed", JSON.stringify(result));
-    assert.equal(result.recordSaved, true);
-    assert.equal(result.results[0].response.authHandshake.status, 401);
-    assert(
-      (await new Store(root).get(project.id)).runs.some(
-        (record) => record.id === result.id && record.status === "passed",
-      ),
-    );
-  };
-  await run(p);
-  const stored = await app.store.get(p.id);
-  const restored = restoreProject(stored);
-  await app.store.save(restored);
-  await run(restored);
-  app.server.closeAllConnections();
-  await new Promise((resolve) => app.server.close(resolve));
-  app = await createApp({ root, port: 0 });
-  await run(await app.store.get(p.id));
-  await run(await app.store.get(restored.id));
-  assert.deepEqual((await app.store.get(p.id)).requests, original);
-  assert.equal(target.requests.length, 8);
-  const initial = target.requests.filter(
-    (request) => !request.headers.authorization,
-  );
-  assert.equal(
-    new Set(initial.map((request) => request.headers["content-type"])).size,
-    4,
-    "separate executions must not share prepared bodies",
-  );
-  for (const request of target.requests.filter(
-    (request) => request.headers.authorization,
-  ))
-    assert.deepEqual(request.body, request.first.body);
-  for (const projectId of [p.id, restored.id]) {
-    const saved = await app.store.get(projectId);
-    const definitions = JSON.stringify({
-      requests: saved.requests,
-      plans: saved.plans,
-      snapshots: saved.runs.map((run) => run.snapshot),
-    });
-    for (const request of initial)
-      assert(!definitions.includes(request.headers["content-type"]));
-    // Wire evidence intentionally retains transmitted headers/body for debugging.
-    for (const run of saved.runs)
-      assert.match(
-        run.results[0].response.request.headers["content-type"],
-        /^multipart\/form-data; boundary=/,
+      ];
+      p.plans = [
+        snapshotPlan({
+          id: "plan",
+          name: "Digest plan",
+          steps: [{ request: p.requests[0] }],
+        }),
+      ];
+      await app.store.save(p);
+      const original = structuredClone((await app.store.get(p.id)).requests);
+      const run = async (project) => {
+        const response = await fetch(
+          app.url + "/api/projects/" + project.id + "/run",
+          {
+            method: "POST",
+            headers: {
+              "x-local-token": app.token,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ planId: project.plans[0].id }),
+          },
+        );
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.equal(result.status, "passed", JSON.stringify(result));
+        assert.equal(result.recordSaved, true);
+        assert.equal(result.results[0].response.status, 200);
+        assert.equal(JSON.parse(result.results[0].response.body).valid, true);
+        assert.equal(result.results[0].response.authHandshake.status, 401);
+        assert(
+          (await new Store(root).get(project.id)).runs.some(
+            (record) => record.id === result.id && record.status === "passed",
+          ),
+        );
+      };
+      await run(p);
+      const stored = await app.store.get(p.id);
+      const restored = restoreProject(stored);
+      await app.store.save(restored);
+      await run(restored);
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      app = await createApp({ root, port: 0 });
+      await run(await app.store.get(p.id));
+      await run(await app.store.get(restored.id));
+      assert.deepEqual((await app.store.get(p.id)).requests, original);
+      const edited = await app.store.get(p.id);
+      const frozenPlan = structuredClone(edited.plans[0]);
+      edited.requests[0].auth.password = "changed-live-fixture-password";
+      edited.requests[0].url = target.url + "/changed-live-definition";
+      await app.store.save(edited);
+      for (const projectId of [p.id, restored.id]) {
+        const { stdout } = await executeCLI(
+          process.execPath,
+          ["scripts/run-plan.mjs", "--project", projectId, "--plan", "plan"],
+          {
+            cwd: fileURLToPath(new URL("..", import.meta.url)),
+            env: { ...process.env, LOCAL_API_DATA: root },
+            timeout: 15000,
+            maxBuffer: 1024 * 1024,
+          },
+        );
+        const result = JSON.parse(stdout);
+        assert.equal(result.status, "passed");
+        assert.equal(result.recordSaved, true);
+        const saved = await new Store(root).get(projectId);
+        const record = saved.runs.find((run) => run.id === result.id);
+        assert(record);
+        assert.equal(record.source, "cli");
+        assert.equal(record.results[0].response.status, 200);
+        assert.equal(JSON.parse(record.results[0].response.body).valid, true);
+        assert.equal(record.results[0].response.authHandshake.status, 401);
+        assert.deepEqual(saved.plans[0], frozenPlan);
+      }
+      assert.equal(target.requests.length, 12);
+      assert(
+        target.requests.every(
+          (request) =>
+            request.url === "/persisted" && request.method === "POST",
+        ),
       );
-  }
-});
+      assert(
+        target.requests
+          .filter((request) => request.headers.authorization)
+          .every((request) => request.valid === true),
+      );
+      const initial = target.requests.filter(
+        (request) => !request.headers.authorization,
+      );
+      assert.equal(
+        new Set(initial.map((request) => request.headers["content-type"])).size,
+        6,
+        "separate owner and CLI executions must not share prepared bodies",
+      );
+      for (const request of target.requests.filter(
+        (request) => request.headers.authorization,
+      ))
+        assert.deepEqual(request.body, request.first.body);
+      for (const projectId of [p.id, restored.id]) {
+        const saved = await app.store.get(projectId);
+        const definitions = JSON.stringify({
+          requests: saved.requests,
+          plans: saved.plans,
+          snapshots: saved.runs.map((run) => run.snapshot),
+        });
+        for (const request of initial)
+          assert(!definitions.includes(request.headers["content-type"]));
+        // Wire evidence intentionally retains transmitted headers/body for debugging.
+        for (const run of saved.runs)
+          assert.match(
+            run.results[0].response.request.headers["content-type"],
+            /^multipart\/form-data; boundary=/,
+          );
+      }
+    },
+  );
 
 test("Digest authenticated retry keeps the original deadline even below normalized minimum timeout", async (t) => {
   const target = await origin(t, { finalDelay: 80 });

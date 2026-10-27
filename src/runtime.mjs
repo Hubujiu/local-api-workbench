@@ -1033,13 +1033,7 @@ export async function executeRequest(input, signal, options = {}) {
       response.cookieError = "Cookie保存失败：" + error.message;
     }
   }
-  if (
-    r.auth.type === "digest" &&
-    response.status === 401 &&
-    /^Digest\s/i.test(response.headers["www-authenticate"] || "")
-  ) {
-    const remaining = deadline - performance.now();
-    if (remaining <= 0) throw Error("Digest 认证超时");
+  if (r.auth.type === "digest" && response.status === 401) {
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
       r.auth,
@@ -1047,6 +1041,9 @@ export async function executeRequest(input, signal, options = {}) {
       u.pathname + u.search,
       body || "",
     );
+    if (authorization === null) return response;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw Error("Digest 认证超时");
     const authenticated = await executeRequest(
       {
         ...r,
