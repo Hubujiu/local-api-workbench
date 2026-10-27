@@ -325,3 +325,13 @@ regressions include form/flow/inheritance, folder moves, resource validation,
 MCP deletion confirmation and plan versioning. Exact final CI is still pending.
 Test setup corrections (restore returns201; invalid owner token403; MCP execution
 requires write plus execute) follow existing contracts and are not product fixes.
+
+Moving/renaming a folder does not rewrite `request.folder` inside old frozen
+steps. If that old directory no longer exists, native directory flow export
+continues to reject rather than recreate it; an explicit plan-only negative
+covers this independently of the cases guard. Complete Workbench backup still
+preserves and executes that old case/plan after restart. Conversely, an API-only
+move which leaves its old folder present has a positive directory graph+flow
+migration test: imported live API uses the new parent while the migrated frozen
+plan actually sends the old parent's headers. The definition-only JSON/directory
+two-generation test is not a claim that all frozen combinations can be exported.

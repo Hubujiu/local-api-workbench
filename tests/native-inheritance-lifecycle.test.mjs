@@ -59,6 +59,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Store } from "../src/runtime.mjs";
 import { moveFolderTree } from "../public/folder-tree.js";
+import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 
 const close = (server) =>
   new Promise((resolve) => {
@@ -211,6 +212,11 @@ test("owner graph subtree/API moves preserve frozen cases, plans and history; li
   // than silently dropping them; definition-only sibling is an explicit copy.
   for (const format of ["apipost", "apipost-directory"])
     await call(route("export") + "?format=" + format, undefined, 400, "GET");
+  const planOnly = structuredClone(p);
+  planOnly.cases = [];
+  assert.equal(planOnly.plans[0].steps[0].request.folder, "A/Child");
+  assert.throws(() => exportApipostDirectory(planOnly), /目录|folder/);
+  assert.deepEqual(planOnly.plans, p.plans);
   const definitions = structuredClone(p);
   definitions.cases = [];
   definitions.plans = [];
@@ -441,6 +447,20 @@ test("official SDK respects moved live graph and unchanged saved plan without ga
       parentId: "other",
     },
   });
+  // API-only reparent leaves the old folder available: the independent
+  // directory flow can still encode its old frozen context without recreating it.
+  const countBeforeExport = wire.length;
+  const encoded = exportApipostDirectory(p);
+  const migratedTarget = await f.app.store.create("Moved API flow migration");
+  const migrated = await call(`projects/${migratedTarget.id}/import`, {
+    document: encoded,
+    inheritanceMode: "preserve",
+  });
+  assert.equal(wire.length, countBeforeExport);
+  assert.equal(migrated.requests[0].folder, "B");
+  assert.equal(migrated.plans[0].steps[0].request.folder, "A/Child");
+  await call(`projects/${migrated.id}/run`, { planId: migrated.plans[0].id });
+  assert.equal(wire.at(-1).headers["x-folder"], "folder");
   const conf = await call("mcp/config", {
     enabled: true,
     projects: [id],
