@@ -133,3 +133,20 @@
 - 这些offset均为完整文件0-based Unicode字符位置，不是UTF-8字节。main renderer仍按既有20bb6e21哈希固定；659068.tJ偏移3570508（函数）、3571526（API/sample叶）、3573819（仅已有children递归）。直接别名搜索只找到新增sample调用；未排除间接导出、计算属性、其他版本或服务端装配。
 
 **仍未关闭：**保存的平级event_list如何有序构树、saved settings来源/覆盖顺序、同来源非空原生项目导出样本。保持原生自动化不支持的明确边界；样例适配器和报告结构不能代替缺失证据。
+
+## 2026-10-27 公开非空项目形态与开源适配器补证
+
+公开第三方 `dabiaoge252/transcription-service` 的固定commit `0a1fa719078f3177f0ea961aa8116abb9a751616` 中项目JSON（Git blob `6eb1e120cfc2cba9b6cd1a40f8a999f439357018`，55,447 UTF-8 bytes，SHA256 `4fe6820c21865b7ef8351191131e59e3ca1faf46e124014f941b2b3c6b470f07`）具有1项非空automated_testings、7个根级API事件。只记录脱敏结构事实，不保留或执行原始请求/身份/地址/凭据，也不复制无许可证实现。
+
+- enabled为数值1、auto_sync为布尔true、apiData为null；parent_event_id为字符串0，数组顺序与sort1–7一致。事件身份唯一，test_id与testing_id相等，project身份一致；data的origin_target_id/target_id相等并引用顶层API，parent_id与该API一致，references_target_ids同序。
+- settings的env_id/iterates_data_id为字符串，其余已见执行字段为数值；execute_count1、interval_time0、ignore_error1、enable_sandbox-1与已知样例默认值一致。这只是保存值相同，不证明运行映射。
+- scenario为manual同时带非空frequency；不能擅自忽略频率/调度含义。README和唯一文件提交未验证导出软件版本，文件内Apipost介绍只提供归属线索；仓库无许可证。因此这不是官方、同版本或经原版运行的验收fixture，也不证明嵌套图或排序冲突优先级。
+
+另静态核对 `EchoAPI-Team/echoapi-for-vscode` commit `bc8ecb58271ac7a8b0289fad2f0455745b4562f1`（package1.7.13；LICENSE.txt MIT，blob `f5d9b4f03735afae5e8dd8cb84ee905e8190a0c0`；已看适配器文件未见覆盖声明）：
+
+- `src/extension/apis.ts:77–140` 将保存的**文件夹运行配置**映射到iterationCount/sleep/ignore_error/enable_sandbox/iterationData；经持久化配置→UI→sendAutoTest→generateTestingRunnerParams→worker runnerEvent→导入run形成真实静态调用链。保存配置整体覆盖默认对象，不是已验证的原生saved automation转换。
+- `src/extension/utils.ts:587–622` 把API目录扁平化为根事件，parent_event_id为0而sort恒为1，不装配保存的parent/sort图；类型声明含automated_testings/children不等于实现了迁移。
+- 原生导入只选择API/env，导出只写project/global/apis，实际未处理automated_testings。sandbox可见作用是跳过变量写回，不证明执行隔离或回滚。
+- 这些MIT适配器可作为独立实现参考，但复用仍须署名和依赖审查；没有复制到本项目。仓库34,280,179-byte bundled runtime（blob `3be9e627b70b946fc774376b8a7e81ed685146e5`）未获取/复用，不能把根MIT声明当作所有内嵌依赖的许可证。
+
+原版平级事件构树、saved settings实际优先级/映射、manual/frequency含义及原版往返执行仍未关闭。没有因此启用原生自动化；没有运行原版或调用真实产品API。

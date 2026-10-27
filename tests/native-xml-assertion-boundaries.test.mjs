@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { withWorkerRejectionDiagnostics } from "./helpers/worker-rejection-diagnostics.mjs";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
 import { normalizeNativeTaskRequest } from "../src/script-database-tasks.mjs";
 import {
@@ -125,14 +126,16 @@ test("native XML assertions read current body without reading code or demanding 
     result.responseOverride.body,
     "<login><token>current</token></login>",
   );
-  await assert.rejects(
-    phase("<login><token>wire</token></login>", [
-      script(
-        "Object.defineProperty(response,'body',{get(){throw Error('body getter invoked');}});",
-      ),
-      assertion(),
-    ]),
-    /自有字符串/,
+  await withWorkerRejectionDiagnostics((captureRejection) =>
+    assert.rejects(
+      phase("<login><token>wire</token></login>", [
+        script(
+          "Object.defineProperty(response,'body',{get(){throw Error('body getter invoked');}});",
+        ),
+        assertion(),
+      ]).catch(captureRejection),
+      /自有字符串/,
+    ),
   );
 });
 

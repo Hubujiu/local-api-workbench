@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-27 21:03 UTC
+# 后端检查点 · 2026-10-27 21:30 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 21:30 现有错误证据保留，不是中断修复
+
+- Digest组合 remote `0534974e0c4cd9db14cfa62cd6097101eb10fcfc` / local `a12c719daed4d13de950942a25a8c97eb9d7086b` / tree `dd2c010da0a8e7bf162e149e713c71bfd73af276` 的首次CI `40583658222` 最终18 GREEN/1 RED。全部19实际checkout同根，12实际ZIP摘要/398文件manifest/TAP完整，hash `0a354d56d1ad7f26f7b62ffd5e922adb1cbf4b7a6bcc066f0528f646d085b026`；Linux2106通过，macOS2105通过/1失败，Windows2099通过/7明确skip。所有49 Digest用例及7非core job均在实际产物通过，但不抵消组合失败，最后完整GREEN仍8fb。
+- 唯一失败是macOS shard2 job122469368142，native-xml-assertion-boundaries第128行原预期/自有字符串/，实际Error: interrupted；该test总耗时930ms，不是失败worker的活动时间。源码375行说明worker exitCode0且返回completed error，不能定位中断发生阶段。原Error已带stage/operation/activity/cpu等字段，但实际TAP没有保留值，不能据此说运行时没有诊断。
+- 只读比对旧9e65桌面失败：373ms在user-script区域，promise-state只是下一次尝试操作标签，其测量耗时为0；CPU差值不证明基础设施原因。旧6c quota缺底层错误/具体变体，甚至尚不能认定为中断。各失败分开保留，未执行任何新的VM/XML/压力/字节码实验或重跑，也未改变预算/错误优先级。
+- 同PR26 diagnostic-only local `e249793af4719518594d93b59c6c7c2692eec149` / remote `e2d676b1c6b7fb1940e615a3237cc60b5e4ff491` / tree `f7a40bf14118b818fd0233b6ad03e8df33473842` 已保存，base `4a79927b` 未动；既有自动CI `40587001028` 证据待核验。只改4个docs/tests文件：原phase输入与调用数、原assert.rejects正则均保留；同一worker Error不改写原样重抛；仅该断言本身失败时向同一AssertionError.message追加不超过2KiB的固定枚举/数值白名单。
+- 诊断不读取getter/proxy/继承字段，不序列化源码、body、变量、message/stack、路径、networkRequests/databaseQueries；缺失/非法/非有限/超限字段省略而非编造值，保留零。独立审查10个纯合成测试通过；另一个仅Node/helper的临时子进程预期失败，实际TAP确有一次白名单后缀且无敏感哨兵。没有执行原XML或VM负载。
+- 根合并点 `58a66b0143df50e387253d675c9c67b3f2d3bae1` / tree `00971ddfd37fa1e75d2deaffa535c5e67cb2f5a6` 自动无冲突，只有同4个docs/tests差异；根本地仅运行10个纯合成测试（10/10）及语法/格式/diff，不以此宣称XML通过。生产代码、scripts、workflow均无差异。新组合仍须自身普通CI；即使随后GREEN也不能宣称既有中断原因已修。
+- 新公开项目形态/EchoAPI适配器结构证据记入NATIVE-AUTOMATION-STATIC-GAPS，仍不构成原版自动化树/执行合同。SQL Server依赖审计与许可、Oracle/达梦及旧失败根因等缺口未消失。所有修改留在任务分支/原功能draft PR，无main/develop合并或部署。
 
 ## 21:03 多认证挑战 Digest 闭环候选
 
