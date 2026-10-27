@@ -46,6 +46,10 @@ const scopes = {
   globalVars: "global",
 };
 
+const metadataSources = ["responseCode", "responseTime", "responseSize"];
+const wholeValueSource = (source) =>
+  source === "responseText" || metadataSources.includes(source);
+
 const headerName = (expression) => {
   const name = expression.trim();
   if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name))
@@ -58,14 +62,18 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
   if (!["source", "variables"].every((key) => Object.hasOwn(value, key)))
     throw Error("pickVars缺少自有来源或变量字段");
   if (
-    !["responseJson", "responseHeader", "responseXml", "responseText"].includes(
-      value.source,
-    )
+    ![
+      "responseJson",
+      "responseHeader",
+      "responseXml",
+      "responseText",
+      ...metadataSources,
+    ].includes(value.source)
   )
     throw Error(
-      "pickVars仅支持responseJson/responseHeader/responseXml/responseText来源",
+      "pickVars仅支持responseJson/responseHeader/responseXml/responseText/responseCode/responseTime/responseSize来源",
     );
-  const isText = value.source === "responseText";
+  const isText = wholeValueSource(value.source);
   nativeDataArray(value.variables, 100);
   const variables = value.variables.map((row) => {
     nativeDataObject(row, ["name", "expression", "type"]);
@@ -107,13 +115,13 @@ export function compilePickVarsOperations(value = []) {
   return normalized.map((data) => ({
     source: data.source,
     variables: data.variables.map((row) => ({
-      name: data.source === "responseText" ? row.name.trim() : row.name,
+      name: wholeValueSource(data.source) ? row.name.trim() : row.name,
       scope: scopes[row.type],
       ...(data.source === "responseHeader"
         ? { header: headerName(row.expression) }
         : data.source === "responseXml"
           ? { xmlPath: nativeXMLPath(row.expression) }
-          : data.source === "responseText"
+          : wholeValueSource(data.source)
             ? {}
             : { segments: jsonPathSegments(row.expression.trim() || "$") }),
     })),
@@ -132,6 +140,7 @@ function installPickVars(
   temporary,
   readXML,
   readText,
+  metricResponse,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -204,6 +213,32 @@ function installPickVars(
     }
     return value;
   };
+  const metadataValue = (source) => {
+    const name = source === "responseCode" ? "code" : source;
+    const property = descriptor(metricResponse, name);
+    if (!property?.enumerable || !hasOwn(property, "value"))
+      throw Error("pickVars指标必须是当前自有数据字段");
+    const value = property.value;
+    if (value === null || typeof value === "boolean") return value;
+    if (typeof value === "number" && finite(value)) return value;
+    if (typeof value !== "string")
+      throw Error("pickVars指标必须是有限JSON原始值");
+    if (value.length > 65536) throw Error("pickVars指标超过64KiB");
+    let bytes = 0;
+    for (let at = 0; at < value.length; at++) {
+      const code = charCode(value, at);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = charCode(value, ++at);
+        if (!(next >= 0xdc00 && next <= 0xdfff))
+          throw Error("pickVars指标包含无效Unicode");
+        bytes += 4;
+      } else if (code >= 0xdc00 && code <= 0xdfff)
+        throw Error("pickVars指标包含无效Unicode");
+      else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+      if (bytes > 65536) throw Error("pickVars指标超过64KiB");
+    }
+    return value;
+  };
   let consumed = 0,
     completed = 0,
     failed = false;
@@ -223,6 +258,12 @@ function installPickVars(
     const selectXML = operation.source === "responseXml" ? readXML() : null;
     // Text is the entire current body, read once per task, never per row.
     const currentText = operation.source === "responseText" ? readText() : null;
+    const isMetadata =
+      operation.source === "responseCode" ||
+      operation.source === "responseTime" ||
+      operation.source === "responseSize";
+    // Snapshot the captured current facade once per task, never per row.
+    const currentMetadata = isMetadata ? metadataValue(operation.source) : null;
     const rows = operation.variables,
       assignments = create(null);
     nodes = 0;
@@ -235,7 +276,9 @@ function installPickVars(
             ? selectXML(row.xmlPath)
             : operation.source === "responseText"
               ? currentText
-              : root;
+              : isMetadata
+                ? currentMetadata
+                : root;
       if (operation.source === "responseJson")
         for (let part = 0; part < row.segments.length; part++) {
           if (value === null || typeof value !== "object")

@@ -86,8 +86,15 @@ function sourceFor(base, version = "1.1") {
     api.request.header.parameter = [];
     api.request.pre_tasks = before;
     api.request.post_tasks = after;
-    if (id === "text")
+    if (id === "text") {
       api.request.auth = { type: "bearer", bearer: { key: "{{token}}" } };
+      api.request.pre_tasks.push(
+        script(
+          "metadata to wire",
+          'pm.setRequestHeader("X-Meta-Code",String(pm.environment.get("metaCode")));pm.setRequestHeader("X-Meta-Time",String(pm.globals.get("globalTime")));pm.setRequestHeader("X-Meta-Size",String(pm.environment.get("metaSize")));',
+        ),
+      );
+    }
     assert(after.length <= 16, "fixture must preserve production task cap");
     source.apis.push(api);
   };
@@ -252,6 +259,43 @@ function sourceFor(base, version = "1.1") {
       "regularmatch",
       "/^A[a-z]+$/",
     ),
+    script(
+      "metadata current view",
+      'pm.environment.set("wireCodeSnapshot",pm.response.code);pm.environment.set("wireTimeSnapshot",pm.response.responseTime);pm.environment.set("wireSizeSnapshot",pm.response.responseSize);apt.response.setCode(201);pm.response.responseTime=12.5;pm.response.responseSize=2048;pm.environment.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.globals.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.variables.set=()=>{throw Error("PUBLIC_META_SETTER")};',
+    ),
+    ...[
+      ["responseCode", "Code"],
+      ["responseTime", "Time"],
+      ["responseSize", "Size"],
+    ].map(([source, suffix]) =>
+      task("metadata " + suffix, "pickVars", {
+        source,
+        variables: [
+          { name: " meta" + suffix + " ", type: "envVars" },
+          {
+            name: "global" + suffix,
+            type: "globalVars",
+            expression: "{{UNUSED_METADATA_EXPRESSION}} $[*]",
+          },
+          { name: "temp" + suffix, type: "tempVars", expression: "" },
+        ],
+      }),
+    ),
+    assertion("temporary metadata number", "tempVars", "tempCode", "eq", "201"),
+    assertion(
+      "global metadata number",
+      "globalVars",
+      "globalTime",
+      "eq",
+      "12.5",
+    ),
+    assertion(
+      "environment metadata number",
+      "envVars",
+      "metaSize",
+      "eq",
+      "2048",
+    ),
     task("bounded wait", "wait", 10),
   ]);
   add("text", "/text", [
@@ -340,6 +384,14 @@ async function fixture(t, version = "1.1") {
     wire.push({ path: req.url, authorization: req.headers.authorization });
     res.setHeader("x-num", "10");
     res.setHeader("x-choice", "blue");
+    res.setHeader(
+      "x-meta-echo",
+      [
+        req.headers["x-meta-code"] ?? "-",
+        req.headers["x-meta-time"] ?? "-",
+        req.headers["x-meta-size"] ?? "-",
+      ].join("|"),
+    );
     if (req.url === "/duplicate") res.setHeader("x-duplicate", ["one", "two"]);
     if (req.url === "/collection")
       res.setHeader("set-cookie", [
@@ -616,6 +668,21 @@ function successfulRun(run, names) {
   assert.equal(run.results[3].request.auth.token, "wire-selected");
   assert.equal(run.results[3].response.body, " Alpha 雪 ");
   assert.equal(run.results[3].scriptResponse.body, "16");
+  assert.equal(run.variables.metaCode, 201);
+  assert.equal(run.variables.metaTime, 12.5);
+  assert.equal(run.variables.metaSize, 2048);
+  assert.equal(run.variables.globalCode, 201);
+  assert.equal(run.variables.globalTime, 12.5);
+  assert.equal(run.variables.globalSize, 2048);
+  assert.equal(run.results[2].response.status, run.variables.wireCodeSnapshot);
+  assert.equal(
+    run.results[2].response.duration,
+    run.variables.wireTimeSnapshot,
+  );
+  assert.equal(run.results[2].response.size, run.variables.wireSizeSnapshot);
+  assert.equal(run.results[2].response.status, 200);
+  assert.notEqual(run.results[2].response.size, 2048);
+  assert.equal(run.results[3].response.headers["x-meta-echo"], "201|12.5|2048");
   unaryShape(run.snapshot.steps.map((step) => step.request));
 }
 async function runFlow(client, p, plan) {
@@ -642,7 +709,7 @@ for (const [version, transport] of [
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 56);
+      assert.equal(names.length, 59);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])

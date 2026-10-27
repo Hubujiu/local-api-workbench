@@ -1,8 +1,16 @@
-# 后端检查点 · 2026-10-27 04:54 UTC
+# 后端检查点 · 2026-10-27 05:23 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 04:54 组合取证与夹具纠正
+## 05:23 当前功能增量
+
+- 组合9139e65131cde8556c3803cc034d0ad3b5a6cf1f/treea77fd1331a27df36f81c67eff98e7233c9755a85=local1880048522f15e6a726d165df2c1d7c795682996的CI40452482154首轮19/19成功；全部actualcheckout及12份清单348文件87/87/87/87已核。三OS1830，历史模板Source零执行与CLI/恢复、19轮私有预期展开、15比较/11来源与DB/生产stdio/固定引擎重建均通过；edad失败记录不改判。
+- 同PR25新增Code/Time/Size提取，headbeefafdbaa702fe4b7023713758e2de4d5e02232/tree81f3c60aea4f6cf5ec1430363ef306457ab75c76=local1e0d257a443a1715d63978cd663f04c7a1b41ec4，仍PR9 base，无PR26依赖。独立CI40452601457首轮10/10，三OS1189；全部实际checkout0240570483af6ed44008cd4eb56d28d85e659594同树。
+- 元数据每task只从启动时捕获facade当前自有数据字段读取一次，有限JSON scalar保持原类型；缺失/undefined/getter/非有限数/对象明确失败，String不隐式转换。目标name按原Text共同分支trim；expression可缺省，存在时有界原样保存但不解释。原子行验证、阶段失败不提交及严格计划停止保持。
+- 新组合已保留assertions私有工厂并只向pick installer追加捕获facade参数。元数据与原预期展开15项、完整MCP/CLI/nativeexport等28项定向通过；主链将当前view改为201/12.5/2048，三来源×三scope提取，公开setter替换不能劫持写入，后续真实请求header回显这些数值，原始wire状态/耗时/大小保持初始快照。数值保持number，原生定义/冻结/恢复原样。
+- 本候选尚需自己的组合CI。requestHeader/requestBody/Cookie提取仍未接入：原版request来源属于legacy阶段投影，WB当前live facade/配置行与认证或系统头不全等，不能直接套用。未运行原版或重启XML专项审查。
+
+## 04:54 先前组合取证与夹具纠正
 
 组合edad4c549b0700938b1db512eac05b73ae30aa9f/tree076ece168af6aba4b5166c7bb30e1f72601f95bf的首轮CI40450856271为16成功/3失败：三个OS均在旧native-text-entrypoints:1047把已支持的普通expected marker当作导入错误，期望400、实际200，各OS1829通过/1失败；不是超时。全部actualcheckout与12份清单348文件87/87/87/87已核，DB/生产stdio/固定ac引擎通过，不抵消RED。
 
