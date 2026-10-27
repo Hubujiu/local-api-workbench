@@ -37,56 +37,106 @@ export async function createExperimentSession() {
   );
   const owned = createOwnedRuntime(raw, budget);
   const { runtime, context } = owned;
-  let disposed = false;
+  let schemaHolder;
+  try {
+    budget.run("create-private-export-holder", () => {
+      schemaHolder = context.newObject(context.null);
+      if (context.typeof(schemaHolder) !== "object")
+        throw Error("Private export holder allocation failed");
+    });
+  } catch (error) {
+    try {
+      schemaHolder?.dispose();
+    } finally {
+      owned.dispose();
+    }
+    throw error;
+  }
+  let disposed = false,
+    schemaAttempted = false;
   const alive = () => {
     if (disposed) throw Error("Experiment session disposed");
     budget.check();
   };
-  const load = (id, mode = "bytecode") => {
+  const evaluateFixed = (id, mode, capture = false) => {
     alive();
     if (!IDS.includes(id) || !["bytecode", "source"].includes(mode))
       throw Error("Unknown fixed experiment operation");
-    return budget.run("load-" + mode, () => {
-      if (mode === "source") {
-        const fixed = fixedSource(id);
-        const result = context.evalCode(fixed.source, fixed.filename, {
-          type: "global",
-        });
-        if (result.error) {
-          result.error.dispose();
-          throw Error("Fixed source evaluation failed");
+    let returned;
+    try {
+      budget.run("load-" + mode, () => {
+        if (mode === "source") {
+          const fixed = fixedSource(id);
+          const result = context.evalCode(fixed.source, fixed.filename, {
+            type: "global",
+          });
+          if (result.error) {
+            result.error.dispose();
+            throw Error("Fixed source evaluation failed");
+          }
+          if (capture) returned = result.value;
+          else result.value.dispose();
+          return;
         }
-        result.value.dispose();
-        return;
-      }
-      // Read once -> verify exactly these bytes -> copy exactly these bytes.
-      // There is no second file read, async interleave or mutable shared buffer.
-      const bytes = budget.run("verify-bundle", () => {
-        const bytes = Buffer.from(
-          readFileSync(new URL(id + ".bytecode.b64", assets), "utf8").trim(),
-          "base64",
-        );
-        verifyBundle(verified.manifest, verified.engine, id, bytes);
-        return bytes;
-      });
-      const pointer = raw.alloc(context.ctx.value, bytes.length);
-      if (!pointer) throw Error("Trusted bytecode input allocation failed");
-      try {
-        budget.run("copy-bytecode", () => {
-          new Uint8Array(raw.memory.buffer, pointer, bytes.length).set(bytes);
+        // Read once -> verify exactly these bytes -> copy exactly these bytes.
+        // No second file read, async interleave or mutable shared buffer.
+        const bytes = budget.run("verify-bundle", () => {
+          const bytes = Buffer.from(
+            readFileSync(new URL(id + ".bytecode.b64", assets), "utf8").trim(),
+            "base64",
+          );
+          verifyBundle(verified.manifest, verified.engine, id, bytes);
+          return bytes;
         });
-        const status = budget.run("read-evaluate-bytecode", () =>
-          raw.readEval(context.ctx.value, pointer, bytes.length),
-        );
-        if (status !== 0)
-          throw Error("Trusted bytecode evaluation failed: " + status);
-      } finally {
-        raw.free(context.ctx.value, pointer);
-      }
-    });
+        // Allocated before guest code can exhaust the heap; never exposed to it.
+        // This immutable fixed export slot is used at most once per session.
+        const pointer = raw.alloc(context.ctx.value, bytes.length);
+        if (!pointer) throw Error("Trusted bytecode input allocation failed");
+        try {
+          budget.run("copy-bytecode", () =>
+            new Uint8Array(raw.memory.buffer, pointer, bytes.length).set(bytes),
+          );
+          const status = budget.run("read-evaluate-bytecode", () =>
+            capture
+              ? raw.readEvalInto(
+                  context.ctx.value,
+                  pointer,
+                  bytes.length,
+                  schemaHolder.value,
+                )
+              : raw.readEval(context.ctx.value, pointer, bytes.length),
+          );
+          if (status !== 0)
+            throw Error("Trusted bytecode evaluation failed: " + status);
+          if (capture) returned = context.getProp(schemaHolder, "value");
+        } finally {
+          raw.free(context.ctx.value, pointer);
+        }
+      });
+      // Assignment occurred inside the charged callback, so a late-success
+      // exception cannot lose a newly owned return handle or private holder.
+      if (capture)
+        budget.run("check-fixed-export", () => {
+          if (context.typeof(returned) !== "function")
+            throw Error("Trusted fixed export is not callable");
+        });
+      const result = returned;
+      returned = undefined;
+      return result;
+    } finally {
+      returned?.dispose();
+    }
   };
+  const load = (id, mode = "bytecode") => evaluateFixed(id, mode);
   return {
     load,
+    // Private host-only fixed export. No guest arguments can choose its bundle.
+    loadSchemaValue(mode = "bytecode") {
+      if (schemaAttempted)
+        throw Error("Fixed private schema already attempted");
+      schemaAttempted = true;
+      return evaluateFixed("schema-private", mode, true);
+    },
     budget,
     // Test-only direct access, never attached to a worker request or guest global.
     context,
@@ -95,7 +145,11 @@ export async function createExperimentSession() {
     dispose() {
       if (!disposed) {
         disposed = true;
-        owned.dispose();
+        try {
+          schemaHolder.dispose();
+        } finally {
+          owned.dispose();
+        }
       }
     },
   };

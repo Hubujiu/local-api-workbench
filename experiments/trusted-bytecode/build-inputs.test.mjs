@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  readFileSync,
   mkdtempSync,
   writeFileSync,
   rmSync,
@@ -18,6 +19,13 @@ import {
   assertSdkDigests,
 } from "./build-inputs.mjs";
 import { hash } from "./catalog.mjs";
+import {
+  BASELINE_PATCH_FIELDS,
+  BASELINE_SOURCE_FIELDS,
+  readVerifiedBaseline,
+  verifyBaselineInputs,
+  verifyEngine,
+} from "./integrity.mjs";
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), "localapi-build-input-test-"));
@@ -102,7 +110,7 @@ test("input verification rejects symlink replacements and path traversal", (t) =
 test("generated export symbols are derived only from the reviewed C interface", () => {
   const inputs = generatedInputs(
     Buffer.from(
-      "int QTS_Normal(int x) {\n}\nDebugOnly int QTS_Hidden(int x) {\n}\n",
+      "int QTS_Normal(int x) {\n}\nint QTS_Multiline(int x,\n  int y) {\n}\nDebugOnly int QTS_Hidden(int x) {\n}\n",
     ),
   );
   const symbols = JSON.parse(
@@ -110,7 +118,12 @@ test("generated export symbols are derived only from the reviewed C interface", 
       "packages/variant-quickjs-wasmfile-release-sync/build/wrapper/symbols.json"
     ],
   );
-  assert.deepEqual(symbols, ["_QTS_Normal", "_malloc", "_free"]);
+  assert.deepEqual(symbols, [
+    "_QTS_Normal",
+    "_QTS_Multiline",
+    "_malloc",
+    "_free",
+  ]);
   assert.equal(
     inputs[
       "packages/variant-quickjs-wasmfile-release-sync/build/wrapper/asyncify-imports.json"
@@ -131,4 +144,133 @@ test("fixed SDK identity rejects changed compiler or Node bytes before compiler 
     () => assertSdkDigests(REVIEWED_SDK.distributionSha256, "0".repeat(64)),
     /reviewed compiler distribution/,
   );
+});
+
+function baselineFixture() {
+  const base = new URL("../../src/vendor/quickjs-tracked/", import.meta.url);
+  return {
+    baseline: JSON.parse(readFileSync(new URL("manifest.json", base))),
+    patches: Object.fromEntries(
+      Object.keys(BASELINE_PATCH_FIELDS).map((name) => [
+        name,
+        readFileSync(new URL(name, base)),
+      ]),
+    ),
+    wasm: Buffer.from(
+      readFileSync(new URL("emscripten-module.wasm.b64", base), "utf8").trim(),
+      "base64",
+    ),
+    glue: readFileSync(new URL("emscripten-module.js", base)),
+  };
+}
+
+test("baseline provenance includes all six patched sources and four actual patches", () => {
+  const { baseline, identity, sources } = readVerifiedBaseline();
+  assert.deepEqual(Object.keys(sources), [
+    "c/interface.c",
+    "packages/variant-quickjs-wasmfile-release-sync/Makefile",
+    "vendor/quickjs/quickjs.c",
+    "vendor/quickjs/libregexp.c",
+    "vendor/quickjs/libregexp.h",
+    "vendor/quickjs/libunicode.c",
+  ]);
+  assert.deepEqual(Object.keys(BASELINE_PATCH_FIELDS), [
+    "rejection-tracker.patch",
+    "heap-accounting.patch",
+    "regexp-interrupt.patch",
+    "unicode-script-oom.patch",
+  ]);
+  for (const [name, field] of Object.entries(BASELINE_SOURCE_FIELDS))
+    assert.equal(sources[name], baseline[field]);
+  assert.equal(identity.baselineWasmSha256, baseline.wasmSha256);
+  assert.equal(identity.baselineGlueSha256, baseline.glueSha256);
+  assert.equal(
+    identity.regexpInterruptSourceCommit,
+    "25aaa7737020d7ca98926abc532acc6c5755d562",
+  );
+  assert.equal(
+    identity.unicodeScriptOOMSourceCommit,
+    "817509a87c3c0af362df576574784bae0dae8129",
+  );
+});
+
+test("each baseline patch and production binary mismatch is rejected before any compiler or runtime", () => {
+  const f = baselineFixture();
+  assert.doesNotThrow(() =>
+    verifyBaselineInputs(f.baseline, f.patches, f.wasm, f.glue),
+  );
+  for (const name of Object.keys(BASELINE_PATCH_FIELDS)) {
+    const patches = {
+      ...f.patches,
+      [name]: Buffer.concat([f.patches[name], Buffer.from("\nchanged")]),
+    };
+    assert.throws(
+      () => verifyBaselineInputs(f.baseline, patches, f.wasm, f.glue),
+      /Unreviewed baseline patch/,
+    );
+  }
+  for (const [wasm, glue] of [
+    [f.wasm.subarray(0, -1), f.glue],
+    [f.wasm, f.glue.subarray(0, -1)],
+  ])
+    assert.throws(
+      () => verifyBaselineInputs(f.baseline, f.patches, wasm, glue),
+      /production baseline artifact identity mismatch/,
+    );
+});
+
+test("baseline requires reviewed upstream commits and all six source fingerprints", () => {
+  const f = baselineFixture();
+  for (const field of [
+    "sourceRepository",
+    "sourceCommit",
+    "sourceTag",
+    "emsdkCommit",
+    "emscripten",
+    "regexpInterruptSourceCommit",
+    "unicodeScriptOOMSourceCommit",
+    ...Object.values(BASELINE_SOURCE_FIELDS),
+  ]) {
+    const baseline = { ...f.baseline, [field]: "unreviewed" };
+    assert.throws(
+      () => verifyBaselineInputs(baseline, f.patches, f.wasm, f.glue),
+      /Unreviewed fixed baseline identity/,
+    );
+  }
+});
+
+test("engine identity rejects well-formed substitutions for every added baseline provenance binding", () => {
+  const assets = new URL("./artifacts/", import.meta.url);
+  const identity = JSON.parse(readFileSync(new URL("engine.json", assets)));
+  const wasm = Buffer.from(
+    readFileSync(new URL("engine.wasm.b64", assets), "utf8").trim(),
+    "base64",
+  );
+  const glue = readFileSync(new URL("engine.mjs", assets));
+  const loader = readFileSync(new URL("./engine.mjs", import.meta.url));
+  verifyEngine(identity, wasm, glue, loader);
+  for (const field of [
+    "baselineManifestSha256",
+    "baselineWasmSha256",
+    "baselineGlueSha256",
+    "integrityVerifierSha256",
+    "regexpInterruptPatchSha256",
+    "unicodeScriptOOMPatchSha256",
+    "patchedRegExpSourceSha256",
+    "patchedRegExpHeaderSha256",
+    "patchedUnicodeSourceSha256",
+    "regexpInterruptSourceCommit",
+    "unicodeScriptOOMSourceCommit",
+  ]) {
+    assert.throws(
+      () =>
+        verifyEngine(
+          { ...identity, [field]: "0".repeat(identity[field].length) },
+          wasm,
+          glue,
+          loader,
+        ),
+      /identity mismatch/,
+    );
+  }
 });

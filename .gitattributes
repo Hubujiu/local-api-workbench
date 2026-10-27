@@ -20,3 +20,6 @@
 /src/vendor/schema-library.js -text
 /src/vendor/script-libraries.js -text
 /src/vendor/quickjs-tracked/*.patch -text
+
+/src/vendor/quickjs-tracked/emscripten-module.js -text
+/src/vendor/quickjs-tracked/manifest.json -text

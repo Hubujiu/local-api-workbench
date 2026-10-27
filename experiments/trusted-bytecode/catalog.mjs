@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const ABI = "localapi-private-trusted-bytecode-v1";
+export const ABI = "localapi-private-trusted-bytecode-v2";
 export const UPSTREAM = "235f6da2fd4f7354fa4765fde4aea880d2a4aef5";
 export const EMSDK = "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d";
 export const FLAGS = Object.freeze({ compile: 32, write: 1, read: 1 });
@@ -21,6 +21,12 @@ const entries = Object.freeze({
     sourceSha256:
       "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
   },
+  "schema-private": {
+    path: "../../src/vendor/schema-library.js",
+    sourceSha256:
+      "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
+    wrapper: "private-schema-v1",
+  },
   "library-prelude": {
     path: "./library-prelude.js",
     sourceSha256:
@@ -35,6 +41,7 @@ const entries = Object.freeze({
     source:
       "globalThis.__trustedFixture = (globalThis.__trustedFixture || 0) + 1; ({owned: 'released return value'});",
   },
+  callable: { source: "(function(value){ return value + 1; });" },
   throwing: { source: "throw new Error('fixed trusted fixture failure');" },
   allocating: {
     source:
@@ -52,12 +59,20 @@ export function fixedSource(id) {
   const sourceSha256 = hash(bytes);
   if (entry.sourceSha256 && sourceSha256 !== entry.sourceSha256)
     throw Error("Fixed source identity mismatch");
-  // Both real bundles already contain their full private IIFE; do not unwrap.
+  // Preserve the entire original IIFE byte-for-byte. Only the private-schema
+  // variant adds a fixed outer lexical receiver; it never exports a guest-global
+  // factory and does not rely on a guest-mutable Object.create or setter.
+  const source =
+    entry.wrapper === "private-schema-v1"
+      ? "(function(globalThis){\n" +
+        bytes.toString("utf8") +
+        "\nreturn globalThis.__boundedJSONSchema;\n})({__proto__:null});"
+      : bytes.toString("utf8");
   return {
     id,
-    source: bytes.toString("utf8"),
+    source,
     sourceSha256,
-    wrapperSha256: sourceSha256,
+    wrapperSha256: hash(source),
     filename: `localapi:trusted/${id}.js`,
     flags: FLAGS,
   };

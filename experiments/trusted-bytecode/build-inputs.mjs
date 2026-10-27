@@ -10,6 +10,7 @@ import {
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { UPSTREAM, EMSDK, hash } from "./catalog.mjs";
+import { readVerifiedBaseline } from "./integrity.mjs";
 
 export const variant = "packages/variant-quickjs-wasmfile-release-sync";
 export const receiptName = ".trusted-bytecode-build.json";
@@ -32,11 +33,7 @@ export function assertSdkDigests(distributionSha256, nodeSha256) {
       "Installed SDK bytes differ from the reviewed compiler distribution",
     );
 }
-export const baseline = JSON.parse(
-  readFileSync(
-    new URL("../../src/vendor/quickjs-tracked/manifest.json", import.meta.url),
-  ),
-);
+export const { baseline } = readVerifiedBaseline();
 export const bridge = () =>
   readFileSync(new URL("./bridge.c", import.meta.url));
 const git = (root, ...args) =>
@@ -120,7 +117,7 @@ export function generatedInputs(source) {
   const symbols = [];
   for (const match of source
     .toString("utf8")
-    .matchAll(/^([\w()* ]+[\s*]+)(QTS_\w+)\((.*?)\) ?\{/gm))
+    .matchAll(/^([\w()* ]+[\s*]+)(QTS_\w+)\(([^)]*)\)\s*\{/gm))
     if (!/AsyncifyOnly|DebugOnly/.test(match[1])) symbols.push("_" + match[2]);
   symbols.push("_malloc", "_free");
   return Object.fromEntries(
@@ -145,35 +142,22 @@ export function writeGenerated(root) {
 }
 
 export function verifySourceInputs(root) {
-  if (
-    baseline.sourceCommit !== UPSTREAM ||
-    baseline.emsdkCommit !== EMSDK ||
-    baseline.emscripten !== "3.1.65"
-  )
-    throw Error("Unreviewed baseline manifest");
-  for (const [name, digest] of [
-    ["rejection-tracker.patch", baseline.patchSha256],
-    ["heap-accounting.patch", baseline.heapPatchSha256],
-  ])
-    if (
-      hash(
-        readFileSync(
-          new URL("../../src/vendor/quickjs-tracked/" + name, import.meta.url),
-        ),
-      ) !== digest
-    )
-      throw Error("Unreviewed baseline patch: " + name);
+  const {
+    baseline: currentBaseline,
+    identity: baselineIdentity,
+    sources,
+  } = readVerifiedBaseline();
   const source = readRegular(root, "c/interface.c");
   const suffix = Buffer.concat([Buffer.from("\n"), bridge()]);
   if (
     !source.subarray(-suffix.length).equals(suffix) ||
-    hash(source.subarray(0, -suffix.length)) !== baseline.patchedSourceSha256
+    hash(source.subarray(0, -suffix.length)) !==
+      currentBaseline.patchedSourceSha256
   )
     throw Error("Unreviewed bridge or base interface");
   const inputs = verifyTrackedTree(root, UPSTREAM, {
+    ...sources,
     "c/interface.c": hash(source),
-    [`${variant}/Makefile`]: baseline.patchedMakefileSha256,
-    "vendor/quickjs/quickjs.c": baseline.patchedQuickJSSourceSha256,
   });
   const generated = generatedInputs(source);
   for (const [name, bytes] of Object.entries(generated)) {
@@ -219,12 +203,11 @@ export function verifySourceInputs(root) {
     sourceCommit: UPSTREAM,
     sourceInputsSha256: hash(sorted(inputs)),
     bridgeSha256: hash(bridge()),
-    interfaceBaseSha256: baseline.patchedSourceSha256,
+    ...baselineIdentity,
+    integrityVerifierSha256: hash(
+      readFileSync(new URL("./integrity.mjs", import.meta.url)),
+    ),
     patchedSourceSha256: hash(source),
-    patchedQuickJSSourceSha256: baseline.patchedQuickJSSourceSha256,
-    patchedMakefileSha256: baseline.patchedMakefileSha256,
-    baselinePatchSha256: baseline.patchSha256,
-    heapPatchSha256: baseline.heapPatchSha256,
   };
 }
 

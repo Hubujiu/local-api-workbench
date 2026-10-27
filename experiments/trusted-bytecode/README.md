@@ -1,3 +1,47 @@
+# Current v2 lazy-adapter stage — WIP, default disabled
+
+PR #37 now targets `fix/quickjs-regexp-interrupt`, including the coordinated
+regex-polling and Unicode-OOM prerequisite. Production baseline WASM is
+`ac4822f75275ccf8cb936649383dc947843511784379518948cf61087a418c9e`.
+The private v2 bridge was rebuilt from all six reviewed patched sources using
+the same pinned SDK, twice from clean source directories on this host:
+
+- WASM `b624737c046e372d22e53151d470421e90489b4e9df905f3baf0f772d96d31b7`
+- Glue `9b384524fcebc4d5177dbeccd2d560ff829e0b5af65fa0a2d92d999036c1c2e7`
+
+A fixed private wrapper preserves the exact schema IIFE and gives its sole
+`globalThis` export a lexical null-prototype receiver. Its callable result is
+consumed into a preallocated, host-private null-prototype holder by the narrow
+C bridge. No factory, callback, source, path or holder is put on a guest global.
+The actual `__validateJSONSchema` getter captures a fixed no-argument host
+callback; per-runtime unloaded/loading/ready/failed state owns the cache, returns
+separate owned duplicates and permanently fails on recursive/failed loading.
+The unchanged `responseCompatibilitySource` wires real pm/apt/Chai schema APIs
+in the experiment without modifying the production worker or extracting a helper.
+
+Nine provenance checks, four C export-ownership checks and fourteen focused
+actual-API/lazy cases pass locally, alongside the eighteen existing experiment
+checks. These cover unused zero callback/load, shared first/repeated cache,
+validation errors versus loader errors, poisoned factory accessors, guest-caught
+recursive load, stable repeated-return ownership and clean ordinary OOM points.
+They do not establish production workflow integration or atomicity.
+
+**Known blocker, not hidden by those passing tests:** after real API setup,
+13 MiB guest Uint8Array pressure causes the explicit source-mode first lazy
+compilation of this fixed schema to hit QuickJS `update_label` assertion at
+quickjs.c:21661, followed by cleanup failure. Bytecode load at that pressure
+fails cleanly, and source load at 12 MiB fails cleanly. Those are separate
+pressure points, not full source/bytecode OOM equivalence. The higher-pressure
+source-parser failure was reported to the parent for independent engine work;
+limits were not weakened and the defect is not a production-enable argument.
+Evidence is retained separately. Cancellation/late-budget worker coverage and
+new exact-head CI are in progress. No default switch, XML-specific work,
+main/develop merge or deployment.
+
+---
+
+## Historical v1 checkpoint (older engine/measurements; retained evidence)
+
 # WIP: fixed trusted-bundle bytecode experiment
 
 This isolated experiment is **not a production loader**. No default/runtime
@@ -122,15 +166,15 @@ Success is published only after guest disposal; disposal is charged to the
 active budget, and cleanup failures cannot be recorded as successful samples. This is not a cold-process,
 cross-platform, full script-workflow or macOS-flake benchmark.
 
-| Operation | Active median (range), ms | Parent total median, ms |
-| --- | ---: | ---: |
-| Unused session | 13.9 (11.5–15.9) | 70.9 |
-| Schema source | 78.0 (69.2–83.3) | 135.2 |
-| Schema bytecode | 29.8 (25.0–35.6) | 87.7 |
-| Schema source + first/repeated validation | 93.1 (82.4–143.1) | 151.4 |
-| Schema bytecode + first/repeated validation | 43.1 (39.2–54.2) | 100.0 |
-| Libraries + prelude source | 141.0 (126.8–147.8) | 196.4 |
-| Libraries + prelude bytecode | 63.7 (56.4–70.7) | 123.7 |
+| Operation                                   | Active median (range), ms | Parent total median, ms |
+| ------------------------------------------- | ------------------------: | ----------------------: |
+| Unused session                              |          13.9 (11.5–15.9) |                    70.9 |
+| Schema source                               |          78.0 (69.2–83.3) |                   135.2 |
+| Schema bytecode                             |          29.8 (25.0–35.6) |                    87.7 |
+| Schema source + first/repeated validation   |         93.1 (82.4–143.1) |                   151.4 |
+| Schema bytecode + first/repeated validation |          43.1 (39.2–54.2) |                   100.0 |
+| Libraries + prelude source                  |       141.0 (126.8–147.8) |                   196.4 |
+| Libraries + prelude bytecode                |          63.7 (56.4–70.7) |                   123.7 |
 
 The fixed ordinary schema/data pair returns `valid: true` twice. First validation
 median is 11.92 ms (source-loaded) versus 15.58 ms (bytecode-loaded), and repeated

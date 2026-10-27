@@ -1,16 +1,27 @@
 {
-  "abi": "localapi-private-trusted-bytecode-v1",
+  "abi": "localapi-private-trusted-bytecode-v2",
   "engine": {
-    "abi": "localapi-private-trusted-bytecode-v1",
+    "abi": "localapi-private-trusted-bytecode-v2",
     "sourceCommit": "235f6da2fd4f7354fa4765fde4aea880d2a4aef5",
-    "sourceInputsSha256": "cb7428f2b10c9e410ffda129a8f82d1fe853a2f422fcc9b40afd7f2159f161ec",
-    "bridgeSha256": "a31885c588e12bdfe35a59076e5a1baf3f8d1aef2c11e1e88b65e96086c1eb0b",
+    "sourceInputsSha256": "72b05f3351cd6c6a09c0992f693a311d27ae3538a7b3b9ae6cccebc39602be88",
+    "bridgeSha256": "39bebace4f172f2dc9021a737e233399562983a60697b39d5641c459728596ec",
     "interfaceBaseSha256": "f8ac718fbcd925c9c51d03a3fcbd9557bc9b0b7fd38cc16170996283e25ec454",
-    "patchedSourceSha256": "f375bfcd2037d55a63a444af6389e1cc4a1ec00b4f67bb6b4627d5802c6f1e01",
-    "patchedQuickJSSourceSha256": "ea37ef190747d83b42b307fb9c331e164f0c83c82f36c1338bc3933b694f2c58",
     "patchedMakefileSha256": "346fe9caebe1bd37d8f331975aa7099eefaae30939ad90a0c1ea3afbdc3074c9",
+    "patchedQuickJSSourceSha256": "f3e0c2fa14b07dababe70a04baa01b7d00591158e159b14836079e0a814e614f",
+    "patchedRegExpSourceSha256": "b5908b05c68b4d10cc83e2298415df70cb7f8fc451ead33be4ae03c107377f42",
+    "patchedRegExpHeaderSha256": "d10b8229a73e9a09fab80f3a2a3570e84bbfa13bc2da9ac33f08e8b9911d2564",
+    "patchedUnicodeSourceSha256": "b151067a56841a0812d1087f02d2b9fe5ccc0dcf1f39a251f202d8ad34c03172",
     "baselinePatchSha256": "b820ef29facac7ccc60dbc6abe967b0528bce04a79d2f51d0665e1eaba3ae03c",
     "heapPatchSha256": "a1532273a27327553f5188339e4006851c463dfbf339d6bed110210e8aecd849",
+    "regexpInterruptPatchSha256": "d607d362edae581799aa896dd961432773622636801e1a46c914c3eb8dc8b4d5",
+    "unicodeScriptOOMPatchSha256": "167561877db123fb16ccbd2c682dfa2e05acd6c639885ae422a2cf92c82e8316",
+    "regexpInterruptSourceCommit": "25aaa7737020d7ca98926abc532acc6c5755d562",
+    "unicodeScriptOOMSourceCommit": "817509a87c3c0af362df576574784bae0dae8129",
+    "baselineWasmSha256": "ac4822f75275ccf8cb936649383dc947843511784379518948cf61087a418c9e",
+    "baselineGlueSha256": "4764f04399ab57b544f4654219c09d36cb6104c17cf8b1ab6baba39b806f3807",
+    "baselineManifestSha256": "16d62440a75eec53bc159c136d6cf332e72b823a923daee86e85ee4caf580b41",
+    "integrityVerifierSha256": "581f53255da8819334b8221811f08b381f69c24f6b91795e8686f7e0ca4673a9",
+    "patchedSourceSha256": "f6a62eda38fc864ed91cb7e09eaf64f92389d545b437cf5da48fe582d15b745f",
     "emscripten": "3.1.65",
     "emsdkCommit": "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d",
     "sdkRelease": "fdcf56c75a1d27fdff6525a7e03423595485ca19",
@@ -19,12 +30,12 @@
     "sdkNodeSha256": "563a678816281a08dc7da9fd3ece4e1fc5fcc01f68ffe404f6cdd1f715821b8f",
     "sdkConfigSha256": "3d24a679242c3093c2b016d398a35e9187c3a99a8a809c1fdf341305d6fdbe64",
     "builderSha256": "dd0d0ffacf20c975cb5ec4d8a6d82b90b7e45d56bbda03669d6419850b8a7e9c",
-    "inputVerifierSha256": "a990d9de55b1f8befcc90c2e5de30015b7ad7d04b31754b39db79f228d55c0f9",
-    "buildRecipeSha256": "da6a898dd85decc2f66e593a15377e19c3b9868e473e094c00740f60bc96fbc1",
-    "executionRecipeSha256": "cad7166f9cf49215cb2830cec9682281017eec8acd6db8ab8edf8980c9e9e646",
-    "loaderSha256": "4eb400da896445365ca485306264c94f1429b5e6f7adc97fdaa438302a04d0ac",
-    "wasmSha256": "12ccc975fbc668837b17f77ae0606e125eedade6733df3704d625dda7eaa58f6",
-    "glueSha256": "59c0544e03c487e3f290c22b168edefb5e48afcdcb9ca453523aa3ecfacf5f57"
+    "inputVerifierSha256": "de4e1b6edb17a187106c828954341fb0229262b7d68d80f8f44a04348ea5e194",
+    "buildRecipeSha256": "4b52cd5d016fcf4243edb8e627fb33574eb8c1a1c5e10655b37fc0c4d39dbc9e",
+    "executionRecipeSha256": "c1b08de4d763c0052665bf8feb6b99833b20d05089a88d55ff3ea31b95ac6f01",
+    "loaderSha256": "0cbf0a064799eb3027acb6b4a0f66eef44187cc2508bbf67d8dac372559bbff0",
+    "wasmSha256": "b624737c046e372d22e53151d470421e90489b4e9df905f3baf0f772d96d31b7",
+    "glueSha256": "9b384524fcebc4d5177dbeccd2d560ff829e0b5af65fa0a2d92d999036c1c2e7"
   },
   "bundles": {
     "schema": {
@@ -39,6 +50,19 @@
       },
       "byteLength": 274651,
       "bytecodeSha256": "a5d95af0a11f7e83527a93fc72b63e1735139ff6bccb3a4750f55d86f8fdd1fb"
+    },
+    "schema-private": {
+      "id": "schema-private",
+      "sourceSha256": "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
+      "wrapperSha256": "9a2d815e333effa3fc16f9a380dbb38da16ec3622caaf26db2a9610f36905995",
+      "filename": "localapi:trusted/schema-private.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 274699,
+      "bytecodeSha256": "f67a36756df3dbaa99d7e645ea8adccf2f81fa0571f45a7fc9f1328d1de84fbb"
     },
     "library-prelude": {
       "id": "library-prelude",
@@ -78,6 +102,19 @@
       },
       "byteLength": 140,
       "bytecodeSha256": "08feaa507cf10383c4e13c1162591c6933ff6678389c5c7c5327e95186808ea3"
+    },
+    "callable": {
+      "id": "callable",
+      "sourceSha256": "9cf4c3969d52ec72314e1f1cd7eb1371873b4d427c64810d951391670c287e92",
+      "wrapperSha256": "9cf4c3969d52ec72314e1f1cd7eb1371873b4d427c64810d951391670c287e92",
+      "filename": "localapi:trusted/callable.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 84,
+      "bytecodeSha256": "c84668e92acffdf3c438d0e995732ee57fb4c0f3e3bfe3f0b2a3fbcaa3adc8ff"
     },
     "throwing": {
       "id": "throwing",

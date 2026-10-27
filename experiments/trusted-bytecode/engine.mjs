@@ -39,6 +39,7 @@ export async function instantiateVerifiedEngine(wasm, glue) {
     free: bind("QTS_TrustedBytecodeFree", 2),
     write: bind("QTS_TrustedBytecodeWrite", 3),
     readEval: bind("QTS_TrustedBytecodeReadEval", 3),
+    readEvalInto: bind("QTS_TrustedBytecodeReadEvalInto", 4),
     mallocSize: bind("QTS_TrustedMallocSize", 1),
     memory: extensions.getWasmMemory(),
   };
