@@ -1,6 +1,21 @@
-# 后端检查点 · 2026-10-27 18:34 UTC
+# 后端检查点 · 2026-10-27 19:27 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 19:27 明文 WebSocket 完整组组合候选
+
+- 同PR14 final local `85c6920d3bc695952cd8978ae8b7720dfd6c5191` / remote `25175a1016737c04facb114ed3e02d6315ceb276` / tree `7fb0b16b298c36dd299421ffb02c2e2e02f13f08` 已保存；功能首次CI `40569090203` 尚待。纯依赖base只从旧ad1e9e90加PR13推进到 `03b3e52bd5e3e26b389611939e862e67b1c80b52` / local `dcd1e331a1564a70e431fcfbe024884e0cf3d855` / tree `e0339b7ac2d37878802bef1edd66f025079fccf4`，不含PR14或集成根祖先；PR43固定base未动。
+- 新出口保留完整 source-backed websocket2 消息组，包括原顺序、param_id、惰性response、Unicode和显式空文本帧。只有新 `sendEmptyMessage:true` 的空文本可迁移；历史无标志/false的receive-only不被偷偷改写。缺失/额外/编辑定义、历史身份塌缩、剥离凭据、未知profile/模板及WSS依然拒绝。
+- 真实两格式×HTTP/stdio官方SDK的四条完整链均含两代往返、owner调用、冻结CLI后编辑活动定义、持久化收据与备份重启；每链12个实际帧中4个空文本帧。Header及重复/编码/Unicode Query逐项比对，ws→wss跳转目标连接为0，安全验证和时限未变。独立审查两完整文件7/7，作者12完整文件49/49；均不是原版完整会话/重连/TLS等价声明。
+- 根合并生产点 `f2715b44df1845ad5dba8f4d4864ced31979b9f8` / tree `e5d6d6614cb492ecb0ba8d6a93ad6c7e7b1732e7`：唯一import区冲突保留全部根数据库/提取imports，最终modern文件与合并前根完全相同。17完整文件84/84通过，0失败/取消/跳过，30.636秒；包含原生/扩展协议迁移、模板/握手、冻结计划/收据/live自动保存及实际宿主关闭，check、全量format:check、diff检查通过。此后只有本文记录变化，最新组合跨平台CI尚待；此前6b仍是最后完整GREEN，不借旧CI验收新根。
+
+## 19:23 已验证回收闭环与 WebSocket 工作中候选
+
+- 最新完整组合 GREEN：remote `6b2e5f441ef11e142ddd9003688f614b4991dfb1` / local `4dc86ddcb3367ece23013976ae79d7d36c85ee9b` / tree `9c5b439f3a7442f1e2863dd4efbe999d828a7cc6`。首次 CI `40562450287` 全19项通过、actual checkout 全部同根同树；12份实际核心 ZIP/TAP/manifest 共393文件，分片99/98/98/98完整互斥，manifest SHA256 `b8092817b2c2301c9e240073969507b4f85dfb9a8119def171628744b5505cc4`。Linux/macOS各2037通过，Windows2033通过+4 POSIX skip，无失败/取消。保图软回收/恢复、被冻结的用例/计划/repeat经真实备份重启执行、历史隔离及真实DB/stdio/桌面关闭/ac4822重建已覆盖。
+- 上述通过不修复旧 `6c238a41` 的 macOS累计配额作用域偶发错误；PR3只补诊断，具体根因仍未知，旧RED不撤销，不放宽任何运行预算。
+- PR13新增 WebSocket 结构身份冲突拒绝和显式 `sendEmptyMessage` 意图：local `f60c46cc98e9cd8b0a7c6805a20049a238eb51e5` / remote `1288991d44d8c279dbbc2db6920b8fd77b57bbaf` / tree `af99dd5b0036da179acae3ba6680b0691edaecb7`。首次 CI `40566707501` 全10项通过，实际checkout `823c4d59c1cd2d691a4cd2fe78beb03cdb7f86c9` 与功能head同树；三份实际ZIP摘要与TAP核对，每OS1063通过，无失败/取消/跳过，包含真实空帧/旧receive-only、子进程重启、冻结CLI及备份恢复。独立审查另5个完整文件20/20通过，无已发现阻塞。
+- 新组合仅保存为WIP：local `8566a6ce95a1b042c8094ea4b4d1f23ee7a9a50f` / remote `37f9a6148f82964cc00100db3ec20fc84f899f46` / tree `1b09439eece9acc7cb1e65fd8a67588dc5a9de70`，parents6b2e+PR13。此刻自身CI尚待，不借上次GREEN验收。完整明文WS消息组出口继续在同PR14开发，WSS/不明模板/剥离凭据等不安全或无法证明的迁移仍拒绝；不声称完整原版会话/重连/TLS等价。
+- PR45 SQL Server现阶段仅严格查询编译、配置和可注入连接端口契约，local `fe07d28e92c51886218f50d8c2776024a22f8845` / remote `0edebcc2a5e49fa743611733dc6a5a6ee12c3c7e` / tree `2700eed56c71beb4a91a7c80c4ad49a70e510ea4`；首次CI `40562342003` 10项通过，actual `3ddb5ea9a54c56b22916e22adef0b56bb3e8ebde` 同树，三OS1030通过。没有真实驱动、没有HTTP/MCP/CLI供应商入口，不纳入根；SQL Server Developer2022明确许可确认未到，未启动服务。Oracle/达梦也仍缺实现，不描述成仅缺测试。
 
 ## 18:34 保图API软回收／恢复与诊断组合候选
 
