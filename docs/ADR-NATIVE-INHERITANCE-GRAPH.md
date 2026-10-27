@@ -387,3 +387,10 @@ The test separately verifies that owner/canonical-restored definition-only copie
 without those batches can use both native formats, while native-deleted/restored
 copies refuse with apiResourceTrash. Complete backups retain either kind, along
 with old cases/plans/history. Exact final independent CI remains to be checked.
+
+The same three lifecycle workflows also launch the real CLI subprocess against
+freshly loaded restored storage, both while the API remains recycled and after
+its restoration. Each execution sends exactly one request using the previously
+frozen parent headers/auth, reports a saved run, and a separate Store verifies
+the exact CLI run ID while the cases/plans stay unchanged. This does not grant
+live execution to the recycled API and does not automatically replay anything.

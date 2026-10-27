@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
 import { importIntoProject } from "../src/core.mjs";
@@ -809,6 +811,31 @@ for (const entry of ["owner", "canonical", "native"])
       400,
     );
     assert.equal(wire.length, networkBeforeRestart);
+    const runFrozenCLI = async () => {
+      const beforeWire = wire.length;
+      const { stdout } = await promisify(execFile)(
+        process.execPath,
+        ["scripts/run-plan.mjs", "--project", restored.id, "--plan", plan.id],
+        {
+          cwd: path.resolve(import.meta.dirname, ".."),
+          env: { ...process.env, LOCAL_API_DATA: f.root },
+          timeout: 10000,
+        },
+      );
+      const run = JSON.parse(stdout);
+      assert.equal(run.status, "passed");
+      assert.equal(run.recordSaved, true);
+      assert.equal(wire.length, beforeWire + 1);
+      assert.equal(wire.at(-1).headers["x-folder"], "folder");
+      assert.equal(wire.at(-1).headers.authorization, "Bearer fixture-token");
+      const loaded = await new Store(f.root).get(restored.id);
+      assert(loaded.runs.some((r) => r.id === run.id && r.source === "cli"));
+      assert.deepEqual(loaded.plans, frozen.plans);
+      assert.deepEqual(loaded.cases, frozen.cases);
+      return loaded;
+    };
+    disk = await runFrozenCLI();
+    assert(disk.requests.every((r) => r.deletedAt));
     const restoreOperation = { type: "restore-requests", requestIds: ids };
     await call(
       `projects/${restored.id}/native-inheritance-edit`,
@@ -868,6 +895,8 @@ for (const entry of ["owner", "canonical", "native"])
     await call(`projects/${restored.id}/run`, { planId: plan.id });
     assert.equal(wire.at(-1).headers["x-folder"], "folder");
     assert.equal(wire.at(-1).headers.authorization, "Bearer fixture-token");
+    const afterCLI = await runFrozenCLI();
+    assert(afterCLI.requests.every((r) => !r.deletedAt));
     assert.deepEqual((await f.app.store.get(f.other.id)).requests, []);
     assert(
       (await f.app.store.get(id)).requests.every((r) => r.deletedAt),
