@@ -875,7 +875,9 @@ export function assertNativeInheritanceIdentity(
   }
   if (!edited) {
     const statuses = (p) =>
-      p.requests.map((r) => [r.id, Object.hasOwn(r, "deletedAt"), r.deletedAt]);
+      p.requests
+        .map((r) => [r.id, Object.hasOwn(r, "deletedAt"), r.deletedAt])
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     if (!isDeepStrictEqual(statuses(previous), statuses(next)))
       fail("普通保存不能切换回收状态，请使用显式操作");
   }

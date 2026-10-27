@@ -362,3 +362,28 @@ Native export refuses active graph tombstones explicitly; backups retain them.
 Permanent purge, detach and folder recycling remain unsupported. The initial
 new owner recycle test was RED400 before implementation, then passed; complete
 multi-entrypoint lifecycle evidence and exact CI remain pending at this stage.
+
+The full lifecycle test now exercises owner, canonical SDK HTTP and native SDK
+HTTP deletion independently with two bound APIs, one frozen case and one saved
+plan. Each covers invalid mixed/duplicate/foreign selections before any write,
+active-list/detail/live/cURL refusal (including old request copies and forged
+snapshot flags), frozen execution, backup and actual server reopen, then owner
+restoration using edited current parent values while the frozen requests retain
+the old values. Bad dates/PUT toggles/repeated and stale operations reject; folder
+moves include retained recycled paths, and the other/source projects stay separate.
+
+An added ordinary reverse-order save exposed a stage regression: tombstone
+comparison originally depended on the requests array order. Status comparison
+now sorts by stable request ID and still checks field presence and exact date.
+The same full owner/canonical/native workflows were RED, then passed, and an
+independent review reproduced the old-order behavior. No date change is allowed
+through generic PUT. A test-only wrong native list tool name was corrected to
+the existing `apipost_list_apis`, not accommodated by adding a new tool.
+
+Native MCP's apiResourceTrash batches survive restoration unchanged. Their
+nonempty historical archive still triggers the existing native export guard;
+restoring requests is not permission to erase deletion history for interchange.
+The test separately verifies that owner/canonical-restored definition-only copies
+without those batches can use both native formats, while native-deleted/restored
+copies refuse with apiResourceTrash. Complete backups retain either kind, along
+with old cases/plans/history. Exact final independent CI remains to be checked.
