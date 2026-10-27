@@ -1,9 +1,10 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { performance } from "node:perf_hooks";
 import { createExperimentSession } from "./runtime.mjs";
+import { completeSession } from "./outcome.mjs";
 
 const started = performance.now();
-let session;
+let session, outcome;
 try {
   const operations = Object.freeze({
     fixture: ["fixture", "bytecode"],
@@ -54,21 +55,19 @@ try {
       });
     }
   }
-  parentPort.postMessage({
-    kind: "result",
+  outcome = {
     ok: true,
-    activityMs: session.budget.elapsed(),
-    metrics: session.budget.metrics,
-    heapBytes: session.raw.mallocSize(session.runtime.rt.value),
-    elapsed: performance.now() - started,
-  });
+    heapBytes: session.budget.run("diagnose-heap", () =>
+      session.raw.mallocSize(session.runtime.rt.value),
+    ),
+  };
 } catch (error) {
-  parentPort.postMessage({
-    kind: "result",
-    ok: false,
-    error: error.message,
-    elapsed: performance.now() - started,
-  });
+  outcome = { ok: false, error: error.message };
 } finally {
-  session?.dispose();
+  outcome = completeSession(session, outcome);
 }
+parentPort.postMessage({
+  kind: "result",
+  ...outcome,
+  elapsed: performance.now() - started,
+});

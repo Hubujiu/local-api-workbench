@@ -29,8 +29,11 @@ function run(operation) {
       settled = true;
       clearTimeout(timer);
       await worker.terminate();
+      const totalMs = performance.now() - start;
       if (error) reject(error);
-      else resolve(value);
+      else if (totalMs >= LIMITS.wallMs)
+        reject(Error("2s worker wall deadline during teardown"));
+      else resolve({ ...value, totalMs });
     };
     const timer = setTimeout(
       () => finish(Error("2s worker wall deadline")),
@@ -45,7 +48,7 @@ function run(operation) {
       const totalMs = performance.now() - start;
       if (totalMs >= LIMITS.wallMs)
         return finish(Error("Late worker success rejected"));
-      finish(null, { ...message, totalMs });
+      finish(null, { ...message, resultMs: totalMs });
     });
   });
 }
@@ -68,7 +71,7 @@ console.log(
   JSON.stringify(
     {
       kind: "fixed-trusted-bytecode-fresh-worker-samples",
-      note: "Ten sequential workers per operation on one host/process; not cold-process or cross-platform performance proof.",
+      note: "Ten sequential workers per operation on one host/process; success follows guest disposal, total includes worker termination. Not cold-process or cross-platform performance proof.",
       node: process.version,
       platform: process.platform,
       arch: process.arch,

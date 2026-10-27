@@ -176,9 +176,10 @@ test("hash/copy/read/eval wall time is cumulative and late success cannot pass",
 });
 
 test("fresh instances, memories, runtimes and contexts never share guest globals", async () => {
-  const a = await createExperimentSession(),
-    b = await createExperimentSession();
+  let a, b;
   try {
+    a = await createExperimentSession();
+    b = await createExperimentSession();
     assert.notEqual(a.raw.module, b.raw.module);
     assert.notEqual(a.raw.memory, b.raw.memory);
     assert.notEqual(a.runtime, b.runtime);
@@ -213,8 +214,11 @@ test("fresh instances, memories, runtimes and contexts never share guest globals
     assert.equal(cCalls, 0);
     a.raw.readEval = original;
   } finally {
-    a.dispose();
-    b.dispose();
+    try {
+      a?.dispose();
+    } finally {
+      b?.dispose();
+    }
   }
 });
 
@@ -415,8 +419,8 @@ const workerRun = (operation, cancel = false) =>
       if (message.kind === "result") {
         settled = true;
         clearTimeout(timer);
-        const late = performance.now() - started >= LIMITS.wallMs;
         await worker.terminate();
+        const late = performance.now() - started >= LIMITS.wallMs;
         if (late) reject(Error("2s worker wall deadline"));
         else resolve(message);
       }

@@ -93,10 +93,11 @@ alongside artifacts. Do not treat this directory as an arbitrary bytecode API.
 
 - Five build-input/provenance unit tests; source/Makefile/export/template/ignored
   header mutation negatives; changed output WASM rejected before collection.
-- Fifteen runtime/ownership checks: late-context setup rollback, idempotent
+- Eighteen runtime/ownership/outcome checks: late-context setup rollback, idempotent
   ownership, staging heap accounting and free symmetry, ordinary OOM recovery,
   borrowed compile handles, non-bytecode writer rejection, result/exception
-  disposal, fixed identity/flag/hash mismatches before C, fresh instance
+  disposal, cleanup failure and late-cleanup success rejection, fixed
+  identity/flag/hash mismatches before C, fresh instance
   isolation, schema and ordinary library source/bytecode equivalence, cumulative
   wall time, interruption and worker cancellation.
 - `npm run check`, experiment formatting and `git diff --check` passed.
@@ -112,30 +113,39 @@ alongside artifacts. Do not treat this directory as an arbitrary bytecode API.
 
 ## Limited measurements, not enablement evidence
 
-[`measurements/2026-10-27-linux-x64.json`](measurements/2026-10-27-linux-x64.json)
+[`measurements/2026-10-27-linux-x64-lifecycle.json`](measurements/2026-10-27-linux-x64-lifecycle.json)
 contains all 70 final samples: ten sequential fresh workers for each fixed operation,
 including schema first-use and repeated validation, rotating order, Node 24.22.1 / Linux x64, same host/process. All succeeded within
 unchanged limits. Active wall time includes verification and engine startup;
-parent total wall time includes worker startup. This is not a cold-process,
+parent total wall time includes worker startup and confirmed termination.
+Success is published only after guest disposal; disposal is charged to the
+active budget, and cleanup failures cannot be recorded as successful samples. This is not a cold-process,
 cross-platform, full script-workflow or macOS-flake benchmark.
 
 | Operation | Active median (range), ms | Parent total median, ms |
 | --- | ---: | ---: |
-| Unused session | 12.3 (11.1–15.7) | 66.5 |
-| Schema source | 75.6 (68.1–80.4) | 132.4 |
-| Schema bytecode | 24.8 (22.0–27.9) | 84.7 |
-| Schema source + first/repeated validation | 86.3 (76.5–94.6) | 144.0 |
-| Schema bytecode + first/repeated validation | 40.1 (35.0–47.8) | 94.1 |
-| Libraries + prelude source | 135.3 (123.4–148.4) | 195.7 |
-| Libraries + prelude bytecode | 59.6 (54.3–80.4) | 122.2 |
+| Unused session | 13.9 (11.5–15.9) | 70.9 |
+| Schema source | 78.0 (69.2–83.3) | 135.2 |
+| Schema bytecode | 29.8 (25.0–35.6) | 87.7 |
+| Schema source + first/repeated validation | 93.1 (82.4–143.1) | 151.4 |
+| Schema bytecode + first/repeated validation | 43.1 (39.2–54.2) | 100.0 |
+| Libraries + prelude source | 141.0 (126.8–147.8) | 196.4 |
+| Libraries + prelude bytecode | 63.7 (56.4–70.7) | 123.7 |
 
 The fixed ordinary schema/data pair returns `valid: true` twice. First validation
-median is 12.25 ms (source-loaded) versus 14.92 ms (bytecode-loaded), and repeated
-validation is 0.43 versus 0.39 ms. Thus this sample does **not** show every phase
+median is 11.92 ms (source-loaded) versus 15.58 ms (bytecode-loaded), and repeated
+validation is 0.50 versus 0.39 ms. Thus this sample does **not** show every phase
 getting faster; the observed saving is principally fixed-bundle initialization.
-Both validations remain charged to the same 250 ms session budget. The earlier
-50-sample initialization-only observation is retained in the `-initial.json`
-file, not mixed into these final distributions.
+Both validations remain charged to the same 250 ms session budget.
+
+The earlier 50-sample `-initial.json` and 70-sample unsuffixed `.json` observations
+are retained as **pre-cleanup / startup-to-result** measurements, not full
+lifecycle evidence and not mixed into the final distributions. Independent
+review found that the old harness posted success before its finally disposal;
+the parent could then terminate before a cleanup failure was observed. The
+current outcome helper disposes before success, rejects cleanup failures and
+late cleanup, and guarantees disposal even if an already-expired budget rejects
+the charged callback before it runs. Three deterministic tests cover this fix.
 
 These samples show lower cost for the fixed bytecode path on this host only.
 They do not justify changing defaults. Production integration, broader behavioral
