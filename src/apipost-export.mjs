@@ -1,4 +1,5 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
@@ -166,6 +167,10 @@ export function exportApipost(project) {
     for (const [key, value] of Object.entries(project.openapiComponents))
       unsupported(value, "模型组件 " + key);
   }
+  // false is meaningful here: absence enables Mock serving. Native definitions
+  // have no verified project-wide equivalent, so never silently reopen it.
+  if (project.settings?.mockEnabled === false)
+    throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (!["statuses", "recursiveFolderScopes"].includes(key))
       unsupported(value, `设置 ${key}`);
@@ -281,7 +286,6 @@ export function exportApipost(project) {
       "assertions",
       "extract",
       "mockRules",
-      "nativeMock",
       "openapiOperation",
       "attributes",
       "proxy",
@@ -389,6 +393,10 @@ export function exportApipost(project) {
         post_tasks: pipeline?.after ?? tasks(r, "after"),
       },
       response: exportApipostResponses(r),
+      ...exportApipostMock(r.nativeMock, {
+        projectId,
+        targetId: apipostExportId("a", r.id),
+      }),
     });
   }
   const document = {

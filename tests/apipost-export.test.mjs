@@ -552,3 +552,61 @@ test("HTTP native export refuses a stored native pipeline without changing the p
   assert.match((await response.json()).error, /nativeTasks/);
   assert.equal(JSON.stringify(await app.store.get(p.id)), before);
 });
+
+test("native exports preserve disabled Mock by refusing it, while neutral false and empty settings remain exportable", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { exportApipostDirectory } = await import(
+    "../src/apipost-directory-export.mjs"
+  );
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "native-export-disabled-mock-"),
+  );
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const project = await app.store.create("Closed Mock");
+  project.requests = [
+    normalizeRequest({
+      id: "mock",
+      name: "Mock",
+      url: "http://127.0.0.1/echo",
+    }),
+  ];
+  project.settings = { mockEnabled: false };
+  await app.store.save(project);
+  const before = await app.store.get(project.id);
+  const mockURL = `${app.url}/mock/${project.id}/mock`;
+  assert.equal((await fetch(mockURL)).status, 503);
+  for (const [format, exporter] of [
+    ["apipost", exportApipost],
+    ["apipost-directory", exportApipostDirectory],
+  ]) {
+    assert.throws(() => exporter(project), /项目Mock关闭/);
+    const url = `${app.url}/api/projects/${project.id}/export?format=${format}`;
+    assert.equal((await fetch(url)).status, 403);
+    const response = await fetch(url, {
+      headers: { "x-local-token": app.token },
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /项目Mock关闭/);
+    assert.deepEqual(await app.store.get(project.id), before);
+  }
+  assert.equal((await fetch(mockURL)).status, 503);
+  const backup = restoreProject(before);
+  assert.equal(backup.settings.mockEnabled, false);
+  project.settings = {
+    smartMockBuiltins: false,
+    builtinDictionary: false,
+    recursiveFolderScopes: false,
+    mockFieldRules: [],
+    folderParameters: {},
+    functions: [],
+  };
+  for (const exporter of [exportApipost, exportApipostDirectory])
+    assert.doesNotThrow(() => exporter(project));
+  project.settings.mockSeed = 0;
+  assert.throws(() => exportApipost(project), /mockSeed/);
+});

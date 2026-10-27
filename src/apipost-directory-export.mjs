@@ -30,6 +30,23 @@ export function exportApipostDirectory(project) {
         task.id = scoped("t", copy.target_id + ":" + phase + ":" + i);
     for (const [i, example] of (copy.response?.example || []).entries())
       example.example_id = scoped("example", copy.target_id + ":" + i);
+    if (copy.ai_expect) {
+      for (const [i, rule] of copy.ai_expect.list.entries()) {
+        rule.example.example_id = scoped(
+          "mock-example",
+          copy.target_id + ":rule:" + i,
+        );
+        for (const [j, condition] of rule.conditions.entries())
+          condition.conditionId = scoped(
+            "mock-condition",
+            copy.target_id + ":" + i + ":" + j,
+          );
+      }
+      copy.ai_expect.none_math_example.example_id = scoped(
+        "mock-example",
+        copy.target_id + ":fallback",
+      );
+    }
     return copy;
   };
   const apis = document.apis.map(mapNode);
@@ -184,13 +201,28 @@ export function exportApipostDirectory(project) {
     project_id: projectId,
     items: apis.map(apiMetadata),
   });
-  for (const node of apis)
+  for (const node of apis) {
+    if (node.ai_expect !== undefined) {
+      const config = { project_id: projectId, target_id: node.target_id };
+      for (const key of [
+        "ai_expect",
+        "mock_server_enable",
+        "mock_ip_white_list_enable",
+        "mock_ip_white_list",
+        "mock_show_target_id",
+      ]) {
+        config[key] = node[key];
+        delete node[key];
+      }
+      put("settings/mock_" + node.target_id + ".json", config);
+    }
     put("apis/" + node.target_id + ".json", {
       ...apiMetadata(node),
       created_at: timestamp,
       updated_at: timestamp,
       data: node,
     });
+  }
   put("envs/index.json", {
     project_id: projectId,
     items: environments.map(({ env_id, name, sort }) => ({

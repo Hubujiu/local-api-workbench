@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 06:05 UTC
+# 后端检查点 · 2026-10-27 06:23 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 06:05 当前候选与最近验证
+## 06:23 条件 Mock 往返候选
+
+- 前一请求快照组合 `8b5bb079c3779333e115257da61b77db3027dcda` / tree `91dfa9163d5322d907c3ba1c8b6a9f5141084e30` 的首次 CI `40459167073` 为 **18 成功、1 失败**。唯一失败为 Windows 既有 XML 输入/节点边界测试触发 250ms 活动预算（compatibility 160ms + userScript 91ms）；不认定为环境偶发，也不重跑或放宽预算。19 个 checkout 和 12 份实际产物已核，352 文件四等分无漏重；Linux/macOS 各 1844 通过，Windows 1843 通过、1 失败。新增请求提取、MCP/CLI/导出完整链均三平台通过，但不抵消组合 RED。
+- 请求快照 PR25 最终 `5011486601df6c910cf7b81421da4c50bb81a586` / tree `79200c4123d36cd027abb9bbc4fa74d6ffdea8c3` 独立 CI `40459090937` 首次 10/10 成功，三平台各 1197；全部实际 merge `18d3c8c124a754fe9864df72b643468f2f07f916` 同树。前阶段取消的部分结果保留，不当作最终验收。
+- 本候选继续同 PR14 的导入导出闭环。修复已复现的 `settings.mockEnabled=false` 被忽略问题：原生格式无已验证的项目级映射时明确拒绝，项目备份保留关闭状态；不把项目关闭偷偷转换为逐接口禁用。单接口 nativeMock.enabled 则支持无损反向映射。
+- 条件 Mock 导出现在支持既有有界条件/顺序/启用值、query/header/body 路径、固定 200 与独立 sourceStatus、响应头/延迟、普通 JSON 正文或 object/array schema。内联期望不覆盖文档 examples/responses；目录使用最终项目/API 标识生成独立 mock 配置，回读深比较确认可逆。未知档案/全局依赖、模型引用、普通 mockRules 混用、scalar/raw-XML 等继续明确拒绝。转换不运行脚本或生成 Mock 数据。
+- PR14 feature `bbf1feed4dff3688e17b6658dd5996b671db6467` / local `c90a7f7b3d1545120498c8c51fcd1e883cb4dcd1` / tree `1b76ac8171253fbb3a47c75e877ed3868fb7f82f`，目标纯依赖 `deps/native-mock-export-base` (`87ffd88da8e44e96ac50802623b1a79d43fc6d49`)。该 base 仅合 PR7/11/3/35/38，不含 PR14/26 或 root；功能差异只有 10 个导出文件。独立 CI `40460664108` 待终态。
+- 根组合保留原生任务导出、运行时全部校验及结果收据，只合入 Mock 导出增量。首批四个整文件 23/23 通过；合入 Header+body bracket 条件及禁用状态测试后，Mock 导出/SDK 入口、既有路由/媒体及原生任务导出五整文件 14/14 通过。SDK HTTP+JSON、stdio+目录均验证只读不能导入/越项目不能导出、源无修改、两种路由与新ID选择一致、真实 CLI 消费 Mock 并保存结果、恢复与重启。
+- 本候选仍需自己的完整 CI；最近完整 GREEN 仍为下节 `26c51181`，不以本地通过替代组合验收。原版 GUI、独立 XML 审查及关闭的 PR37 实验边界均未改变。
+
+## 06:05 历史请求快照候选与验证
 
 - 最近完整通过的组合为 `26c51181e1f7eced67ab6c56bb5f1208f6830a59`，本地 `f2db1eacd46a792da229a8da705ad708ac107144`，同树 `336463a77d17c11ec113970265c2718a7349287e`。CI `40455614645` 首轮 19/19 成功，全部实际 checkout 同提交/树；12 份实际清单完整互斥覆盖 350 文件（88/88/87/87），三平台各 1836 通过。元数据提取的 H1/H2、全部作用域、后续真实请求、冻结计划、备份重启和严格失败回滚，以及既有数据库、production-only stdio、固定 ac4822 引擎复现均通过。
 - 本候选在同 PR25 的已保存元数据阶段之上继续接入前置 requestHeader/requestBody：私有阶段启动配置快照，Header 为唯一普通字段名，Body 为有界严格 JSON 对象/数组或唯一纯文本表单。SDK 在同阶段改动不改变初始快照，实际发送请求仍遵从 SDK 编辑；后置请求提取暂拒绝，不声称最终 wire/auth/system header 投影、JSON5、文件或原版所有 legacy 修改语义兼容。
