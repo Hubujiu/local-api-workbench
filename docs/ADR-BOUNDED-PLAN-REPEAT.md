@@ -56,7 +56,9 @@ unsupported repeat nodes rather than flatten them. Native flow lists and filtere
 execution-history/result projections reject repeat-containing results rather than
 dropping occurrence identities; canonical history/result tools remain available.
 CLI grants scan only enabled definitions once, not once per iteration; subsequent
-queries retain the existing invocation grant/TTL/query limits. Stored graph
+queries retain the existing invocation-scoped grants and per-query/per-stage
+limits. CLI grants have no total TTL or total-call-count field; no such policy is
+introduced or claimed by repetition. Stored graph
 bindings and provenance are validated through child definitions, including on
 restore; only an exact same-project stored frozen leaf can be reused without a
 live graph binding. Existing write/execute permissions are unchanged.
