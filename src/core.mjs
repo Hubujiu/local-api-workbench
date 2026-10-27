@@ -9,6 +9,8 @@ import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -188,6 +190,14 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   validateRequestTaskSource(r);
+  if (
+    r.nativeMock !== undefined &&
+    r.nativeMockRoute !== undefined &&
+    r.nativeMock.sourceTargetId !== r.nativeMockRoute.sourceTargetId
+  )
+    throw Error("Mock路由与响应来源接口不一致");
+  if (r.nativeMock !== undefined && r.mockRules?.length)
+    throw Error("原版Mock与普通Mock规则不能混用");
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -330,6 +340,12 @@ export function normalizeRequest(r = {}) {
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    ...(r.nativeMockRoute === undefined
+      ? {}
+      : { nativeMockRoute: normalizeNativeMockRoute(r.nativeMockRoute) }),
+    ...(r.nativeMock === undefined
+      ? {}
+      : { nativeMock: normalizeNativeMock(r.nativeMock) }),
     mockRules: r.mockRules || [],
     schema: r.schema ?? {},
     responses: r.responses || [],
