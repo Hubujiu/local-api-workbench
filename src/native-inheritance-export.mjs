@@ -32,7 +32,7 @@ export function applyNativeInheritanceExport(
     header: { parameter: rows(value.headers, "header") },
     query: { parameter: rows(value.query, "query") },
     cookie: { parameter: rows(value.cookies, "cookie") },
-    body: { parameter: [] },
+    body: { parameter: rows(value.form || [], "body") },
     pre_tasks: [],
     post_tasks: [],
   });
@@ -50,9 +50,15 @@ export function applyNativeInheritanceExport(
 function intentGraph(project) {
   const state = validateNativeInheritanceProject(project);
   return {
-    projectLayer: state.graph.projectLayer,
+    projectLayer: {
+      ...state.graph.projectLayer,
+      form: state.graph.projectLayer.form || [],
+    },
     folders: state.graph.folders
-      .map((f) => ({ path: f.path, layer: f.layer }))
+      .map((f) => ({
+        path: f.path,
+        layer: { ...f.layer, form: f.layer.form || [] },
+      }))
       .sort((a, b) => a.path.localeCompare(b.path)),
   };
 }

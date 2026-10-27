@@ -149,3 +149,43 @@ rejected before network. Environment placeholders remain dynamic as above.
 Preserved-graph case records must also associate `sourceRequestId` with that same
 request ID in the current bound graph; inconsistent associations reject at Store
 save/read and backup restore, before execution.
+
+## Bounded text form layers (same graph version)
+
+Graph version 1 layers optionally add `form` text rows. An absent field means an
+empty layer; validation and export do not mutate older stored graphs. New imports
+emit explicit arrays. Own API `form` stays separate; project/folder rows use the
+existing bounded text-row codec and native active-child override merge. Inactive
+children remain editable but are not canonical masks. Existing duplicate/system
+row restrictions remain. API body mode selects urlencoded or form-data; a parent
+accepts only absent/none mode and cannot choose a child's mode. A nonempty parent
+form requires an explicit non-GET/HEAD form API. Raw/JSON body inheritance, binary,
+files, schema-generated bodies, part media types and unsafe multipart field names
+remain rejected. Multipart cannot carry an explicit active Content-Type in any
+contributing layer; urlencoded permits only absent or standard
+application/x-www-form-urlencoded. These restrictions apply to inherited-form
+graphs, not ordinary flattened requests. The existing transport supplies the
+multipart boundary; equal field semantics do not mean identical random bytes.
+
+Legal static sender index.js SHA256
+5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff,
+module842216, LF-normalized Unicode-character offsets (not bytes/UTF16):
+33601767 body joins the inherited parameter kinds; 33611539 selects API body
+mode; 33611786 consumes effective form rows; 33613405 disables source SDK body
+pruning. This last observation does not authorize GET-body parity. No original
+runtime execution or proprietary implementation was copied.
+
+Import compares effective form/bodyType to the existing modern converter before
+publishing. Export checks both original own rows and each graph layer after full
+forward reimport, including older graphs without form. The preserved graph's
+existing MCP ambiguous temporary-input guard also applies to effective form rows
+in execute_api and native flow creation/update; default flattened behavior stays
+unchanged.
+
+The new whole workflow covers two formats and two generations for both body
+modes, UTF8/empty/special values, nested scopes, live edits versus frozen case/plan,
+real SDK calls, CLI, backup and owner restart. Unsupported source inputs are
+rejected atomically. Initial local failures exposed a missing allowance for the
+existing encoder's inert binary:null field (nonempty binary still rejects), then
+a test incorrectly referenced src/cli.mjs instead of the actual run-plan entry;
+both were corrected before the first five-case PASS. Final CI remains pending.

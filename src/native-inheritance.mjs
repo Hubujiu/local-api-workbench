@@ -4,8 +4,13 @@ import { importApipostAuth, importApipostRows } from "./apipost-import.mjs";
 import { validateGlobalParameters } from "../public/global-parameters.js";
 import { validateSharedAuthSettings } from "../public/shared-auth.js";
 
-const kinds = ["headers", "query", "cookies"];
-const sourceKinds = { headers: "header", query: "query", cookies: "cookie" };
+const kinds = ["headers", "query", "cookies", "form"];
+const sourceKinds = {
+  headers: "header",
+  query: "query",
+  cookies: "cookie",
+  form: "body",
+};
 const snapshots = [
   "authSnapshot",
   "parametersSnapshot",
@@ -60,9 +65,21 @@ function rows(value, kind) {
   for (const row of value) {
     fields(
       row,
-      ["key", "value", "enabled", "required", "description", "schema"],
+      [
+        "key",
+        "value",
+        "enabled",
+        "required",
+        "description",
+        "schema",
+        ...(kind === "form" ? ["type"] : []),
+      ],
       "参数",
     );
+    if (kind === "form" && row.type !== undefined && row.type !== "text")
+      fail("表单仅支持文本行");
+    if (kind === "form" && /["\r\n\0]/.test(row.key))
+      fail("表单名称不能含传输会改写的字符");
     if (row.required !== undefined && typeof row.required !== "boolean")
       fail("参数必填标识无效");
     if (row.description !== undefined && typeof row.description !== "string")
@@ -99,7 +116,8 @@ function auth(value) {
 function layer(value) {
   fields(value, ["auth", ...kinds], "层定义");
   auth(value.auth);
-  for (const kind of kinds) rows(value[kind], kind);
+  for (const kind of kinds)
+    rows(kind === "form" && value[kind] === undefined ? [] : value[kind], kind);
 }
 function sourceAuth(value) {
   if (value === undefined) return { mode: "absent" };
@@ -132,13 +150,8 @@ function sourceLayer(request = {}, shared = false) {
   );
   for (const key of ["pre_tasks", "post_tasks", "script", "pre_script", "test"])
     if (populated(request[key])) fail("preserve首片不支持任务或脚本");
-  if (
-    shared &&
-    (populated(request.body?.parameter) ||
-      populated(request.body?.raw) ||
-      populated(request.restful))
-  )
-    fail("preserve首片不支持继承Body或路径参数");
+  if (shared && (populated(request.body?.raw) || populated(request.restful)))
+    fail("preserve不支持继承原始Body或路径参数");
   if (populated(request.description)) fail("preserve首片不保留request内部描述");
   if (shared && request.body !== undefined) {
     fields(request.body, ["mode", "parameter", "raw"], "共享Body");
@@ -154,11 +167,22 @@ function sourceLayer(request = {}, shared = false) {
   const result = { auth: sourceAuth(request.auth) };
   for (const kind of kinds) {
     const block = request[sourceKinds[kind]];
+    if (
+      kind === "form" &&
+      !shared &&
+      !["urlencoded", "form-data"].includes(block?.mode)
+    ) {
+      result.form = [];
+      continue;
+    }
     if (block !== undefined)
       fields(
         block,
         [
           "parameter",
+          ...(kind === "form"
+            ? ["mode", "raw", "raw_parameter", "raw_schema", "binary"]
+            : []),
           ...(kind === "query"
             ? ["query_add_equal"]
             : kind === "cookies"
@@ -167,6 +191,14 @@ function sourceLayer(request = {}, shared = false) {
         ],
         "源参数表",
       );
+    if (
+      kind === "form" &&
+      (populated(block?.binary) ||
+        populated(block?.raw) ||
+        populated(block?.raw_parameter) ||
+        populated(block?.raw_schema))
+    )
+      fail("表单层不能携带原始Body或schema生成行为");
     const items = block?.parameter || [];
     if (!Array.isArray(items) || items.length > 100) fail("源参数最多100项");
     for (const row of items) {
@@ -191,6 +223,8 @@ function sourceLayer(request = {}, shared = false) {
         ![-1, 0, "-1", "0"].includes(row.is_system)
       )
         fail("preserve首片不支持系统参数行");
+      if (kind === "form" && String(row.field_type).toLowerCase() === "file")
+        fail("表单不读取文件参数");
       if (row.type !== undefined && row.type !== "text")
         fail("preserve不读取文件参数");
       if (
@@ -212,6 +246,25 @@ function sourceLayer(request = {}, shared = false) {
   }
   layer(result);
   return result;
+}
+function formContract(request, layers) {
+  const inherited = layers.some((value) => (value.form || []).length > 0);
+  if (!inherited) return;
+  if (
+    !["urlencoded", "form-data"].includes(request.bodyType) ||
+    ["GET", "HEAD"].includes(request.method)
+  )
+    fail("继承表单仅支持显式非GET/HEAD表单请求");
+  for (const value of [...layers, { headers: request.headers || [] }])
+    for (const header of value.headers || [])
+      if (
+        header.enabled !== false &&
+        header.key.toLowerCase() === "content-type" &&
+        (request.bodyType === "form-data" ||
+          header.value.trim().toLowerCase() !==
+            "application/x-www-form-urlencoded")
+      )
+        fail("继承表单Content-Type不在已证实子集");
 }
 export function assertEmptyInheritanceTarget(project) {
   for (const key of [
@@ -528,6 +581,10 @@ export function validateNativeInheritanceProject(project) {
     )
       fail("接口跨来源或缺少绑定");
     ownRequest(r, binding);
+    formContract(r, [
+      graph.projectLayer,
+      ...ancestry(b.parentId).map((f) => f.layer),
+    ]);
     bound.set(b.requestId, b);
     sourceIds.add(b.sourceId);
   }
@@ -605,8 +662,10 @@ export function resolveNativeInheritance(
       headers: request.headers || [],
       query: request.query || [],
       cookies: request.cookies || [],
+      form: request.form || [],
     },
   ];
+  formContract(request, layers.slice(0, -1));
   const result = structuredClone(request);
   let effectiveAuth = { type: "none" };
   for (const current of layers) {
@@ -619,11 +678,11 @@ export function resolveNativeInheritance(
     let merged = [];
     for (const current of layers) {
       const active = new Set(
-        current[kind].filter((row) => row.enabled !== false).map(key),
+        (current[kind] || []).filter((row) => row.enabled !== false).map(key),
       );
       merged = [
         ...merged.filter((row) => !active.has(key(row))),
-        ...current[kind],
+        ...(current[kind] || []),
       ];
     }
     result[kind] = structuredClone(merged);
