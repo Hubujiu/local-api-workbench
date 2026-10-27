@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-27 15:49 UTC
+# 后端检查点 · 2026-10-27 16:09 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 16:09 正常宿主退出保存候选
+
+- 最近完整根 `085c92a0aaf412b2c8c6ad0222e1eef8cbf360b5` / tree `349bb5e2bfc91ea0a39f04d688cb89d35cd23ac9`，首次CI `40535437324` 19/19 GREEN；19实际checkout都为该提交。12实际manifest／TAP覆盖385文件（97/96/96/96），清单hash `d32ddacd0d9cdaf4c82bfd6d2a480f29d489e7872c02f3a94077d6675ebea4bf`，三OS各1991通过、无失败／取消／跳过。覆盖form／repeat完整链、DB、production stdio与ac4822；不包含本次退出接线。
+- PR40沿原功能分支推进，无新增依赖或重复PR：local `53a65fff7f4b0d9faf81ce6a7f218f66c4181eaa` / remote `77975d542da204f8cd5084884a7acd71e6976979` / tree `78af5ccadcf49a82297fbfdd39fe12ce5ca291c9`。本地4整文件26/26、check／format／diff通过。独立CI `40537142115` 首次10/10 GREEN，10实际checkout均 `6ce698cc7591886af233b5412afdad5b49f1de9b`，树精确同功能头；三OS真实packaged desktop-shutdown-smoke及原desktop-smoke均通过。三份core产物ZIP SHA256与GitHub匹配，实际TAP Linux／macOS各1074通过、Windows1070通过加4项明确POSIX信号skip，均无失败／取消。
+- 生产组合合并点 `ea2dc424118b3286668cc914e43af58d17542c7e` / tree `9fee426787ff4258900f437616e49e9ebbeb6511`；仅server imports冲突，保留现有继承、autoImports、MCP、DB及既有close行为。该生产树的14个完整相关文件99/99通过，无失败／取消／跳过；覆盖host真实子进程／合同、wire证据、native自动结束SDK、协议模板、OAuth关闭、stdio DB授权／取消、CLI授权及form／repeat入口。check／format／diff均过，后续仅README／检查点／静态证据文档变化，无根生产或测试补丁。新根CI尚待，不能借独立分支结果验收组合。
+- Node真实主入口为src/server.mjs，安装启动等待与单Promise SIGINT／SIGTERM drain；重复信号不重复保存。正常HTTP等待原完成／超时，不closeAllConnections强制终止。Electron在service ready、窗口创建／加载前安装will-quit接线，窗口关闭获准才等保存；旧before-quit早关后端已移除，原未保存提示和取消行为不变，无新增UI。
+- 全会话确认保存返回成功0；保存失败／unknown或close异常固定脱敏日志并退出2，沿用持久化／基础设施失败状态，不宣称回滚，不自动重放。Node仅设exitCode允许自然收尾；Electron确认关闭后exit，无递归quit。该范围不是崩溃／强杀／断电保证；Windows系统关机、重启、注销不受will-quit保证。Windows child.kill不提供可捕获POSIX信号，相关四项skip必须单列，不冒充通过。
+- 新桌面smoke实际打开TCP／WebSocket／SSE，取消退出后会话仍可读取且未保存；确认后退出0，新Store精确读三记录，重启不重连；再制造真实存储损坏，退出2且日志无路径或秘密，不产生假记录。无脚本probe或暂停专项；独立内存事件合同测试不替代此真实Electron证据。
+- 原生automated_testings静态研究仍缺flat event_list到有序children及saved settings到runner option调用、非空同源样本；现有五个样本该数组均空。证据与最小补证门槛见[NATIVE-AUTOMATION-STATIC-GAPS](NATIVE-AUTOMATION-STATIC-GAPS.md)，不靠猜测解锁付费原生格式。
+- 历史XML／desktop预算RED根因未改判，预算、安全与暂停范围不变；未合main/develop、未部署。
 
 ## 15:49 文本表单继承与有界循环组合候选
 

@@ -19,9 +19,9 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最近完整根 `35ea` / CI `40513156978` 已19项GREEN，验证既有继承图组合，不包含本次循环计划。历史 `d9cd5c0e` 及更早XML／桌面脚本RED保留，不以新功能宣称已修。当前候选新增canonical单层HTTP固定次数 `repeat`：count为1–100，潜在展开总数最多200，保存循环图与每轮身份；不支持条件、嵌套、并行或数据源循环，也不声称兼容原生automated_testings。原生流程／历史投影遇循环明确拒绝，canonical工具与Workbench备份保留完整定义和证据。
+最近完整根 `085c92a0` / CI `40535437324` 首次19项GREEN，实际checkout及树已核，三OS覆盖循环计划、文本表单继承、冻结执行、SDK／CLI与恢复。历史XML／桌面脚本RED保留，不以新功能宣称根因已修。canonical单层HTTP固定次数repeat的count为1–100、潜在展开最多200，保存循环图与每轮身份；不支持条件、嵌套、并行或数据源循环。preserve继承图支持urlencoded／multipart文本表单层，保留接口body模式与严格Content-Type边界。原生automated_testings仍缺保存图到执行树的证据，明确拒绝，不能将canonical循环称为原生格式兼容，见[静态证据缺口](docs/NATIVE-AUTOMATION-STATIC-GAPS.md)。
 
-本次循环已有官方SDK HTTP／stdio、CLI、备份恢复与真实服务器重启的本地组合证据；普通失败继续与原生严格提取停止分别保持合同。第2轮HTTP500时成功BEFORE Header／JSON5 Body提取保留，后续轮次和组后请求不发送；preserve继承图另新增urlencoded／multipart文本表单层，保留接口body模式及严格Content-Type边界；**新根循环＋文本表单组合CI尚待**，不借上一根或独立PR绿色替代。来源身份可能重映射，原始历史用Workbench备份；WS/WSS及原生协议计划出口仍拒绝。HTTP500／断言失败仍可提取，与协议passed-only和原生严格阶段分别保持旧合同。项目会话失败只显式重试存储；`app.close()`可观察保存结果，但桌面退出／信号终止尚未接入，不宣称耐崩溃保存。最新精确提交、验证与遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
+当前候选接入Node正常SIGINT／SIGTERM及Electron正常确认退出：等待既有会话最终保存，确认成功退出0，保存未确认或关闭异常固定脱敏日志并退出2，不重放网络。取消桌面未保存修改提示时后端保持运行，不提前关闭；正常在途HTTP沿用原完成／超时合同，不强制中断。PR40独立真实三OS桌面退出smoke已过，**新根退出组合CI尚待**。Windows子进程kill不能当可捕获POSIX信号验证；正常桌面退出不等于强杀、崩溃、断电或系统注销／关机耐久保存。详细精确提交和剩余缺口见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
 
 ## 已实现的核心
 

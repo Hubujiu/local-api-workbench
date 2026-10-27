@@ -16,6 +16,7 @@ import { resolveNativeMockRoute } from "./native-mock-route.mjs";
 import { nativeMockResponse } from "./native-mock-runtime.mjs";
 
 import { sqliteProcessFailureDetails } from "./sqlite-process-diagnostics.mjs";
+import { installNodeShutdown } from "./host-shutdown.mjs";
 import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
 import {
   appendExecutionRecord,
@@ -1926,8 +1927,15 @@ export async function createApp({
   };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = await createApp();
-  console.log(
-    `Local API Workbench: ${app.launchUrl}\nData: ${path.resolve(process.env.LOCAL_API_DATA || ".local-api")}`,
-  );
+  const starting = createApp();
+  installNodeShutdown(starting);
+  try {
+    const app = await starting;
+    console.log(
+      `Local API Workbench: ${app.launchUrl}\nData: ${path.resolve(process.env.LOCAL_API_DATA || ".local-api")}`,
+    );
+  } catch {
+    console.error("LOCAL_API_STARTUP_FAILED");
+    process.exitCode = 2;
+  }
 }
