@@ -53,3 +53,46 @@ Malformed UTF-16 record IDs previously collapsed to replacement-character UTF-8 
 Layout validation now rejects malformed Unicode, encoded filenames whose complete temporary component exceeds 255 bytes, and case-folded filename collisions before publishing a transaction. Existing filename encoding is unchanged; no records are silently renamed or truncated. Well-formed long IDs exceeding this stricter disk limit are rejected with an ordinary precommit error. Safe 153-byte ASCII and distinct Unicode IDs have disk save/read/restore tests; invalid saves and HTTP restore preserve the old revision/list and publish no journal.
 
 This prevents new corrupt layouts. It does not repair already overwritten records or automatically discard a pre-existing invalid journal; such data requires explicit recovery from a known intact backup. The limits are per filename component, not a promise that every possible full filesystem path is writable.
+
+## Creation lifecycle and custom-directory registration
+
+Creation now runs under the registry lock followed by the project lock, with the
+same write queue and journaled save core as updates. It exclusively reserves a
+new generated-ID directory; an existing directory, legacy file, or registered ID
+is a collision, never a destination to overwrite. The registry recovery guard is
+checked inside that locked operation, including concurrent creation failures.
+
+A versioned `.creations.json` intent records the generated ID and absolute base
+before project journaling. `.locations.json` keeps its existing ID-to-base format
+and is published only after the project is committed or recoverable. Readers
+wait for active creation rather than observing a registered-but-missing project.
+On restart, intent reconciliation uses the same lock order and ENOENT-only
+filesystem checks. A journal, manifest, or legacy project is retained and made
+discoverable. A markerless, never-registered intent can be retired; no project
+folder, temporary project file, or user data is deleted. A matching published
+registration is never erased merely because its files have become unavailable.
+Malformed/conflicting registry structure fails closed.
+
+Pre-journal failures with proven absence remain ordinary definite errors. If
+commit evidence exists or cannot be determined safely, creation retains recovery
+identity and uses PROJECT_COMMIT_UNCERTAIN. Post-commit publication, readback,
+project-lock cleanup and registry-lock cleanup failures have the same uncertain
+outcome. An intent remains durable when registration publication fails. Registry
+reload resets absent maps instead of reusing stale per-Store locations.
+
+An unavailable pending custom disk or unknown project lock is isolated as an
+unresolved listing entry; it does not prevent startup or access to healthy
+projects. Creation still fails closed with PROJECT_RECOVERY_REQUIRED. Existing
+unknown-lock ownership safeguards are unchanged. Retrying initialization does not
+retry the project mutation, delete locks, modify permissions, or discard data.
+This remains process-crash recovery, not a power-loss durability guarantee or a
+general idempotency protocol. Unregistered legacy ghosts without a creation
+intent are not automatically repaired.
+
+Bounded real-filesystem tests exercise owner POST permission failure, pre-journal
+failure after intent publication, custom/explicit-root success, fixed concurrent
+Store interleavings, post-journal failure, registry publication/cleanup failures,
+collisions, structural corruption, isolation, and real child-process interruption
+before journaling, with a journal, and after manifest application. Permission
+fixtures run only where POSIX permission bits are effective; all other creation
+fixtures also run on Windows. Tests preserve user sentinel files throughout.
