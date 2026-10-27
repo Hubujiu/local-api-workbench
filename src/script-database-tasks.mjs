@@ -1,4 +1,7 @@
-import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
+import {
+  normalizeNativeAssertionData,
+  isNativeVariableAssertion,
+} from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -226,11 +229,15 @@ export function normalizeNativeTaskRequest(request) {
           throw Error("任务脚本合计最多64KiB");
         data = task.data;
       } else if (task.type === "assert") {
-        if (task.enabled === 1 && phase !== "after")
-          throw Error("启用原生断言仅支持后置响应阶段");
         data = normalizeNativeAssertionData(task.data, {
           enabled: task.enabled === 1,
         });
+        if (
+          task.enabled === 1 &&
+          phase !== "after" &&
+          !isNativeVariableAssertion(data.type)
+        )
+          throw Error("启用响应断言仅支持后置响应阶段");
       } else if (task.type === "pickVars") {
         if (task.enabled === 1 && phase !== "after")
           throw Error("启用pickVars仅支持后置响应阶段");

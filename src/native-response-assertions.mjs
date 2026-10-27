@@ -5,6 +5,9 @@ import {
   nativeDataObject,
 } from "./native-response-extraction.mjs";
 
+export const isNativeVariableAssertion = (type) =>
+  ["tempVars", "envVars", "globalVars"].includes(type);
+
 const unaryComparisons = ["null", "notnull", "exist", "notexist"];
 const comparisons = [
   "eq",
@@ -34,10 +37,13 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
       "responseText",
       "responseTime",
       "responseSize",
+      "tempVars",
+      "envVars",
+      "globalVars",
     ].includes(value.type)
   )
     throw Error(
-      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText/responseTime/responseSize",
+      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText/responseTime/responseSize/tempVars/envVars/globalVars",
     );
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
@@ -64,7 +70,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     throw Error("原生断言仅支持有界文字路径与14种非正则字面比较");
   if (
     enabled &&
-    ((!isText && /\{\{/.test(path)) ||
+    ((!isText && !isNativeVariableAssertion(value.type) && /\{\{/.test(path)) ||
       (hasExpected && /\{\{/.test(expression.compareValue)))
   )
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
@@ -116,6 +122,12 @@ export function compileNativeAssertions(value = []) {
             : "",
         }
       : {}),
+    ...(isNativeVariableAssertion(data.type)
+      ? {
+          variable: data.expression.path.replace(/^[{}]+|[{}]+$/g, ""),
+          diagnostic: data.expression.path,
+        }
+      : {}),
     comparison: data.expression.compareType,
     ...(Object.hasOwn(data.expression, "compareValue")
       ? { expected: data.expression.compareValue }
@@ -135,6 +147,7 @@ function installNativeAssertions(
   readXML,
   readText,
   metricResponse,
+  variableMaps,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -196,29 +209,47 @@ function installNativeAssertions(
     }
     return value;
   };
-  const readMetric = (name) => {
-    const property = descriptor(metricResponse, name);
-    if (!property) return undefined;
-    if (!property.enumerable || !hasOwn(property, "value"))
-      throw Failure("原生指标断言只读取当前自有数据字段");
-    const value = property.value;
+  const boundedString = (value) => {
     if (typeof value === "string") {
-      if (value.length > 65536) throw Failure("原生指标断言字符串超过64KiB");
+      if (value.length > 65536)
+        throw Failure("原生指标或变量断言字符串超过64KiB");
       let bytes = 0;
       for (let at = 0; at < value.length; at++) {
         const code = charCode(value, at);
         if (code >= 0xd800 && code <= 0xdbff) {
           const next = charCode(value, ++at);
           if (!(next >= 0xdc00 && next <= 0xdfff))
-            throw Failure("原生指标断言字符串包含无效Unicode");
+            throw Failure("原生指标或变量断言字符串包含无效Unicode");
           bytes += 4;
         } else if (code >= 0xdc00 && code <= 0xdfff)
-          throw Failure("原生指标断言字符串包含无效Unicode");
+          throw Failure("原生指标或变量断言字符串包含无效Unicode");
         else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
-        if (bytes > 65536) throw Failure("原生指标断言字符串超过64KiB");
+        if (bytes > 65536) throw Failure("原生指标或变量断言字符串超过64KiB");
       }
     }
     return value;
+  };
+  const readVariable = (type, name) => {
+    const map =
+      type === "tempVars"
+        ? descriptor(variableMaps.local, name)
+          ? variableMaps.local
+          : variableMaps.effective
+        : type === "envVars"
+          ? variableMaps.environment
+          : variableMaps.globals;
+    const property = descriptor(map, name);
+    if (!property) return undefined;
+    if (!property.enumerable || !hasOwn(property, "value"))
+      throw Failure("原生变量断言只读取当前自有数据字段");
+    return boundedString(property.value);
+  };
+  const readMetric = (name) => {
+    const property = descriptor(metricResponse, name);
+    if (!property) return undefined;
+    if (!property.enumerable || !hasOwn(property, "value"))
+      throw Failure("原生指标断言只读取当前自有数据字段");
+    return boundedString(property.value);
   };
   const safeArray = () => {
     const value = [];
@@ -237,7 +268,10 @@ function installNativeAssertions(
       op.type === "responseXml" ||
       op.type === "responseText" ||
       op.type === "responseTime" ||
-      op.type === "responseSize"
+      op.type === "responseSize" ||
+      op.type === "tempVars" ||
+      op.type === "envVars" ||
+      op.type === "globalVars"
         ? null
         : readResponse();
     let value =
@@ -249,7 +283,11 @@ function installNativeAssertions(
             ? readText()
             : op.type === "responseTime" || op.type === "responseSize"
               ? readMetric(op.type)
-              : response.status;
+              : op.type === "tempVars" ||
+                  op.type === "envVars" ||
+                  op.type === "globalVars"
+                ? readVariable(op.type, op.variable)
+                : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);

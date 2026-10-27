@@ -1,4 +1,7 @@
-import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
+import {
+  normalizeNativeAssertionData,
+  isNativeVariableAssertion,
+} from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -47,7 +50,8 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
         enabled: task.enabled === 1,
       });
       if (task.enabled === 1) {
-        if (!input.response) throw Error("启用原生断言仅支持后置响应阶段");
+        if (!input.response && !isNativeVariableAssertion(data.type))
+          throw Error("启用响应断言仅支持后置响应阶段");
         const index =
           responseAssertions.push({
             name: task.name ?? "Native response assertion",

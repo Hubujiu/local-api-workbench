@@ -253,3 +253,55 @@ record persistence, backup restoration and restart. Native reverse export is
 validated separately on the integration branch because its dependency is not
 part of this feature branch. No budgets, quota, rollback policy, XML guard or
 frontend behavior is changed.
+
+## 2026-10-27: before/after variable-source assertions
+
+The same original sender hash above has direct source dispatch at LF-normalized
+Unicode offsets 33585716/33585950/33586185: tempVars uses pm.variables.get,
+envVars uses pm.environment.get, globalVars uses pm.globals.get. Each passes
+`_.trim(path, '{}')`: only the set of brace characters is stripped from both
+ends. Whitespace is not stripped; interior braces and dotted/bracket names are
+literal keys, not JSONPath or template expressions. The common pre/post task
+switch at 33578995 and assert_visual pre-assert generation at 33605534 show
+variable assertions are not inherently response-only.
+
+Both phases now allow exactly these three additional sources. Existing response
+sources still require a response in normalization, phase construction and direct
+runScript entrypoints; unknown sources/Cookie/regex remain rejected. Host
+normalization requires an own well-formed bounded string path, including empty;
+original missing/non-string paths could be coerced by Lodash, a broader domain
+not enabled here. Original path is retained in stored/imported task data; only
+the compiled private key strips edge braces. Expected-value templates remain
+rejected. An empty key cannot be created through Workbench's variable setters;
+lookup therefore normally produces undefined, without inventing a valid setter.
+
+The original PM SDK effective lookup has local, iteration, environment,
+collection and global layers. This increment deliberately preserves Workbench's
+existing public lookup contract: own temporary value first (including own
+undefined), otherwise current effective globals/environment/runtime map with
+hidden keys removed. envVars/globalVars read only their respective current maps.
+It does not claim missing original iteration/collection/disabled-value layer
+semantics. set/unset/clear and effective refresh mutate the captured map objects,
+so each assertion observes the then-current values rather than an import-time
+snapshot. The installer captures these map references and descriptor intrinsics
+before user tasks; replacing public get functions cannot redirect its reads.
+Own accessors/non-enumerable properties, object/array/nonfinite values and bad or
+oversized strings fail the stage without coercion/getter execution. Ordinary
+absence remains undefined and can satisfy notexist.
+
+All fourteen comparison rules, private evidence, completion, shared quota and
+budgets remain unchanged. Existing before-failure policy is preserved: a false
+prerequisite prevents the main HTTP request and before-scope commit. Post false
+comparisons remain completed soft failures, preserving ordinary continuation and
+scope writes; existing active-pick strict policy is unchanged. Metrics, Code,
+Header and body readers are not called for variable-only pre phases.
+
+Tests exercise three sources before/after across all comparators, literal path
+normalization, local/effective shadowing and own undefined, current edits and
+clear/unset, public method replacement, invalid-value stage errors, concurrent
+VM isolation, real SQLite assignments after an awaited operation with shared
+lexical state, real HTTP import and before rejection with zero requests/writes,
+post soft failure continuing plans, saved results, independent projects,
+original task-data preservation, backup restore and process restart. Native
+reverse export and official SDK/CLI entrypoint checks remain integration-level
+work because their feature dependencies are not in this branch.
