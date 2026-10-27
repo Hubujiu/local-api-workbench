@@ -604,7 +604,7 @@ try {
           (workerData.requestSnapshot
             ? "(" +
               nativeRequestSnapshotSource +
-              ')(data.requestSnapshot,data.operations.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source))'
+              ')(data.requestSnapshot,data.operations.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source),()=>JSON5.parse)'
             : "null") +
           ";const state=(" +
           pickVarsInstallerSource +

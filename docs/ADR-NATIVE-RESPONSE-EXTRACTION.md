@@ -54,7 +54,6 @@ Unicode 偏移 9913 为默认数据，work 主 bundle 模块 693291 偏移 12244
 组合时须显式识别/验证新类型或原子拒绝，不能把 flow API 快照惰性任务提升为执行。
 完整 Workbench backup 保留来源/冻结计划，与原版导出往返不同。
 
-
 ## responseHeader：有界的单字段登录令牌闭环
 
 独立契约仍来自上述合法静态包，非原版运行结果。sender `index.js` SHA256 为
@@ -107,7 +106,6 @@ set-cookie/超过 256 对/1000 对截断、断言/网络/前后置失败时不�
 闭合形状、全部行验证后才写入、零 getter/正文读取、原型/公开函数/map 篡改与 UTF-8
 值限额。测试没有原版 runtime parity 证据。原生反向导出与惰性来源仍由其独立模块
 负责整合，完整 Workbench backup 往返不等于原版导出往返。
-
 
 ## responseXml：WIP 有界标量适配
 
@@ -207,3 +205,44 @@ setBody 合同，不声称原 SDK 的 stream、charset 或缺失值持久化逐�
 真实 H1/H2 workflow 另覆盖原生导入→三个 scope→后续 Bearer、冻结定义、项目/环境隔离、
 Store/备份/重启，以及后置失败/取消不提交、不继续使用旧 token。Workbench backup
 往返不是原版 native export 等价证明；XML 未完成的独立 guard 专项状态保持不变。
+
+## Request body snapshots: bounded JSON5 and empty bodies
+
+The existing PRE-only configured request snapshot now accepts JSON5 object/array
+bodies using the already locked MIT `json5` 2.2.3 and its existing same-VM entry.
+No new library, loader, public API, host parsing capability or execution budget is
+introduced. Only a nonempty raw/json body requests the parser; Header-only, none,
+and exact-empty body snapshots do not activate it for this feature. The parser is
+obtained and invoked during private phase initialization, before custom tasks.
+SDK body edits still change the actual wire request, not this phase's snapshot.
+Original raw bytes and native declarations remain unchanged in stored/frozen data.
+
+Static evidence uses the sender SHA-256 already recorded above, LF-normalized
+Unicode character offsets (not bytes): legacy request.data at 28717191 takes
+raw/form/formData/file content and falls back to {}; RequestBody.isEmpty in
+26241000–26242900 treats an empty string, but not whitespace, as empty. At
+33567496 request.data is tentatively JSON5-parsed and JSON-stringified into
+request_bodys; at 33594003 the pick task parses a string again. These are static
+observations, not original GUI execution or complete legacy transport parity.
+
+Workbench accepts none, missing raw/json body and exact empty string as a new
+empty object. Whitespace/comment-only documents still fail parsing. Input remains
+valid Unicode and at most 64 KiB UTF-8. A quote/escape/comment-aware resource scan
+rejects nesting beyond 64 before parser invocation; this is not a second syntax
+parser. JSON5 alone validates syntax, with no reviver. Existing copied-value
+checks retain finite numbers, object/array root, Unicode and string byte limits,
+10000 nodes, 64 levels, own data properties and reserved-key rejection. Invalid
+syntax, primitive roots, NaN/Infinity, files/GraphQL and ambiguous text form rows
+remain unsupported. In particular, original swallowed errors or stringify's
+nonfinite-to-null coercion are not reproduced.
+
+Per-source errors remain deferred to the corresponding task. All-row validation,
+phase rollback, active-pick strict plan stop and shared runtime budgets are
+unchanged. Original JSON5 acceptance does not imply that a raw wire body is
+canonicalized: ordinary request sending keeps its existing mode contract.
+
+Verification includes actual HTTP/1.1 and HTTP/2 native import, initial snapshot,
+three scopes, SDK wire edits, later request consumption, frozen definitions,
+backup/restart, isolation and later-row/phase failure. Empty bodies and strict
+JSON are controls. The new grammar/empty-source fixtures failed before this
+change; existing source/accessor/array/depth protections remain regression tests.

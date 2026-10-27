@@ -93,13 +93,12 @@ export function nativeRequestSnapshotInput(request, sources) {
 }
 
 // Serialized independently of user data and installed only for request sources.
-function createNativeRequestSnapshot(input, sources) {
+function createNativeRequestSnapshot(input, sources, getJSON5Parse) {
   const descriptor = Object.getOwnPropertyDescriptor,
     hasOwn = Object.hasOwn,
     keys = Object.keys,
     create = Object.create,
     define = Object.defineProperty,
-    parse = JSON.parse,
     isArray = Array.isArray,
     finite = Number.isFinite,
     charCode = Function.prototype.call.bind(String.prototype.charCodeAt),
@@ -196,26 +195,41 @@ function createNativeRequestSnapshot(input, sources) {
     const mode = own(input, "bodyType");
     if (mode === "urlencoded" || mode === "form-data")
       return rows(own(input, "form"), false);
+    if (mode === "none") return create(null);
     if (mode !== "raw" && mode !== "json")
-      throw Failure("请求Body提取仅支持严格JSON或文本表单快照");
+      throw Failure("请求Body提取仅支持JSON5对象/数组或文本表单快照");
     const raw = own(input, "body");
     text(raw);
-    if (!raw) throw Failure("请求Body提取不支持空正文快照");
-    // Resource preflight, not a JSON parser. Native JSON.parse validates syntax.
+    if (!raw) return create(null);
+    // Resource preflight only. JSON5 owns syntax validation, without a reviver.
     let depth = 0,
-      quoted = false,
-      escaped = false;
+      quote = 0,
+      escaped = false,
+      comment = 0;
     for (let at = 0; at < raw.length; at++) {
-      const code = charCode(raw, at);
-      if (quoted) {
+      const code = charCode(raw, at),
+        next = charCode(raw, at + 1);
+      if (comment === 1) {
+        if (code === 10 || code === 13 || code === 0x2028 || code === 0x2029)
+          comment = 0;
+      } else if (comment === 2) {
+        if (code === 42 && next === 47) {
+          comment = 0;
+          at++;
+        }
+      } else if (quote) {
         if (escaped) escaped = false;
         else if (code === 92) escaped = true;
-        else if (code === 34) quoted = false;
-      } else if (code === 34) quoted = true;
-      else if (code === 123 || code === 91) {
+        else if (code === quote) quote = 0;
+      } else if (code === 34 || code === 39) quote = code;
+      else if (code === 47 && (next === 47 || next === 42)) {
+        comment = next === 47 ? 1 : 2;
+        at++;
+      } else if (code === 123 || code === 91) {
         if (++depth > 64) throw Failure("请求JSON预检超过64层");
       } else if (code === 125 || code === 93) depth--;
     }
+    const parse = getJSON5Parse();
     const value = parse(raw);
     if (!value || typeof value !== "object")
       throw Failure("请求Body提取须为JSON对象或数组");
