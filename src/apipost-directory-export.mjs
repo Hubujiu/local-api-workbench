@@ -1,4 +1,12 @@
+import {
+  validateInheritancePlans,
+  verifyInheritancePlans,
+} from "./native-inheritance-plans.mjs";
 import { verifyNativeInheritanceExport } from "./native-inheritance-export.mjs";
+import {
+  prepareExtendedProtocolExport,
+  verifyExtendedProtocolExport,
+} from "./apipost-extended-protocol-export.mjs";
 import { verifySampleDefinitions } from "./apipost-sample-export.mjs";
 import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
 import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
@@ -9,12 +17,12 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
-  const plans = project.plans || [];
-  if (project.settings?.nativeInheritance && plans.length)
-    throw Error("原生继承图出口首片不支持冻结计划；请使用完整项目备份");
+  const extended = prepareExtendedProtocolExport(project);
+  const plans = extended.base.plans ?? [];
+  if (project.settings?.nativeInheritance) validateInheritancePlans(plans);
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
-  const base = { ...project, plans: [] };
+  const base = { ...project, plans: extended.derivedPlans };
   const document = exportApipost(base, options);
   const projectId = document.project_id;
   const scoped = (kind, value) =>
@@ -140,8 +148,16 @@ export function exportApipostDirectory(project, options = {}) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
+      const snapshotSettings = { ...base.settings };
+      delete snapshotSettings.nativeInheritance;
       const frozen = exportApipost(
-        { ...base, requests: [snapshotRequest], cases: [], caseFolders: [] },
+        {
+          ...base,
+          settings: snapshotSettings,
+          requests: [snapshotRequest],
+          cases: [],
+          caseFolders: [],
+        },
         options,
       );
       for (const folder of frozen.apis.filter(
@@ -386,14 +402,17 @@ export function exportApipostDirectory(project, options = {}) {
         : undefined,
     }));
   verifyApipostDocumentDefinitions(withStatus(project), withStatus(check));
-  if (check.plans.length !== plans.length)
+  const ordinary = verifyExtendedProtocolExport(project, check);
+  if (ordinary.plans.length !== plans.length)
     throw Error("原生目录计划回读不完整");
-  for (const [i, plan] of check.plans.entries())
+  for (const [i, plan] of ordinary.plans.entries())
     for (const [j, step] of plan.steps.entries())
       if (
         step.request.beforeScript !== flows[i].steps[j].pre_script ||
         step.request.afterScript !== flows[i].steps[j].post_script
       )
         throw Error("原生目录步骤脚本回读不一致");
+  if (project.settings?.nativeInheritance)
+    verifyInheritancePlans(project, check, flows);
   return result;
 }

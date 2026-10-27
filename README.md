@@ -19,9 +19,11 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最近完整根 `085c92a0` / CI `40535437324` 首次19项GREEN，实际checkout及树已核，三OS覆盖循环计划、文本表单继承、冻结执行、SDK／CLI与恢复。历史XML／桌面脚本RED保留，不以新功能宣称根因已修。canonical单层HTTP固定次数repeat的count为1–100、潜在展开最多200，保存循环图与每轮身份；不支持条件、嵌套、并行或数据源循环。preserve继承图支持urlencoded／multipart文本表单层，保留接口body模式与严格Content-Type边界。原生automated_testings仍缺保存图到执行树的证据，明确拒绝，不能将canonical循环称为原生格式兼容，见[静态证据缺口](docs/NATIVE-AUTOMATION-STATIC-GAPS.md)。
+最近完整根 `bfdd6a38` / CI `40538559764` 首次19项GREEN，实际checkout及树、12份测试产物已核。正常Node SIGINT／SIGTERM与Electron确认退出等待会话保存；取消退出不提前关闭后端，保存未确认退出2且不重放。Windows不支持可捕获POSIX child signals的四项单列跳过，三平台真实桌面正常退出均验证；不承诺强杀、断电或系统注销／关机耐久。
 
-当前候选接入Node正常SIGINT／SIGTERM及Electron正常确认退出：等待既有会话最终保存，确认成功退出0，保存未确认或关闭异常固定脱敏日志并退出2，不重放网络。取消桌面未保存修改提示时后端保持运行，不提前关闭；正常在途HTTP沿用原完成／超时合同，不强制中断。PR40独立真实三OS桌面退出smoke已过，**新根退出组合CI尚待**。Windows子进程kill不能当可捕获POSIX信号验证；正常桌面退出不等于强杀、崩溃、断电或系统注销／关机耐久保存。详细精确提交和剩余缺口见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
+当前候选把原生协议身份歧义拒绝、source-backed gRPC／Socket.IO定义及派生消息往返、HTTP继承图与独立冻结目录flow一起组合。gRPC仅plaintext内联Proto的已证unary／server-stream，Socket.IO仅HTTP v4字面文本／Ack受限配置；不导出TLS秘密、不补造已剥离metadata或握手凭据，来源与当前定义／派生plan不一致拒绝。HTTP图＋flow完整回读核冻结请求；父新增字段会注入旧快照时仍拒绝。原生目录是定义迁移而非编辑历史备份，仅已知manual／ai编辑归因可按明确合同投影；未知metadata、原生历史、repeat／samples混合和不可表示资源继续拒绝。**新根组合CI尚待**，不借独立PR或旧根绿灯验收。
+
+canonical有界repeat、文本表单继承等既有能力保持；原生automated_testings仍缺保存图到执行树证据，不猜测解锁，见[静态缺口](docs/NATIVE-AUTOMATION-STATIC-GAPS.md)。历史XML／桌面脚本RED根因未修复或改判。最新精确提交、验收边界及遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
 
 ## 已实现的核心
 

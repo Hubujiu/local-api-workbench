@@ -2266,7 +2266,7 @@ export function importIntoProject(
       directoryDocument.files.some(
         (file) =>
           (file.path.startsWith("executions/") &&
-            file.path !== "executions/flows/index.json") ||
+            !/^executions\/flows\/[A-Za-z0-9_-]+\.json$/.test(file.path)) ||
           file.path === "settings/mock.json" ||
           (/^settings\/mock_/.test(file.path) &&
             file.path !== "settings/mock_custom_rules.json"),
@@ -2276,7 +2276,12 @@ export function importIntoProject(
     return importPreservedNativeInheritance(
       project,
       apipostDocument(original),
-      { modelNameMode },
+      {
+        modelNameMode,
+        directoryFlows: fromDirectory
+          ? original.nativeExecutionFlows || []
+          : undefined,
+      },
     );
   }
   if (

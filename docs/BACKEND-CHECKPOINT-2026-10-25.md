@@ -1,6 +1,18 @@
-# 后端检查点 · 2026-10-27 16:09 UTC
+# 后端检查点 · 2026-10-27 16:43 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 16:43 原生定义迁移组合候选
+
+- 最近完整根 `bfdd6a38629dc5b95be27dbf71f3f9ad70b026c0` / tree `7f2dad7f5eaec76cfd27885e94a82b2567e429bd`，首次CI `40538559764` 19/19 GREEN；全部actual checkout精确同根。12实际ZIP／manifest／TAP387文件（97/97/97/96），清单hash `1b12d6a763f7e57a564ef4a506bcc032417ae6675ced146f073d410d1aeb78c5`。Linux／macOS各1998通过，Windows1994通过加4个明确POSIX信号skip，均无失败／取消。新旧桌面smoke、真实DB／SSH／TLS／stdio及ac4822重现通过；不包含本节新迁移组合。
+- 本地生产组合 `9c65a6ed640e7a7fb0b2e3900bc445809d199a64` / tree `c3576b7b4991459c952726a559f21bc9e69a862e`，合PR13身份拒歧义、PR14扩展协议出口及PR43图＋HTTP flow。共同exporter保留prepare／verifyExtended及validate／verifyInheritance两套路径，旧native任务出口、DB／JSON5／PRE、repeat叶子遍历不被旧分支覆盖。最终测试基线 `e71198d7e737558f065ffcd24ae1593a1c6d05dc` / tree `f5440c7d6f992a0a833ff22296975afac52bf70b` 已通过21个完整相关文件92/92，无失败／取消／跳过；check／format／diff均通过。运行期间仅检查点文档变化，代码／测试树一致已核。根候选待推送和跨平台CI，不能声称新组合已验收。
+- PR13 local `357b45686e4a93c522931a2d88c1b6bbe09d50eb` / remote `d7dee8adfa1b92dec8096d2a3b03ebd745c54ee4` / tree `b87b5d84d2373483026306aebe29e76d61959fd6`。实证原导入会把target/method的a:b/c和a/b:c两来源等值去重为一条定义与消息计划。保旧ID算法，以结构化tuple检查旧拼接键；包含同源项目已有归档，整批及分批／重启后均在写入前原子拒绝，正常重导幂等／不同源namespace保持。6整文件15通过及check／format／diff通过，首次CI `40542315959` 10/10 GREEN，actual `c56d46d21fe4c2e9dda25326bb4accc7d34e0985` 精确同树，3OS实际TAP各1060通过无skip。旧feature无分片manifest，运行时e12c1e8b不冒充根ac4822。本修复不修复旧已塌缩数据，出口另行独立拒绝。
+- PR14 production local `415c5e53416a9b0a12276feda59cddde56ffe0da` / remote `520946a148216520984d3578ca568edc243b7bb8` / tree `3988b5e4e2807b7d99117d4dd88e2d7a1fd1c165`，11完整文件53通过、check／format／diff通过。最新仅测试修正 local `3cf614c9f5371d5c95acc168cb8429745c5eaff3` / remote `0fcf194b4ccd5e63378e662318e0a92650561655` / tree `ee0cb09f70dab09b4d5f509c8d16355d9465f433`：历史塌缩负例由两个合法单source导入结果显式组合，不再依赖已修复的旧导入bug；整文件8/8及format／diff通过。新exact CI尚待，旧415c不是最新测试头验收。首片source-backed根gRPC plaintext内联Proto unary／server-stream与Socket.IO HTTPv4文字Ack；完整来源重新生成定义和派生消息计划后逐一比较，无新增／遗漏／编辑才反向映射。消息计划由原生消息定义重建，不写成automated_testings；HTTP flow单独处理。统一重映射所有引用身份，不承诺历史ID。所有metadata行、被剥离握手凭据、TLS、非根资源、无法表达的状态均拒绝；旧WS/WSS出口仍拒绝。
+- PR14两格式×官方SDK HTTP／stdio双代执行、owner／SDK／CLI／恢复重启CLI每链12次真实gRPC／Socket.IO调用、精确run IDs与项目隔离已本地验证；live定义编辑不影响旧冻结执行，编辑后的不等价项目两出口零网络拒绝。旧WIP曾因无plans缺省丢失误拒样例／模型／文档，已恢复??[]并完整回归；descriptor校验必须在classification之前，object／symbol／array自身filter或iterator访问器全部零调用拒绝，正常HTTP快照undefined兼容保留。c700和d689是修正前阶段，不能借其CI验收latest。
+- PR43 production local `98af0f2ee6ca3c86f5dd6330da83e857ddf0eeb6`，最新仅ADR local `bb6dd7f06d56f412c9ec94a4f148a912d6b8533d` / remote `b5a090d4a246ecb70ff4e40785370d907f898477` / tree `2d4e8ee808b26caf8eb8c36a43046305ce209785`。固定纯依赖 `deps/native-inheritance-export-base` 在旧PR14 `9c66155ceeff7f57afda1b2368004cb3cf355f02`，避免未来PR14规格／实现混入独立树；精确CI `40542921179` 首次19/19 GREEN，19实际checkout `d8916f17045d5dcaa00d5500a733bfbb1af833ab`，parents9c66155+b5a090d4且tree同本地；12实际ZIP摘要通过，277文件70/69/69/69完整互斥，hash `72df8ccef6056420b9f827d10560bc0a95da11f61ee67c1a17065546f56bd499`，三OS各1238通过、无失败／取消／跳过。旧CI `40541684337` 16/19 RED，actual026d8f80树2208db92包含PR14故意RED规格4e5caa，三OS唯一新增extended出口测试失败；不是本PR43树，也没有证据说GitHub丢hook。旧stage ac9b66的snapshot同名行误拒和mac桌面250ms预算失败均保留，不重跑改判。
+- 图＋目录flow导入按完整原生global/folder/api_snapshot合并一次，再独立冻结；live仍保留own层图。出口完整重导检查所有冻结请求、环境、身份、顺序和元数据，父新增Header／Query／Cookie／合法POST form导致旧快照语义漂移时整包拒绝。已知versionPlan四字段／真实stepID的manual／ai编辑归因是明确的定义投影，原生格式不保该Workbench编辑历史；未知字段／归因及imported历史仍拒绝，完整备份保留全部。真实owner与SDK新建计划后迁移正例已补，不仅是原生flow输入；modern JSON仍不支持flow。样例／repeat／协议混入保图合同仍拒绝。
+- 首次根21整文件92项为91通过／1失败：唯一旧测试依赖“先导入塌缩数据”，而PR13正确提前拒绝。未回退保护；已同PR14修正历史fixture并顺序合入 `e71198d7e737558f065ffcd24ae1593a1c6d05dc` / tree `f5440c7d6f992a0a833ff22296975afac52bf70b`，根生产与9c65相同。原RED日志保留，随后同21完整文件最终92/92通过，生产代码未变；check／format／diff均过。保留原91/92失败，不将其改判或回退进口保护。
+- 暂停专项、原版运行／许可边界不变；无新前端、无main/develop合并、无部署。native automated_testings静态缺口仍单列，不把派生消息计划或HTTP目录flow冒称该格式兼容。
 
 ## 16:09 正常宿主退出保存候选
 
