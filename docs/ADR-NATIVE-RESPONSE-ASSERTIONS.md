@@ -518,3 +518,55 @@ project isolation, backup restore and restart. Earlier import-time template
 negatives become runtime unsupported-builtin cases; structural/unknown comparator
 and data-type rejection remain. Exact local and CI results are recorded in PR26,
 not inferred from historical GREEN checkpoints.
+
+## 2026-10-27: assertion-failure observability only
+
+Root `0534974e`, ordinary CI [40583658222](https://github.com/Hubujiu/local-api-workbench/actions/runs/40583658222),
+macOS core shard 2 job `122469368142`, retains a real failure in the current-body
+XML test: line 128 expected `/自有字符串/` but received `Error: interrupted`.
+The exact root source's `src/scripts.mjs:375` reconstructs the worker's completed
+error after exit code 0. This is the host propagation branch, **not the interruption
+origin**. The test's 930.245625 ms spans two separate phase calls and is not the
+failing worker's active time. Its saved TAP omitted the existing stage, operation
+and timing/counter values. The cause remains **unknown**; no evidence establishes
+whether the intended own-string guard had already produced an error.
+
+Only the failing `assert.rejects` site now captures and rethrows its identical
+worker rejection. The exact `phase(...)` input, single invocation for this
+assertion, original `/自有字符串/` expectation and preceding phase are unchanged.
+On an assertion failure only, a test helper appends a maximum 2 KiB UTF-8 JSON
+suffix to that same assertion failure's message and rethrows it. A match adds
+nothing and does not inspect metadata; unexpected fulfillment still fails.
+
+The helper imports only Node built-ins, not the script runtime, native XML or VM.
+It reads own data descriptors only, skips proxies/accessors/inherited fields,
+and emits null-prototype records containing exclusively these explicit fields:
+
+- Known `scriptStage` / `lastWorkerStage` enums from `script-diagnostics.mjs`.
+- Known worker `activityOperation` enums, including `pick-vars-completion`,
+  `native-assertion-completion`, `native-assertion-evidence` and the reviewed root
+  worker's `native-wait-completion`; unrecognized strings are omitted.
+- `scriptDiagnostics`: `activityBudgetMs` <=250, `fakerCalls` <=1001,
+  `timerCount` <=101, `requestCount` <=11.
+- `activityMetrics`: compatibility/functionLibrary/userScript/microtask/callback/
+  promiseState/serialization/fakerLoad `Ms` fields <=60000.
+- `activityCPUTimeUs`: raw compatibility/functionLibrary/userScript/microtask/
+  callback/promiseState/serialization `Us` fields <=60000000.
+- `elapsedMs` <=60000. Finite nonnegative values only; integers except the existing
+  fractional activity-budget allowance. Zero is retained; invalid or absent
+  values are omitted, never converted or clamped.
+
+No worker message/stack/source/body/variables/SQL/paths, query/request arrays or
+arbitrary diagnostic object is serialized into the added suffix. Existing Node
+assertion error reporting is not replaced or weakened. Synthetic tests cover
+whitelist/redaction, all enums and numeric caps, getters/conversion hooks/proxies,
+nonfinite inputs, pass/mismatch/unexpected-success behavior, one invocation,
+original worker Error immutability/identity and the same assertion-failure object.
+
+This increment is **not a runtime fix or causal diagnosis**. Local verification
+is restricted to syntax, formatting/diff and these pure synthetic tests; no VM/XML
+execution, pressure/heap/bytecode experiments, original application execution or
+manual CI rerun. Production source, scripts, workflows, budgets and assertion
+expectations are unchanged. An automatic ordinary CI run following the authorized
+branch push may execute its unchanged workloads. A future GREEN cannot erase the
+known failure, prove interruption cause, or complete the paused XML audit.
