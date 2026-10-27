@@ -1,5 +1,8 @@
 import { compileNativeWaits } from "./native-wait-tasks.mjs";
-import { compileNativeAssertions } from "./native-response-assertions.mjs";
+import {
+  compileNativeAssertions,
+  isNativeVariableAssertion,
+} from "./native-response-assertions.mjs";
 import { readResponseHeaderEvidence } from "./response-header-evidence.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
@@ -70,7 +73,10 @@ export function runScript(code, input, options = {}) {
   const responseAssertions = compileNativeAssertions(
     options.responseAssertions,
   );
-  if (responseAssertions.length && !input.response)
+  if (
+    responseAssertions.some((op) => !isNativeVariableAssertion(op.type)) &&
+    !input.response
+  )
     throw Error("原生断言需要后置响应");
   const responseExtractions = compilePickVarsOperations(
     options.responseExtractions,

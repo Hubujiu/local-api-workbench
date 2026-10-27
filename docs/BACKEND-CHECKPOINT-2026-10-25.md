@@ -1,4 +1,14 @@
-# 后端检查点 · 2026-10-27 01:47 UTC
+# 后端检查点 · 2026-10-27 02:04 UTC
+
+## 02:04 更新
+
+- 最新全项绿灯组合4ab68b2ffa5fd8ee1429c6a3da2e56b8e699d8dc/tree7cd48cd61a8c716b1e0d992dac69ccf500ed225e=localff358ac70d0a1408051526bfdd6081a1b0c65336，CI40434862187首轮13/13通过，全部checkout/head/tree核实。三OS各1766/1766；六份实际清单339文件170/169，无漏项重复。三OS桌面、production-only stdio、真实DB与固定WASM重建通过。包含耗时/大小、终态预算及OOM流程，但不包含新增变量来源。
+- PR3当前b7fc0df3的CI40434429389首轮10/10成功，实际mergea438ffd8f188f646a54cb5ffc22d4152e1a54513同树；PR36当前355bf9的CI40434252890首轮10/10成功，实际mergee10d71ced849a111ecd8b3d80ff18bb8c13a2ce9同树。PR26旧585d373a独立CI40434445389为9成功/1Mac core失败，旧XML边界及Faker配额用例先超时，新增指标用例均通过；不以组合绿灯覆盖该RED。
+- PR26变量阶段已保存7fdc364fb033278702ddb8c98e1ac4c57519f2ca/tree2ea810a589ec953c2950ee323a861159f4c14e32=localde738b561bc97e2ccfe65b173ee4e2d4de2eb8c1，独立CI待验证。tempVars/envVars/globalVars支持前后置、捕获自有map每次读当前值；path仅剥边缘花括号、不展开模板，不把pm.variables有效查找误写成仅local。缺值/自有undefined、set/unset/clear、前置false阻止请求并回滚、后置软失败、SQLite等待、隔离和备份恢复均有正式验证；WB有效层优先级与原版iteration/collection层差异明确保留。
+- 新组合合并时保留PR27等待和预算helper，仅将三变量源从response-only guard中放行；三个import/helper冲突已人工解决，旧等待/序列/终态预算18项及10来源MCP/CLI/native-export整链等32项通过。首次测试误在未解决merge markers时启动，只得到SyntaxError，不计为通过；解决后重新运行上述真实文件。新组合仍待自己的CI。
+- 普通gzip原版静态链已补证：requester gzip/brotli解压responseContent聚合Buffer后赋SDK.stream，再byteLength计数。仅此路径与WB解压后字节语义相符，不扩展全协议等价。原版Time Math.ceil(timings.end)而WB仍两位小数duration，差异未隐藏。
+
+以下01:47及更早记录保留当时状态，不替代上述更新。
 
 ## 当前已核实与尚待核实
 

@@ -119,7 +119,28 @@ function sourceFor(base, version = "1.1") {
     [
       script(
         "before",
-        'pm.environment.set("beforeProof","committed");pm.environment.set("beforeCount",(pm.environment.get("beforeCount")||0)+1);',
+        'pm.environment.set("beforeProof","committed");pm.variables.set("temporaryProof","local");pm.globals.set("globalProof","shared");pm.environment.set("beforeCount",(pm.environment.get("beforeCount")||0)+1);',
+      ),
+      assertion(
+        "pre current environment",
+        "envVars",
+        "{{{beforeProof}}}",
+        "eq",
+        "committed",
+      ),
+      assertion(
+        "pre current temporary",
+        "tempVars",
+        "{{temporaryProof}}",
+        "eq",
+        "local",
+      ),
+      assertion(
+        "pre current global",
+        "globalVars",
+        "{{globalProof}}",
+        "eq",
+        "shared",
       ),
     ],
   );
@@ -560,18 +581,18 @@ for (const [version, transport] of [
   ["2", "stdio"],
 ])
   test(
-    `fourteen native comparators and seven sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
+    `fourteen native comparators and ten sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
     { timeout: 30000 },
     async (t) => {
       const f = await fixture(t, version),
         source = sourceFor(f.base, version),
         untouched = structuredClone(source);
       const names = source.apis.flatMap((api) =>
-        (api.request.post_tasks ?? [])
+        [...(api.request.pre_tasks ?? []), ...(api.request.post_tasks ?? [])]
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 48);
+      assert.equal(names.length, 51);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])

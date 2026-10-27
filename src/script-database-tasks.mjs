@@ -1,5 +1,8 @@
 import { normalizeNativeWaitData } from "./native-wait-tasks.mjs";
-import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
+import {
+  normalizeNativeAssertionData,
+  isNativeVariableAssertion,
+} from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -236,11 +239,15 @@ export function normalizeNativeTaskRequest(request) {
         if (task.enabled === 1 && (waitMilliseconds += data) > 1000)
           throw Error("原生wait每阶段合计最多1000毫秒");
       } else if (task.type === "assert") {
-        if (task.enabled === 1 && phase !== "after")
-          throw Error("启用原生断言仅支持后置响应阶段");
         data = normalizeNativeAssertionData(task.data, {
           enabled: task.enabled === 1,
         });
+        if (
+          task.enabled === 1 &&
+          phase !== "after" &&
+          !isNativeVariableAssertion(data.type)
+        )
+          throw Error("启用响应断言仅支持后置响应阶段");
       } else if (task.type === "pickVars") {
         if (task.enabled === 1 && phase !== "after")
           throw Error("启用pickVars仅支持后置响应阶段");
