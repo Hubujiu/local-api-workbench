@@ -116,9 +116,14 @@ for (const transport of ["http", "stdio"])
           return value;
         };
         const source = nativeProtocolFixture({
-          ws: `ws://127.0.0.1:${peer.address().port}/echo?x=one`,
+          ws: `ws://127.0.0.1:${peer.address().port}/echo?x=one&x=one&raw=%2f`,
         });
         source.apis = [source.apis[0]];
+        source.apis[0].request.query.parameter.push(
+          { key: "x", value: "one", is_checked: 1 },
+          { key: "raw", value: "/", is_checked: 1 },
+          { key: "extra", value: "雪 /+", is_checked: 1 },
+        );
         source.apis[0].request.header.parameter = [
           { key: "Accept-Language", value: "zh-CN", is_checked: 1 },
         ];
@@ -127,6 +132,12 @@ for (const transport of ["http", "stdio"])
           name: "Unicode",
           request: { mode: "text", raw: "雪😀 second" },
           response: { mode: "text", raw: "inert example" },
+        });
+        source.apis[0].message.push({
+          param_id: "empty",
+          name: "Empty text",
+          request: { mode: "text", raw: "" },
+          response: { mode: "text", raw: "inert empty example" },
         });
         const original = structuredClone(source),
           p = await app.store.create("source"),
@@ -145,6 +156,8 @@ for (const transport of ["http", "stdio"])
         }
         assert.equal(seen.length, 0, "conversion never executes");
         const saved = await app.store.get(current.id);
+        assert.equal(saved.protocols[2].sendEmptyMessage, true);
+        assert.equal(saved.protocols[2].templateMode, undefined);
         assert.deepEqual(
           saved.settings.apipostProtocolSources[0].source.message,
           source.apis[0].message,
@@ -161,7 +174,7 @@ for (const transport of ["http", "stdio"])
           assert.equal(run.status, "passed", JSON.stringify(run));
           assert.equal(run.recordSaved, true);
           assert.deepEqual(run.snapshot.steps, plan.steps);
-          assert.equal(run.results.length, 2);
+          assert.equal(run.results.length, 3);
           for (const result of run.results) {
             assert.equal(result.status, "passed");
             assert.equal(result.protocolResult.result.messages.length, 1);
@@ -241,20 +254,24 @@ for (const transport of ["http", "stdio"])
           restored = await call("/api/restore", { document: backup }, 201);
         await stop();
         app = await createApp({ root, port: 0 });
-        assert.equal(seen.length, 6, "restart does not replay");
+        assert.equal(seen.length, 9, "restart does not replay");
         verify(await cli(root, restored.id, plan.id));
-        assert.equal(seen.length, 8);
+        assert.equal(seen.length, 12);
         assert.deepEqual(
           seen.map((v) => v.text),
           Array.from({ length: 4 }, () => [
             "wire-payload",
             "雪😀 second",
+            "",
           ]).flat(),
         );
         for (const item of seen) {
           assert.equal(item.binary, false);
           assert.equal(item.header, "zh-CN");
-          assert.equal(item.url, "/echo?x=one");
+          assert.equal(
+            item.url,
+            "/echo?x=one&x=one&raw=%2f&extra=%E9%9B%AA+%2F%2B",
+          );
           assert.equal(item.auth, undefined);
         }
         const disk = await new Store(root).get(restored.id);

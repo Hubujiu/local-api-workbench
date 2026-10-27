@@ -27,6 +27,12 @@ function fixture() {
     request: { mode: "text", raw: "雪😀 / second" },
     response: { mode: "text", raw: "inert second response" },
   });
+  ws.message.push({
+    param_id: "empty",
+    name: "Empty text",
+    request: { mode: "text", raw: "" },
+    response: { mode: "text", raw: "inert empty response" },
+  });
   return source;
 }
 function imported(source) {
@@ -40,9 +46,12 @@ test("plaintext WebSocket complete ordered message groups roundtrip in both nati
       initial = imported(source),
       before = structuredClone(initial);
     let current = initial;
+    assert.equal(initial.protocols[2].sendEmptyMessage, true);
     for (let generation = 0; generation < 2; generation++) {
       current = imported(exporter(current));
       verifyProtocolDefinitions(initial.protocols, current.protocols);
+      assert.equal(current.protocols[2].sendEmptyMessage, true);
+      assert.equal(current.protocols[2].templateMode, undefined);
       assert.deepEqual(
         current.settings.apipostProtocolSources[0].source.message,
         source.apis[0].message,
@@ -59,6 +68,7 @@ test("WS export rejects incomplete edited credentialed unsupported and historica
     (p) => p.protocols.push({ ...p.protocols[0], id: "extra" }),
     (p) => (p.protocols[0].message = "edited"),
     (p) => (p.protocols[0].name = "edited"),
+    (p) => (p.protocols[0].handshake.requiredHeaders = ["authorization"]),
     (p) => p.settings.apipostProtocolSources.pop(),
     (p) =>
       (p.settings.apipostProtocolSources[0].source.config.reconnect_num = 0),
@@ -66,12 +76,20 @@ test("WS export rejects incomplete edited credentialed unsupported and historica
       (p.settings.apipostProtocolSources[0].source.url = "wss://127.0.0.1:1/"),
     (p) =>
       (p.settings.apipostProtocolSources[0].source.url = "http://127.0.0.1:1/"),
+    (p) =>
+      (p.settings.apipostProtocolSources[0].source.url =
+        "https://127.0.0.1:1/"),
+    (p) =>
+      (p.settings.apipostProtocolSources[0].source.url =
+        "ws://user:pass@127.0.0.1:1/"),
+    (p) => (p.settings.apipostProtocolSources[0].source.url = "ws://{{host}}/"),
     (p) => (p.settings.apipostProtocolSources[0].source.url += "#fragment"),
     (p) =>
       (p.settings.apipostProtocolSources[0].source.message[0].request.raw =
         "{{message}}"),
-    (p) =>
-      (p.settings.apipostProtocolSources[0].source.message[0].request.raw = ""),
+    (p) => delete p.protocols[2].sendEmptyMessage,
+    (p) => (p.protocols[2].sendEmptyMessage = false),
+    (p) => (p.protocols[2].templateMode = "literal"),
     (p) =>
       delete p.settings.apipostProtocolSources[0].source.request.header
         .parameter[0].value,
@@ -101,4 +119,18 @@ test("WS export rejects incomplete edited credentialed unsupported and historica
   );
   for (const exporter of exporters)
     assert.throws(() => exporter(left), /原生协议/);
+  for (const kind of ["header", "cookie"]) {
+    const credentialed = fixture();
+    credentialed.apis[0].request[kind].parameter.push({
+      key: kind === "header" ? "Authorization" : "session",
+      value: "source-only-secret",
+      is_checked: 1,
+    });
+    const p = imported(credentialed),
+      before = structuredClone(p);
+    assert.equal(JSON.stringify(p).includes("source-only-secret"), false);
+    for (const exporter of exporters)
+      assert.throws(() => exporter(p), /原生协议/);
+    assert.deepEqual(p, before);
+  }
 });

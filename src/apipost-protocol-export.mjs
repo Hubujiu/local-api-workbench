@@ -129,16 +129,22 @@ export function prepareProtocolExport(project, { projectId, id }) {
         for (const message of node.message) {
           if (
             typeof message?.request?.raw !== "string" ||
-            !message.request.raw ||
             message.request.raw.includes("{{")
           )
-            fail("WS非空字面量文本消息");
+            fail("WS字面量文本消息");
           const defId = resource(
               "protocol",
               node.target_id + ":" + message.param_id,
             ),
             definition = byId.get(defId);
           if (!definition || covered.has(defId)) fail("缺失/重用的WS活动定义");
+          // Empty native text means an actual empty frame, not the canonical
+          // legacy receive-only default. Require the importer-owned intent flag.
+          if (
+            message.request.raw === "" &&
+            definition.sendEmptyMessage !== true
+          )
+            fail("WS空文本发送意图");
           covered.add(defId);
           if (definition.handshake?.requiredHeaders?.length)
             fail("已移除的运行时握手凭据");
