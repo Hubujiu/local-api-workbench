@@ -1,8 +1,10 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
 } from "./imported-native-task-source.mjs";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -212,6 +214,8 @@ export class Store {
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
+    for (const run of p.runs || [])
+      if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,
@@ -258,6 +262,11 @@ export class Store {
         request.importedNativeTaskSource = normalizeImportedNativeTaskSource(
           request.importedNativeTaskSource,
         );
+      if (request.nativeMock !== undefined) {
+        if (request.mockRules?.length)
+          throw Error("原版Mock与普通Mock规则不能混用");
+        request.nativeMock = normalizeNativeMock(request.nativeMock);
+      }
     }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)

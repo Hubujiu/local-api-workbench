@@ -23,11 +23,19 @@ export function scriptFailureDetails(error) {
   const diagnostics = {};
   const source = error.scriptDiagnostics || {};
   const metrics = error.activityMetrics || {};
+  const cpu = error.activityCPUTimeUs || {};
   for (const [key, max] of Object.entries({
     activityBudgetMs: 250,
     fakerCalls: 1001,
     timerCount: 101,
     requestCount: 11,
+    compatibilityCPUUs: 60000000,
+    functionLibraryCPUUs: 60000000,
+    userScriptCPUUs: 60000000,
+    microtaskCPUUs: 60000000,
+    callbackCPUUs: 60000000,
+    promiseStateCPUUs: 60000000,
+    serializationCPUUs: 60000000,
     compatibilityMs: 60000,
     fakerLoadMs: 60000,
     functionLibraryMs: 60000,
@@ -37,8 +45,9 @@ export function scriptFailureDetails(error) {
     promiseStateMs: 60000,
     serializationMs: 60000,
   })) {
-    const value =
-      key.endsWith("Ms") && key !== "activityBudgetMs"
+    const value = key.endsWith("CPUUs")
+      ? (cpu[key.replace("CPUUs", "Us")] ?? source[key])
+      : key.endsWith("Ms") && key !== "activityBudgetMs"
         ? (metrics[key] ?? source[key])
         : source[key];
     if (
@@ -93,6 +102,7 @@ export function scriptFailureDetails(error) {
               requestCount: entry.requestCount,
             },
             activityMetrics: entry.activityMetrics,
+            activityCPUTimeUs: entry.activityCPUTimeUs,
           }).scriptDiagnostics || {};
         const row = { stageIndex: entry.stageIndex, ...counters };
         for (const key of ["activityMs", "elapsedMs"]) {

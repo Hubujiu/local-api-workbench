@@ -1,3 +1,4 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
@@ -8,6 +9,8 @@ import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
+import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -187,6 +190,14 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   validateRequestTaskSource(r);
+  if (
+    r.nativeMock !== undefined &&
+    r.nativeMockRoute !== undefined &&
+    r.nativeMock.sourceTargetId !== r.nativeMockRoute.sourceTargetId
+  )
+    throw Error("Mock路由与响应来源接口不一致");
+  if (r.nativeMock !== undefined && r.mockRules?.length)
+    throw Error("原版Mock与普通Mock规则不能混用");
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -329,6 +340,12 @@ export function normalizeRequest(r = {}) {
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    ...(r.nativeMockRoute === undefined
+      ? {}
+      : { nativeMockRoute: normalizeNativeMockRoute(r.nativeMockRoute) }),
+    ...(r.nativeMock === undefined
+      ? {}
+      : { nativeMock: normalizeNativeMock(r.nativeMock) }),
     mockRules: r.mockRules || [],
     schema: r.schema ?? {},
     responses: r.responses || [],
@@ -388,6 +405,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -396,6 +414,9 @@ export function snapshotPlan(plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   const snapshot = {
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -443,7 +464,10 @@ export function snapshotPlan(plan) {
               },
     ),
   };
-  let sourceBytes = 0;
+  let sourceBytes =
+    importedNativeFlowSource === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
   for (const step of snapshot.steps) {
     const source = step.request?.importedNativeTaskSource;
     if (source !== undefined)
@@ -474,6 +498,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  readImportedNativeFlowSource(plan);
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
@@ -1795,9 +1820,13 @@ export function restoreProject(document) {
   for (const request of document.requests) validateRequestTaskSource(request);
   for (const item of document.cases || [])
     validateRequestTaskSource(item.request);
-  for (const plan of document.plans || [])
+  for (const plan of document.plans || []) {
+    readImportedNativeFlowSource(plan);
     for (const step of plan.steps || [])
       validateRequestTaskSource(step.request);
+  }
+  for (const run of document.runs || [])
+    if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

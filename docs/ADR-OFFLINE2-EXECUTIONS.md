@@ -212,3 +212,76 @@ while native flows with/without independent step scripts execute real HTTP,
 persist only step variables, restore and restart without inheriting the API
 pipeline. That cross-feature test belongs to the combined validation snapshot,
 not a claim that this PR alone implements the separate database-task feature.
+
+## MCP-saved flows: inert comparison baseline
+
+A bounded static inspection of the already available Offline2 source establishes
+that saved MCP flows use `source: mcp` and optional `mcp_name`,
+`mcp_description`, `mcp_environment_id`, step `mcp_input` and
+`mcp_deleted_body_keys`. These are historical AI-versus-human comparison data.
+The saved-flow runner reads the current `input`, explicit step scripts,
+`api_snapshot` and actual `environment_id`, not the comparison baseline. This is
+static evidence, not a new original-application runtime observation. No vendor
+implementation or raw bundle is included here.
+
+The importer maps native `mcp` to canonical plan source `ai`, while retaining the
+native source in `importedNativeFlowSource` version 1. Ordinary manual/AI flows
+without comparison data keep their previous shape. The new source record contains
+only source project/flow IDs, optional comparison strings and step baseline data;
+never another raw API snapshot. Each `sourceStepId` / `importedStepId` pair is a
+**historical import-time mapping**, not a binding to current steps. Reordering,
+deleting or cloning current steps does not reinterpret or discard that history.
+Plan edits, snapshots, backup restore and Store writes validate/preserve it.
+Run provenance remains stamped by the actual HTTP/CLI/MCP entry point.
+
+The closed baseline input envelope supports body and Query/Path/Header/Cookie
+plain JSON data. It never invokes the normal input applicator, interpolates values,
+merges an old body, deletes a key, falls back to an old environment or activates an
+API task. Historical authentication only accepts exact `noauth`/`none` objects;
+credential-bearing/unsupported auth, target/file/TLS/connection/session/grant
+fields reject explicitly, rather than being discarded or acquiring authority.
+Body/header/cookie values may still contain user-provided sensitive data: this is
+not a general-purpose secret scrubber. The actual current input/auth contract is
+unchanged. An explicit existing `environment_id` is always required.
+
+Each baseline input is at most 64KiB, 5,000 JSON nodes and 20 levels deep. Maps and
+arrays contain at most 1,000 members; historical deleted-key arrays have at most
+1,000 strings of 1,000 UTF-8 bytes and 64KiB total. Optional metadata bounds are
+800/40,000/800 UTF-8 bytes for name/description/environment respectively. The
+source record is closed, rejects accessors, hidden/symbol keys, exotic objects,
+non-finite/non-JSON values and malformed UTF-16, and shares the existing 4MiB
+plan-provenance budget. Directory limits remain 4MiB, 50 flows and 200 steps.
+Omitted and explicitly empty baseline fields remain distinguishable.
+
+Full project JSON backup preserves the validated history. This independent PR
+base does not implement native reverse export. Combined native directory writers
+must explicitly reject plans carrying `importedNativeFlowSource` until they have
+a tested lossless mapping; silently dropping this field is not a round trip.
+Native API-only JSON export already rejects plans and must continue doing so.
+
+### Evidence and acceptance for the MCP comparison slice
+
+The bounded static references are Unicode character offsets after universal-newline
+text decoding, not byte offsets:
+
+- `1550.0381c5a8bb4d.js`, SHA-256
+  `e3ebd9a4f65ffc2ef0fdb1efa228a198eac9334b23d3bb8e8dedbfdbaca30adb`:
+  input envelope at 84206; comparison-body reduction at 84626; step baseline
+  assignment at 89171; MCP metadata assignment at 91382.
+- `1996.33c788c75f64.js`, SHA-256
+  `150589fb1018fb58659d0c6d94179355619158939066469226190200b18416d6`:
+  MCP source assignment at 18272; saved-flow execution projection at 20455.
+- `1277.59ec09176043.js`, SHA-256
+  `add06658b9b7aca3cec15e265b10775836eed26d94319d0c345f8c8c62e38d70`:
+  comparison UI at 44673–45118; manual editing of current input at 55834.
+
+The tests deliberately mutate the previously approved directory fixture into
+synthetic MCP-shaped data; they are not newly captured original MCP runs.
+Real loopback CLI tests prove current-input and actual-environment precedence,
+absent-input snapshot behavior, 503/200 continuation, API-task isolation, durable
+CLI origin, backup/restore/restart and unrelated-project isolation. Authenticated
+HTTP tests cover import, clone with fresh step IDs, reorder/delete, source-only
+edits, project PUT, invalid-PUT atomicity, real execution and restored execution.
+Cancelling a held real request records cancellation without dispatching a later
+step; its saved origin is manual, not imported MCP. Source-only edits change the
+snapshot hash, but not the wire request. No test grants new MCP authority.

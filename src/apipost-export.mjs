@@ -1,3 +1,4 @@
+import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
@@ -284,7 +285,6 @@ export function exportApipost(project) {
       "assertions",
       "extract",
       "mockRules",
-      "nativeMock",
       "openapiOperation",
       "attributes",
       "proxy",
@@ -392,6 +392,10 @@ export function exportApipost(project) {
         post_tasks: tasks(r, "after"),
       },
       response: exportApipostResponses(r),
+      ...exportApipostMock(r.nativeMock, {
+        projectId,
+        targetId: apipostExportId("a", r.id),
+      }),
     });
   }
   const document = {

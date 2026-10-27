@@ -1,3 +1,5 @@
+import { nativeMockRouteFromSource } from "./native-mock-route.mjs";
+import { prepareNativeMock } from "./apipost-native-mock.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -149,16 +151,26 @@ function responseHeaderMap(value) {
             "description",
             "field_type",
             "not_null",
+            "schema",
           ].includes(k),
       ) ||
       row.is_checked !== 1 ||
       (row.description !== undefined && row.description !== "") ||
-      (row.field_type !== undefined && row.field_type !== "String") ||
-      (row.not_null !== undefined && ![-1, 0].includes(row.not_null)) ||
+      (row.field_type !== undefined &&
+        !["String", "string"].includes(row.field_type)) ||
+      (row.not_null !== undefined && ![-1, 0, 1].includes(row.not_null)) ||
       typeof row.key !== "string" ||
       typeof row.value !== "string"
     )
       throw Error("Apipost响应示例头仅支持启用的普通文本行；其他语义不会丢弃");
+    if (
+      row.schema !== undefined &&
+      (!object(row.schema) ||
+        Object.keys(row.schema).some((key) => key !== "type") ||
+        row.schema.type !== "string")
+    )
+      throw Error("Apipost响应头仅支持普通字符串Schema");
+    if (row.key === "" && row.value === "") continue;
     const name = row.key.toLowerCase();
     if (names.has(name)) throw Error("Apipost响应头名称重复");
     names.add(name);
@@ -341,7 +353,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     reject(node.children, "嵌套资源");
     if (node.target_type === "folder") reject(node.attribute_info, "目录属性");
     reject(node.tags, "接口标签");
-    reject(node.ai_expect?.list, "AI条件Mock");
+    if (
+      node.target_type === "folder" &&
+      (node.ai_expect || node.nativeMockConfig)
+    )
+      throw Error("目录Mock配置不支持");
     if (node.mock_ip_white_list_enable && node.mock_ip_white_list_enable !== -1)
       throw Error("Apipost Mock IP白名单需手工迁移");
   }
@@ -686,6 +702,23 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
     );
+    const route = nativeMockRouteFromSource(row.node, source.project_id);
+    if (route) request.nativeMockRoute = route;
+    else
+      request.importNotes.push(
+        "源标识或URL不满足原生Mock路径路由约束；保留HTTP定义与原接口ID的Mock入口，不启用路径别名。",
+      );
+    const nativeMock = prepareNativeMock(row.node, {
+      projectId: source.project_id,
+      headers: responseHeaderMap,
+      rewriteSchema: models.rewrite,
+    });
+    if (nativeMock) {
+      request.nativeMock = nativeMock;
+      request.importNotes.push(
+        "原版条件Mock以固定HTTP 200和优先JSON Schema策略迁移；期望状态码仅保留为来源元数据。运行时保留工作台接口ID地址，并支持工作台项目ID下的原生方法/路径路由；未知路径失败而不返回伪成功。IP限制/其他返回策略不自动丢弃或启用。",
+      );
+    }
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
       request.importedScriptTasks = normalizeImportedScriptTasks({

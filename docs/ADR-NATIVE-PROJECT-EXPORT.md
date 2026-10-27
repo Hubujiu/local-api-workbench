@@ -160,3 +160,42 @@ represent recoverable Workbench resource state. Full project backup is distinct.
 Independent negative tests reproduced both omissions before the fix; pure native
 roundtrip and authenticated HTTP/disk/backup tests cover the guard and unchanged
 state. This is not new original-UI roundtrip evidence.
+
+## Bounded conditional Mock reverse interchange (WIP)
+
+JSON and directory definitions now serialize native conditional Mock data without
+evaluating conditions, sampling schemas or running scripts. Generated data is
+read back through the existing native importer and compared before returning.
+Rules retain order, IDs, names, enable state, AND conditions and literal values;
+sourceStatus is retained while runtime remains fixed HTTP 200. Headers, delays,
+fallback, inline object/array schemas and raw JSON object/array bodies survive.
+Inline rule examples avoid altering the separate request documentation examples.
+Condition/example IDs are stable; directory output uses final project/API IDs and
+one settings/mock\_<target>.json configuration rather than conflicting mirrors.
+
+Scalar/raw-XML serialization, model/external references, non-JSON raw bodies,
+ordinary/native mixed rules, global custom Mock-library dependencies and paths
+that cannot reverse faithfully reject. Existing unsupported project resources
+still reject. Retained mock_inner_rules and execution archives are not consumed
+per-API Mock config and cannot be discarded as redundant. No original GUI or
+XML/engine-special audit was performed for this feature.
+
+settings.mockEnabled=false previously disappeared during export, reopening Mock
+serving on re-import. No verified native project-wide equivalent exists, so both
+exports now refuse this state. smartMockBuiltins=false, builtinDictionary=false
+and recursiveFolderScopes=false are neutral defaults; empty resource collections
+remain accepted. mockSeed=0 was already rejected, never silently discarded. True
+recursiveFolderScopes cannot affect the supported export subset because inherited
+settings are rejected independently. Future unknown settings are not thereby
+assumed neutral.
+
+Focused acceptance covers authenticated HTTP exports; real hit/fallback/disabled
+rules, duplicate query and combined header/bracket-body POST conditions; declared
+404 versus executed200; raw JSON/schema responses; repeated dual-format roundtrip;
+document examples and source immutability; disabled API roundtrip; project
+isolation, backup restore and restart. An invalid regex literal is transported
+inertly, not executed. The dependency-only base joins native directory import,
+conditional Mock and verified runtime/CI prerequisites without root integration.
+MCP export is absent from this isolated baseline and requires root integration
+acceptance rather than importing an unrelated MCP feature. Exact-commit CI is
+required before acceptance; local workflow results are not full compatibility.
