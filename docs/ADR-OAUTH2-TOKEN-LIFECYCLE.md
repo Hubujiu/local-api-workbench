@@ -16,3 +16,24 @@ Keep the existing authorization-code + PKCE S256, client-credentials and refresh
 `tests/oauth-lifecycle.test.mjs` uses fictional credentials and real loopback sockets: strict independently encoded Basic/body/none providers, all supported grants through owner HTTP, PKCE hash/redirect verification, explicit bearer use, no project mutation, ordinary Basic regression, pre-abort/no I/O, callback replay, in-flight cancellation/expiry/shutdown, actual peer socket closure, unrelated-flow isolation with out-of-order completion, ten-flow/exchange slot limits, owner token/callback disconnect, invalid/oversized responses, redirect/no-leak and failure/no-automatic-retry. A real 15-second held POST distinguishes timeout from cancellation. An explicit owner save/export/restore/restart test then proves the saved bearer works without automatic reacquisition, while another project remains unchanged. Existing OAuth2, OAuth1, HTTP/runtime and server tests are targeted regression coverage; not a full-suite or real-provider compatibility claim.
 
 No frontend, real accounts, authorization popup, original client/EULA interaction, deployment or main/develop merge is part of this change. Tokens remain unsaved until the owner explicitly saves a request using the existing project workflow.
+
+## Strict callback form encoding
+
+The owner callback validates raw query percent encoding and UTF-8 before
+`URLSearchParams` can repair invalid bytes. For example, `%FF` must not become
+U+FFFD and be sent as a different authorization code. Malformed parameter names
+and extension values are rejected as malformed form input as well; valid unknown
+extensions are still ignored. This parsing check runs before the existing duplicate
+field guard and before the manager claims a state. Parsing/duplicate failures leave
+a pending flow usable; validly decoded missing codes, control characters and
+provider errors retain the existing state-consuming failure behavior.
+
+Valid UTF-8, including explicitly encoded U+FFFD, is accepted. Form `+` remains a
+space, `%2B` remains a literal plus and `%25FF` remains the literal text `%FF`.
+No token fields, transport limits, grants, retries, caller ownership or persistence
+rules change. `tests/oauth2-callback-encoding.test.mjs` uses raw HTTP callback
+request targets and an actual loopback token server to verify wire fidelity,
+PKCE, no POST/no project mutation on rejected syntax, replay and compatible
+semantic-error handling. The pre-fix raw `%FF` callback actually returned 200 and
+posted `code=%EF%BF%BD`; that RED evidence is retained separately. The normal
+lifecycle and saved-token restore/restart workflow files remain regression gates.

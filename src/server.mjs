@@ -222,6 +222,14 @@ export async function createApp({
         return json(res, 200, { token, version: "0.1.0" });
       }
       if (u.pathname === "/oauth/callback" && req.method === "GET") {
+        // URLSearchParams repairs malformed percent/UTF-8 input. Reject raw
+        // encoding errors before that repaired value can consume state or be
+        // exchanged as a different credential. Valid encoded U+FFFD is allowed.
+        try {
+          decodeURIComponent(u.search.replace(/\+/g, " "));
+        } catch {
+          throw Error("OAuth 回调参数编码无效");
+        }
         for (const key of ["state", "code", "error", "error_description"])
           if (u.searchParams.getAll(key).length > 1)
             throw Error("OAuth 回调参数重复");
