@@ -158,6 +158,22 @@ export async function createApp({
           : childSignal,
       ),
     );
+  // OAuth1 exchanges belong to the initiating response, not merely its body.
+  const withOAuth1Caller = async (req, res, operation) => {
+    const controller = new AbortController();
+    const abort = () => {
+      if (!res.writableFinished) controller.abort();
+    };
+    req.once("aborted", abort);
+    res.once("close", abort);
+    if (req.aborted || res.destroyed) abort();
+    try {
+      return await operation(controller.signal);
+    } finally {
+      req.off("aborted", abort);
+      res.off("close", abort);
+    }
+  };
   let server;
   const json = (res, status, data) => {
     res.writeHead(status, {
@@ -203,6 +219,36 @@ export async function createApp({
             error: "请使用启动时生成的本地链接打开工作台",
           });
         return json(res, 200, { token, version: "0.1.0" });
+      }
+      if (/^\/oauth1\/callback\/[a-f0-9]{48}$/.test(u.pathname)) {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'none'; frame-ancestors 'none'",
+        );
+        if (req.method !== "GET") {
+          res.setHeader("Allow", "GET");
+          res.writeHead(405);
+          return res.end("OAuth1 callback requires GET.");
+        }
+        try {
+          if (u.origin !== base || u.hash || !req.url.startsWith("/"))
+            throw Error("Invalid callback target");
+          await withOAuth1Caller(req, res, (signal) =>
+            oauth1.callback(u.pathname, u.search, signal),
+          );
+          res.writeHead(200);
+          return res.end(
+            "OAuth1 authorization completed. Return to Local API Workbench.",
+          );
+        } catch {
+          // Never reflect verifier, temporary credentials, provider errors or local token.
+          res.writeHead(400);
+          return res.end(
+            "OAuth1 callback failed or expired. Return to Local API Workbench.",
+          );
+        }
       }
       if (u.pathname === "/oauth/callback" && req.method === "GET") {
         await oauth.complete(Object.fromEntries(u.searchParams));
@@ -362,9 +408,30 @@ export async function createApp({
           }
         }
         if (u.pathname === "/api/oauth1/start" && req.method === "POST")
-          return json(res, 200, await oauth1.start(await body(req)));
+          return json(
+            res,
+            200,
+            await withOAuth1Caller(req, res, async (signal) =>
+              oauth1.start(await body(req), base, signal),
+            ),
+          );
         if (u.pathname === "/api/oauth1/complete" && req.method === "POST")
-          return json(res, 200, await oauth1.complete(await body(req)));
+          return json(
+            res,
+            200,
+            await withOAuth1Caller(req, res, async (signal) =>
+              oauth1.complete(await body(req), signal),
+            ),
+          );
+        if (
+          parts[1] === "oauth1" &&
+          parts[2] === "status" &&
+          parts.length === 4 &&
+          req.method === "GET"
+        )
+          return json(res, 200, oauth1.status(parts[3]));
+        if (u.pathname === "/api/oauth1/cancel" && req.method === "POST")
+          return json(res, 200, oauth1.cancel((await body(req)).id));
         if (u.pathname === "/api/oauth/start" && req.method === "POST")
           return json(res, 200, oauth.start(await body(req), base));
         if (
@@ -1395,6 +1462,12 @@ export async function createApp({
       json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
     }
   });
+  // Abort owned provider requests when shutdown begins, before close waits for them.
+  const oauth1CloseServer = server.close;
+  server.close = function (...args) {
+    oauth1.close();
+    return oauth1CloseServer.apply(this, args);
+  };
   server.on("close", () => {
     protocolSessions.close();
     socketioSessions.close();
