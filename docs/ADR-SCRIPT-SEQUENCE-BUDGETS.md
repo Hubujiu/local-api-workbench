@@ -51,3 +51,32 @@ scope at https://nodejs.org/api/process.html#processthreadcpuusagepreviousvalue 
 
 This change improves the next failure's evidence; it is not a performance fix or
 proof that CI scheduling caused the observed timeout.
+
+## Terminal serialization budget enforcement (2026-10-27)
+
+A single-script completion previously charged serialization, QuickJS-to-host
+string conversion and host JSON parsing in `activityMs`, but returned success
+without checking that final charge. Native JSON/string operations can finish
+between QuickJS interrupt checks. Ordinary bounded output reproduced the gap:
+`pm.variables.set("payload", "x".repeat(900000))` returned 27/27/30 ms under
+three explicit 20 ms budgets, while staying below the 1 MiB output cap. A formal
+regression first failed with 33 ms returned for a 16 ms budget. This is a real
+completion-contract defect, not an assertion that prior CI timeouts had this cause.
+
+The worker now checks the exact final charged `activityMs` before publishing a
+success outcome. Exceeding the requested budget takes the existing error and
+cleanup path; no successful variables, scopes or response overrides escape.
+The limit remains active wall time, not CPU, with the same 250 ms / 2 s / 16 MiB
+maxima. No counters are replenished and no serialization or asynchronous safety
+check is removed. Existing quota and serialization-content errors retain their
+checks and messages. The fix does not claim preemption of host native operations;
+it rejects a late result rather than accepting it.
+
+The regression uses normal isolated workers and several explicitly reduced
+budgets. Scheduling can cause an earlier legitimate timeout, or a sufficiently
+fast machine can finish within budget; every success must satisfy the charged
+activity invariant, and timeout is not accepted as proof of content validation.
+Separate default-budget success, output-size/circular-value rejection, sequence
+failure and fresh-worker isolation checks retain their specific expectations.
+Initial focused validation: 10/10 terminal and sequence budget cases pass. Broader
+related checks and exact platform CI remain pending at this checkpoint.

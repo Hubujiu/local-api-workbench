@@ -721,6 +721,11 @@ try {
         serializationStart,
     },
   };
+  // Native JSON/string conversion can finish between QuickJS interrupt checks.
+  // The already charged serialization and host parsing tail must not publish
+  // a successful result after consuming more than the requested active budget.
+  if (outcome.result.activityMs > workerData.activityBudgetMs)
+    throw Error("脚本执行超时");
 } catch (error) {
   outcome = {
     error: error.message,
