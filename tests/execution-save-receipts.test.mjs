@@ -357,6 +357,8 @@ test("HTTP plan retains completed execution and a typed recoverable record recei
   });
   assert.equal(status, 200);
   assert.equal(value.status, "passed");
+  assert.equal(value.environmentId, f.project.environments[0].id);
+  assert.equal(value.snapshot.environmentId, "");
   assert.equal(value.results[0].response.status, 200);
   assert.equal(value.results[0].response.body, '{"receipt":"receipt-1"}');
   assertUnconfirmed(value, f.project.id);
@@ -368,6 +370,7 @@ test("HTTP plan retains completed execution and a typed recoverable record recei
   assert.equal(recovered.runs.length, 1);
   assert.equal(recovered.runs[0].id, value.attemptedRecordId);
   assert.deepEqual(recovered.runs[0].results, value.results);
+  assert.equal(recovered.runs[0].environmentId, value.environmentId);
   assert.equal(f.hits(), 1);
 });
 
