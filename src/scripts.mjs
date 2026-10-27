@@ -21,35 +21,15 @@ import { Worker } from "node:worker_threads";
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
 
-/** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
-export function runScript(
-  code,
-  input,
-  {
-    signal,
-    cookieSession,
-    databaseQuery,
-    databaseOperations: suppliedDatabaseOperations,
-    responseExtractions: suppliedResponseExtractions,
-    activityBudgetMs = 250,
-    wallBudgetMs = 2000,
-    requestLimit = 10,
-    timerLimit = 100,
-    fakerLimit = 1000,
-    jobLimit = 10000,
-    assertionLimit = 1000,
-  } = {},
-) {
-  const responseExtractions = compilePickVarsOperations(
-    suppliedResponseExtractions,
-  );
-  if (responseExtractions.length && !input.response)
-    throw Error("pickVars需要后置响应");
-  const databaseOperations = normalizeDatabaseOperations(
-    suppliedDatabaseOperations,
-  );
-  if (databaseOperations.length && typeof databaseQuery !== "function")
-    throw Error("此执行入口未授权数据库任务");
+function scriptBudgets({
+  activityBudgetMs = 250,
+  wallBudgetMs = 2000,
+  requestLimit = 10,
+  timerLimit = 100,
+  fakerLimit = 1000,
+  jobLimit = 10000,
+  assertionLimit = 1000,
+} = {}) {
   if (
     !Number.isFinite(activityBudgetMs) ||
     activityBudgetMs <= 0 ||
@@ -70,6 +50,45 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  return {
+    activityBudgetMs,
+    wallBudgetMs,
+    requestLimit,
+    timerLimit,
+    fakerLimit,
+    jobLimit,
+    assertionLimit,
+  };
+}
+
+/** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
+export function runScript(code, input, options = {}) {
+  const {
+    signal,
+    cookieSession,
+    databaseQuery,
+    databaseOperations: suppliedDatabaseOperations,
+    responseExtractions: suppliedResponseExtractions,
+  } = options;
+  const responseExtractions = compilePickVarsOperations(
+    suppliedResponseExtractions,
+  );
+  if (responseExtractions.length && !input.response)
+    throw Error("pickVars需要后置响应");
+  const databaseOperations = normalizeDatabaseOperations(
+    suppliedDatabaseOperations,
+  );
+  if (databaseOperations.length && typeof databaseQuery !== "function")
+    throw Error("此执行入口未授权数据库任务");
+  const {
+    activityBudgetMs,
+    wallBudgetMs,
+    requestLimit,
+    timerLimit,
+    fakerLimit,
+    jobLimit,
+    assertionLimit,
+  } = scriptBudgets(options);
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -324,6 +343,7 @@ export function runScript(
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
                 activityOperation: completedMessage.activityOperation,
                 activityMetrics: completedMessage.activityMetrics,
+                activityCPUTimeUs: completedMessage.activityCPUTimeUs,
               })
             : null,
           completedMessage.result,
@@ -350,13 +370,14 @@ export async function runScriptSequence(stages, input, options = {}) {
     stages.reduce((sum, stage) => sum + stage.code.length, 0) > 100000
   )
     throw Error("脚本阶段格式无效，最多34阶段、源码合计100000字符");
-  const deadline = performance.now() + 2000;
-  let remaining = 250,
-    requestLimit = 10,
-    timerLimit = 100,
-    fakerLimit = 1000,
-    jobLimit = 10000,
-    assertionLimit = 1000,
+  const budgets = scriptBudgets(options);
+  const deadline = performance.now() + budgets.wallBudgetMs;
+  let remaining = budgets.activityBudgetMs,
+    requestLimit = budgets.requestLimit,
+    timerLimit = budgets.timerLimit,
+    fakerLimit = budgets.fakerLimit,
+    jobLimit = budgets.jobLimit,
+    assertionLimit = budgets.assertionLimit,
     state = structuredClone(input);
   state.responseOverride = null;
   state.responseOriginals = null;
@@ -408,6 +429,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       timerCount: result.usage.timers,
       requestCount: result.networkRequests.length,
       activityMetrics: { ...result.activityMetrics },
+      activityCPUTimeUs: { ...result.activityCPUTimeUs },
     });
     if (result.responseOverride) {
       state.responseWire ??= structuredClone(input.response);
@@ -485,6 +507,6 @@ export async function runScriptSequence(stages, input, options = {}) {
     logs,
     tests,
     networkRequests,
-    activityMs: 250 - remaining,
+    activityMs: budgets.activityBudgetMs - remaining,
   };
 }
