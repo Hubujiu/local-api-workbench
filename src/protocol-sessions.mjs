@@ -115,6 +115,7 @@ export class ProtocolSessions {
     if (input.templateMode === "variables")
       throw Error("协议模板会话须由项目入口解析");
     validateProtocolTemplate(input);
+    protocolRequestOptions(input);
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {

@@ -207,3 +207,51 @@ test("native query mirrors consume multiplicity without re-encoding original spe
     "ws://127.0.0.1:1/?x=a+b&x=a%20b&literal=%2b&x=a+b",
   );
 });
+
+test("WebSocket legacy composed identities reject same-batch and archived cross-batch collisions", () => {
+  const source = nativeProtocolFixture();
+  const a = source.apis[0],
+    b = structuredClone(a);
+  a.target_id = "a:b";
+  a.message[0].param_id = "c";
+  b.target_id = "a";
+  b.message[0].param_id = "b:c";
+  source.apis = [a, b];
+  const p = project(),
+    empty = structuredClone(p);
+  assert.throws(() => importIntoProject(p, source), /身份拼接歧义/);
+  assert.deepEqual(p, empty);
+  importIntoProject(p, { ...source, apis: [a] });
+  const saved = structuredClone(p);
+  importIntoProject(p, { ...source, apis: [a] });
+  assert.deepEqual(p, saved);
+  assert.throws(
+    () => importIntoProject(p, { ...source, apis: [b] }),
+    /身份拼接歧义/,
+  );
+  assert.deepEqual(p, saved);
+  const sse = nativeProtocolFixture().apis[3];
+  sse.target_id = "a:b:c";
+  assert.throws(
+    () => importIntoProject(p, { ...source, apis: [sse] }),
+    /身份拼接歧义/,
+  );
+  assert.deepEqual(p, saved);
+  const other = {
+    ...source,
+    project_id: "other-ws",
+    apis: [{ ...b, project_id: "other-ws" }],
+  };
+  importIntoProject(p, other);
+  assert.equal(p.protocols.length, 2);
+});
+
+test("native empty WebSocket text carries explicit send intent without template mode", () => {
+  const source = nativeProtocolFixture(),
+    p = project();
+  source.apis = [source.apis[0]];
+  source.apis[0].message[0].request.raw = "";
+  importIntoProject(p, source);
+  assert.equal(p.protocols[0].sendEmptyMessage, true);
+  assert.equal(p.protocols[0].templateMode, undefined);
+});
