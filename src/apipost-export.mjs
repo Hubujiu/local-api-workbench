@@ -154,6 +154,7 @@ export function exportApipost(project) {
     "dictionary",
     "parameterDictionary",
     "models",
+    "modelFolders",
   ])
     unsupported(project[key], key);
   if (project.openapiComponents !== undefined) {
