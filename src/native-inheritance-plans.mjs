@@ -1,3 +1,4 @@
+import { normalizeRequest } from "./core.mjs";
 import { createHash } from "node:crypto";
 import { variableRows } from "../public/variable-definitions.js";
 import { isDeepStrictEqual } from "node:util";
@@ -15,8 +16,29 @@ export function validateInheritancePlans(plans) {
   let count = 0;
   for (const plan of plans) {
     if (
+      !plan ||
+      Object.keys(plan).some(
+        (key) =>
+          ![
+            "id",
+            "name",
+            "description",
+            "statusPolicy",
+            "functions",
+            "updatedAt",
+            "source",
+            "provenance",
+            "environmentId",
+            "createdAt",
+            "steps",
+          ].includes(key),
+      )
+    )
+      fail();
+    if (
       plan.statusPolicy !== "strict200" ||
-      plan.functions?.length ||
+      !Array.isArray(plan.functions) ||
+      plan.functions.length ||
       plan.importedNativeFlowSource !== undefined ||
       !["manual", "ai"].includes(plan.source) ||
       !Array.isArray(plan.steps) ||
@@ -24,12 +46,43 @@ export function validateInheritancePlans(plans) {
       (count += plan.steps.length) > 200
     )
       fail();
-    if (plan.provenance && Object.values(plan.provenance).some(nonempty))
-      fail();
+    if (plan.provenance !== undefined) {
+      const p = plan.provenance;
+      const object = (x) =>
+        x !== null && typeof x === "object" && !Array.isArray(x);
+      if (
+        !object(p) ||
+        Object.keys(p).some((k) => !["fields", "steps"].includes(k)) ||
+        !object(p.fields) ||
+        !object(p.steps)
+      )
+        fail();
+      const stepIds = new Set(plan.steps.map((step) => step.id));
+      for (const [key, value] of Object.entries(p.fields))
+        if (
+          !["name", "description", "environmentId", "statusPolicy"].includes(
+            key,
+          ) ||
+          !["manual", "ai"].includes(value)
+        )
+          fail();
+      for (const [key, value] of Object.entries(p.steps))
+        if (!stepIds.has(key) || !["manual", "ai"].includes(value)) fail();
+    }
     for (const step of plan.steps) {
       if (
+        !step ||
+        Object.keys(step).some(
+          (key) =>
+            !["id", "name", "enabled", "request", "expectedStatus"].includes(
+              key,
+            ),
+        )
+      )
+        fail();
+      if (
         step.type !== undefined ||
-        !step.enabled ||
+        step.enabled !== true ||
         step.nativeMCP !== undefined ||
         (step.expectedStatus !== undefined && step.expectedStatus !== 200)
       )
@@ -55,6 +108,9 @@ export function validateInheritancePlans(plans) {
           (k) => r[k] !== undefined,
         )
       )
+        fail();
+      const knownRequest = normalizeRequest(r);
+      if (Object.keys(r).some((key) => !Object.hasOwn(knownRequest, key)))
         fail();
       if (
         ![

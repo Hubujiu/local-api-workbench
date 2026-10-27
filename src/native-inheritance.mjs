@@ -129,7 +129,7 @@ function sourceAuth(value) {
   auth(result);
   return result;
 }
-function sourceLayer(request = {}, shared = false) {
+function sourceLayer(request = {}, shared = false, snapshotRows = false) {
   fields(
     request,
     [
@@ -242,9 +242,14 @@ function sourceLayer(request = {}, shared = false) {
       }
     }
     result[kind] = importApipostRows(items);
-    rows(result[kind], kind);
+    if (snapshotRows) {
+      // Frozen effective lists may retain a disabled own row alongside its
+      // enabled inherited counterpart. Validate each row without treating this
+      // list as a new editable layer or changing its order/mask semantics.
+      for (const row of result[kind]) rows([row], kind);
+    } else rows(result[kind], kind);
   }
-  layer(result);
+  if (!snapshotRows) layer(result);
   return result;
 }
 function formContract(request, layers) {
@@ -313,7 +318,10 @@ export function assertEmptyInheritanceTarget(project) {
   } else if (project.currentEnvironmentId !== undefined)
     fail("preserve空项目不能保留已有环境选择");
 }
-export function prepareNativeInheritanceSource(source) {
+export function prepareNativeInheritanceSource(
+  source,
+  { snapshotRows = false } = {},
+) {
   validateResourceJSON(source);
   identifier(source.project_id);
   for (const key of [
@@ -410,7 +418,11 @@ export function prepareNativeInheritanceSource(source) {
       !["0", "1"].includes(String(node.server_id))
     )
       fail("目录服务覆盖不支持");
-    const own = sourceLayer(node.request, node.target_type === "folder");
+    const own = sourceLayer(
+      node.request,
+      node.target_type === "folder",
+      snapshotRows && node.target_type === "api",
+    );
     if (node.target_type === "folder") {
       graph.folders.push({
         sourceId: node.target_id,

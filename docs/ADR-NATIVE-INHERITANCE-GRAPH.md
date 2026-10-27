@@ -232,3 +232,24 @@ The ordinary HTTP codec may encode a detached snapshot internally, but only the
 final graph-preserving reimport is acceptance evidence. Workbench backup remains
 the fallback for unrepresentable combinations. This section is a candidate until
 its exact implementation and end-to-end tests pass.
+
+
+This directory operation migrates definitions, not Workbench editor history.
+Only versionPlan-shaped edit attribution is projected: provenance has exactly
+fields/steps objects, known name/description/environmentId/statusPolicy field
+keys, actual step IDs, and manual/ai attribution values. Native directories do
+not encode that attribution; complete Workbench backup retains it. Unknown keys,
+external attribution, imported historical MCP metadata and executable metadata
+still reject. Real owner and official SDK-created strict plans are covered, not
+only already-imported native flow fixtures.
+
+
+Stage evidence: the initial public guard rejected the new nonempty directory
+fixture (RED). A later raw-source check initially reused the editable layer's
+unique-name rule and incorrectly rejected an enabled inherited row beside a
+disabled own row. Snapshot-only source validation now checks the same bounded
+rows individually and retains their full order; editable live layers keep their
+original unique-name restriction. No duplicate row is dropped to manufacture
+roundtrip equality. Early test wiring also assumed the root-only recordId field
+and omitted stdio write permission; both fixtures were corrected to this pure
+feature base's actual receipt/permission contract. Final own CI remains pending.

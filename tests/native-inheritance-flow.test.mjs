@@ -272,6 +272,19 @@ for (const transport of ["http", "stdio"])
         assert(stored.runs.some((r) => r.id === run.id));
       };
       await verify(await owner(`projects/${p.id}/run`, { planId: plan.id }));
+      const ownerCreated = await owner(`projects/${p.id}/plans`, {
+        name: "Owner-created strict flow",
+        environmentId: plan.environmentId,
+        statusPolicy: "strict200",
+        steps: [{ request: p.requests[0] }],
+      });
+      assert.equal(ownerCreated.provenance.fields.name, "manual");
+      const ownerRun = await owner(`projects/${p.id}/run`, {
+        planId: ownerCreated.id,
+      });
+      assert.equal(ownerRun.status, "passed");
+      assert.equal(ownerRun.recordSaved, true);
+      assert.equal(wire.at(-1).headers["x-shared"], "project");
       p = await app.store.get(p.id);
       p.settings.nativeInheritance.projectLayer.headers[0].value =
         "live-changed";
@@ -341,23 +354,78 @@ for (const transport of ["http", "stdio"])
           }),
         ),
       );
+      const mcpCreated = decode(
+        await client.callTool({
+          name: "localapi_save_plan",
+          arguments: {
+            projectId: p.id,
+            plan: {
+              name: "SDK-created strict flow",
+              environmentId: plan.environmentId,
+              statusPolicy: "strict200",
+              steps: [{ request: p.requests[0] }],
+            },
+          },
+        }),
+      );
+      assert.equal(mcpCreated.provenance.fields.name, "ai");
+      const mcpRun = decode(
+        await client.callTool({
+          name: "localapi_run_plan",
+          arguments: { projectId: p.id, planId: mcpCreated.id },
+        }),
+      );
+      assert.equal(mcpRun.status, "passed");
+      assert.equal(mcpRun.recordSaved, true);
+      assert.equal(wire.at(-1).headers["x-shared"], "live-changed");
+      const createdDocument = exportApipostDirectory(await app.store.get(p.id));
+      const migrated = await app.store.create("Created flows migrated");
+      importIntoProject(migrated, createdDocument, {
+        inheritanceMode: "preserve",
+      });
+      await app.store.save(migrated);
+      assert.equal(migrated.plans.length, 3);
+      assert(
+        migrated.plans.every(
+          (flow) =>
+            Object.keys(flow.provenance.fields).length === 0 &&
+            Object.keys(flow.provenance.steps).length === 0,
+        ),
+      );
+      for (const [name, expected] of [
+        [ownerCreated.name, "project"],
+        [mcpCreated.name, "live-changed"],
+      ]) {
+        const flow = migrated.plans.find((flow) => flow.name === name);
+        const run = await owner(`projects/${migrated.id}/run`, {
+          planId: flow.id,
+        });
+        assert.equal(run.status, "passed");
+        assert.equal(run.recordSaved, true);
+        assert.equal(wire.at(-1).headers["x-shared"], expected);
+      }
       await client.close();
       client = null;
       await verify(await cli(root, p.id, plan.id));
       p = await app.store.get(p.id);
-      const drift = structuredClone(p);
-      drift.settings.nativeInheritance.projectLayer.headers.push({
-        ...structuredClone(
-          drift.settings.nativeInheritance.projectLayer.headers[0],
-        ),
-        key: "X-Extra",
-        value: "must-not-inject",
-      });
-      const unchanged = structuredClone(drift),
-        count = wire.length;
-      assert.throws(() => exportApipostDirectory(drift), /独立HTTP冻结/);
-      assert.deepEqual(drift, unchanged);
-      assert.equal(wire.length, count);
+      for (const kind of ["headers", "query", "cookies", "form"]) {
+        const drift = structuredClone(p);
+        drift.settings.nativeInheritance.projectLayer[kind].push({
+          ...structuredClone(
+            drift.settings.nativeInheritance.projectLayer.headers[0],
+          ),
+          key: "X-Extra",
+          value: "must-not-inject",
+        });
+        const unchanged = structuredClone(drift),
+          count = wire.length;
+        assert.throws(
+          () => exportApipostDirectory(drift),
+          /独立HTTP冻结|继承表单/,
+        );
+        assert.deepEqual(drift, unchanged);
+        assert.equal(wire.length, count);
+      }
       assert.throws(() => exportApipost(p), /plans|冻结/);
       const restored = restoreProject(p);
       await app.store.save(restored);
@@ -415,6 +483,27 @@ test("graph flow unsupported sources and semantic drift reject atomically", () =
     },
     (q) => {
       q.plans[0].statusPolicy = "assertions";
+    },
+    (q) => {
+      q.plans[0].provenance.fields.external = "manual";
+    },
+    (q) => {
+      q.plans[0].provenance.fields.name = "remote";
+    },
+    (q) => {
+      q.plans[0].provenance.steps.unknown = "ai";
+    },
+    (q) => {
+      q.plans[0].provenance.history = [];
+    },
+    (q) => {
+      q.plans[0].externalHistory = {};
+    },
+    (q) => {
+      q.plans[0].steps[0].externalMetadata = {};
+    },
+    (q) => {
+      q.plans[0].steps[0].request.unknownMode = true;
     },
     (q) => {
       q.plans[0].steps[0].type = "repeat";

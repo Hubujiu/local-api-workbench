@@ -59,13 +59,16 @@ export function importPreservedNativeInheritance(project, source, options) {
   // source definitions too, so unsupported metadata/tasks are not silently lost.
   for (const flow of flows)
     for (const step of flow.steps)
-      prepareNativeInheritanceSource({
-        ...source,
-        apis: [
-          ...source.apis.filter((node) => node.target_type === "folder"),
-          step.api_snapshot,
-        ],
-      });
+      prepareNativeInheritanceSource(
+        {
+          ...source,
+          apis: [
+            ...source.apis.filter((node) => node.target_type === "folder"),
+            step.api_snapshot,
+          ],
+        },
+        { snapshotRows: true },
+      );
   draft.settings.nativeInheritance = prepared.graph;
   validateNativeInheritanceProject(draft);
   for (const request of draft.requests) {
