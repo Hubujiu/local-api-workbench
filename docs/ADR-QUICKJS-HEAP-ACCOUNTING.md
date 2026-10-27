@@ -61,3 +61,17 @@ with only this engine overlaid passed 27/27 ordinary schema/library and native
 comparator/MCP entrypoint checks. It did not modify or merge that branch.
 Platform CI remains pending; local checks are not a release acceptance claim. This is WIP,
 not a macOS timing-failure fix or permission to deploy/merge.
+
+## Workflow regression
+
+A real loopback HTTP server and application API now exercise bounded, ordinary
+guest ArrayBuffer exhaustion through both manual debug and stored execution
+plans. Pre-request OOM prevents the main HTTP send and discards pending
+persistent variable changes. Post-request OOM preserves the raw response and
+previously committed before-phase variables, while discarding failed-phase
+changes. The failed plan step is retained and the subsequent request succeeds
+in a fresh runtime. Another project's state stays unchanged. Restarting the
+application preserves failure histories, plan results and committed variables;
+a subsequent normal request succeeds and persists a new variable. This keeps
+the existing 16 MiB heap and 250 ms active-wall budgets and does not classify
+a timing failure as an OOM success.
