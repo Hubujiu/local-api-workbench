@@ -1,3 +1,4 @@
+import { recordSaveFailure } from "./execution-evidence.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -11,7 +12,8 @@ import net from "node:net";
 
 /** Bounded interactive connections. No connection starts without a UI/API action. */
 export class ProtocolSessions {
-  constructor() {
+  constructor({ onFinish } = {}) {
+    this.onFinish = onFinish;
     this.sessions = new Map();
   }
   get(id) {
@@ -40,6 +42,31 @@ export class ProtocolSessions {
     if (!session.finishedAt) {
       session.finishedAt = new Date().toISOString();
       session.closeReason = reason;
+      session.finalSnapshot = this.snapshot(session.id);
+      // A persistence observer must never interrupt socket cleanup or surface
+      // as an unhandled transport rejection. Production observer also handles
+      // its own errors, while these guards cover synchronous hook failures.
+      try {
+        const pending = this.onFinish?.(session);
+        if (pending?.catch)
+          session.recordPromise = pending.catch((error) => {
+            session.receipt = recordSaveFailure(
+              session.projectId,
+              session.finalRecord?.id ?? null,
+              error,
+            );
+            session.recordPending = false;
+            return session.receipt;
+          });
+      } catch (error) {
+        session.receipt = recordSaveFailure(
+          session.projectId,
+          session.finalRecord?.id ?? null,
+          error,
+        );
+        session.recordPending = false;
+        session.recordPromise = Promise.resolve(session.receipt);
+      }
     }
     clearTimeout(session.deadline);
   }
@@ -66,13 +93,20 @@ export class ProtocolSessions {
     });
     session.events = session.events.slice(-200);
   }
-  start(input) {
+  discard(session) {
+    // Keep bounded, retriable evidence while a project save is pending/failed.
+    if (session.projectId && !session.recordSaved) return false;
+    clearTimeout(session.expiry);
+    this.sessions.delete(session.id);
+    return true;
+  }
+  start(input, context) {
+    if (this.closing) throw Error("协议会话管理器正在关闭");
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {
           this.stop(old.id);
-          clearTimeout(old.expiry);
-          this.sessions.delete(old.id);
+          this.discard(old);
           if (this.sessions.size < 50) break;
         }
       }
@@ -93,6 +127,12 @@ export class ProtocolSessions {
       bytes: 0,
       totalEvents: 0,
       createdAt: new Date().toISOString(),
+      ...(context
+        ? {
+            projectId: context.projectId,
+            definition: structuredClone(context.definition),
+          }
+        : {}),
     };
     this.sessions.set(session.id, session);
     session.deadline = setTimeout(
@@ -102,7 +142,7 @@ export class ProtocolSessions {
     session.expiry = setTimeout(
       () => {
         this.stop(session.id);
-        this.sessions.delete(session.id);
+        this.discard(session);
       },
       60 * 60 * 1000,
     );
@@ -288,11 +328,31 @@ export class ProtocolSessions {
     session.socket = null;
     session.controller?.abort();
   }
-  close() {
+  async close() {
+    this.closing = true;
     for (const session of this.sessions.values()) {
       this.stop(session.id);
       clearTimeout(session.expiry);
     }
-    this.sessions.clear();
+    await Promise.all(
+      [...this.sessions.values()].map((session) => session.recordPromise),
+    );
+    const receipts = [...this.sessions.values()]
+      .filter((session) => session.projectId)
+      .map((session) => ({
+        projectId: session.projectId,
+        sessionId: session.id,
+        ...structuredClone(
+          session.receipt ||
+            recordSaveFailure(
+              session.projectId,
+              session.finalRecord?.id ?? null,
+              Error("保存未确认"),
+            ),
+        ),
+      }));
+    // Retain failed receipts for callers inspecting graceful shutdown.
+    for (const session of this.sessions.values()) this.discard(session);
+    return receipts;
   }
 }

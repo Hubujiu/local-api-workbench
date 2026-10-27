@@ -1,3 +1,4 @@
+import { installDesktopShutdown } from "../src/host-shutdown.mjs";
 import { spawn } from "node:child_process";
 import { terminalLaunch } from "./terminal.mjs";
 import { app, BrowserWindow, session, ipcMain, shell, dialog } from "electron";
@@ -19,6 +20,7 @@ else
         root: path.join(app.getPath("userData"), "projects"),
         port: 0,
       });
+      installDesktopShutdown(app, service);
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       );
@@ -90,7 +92,6 @@ else
       await win.loadURL(service.launchUrl);
       console.error("DESKTOP_READY", service.url);
       app.on("window-all-closed", () => app.quit());
-      app.on("before-quit", () => service.server.close());
       app.on("second-instance", () => {
         if (win.isMinimized()) win.restore();
         win.focus();

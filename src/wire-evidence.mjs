@@ -56,7 +56,9 @@ export function prepareWireExecution(project, input) {
     ...(type === "tcp"
       ? {
           port: saved?.port ?? input.port,
-          receiveEncoding: saved?.receiveEncoding,
+          receiveEncoding: saved
+            ? saved.receiveEncoding
+            : input.receiveEncoding,
         }
       : {}),
     ...(type !== "sse"
