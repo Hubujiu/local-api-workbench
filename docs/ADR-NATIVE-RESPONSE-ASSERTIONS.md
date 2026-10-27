@@ -216,3 +216,40 @@ replaceIn 在 30699275 对非 string 原样返回，因而四个 unary 的 expec
 
 Text 组合 CI 历史全绿不抹去旧 Mac XML/Schema 预算 RED；本阶段不声称修复这些根因。
 独立 XML intrinsic-guard 专项仍是中断未完成，既有正式测试或本次局部源码核对不替代该专项。
+
+## 2026-10-27: bounded responseTime / responseSize sources
+
+Static original sender evidence (same SHA-256 `5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`, LF-normalized Unicode offsets):
+`33585350`/`33585533` dispatch directly to current `pm.response.responseTime` /
+`pm.response.responseSize`. The expression path does not select either metric;
+`33586595` uses it only as diagnostic text. The SDK Response update at `30688115`
+assigns responseTime from the supplied transport metric and responseSize from
+normalized stream `.byteLength` (`30688143`), not string character length or
+header-plus-body size. This is static evidence, not an original application run.
+
+Workbench now accepts both sources with all existing fourteen comparators.
+Optional paths retain literal diagnostic data, including inert template-looking
+text; expected values and enabled comparators retain existing validation.
+The private installer captures the initial `pm.response` facade and reads only
+its current own enumerable data properties. Ordinary script changes/deletions
+are visible; inherited properties/accessors, objects/arrays, nonfinite numbers,
+malformed Unicode and over-64-KiB strings are not evaluated/coerced. Missing own
+properties remain undefined. A source error cannot turn into a successful
+`notexist`. Body/code/header readers are not invoked for metric assertions.
+Public facade replacement does not redirect this private reader.
+
+HTTP metrics remain the existing Workbench transport contract: duration is
+milliseconds from connection preparation through response collection/decoding,
+rounded to two decimal places; size is the collected decompressed response
+buffer byte count, before display-body conversion. `setBody` does not recompute
+these transport metrics. This does not claim exact original sender timing,
+compression/accounting parity for every original protocol, or implement new
+protocol adapters. Existing adapters keep their recorded duration/size semantics.
+
+New formal tests cover both sources and every comparator, missing/changed values,
+no unrelated body access, bounded error paths, parallel runtime isolation, real
+Unicode gzip HTTP bytes, original-format import, soft failure continuing a plan,
+record persistence, backup restoration and restart. Native reverse export is
+validated separately on the integration branch because its dependency is not
+part of this feature branch. No budgets, quota, rollback policy, XML guard or
+frontend behavior is changed.
