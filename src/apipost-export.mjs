@@ -276,6 +276,8 @@ export function exportApipost(project) {
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
     const r = normalizeRequest(input);
+    if (r.scriptURLMode === "sdk")
+      throw Error("Apipost导出不能保留SDK URL对象模式；请使用项目备份");
     for (const key of [
       "nativeTasks",
       "importedNativeTaskSource",
