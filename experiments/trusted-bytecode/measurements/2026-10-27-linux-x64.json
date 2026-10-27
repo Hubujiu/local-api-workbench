@@ -1,0 +1,1284 @@
+{
+  "kind": "fixed-trusted-bytecode-fresh-worker-samples",
+  "note": "Ten sequential workers per operation on one host/process; not cold-process or cross-platform performance proof.",
+  "node": "v24.22.1",
+  "platform": "linux",
+  "arch": "x64",
+  "engine": {
+    "abi": "localapi-private-trusted-bytecode-v1",
+    "sourceCommit": "235f6da2fd4f7354fa4765fde4aea880d2a4aef5",
+    "sourceInputsSha256": "cb7428f2b10c9e410ffda129a8f82d1fe853a2f422fcc9b40afd7f2159f161ec",
+    "bridgeSha256": "a31885c588e12bdfe35a59076e5a1baf3f8d1aef2c11e1e88b65e96086c1eb0b",
+    "interfaceBaseSha256": "f8ac718fbcd925c9c51d03a3fcbd9557bc9b0b7fd38cc16170996283e25ec454",
+    "patchedSourceSha256": "f375bfcd2037d55a63a444af6389e1cc4a1ec00b4f67bb6b4627d5802c6f1e01",
+    "patchedQuickJSSourceSha256": "ea37ef190747d83b42b307fb9c331e164f0c83c82f36c1338bc3933b694f2c58",
+    "patchedMakefileSha256": "346fe9caebe1bd37d8f331975aa7099eefaae30939ad90a0c1ea3afbdc3074c9",
+    "baselinePatchSha256": "b820ef29facac7ccc60dbc6abe967b0528bce04a79d2f51d0665e1eaba3ae03c",
+    "heapPatchSha256": "a1532273a27327553f5188339e4006851c463dfbf339d6bed110210e8aecd849",
+    "emscripten": "3.1.65",
+    "emsdkCommit": "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d",
+    "sdkRelease": "fdcf56c75a1d27fdff6525a7e03423595485ca19",
+    "sdkTrackedSha256": "6fd98e5ef42e2d4f196769b3a77b5ce83b637a8e66d0049b7c9afbee7d5c6e96",
+    "sdkDistributionSha256": "1d4987c1af39b5fa46dd17d1044ceb7f763ba65614248d1795cd6c4856d92cc5",
+    "sdkNodeSha256": "563a678816281a08dc7da9fd3ece4e1fc5fcc01f68ffe404f6cdd1f715821b8f",
+    "sdkConfigSha256": "3d24a679242c3093c2b016d398a35e9187c3a99a8a809c1fdf341305d6fdbe64",
+    "builderSha256": "dd0d0ffacf20c975cb5ec4d8a6d82b90b7e45d56bbda03669d6419850b8a7e9c",
+    "inputVerifierSha256": "a990d9de55b1f8befcc90c2e5de30015b7ad7d04b31754b39db79f228d55c0f9",
+    "buildRecipeSha256": "da6a898dd85decc2f66e593a15377e19c3b9868e473e094c00740f60bc96fbc1",
+    "executionRecipeSha256": "cad7166f9cf49215cb2830cec9682281017eec8acd6db8ab8edf8980c9e9e646",
+    "loaderSha256": "4eb400da896445365ca485306264c94f1429b5e6f7adc97fdaa438302a04d0ac",
+    "wasmSha256": "12ccc975fbc668837b17f77ae0606e125eedade6733df3704d625dda7eaa58f6",
+    "glueSha256": "59c0544e03c487e3f290c22b168edefb5e48afcdcb9ca453523aa3ecfacf5f57"
+  },
+  "limits": {
+    "memory": 16777216,
+    "stack": 524288,
+    "activeMs": 250,
+    "wallMs": 2000
+  },
+  "summary": {
+    "unused": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 61.25309700000025,
+        "median": 66.46980399999984,
+        "max": 79.612876
+      },
+      "schemaPhasesMs": null,
+      "activeMs": {
+        "min": 11.050552000000152,
+        "median": 12.28876050000008,
+        "max": 15.66852799999998
+      }
+    },
+    "schema-source": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 122.88347900000008,
+        "median": 132.37362150000013,
+        "max": 146.95723500000003
+      },
+      "schemaPhasesMs": null,
+      "activeMs": {
+        "min": 68.12924300000032,
+        "median": 75.62788549999937,
+        "max": 80.42385400000003
+      }
+    },
+    "schema-bytecode": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 75.12067900000011,
+        "median": 84.72987249999983,
+        "max": 91.15965300000062
+      },
+      "schemaPhasesMs": null,
+      "activeMs": {
+        "min": 22.03097099999968,
+        "median": 24.76352400000087,
+        "max": 27.88940200000002
+      }
+    },
+    "schema-first-warm-source": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 129.18001800000002,
+        "median": 143.96987100000024,
+        "max": 151.59816100000012
+      },
+      "schemaPhasesMs": {
+        "first": {
+          "min": 9.915884000000005,
+          "median": 12.245622999999796,
+          "max": 14.289290999999594
+        },
+        "cached": {
+          "min": 0.34713099999953556,
+          "median": 0.4316395000000739,
+          "max": 0.6486340000000155
+        }
+      },
+      "activeMs": {
+        "min": 76.50818699999945,
+        "median": 86.3199239999999,
+        "max": 94.57271799999967
+      }
+    },
+    "schema-first-warm-bytecode": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 88.20347799999945,
+        "median": 94.08297450000032,
+        "max": 126.88994699999989
+      },
+      "schemaPhasesMs": {
+        "first": {
+          "min": 13.152930999999626,
+          "median": 14.922142000000122,
+          "max": 20.145408999999972
+        },
+        "cached": {
+          "min": 0.350144999999884,
+          "median": 0.3949404999998478,
+          "max": 0.58113400000002
+        }
+      },
+      "activeMs": {
+        "min": 34.99906999999985,
+        "median": 40.135632999999416,
+        "max": 47.7926829999999
+      }
+    },
+    "libraries-source": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 175.3803969999999,
+        "median": 195.6551790000001,
+        "max": 209.98080099999993
+      },
+      "schemaPhasesMs": null,
+      "activeMs": {
+        "min": 123.41989299999977,
+        "median": 135.25842899999998,
+        "max": 148.3771579999999
+      }
+    },
+    "libraries-bytecode": {
+      "successes": 10,
+      "failures": [],
+      "totalMs": {
+        "min": 106.2558710000003,
+        "median": 122.18763650000005,
+        "max": 134.29523100000006
+      },
+      "schemaPhasesMs": null,
+      "activeMs": {
+        "min": 54.32946300000003,
+        "median": 59.586212500000215,
+        "max": 80.38045400000192
+      }
+    }
+  },
+  "results": {
+    "unused": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 15.66852799999998,
+        "metrics": {
+          "verify-engine": 3.066195999999991,
+          "instantiate-engine": 9.516616999999997,
+          "create-runtime-context": 3.0787949999999853
+        },
+        "heapBytes": 54564,
+        "elapsed": 16.127032,
+        "totalMs": 79.612876
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 11.199591000000055,
+        "metrics": {
+          "verify-engine": 1.7977730000000065,
+          "instantiate-engine": 6.869567000000188,
+          "create-runtime-context": 2.525421999999935
+        },
+        "heapBytes": 54564,
+        "elapsed": 11.736921000000166,
+        "totalMs": 61.80873399999996
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 11.838378999999804,
+        "metrics": {
+          "verify-engine": 1.9902250000000095,
+          "instantiate-engine": 6.942864999999983,
+          "create-runtime-context": 2.8992410000000746
+        },
+        "heapBytes": 54564,
+        "elapsed": 12.276143999999931,
+        "totalMs": 63.85521699999981
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 11.050552000000152,
+        "metrics": {
+          "verify-engine": 1.7642630000000281,
+          "instantiate-engine": 6.734778000000006,
+          "create-runtime-context": 2.5454110000000583
+        },
+        "heapBytes": 54564,
+        "elapsed": 11.484920999999758,
+        "totalMs": 61.25309700000025
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 12.943913999999495,
+        "metrics": {
+          "verify-engine": 2.17631799999981,
+          "instantiate-engine": 7.499964000000091,
+          "create-runtime-context": 3.2615929999997206
+        },
+        "heapBytes": 54564,
+        "elapsed": 13.41063099999974,
+        "totalMs": 70.45255799999995
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 12.322210000000268,
+        "metrics": {
+          "verify-engine": 1.8099199999996927,
+          "instantiate-engine": 7.296113000000332,
+          "create-runtime-context": 3.2084960000001956
+        },
+        "heapBytes": 54564,
+        "elapsed": 12.855123999999705,
+        "totalMs": 66.99376399999983
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 12.572397999999339,
+        "metrics": {
+          "verify-engine": 2.2997699999996257,
+          "instantiate-engine": 6.94622900000013,
+          "create-runtime-context": 3.319217999999637
+        },
+        "heapBytes": 54564,
+        "elapsed": 13.112232000000404,
+        "totalMs": 67.828442
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 11.75568899999962,
+        "metrics": {
+          "verify-engine": 1.828816999999617,
+          "instantiate-engine": 6.776520999999775,
+          "create-runtime-context": 3.138122999999723
+        },
+        "heapBytes": 54564,
+        "elapsed": 12.186232000000018,
+        "totalMs": 65.94584399999985
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 12.255310999999892,
+        "metrics": {
+          "verify-engine": 1.7973910000000615,
+          "instantiate-engine": 7.211518999999498,
+          "create-runtime-context": 3.2394509999994625
+        },
+        "heapBytes": 54564,
+        "elapsed": 12.751350999999886,
+        "totalMs": 63.2607680000001
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 13.07759200000146,
+        "metrics": {
+          "verify-engine": 2.336993999999322,
+          "instantiate-engine": 7.93754699999954,
+          "create-runtime-context": 2.796700000000783
+        },
+        "heapBytes": 54564,
+        "elapsed": 13.57822699999997,
+        "totalMs": 71.36776800000007
+      }
+    ],
+    "schema-source": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 80.42385400000003,
+        "metrics": {
+          "verify-engine": 3.181055000000015,
+          "instantiate-engine": 8.16291799999999,
+          "create-runtime-context": 3.2879330000000095,
+          "load-source": 65.78394599999999
+        },
+        "heapBytes": 1063496,
+        "elapsed": 81.44560499999997,
+        "totalMs": 146.95723500000003
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 77.21790199999987,
+        "metrics": {
+          "verify-engine": 2.1803950000000896,
+          "instantiate-engine": 7.899360999999999,
+          "create-runtime-context": 2.942984999999908,
+          "load-source": 64.18736999999987
+        },
+        "heapBytes": 1063496,
+        "elapsed": 78.51129199999991,
+        "totalMs": 134.58135099999993
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 74.59530799999948,
+        "metrics": {
+          "verify-engine": 1.8854609999998502,
+          "instantiate-engine": 7.0052670000000035,
+          "create-runtime-context": 3.390103000000181,
+          "load-source": 62.306155999999646
+        },
+        "heapBytes": 1063496,
+        "elapsed": 75.56193900000017,
+        "totalMs": 130.62005
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 71.24772600000006,
+        "metrics": {
+          "verify-engine": 1.8466739999998936,
+          "instantiate-engine": 7.6117669999998725,
+          "create-runtime-context": 3.157480000000305,
+          "load-source": 58.624533999999585
+        },
+        "heapBytes": 1063496,
+        "elapsed": 72.18776899999966,
+        "totalMs": 132.8094070000002
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 77.40423300000111,
+        "metrics": {
+          "verify-engine": 1.7872969999998531,
+          "instantiate-engine": 7.160804000000098,
+          "create-runtime-context": 3.1489980000005744,
+          "load-source": 65.30008500000076
+        },
+        "heapBytes": 1063496,
+        "elapsed": 78.43316700000014,
+        "totalMs": 135.01681699999972
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 68.12924300000032,
+        "metrics": {
+          "verify-engine": 2.2094269999997778,
+          "instantiate-engine": 6.989121999999952,
+          "create-runtime-context": 2.8077769999999873,
+          "load-source": 56.115976999999475
+        },
+        "heapBytes": 1063496,
+        "elapsed": 69.15487099999973,
+        "totalMs": 122.88347900000008
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 69.8035549999995,
+        "metrics": {
+          "verify-engine": 2.314331999999922,
+          "instantiate-engine": 7.3410989999993035,
+          "create-runtime-context": 2.556868000000577,
+          "load-source": 57.57990900000004
+        },
+        "heapBytes": 1063496,
+        "elapsed": 70.68885599999976,
+        "totalMs": 124.50688499999978
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 71.65448500000002,
+        "metrics": {
+          "verify-engine": 1.8623969999998735,
+          "instantiate-engine": 6.9660079999994196,
+          "create-runtime-context": 3.372516999999789,
+          "load-source": 59.44612200000029
+        },
+        "heapBytes": 1063496,
+        "elapsed": 72.69684699999925,
+        "totalMs": 128.46829699999944
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 76.66046299999925,
+        "metrics": {
+          "verify-engine": 1.97687599999972,
+          "instantiate-engine": 6.8443299999999,
+          "create-runtime-context": 2.8547859999998764,
+          "load-source": 64.97732099999939
+        },
+        "heapBytes": 1063496,
+        "elapsed": 77.63444400000026,
+        "totalMs": 131.93783600000006
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 79.22338399999717,
+        "metrics": {
+          "verify-engine": 2.0814989999998943,
+          "instantiate-engine": 7.2310880000004545,
+          "create-runtime-context": 3.105555000000095,
+          "load-source": 66.79810299999917
+        },
+        "heapBytes": 1063496,
+        "elapsed": 80.14308600000004,
+        "totalMs": 141.00638600000093
+      }
+    ],
+    "schema-bytecode": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 27.191704000000016,
+        "metrics": {
+          "verify-engine": 2.0015520000000038,
+          "instantiate-engine": 7.145081000000005,
+          "create-runtime-context": 3.2656800000000317,
+          "verify-bundle": 1.3545410000000402,
+          "copy-bytecode": 0.19178199999998924,
+          "read-evaluate-bytecode": 12.870595999999978,
+          "load-bytecode": 14.77179000000001
+        },
+        "heapBytes": 835248,
+        "elapsed": 28.482211000000007,
+        "totalMs": 86.20059300000003
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 22.03097099999968,
+        "metrics": {
+          "verify-engine": 1.8564779999999246,
+          "instantiate-engine": 6.275283000000172,
+          "create-runtime-context": 2.8117829999998776,
+          "verify-bundle": 0.965298999999959,
+          "copy-bytecode": 0.10923099999990882,
+          "read-evaluate-bytecode": 9.80072599999994,
+          "load-bytecode": 11.079684999999927
+        },
+        "heapBytes": 835248,
+        "elapsed": 22.9340380000001,
+        "totalMs": 75.12067900000011
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 27.88940200000002,
+        "metrics": {
+          "verify-engine": 1.8528739999999289,
+          "instantiate-engine": 7.202105999999958,
+          "create-runtime-context": 3.0579740000000584,
+          "verify-bundle": 3.119414000000006,
+          "copy-bytecode": 0.10617600000000493,
+          "read-evaluate-bytecode": 12.255493000000115,
+          "load-bytecode": 15.768957
+        },
+        "heapBytes": 835248,
+        "elapsed": 28.74895400000014,
+        "totalMs": 86.68418500000007
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 25.061365000000023,
+        "metrics": {
+          "verify-engine": 1.8351679999996122,
+          "instantiate-engine": 7.208243999999922,
+          "create-runtime-context": 3.1914200000001074,
+          "verify-bundle": 1.4033730000001015,
+          "copy-bytecode": 0.10676599999987957,
+          "read-evaluate-bytecode": 11.088017000000036,
+          "load-bytecode": 12.818441000000348
+        },
+        "heapBytes": 835248,
+        "elapsed": 25.897413000000142,
+        "totalMs": 84.0756409999999
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 24.039381000000503,
+        "metrics": {
+          "verify-engine": 2.408400000000256,
+          "instantiate-engine": 7.511540000000423,
+          "create-runtime-context": 2.7206889999997657,
+          "verify-bundle": 1.093087000000196,
+          "copy-bytecode": 0.10930099999950471,
+          "read-evaluate-bytecode": 9.962561999999707,
+          "load-bytecode": 11.391311999999743
+        },
+        "heapBytes": 835248,
+        "elapsed": 24.90313199999946,
+        "totalMs": 82.20996300000024
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 24.581788000000415,
+        "metrics": {
+          "verify-engine": 1.855467000000317,
+          "instantiate-engine": 7.407646999999997,
+          "create-runtime-context": 3.210718999999699,
+          "verify-bundle": 1.133284999999887,
+          "copy-bytecode": 0.10742800000025454,
+          "read-evaluate-bytecode": 10.585108000000218,
+          "load-bytecode": 12.10118599999987
+        },
+        "heapBytes": 835248,
+        "elapsed": 25.388104999999996,
+        "totalMs": 89.86126500000046
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 24.801927000001342,
+        "metrics": {
+          "verify-engine": 1.9923980000003212,
+          "instantiate-engine": 7.412183999999797,
+          "create-runtime-context": 2.889165999999932,
+          "verify-bundle": 0.9690350000000763,
+          "copy-bytecode": 0.08880100000078528,
+          "read-evaluate-bytecode": 11.142713000000185,
+          "load-bytecode": 12.50115900000037
+        },
+        "heapBytes": 835248,
+        "elapsed": 25.609975000000304,
+        "totalMs": 85.38410399999975
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 24.7251210000004,
+        "metrics": {
+          "verify-engine": 1.9774360000001252,
+          "instantiate-engine": 7.050202999999783,
+          "create-runtime-context": 2.47214299999996,
+          "verify-bundle": 2.400908999999956,
+          "copy-bytecode": 0.08080900000004476,
+          "read-evaluate-bytecode": 10.490949,
+          "load-bytecode": 13.218788000000131
+        },
+        "heapBytes": 835248,
+        "elapsed": 25.482672999999522,
+        "totalMs": 77.33407199999965
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 26.36222600000019,
+        "metrics": {
+          "verify-engine": 2.1389140000001134,
+          "instantiate-engine": 6.887423000000126,
+          "create-runtime-context": 3.18989799999963,
+          "verify-bundle": 2.848616999999649,
+          "copy-bytecode": 0.0957509999998365,
+          "read-evaluate-bytecode": 10.943162999999913,
+          "load-bytecode": 14.138089000000036
+        },
+        "heapBytes": 835248,
+        "elapsed": 27.379831000000195,
+        "totalMs": 91.15965300000062
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 24.549772000000303,
+        "metrics": {
+          "verify-engine": 1.845021999999517,
+          "instantiate-engine": 7.416250000000218,
+          "create-runtime-context": 2.738886000000093,
+          "verify-bundle": 2.728189999999813,
+          "copy-bytecode": 0.08178999999927328,
+          "read-evaluate-bytecode": 9.505229999999756,
+          "load-bytecode": 12.541893999999957
+        },
+        "heapBytes": 835248,
+        "elapsed": 25.674544999999853,
+        "totalMs": 80.31911000000036
+      }
+    ],
+    "schema-first-warm-source": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 89.96630600000009,
+        "metrics": {
+          "verify-engine": 1.9711269999999672,
+          "instantiate-engine": 7.340828999999985,
+          "create-runtime-context": 3.1407560000000103,
+          "load-source": 63.56264200000004,
+          "first-schema-validation": 13.294148000000064,
+          "cached-schema-validation": 0.6486340000000155
+        },
+        "heapBytes": 1107748,
+        "elapsed": 91.33583000000004,
+        "totalMs": 149.32333799999998
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 94.57271799999967,
+        "metrics": {
+          "verify-engine": 1.8642699999998058,
+          "instantiate-engine": 7.49174099999982,
+          "create-runtime-context": 3.2106690000000526,
+          "load-source": 68.33496500000001,
+          "first-schema-validation": 13.206339999999955,
+          "cached-schema-validation": 0.4567109999998138
+        },
+        "heapBytes": 1107748,
+        "elapsed": 95.71129199999996,
+        "totalMs": 151.59816100000012
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 83.34919399999967,
+        "metrics": {
+          "verify-engine": 2.0834520000000794,
+          "instantiate-engine": 7.35317699999996,
+          "create-runtime-context": 3.161425999999665,
+          "load-source": 56.02586500000007,
+          "first-schema-validation": 14.289290999999594,
+          "cached-schema-validation": 0.42731800000001385
+        },
+        "heapBytes": 1107748,
+        "elapsed": 84.45978500000024,
+        "totalMs": 145.80105099999992
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 81.21607799999947,
+        "metrics": {
+          "verify-engine": 2.063842999999906,
+          "instantiate-engine": 7.011445999999978,
+          "create-runtime-context": 2.5644790000001194,
+          "load-source": 59.303841999999804,
+          "first-schema-validation": 9.915884000000005,
+          "cached-schema-validation": 0.34878299999991214
+        },
+        "heapBytes": 1107748,
+        "elapsed": 82.41097500000024,
+        "totalMs": 135.99091399999998
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 76.50818699999945,
+        "metrics": {
+          "verify-engine": 1.799403999999413,
+          "instantiate-engine": 6.944206000000122,
+          "create-runtime-context": 2.7811179999998785,
+          "load-source": 54.32281200000034,
+          "first-schema-validation": 10.271985999999742,
+          "cached-schema-validation": 0.3814110000002984
+        },
+        "heapBytes": 1107748,
+        "elapsed": 77.45074299999942,
+        "totalMs": 129.18001800000002
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 88.84794499999953,
+        "metrics": {
+          "verify-engine": 1.8059940000002825,
+          "instantiate-engine": 6.572791000000507,
+          "create-runtime-context": 2.722592000000077,
+          "load-source": 64.9772810000004,
+          "first-schema-validation": 12.415156999999454,
+          "cached-schema-validation": 0.34713099999953556
+        },
+        "heapBytes": 1107748,
+        "elapsed": 89.84765499999958,
+        "totalMs": 143.29400700000042
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 85.89833399999861,
+        "metrics": {
+          "verify-engine": 2.566902999999911,
+          "instantiate-engine": 8.62984299999971,
+          "create-runtime-context": 3.0255869999991774,
+          "load-source": 58.794818999999734,
+          "first-schema-validation": 12.435246999999436,
+          "cached-schema-validation": 0.43596100000013394
+        },
+        "heapBytes": 1107748,
+        "elapsed": 86.9977799999997,
+        "totalMs": 144.64573500000006
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 87.14750600000025,
+        "metrics": {
+          "verify-engine": 1.8137759999999616,
+          "instantiate-engine": 6.707898999999998,
+          "create-runtime-context": 3.227634000000762,
+          "load-source": 63.791337999999996,
+          "first-schema-validation": 11.18803300000036,
+          "cached-schema-validation": 0.40943200000037905
+        },
+        "heapBytes": 1107748,
+        "elapsed": 88.21491499999956,
+        "totalMs": 148.3247710000005
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 81.55461500000092,
+        "metrics": {
+          "verify-engine": 2.4010090000001583,
+          "instantiate-engine": 7.332926999999472,
+          "create-runtime-context": 3.1617269999997006,
+          "load-source": 56.16750300000058,
+          "first-schema-validation": 11.971564999999828,
+          "cached-schema-validation": 0.5121230000004289
+        },
+        "heapBytes": 1107748,
+        "elapsed": 82.53005899999971,
+        "totalMs": 135.27463200000057
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 86.74151400000119,
+        "metrics": {
+          "verify-engine": 1.7423710000002757,
+          "instantiate-engine": 6.840283999999883,
+          "create-runtime-context": 5.631537000000208,
+          "load-source": 60.00627000000077,
+          "first-schema-validation": 12.076089000000138,
+          "cached-schema-validation": 0.43780400000014197
+        },
+        "heapBytes": 1107748,
+        "elapsed": 87.77271000000019,
+        "totalMs": 139.311334
+      }
+    ],
+    "schema-first-warm-bytecode": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 45.50531099999989,
+        "metrics": {
+          "verify-engine": 3.5377599999999347,
+          "instantiate-engine": 9.918637999999987,
+          "create-runtime-context": 3.0119469999999637,
+          "verify-bundle": 1.1842100000000073,
+          "copy-bytecode": 0.16560299999991912,
+          "read-evaluate-bytecode": 11.168645999999967,
+          "load-bytecode": 12.759494000000018,
+          "first-schema-validation": 15.862243999999919,
+          "cached-schema-validation": 0.4073880000000827
+        },
+        "heapBytes": 879556,
+        "elapsed": 46.391594000000055,
+        "totalMs": 98.32366100000002
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 47.7926829999999,
+        "metrics": {
+          "verify-engine": 2.1052639999998064,
+          "instantiate-engine": 7.050643000000036,
+          "create-runtime-context": 3.762911000000031,
+          "verify-bundle": 1.142659999999978,
+          "copy-bytecode": 0.09360700000001998,
+          "read-evaluate-bytecode": 12.662630000000036,
+          "load-bytecode": 14.139201000000185,
+          "first-schema-validation": 20.145408999999972,
+          "cached-schema-validation": 0.58113400000002
+        },
+        "heapBytes": 879556,
+        "elapsed": 49.04479399999991,
+        "totalMs": 126.88994699999989
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 40.07796300000018,
+        "metrics": {
+          "verify-engine": 1.8164190000002236,
+          "instantiate-engine": 6.365444999999909,
+          "create-runtime-context": 2.848476000000119,
+          "verify-bundle": 0.96913399999994,
+          "copy-bytecode": 0.11034299999982977,
+          "read-evaluate-bytecode": 10.728269000000182,
+          "load-bytecode": 12.003332000000228,
+          "first-schema-validation": 16.45651699999962,
+          "cached-schema-validation": 0.5804939999998169
+        },
+        "heapBytes": 879556,
+        "elapsed": 41.158734000000095,
+        "totalMs": 93.49170100000038
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 36.076201000000765,
+        "metrics": {
+          "verify-engine": 1.88537099999985,
+          "instantiate-engine": 6.86947599999985,
+          "create-runtime-context": 2.53679800000009,
+          "verify-bundle": 1.4827789999999368,
+          "copy-bytecode": 0.11364700000012817,
+          "read-evaluate-bytecode": 9.385223999999653,
+          "load-bytecode": 11.273380000000088,
+          "first-schema-validation": 13.152930999999626,
+          "cached-schema-validation": 0.350144999999884
+        },
+        "heapBytes": 879556,
+        "elapsed": 37.03981900000008,
+        "totalMs": 93.36578499999996
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 40.73509100000001,
+        "metrics": {
+          "verify-engine": 1.7771820000002663,
+          "instantiate-engine": 6.888344999999845,
+          "create-runtime-context": 2.513844000000063,
+          "verify-bundle": 2.559961999999814,
+          "copy-bytecode": 0.09325699999999415,
+          "read-evaluate-bytecode": 11.580950999999914,
+          "load-bytecode": 14.507653000000118,
+          "first-schema-validation": 14.654237999999623,
+          "cached-schema-validation": 0.3859170000000631
+        },
+        "heapBytes": 879556,
+        "elapsed": 41.74484500000017,
+        "totalMs": 94.67424800000026
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 43.837806000000455,
+        "metrics": {
+          "verify-engine": 2.0661270000000513,
+          "instantiate-engine": 7.875074000000495,
+          "create-runtime-context": 3.106880999999703,
+          "verify-bundle": 2.9708360000004177,
+          "copy-bytecode": 0.09919499999978143,
+          "read-evaluate-bytecode": 11.892488999999841,
+          "load-bytecode": 15.193460999999843,
+          "first-schema-validation": 15.19004600000062,
+          "cached-schema-validation": 0.397675000000163
+        },
+        "heapBytes": 879556,
+        "elapsed": 45.057879999999386,
+        "totalMs": 96.29199499999959
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 40.14227999999912,
+        "metrics": {
+          "verify-engine": 1.8411159999996016,
+          "instantiate-engine": 7.42236899999989,
+          "create-runtime-context": 2.6359339999999065,
+          "verify-bundle": 2.4239219999999477,
+          "copy-bytecode": 0.08299199999964912,
+          "read-evaluate-bytecode": 10.752754000000095,
+          "load-bytecode": 13.538538999999219,
+          "first-schema-validation": 14.291175000000294,
+          "cached-schema-validation": 0.40586700000039855
+        },
+        "heapBytes": 879556,
+        "elapsed": 41.04214199999933,
+        "totalMs": 95.66540499999974
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 38.90157400000044,
+        "metrics": {
+          "verify-engine": 1.845922999999857,
+          "instantiate-engine": 7.7686069999999745,
+          "create-runtime-context": 3.0468379999992976,
+          "verify-bundle": 1.0857660000001488,
+          "copy-bytecode": 0.08925100000033126,
+          "read-evaluate-bytecode": 10.29417999999987,
+          "load-bytecode": 11.689060000000609,
+          "first-schema-validation": 14.150907999999617,
+          "cached-schema-validation": 0.39220599999953265
+        },
+        "heapBytes": 879556,
+        "elapsed": 39.83510800000022,
+        "totalMs": 90.87024800000017
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 40.12898599999971,
+        "metrics": {
+          "verify-engine": 2.185281999999461,
+          "instantiate-engine": 7.566501000000244,
+          "create-runtime-context": 2.8615759999993315,
+          "verify-bundle": 1.1295110000000932,
+          "copy-bytecode": 0.10992199999964214,
+          "read-evaluate-bytecode": 9.36095800000021,
+          "load-bytecode": 10.821914999999535,
+          "first-schema-validation": 16.325800000000527,
+          "cached-schema-validation": 0.36040000000048167
+        },
+        "heapBytes": 879556,
+        "elapsed": 41.264052999999876,
+        "totalMs": 93.45064900000034
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 34.99906999999985,
+        "metrics": {
+          "verify-engine": 1.8507299999992028,
+          "instantiate-engine": 6.584917999999561,
+          "create-runtime-context": 2.506014000000505,
+          "verify-bundle": 1.0274900000003981,
+          "copy-bytecode": 0.08716800000001967,
+          "read-evaluate-bytecode": 9.167774000000463,
+          "load-bytecode": 10.472101000000293,
+          "first-schema-validation": 13.189014999999927,
+          "cached-schema-validation": 0.38860100000056264
+        },
+        "heapBytes": 879556,
+        "elapsed": 38.375512999999955,
+        "totalMs": 88.20347799999945
+      }
+    ],
+    "libraries-source": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 148.3771579999999,
+        "metrics": {
+          "verify-engine": 2.107297000000017,
+          "instantiate-engine": 7.896886000000109,
+          "create-runtime-context": 2.679699000000028,
+          "load-source": 135.68609500000002
+        },
+        "heapBytes": 2742684,
+        "elapsed": 150.24973999999997,
+        "totalMs": 205.40731200000005
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 145.42186499999957,
+        "metrics": {
+          "verify-engine": 2.15634,
+          "instantiate-engine": 7.342773000000079,
+          "create-runtime-context": 3.255143999999973,
+          "load-source": 132.60665999999992
+        },
+        "heapBytes": 2742684,
+        "elapsed": 147.00088600000004,
+        "totalMs": 209.98080099999993
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 130.19954199999984,
+        "metrics": {
+          "verify-engine": 1.8507500000000618,
+          "instantiate-engine": 7.148106000000098,
+          "create-runtime-context": 2.860214000000269,
+          "load-source": 118.33241099999987
+        },
+        "heapBytes": 2742684,
+        "elapsed": 131.9260989999998,
+        "totalMs": 189.9656490000002
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 123.41989299999977,
+        "metrics": {
+          "verify-engine": 1.859523000000081,
+          "instantiate-engine": 6.071582999999919,
+          "create-runtime-context": 2.756731999999829,
+          "load-source": 112.7251640000004
+        },
+        "heapBytes": 2742684,
+        "elapsed": 124.92815999999993,
+        "totalMs": 175.3803969999999
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 130.1010269999997,
+        "metrics": {
+          "verify-engine": 2.00669999999991,
+          "instantiate-engine": 7.33386900000005,
+          "create-runtime-context": 2.966530000000148,
+          "load-source": 117.78622700000005
+        },
+        "heapBytes": 2742684,
+        "elapsed": 131.70218099999965,
+        "totalMs": 189.25171499999988
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 141.98535399999946,
+        "metrics": {
+          "verify-engine": 2.133244999999988,
+          "instantiate-engine": 8.855876999999964,
+          "create-runtime-context": 3.3971919999994498,
+          "load-source": 127.59124799999972
+        },
+        "heapBytes": 2742684,
+        "elapsed": 143.68753600000036,
+        "totalMs": 209.6083239999998
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 143.57513799999924,
+        "metrics": {
+          "verify-engine": 2.279230000000098,
+          "instantiate-engine": 7.883534000000509,
+          "create-runtime-context": 3.4725140000000465,
+          "load-source": 129.93238999999994
+        },
+        "heapBytes": 2742684,
+        "elapsed": 145.1705810000003,
+        "totalMs": 205.11550100000022
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 134.91397000000052,
+        "metrics": {
+          "verify-engine": 1.7657749999998487,
+          "instantiate-engine": 7.167234999999891,
+          "create-runtime-context": 2.972048000000541,
+          "load-source": 123.00146200000017
+        },
+        "heapBytes": 2742684,
+        "elapsed": 136.48040300000048,
+        "totalMs": 188.3533639999996
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 135.60288799999944,
+        "metrics": {
+          "verify-engine": 1.9180790000000343,
+          "instantiate-engine": 7.813253999999688,
+          "create-runtime-context": 2.7758899999998903,
+          "load-source": 123.087853
+        },
+        "heapBytes": 2742684,
+        "elapsed": 137.54782700000032,
+        "totalMs": 201.34470899999997
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 131.7674220000008,
+        "metrics": {
+          "verify-engine": 1.8702590000011696,
+          "instantiate-engine": 6.595204000001104,
+          "create-runtime-context": 2.967851999999766,
+          "load-source": 120.32267900000079
+        },
+        "heapBytes": 2742684,
+        "elapsed": 133.3332730000002,
+        "totalMs": 184.6394249999994
+      }
+    ],
+    "libraries-bytecode": [
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 67.56906099999992,
+        "metrics": {
+          "verify-engine": 1.9353739999999107,
+          "instantiate-engine": 6.965608999999972,
+          "create-runtime-context": 3.200533999999948,
+          "verify-bundle": 4.485122000000047,
+          "copy-bytecode": 0.15050200000007408,
+          "read-evaluate-bytecode": 50.58093100000008,
+          "load-bytecode": 55.459742000000006
+        },
+        "heapBytes": 2261760,
+        "elapsed": 68.96478100000002,
+        "totalMs": 124.19281799999999
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 59.53897800000027,
+        "metrics": {
+          "verify-engine": 1.9870200000000295,
+          "instantiate-engine": 7.181675000000041,
+          "create-runtime-context": 2.9494050000000698,
+          "verify-bundle": 4.128598000000011,
+          "copy-bytecode": 0.2886240000000271,
+          "read-evaluate-bytecode": 42.70026899999971,
+          "load-bytecode": 47.366207999999915
+        },
+        "heapBytes": 2261760,
+        "elapsed": 61.25029400000017,
+        "totalMs": 123.43816500000003
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 54.32946300000003,
+        "metrics": {
+          "verify-engine": 1.7591459999998733,
+          "instantiate-engine": 7.230927999999949,
+          "create-runtime-context": 2.7330369999999675,
+          "verify-bundle": 3.5625059999997575,
+          "copy-bytecode": 0.19846099999995204,
+          "read-evaluate-bytecode": 38.548157000000174,
+          "load-bytecode": 42.59897000000001
+        },
+        "heapBytes": 2261760,
+        "elapsed": 55.637894000000415,
+        "totalMs": 106.51092500000004
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 54.650182000000314,
+        "metrics": {
+          "verify-engine": 1.714379000000008,
+          "instantiate-engine": 6.616915000000063,
+          "create-runtime-context": 2.4094709999999395,
+          "verify-bundle": 3.6408409999999094,
+          "copy-bytecode": 0.18093599999974685,
+          "read-evaluate-bytecode": 39.85332500000004,
+          "load-bytecode": 43.9025959999999
+        },
+        "heapBytes": 2261760,
+        "elapsed": 56.06136599999991,
+        "totalMs": 106.2558710000003
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 58.5393880000006,
+        "metrics": {
+          "verify-engine": 1.908625000000029,
+          "instantiate-engine": 6.752774000000045,
+          "create-runtime-context": 3.466816000000108,
+          "verify-bundle": 3.921644000000015,
+          "copy-bytecode": 0.17854199999965203,
+          "read-evaluate-bytecode": 42.024597000000085,
+          "load-bytecode": 46.40338299999985
+        },
+        "heapBytes": 2261760,
+        "elapsed": 59.86705000000029,
+        "totalMs": 122.20744599999989
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 62.94527500000004,
+        "metrics": {
+          "verify-engine": 1.848997999999483,
+          "instantiate-engine": 8.575013000000581,
+          "create-runtime-context": 4.58225499999935,
+          "verify-bundle": 4.36329299999943,
+          "copy-bytecode": 0.4738870000001043,
+          "read-evaluate-bytecode": 42.83223300000009,
+          "load-bytecode": 47.931768000000375
+        },
+        "heapBytes": 2261760,
+        "elapsed": 64.67699899999934,
+        "totalMs": 122.16782700000022
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 64.7928180000008,
+        "metrics": {
+          "verify-engine": 1.8122040000007473,
+          "instantiate-engine": 6.620490000000245,
+          "create-runtime-context": 2.538821000000098,
+          "verify-bundle": 3.982313000000431,
+          "copy-bytecode": 0.21545700000024226,
+          "read-evaluate-bytecode": 49.33391800000027,
+          "load-bytecode": 53.75403600000027
+        },
+        "heapBytes": 2261760,
+        "elapsed": 65.99150099999952,
+        "totalMs": 123.62620599999991
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 59.63344700000016,
+        "metrics": {
+          "verify-engine": 2.0162639999998646,
+          "instantiate-engine": 7.139703000000736,
+          "create-runtime-context": 2.590658000000076,
+          "verify-bundle": 3.8868130000000747,
+          "copy-bytecode": 0.1981309999991936,
+          "read-evaluate-bytecode": 43.526512999999795,
+          "load-bytecode": 47.879893000000266
+        },
+        "heapBytes": 2261760,
+        "elapsed": 61.29501900000014,
+        "totalMs": 116.66597200000069
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 55.32821899999908,
+        "metrics": {
+          "verify-engine": 1.898309999999583,
+          "instantiate-engine": 7.058414000000084,
+          "create-runtime-context": 3.5712890000004336,
+          "verify-bundle": 4.10672699999941,
+          "copy-bytecode": 0.17929300000014337,
+          "read-evaluate-bytecode": 38.166535000000295,
+          "load-bytecode": 42.793015000000196
+        },
+        "heapBytes": 2261760,
+        "elapsed": 56.9151609999999,
+        "totalMs": 107.8447959999994
+      },
+      {
+        "kind": "result",
+        "ok": true,
+        "activityMs": 80.38045400000192,
+        "metrics": {
+          "verify-engine": 2.2558050000006915,
+          "instantiate-engine": 7.516787000000477,
+          "create-runtime-context": 2.7869859999991604,
+          "verify-bundle": 3.9960529999989376,
+          "copy-bytecode": 0.41578500000105123,
+          "read-evaluate-bytecode": 63.158007,
+          "load-bytecode": 67.81355500000063
+        },
+        "heapBytes": 2261760,
+        "elapsed": 82.1315480000012,
+        "totalMs": 134.29523100000006
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+Actual initial build-bundles invocation, 2026-10-27.
+Command: node experiments/trusted-bytecode/build-bundles.mjs
+
+TypeError: Cannot read properties of undefined (reading 'getWasmMemory')
+  at instantiateVerifiedEngine (engine.mjs:42:48)
+
+The pinned upstream extension exists only after quickjsEmscriptenInit(). The loader now explicitly initializes it; both clean-source engine receipts were regenerated to bind the corrected loader hash before any successful bundle build. No limit or identity check was bypassed.

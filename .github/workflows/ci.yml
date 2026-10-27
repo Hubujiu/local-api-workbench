@@ -28,6 +28,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: node --test --test-concurrency=2 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=core-test-results.tap tests/*.test.mjs
+      - name: Validate isolated fixed trusted-bytecode experiment (not enabled)
+        run: node --test --test-concurrency=1 experiments/trusted-bytecode/ownership.test.mjs experiments/trusted-bytecode/outcome.test.mjs experiments/trusted-bytecode/prototype.test.mjs experiments/trusted-bytecode/bridge-export.test.mjs experiments/trusted-bytecode/lazy-schema.test.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -125,6 +127,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run audit:ci
       - run: npm run format:check
+      - run: node node_modules/prettier/bin/prettier.cjs --check "experiments/trusted-bytecode/*.mjs"
+      - run: node --test experiments/trusted-bytecode/build-inputs.test.mjs
       - run: node scripts/build-markdown.mjs
       - run: node scripts/build-sandbox-libraries.mjs
       - run: git diff --exit-code -- public/vendor src/vendor

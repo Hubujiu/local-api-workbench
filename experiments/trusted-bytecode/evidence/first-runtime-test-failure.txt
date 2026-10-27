@@ -1,0 +1,37 @@
+Actual first full prototype runtime run after extension initialization fix. Checkout prefix normalized; no tests removed.
+
+✔ late context creation disposes the acquired context before its runtime (1.676263ms)
+✔ runtime option and context creation failures dispose only acquired owners (0.287792ms)
+✔ successful ownership is idempotent and still frees runtime if context cleanup throws (0.19718ms)
+✔ ordinary identity, ABI, source, filename, flags and truncated bytes fail before C (11.109791ms)
+✔ hash/copy/read/eval wall time is cumulative and late success cannot pass (0.359368ms)
+✔ fresh instances, memories, runtimes and contexts never share guest globals (31.776781ms)
+✔ temporary staging is actually charged; allocation OOM leaves no pending exception (8.337839ms)
+✔ borrowed compile handle and writer buffer are released exactly once (9.241946ms)
+✔ writer refuses ordinary non-bytecode handles without consuming them (4.773863ms)
+✔ successful object results and thrown errors do not leak or leave pending exceptions (12.093786ms)
+✔ ordinary 16MiB guest allocation failure is closed and cleanup permits subsequent fixed evaluation (56.447243ms)
+✔ same fixed schema bytecode and text retain validity, error and option semantics (101.442765ms)
+✖ same fixed script-libraries bytecode and text retain ordinary library semantics (90.502852ms)
+✔ interruptible ordinary loop fails within unchanged active/worker budgets (328.264889ms)
+✔ cancellation terminates its isolated worker and does not contaminate a fresh run (169.870639ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 14
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1008.207231
+
+✖ failing tests:
+
+test at experiments/trusted-bytecode/prototype.test.mjs:347:1
+✖ same fixed script-libraries bytecode and text retain ordinary library semantics (90.502852ms)
+  Error: Fixed source evaluation failed
+      at file://<checkout>/experiments/trusted-bytecode/runtime.mjs:57:17
+      at ActivityBudget.run (file://<checkout>/experiments/trusted-bytecode/budget.mjs:39:14)
+      at Object.load (file://<checkout>/experiments/trusted-bytecode/runtime.mjs:49:19)
+      at TestContext.<anonymous> (file://<checkout>/experiments/trusted-bytecode/prototype.test.mjs:352:15)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
