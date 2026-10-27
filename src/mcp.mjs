@@ -57,7 +57,7 @@ import {
   environmentVariables,
   selectedEnvironment,
   debugEnvironment,
-  resolveServiceRequest,
+  createServiceRequestResolver,
 } from "./environments.mjs";
 import {
   environmentTools,
@@ -829,11 +829,10 @@ export function createMCP({
                 p,
                 args.environmentId,
               ).id;
-              const effectiveRequest = resolveServiceRequest(
+              const effectiveRequest = createServiceRequestResolver(
                 p,
-                freezeServiceBinding(p, request),
                 environmentId,
-              );
+              )(freezeServiceBinding(p, request));
               const temporaryInput = nativeName
                 ? inputAuth(effectiveRequest, args.input)
                 : args.input;
@@ -948,8 +947,10 @@ export function createMCP({
                       stepId: step.stepId,
                       stepStatus: step.status,
                     }),
-                  prepareRequest: (request) =>
-                    resolveServiceRequest(p, request, environmentId),
+                  prepareRequest: createServiceRequestResolver(
+                    p,
+                    environmentId,
+                  ),
                 },
               );
               output.environmentId = environmentId;

@@ -73,6 +73,7 @@ import {
   environmentVariables,
   selectedEnvironment,
   resolveServiceRequest,
+  createServiceRequestResolver,
   freezeServiceBinding,
   debugEnvironment,
   manageEnvironment,
@@ -1642,8 +1643,10 @@ export async function createApp({
                     context.environment.id,
                   ),
                   signal: controller.signal,
-                  prepareRequest: (request) =>
-                    resolveServiceRequest(p, request, context.environment.id),
+                  prepareRequest: createServiceRequestResolver(
+                    p,
+                    context.environment.id,
+                  ),
                 },
               );
               const result = single.results[0];
@@ -1783,8 +1786,7 @@ export async function createApp({
                   databaseSessions.query(p.id, operation, signal),
                 cookieSession: projectCookieSession(store, p, environmentId),
                 signal: controller.signal,
-                prepareRequest: (request) =>
-                  resolveServiceRequest(p, request, environmentId),
+                prepareRequest: createServiceRequestResolver(p, environmentId),
               });
               run.environmentId = environmentId;
               return json(

@@ -1,6 +1,18 @@
-# 后端检查点 · 2026-10-27 21:30 UTC
+# 后端检查点 · 2026-10-27 22:48 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 22:48 执行期间服务地址隔离修复候选
+
+- 最后完整验证根已推进至 remote `245d3d1f52703f73d579f0779a07a0e38e8cb07f` / local `61e562e27000381db86d5826a514c495ddadf202` / tree `9cb70f3d793518e15d6463645d923be1bf532e57`，首次CI `40587849423` 19/19 GREEN。19实际checkout、12实际core ZIP摘要/399文件manifest及完整TAP核完；Linux/macOS2116通过，Windows2109通过/7明确skip。49 Digest、10纯诊断、7 XML边界全部通过，DB/stdio/三平台桌面/UI/format/ac4822均为本次日志证据；portable/UI ZIP字节未声称已校验。没有输出新增失败诊断，不能据此解释或消除旧中断原因。
+- PR26 `e2d676b1` 的首次CI `40587001028` 亦已完整核验19/19，all actual `a6bb7714f7a6d2bc73878f33b463bc7fd273f30a` 同树 `f7a40bf14118b818fd0233b6ad03e8df33473842`，12实际ZIP摘要/TAP/264文件66×4清单完整，每OS1379通过无失败/跳过。仅诊断信息保留，不算运行时修复。
+- 新问题是真实的执行隔离错误：scope持久化的Object.assign刷新调用方project后，每个HTTP叶片的服务解析又读该对象；运行期间owner修改环境服务URL、随后正常JSON环境变量提取保存，会使第二请求转去新host。旧集成根owner流程以及未改develop的owner/MCP HTTP/MCP stdio/CLI四入口均有真实loopback RED；初次develop夹具清理方法不适用的问题另保留，随后四入口重做明确RED，不拿清理异常冒充行为复现。
+- 新独立draft PR46 `fix/run-service-context → develop`，local `579608020d3d2225d63ca2ccfaa7c3028cbb3d58` / remote `a6e62ee34237ab8032995a37cececef3a0d353d4` / tree `6fa11855b91d1159e0a55530f22313ef912b9f03`，无额外base依赖。最小私有resolver在执行前只分离选定环境ID/服务URL映射、服务ID目录、folder binding，不复制/冻结变量值；本次运行地址不漂移，下次运行仍读新配置。四生产文件变更，不改scope提交、数据库授权、Cookie、取消、保存收据、预算或前端。
+- PR46首次CI `40595195067` 10/10 GREEN，actual checkout `c4bee6c25cebdb07804145d3d333bcd69e9e3504` 与提交同树，parents develop88f70bb+a6e62ee。三个实际core ZIP SHA256/大小/CRC及完整TAP核对，三OS各1035通过无fail/cancel/skip，1030顶层加2/3嵌套计划连续，全部12新增用例在实际TAP通过。旧workflow不含core manifest或packaged-stdio，不借用root能力；三平台自有desktop日志smoke通过，desktop ZIP字节未校验。
+- 根生产合并 `f978efb7dbea67b38ab4204e57775584f3418ae6` / tree `33d8fa3a71309d4df154155d58310fc4115042af` 与独立组合f291629同树。CLI保留selectedEnvironment及临时授权/取消链；MCP保留effectiveRequest→inputAuth→assertNativeInheritanceMCPInput→applyMCPInput顺序，只替换resolver工厂。load-runner没有此次scope持久化刷新别名，不为对称性扩展补丁或增加负载。
+- 根只增加组合测试的 `6603e93a95db8ff65b983e9a563ec551f5afcf06` 已cherry-pick为 `42b39b502438ccb3621e043d13f9a79e25304947`，精确同树 `810e21f44ba024d7fc074bf34d4abb192a2309b7`。同树4完整文件24/24通过，0fail/cancel/skip，6.815秒；独立17-case工作流文件亦通过。没有为凑数重复跑相同根批次。覆盖四标准入口及原生HTTP/stdio aliases、授权拒绝、当前配置的single调用、下一次执行、删除/空地址、取消、变量冲突保留响应不重发、跨项目与备份重启。
+- 另六入口真实postjournal activity-save故障控制保留两个实际wire响应、已提交变量/配置、未知且不可直接重试的收据；恢复同run ID一次，其他项目不变，无HTTP重放。注入仅在原Store方法边界制造测试自有history路径障碍，原save/journal/read/recovery仍执行，不伪造错误。root-only原生/typed receipts不冒充PR46独立base覆盖。该组合及check/fullformat/diff来自同树验证；之后只有本文变化，新根仍待自身CI。
+- 原live-reference计划模式只做了可行性评估，**没有实现或启用**；先修已有合同错误，不新增前端或数据格式。SQL Server依赖/许可、Oracle/达梦、原生自动化图映射和历史未明失败仍保留。没有main/develop合并或部署。
 
 ## 21:30 现有错误证据保留，不是中断修复
 
