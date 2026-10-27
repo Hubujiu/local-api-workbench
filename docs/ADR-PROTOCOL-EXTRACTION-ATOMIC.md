@@ -1,0 +1,9 @@
+# Ordinary protocol extraction batches
+
+The shared gRPC, Socket.IO and TCP/WebSocket/SSE plan-result branch prepares every declared extraction against the completed protocol result before changing any variable scope. The whole candidate includes runtime values, hidden-name masks, environment and globals. Duplicate targets retain declaration-order, last-write behavior. Failed extraction publishes an empty `record.extracted` and leaves the previous effective values available to the next step. Continuing after an ordinary failed protocol step is existing policy and is unchanged.
+
+Environment/global changes are submitted through the existing scope-persistence callback once. The local batch and `record.extracted` publish only after that callback succeeds. A genuine `ProjectCommitUncertain` reports `scopeCommit: {outcome: "unknown", retrySafe: false}` without raw causes or project IDs; it means this execution did not adopt the batch, not that disk was rolled back. No protocol call is retried. A cancellation observed before this commit boundary prevents the batch; a storage write already confirmed during cancellation is not falsely undone.
+
+This change does not alter HTTP extraction, native tasks, script behavior, protocol request side effects, budgets or the continue-after-failure policy. Its minimal base is PR30 (truthful run receipts), already dependent on PR17 (typed journal outcomes); root integration and unrelated native-script changes are not dependencies.
+
+The initial real loopback regression reproduced all three branches sending `fresh-loopback-token` in a following HTTP request after a later extraction failed. The corrected batch keeps the old runtime token and hidden masks, with no partial extraction receipt. Broader persistence/cancellation/frozen restoration verification is in progress until the exact final commit is validated.
