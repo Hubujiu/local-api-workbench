@@ -253,3 +253,26 @@ original unique-name restriction. No duplicate row is dropped to manufacture
 roundtrip equality. Early test wiring also assumed the root-only recordId field
 and omitted stdio write permission; both fixtures were corrected to this pure
 feature base's actual receipt/permission contract. Final own CI remains pending.
+
+### Fixed dependency baseline and CI provenance
+
+PR43 targets `deps/native-inheritance-export-base`, pinned to the prior PR14
+commit `9c66155ceeff7f57afda1b2368004cb3cf355f02`. Future PR14 extended-protocol
+export changes are composed separately; they are not prerequisites of this HTTP
+inheritance/flow slice. No integration-branch history is added to this baseline.
+
+CI run `40541684337` did not check out the feature's local tree. Its actual merge
+commit was `026d8f80ca2cbd3e9b9d7c4673f6aa4189e9e578` (tree
+`2208db92dcb746a079eae6bcfd129b2425fad73a`), combining feature head `10780bff`
+with moving PR14 base `4e5caa66`. That base introduced an intentionally RED
+extended-protocol specification before its implementation. All three core shard
+3 jobs failed that specification; the new HTTP graph/flow cases passed on all
+three platforms. This 16/19 result remains RED and does not validate the isolated
+feature tree. Retargeting plus this dependency record triggers a new, separately
+verified head; no obsolete merge-tree run is retried or relabeled successful.
+
+The earlier WIP run `40540359382` also remains RED: its flow tests hit the known
+snapshot duplicate-row rejection, and macOS desktop separately reported a script
+activity timeout after HTTP 200 (compatibility 275 ms against a 250 ms budget),
+followed by shutdown watchdog timeout. This is not an artifact-upload failure;
+this feature does not change the script engine or its limits to hide it.
