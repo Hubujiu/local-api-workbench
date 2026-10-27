@@ -160,3 +160,162 @@ represent recoverable Workbench resource state. Full project backup is distinct.
 Independent negative tests reproduced both omissions before the fix; pure native
 roundtrip and authenticated HTTP/disk/backup tests cover the guard and unchanged
 state. This is not new original-UI roundtrip evidence.
+
+## Bounded conditional Mock reverse interchange (WIP)
+
+JSON and directory definitions now serialize native conditional Mock data without
+evaluating conditions, sampling schemas or running scripts. Generated data is
+read back through the existing native importer and compared before returning.
+Rules retain order, IDs, names, enable state, AND conditions and literal values;
+sourceStatus is retained while runtime remains fixed HTTP 200. Headers, delays,
+fallback, inline object/array schemas and raw JSON object/array bodies survive.
+Inline rule examples avoid altering the separate request documentation examples.
+Condition/example IDs are stable; directory output uses final project/API IDs and
+one settings/mock\_<target>.json configuration rather than conflicting mirrors.
+
+Scalar/raw-XML serialization, model/external references, non-JSON raw bodies,
+ordinary/native mixed rules, global custom Mock-library dependencies and paths
+that cannot reverse faithfully reject. Existing unsupported project resources
+still reject. Retained mock_inner_rules and execution archives are not consumed
+per-API Mock config and cannot be discarded as redundant. No original GUI or
+XML/engine-special audit was performed for this feature.
+
+settings.mockEnabled=false previously disappeared during export, reopening Mock
+serving on re-import. No verified native project-wide equivalent exists, so both
+exports now refuse this state. smartMockBuiltins=false, builtinDictionary=false
+and recursiveFolderScopes=false are neutral defaults; empty resource collections
+remain accepted. mockSeed=0 was already rejected, never silently discarded. True
+recursiveFolderScopes cannot affect the supported export subset because inherited
+settings are rejected independently. Future unknown settings are not thereby
+assumed neutral.
+
+Focused acceptance covers authenticated HTTP exports; real hit/fallback/disabled
+rules, duplicate query and combined header/bracket-body POST conditions; declared
+404 versus executed200; raw JSON/schema responses; repeated dual-format roundtrip;
+document examples and source immutability; disabled API roundtrip; project
+isolation, backup restore and restart. An invalid regex literal is transported
+inertly, not executed. The dependency-only base joins native directory import,
+conditional Mock and verified runtime/CI prerequisites without root integration.
+MCP export is absent from this isolated baseline and requires root integration
+acceptance rather than importing an unrelated MCP feature. Exact-commit CI is
+required before acceptance; local workflow results are not full compatibility.
+
+## Explicit SDK URL mode must not silently downgrade
+
+A request using scriptURLMode=sdk and pm.request.url.query.add previously exported
+successfully, but native import kept its script and dropped the mode. Re-execution
+then failed because the imported URL was a string. No verified native field carries
+this Workbench mode, so both exporters now reject it explicitly, even without an
+active script. Frozen directory steps pass through the same guard. No script
+rewriting, inference or global import-default change is attempted.
+
+The ordinary HTTP workflow proves the original SDK query edit reaches the wire,
+authenticated native exports return400 without mutation or execution, and the full
+Workbench backup preserves the frozen SDK step through restore/restart and actual
+HTTP execution. Editing the live API to ordinary mode does not erase the frozen
+step's restriction. Ordinary legacy/apipost8 definitions retain positive coverage.
+This small format guard does not change the URL implementation or script runtime.
+
+## Active document definition roundtrip
+
+The document slice reuses PR21's bounded static `target_type: "doc"` contract.
+Current title/content/folder and status selection are exported as name/description,
+parent relationship and mark reference. Current statusId takes precedence over a
+historical source mark. Source sort/version/status remain inert scalar metadata.
+Empty content, CRLF, Unicode, Markdown, HTML, template-looking text and URLs are
+preserved literally: no rendering, interpolation, execution, attachment fetching,
+link migration or internal-link rewriting takes place.
+
+Both formats assign output project/target/parent/mark identities consistently.
+Old Workbench document IDs and apipostSource identity are NOT preserved verbatim:
+reimport derives a new identity from the exported source. Workbench backup alone
+preserves exact historical identities. No invented provenance extension or body
+annotation is emitted. Generated IDs are deterministic for a fixed input project;
+reimport into a new project is not a claim of unchanged IDs across generations.
+
+Supported plain Workbench text documents need no native source metadata. Native
+names must be nonempty and at most 200 characters (narrower than the 500-character
+Workbench title limit). Unknown source fields, custom import notes, populated
+attributes, deletedAt and resource trash are rejected; they are not filtered away.
+A historical mark without a current validated statusId is rejected rather than
+silently revived. Non-string rich-text/attachment bodies and native task payloads
+remain unsupported. Empty attribute objects and absent/empty generated notes have
+no extra exported semantics. Existing whole-project unsupported-feature guards
+continue to apply.
+
+The dependency-only base joins the existing export prerequisites with PR21 and
+its PR20 prerequisites, not PR14 or root integration business commits. The feature
+changes only export conversion, regressions and this ADR. Tests exercise owner
+JSON/directory import, edits through authenticated PUT, double export/reimport,
+plain and native documents, mixed and document-only projects, current status
+edits, same titles in different folders, source/project isolation, exact backup
+restore and restart. Deleted archives and unsupported metadata fail closed.
+Source fixtures are independently authored, not original GUI roundtrip evidence.
+
+## Bounded reusable model definition graph
+
+The exporter now uses the existing model importer, model folder validator and
+schema-position classifier as a static reverse adapter and readback oracle. It
+never executes, samples, compiles, expands or fetches a schema. Model/folder IDs
+are generated together; API body and response schema references use the same
+mapping. JSON `models` and directory `schemas/index.json` plus wrapped
+`schemas/<id>.json` carry the definitions, including empty model folders. The
+previous intermediate guard rejected modelFolders explicitly rather than silently
+losing them; supported folders now actually roundtrip.
+
+Only a one-to-one exact dictionary/schema-component graph is accepted, with
+existing bounds (100 models plus folders, 20 folder levels, 50000 schema traversal
+nodes, 40 schema levels and project byte limits). Unknown fields and other
+component categories remain unsupported. Source sort and folder relationships
+remain data. Model object/boolean definitions, whole-model references, static
+self/mutual references and same-model local pointers are preserved without
+inlining. Cross-model subpaths, unresolved aliases, external references, dynamic
+anchors and custom model-combination extensions reject. Literal example/default/
+enum/extension objects are copied as data, even if they contain `$ref`-looking
+keys. Parameter schema and conditional-Mock reference limits remain unchanged.
+
+Naming is intentionally narrow: existing native import prefixes every dictionary
+name with the source project name plus `/`. Export requires that exact current
+project namespace and a nonempty native suffix no longer than 200 characters.
+It removes exactly that prefix and verifies the original name on readback. It
+never guesses, changes generic import naming, or repeatedly adds prefixes.
+Importing into an arbitrarily named destination is allowed, but that destination
+may not satisfy the next native export precondition; rename mismatches explicitly
+reject. Arbitrary names and historical IDs are preserved by Workbench backup,
+not promised by this subset. Two-generation tests deliberately keep the required
+project name and separately test mismatch rejection.
+
+The regression workflow imports both source formats, edits the linked model with
+existing saveModel, saves through owner PUT, checks request/response links, exports
+both formats twice, sends a small literal body to fictional loopback HTTP, then
+backs up/restores/restarts. The schema remains a definition; no new schema runtime
+or generation path is enabled. It also checks empty directories, literal reference
+annotations, persisted source identity in backup, unrelated-project isolation and
+atomic refusal of unrepresentable graphs. No original program or special runtime
+stress/audit was used.
+
+Boolean **model** definitions and API `$ref` to such a model are distinct from a
+direct API boolean schema. This slice rejects a direct request boolean before
+normalization, which would otherwise replace false with `{}`; it does not change
+generic normalization or recover information already discarded on earlier input.
+The response exporter retains its existing object-schema contract. No boolean
+schema execution acceptance is claimed.
+
+### Explicit model-name mode
+
+Native import and export now accept the caller option `modelNameMode: "preserve"`.
+Owner imports supply it in the request body beside `document`; owner exports use
+one `modelNameMode=preserve` query parameter. Each side must select it independently.
+Omission or `namespaced` keeps the existing namespace behavior and its export
+preconditions. Imported file fields never opt in; no project setting or private
+native extension is added. The existing native `name` / effective `display_name`
+carry the exact current name in preserve mode (valid Unicode, nonblank, <=200
+UTF-16 units). No guessed truncation or prefix removal occurs. Duplicate effective
+names reject rather than silently rename. Project renaming and mixed-source names
+are thus reversible only when both callers explicitly choose preserve.
+
+The option propagates through directory frozen API conversion and final readback,
+without freezing a new model-library snapshot or changing schema execution. Invalid
+options, repeated export query options, and options for nonnative formats reject
+before persistence. Existing reference-graph and unsupported-data limits remain.
+Full Workbench backups continue preserving identity and all names without this option.

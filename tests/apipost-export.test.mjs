@@ -552,3 +552,174 @@ test("HTTP native export refuses a stored native pipeline without changing the p
   assert.match((await response.json()).error, /nativeTasks/);
   assert.equal(JSON.stringify(await app.store.get(p.id)), before);
 });
+
+test("native exports preserve disabled Mock by refusing it, while neutral false and empty settings remain exportable", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { exportApipostDirectory } = await import(
+    "../src/apipost-directory-export.mjs"
+  );
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "native-export-disabled-mock-"),
+  );
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const project = await app.store.create("Closed Mock");
+  project.requests = [
+    normalizeRequest({
+      id: "mock",
+      name: "Mock",
+      url: "http://127.0.0.1/echo",
+    }),
+  ];
+  project.settings = { mockEnabled: false };
+  await app.store.save(project);
+  const before = await app.store.get(project.id);
+  const mockURL = `${app.url}/mock/${project.id}/mock`;
+  assert.equal((await fetch(mockURL)).status, 503);
+  for (const [format, exporter] of [
+    ["apipost", exportApipost],
+    ["apipost-directory", exportApipostDirectory],
+  ]) {
+    assert.throws(() => exporter(project), /项目Mock关闭/);
+    const url = `${app.url}/api/projects/${project.id}/export?format=${format}`;
+    assert.equal((await fetch(url)).status, 403);
+    const response = await fetch(url, {
+      headers: { "x-local-token": app.token },
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /项目Mock关闭/);
+    assert.deepEqual(await app.store.get(project.id), before);
+  }
+  assert.equal((await fetch(mockURL)).status, 503);
+  const backup = restoreProject(before);
+  assert.equal(backup.settings.mockEnabled, false);
+  project.settings = {
+    smartMockBuiltins: false,
+    builtinDictionary: false,
+    recursiveFolderScopes: false,
+    mockFieldRules: [],
+    folderParameters: {},
+    functions: [],
+  };
+  for (const exporter of [exportApipost, exportApipostDirectory])
+    assert.doesNotThrow(() => exporter(project));
+  project.settings.mockSeed = 0;
+  assert.throws(() => exportApipost(project), /mockSeed/);
+});
+
+test("native exports refuse SDK URL mode without disabling its real execution or backup/frozen-plan recovery", async (t) => {
+  const { createApp } = await import("../src/server.mjs");
+  const { exportApipostDirectory } = await import(
+    "../src/apipost-directory-export.mjs"
+  );
+  const seen = [];
+  const upstream = http.createServer((req, res) => {
+    seen.push(req.url);
+    res.setHeader("content-type", "application/json");
+    res.end("{}");
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  const root = await mkdtemp(path.join(os.tmpdir(), "native-export-sdk-mode-"));
+  let app = await createApp({ root, port: 0 });
+  const stop = async () => {
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+  };
+  t.after(async () => {
+    await stop();
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const post = async (route, body, status = 200) => {
+    const response = await fetch(app.url + route, {
+      method: "POST",
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const value = await response.json();
+    assert.equal(response.status, status, JSON.stringify(value));
+    return value;
+  };
+  const project = await app.store.create("SDK mode");
+  const request = normalizeRequest({
+    id: "sdk",
+    name: "SDK mode",
+    url: `http://127.0.0.1:${upstream.address().port}/echo`,
+    scriptDialect: "apipost8",
+    scriptURLMode: "sdk",
+    beforeScript: "pm.request.url.query.add({key:'proof',value:'kept'});",
+  });
+  project.requests = [request];
+  await app.store.save(project);
+  await post(`/api/projects/${project.id}/execute`, { request });
+  assert.equal(seen.at(-1), "/echo?proof=kept");
+  const before = await app.store.get(project.id);
+  const count = seen.length;
+  for (const format of ["apipost", "apipost-directory"]) {
+    const url = `${app.url}/api/projects/${project.id}/export?format=${format}`;
+    assert.equal((await fetch(url)).status, 403);
+    const response = await fetch(url, {
+      headers: { "x-local-token": app.token },
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /SDK URL/);
+    assert.deepEqual(await app.store.get(project.id), before);
+  }
+  assert.equal(seen.length, count);
+  const withoutScript = structuredClone(before);
+  withoutScript.requests[0].beforeScript = "";
+  for (const exporter of [exportApipost, exportApipostDirectory])
+    assert.throws(() => exporter(withoutScript), /SDK URL/);
+  const plan = await post(`/api/projects/${project.id}/plans`, {
+    name: "Frozen SDK",
+    environmentId: project.environments[0].id,
+    steps: [{ request }],
+  });
+  const live = await app.store.get(project.id);
+  delete live.requests[0].scriptURLMode;
+  live.requests[0].beforeScript = "";
+  await app.store.save(live);
+  assert.throws(() => exportApipostDirectory(live), /SDK URL/);
+  const frozenError = await fetch(
+    `${app.url}/api/projects/${project.id}/export?format=apipost-directory`,
+    { headers: { "x-local-token": app.token } },
+  );
+  assert.equal(frozenError.status, 400);
+  assert.match((await frozenError.json()).error, /SDK URL/);
+  assert.equal(live.plans[0].steps[0].request.scriptURLMode, "sdk");
+  const backupResponse = await fetch(
+    `${app.url}/api/projects/${project.id}/export`,
+    { headers: { "x-local-token": app.token } },
+  );
+  assert.equal(backupResponse.status, 200);
+  const backup = await backupResponse.json();
+  const restored = await post("/api/restore", { document: backup }, 201);
+  await stop();
+  app = await createApp({ root, port: 0 });
+  const run = await post(`/api/projects/${restored.id}/run`, {
+    planId: plan.id,
+  });
+  assert.equal(run.status, "passed", JSON.stringify(run));
+  assert.equal(seen.at(-1), "/echo?proof=kept");
+  assert.equal(
+    (await app.store.get(restored.id)).plans[0].steps[0].request.scriptURLMode,
+    "sdk",
+  );
+  for (const dialect of ["legacy", "apipost8"]) {
+    const simple = structuredClone(before);
+    simple.plans = [];
+    delete simple.requests[0].scriptURLMode;
+    simple.requests[0].scriptDialect = dialect;
+    simple.requests[0].beforeScript = "";
+    for (const exporter of [exportApipost, exportApipostDirectory])
+      assert.doesNotThrow(() => exporter(simple));
+  }
+});

@@ -6,6 +6,8 @@ import {
   prepareApipostDatabases,
   nativeDatabaseTasks,
 } from "./apipost-database-import.mjs";
+import { nativeMockRouteFromSource } from "./native-mock-route.mjs";
+import { prepareNativeMock } from "./apipost-native-mock.mjs";
 import { mergeApipostMockRules } from "./apipost-mock-rules.mjs";
 import {
   parseApipostFunctionTemplate,
@@ -157,16 +159,26 @@ function responseHeaderMap(value) {
             "description",
             "field_type",
             "not_null",
+            "schema",
           ].includes(k),
       ) ||
       row.is_checked !== 1 ||
       (row.description !== undefined && row.description !== "") ||
-      (row.field_type !== undefined && row.field_type !== "String") ||
-      (row.not_null !== undefined && ![-1, 0].includes(row.not_null)) ||
+      (row.field_type !== undefined &&
+        !["String", "string"].includes(row.field_type)) ||
+      (row.not_null !== undefined && ![-1, 0, 1].includes(row.not_null)) ||
       typeof row.key !== "string" ||
       typeof row.value !== "string"
     )
       throw Error("Apipost响应示例头仅支持启用的普通文本行；其他语义不会丢弃");
+    if (
+      row.schema !== undefined &&
+      (!object(row.schema) ||
+        Object.keys(row.schema).some((key) => key !== "type") ||
+        row.schema.type !== "string")
+    )
+      throw Error("Apipost响应头仅支持普通字符串Schema");
+    if (row.key === "" && row.value === "") continue;
     const name = row.key.toLowerCase();
     if (names.has(name)) throw Error("Apipost响应头名称重复");
     names.add(name);
@@ -237,7 +249,11 @@ export function parseApipostScriptTasks(value, phase, internalOrigins = false) {
       provenance,
   };
 }
-export function importModernApipost(source, project, { sync = false } = {}) {
+export function importModernApipost(
+  source,
+  project,
+  { sync = false, modelNameMode } = {},
+) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
   if (!isModernApipost(source)) throw Error("Apipost现代JSON结构不完整");
   for (const [key, value] of Object.entries(source))
@@ -256,7 +272,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       reject(value, key);
   const resource = apipostResourceFactory(source.project_id);
   for (const name of ["automated_testings"]) reject(source[name], name);
-  const models = prepareApipostModels(source.models, resource, source.name);
+  const models = prepareApipostModels(source.models, resource, source.name, {
+    modelNameMode,
+  });
   const global = source.global;
   const knownGlobal = new Set([
     "envs",
@@ -391,7 +409,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const nodes = [...apiNodes, ...samples.nodes];
   const ids = new Map();
   for (const node of nodes) {
-    if (!object(node) || !["api", "folder"].includes(node.target_type))
+    if (!object(node) || !["api", "folder", "doc"].includes(node.target_type))
       throw Error("Apipost包含未支持的资源类型");
     const id = safe(String(node.target_id));
     if (ids.has(id)) throw Error("Apipost资源ID重复");
@@ -399,7 +417,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     reject(node.children, "嵌套资源");
     if (node.target_type === "folder") reject(node.attribute_info, "目录属性");
     reject(node.tags, "接口标签");
-    reject(node.ai_expect?.list, "AI条件Mock");
+    if (
+      node.target_type === "folder" &&
+      (node.ai_expect || node.nativeMockConfig)
+    )
+      throw Error("目录Mock配置不支持");
     if (node.mock_ip_white_list_enable && node.mock_ip_white_list_enable !== -1)
       throw Error("Apipost Mock IP白名单需手工迁移");
   }
@@ -446,6 +468,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   )
     throw Error("Apipost空项目表单参数尚不能保留，不会丢弃来源");
   const mapped = nodes.map((node) => {
+    if (node.target_type === "doc") {
+      if (node.mark_id && !marks.has(String(node.mark_id)))
+        throw Error("Apipost文档状态引用不存在");
+      // Keep documents out of all request/task/inheritance conversion paths.
+      return { node, legacy: node };
+    }
     const request = node.request ?? {};
     if (!object(request)) throw Error("Apipost请求无效");
     if (request.body !== undefined && !object(request.body))
@@ -736,14 +764,35 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   });
   const legacy = importApipost(
     { apis: mapped.map((x) => x.legacy) },
-    { preserveEmptyExamples: true },
+    { preserveEmptyExamples: true, documentProjectId: source.project_id },
   );
+  for (const document of legacy.documents) {
+    const markId = document.apipostSource.mark_id;
+    if (markId) document.statusId = resource("mark", markId);
+  }
   const sampleCases = [],
     ordinaryRequests = [];
   for (const request of legacy.requests) {
     const row = mapped.find(
       (x) => "apipost:" + x.node.target_id === request.sourceOperationId,
     );
+    const route = nativeMockRouteFromSource(row.node, source.project_id);
+    if (route) request.nativeMockRoute = route;
+    else
+      request.importNotes.push(
+        "源标识或URL不满足原生Mock路径路由约束；保留HTTP定义与原接口ID的Mock入口，不启用路径别名。",
+      );
+    const nativeMock = prepareNativeMock(row.node, {
+      projectId: source.project_id,
+      headers: responseHeaderMap,
+      rewriteSchema: models.rewrite,
+    });
+    if (nativeMock) {
+      request.nativeMock = nativeMock;
+      request.importNotes.push(
+        "原版条件Mock以固定HTTP 200和优先JSON Schema策略迁移；期望状态码仅保留为来源元数据。运行时保留工作台接口ID地址，并支持工作台项目ID下的原生方法/路径路由；未知路径失败而不返回伪成功。IP限制/其他返回策略不自动丢弃或启用。",
+      );
+    }
     if (row.beforeTask || row.afterTask) {
       request.scriptDialect = "apipost8";
       if (row.beforeTask?.native || row.afterTask?.native) {
@@ -1021,6 +1070,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     components.schemas[key] = schema;
   }
   const dictionary = mergeResources(project.dictionary, models.dictionary);
+  if (
+    modelNameMode === "preserve" &&
+    new Set(dictionary.map((m) => m.name)).size !== dictionary.length
+  )
+    throw Error("Apipost模型名称冲突，请导入新项目");
   const modelFolders = mergeResources(project.modelFolders, models.folders);
   validateModelFolders({ dictionary, modelFolders });
   return {

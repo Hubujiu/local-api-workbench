@@ -1,10 +1,13 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
 } from "./imported-native-task-source.mjs";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
@@ -152,11 +155,12 @@ export class Store {
       await release();
     }
   }
-  async create(name, directory) {
+  async create(name, directory, { description } = {}) {
     const p = {
       version: 1,
       id: id(),
       name: String(name || "新项目").slice(0, 100),
+      ...(description === undefined ? {} : { description }),
       requests: [],
       environments: [
         {
@@ -198,6 +202,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -213,6 +218,8 @@ export class Store {
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
+    for (const run of p.runs || [])
+      if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,
@@ -261,6 +268,11 @@ export class Store {
         );
       if (request.nativeTasks !== undefined)
         request.nativeTasks = normalizeNativeTaskRequest(request);
+      if (request.nativeMock !== undefined) {
+        if (request.mockRules?.length)
+          throw Error("原版Mock与普通Mock规则不能混用");
+        request.nativeMock = normalizeNativeMock(request.nativeMock);
+      }
     }
     if (p.cases !== undefined) {
       if (!Array.isArray(p.cases) || p.cases.length > 1000)
