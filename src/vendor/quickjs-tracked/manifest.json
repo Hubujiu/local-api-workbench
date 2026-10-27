@@ -1,13 +1,16 @@
 {
-  "runtime": "quickjs-emscripten0.31.0-localapi-rejections1",
+  "runtime": "quickjs-emscripten0.31.0-localapi-rejections1-heap1",
   "sourceRepository": "https://github.com/justjake/quickjs-emscripten",
   "sourceCommit": "235f6da2fd4f7354fa4765fde4aea880d2a4aef5",
   "sourceTag": "v0.31.0",
   "emscripten": "3.1.65",
   "emsdkCommit": "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d",
   "closureCompiler": false,
-  "wasmSha256": "e12c1e8b0ad1c137564ca8a8a3979208c86b9e9f3a10fb08c704e1fd3053375f",
+  "wasmSha256": "73dd53a3e384549688c49a1724e43139160e40d3136b0c8da62bfd4f138a1b94",
   "glueSha256": "4764f04399ab57b544f4654219c09d36cb6104c17cf8b1ab6baba39b806f3807",
   "patchSha256": "b820ef29facac7ccc60dbc6abe967b0528bce04a79d2f51d0665e1eaba3ae03c",
-  "patchedSourceSha256": "f8ac718fbcd925c9c51d03a3fcbd9557bc9b0b7fd38cc16170996283e25ec454"
+  "patchedSourceSha256": "f8ac718fbcd925c9c51d03a3fcbd9557bc9b0b7fd38cc16170996283e25ec454",
+  "heapPatchSha256": "a1532273a27327553f5188339e4006851c463dfbf339d6bed110210e8aecd849",
+  "patchedQuickJSSourceSha256": "ea37ef190747d83b42b307fb9c331e164f0c83c82f36c1338bc3933b694f2c58",
+  "patchedMakefileSha256": "346fe9caebe1bd37d8f331975aa7099eefaae30939ad90a0c1ea3afbdc3074c9"
 }
