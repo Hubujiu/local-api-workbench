@@ -1,4 +1,9 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import {
+  prepareProtocolExport,
+  verifyProtocolDocument,
+} from "./apipost-protocol-export.mjs";
+
 import { exportExtendedApipostAuth } from "./apipost-auth-export.mjs";
 import { prepareApipostModelExport } from "./apipost-model-export.mjs";
 import { exportApipostDocuments } from "./apipost-document-export.mjs";
@@ -154,7 +159,6 @@ export function exportApipost(project, options = {}) {
   for (const key of [
     "plans",
     "cases",
-    "protocols",
     "apiResourceTrash",
     "parameterDictionary",
     "models",
@@ -165,7 +169,11 @@ export function exportApipost(project, options = {}) {
   if (project.settings?.mockEnabled === false)
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
-    if (!["statuses", "recursiveFolderScopes"].includes(key))
+    if (
+      !["statuses", "recursiveFolderScopes", "apipostProtocolSources"].includes(
+        key,
+      )
+    )
       unsupported(value, `设置 ${key}`);
   if (
     typeof project.id !== "string" ||
@@ -239,8 +247,12 @@ export function exportApipost(project, options = {}) {
     is_sys_default: -1,
   }));
   const markIds = new Set((project.settings?.statuses || []).map((s) => s.id));
+  const protocolExport = prepareProtocolExport(project, {
+    projectId,
+    id: apipostExportId,
+  });
   const apis = [],
-    folders = new Map();
+    folders = new Map(protocolExport.folders);
   function folder(name) {
     if (!name) return "0";
     if (folders.has(name)) return folders.get(name);
@@ -412,6 +424,7 @@ export function exportApipost(project, options = {}) {
       folder,
     }),
   );
+  apis.push(...protocolExport.emit(folder));
   if (apis.length > 5000) throw Error("Apipost最多5000条资源");
   const document = {
     project_id: projectId,
@@ -464,5 +477,6 @@ export function exportApipost(project, options = {}) {
   };
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
     throw Error("Apipost导出超过4MiB");
+  verifyProtocolDocument(project, document);
   return document;
 }
