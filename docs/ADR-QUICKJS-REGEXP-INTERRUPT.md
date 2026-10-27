@@ -1,4 +1,4 @@
-# WIP: use the existing activity deadline inside QuickJS regex execution
+# WIP: QuickJS regex interruption and upstream Unicode Script OOM repair
 
 The pinned QuickJS 2024-02-14 regex VM performs backtracking in C without
 checking the runtime interrupt callback. Its stack-overflow callback checks
@@ -14,6 +14,22 @@ Only its three production files are patched: `libregexp.c`, `libregexp.h` and
 trailing space is removed; functional patch content is unchanged. Existing
 QuickJS and quickjs-emscripten MIT notices remain in the distributed LICENSE.
 No proprietary implementation is used.
+
+### Separate official Unicode Script allocation-failure repair
+
+Also backport Bellard's MIT-licensed 2026-10-26 commit
+[`817509a87c3c0af362df576574784bae0dae8129`](https://github.com/bellard/quickjs/commit/817509a87c3c0af362df576574784bae0dae8129)
+as the separate `unicode-script-oom.patch`. Its sole functional change in
+`libunicode.c` is returning `-1` instead of jumping to the same failure label
+again. The original path never returned after allocation failure; with script
+extensions it also repeated cleanup. The repaired path frees its owned
+temporary ranges once and returns the existing memory-error result to its
+caller. The caller retains ownership of its result range.
+
+This does not introduce compilation polling or change existing compile-error
+classification: `js_compile_regexp` still wraps a failed compilation in a
+SyntaxError. The bounded OOM regression must distinguish this existing result
+from successful matching and from the worker's two-second failure guard.
 
 The regex VM polls after 10,000 selected backtracking/loop polling points,
 not every 10,000 arbitrary opcodes. Its callback uses the already-installed
@@ -39,6 +55,14 @@ each such operation finishes within 250 ms. Polling is cooperative, not an
 exact-millisecond preemption guarantee. Final over-budget rejection cannot
 retroactively stop work already performed.
 
+The product contract is cumulative charged active wall time with final
+over-budget rejection plus independent worker wall termination, not universal
+250 ms hard preemption of every native C operation. Extremely exhausted heaps
+can also prevent allocation of the Error object used by `JS_ThrowInterrupted`;
+the existing engine may then throw a null value that cannot carry its
+uncatchable marker. This patch makes no universal OOM-plus-timeout catchability
+guarantee and adds no runtime-global flag or message-text classification.
+
 Native assertion `regularmatch` remains unsupported. This engine repair is not
 full regex hardening, an RE2 substitution, a handwritten safe-regex validator,
 a repair of unrelated macOS activity-budget failures, or an XML-audit result.
@@ -51,12 +75,12 @@ termination guard that counts as failure if reached.
 The original source stays quickjs-emscripten `235f6da2fd4f7354fa4765fde4aea880d2a4aef5`;
 the official Emscripten SDK stays 3.1.65, manager commit
 `3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d`. Rejection and heap patches are unchanged.
-The manifest additionally identifies the upstream interrupt commit, exact
-backport patch, and patched `libregexp.c` / `libregexp.h` / `quickjs.c` bytes.
-The existing build verifier checks all five modified source paths and retains
+The manifest additionally identifies both upstream repair commits, their exact
+separate patches, and patched `libregexp.c` / `libregexp.h` / `quickjs.c` /
+`libunicode.c` bytes. The build verifier checks all six modified source paths and retains
 the unchanged wrapper API. Every changed engine artifact must be rebuilt.
 
-Two separate clean pinned-source builds with the same fixed official SDK
+Before the Unicode Script repair, two separate clean pinned-source builds with the same fixed official SDK
 reproduce WASM SHA-256
 `c09ec397ce8419fc385b46044659da9a4a9ac35d6dec8ccb1cedb3821d56fd3c`;
 glue remains byte-identical. Both builds pass source/artifact verification.
@@ -103,5 +127,19 @@ Both failures expected literal `interrupted` instead of the existing public
 official SDK reproduction, desktop, browser and database jobs passed, but do
 not make that run green. The corrected tests retain strict script-stage and
 promise-state classification, so parent wall timeout/OOM cannot pass instead.
+
+## Unicode Script OOM repair checkpoint
+
+The separate one-line upstream repair has been rebuilt from two fresh clones
+of the same pinned source using the existing read-only, frozen-cache SDK.
+Both source/artifact verifications reproduce WASM SHA-256
+`ac4822f75275ccf8cb936649383dc947843511784379518948cf61087a418c9e`.
+The glue and previously patched C sources remain byte-identical. The new patch
+SHA-256 is `167561877db123fb16ccbd2c682dfa2e05acd6c639885ae422a2cf92c82e8316`;
+the patched `libunicode.c` SHA-256 is
+`b151067a56841a0812d1087f02d2b9fe5ccc0dcf1f39a251f202d8ad34c03172`.
+
+The prior matching-only head's green CI does not validate this changed WASM.
+Bounded Unicode OOM regression and exact new-head CI are required separately.
 No old CI rerun or budget relaxation is used. New exact-head platform CI is
 still required; unrelated historical macOS budget failures are not claimed fixed.

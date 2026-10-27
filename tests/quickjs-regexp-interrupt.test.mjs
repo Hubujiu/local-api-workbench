@@ -58,6 +58,30 @@ test("reviewed regexp patch identity and manifest source digest fields are consi
   assert.equal(manifest.emscripten, "3.1.65");
 });
 
+test("reviewed upstream Unicode Script OOM repair is the separate one-line patch", async () => {
+  const root = new URL("../src/vendor/quickjs-tracked/", import.meta.url);
+  const manifest = JSON.parse(await readFile(new URL("manifest.json", root)));
+  assert.equal(
+    manifest.unicodeScriptOOMSourceCommit,
+    "817509a87c3c0af362df576574784bae0dae8129",
+  );
+  const patch = (
+    await readFile(new URL("unicode-script-oom.patch", root), "utf8")
+  ).replace(/\r\n/g, "\n");
+  assert.equal(
+    createHash("sha256").update(patch).digest("hex"),
+    manifest.unicodeScriptOOMPatchSha256,
+  );
+  assert.deepEqual(
+    patch.split("\n").filter((line) => /^[+-](?![+-])/.test(line)),
+    ["-    goto fail;", "+    return -1;"],
+  );
+  assert.equal(
+    manifest.patchedUnicodeSourceSha256,
+    "b151067a56841a0812d1087f02d2b9fe5ccc0dcf1f39a251f202d8ad34c03172",
+  );
+});
+
 test("ordinary regex keeps no-flags UTF-16, coercion, lookaround and backreference behavior", async () => {
   const cases = [
     ["^.$", "😀"],
