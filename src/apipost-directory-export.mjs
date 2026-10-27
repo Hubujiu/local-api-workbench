@@ -1,3 +1,4 @@
+import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
 import { exportApipost, apipostExportId } from "./apipost-export.mjs";
 import { importIntoProject, snapshotPlan } from "./core.mjs";
 import { directorySettings } from "../public/apipost-directory-input.js";
@@ -20,7 +21,11 @@ export function exportApipostDirectory(project) {
   const mapNode = (node) => {
     const copy = structuredClone(node);
     copy.target_id = scoped(
-      copy.target_type === "folder" ? "f" : "a",
+      copy.target_type === "folder"
+        ? "f"
+        : copy.target_type === "doc"
+          ? "d"
+          : "a",
       node.target_id,
     );
     copy.parent_id = node.parent_id === "0" ? "0" : scoped("f", node.parent_id);
@@ -271,6 +276,14 @@ export function exportApipostDirectory(project) {
     dictionary: [],
   };
   importIntoProject(check, result);
+  const withStatus = (p) =>
+    (p.documents || []).map((d) => ({
+      ...d,
+      statusName: d.statusId
+        ? p.settings?.statuses?.find((s) => s.id === d.statusId)?.name
+        : undefined,
+    }));
+  verifyApipostDocumentDefinitions(withStatus(project), withStatus(check));
   if (check.plans.length !== plans.length)
     throw Error("原生目录计划回读不完整");
   for (const [i, plan] of check.plans.entries())

@@ -215,3 +215,39 @@ Workbench backup preserves the frozen SDK step through restore/restart and actua
 HTTP execution. Editing the live API to ordinary mode does not erase the frozen
 step's restriction. Ordinary legacy/apipost8 definitions retain positive coverage.
 This small format guard does not change the URL implementation or script runtime.
+
+## Active document definition roundtrip
+
+The document slice reuses PR21's bounded static `target_type: "doc"` contract.
+Current title/content/folder and status selection are exported as name/description,
+parent relationship and mark reference. Current statusId takes precedence over a
+historical source mark. Source sort/version/status remain inert scalar metadata.
+Empty content, CRLF, Unicode, Markdown, HTML, template-looking text and URLs are
+preserved literally: no rendering, interpolation, execution, attachment fetching,
+link migration or internal-link rewriting takes place.
+
+Both formats assign output project/target/parent/mark identities consistently.
+Old Workbench document IDs and apipostSource identity are NOT preserved verbatim:
+reimport derives a new identity from the exported source. Workbench backup alone
+preserves exact historical identities. No invented provenance extension or body
+annotation is emitted. Generated IDs are deterministic for a fixed input project;
+reimport into a new project is not a claim of unchanged IDs across generations.
+
+Supported plain Workbench text documents need no native source metadata. Native
+names must be nonempty and at most 200 characters (narrower than the 500-character
+Workbench title limit). Unknown source fields, custom import notes, populated
+attributes, deletedAt and resource trash are rejected; they are not filtered away.
+A historical mark without a current validated statusId is rejected rather than
+silently revived. Non-string rich-text/attachment bodies and native task payloads
+remain unsupported. Empty attribute objects and absent/empty generated notes have
+no extra exported semantics. Existing whole-project unsupported-feature guards
+continue to apply.
+
+The dependency-only base joins the existing export prerequisites with PR21 and
+its PR20 prerequisites, not PR14 or root integration business commits. The feature
+changes only export conversion, regressions and this ADR. Tests exercise owner
+JSON/directory import, edits through authenticated PUT, double export/reimport,
+plain and native documents, mixed and document-only projects, current status
+edits, same titles in different folders, source/project isolation, exact backup
+restore and restart. Deleted archives and unsupported metadata fail closed.
+Source fixtures are independently authored, not original GUI roundtrip evidence.
