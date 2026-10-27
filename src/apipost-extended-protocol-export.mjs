@@ -8,6 +8,24 @@ const fail = (reason) => {
 };
 const same = (a, b) => isDeepStrictEqual(a, b);
 const types = new Set(["grpc", "socketio"]);
+function ownData(object, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(object, key);
+  if (descriptor && !("value" in descriptor)) fail("访问器字段");
+  return descriptor?.value;
+}
+function dataObject(object) {
+  if (
+    !object ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(object))
+  )
+    fail("对象类型");
+  for (const descriptor of Object.values(
+    Object.getOwnPropertyDescriptors(object),
+  ))
+    if (!("value" in descriptor)) fail("访问器字段");
+  return object;
+}
+
 function unique(items, label) {
   const map = new Map();
   for (const item of items) {
@@ -52,12 +70,14 @@ function noCredentials(node) {
   }
 }
 export function prepareExtendedProtocolExport(project) {
-  const sources = project.settings?.apipostProtocolSources ?? [];
+  dataObject(project);
+  const storedSettings = dataObject(ownData(project, "settings") ?? {});
+  const sources = ownData(storedSettings, "apipostProtocolSources") ?? [];
   const definitions = {
-    grpc: project.settings?.grpcDefinitions ?? [],
-    socketio: project.settings?.socketioDefinitions ?? [],
+    grpc: ownData(storedSettings, "grpcDefinitions") ?? [],
+    socketio: ownData(storedSettings, "socketioDefinitions") ?? [],
   };
-  const plans = project.plans ?? [];
+  const plans = ownData(project, "plans") ?? [];
   if (
     !Array.isArray(sources) ||
     !Array.isArray(plans) ||
@@ -66,6 +86,7 @@ export function prepareExtendedProtocolExport(project) {
     Object.values(definitions).some((a) => !Array.isArray(a) || a.length > 1000)
   )
     fail("集合无效");
+  validateResourceJSON({ sources, definitions });
   const entries = sources.filter((e) => types.has(e?.source?.target_type));
   if (
     !entries.length &&
@@ -73,10 +94,30 @@ export function prepareExtendedProtocolExport(project) {
     !definitions.socketio.length
   )
     return { base: project, derivedPlans: [], emit: () => [] };
+  const protocolPlanIds = new Set();
   validateResourceJSON({
     sources,
     definitions,
-    plans: plans.filter((p) => p.steps?.some((s) => types.has(s.type))),
+    plans: plans.filter((p) => {
+      const own = (object, key) => {
+        const descriptor = Object.getOwnPropertyDescriptor(object, key);
+        if (descriptor && !("value" in descriptor)) fail("计划访问器");
+        return descriptor?.value;
+      };
+      const planId = own(p, "id");
+      if (typeof planId !== "string" || !planId) fail("计划身份");
+      const steps = own(p, "steps");
+      if (!Array.isArray(steps)) fail("计划步骤");
+      for (let i = 0; i < steps.length; i++) {
+        const step = own(steps, String(i));
+        if (!step || typeof step !== "object") fail("计划步骤");
+        if (types.has(own(step, "type"))) {
+          protocolPlanIds.add(planId);
+          return true;
+        }
+      }
+      return false;
+    }),
   });
   const currentPlans = unique(plans, "计划"),
     groups = new Map(),
@@ -147,9 +188,9 @@ export function prepareExtendedProtocolExport(project) {
     consumed.add(raw.id);
   }
   const remainingPlans = plans.filter((p) => !consumed.has(p.id));
-  if (remainingPlans.some((p) => p.steps?.some((s) => types.has(s.type))))
+  if (remainingPlans.some((p) => protocolPlanIds.has(p.id)))
     fail("额外协议计划");
-  const settings = { ...project.settings };
+  const settings = { ...storedSettings };
   delete settings.grpcDefinitions;
   delete settings.socketioDefinitions;
   if (Object.hasOwn(settings, "apipostProtocolSources"))

@@ -13,7 +13,7 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
   const extended = prepareExtendedProtocolExport(project);
-  const plans = extended.base.plans;
+  const plans = extended.base.plans ?? [];
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: extended.derivedPlans };

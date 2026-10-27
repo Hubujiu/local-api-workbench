@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { importIntoProject } from "../src/core.mjs";
+import {
+  importIntoProject,
+  normalizeRequest,
+  snapshotPlan,
+} from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { extendedProtocolFixture } from "./fixtures/apipost-extended-protocols.mjs";
@@ -95,4 +99,165 @@ test("extended source ambiguity and all unrepresentable mutations reject without
   assert.equal(collision.settings.grpcDefinitions.length, 1);
   for (const encode of exporters)
     assert.throws(() => encode(collision), /身份冲突/);
+});
+
+test("source and plan accessors reject before invocation", () => {
+  for (const target of ["source", "steps", "type"]) {
+    const p = blank();
+    importIntoProject(p, extendedProtocolFixture());
+    let calls = 0;
+    const object =
+      target === "source"
+        ? p.settings.apipostProtocolSources[0]
+        : target === "steps"
+          ? p.plans[0]
+          : p.plans[0].steps[0];
+    const value = object[target];
+    Object.defineProperty(object, target, {
+      enumerable: true,
+      get() {
+        calls++;
+        return value;
+      },
+    });
+    for (const encode of exporters) assert.throws(() => encode(p));
+    assert.equal(calls, 0);
+  }
+});
+
+test("empty protocol messages and multiple source namespaces remain complete; TLS and stripped credentials reject", () => {
+  for (const alter of [
+    (s) => {
+      s.apis[0].message = [];
+      s.apis[1].protos[0].services[0].methods[0].request.message = [];
+    },
+    (s) => {
+      s.project_id = "other-source";
+      for (const n of s.apis) n.project_id = s.project_id;
+    },
+  ]) {
+    const source = extendedProtocolFixture();
+    alter(source);
+    const p = blank();
+    if (source.project_id === "other-source")
+      importIntoProject(p, extendedProtocolFixture());
+    importIntoProject(p, source);
+    for (const encode of exporters) {
+      const q = blank();
+      importIntoProject(q, encode(p));
+      assert.deepEqual(semantic(q), semantic(p));
+    }
+  }
+  for (const alter of [
+    (s) => {
+      s.apis[0].url = "https://localhost";
+    },
+    (s) => {
+      const m = s.apis[1].protos[0].services[0].methods[0];
+      m.tls = 1;
+      m.ssl = 1;
+    },
+    (s) =>
+      s.apis[0].request.header.parameter.push({
+        key: "authorization",
+        value: "fictional-secret",
+        is_checked: 1,
+      }),
+    (s) =>
+      s.apis[1].protos[0].services[0].methods[0].request.metadata.parameter.push(
+        { key: "authorization", value: "fictional-secret", is_checked: -1 },
+      ),
+  ]) {
+    const source = extendedProtocolFixture();
+    alter(source);
+    const p = blank();
+    importIntoProject(p, source);
+    for (const encode of exporters) assert.throws(() => encode(p));
+  }
+});
+
+test("directory keeps ordinary HTTP flows separate from exact protocol message plans", () => {
+  const p = blank("mixed");
+  importIntoProject(p, extendedProtocolFixture());
+  p.environments.push({
+    id: "env-one",
+    name: "one",
+    variables: {},
+    serviceUrls: {},
+  });
+  const request = normalizeRequest({
+    id: "http-one",
+    name: "HTTP remains",
+    method: "GET",
+    url: "http://127.0.0.1:8/path",
+    auth: { type: "none" },
+  });
+  p.requests.push(request);
+  p.plans.push(
+    snapshotPlan({
+      id: "flow-one",
+      name: "ordinary HTTP",
+      environmentId: "env-one",
+      statusPolicy: "strict200",
+      steps: [{ id: "http-step", request }],
+    }),
+  );
+  const before = structuredClone(p);
+  assert.throws(() => exportApipost(p), /plans/);
+  const next = blank();
+  importIntoProject(next, exportApipostDirectory(p));
+  assert.equal(next.plans.length, 3);
+  assert.deepEqual(next.plans.map((p) => p.steps[0].type ?? "http").sort(), [
+    "grpc",
+    "http",
+    "socketio",
+  ]);
+  assert.equal(
+    next.plans.find((p) => !p.steps[0].type).steps[0].request.url,
+    request.url,
+  );
+  assert.deepEqual(p, before);
+});
+
+test("projects without extended protocols retain the original absent-plan default", () => {
+  const p = blank();
+  delete p.plans;
+  for (const encode of exporters) {
+    const q = blank();
+    importIntoProject(q, encode(p));
+    assert.equal(q.plans.length, 0);
+  }
+  assert.equal(Object.hasOwn(p, "plans"), false);
+});
+
+test("extended collection and ordinary-plan identity accessors are not invoked", () => {
+  for (const key of [
+    "apipostProtocolSources",
+    "grpcDefinitions",
+    "socketioDefinitions",
+    "id",
+  ]) {
+    const p = blank();
+    importIntoProject(p, extendedProtocolFixture());
+    let calls = 0;
+    let object = p.settings;
+    if (key === "id") {
+      const flow = snapshotPlan({
+        id: "ordinary",
+        steps: [{ request: normalizeRequest({ url: "http://localhost" }) }],
+      });
+      p.plans.push(flow);
+      object = flow;
+    }
+    const value = object[key];
+    Object.defineProperty(object, key, {
+      enumerable: true,
+      get() {
+        calls++;
+        return value;
+      },
+    });
+    for (const encode of exporters) assert.throws(() => encode(p));
+    assert.equal(calls, 0);
+  }
 });

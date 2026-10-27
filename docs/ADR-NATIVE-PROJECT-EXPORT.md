@@ -480,3 +480,24 @@ Both public export formats must reimport the complete output and compare all
 protocol definitions/message plans after explicit identity remapping. Export
 only converts inert definitions and never connects, signs, fetches Proto files,
 executes messages, restores credentials, or enables a new execution permission.
+
+Implementation now partitions only exactly reconstructed native message plans
+from ordinary HTTP flows. Directory JSON retains the latter through its existing
+flow encoder; public JSON still rejects them. Source-derived definition/plan IDs
+are checked for collisions before any map-based deduplication. Export IDs use
+JSON tuple inputs, not ambiguous delimiter concatenation. Inputs with historical
+collapsed gRPC source suffixes reject rather than expanding one stored definition
+into multiple outputs. No importer behavior is changed in this feature.
+
+Two-format/two-generation tests and four owner + official MCP SDK HTTP/stdio +
+real CLI workflows cover Socket.IO text Ack and gRPC unary/server-stream with
+exact int64 strings/base64. Each flow explicitly executes all three plans through
+owner HTTP, SDK, CLI and a genuinely restarted restored project's CLI; it checks
+new-Store exact run identities and no conversion/restart traffic. Modified live
+protocol definitions do not change the saved frozen plans, but cause both native
+exports to reject. Cross-project execution is refused, source projects stay
+unchanged, and stripped credentials/TLS/metadata/accessors/ambiguous identities
+fail closed. Accessor refusal occurs before invocation. This PR's older MCP base
+has recordSaved without the newer recordId receipt field; tests inspect actual
+saved run IDs instead of inventing a response field or importing unrelated code.
+Independent exact-head CI remains required; local tests do not certify root.
