@@ -6,11 +6,24 @@ import { boundedSSEParser, validSSEHandshake } from "./sse-parser.mjs";
 import net from "node:net";
 
 export async function captureSSE(
-  { url, headers = {}, duration = 3000, maxEvents = 20, method, body },
+  {
+    url,
+    headers = {},
+    duration = 3000,
+    maxEvents = 20,
+    method,
+    body,
+    sendEmptyMessage,
+  },
   signal,
 ) {
   signal?.throwIfAborted();
-  const options = protocolRequestOptions({ type: "sse", method, body });
+  const options = protocolRequestOptions({
+    type: "sse",
+    method,
+    body,
+    sendEmptyMessage,
+  });
   const target = new URL(url);
   if (!["http:", "https:"].includes(target.protocol))
     throw Error("SSE 仅支持 HTTP/HTTPS");
@@ -61,13 +74,13 @@ export async function captureSSE(
 }
 
 export function exchangeTCP(
-  { host, port, message = "", duration = 3000, completion },
+  { host, port, message = "", duration = 3000, completion, sendEmptyMessage },
   signal,
 ) {
   if (!host || !Number.isInteger(Number(port)) || port < 1 || port > 65535)
     throw Error("TCP 地址或端口无效");
   if (signal?.aborted) return Promise.reject(Error("TCP 请求已取消"));
-  protocolRequestOptions({ type: "tcp", completion });
+  protocolRequestOptions({ type: "tcp", completion, sendEmptyMessage });
   const payload = protocolPayload(message);
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -133,6 +146,7 @@ export function exchangeTCP(
 export function exchangeWebSocket(input, signal) {
   const { message = "", duration = 3000, maxMessages = 20 } = input;
   if (signal?.aborted) return Promise.reject(Error("WebSocket 已取消"));
+  protocolRequestOptions({ ...input, type: "websocket" });
   const payload = protocolPayload(message),
     socket = openWebSocket(input);
   return new Promise((resolve, reject) => {
@@ -175,7 +189,8 @@ export function exchangeWebSocket(input, signal) {
       if (
         payload.buffer.length ||
         typeof message !== "string" ||
-        input.templateMode === "literal"
+        input.templateMode === "literal" ||
+        input.sendEmptyMessage === true
       )
         socket.send(payload.buffer, { binary: payload.binary }, (error) => {
           if (error) finish(error);
