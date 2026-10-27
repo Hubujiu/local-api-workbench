@@ -1,3 +1,4 @@
+import { nativeCookieName } from "./native-cookie-name.mjs";
 import { nativeXMLPath } from "./native-xml-path.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 
@@ -69,13 +70,14 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
       "requestBody",
       "responseJson",
       "responseHeader",
+      "responseCookie",
       "responseXml",
       "responseText",
       ...metadataSources,
     ].includes(value.source)
   )
     throw Error(
-      "pickVars仅支持requestHeader/requestBody/responseJson/responseHeader/responseXml/responseText/responseCode/responseTime/responseSize来源",
+      "pickVars仅支持requestHeader/requestBody/responseJson/responseHeader/responseCookie/responseXml/responseText/responseCode/responseTime/responseSize来源",
     );
   const isText = wholeValueSource(value.source);
   nativeDataArray(value.variables, 100);
@@ -96,7 +98,10 @@ export function normalizePickVarsData(value, { enabled = true } = {}) {
         throw Error("pickVars变量名无效");
       if (["responseHeader", "requestHeader"].includes(value.source))
         headerName(row.expression);
-      else if (value.source === "responseXml") nativeXMLPath(row.expression);
+      else if (value.source === "responseCookie") {
+        if (!nativeCookieName(row.expression.trim()))
+          throw Error("pickVars Cookie表达式须为普通非保留名称");
+      } else if (value.source === "responseXml") nativeXMLPath(row.expression);
       else if (!isText) jsonPathSegments(row.expression.trim() || "$");
     }
     return {
@@ -124,11 +129,13 @@ export function compilePickVarsOperations(value = []) {
       scope: scopes[row.type],
       ...(["responseHeader", "requestHeader"].includes(data.source)
         ? { header: headerName(row.expression) }
-        : data.source === "responseXml"
-          ? { xmlPath: nativeXMLPath(row.expression) }
-          : wholeValueSource(data.source)
-            ? {}
-            : { segments: jsonPathSegments(row.expression.trim() || "$") }),
+        : data.source === "responseCookie"
+          ? { cookie: row.expression.trim() }
+          : data.source === "responseXml"
+            ? { xmlPath: nativeXMLPath(row.expression) }
+            : wholeValueSource(data.source)
+              ? {}
+              : { segments: jsonPathSegments(row.expression.trim() || "$") }),
     })),
   }));
 }
@@ -147,11 +154,14 @@ function installPickVars(
   readText,
   metricResponse,
   readRequest,
+  cookies,
+  cookieEvidenceJSON,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
     hasOwn = Object.hasOwn,
     keys = Object.keys,
+    ownKeys = Reflect.ownKeys,
     create = Object.create,
     define = Object.defineProperty,
     isArray = Array.isArray,
@@ -160,6 +170,22 @@ function installPickVars(
   const operations = parse(json),
     evidence = parse(evidenceJSON),
     setters = { environment, global, temporary };
+  const cookieEvidence = cookieEvidenceJSON ? parse(cookieEvidenceJSON) : null;
+  let cookiesMatch = cookieEvidence?.complete === true;
+  if (cookiesMatch && cookies && typeof cookies === "object") {
+    const names = ownKeys(cookies),
+      expected = ownKeys(cookieEvidence.values);
+    cookiesMatch = names.length === expected.length;
+    for (let at = 0; cookiesMatch && at < names.length; at++) {
+      const actual = descriptor(cookies, names[at]),
+        known = descriptor(cookieEvidence.values, names[at]);
+      cookiesMatch =
+        !!known &&
+        actual?.enumerable === true &&
+        hasOwn(actual, "value") &&
+        actual.value === known.value;
+    }
+  } else cookiesMatch = false;
   let nodes = 0;
   const copy = (value, depth = 0) => {
     if (++nodes > 10000 || depth > 64) throw Error("pickVars提取值结构超限");
@@ -219,6 +245,34 @@ function installPickVars(
     }
     return value;
   };
+  const cookieValue = (map, name) => {
+    if (!cookiesMatch) throw Error("pickVars Cookie需要完整且匹配的传输证据");
+    if (!descriptor(cookieEvidence.values, name))
+      throw Error("pickVars Cookie字段缺少传输证据");
+    const property = descriptor(map, name);
+    if (
+      !property?.enumerable ||
+      !hasOwn(property, "value") ||
+      typeof property.value !== "string"
+    )
+      throw Error("pickVars Cookie不存在或不是当前自有字符串数据");
+    const value = property.value;
+    if (value.length > 65536) throw Error("pickVarsCookie值超过64KiB");
+    let bytes = 0;
+    for (let at = 0; at < value.length; at++) {
+      const code = charCode(value, at);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = charCode(value, ++at);
+        if (!(next >= 0xdc00 && next <= 0xdfff))
+          throw Error("pickVarsCookie值包含无效Unicode");
+        bytes += 4;
+      } else if (code >= 0xdc00 && code <= 0xdfff)
+        throw Error("pickVarsCookie值包含无效Unicode");
+      else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+      if (bytes > 65536) throw Error("pickVarsCookie值超过64KiB");
+    }
+    return value;
+  };
   const metadataValue = (source) => {
     const name = source === "responseCode" ? "code" : source;
     const property = descriptor(metricResponse, name);
@@ -275,6 +329,9 @@ function installPickVars(
       operation.source === "responseSize";
     // Snapshot the captured current facade once per task, never per row.
     const currentMetadata = isMetadata ? metadataValue(operation.source) : null;
+    // Capture the map reference once per task; rows read current own values.
+    const currentCookies =
+      operation.source === "responseCookie" ? cookies : null;
     const rows = operation.variables,
       assignments = create(null);
     nodes = 0;
@@ -290,13 +347,15 @@ function installPickVars(
             })()
           : operation.source === "responseHeader"
             ? headerValue(row.header)
-            : operation.source === "responseXml"
-              ? selectXML(row.xmlPath)
-              : operation.source === "responseText"
-                ? currentText
-                : isMetadata
-                  ? currentMetadata
-                  : root;
+            : operation.source === "responseCookie"
+              ? cookieValue(currentCookies, row.cookie)
+              : operation.source === "responseXml"
+                ? selectXML(row.xmlPath)
+                : operation.source === "responseText"
+                  ? currentText
+                  : isMetadata
+                    ? currentMetadata
+                    : root;
       if (
         operation.source === "responseJson" ||
         operation.source === "requestBody"
