@@ -252,7 +252,8 @@ function formContract(request, layers) {
   if (!inherited) return;
   if (
     !["urlencoded", "form-data"].includes(request.bodyType) ||
-    ["GET", "HEAD"].includes(request.method)
+    typeof request.method !== "string" ||
+    ["GET", "HEAD"].includes((request.method || "GET").toUpperCase())
   )
     fail("继承表单仅支持显式非GET/HEAD表单请求");
   for (const value of [...layers, { headers: request.headers || [] }])
@@ -733,6 +734,25 @@ export function assertNativeInheritanceMCPInput(
   const stored = project.requests.find((r) => r.id === sourceRequest.id);
   ownRequest(sourceRequest, stored.nativeInheritance);
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  // Use the actual frozen base, not a newly resolved live body. Header patches
+  // enable even disabled rows, so preserved form APIs cannot bypass the bounded
+  // Content-Type contract via a temporary MCP input.
+  if (["urlencoded", "form-data"].includes(effective.bodyType)) {
+    const patch = input.headers;
+    if (patch && typeof patch === "object" && !Array.isArray(patch))
+      for (const key of Object.keys(patch))
+        if (
+          key.toLowerCase() === "content-type" &&
+          (effective.headers || []).some(
+            (row) => row.key.toLowerCase() === "content-type",
+          ) &&
+          (effective.bodyType === "form-data" ||
+            typeof patch[key] !== "string" ||
+            patch[key].trim().toLowerCase() !==
+              "application/x-www-form-urlencoded")
+        )
+          fail("继承图表单MCP Content-Type不在已证实子集");
+  }
   const fields = [
     ["headers", "headers"],
     ["query", "query"],

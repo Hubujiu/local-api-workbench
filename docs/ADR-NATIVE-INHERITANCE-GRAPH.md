@@ -189,3 +189,26 @@ rejected atomically. Initial local failures exposed a missing allowance for the
 existing encoder's inert binary:null field (nonempty binary still rejects), then
 a test incorrectly referenced src/cli.mjs instead of the actual run-plan entry;
 both were corrected before the first five-case PASS. Final CI remains pending.
+
+
+### Review corrections before final form acceptance
+
+The first form stage f45c1d2b / tree ff6a8228 passed its own CI 40526742319,
+but subsequent ordinary-entry review found two real gaps; that green is not the
+final acceptance. Owner execution froze before canonical method normalization,
+so lowercase get/head and omitted/empty methods could admit inherited forms.
+The narrow inherited-form guard now requires a string method and applies the
+same default/uppercase interpretation; owner and Store negatives first failed,
+then passed without network or disk changes.
+
+MCP header overrides enable even disabled rows. For preserved graph form APIs,
+temporary Content-Type is therefore restricted by the actual effective/frozen
+base body mode: multipart cannot enable a declared Content-Type, and urlencoded
+only accepts a standard string value. This deliberately includes own-only forms
+on preserved graphs, since an older frozen flow must not lose protection when
+live ancestor form rows are subsequently removed. Ordinary flattened APIs keep
+the existing contract. No new caller-trusted flags or live re-resolution of old
+flow bases are introduced. Official SDK execute/create/update negatives cover
+existing enabled urlencoded and disabled multipart Content-Type rows, including
+old-flow updates after live parent rows are cleared; a standard urlencoded patch
+remains a real-wire positive. The SDK negatives were also RED before this guard.

@@ -45,6 +45,15 @@ function source(url, mode) {
   d.apis.splice(1, 0, child);
   d.apis[2].parent_id = "child";
   d.apis[2].method = "POST";
+  d.apis[2].request.header.parameter.push(
+    row(
+      "Content-Type",
+      mode === "urlencoded"
+        ? "application/x-www-form-urlencoded"
+        : "text/plain",
+      mode === "urlencoded" ? 1 : 0,
+    ),
+  );
   d.apis[2].request.body = {
     mode,
     parameter: [row("shared", "disabled", 0), row("own", "a+b &= 雪")],
@@ -227,6 +236,15 @@ for (const mode of ["urlencoded", "form-data"])
           );
           assert(!wire.at(-1).body.includes("disabled"));
         };
+        const beforeMethodChecks = await app.store.get(p.id);
+        for (const method of ["get", "head", "", null, false, 0, undefined]) {
+          const request = structuredClone(p.requests[0]);
+          if (method === undefined) delete request.method;
+          else request.method = method;
+          await owner(p.id, "execute", { request }, 400);
+          assert.equal(wire.length, 0);
+          assert.deepEqual(await app.store.get(p.id), beforeMethodChecks);
+        }
         await owner(p.id, "execute", { request: p.requests[0] });
         check();
         const plan = await owner(p.id, "plans", {
@@ -278,30 +296,34 @@ for (const mode of ["urlencoded", "form-data"])
         );
         const count = wire.length,
           before = await app.store.get(p.id);
-        for (const name of [
-          "localapi_execute_api",
-          "apipost_create_execution_flow",
-        ]) {
-          const args = name.startsWith("localapi")
-            ? {
-                projectId: p.id,
-                apiId: p.requests[0].id,
-                input: { body: { shared: "ambiguous" } },
-              }
-            : {
-                project_id: p.id,
-                name: "Rejected",
-                steps: [
-                  {
-                    target_id: p.requests[0].id,
-                    input: { body: { shared: "ambiguous" } },
-                  },
-                ],
-              };
-          const r = await client.callTool({ name, arguments: args });
-          assert.equal(r.isError, true);
-          assert.match(r.content[0].text, /同名多行/);
-        }
+        for (const input of [
+          { body: { shared: "ambiguous" } },
+          { headers: { "Content-Type": "text/plain" } },
+        ])
+          for (const name of [
+            "localapi_execute_api",
+            "apipost_create_execution_flow",
+          ]) {
+            const args = name.startsWith("localapi")
+              ? {
+                  projectId: p.id,
+                  apiId: p.requests[0].id,
+                  input,
+                }
+              : {
+                  project_id: p.id,
+                  name: "Rejected",
+                  steps: [
+                    {
+                      target_id: p.requests[0].id,
+                      input,
+                    },
+                  ],
+                };
+            const r = await client.callTool({ name, arguments: args });
+            assert.equal(r.isError, true);
+            assert.match(r.content[0].text, /同名多行|Content-Type/);
+          }
         assert.equal(wire.length, count);
         assert.deepEqual((await app.store.get(p.id)).plans, before.plans);
         decode(
@@ -326,32 +348,58 @@ for (const mode of ["urlencoded", "form-data"])
             },
           }),
         );
-        const plansBefore = (await app.store.get(p.id)).plans;
-        const updated = await client.callTool({
-          name: "apipost_update_execution_flow",
-          arguments: {
-            project_id: p.id,
-            flow_id: native.flow_id,
-            steps: [
-              {
-                target_id: p.requests[0].id,
-                step_id: plansBefore.find((x) => x.id === native.flow_id)
-                  .steps[0].id,
-                input: { body: { shared: "ambiguous" } },
-              },
-            ],
-          },
-        });
-        assert.equal(updated.isError, true);
-        assert.match(updated.content[0].text, /同名多行/);
-        assert.deepEqual((await app.store.get(p.id)).plans, plansBefore);
+        const beforeParentClear = await app.store.get(p.id);
+        const plansBefore = beforeParentClear.plans;
+        const clearedParents = structuredClone(beforeParentClear);
+        clearedParents.settings.nativeInheritance.projectLayer.form = [];
+        for (const folder of clearedParents.settings.nativeInheritance.folders)
+          folder.layer.form = [];
+        await app.store.save(clearedParents);
+        for (const input of [
+          { body: { shared: "ambiguous" } },
+          { headers: { "Content-Type": "text/plain" } },
+        ]) {
+          const updated = await client.callTool({
+            name: "apipost_update_execution_flow",
+            arguments: {
+              project_id: p.id,
+              flow_id: native.flow_id,
+              steps: [
+                {
+                  target_id: p.requests[0].id,
+                  step_id: plansBefore.find((x) => x.id === native.flow_id)
+                    .steps[0].id,
+                  input,
+                },
+              ],
+            },
+          });
+          assert.equal(updated.isError, true);
+          assert.match(updated.content[0].text, /同名多行|Content-Type/);
+          assert.deepEqual((await app.store.get(p.id)).plans, plansBefore);
+        }
+        assert.equal(wire.length, count + 1);
+        const restoreParents = await app.store.get(p.id);
+        restoreParents.settings.nativeInheritance = structuredClone(
+          beforeParentClear.settings.nativeInheritance,
+        );
+        await app.store.save(restoreParents);
         decode(
           await client.callTool({
             name: "localapi_execute_api",
             arguments: {
               projectId: p.id,
               apiId: p.requests[0].id,
-              input: { body: { own: "temporary" } },
+              input: {
+                body: { own: "temporary" },
+                ...(mode === "urlencoded"
+                  ? {
+                      headers: {
+                        "content-type": "application/x-www-form-urlencoded",
+                      },
+                    }
+                  : {}),
+              },
             },
           }),
         );
@@ -449,6 +497,13 @@ test(
     });
     await store.save(editable);
     const stable = await store.get(editable.id);
+    for (const method of ["get", "head", "", null, false, 0, undefined]) {
+      const bad = structuredClone(stable);
+      if (method === undefined) delete bad.requests[0].method;
+      else bad.requests[0].method = method;
+      await assert.rejects(store.save(bad), /继承表单/);
+      assert.deepEqual(await store.get(editable.id), stable);
+    }
     for (const change of [
       (x) => {
         x.requests[0].bodyType = "none";
