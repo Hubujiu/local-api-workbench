@@ -39,6 +39,65 @@ const documentDefinitions = (project) =>
       ),
     };
   });
+const verifyModelGraph = (project) => {
+  const req = project.dictionary.find(
+    (model) => model.name === "SDK source / Request",
+  );
+  const res = project.dictionary.find(
+    (model) => model.name === "SDK source / Response",
+  );
+  const never = project.dictionary.find(
+    (model) => model.name === "SDK source / Never",
+  );
+  assert(req && res && never);
+  for (const model of [req, res, never])
+    assert.deepEqual(project.openapiComponents.schemas[model.id], model.schema);
+  assert.equal(never.schema, false);
+  assert.equal(
+    req.schema.properties.response.$ref,
+    "#/components/schemas/" + res.id,
+  );
+  assert.equal(
+    req.schema.properties.self.$ref,
+    "#/components/schemas/" + req.id,
+  );
+  assert.equal(
+    req.schema.properties.local.$ref,
+    "#/components/schemas/" + req.id + "/$defs/Name",
+  );
+  assert.equal(
+    res.schema.properties.request.$ref,
+    "#/components/schemas/" + req.id,
+  );
+  assert.deepEqual(req.schema.example, {
+    $ref: "https://literal.invalid",
+    ref: "literal",
+  });
+  const types = project.modelFolders.find((folder) => folder.name === "Types");
+  const empty = project.modelFolders.find((folder) => folder.name === "Empty");
+  assert(types && empty);
+  assert.equal(empty.parentId, types.id);
+  assert.equal(req.folderId, types.id);
+  assert.equal(types.sort, 0);
+  assert.equal(types.description, "kept");
+  const api = project.requests.find(
+    (request) => request.name === "SDK saved request",
+  );
+  assert.equal(api.schema.$ref, "#/components/schemas/" + req.id);
+  assert.equal(api.responses[0].schema.$ref, "#/components/schemas/" + res.id);
+  for (const plan of project.plans)
+    for (const step of plan.steps)
+      if (step.request?.name === "SDK saved request") {
+        assert.equal(
+          step.request.schema.$ref,
+          "#/components/schemas/" + req.id,
+        );
+        assert.equal(
+          step.request.responses[0].schema.$ref,
+          "#/components/schemas/" + res.id,
+        );
+      }
+};
 const closeServer = async (server) => {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
@@ -109,6 +168,81 @@ for (const transport of ["http", "stdio"])
           beforeScript:
             'apt.setRequestHeader("x-proof","frozen");apt.environment.set("executed","yes");',
         });
+        // Native model names are reversible only under this explicit project
+        // namespace precondition. Identity remaps must not inline the graph.
+        target.name = source.name;
+        second.name = source.name;
+        await store.save(second);
+        const reqSchema = {
+          type: "object",
+          $defs: { Name: { type: "string" } },
+          properties: {
+            value: { type: "string" },
+            response: { $ref: "#/components/schemas/response-model" },
+            self: { $ref: "#/components/schemas/request-model" },
+            local: { $ref: "#/components/schemas/request-model/$defs/Name" },
+          },
+          example: { $ref: "https://literal.invalid", ref: "literal" },
+        };
+        const resSchema = {
+          type: "object",
+          properties: {
+            ok: { type: "boolean" },
+            request: { $ref: "#/components/schemas/request-model" },
+          },
+        };
+        source.modelFolders = [
+          {
+            id: "types",
+            name: "Types",
+            parentId: "",
+            sort: 0,
+            description: "kept",
+          },
+          { id: "empty-model-folder", name: "Empty", parentId: "types" },
+        ];
+        source.dictionary = [
+          {
+            id: "request-model",
+            name: "SDK source / Request",
+            folderId: "types",
+            schema: reqSchema,
+          },
+          {
+            id: "response-model",
+            name: "SDK source / Response",
+            schema: resSchema,
+          },
+          { id: "false-model", name: "SDK source / Never", schema: false },
+        ];
+        source.openapiComponents = {
+          schemas: Object.fromEntries(
+            source.dictionary.map((model) => [
+              model.id,
+              structuredClone(model.schema),
+            ]),
+          ),
+        };
+        request.schema = { $ref: "#/components/schemas/request-model" };
+        const responseRef = { $ref: "#/components/schemas/response-model" };
+        request.responses = [
+          {
+            status: "200",
+            description: "OK",
+            schema: structuredClone(responseRef),
+            content: {
+              "application/json": { schema: structuredClone(responseRef) },
+            },
+          },
+        ];
+        request.examples = [
+          {
+            name: "OK",
+            status: 200,
+            headers: { "content-type": "application/json" },
+            body: '{"ok":true}',
+          },
+        ];
         source.requests = [request];
         source.settings.statuses = [
           { id: "state-a", name: "Same label", color: "#112233" },
@@ -153,6 +287,7 @@ for (const transport of ["http", "stdio"])
             }),
           ];
         await store.save(source);
+        verifyModelGraph(source);
         target.requests = [
           normalizeRequest({
             id: "keep-existing",
@@ -452,6 +587,7 @@ for (const transport of ["http", "stdio"])
           saved.documents.map((doc) => doc.id),
         );
         assert.deepEqual(documentDefinitions(saved), expectedDocuments);
+        verifyModelGraph(saved);
         assert(
           saved.documents.every(
             (doc) => !saved.requests.some((request) => request.id === doc.id),
@@ -480,6 +616,7 @@ for (const transport of ["http", "stdio"])
         const secondState = await store.get(second.id);
         assert.equal(secondState.requests.length, 2);
         assert.deepEqual(documentDefinitions(secondState), expectedDocuments);
+        verifyModelGraph(secondState);
         assert.equal(secondState.runs.length, 0);
         assert.equal(wire.length, 0);
         assert.deepEqual(
@@ -547,6 +684,7 @@ for (const transport of ["http", "stdio"])
         const executed = await store.get(target.id);
         assert.equal(executed.runs.length, 1);
         assert.deepEqual(documentDefinitions(executed), expectedDocuments);
+        verifyModelGraph(executed);
         const restored = restoreProject(executed);
         await store.save(restored);
         assert.deepEqual(
@@ -554,6 +692,14 @@ for (const transport of ["http", "stdio"])
           executed.documents,
         );
         await failure("export_project", { projectId: restored.id, format });
+        verifyModelGraph(await store.get(restored.id));
+        const changedNamespace = await store.get(target.id);
+        changedNamespace.name = "Unrepresentable renamed namespace";
+        await store.save(changedNamespace);
+        const beforeRejectedExport = await store.get(target.id);
+        await failure("export_project", { projectId: target.id, format });
+        assert.deepEqual(await store.get(target.id), beforeRejectedExport);
+
         assert.equal(
           executed.environments.find((env) => env.id === plan.environmentId)
             .variables.executed,

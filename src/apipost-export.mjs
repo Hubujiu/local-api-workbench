@@ -1,4 +1,5 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import { prepareApipostModelExport } from "./apipost-model-export.mjs";
 import { exportApipostDocuments } from "./apipost-document-export.mjs";
 import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
@@ -152,21 +153,10 @@ export function exportApipost(project) {
     "cases",
     "protocols",
     "apiResourceTrash",
-    "dictionary",
     "parameterDictionary",
     "models",
   ])
     unsupported(project[key], key);
-  if (project.openapiComponents !== undefined) {
-    if (
-      !project.openapiComponents ||
-      typeof project.openapiComponents !== "object" ||
-      Array.isArray(project.openapiComponents)
-    )
-      throw Error("Apipost导出模型组件无效");
-    for (const [key, value] of Object.entries(project.openapiComponents))
-      unsupported(value, "模型组件 " + key);
-  }
   // false is meaningful here: absence enables Mock serving. Native definitions
   // have no verified project-wide equivalent, so never silently reopen it.
   if (project.settings?.mockEnabled === false)
@@ -220,6 +210,9 @@ export function exportApipost(project) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const modelExport = prepareApipostModelExport(project, (kind, value) =>
+    apipostExportId(kind, projectId + "\0" + value),
+  );
   if ((project.servers || []).length > 1)
     throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");
   const servers = (project.servers || []).map((s, index) => ({
@@ -277,6 +270,10 @@ export function exportApipost(project) {
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
     const pipeline = exportApipostTaskPipeline(input);
+    if (typeof input.schema === "boolean")
+      throw Error(
+        "原生导出不支持API直接布尔schema；请引用明确模型或使用项目备份",
+      );
     const r = normalizeRequest(input);
     if (r.scriptURLMode === "sdk")
       throw Error("Apipost导出不能保留SDK URL对象模式；请使用项目备份");
@@ -388,13 +385,15 @@ export function exportApipost(project) {
           raw: r.body,
           parameter: rows(r.form, "body"),
           raw_parameter: [],
-          raw_schema: structuredClone(r.schema || {}),
+          raw_schema: modelExport.rewrite(r.schema || {}),
           binary: null,
         },
         pre_tasks: pipeline?.before ?? tasks(r, "before"),
         post_tasks: pipeline?.after ?? tasks(r, "after"),
       },
-      response: exportApipostResponses(r),
+      response: exportApipostResponses(r, {
+        rewriteSchema: modelExport.rewrite,
+      }),
       ...exportApipostMock(r.nativeMock, {
         projectId,
         targetId: apipostExportId("a", r.id),
@@ -455,7 +454,7 @@ export function exportApipost(project) {
     },
     apis,
     samples: [],
-    models: [],
+    models: modelExport.models,
     automated_testings: [],
   };
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)

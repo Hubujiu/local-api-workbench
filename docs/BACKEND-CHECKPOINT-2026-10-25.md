@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 08:18 UTC
+# 后端检查点 · 2026-10-27 09:15 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 08:18 活动文档定义往返候选
+## 09:15 复用模型定义图候选
+
+- 前一文档组合 `f83ccd81711ee8f73856334606f1152bcb7d29ad` / tree `d3d401e8e5a558de23314d0ffba3e8cfd90d832c` 的 CI `40472886178` 首次为 **18 成功、1 失败**。Windows shard2 的既有 native-pick-xml-boundaries 输入/节点边界触发250ms预算（compatibility51ms + userScript199ms，CPU47ms+109ms，elapsed450ms，无网络/数据库），具体子边界和根因未确定；没有重跑、放宽预算或重启暂停审查。19实际checkout、12产物362文件91/91/90/90完整核对；Linux/macOS各1875通过，Windows1874通过/1失败。文档新流程三平台通过但不能抵消整体RED。最近完整GREEN仍为25315dac。
+- 本候选修复非空 modelFolders 在两个原生出口被静默丢失，并支持有界静态复用模型图。dictionary与同ID components.schemas 必须一致；保留空目录、目录关系/排序/说明、模型定义、同模型局部及跨模型整根引用、API请求/响应关联，不展开复制图、不改字面example/default/enum等数据。使用现有模型验证、schema位置分类和导入器回读，不新增schema解释器或执行路径。
+- 名称必须精确满足当前输出项目名称空间，并回读一致；项目/模型改名不再满足条件就明确拒绝，不猜删前缀。导入到任意目标名称不保证可再次原生导出；成功双代测试明确满足名称前提，重命名拒绝也验证。外部、跨模型子路径、动态锚点、未知组合、额外组件、存储不一致及未纳入依赖继续拒绝。输出ID重新映射，备份精确保留当前Workbench图与ID，不声称恢复已丢失的原版历史字段。
+- 布尔模型及API引用false模型可保留；直接API布尔schema在normalize前拒绝，避免false被既有默认抹成{}，不猜测修复已归一化旧记录。没有运行schema/OOM或引擎专项。
+- 同PR14 feature remote `0894a3439e8bd31c4c4af6d55d7ff431d442f91d` / local `cb870e80dc6f5be96a72ef64a9e7a6c949a07361` / tree `227e914e96ac1f1baedc10118250dca16f5a7f58`，pure base c348未变。独立 CI `40475742200` 首次19/19成功，全部实际checkout `419a761ccceb0bb134a4c8d365a0e4ed45798d40` 同树，三平台各1158，12产物255文件64/64/64/63完整核验。早期拒绝空目录丢失阶段56bd/CI40474957030通过；中间046b/CI40475555768取消，保留真实历史。
+- 根组合保留原生任务出口并接入模型映射，四种官方SDK格式/transport矩阵使用同时包含API、文档、复用模型及冻结计划的项目。验证空目录、互引用/自引用、局部$defs、literal $ref不改、false模型、API与冻结步骤引用目标存在、文档状态引用、第二次原生导出、备份、真实HTTP及权限隔离；改项目名后出口原子拒绝。三个整文件11/11通过，原API/任务/Mock/认证及环境证据五整文件28/28通过，全format/check/diff通过。
+- 本候选仍须自己的组合CI，独立绿灯不替代它；所有PR仍draft，无main/develop合并、部署或前端新增。旧Windows XML失败与原版/实验审查边界保持。
+
+## 08:18 历史活动文档定义往返候选
 
 - 最近完整 GREEN 为 `25315dacf17bcd793037a9bbf901c50ef7462870` / local `7992413978a1b1f97c1c2c598f533669031735dc` / tree `097982cf0f5b6e9798212f511158c8b81934e391`。CI `40468749549` 首次 19/19 成功，19 checkout 同树；12 实际产物完整覆盖 361 文件（91/90/90/90），三平台各 1873 通过。实际环境身份、保存失败/未知提交、MCP/CLI/恢复、数据库、production stdio 和固定引擎均通过；旧 8b5 XML RED 保留。
 - 本候选让活动原生文档与可表达的普通文本 Workbench 文档进入 JSON/目录定义往返。title/content/folder/type/current status 和已验证 sort/version/status 保持；正文原样，不渲染、插值、执行或获取 URL/附件。当前 statusId 优先于历史 mark；输出 project/target/parent/mark 引用自洽。原生身份重映射，旧 document/apipostSource ID 精确保留仅由完整备份承担，不私造历史扩展或塞进正文。
