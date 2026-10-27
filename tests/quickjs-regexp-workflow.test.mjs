@@ -70,15 +70,19 @@ test("real regex interruption rolls back failed phases and preserves HTTP, plan,
   other.environments[0].variables = { marker: "isolated" };
   await app.store.save(other);
   const url = `http://127.0.0.1:${fixture.address().port}`;
+  const timeoutMessage = /^脚本执行超时$/;
   const interrupted = (result) => {
     assert.equal(result.outcome ?? result.status, "failed");
-    assert.match(result.error, /interrupted/);
+    assert.match(result.error, timeoutMessage, JSON.stringify(result));
     assert.doesNotMatch(result.error, /out of memory/);
     // The old C matcher reaches the parent wall timeout instead. That is not
     // accepted as evidence that the activity deadline interrupted matching.
     assert.equal(result.scriptStage, "script");
     assert.equal(result.scriptDiagnostics.activityBudgetMs, 250);
-    assert.equal(result.scriptDiagnostics.activityOperation, "user-script");
+    // Async guest functions return a rejected Promise after the engine
+    // interrupts. The next charged promise-state operation then reports the
+    // exhausted budget before inspecting it. This is not a wall timeout.
+    assert.equal(result.scriptDiagnostics.activityOperation, "promise-state");
   };
   const unchangedFailureScope = (saved, marker) => {
     assert.equal(saved.environments[0].variables.marker, marker);
@@ -95,7 +99,7 @@ test("real regex interruption rolls back failed phases and preserves HTTP, plan,
   let saved = await app.store.get(project.id);
   unchangedFailureScope(saved, "original");
   assert.equal(saved.history[0].response, undefined);
-  assert.match(saved.history[0].error, /interrupted/);
+  assert.match(saved.history[0].error, timeoutMessage);
 
   // Empty replacement with a standard global RegExp exercises the engine's
   // separate JS_RegExpDelete call site, not just RegExp.prototype.exec.
@@ -115,7 +119,7 @@ test("real regex interruption rolls back failed phases and preserves HTTP, plan,
   const postHistory = saved.history.find((item) => item.response);
   assert.equal(postHistory.response.body, after.body);
   assert.equal(postHistory.status, "failed");
-  assert.match(postHistory.error, /interrupted/);
+  assert.match(postHistory.error, timeoutMessage);
   assert.equal(
     (await call(project, "debug-variables")).variables.marker,
     "before-committed",
@@ -160,7 +164,7 @@ test("real regex interruption rolls back failed phases and preserves HTTP, plan,
   assert.equal(saved.history.length, 2);
   assert(
     saved.history.every(
-      (item) => item.status === "failed" && /interrupted/.test(item.error),
+      (item) => item.status === "failed" && timeoutMessage.test(item.error),
     ),
   );
   assert.equal(saved.runs[0].results[0].response, undefined);

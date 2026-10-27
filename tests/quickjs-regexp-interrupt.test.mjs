@@ -39,7 +39,7 @@ function boundedWorker(source) {
   });
 }
 
-test("reviewed regexp patch and source inputs have independent fixed identities", async () => {
+test("reviewed regexp patch identity and manifest source digest fields are consistent", async () => {
   const root = new URL("../src/vendor/quickjs-tracked/", import.meta.url);
   const manifest = JSON.parse(await readFile(new URL("manifest.json", root)));
   assert.equal(
@@ -132,18 +132,35 @@ for (const [name, operation] of [
   });
 }
 
-test("production regex work uses the remaining activity deadline, not parent wall timeout", async () => {
+test("production regex work after prior activity fails within the script stage, not parent wall timeout", async () => {
   await assert.rejects(
     runScript(
       "const start=Date.now();while(Date.now()-start<100){};/(a+)+$/.test('a'.repeat(64)+'!');",
       { request: { url: "http://localhost/" }, variables: {} },
     ),
     (error) => {
-      assert.match(error.message, /interrupted/);
+      assert.equal(error.message, "脚本执行超时");
       assert.equal(error.scriptStage, "script");
-      assert.equal(error.activityOperation, "user-script");
+      assert.equal(error.activityOperation, "promise-state");
       assert.equal(error.scriptDiagnostics.activityBudgetMs, 250);
       return true;
     },
   );
+});
+
+test("regex stack OOM remains catchable and frees capacity without becoming timeout", async () => {
+  const result = await boundedWorker(`
+    let held = Array.from({length:15}, () => new ArrayBuffer(1024*1024));
+    let message = '';
+    try { /^(a)*$/.test('a'.repeat(32768)); }
+    catch (error) { message = error.message; }
+    held = [];
+    [message, new ArrayBuffer(1024*1024).byteLength, /^ok$/.test('ok')];
+  `);
+  assert.equal(result.error, false, JSON.stringify(result));
+  assert.match(result.value[0], /out of memory in regexp execution/);
+  assert.deepEqual(result.value.slice(1), [1024 * 1024, true]);
+  assert.equal(result.expiredChecks, 0);
+  assert(result.elapsedMs <= 250, JSON.stringify(result));
+  assert.equal(result.unhandledAfterDispose, 0);
 });
