@@ -1,0 +1,25 @@
+diff --git a/vendor/quickjs/quickjs.c b/vendor/quickjs/quickjs.c
+index fa7742a..5683925 100644
+--- a/vendor/quickjs/quickjs.c
++++ b/vendor/quickjs/quickjs.c
+@@ -34,7 +34,7 @@
+ #include <math.h>
+ #if defined(__APPLE__)
+ #include <malloc/malloc.h>
+-#elif defined(__linux__)
++#elif defined(__linux__) || defined(__EMSCRIPTEN__)
+ #include <malloc.h>
+ #elif defined(__FreeBSD__)
+ #include <malloc_np.h>
+@@ -1706,8 +1706,9 @@ static size_t js_def_malloc_usable_size(const void *ptr)
+     return malloc_size(ptr);
+ #elif defined(_WIN32)
+     return _msize((void *)ptr);
+-#elif defined(EMSCRIPTEN)
+-    return 0;
++#elif defined(__EMSCRIPTEN__)
++    /* Pinned Emscripten dlmalloc provides the real allocation size. */
++    return malloc_usable_size((void *)ptr);
+ #elif defined(__linux__)
+     return malloc_usable_size((void *)ptr);
+ #else
