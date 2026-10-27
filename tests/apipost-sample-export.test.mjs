@@ -1,3 +1,4 @@
+import { caseRunOrder } from "../public/case-folders.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -183,22 +184,58 @@ test("same native sample IDs in distinct source namespaces and explicit current 
   importIntoProject(p, b);
   // Namespace-safe identities; current array order may be explicitly reordered.
   p.cases[0].sort = 50;
-  const names = p.cases
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => (a.c.sort ?? a.i) - (b.c.sort ?? b.i))
-    .map(({ c }) => c.request.url);
+  const order = (project) =>
+    project.requests.map((api) =>
+      caseRunOrder(project, api.id).map((c) => c.request.url),
+    );
+  const names = order(p);
   for (const encode of formats) {
     const q = imported(encode(p), "read");
     assert.equal(new Set(q.cases.map((c) => c.id)).size, 6);
     assert.equal(q.caseFolders.length, 4);
-    assert.deepEqual(
-      q.cases.map((c) => c.request.url),
-      names,
-    );
-    assert.deepEqual(
-      imported(encode(q), "again").cases.map((c) => c.request.url),
-      names,
-    );
+    assert.deepEqual(order(q), names);
+    assert.deepEqual(order(imported(encode(q), "again")), names);
+  }
+  // Regression: fallback indexes are local to API/group, not global array.
+  const mixed = imported(nativeSampleExportFixture(), "mixed");
+  const first = mixed.cases.find((c) => c.name === "grouped"),
+    other = mixed.cases.find((c) => c.name === "other");
+  const second = structuredClone(first);
+  second.id += "-second";
+  second.name = second.request.name = "second-grouped";
+  second.request.url += "-second";
+  second.sort = 0.5;
+  mixed.cases = [other, first, second];
+  assert.deepEqual(
+    caseRunOrder(mixed, first.sourceRequestId).map((c) => c.name),
+    ["grouped", "second-grouped"],
+  );
+  const sibling = {
+    id: "sibling",
+    name: "Sibling",
+    sourceRequestId: first.sourceRequestId,
+    parentId: "",
+    sort: 0.5,
+  };
+  delete mixed.caseFolders[0].sort;
+  mixed.caseFolders.unshift({
+    id: "other-empty",
+    name: "Other empty",
+    sourceRequestId: other.sourceRequestId,
+    parentId: "",
+  });
+  mixed.caseFolders.push(sibling);
+  const siblingCase = structuredClone(first);
+  siblingCase.id += "-sibling";
+  siblingCase.name = siblingCase.request.name = "sibling-case";
+  siblingCase.folderId = sibling.id;
+  siblingCase.request.url += "-sibling";
+  mixed.cases.push(siblingCase);
+  const expected = order(mixed);
+  for (const encode of formats) {
+    const q = imported(encode(mixed), "ordered");
+    assert.deepEqual(order(q), expected);
+    assert.deepEqual(order(imported(encode(q), "ordered-again")), expected);
   }
 });
 

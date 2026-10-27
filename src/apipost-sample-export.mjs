@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { normalizeRequest } from "./core.mjs";
-import { validateCaseFolders } from "../public/case-folders.js";
+import { validateCaseFolders, caseRunOrder } from "../public/case-folders.js";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 
 const fail = (reason) => {
@@ -11,15 +11,33 @@ const populated = (value) =>
   value !== "" &&
   value !== false &&
   (typeof value !== "object" || Object.keys(value).length > 0);
-const sortedCases = (project) =>
-  (project.cases || [])
-    .map((item, index) => ({ item, index }))
-    .sort(
-      (a, b) =>
-        (a.item.sort ?? a.index) - (b.item.sort ?? b.index) ||
-        a.index - b.index,
+// Preserve the original cross-bucket layout, but order each API/group bucket
+// using the same contract as explicit case execution (local fallback indices).
+const sortedCases = (project) => {
+  const buckets = new Map();
+  for (const api of project.requests) {
+    for (const item of caseRunOrder(project, api.id)) {
+      const key = JSON.stringify([api.id, item.folderId || ""]);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(item);
+    }
+  }
+  return (project.cases || []).map(
+    (item) =>
+      buckets
+        .get(JSON.stringify([item.sourceRequestId, item.folderId || ""]))
+        ?.shift() || item,
+  );
+};
+const groupSort = (group, groups) =>
+  group.sort ??
+  groups
+    .filter(
+      (candidate) =>
+        candidate.sourceRequestId === group.sourceRequestId &&
+        (candidate.parentId || "") === (group.parentId || ""),
     )
-    .map(({ item }) => item);
+    .findIndex((candidate) => candidate.id === group.id);
 const known = (object, keys, label) => {
   if (Object.keys(object).some((key) => !keys.includes(key)))
     fail(label + "未知字段");
@@ -49,7 +67,7 @@ export function prepareSampleExport(project, { projectId, id, encodeRequest }) {
     type: "sample_group",
     method: "",
     url: "",
-    sort: group.sort ?? index,
+    sort: groupSort(group, groups),
   }));
   for (const [index, item] of sortedCases(project).entries()) {
     known(
@@ -234,12 +252,14 @@ export function verifySampleDefinitions(project, check, targetId) {
         api.get("apipost:" + targetId(group.sourceRequestId)) ||
       (found.parentId || "") !==
         (group.parentId ? actualGroupIds.get(group.parentId) : "") ||
-      found.sort !== (group.sort ?? i)
+      found.sort !== groupSort(group, groups)
     )
       fail("分组名称/排序/归属/父关系");
   }
+  const caseIds = new Map();
   for (const [i, item] of expected.entries()) {
     const found = actual[i];
+    caseIds.set(item.id, found.id);
     if (
       found.name !== item.name ||
       found.sourceRequestId !==
@@ -255,5 +275,15 @@ export function verifySampleDefinitions(project, check, targetId) {
       )
     )
       fail("冻结请求语义（可能被活动API继承配置重新注入）");
+  }
+  for (const request of project.requests.filter((r) => !r.deletedAt)) {
+    const actualAPIId = api.get("apipost:" + targetId(request.id));
+    if (
+      !isDeepStrictEqual(
+        caseRunOrder(project, request.id).map((item) => caseIds.get(item.id)),
+        caseRunOrder(check, actualAPIId).map((item) => item.id),
+      )
+    )
+      fail("每接口/分组的实际执行顺序");
   }
 }

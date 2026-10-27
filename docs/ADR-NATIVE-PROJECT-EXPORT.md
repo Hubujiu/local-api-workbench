@@ -450,3 +450,13 @@ without weakening guards. Four new groups and eight complete related files (46 t
 including root-only samples that correctly exclude extra live API headers/query.
 Full format/check/diff checks pass. Exact final independent CI remains pending
 until the updated PR14 tree is published and verified.
+
+A limited business review found and reproduced a real ordering error in the
+first candidate: global array-index fallback for mixed explicit `case.sort`
+values disagreed with `caseRunOrder`, whose fallback index is local to each API
+and group. The exporter now reuses `caseRunOrder` for within-bucket ordering and
+checks the complete per-API execution order after import independently of the
+emitted row list. Groups with absent sort use sibling-local fallback indices as
+well; explicit group sort remains exact. Regression fixtures interleave APIs and
+groups and mix omitted sort with 0.5 across both formats and two generations.
+The earlier candidate's test/CI result cannot certify this corrected tree.
