@@ -548,3 +548,23 @@ test("official SDK respects moved live graph and unchanged saved plan without ga
   assert.equal(denied.isError, true);
   assert.equal(wire.length, count);
 });
+
+test("owner recycles and restores a bound API without deleting graph identity or frozen evidence", async (t) => {
+  const f = await graphFixture(t),
+    p = await f.app.store.get(f.id),
+    api = p.requests[0];
+  const next = await f.call(`projects/${p.id}/native-inheritance-edit`, {
+    configRevision: p.configRevision,
+    operation: { type: "recycle-requests", requestIds: [api.id] },
+  });
+  assert.equal(typeof next.requests[0].deletedAt, "string");
+  assert.deepEqual(
+    next.settings.nativeInheritance,
+    p.settings.nativeInheritance,
+  );
+  const restored = await f.call(`projects/${p.id}/native-inheritance-edit`, {
+    configRevision: next.configRevision,
+    operation: { type: "restore-requests", requestIds: [api.id] },
+  });
+  assert.equal(Object.hasOwn(restored.requests[0], "deletedAt"), false);
+});

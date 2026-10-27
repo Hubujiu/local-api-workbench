@@ -335,3 +335,30 @@ move which leaves its old folder present has a positive directory graph+flow
 migration test: imported live API uses the new parent while the migrated frozen
 plan actually sends the old parent's headers. The definition-only JSON/directory
 two-generation test is not a claim that all frozen combinations can be exported.
+
+## Bound HTTP soft recycling/restoration (work in progress)
+
+The explicit owner graph operation now also accepts `recycle-requests` or
+`restore-requests`, each with unique nonempty `requestIds` (at most1000) from the
+current graph and an explicit current configRevision. It retains every binding,
+parent, source ID and own request, changing only the existing `deletedAt` field.
+Only the backend supplies the ISO date. Restoration removes that field and
+resumes current parent inheritance, not deletion-time parent values. Generic PUT
+cannot toggle dates, and malformed dates fail Store/backup validation.
+
+Both existing MCP canonical/native HTTP-only deletion paths use one atomic Store
+operation under existing write+confirm/project checks. Native deletion keeps the
+existing apiResourceTrash batch through the existing deleteAPIResources codec;
+its date and batch ID are generated once by the backend and used for deterministic
+locked replay. Restore does not erase these historical batches. Folder/mixed
+selection, duplicates, missing/foreign IDs and repeated state transitions reject
+as one batch; there is no save-per-ID loop. No new MCP restore tool is added.
+
+The resolver checks the stored tombstone before resolving live bound requests,
+including caller copies without deletedAt. Exact saved unbound case/plan
+snapshots keep their existing trust contract and remain independent. A recycled
+API cannot move alone; an allowed whole-folder move includes its retained path.
+Native export refuses active graph tombstones explicitly; backups retain them.
+Permanent purge, detach and folder recycling remain unsupported. The initial
+new owner recycle test was RED400 before implementation, then passed; complete
+multi-entrypoint lifecycle evidence and exact CI remain pending at this stage.
