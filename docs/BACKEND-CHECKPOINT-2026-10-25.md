@@ -1,8 +1,14 @@
-# 后端检查点 · 2026-10-27 04:36 UTC
+# 后端检查点 · 2026-10-27 04:54 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 04:36 当前更新
+## 04:54 组合取证与夹具纠正
+
+组合edad4c549b0700938b1db512eac05b73ae30aa9f/tree076ece168af6aba4b5166c7bb30e1f72601f95bf的首轮CI40450856271为16成功/3失败：三个OS均在旧native-text-entrypoints:1047把已支持的普通expected marker当作导入错误，期望400、实际200，各OS1829通过/1失败；不是超时。全部actualcheckout与12份清单348文件87/87/87/87已核，DB/生产stdio/固定ac引擎通过，不抵消RED。
+
+本次只调整该旧fixture：用真正非法的对象expected保留400、错误类别、磁盘/内存原子性与零网络验证；另将有效历史原生source改成普通expected marker，并明确断言CLI/备份重启仍保留原文、零断言执行和不修改token。没有弱化生产校验或删除失败检查。三个原有Text/Header/XML入口整文件30项重新通过；这是普通功能回归，不是重启未完成的XML独立审查。修复提交仍须自己的CI，旧RED保留。
+
+## 04:36 先前更新
 
 - 最新完整绿色组合9b3ca434b63c30c22291a329e6304dc6d10e38ec/tree95e1efb7f68a53b23452bc2df3815ccce78bcd0a=local6c05a6952d5049608f900cda079710f03685b035，CI40445982435首轮19/19，全部实际checkout/tree已核。三OS1819，12清单347文件87/87/87/86互斥完整，hash79f8066978f836f3f6f245a5fdea987c05f2c0f7e8f72cb86e57624c6dc7ae9f。15比较/11来源MCP HTTP/stdio、CLI、原生往返/恢复与Unicode OOM清理、DB/生产stdio/固定ac4822引擎重建均通过。
 - 当前同PR26新增有界compareValue展开：feature9f268e51ad3154eea225050475bd45b7c5b5babe/treee516b356422a225a3c5896aea44d53151392ff4d=local688d14de7bf3b079c80ae329b9d758fefd6ae03e。独立CI40449589366首轮19/19，actual mergedbfb99312ec150f97f6a040a16623f9655e85263同树、三OS1369；12清单263文件66/66/66/65完整。仍target纯依赖base4a79927b，差异仅断言相关24文件。

@@ -985,7 +985,7 @@ async function inertFlowDocument(base) {
       ),
       assertion(
         "historical-assert",
-        "must-not-be-observed",
+        "{{HISTORICAL_EXPECTED}}",
         "eq",
         "responseText",
         inertDiagnostic,
@@ -1038,14 +1038,14 @@ test(
     );
     const expectedFlow = JSON.parse(expectedFile.text);
     expectedFlow.steps[0].api_snapshot.request.post_tasks[2].data.expression.compareValue =
-      "{{UNSUPPORTED_EXPECTED}}";
+      { invalid: "expected must remain scalar text" };
     expectedFile.text = JSON.stringify(expectedFlow);
     const rejectedExpected = await f.call(
       `/api/projects/${initial.id}/import`,
       { document: badExpected },
     );
     assert.equal(rejectedExpected.status, 400);
-    assert.match(rejectedExpected.value.error, /模板/);
+    assert.match(rejectedExpected.value.error, /字面/);
     assert.deepEqual(await f.store.get(initial.id), initial);
     assert.deepEqual(f.wire, []);
     const imported = await f.call(`/api/projects/${initial.id}/import`, {
@@ -1078,6 +1078,10 @@ test(
       assert.equal(
         histories[index].after[2].data.expression.path,
         inertDiagnostic,
+      );
+      assert.equal(
+        histories[index].after[2].data.expression.compareValue,
+        "{{HISTORICAL_EXPECTED}}",
       );
       assert.equal(
         histories[index].after[3].data.expression.compareValue,
