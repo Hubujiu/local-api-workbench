@@ -8,13 +8,14 @@ const formats = {
   "text/plain": "text",
 };
 const object = (v) => v && typeof v === "object" && !Array.isArray(v);
-function schema(value, depth = 0) {
+function schema(value, depth = 0, rewriteSchema) {
   if (
     !object(value) ||
     depth > 40 ||
     Buffer.byteLength(JSON.stringify(value)) > 262144
   )
     throw Error("原生响应导出需要有界的内联对象schema");
+  if (rewriteSchema) return rewriteSchema(value);
   const visit = (node, level) => {
     if (level > 40) throw Error("原生响应schema层级超过40");
     if (!node || typeof node !== "object") return;
@@ -30,7 +31,7 @@ function schema(value, depth = 0) {
   visit(value, depth);
   return structuredClone(value);
 }
-export function exportApipostResponses(request) {
+export function exportApipostResponses(request, { rewriteSchema } = {}) {
   const examples = request.examples || [],
     responses = request.responses || [];
   if (
@@ -58,10 +59,11 @@ export function exportApipostResponses(request) {
     const content = response.content[media[0]];
     if (!object(content) || Object.keys(content).some((k) => k !== "schema"))
       throw Error("原生响应内容定义不可丢弃");
-    const definition = schema(content.schema ?? response.schema ?? {});
+    const originalSchema = content.schema ?? response.schema ?? {};
+    const definition = schema(originalSchema, 0, rewriteSchema);
     if (
       response.schema !== undefined &&
-      !isDeepStrictEqual(response.schema, definition)
+      !isDeepStrictEqual(response.schema, originalSchema)
     )
       throw Error("响应顶层及媒体schema不一致");
     const key = response.status + ":" + media[0];

@@ -1,9 +1,12 @@
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { exportApipostDirectory } from "./apipost-directory-export.mjs";
 import { exportApipost } from "./apipost-export.mjs";
 import {
   listImportedExecutionRuns,
   getImportedExecutionRun,
 } from "./imported-execution-history.mjs";
+import { resolveNativeMockRoute } from "./native-mock-route.mjs";
+import { nativeMockResponse } from "./native-mock-runtime.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -100,6 +103,7 @@ export async function createApp({
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpSessionProjects = [],
     mcpToken = "",
     mcpLastActivity = null;
   const persistedMCP = await loadMCPConfig(path.resolve(root));
@@ -245,8 +249,12 @@ export async function createApp({
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
@@ -255,6 +263,7 @@ export async function createApp({
         const dispatch = createMCP({
           store,
           ...mcp,
+          sessionProjects: mcpSessionProjects,
           debugEnvironments,
           grpcExecutor: executePlanGrpc,
           protocolExecutor: executePlanWire,
@@ -302,9 +311,30 @@ export async function createApp({
         }
         return json(res, 200, result);
       }
-      if (parts[0] === "mock") {
-        const p = await store.get(parts[1]),
-          r = p.requests.find((r) => r.id === parts[2] && !r.deletedAt);
+      const nativeMockAlias =
+        parts[0] === "app" && parts[1] === "mock" && parts[2] === "project";
+      if (parts[0] === "mock" || nativeMockAlias) {
+        const offset = nativeMockAlias ? 3 : 1;
+        const p = await store.get(parts[offset]);
+        // The old ID route keeps priority and its query arguments stay ordinary data.
+        let r =
+          !nativeMockAlias && parts.length === 3
+            ? p.requests.find((r) => r.id === parts[2] && !r.deletedAt)
+            : undefined;
+        if (!r) {
+          try {
+            r = resolveNativeMockRoute(
+              p,
+              req.method,
+              "/" + parts.slice(offset + 1).join("/"),
+              u.searchParams,
+            );
+          } catch (error) {
+            if (error.statusCode === 409)
+              return json(res, 409, { error: error.message });
+            throw error;
+          }
+        }
         if (!r) return json(res, 404, { error: "Mock not found" });
         if (p.settings?.mockEnabled === false)
           return json(res, 503, { error: "Mock服务已关闭" });
@@ -320,18 +350,28 @@ export async function createApp({
         try {
           incoming = JSON.parse(raw);
         } catch {}
-        if (u.searchParams.getAll("example").length > 1)
+        if (
+          r.nativeMock === undefined &&
+          u.searchParams.getAll("example").length > 1
+        )
           throw Error("Mock示例索引不能重复");
-        const selected = selectMockResponse(
-          r,
-          {
-            method: req.method,
-            query: Object.fromEntries(u.searchParams),
-            headers: req.headers,
-            body: incoming,
-          },
-          () => schemaMockResponse(p, r),
-        );
+        const selected =
+          r.nativeMock !== undefined
+            ? await nativeMockResponse(p, r, {
+                query: Object.fromEntries(u.searchParams),
+                headers: req.headers,
+                body: incoming,
+              })
+            : selectMockResponse(
+                r,
+                {
+                  method: req.method,
+                  query: Object.fromEntries(u.searchParams),
+                  headers: req.headers,
+                  body: incoming,
+                },
+                () => schemaMockResponse(p, r),
+              );
         if (selected.delayMs)
           await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
         res.writeHead(selected.status, {
@@ -423,6 +463,7 @@ export async function createApp({
               port: server.address().port,
             });
             mcp = next;
+            mcpSessionProjects = [];
             mcpToken = nextToken;
             mcpWarning = "";
           } else if (req.method !== "GET")
@@ -597,6 +638,10 @@ export async function createApp({
             b.runs = p.runs;
             b.history = p.history;
             const saved = await store.save(b);
+            if (b.archived)
+              mcpSessionProjects = mcpSessionProjects.filter(
+                (id) => id !== b.id,
+              );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
@@ -607,22 +652,36 @@ export async function createApp({
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
-            importIntoProject(p, b.document);
+            importIntoProject(p, b.document, {
+              modelNameMode: b.modelNameMode,
+            });
             await store.save(p);
             return json(res, 200, p);
           }
-          if (action === "export" && req.method === "GET")
+          if (action === "export" && req.method === "GET") {
+            const values = u.searchParams.getAll("modelNameMode");
+            if (values.length > 1) throw Error("modelNameMode查询参数重复");
+            const modelNameMode = values[0];
+            resolveModelNameMode(modelNameMode);
+            if (
+              values.length &&
+              !["apipost", "apipost-directory"].includes(
+                u.searchParams.get("format"),
+              )
+            )
+              throw Error("modelNameMode仅支持Apipost原生格式");
             return json(
               res,
               200,
               u.searchParams.get("format") === "apipost-directory"
-                ? exportApipostDirectory(p)
+                ? exportApipostDirectory(p, { modelNameMode })
                 : u.searchParams.get("format") === "apipost"
-                  ? exportApipost(p)
+                  ? exportApipost(p, { modelNameMode })
                   : u.searchParams.get("format") === "openapi"
                     ? exportOpenAPI(p)
                     : p,
             );
+          }
           if (action === "grpc-reflection" && req.method === "POST") {
             const { runId, ...input } = await body(req);
             return await withGrpcTask(runId, async (runId, signal) =>

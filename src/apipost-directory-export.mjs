@@ -1,15 +1,16 @@
+import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
 import { exportApipost, apipostExportId } from "./apipost-export.mjs";
 import { importIntoProject, snapshotPlan } from "./core.mjs";
 import { directorySettings } from "../public/apipost-directory-input.js";
 
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
-export function exportApipostDirectory(project) {
+export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
-  const document = exportApipost(base);
+  const document = exportApipost(base, options);
   const projectId = document.project_id;
   const scoped = (kind, value) =>
     apipostExportId(kind, projectId + "\0" + value);
@@ -20,7 +21,11 @@ export function exportApipostDirectory(project) {
   const mapNode = (node) => {
     const copy = structuredClone(node);
     copy.target_id = scoped(
-      copy.target_type === "folder" ? "f" : "a",
+      copy.target_type === "folder"
+        ? "f"
+        : copy.target_type === "doc"
+          ? "d"
+          : "a",
       node.target_id,
     );
     copy.parent_id = node.parent_id === "0" ? "0" : scoped("f", node.parent_id);
@@ -30,6 +35,23 @@ export function exportApipostDirectory(project) {
         task.id = scoped("t", copy.target_id + ":" + phase + ":" + i);
     for (const [i, example] of (copy.response?.example || []).entries())
       example.example_id = scoped("example", copy.target_id + ":" + i);
+    if (copy.ai_expect) {
+      for (const [i, rule] of copy.ai_expect.list.entries()) {
+        rule.example.example_id = scoped(
+          "mock-example",
+          copy.target_id + ":rule:" + i,
+        );
+        for (const [j, condition] of rule.conditions.entries())
+          condition.conditionId = scoped(
+            "mock-condition",
+            copy.target_id + ":" + i + ":" + j,
+          );
+      }
+      copy.ai_expect.none_math_example.example_id = scoped(
+        "mock-example",
+        copy.target_id + ":fallback",
+      );
+    }
     return copy;
   };
   const apis = document.apis.map(mapNode);
@@ -94,7 +116,10 @@ export function exportApipostDirectory(project) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
-      const frozen = exportApipost({ ...base, requests: [snapshotRequest] });
+      const frozen = exportApipost(
+        { ...base, requests: [snapshotRequest] },
+        options,
+      );
       for (const folder of frozen.apis.filter(
         (n) => n.target_type === "folder",
       )) {
@@ -180,13 +205,28 @@ export function exportApipostDirectory(project) {
     project_id: projectId,
     items: apis.map(apiMetadata),
   });
-  for (const node of apis)
+  for (const node of apis) {
+    if (node.ai_expect !== undefined) {
+      const config = { project_id: projectId, target_id: node.target_id };
+      for (const key of [
+        "ai_expect",
+        "mock_server_enable",
+        "mock_ip_white_list_enable",
+        "mock_ip_white_list",
+        "mock_show_target_id",
+      ]) {
+        config[key] = node[key];
+        delete node[key];
+      }
+      put("settings/mock_" + node.target_id + ".json", config);
+    }
     put("apis/" + node.target_id + ".json", {
       ...apiMetadata(node),
       created_at: timestamp,
       updated_at: timestamp,
       data: node,
     });
+  }
   put("envs/index.json", {
     project_id: projectId,
     items: environments.map(({ env_id, name, sort }) => ({
@@ -208,7 +248,17 @@ export function exportApipostDirectory(project) {
     put("settings/" + file + ".json", value);
   }
   put("samples/index.json", { project_id: projectId, items: [] });
-  put("schemas/index.json", { project_id: projectId, items: [] });
+  put("schemas/index.json", {
+    project_id: projectId,
+    items: document.models.map(({ schema, ...metadata }) => metadata),
+  });
+  for (const model of document.models)
+    put("schemas/" + model.model_id + ".json", {
+      model_id: model.model_id,
+      project_id: projectId,
+      name: model.name,
+      data: model,
+    });
   put("executions/flows/index.json", {
     version: 2,
     updated_at: timestamp,
@@ -242,7 +292,15 @@ export function exportApipostDirectory(project) {
     documents: [],
     dictionary: [],
   };
-  importIntoProject(check, result);
+  importIntoProject(check, result, options);
+  const withStatus = (p) =>
+    (p.documents || []).map((d) => ({
+      ...d,
+      statusName: d.statusId
+        ? p.settings?.statuses?.find((s) => s.id === d.statusId)?.name
+        : undefined,
+    }));
+  verifyApipostDocumentDefinitions(withStatus(project), withStatus(check));
   if (check.plans.length !== plans.length)
     throw Error("原生目录计划回读不完整");
   for (const [i, plan] of check.plans.entries())

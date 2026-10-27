@@ -87,6 +87,24 @@ for (const transport of ["http", "stdio"])
           beforeScript:
             'apt.setRequestHeader("x-proof","frozen");apt.environment.set("executed","yes");',
         });
+        source.dictionary = [
+          {
+            id: "a",
+            name: "雪 / independent A",
+            schema: {
+              type: "object",
+              properties: { next: { $ref: "#/components/schemas/b" } },
+            },
+          },
+          { id: "b", name: "Another origin B", schema: { type: "object" } },
+        ];
+        source.openapiComponents = {
+          schemas: Object.fromEntries(
+            source.dictionary.map((m) => [m.id, m.schema]),
+          ),
+        };
+        source.modelFolders = [{ id: "empty", name: "Empty" }];
+        request.schema = { $ref: "#/components/schemas/a" };
         source.requests = [request];
         if (format === "apipost-directory")
           source.plans = [
@@ -173,10 +191,17 @@ for (const transport of ["http", "stdio"])
         assert(tools.some((tool) => tool.name === "localapi_export_project"));
         assert(!tools.some((tool) => tool.name === "localapi_import_project"));
         assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
+        await failure("export_project", { projectId: source.id, format });
         const exported = await success("export_project", {
           projectId: source.id,
           format,
+          modelNameMode: "preserve",
         });
+        assert.deepEqual(Object.keys(exported).sort(), [
+          "document",
+          "format",
+          "projectId",
+        ]);
         assert.equal(exported.projectId, source.id);
         assert.equal(exported.format, format);
         assert(exported.document && typeof exported.document === "object");
@@ -188,6 +213,7 @@ for (const transport of ["http", "stdio"])
         await failure("import_project", {
           projectId: target.id,
           format,
+          modelNameMode: "preserve",
           document: exported.document,
         });
         assert.deepEqual(await store.get(target.id), originalTarget);
@@ -207,18 +233,32 @@ for (const transport of ["http", "stdio"])
           ]);
           assert(tool.inputSchema.required.includes("projectId"));
           assert(tool.inputSchema.required.includes("format"));
+          assert(!tool.inputSchema.required.includes("modelNameMode"));
+          assert.deepEqual(tool.inputSchema.properties.modelNameMode.enum, [
+            "namespaced",
+            "preserve",
+          ]);
         }
         assert(!tools.some((tool) => tool.name === "localapi_run_plan"));
         const importArgs = {
           projectId: target.id,
           format,
+          modelNameMode: "preserve",
           document: exported.document,
         };
+        for (const modelNameMode of [null, "", false, "bad"])
+          for (const name of ["import_project", "export_project"])
+            await failure(name, {
+              ...importArgs,
+              modelNameMode,
+              ...(name === "export_project" ? { document: undefined } : {}),
+            });
         for (const projectId of [denied.id, archived.id, "missing-project"])
           for (const name of ["import_project", "export_project"])
             await failure(name, {
               projectId,
               format,
+              modelNameMode: "preserve",
               ...(name === "import_project"
                 ? { document: exported.document }
                 : {}),
@@ -251,6 +291,7 @@ for (const transport of ["http", "stdio"])
         await failure("export_project", {
           projectId: target.id,
           format,
+          modelNameMode: "preserve",
           path: "/tmp/not-an-export-destination",
         });
         for (const name of ["import_project", "export_project"])
@@ -320,6 +361,21 @@ for (const transport of ["http", "stdio"])
         assert(Buffer.byteLength(JSON.stringify(imported)) < 65536);
         assert(!JSON.stringify(imported).includes("fictional-saved-secret"));
         let saved = await store.get(target.id);
+        assert.deepEqual(Object.keys(imported).sort(), [
+          "format",
+          "imported",
+          "projectId",
+        ]);
+        assert.deepEqual(
+          saved.dictionary.map((m) => m.name),
+          source.dictionary.map((m) => m.name),
+        );
+        assert.equal(saved.modelFolders[0].name, "Empty");
+        const importedModel = saved.dictionary[0];
+        assert.equal(
+          importedModel.schema.properties.next.$ref,
+          "#/components/schemas/" + saved.dictionary[1].id,
+        );
         assert.deepEqual(
           saved.requests.find((item) => item.id === "keep-existing"),
           originalTarget.requests[0],
@@ -365,14 +421,20 @@ for (const transport of ["http", "stdio"])
         const targetExport = await success("export_project", {
           projectId: target.id,
           format,
+          modelNameMode: "preserve",
         });
         assert.deepEqual(await store.get(target.id), saved);
         await success("import_project", {
           projectId: second.id,
           format,
+          modelNameMode: "preserve",
           document: targetExport.document,
         });
         const secondState = await store.get(second.id);
+        assert.deepEqual(
+          secondState.dictionary.map((m) => m.name),
+          source.dictionary.map((m) => m.name),
+        );
         assert.equal(secondState.requests.length, 2);
         assert.equal(secondState.runs.length, 0);
         assert.equal(wire.length, 0);

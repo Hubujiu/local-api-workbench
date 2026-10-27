@@ -1,3 +1,5 @@
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
   validateRequestTaskSource,
@@ -13,6 +15,11 @@ import {
   runNativeTaskPhase,
   isNativeExtractionPhaseFailure,
 } from "./native-task-phase.mjs";
+import { normalizeNativeMockRoute } from "./native-mock-route.mjs";
+import { normalizeNativeMock } from "./native-mock.mjs";
+import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
+import { mergeImportedDocuments } from "./apipost-documents.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -192,6 +199,14 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   validateRequestTaskSource(r);
+  if (
+    r.nativeMock !== undefined &&
+    r.nativeMockRoute !== undefined &&
+    r.nativeMock.sourceTargetId !== r.nativeMockRoute.sourceTargetId
+  )
+    throw Error("Mock路由与响应来源接口不一致");
+  if (r.nativeMock !== undefined && r.mockRules?.length)
+    throw Error("原版Mock与普通Mock规则不能混用");
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -337,6 +352,12 @@ export function normalizeRequest(r = {}) {
     afterScript: r.afterScript || "",
     after: r.after || [],
     examples: r.examples || [],
+    ...(r.nativeMockRoute === undefined
+      ? {}
+      : { nativeMockRoute: normalizeNativeMockRoute(r.nativeMockRoute) }),
+    ...(r.nativeMock === undefined
+      ? {}
+      : { nativeMock: normalizeNativeMock(r.nativeMock) }),
     mockRules: r.mockRules || [],
     schema: r.schema ?? {},
     responses: r.responses || [],
@@ -396,6 +417,8 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const importedNativeFlowSource = readImportedNativeFlowSource(plan);
+  const nativeMCPBudget = { bytes: 0 };
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -404,6 +427,9 @@ export function snapshotPlan(plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   const snapshot = {
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -447,11 +473,24 @@ export function snapshotPlan(plan) {
                   authSnapshot: true,
                   sharedScriptsSnapshot: true,
                 },
+                ...(s.nativeMCP === undefined
+                  ? {}
+                  : {
+                      nativeMCP: normalizeNativeMCPState(
+                        s.nativeMCP,
+                        s.request,
+                        normalizeRequest,
+                        nativeMCPBudget,
+                      ),
+                    }),
                 expectedStatus: s.expectedStatus,
               },
     ),
   };
-  let sourceBytes = 0;
+  let sourceBytes =
+    importedNativeFlowSource === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
   for (const step of snapshot.steps) {
     const source = step.request?.importedNativeTaskSource;
     if (source !== undefined)
@@ -482,6 +521,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  readImportedNativeFlowSource(plan);
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
@@ -1332,8 +1372,12 @@ export function importDocument(doc) {
   }
   if (isModernApipost(apipostDocument(doc)))
     throw Error("Apipost现代JSON需要完整项目导入，不能丢弃环境依赖");
-  if (apipostDocument(doc))
-    return importApipost(doc).requests.map(normalizeRequest);
+  if (apipostDocument(doc)) {
+    const imported = importApipost(doc);
+    if (imported.documents.length)
+      throw Error("原生文档须使用完整项目导入，不会丢弃文档正文");
+    return imported.requests.map(normalizeRequest);
+  }
   if (Array.isArray(doc.requests)) return doc.requests.map(normalizeRequest);
   throw Error("无法识别导入格式");
 }
@@ -1819,6 +1863,7 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  validateAPIResourceTrash(document);
   for (const environment of document.environments) {
     if (
       !environment.id ||
@@ -1871,9 +1916,13 @@ export function restoreProject(document) {
   for (const request of document.requests) validateRequestTaskSource(request);
   for (const item of document.cases || [])
     validateRequestTaskSource(item.request);
-  for (const plan of document.plans || [])
+  for (const plan of document.plans || []) {
+    readImportedNativeFlowSource(plan);
     for (const step of plan.steps || [])
       validateRequestTaskSource(step.request);
+  }
+  for (const run of document.runs || [])
+    if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
@@ -1990,7 +2039,12 @@ function replaceVariables(target, source) {
 }
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
-export function importIntoProject(project, document, { sync = false } = {}) {
+export function importIntoProject(
+  project,
+  document,
+  { sync = false, modelNameMode } = {},
+) {
+  resolveModelNameMode(modelNameMode);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -2008,6 +2062,11 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  if (
+    modelNameMode !== undefined &&
+    !isModernApipost(apipostDocument(original))
+  )
+    throw Error("modelNameMode仅支持现代Apipost原生格式");
   const directoryFlows = fromDirectory
     ? original.nativeExecutionFlows || []
     : [];
@@ -2016,6 +2075,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     ? prepareDirectoryPlans(original, directoryFlows, project, {
         normalizeRequest,
         snapshotPlan,
+        modelNameMode,
       })
     : [];
   const directoryArtifacts = fromDirectory
@@ -2027,9 +2087,12 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     : null;
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
-    ? importModernApipost(source, project, { sync })
+    ? importModernApipost(source, project, { sync, modelNameMode })
     : null;
   const legacy = modern || (source ? importApipost(original) : null);
+  const importedDocuments = mergeImportedDocuments(project, legacy?.documents, {
+    sync,
+  });
   const requests = legacy
     ? legacy.requests.map(normalizeRequest)
     : importDocument(document);
@@ -2142,6 +2205,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     project.settings ??= {};
     project.settings.apipostDirectoryArtifacts = directoryArtifacts;
   }
+  if (importedDocuments) project.documents = importedDocuments;
   if (importedCases.length)
     project.cases = [...(project.cases || []), ...importedCases];
   if (importedCaseFolders.length)

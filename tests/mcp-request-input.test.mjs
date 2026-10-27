@@ -95,3 +95,56 @@ test("temporary inputs enforce JSON size and safety boundaries", () => {
   assert.equal(saved.query[0].value, "saved");
   assert.equal(applyMCPInput(saved, { body: null }).body, "null");
 });
+
+test("explicit inputs override cached SDK URL state without rewriting raw query or retaining dynamic providers", async (t) => {
+  const http = await import("node:http");
+  const { initializeQueryRuntime } = await import(
+    "../src/script-url-runtime.mjs"
+  );
+  const { normalizeRequest, snapshotPlan, runPlan } = await import(
+    "../src/core.mjs"
+  );
+  const { executeRequest } = await import("../src/runtime.mjs");
+  const seen = [],
+    server = http.createServer((req, res) => {
+      seen.push(req.url);
+      res.setHeader("content-type", "application/json");
+      res.end("{}");
+    });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+  });
+  const request = normalizeRequest({
+    id: "sdk",
+    url: `http://127.0.0.1:${server.address().port}/{id}?q=raw%2f+`,
+    query: [
+      { key: "q", value: "old", dynamic: { source: "fixed", value: "wrong" } },
+    ],
+    path: [{ key: "id", value: "old", enabled: false }],
+    scriptURLMode: "sdk",
+    scriptDialect: "apipost8",
+  });
+  request.scriptURLRuntime = initializeQueryRuntime(request);
+  const before = structuredClone(request);
+  const changed = applyMCPInput(request, {
+    query: { q: "new" },
+    path: { id: "bound" },
+  });
+  const result = await runPlan(
+    snapshotPlan({ steps: [{ request: changed }] }),
+    {},
+    executeRequest,
+  );
+  assert.equal(result.status, "passed", JSON.stringify(result));
+  assert.deepEqual(seen, ["/bound?q=raw%2f+&q=new"]);
+  assert.deepEqual(request, before);
+  const divergent = structuredClone(request);
+  divergent.scriptURLRuntime.state.url.query.pop();
+  divergent.scriptURLRuntime.origins.pop();
+  assert.throws(
+    () => applyMCPInput(divergent, { query: { q: "new" } }),
+    /不一致/,
+  );
+});

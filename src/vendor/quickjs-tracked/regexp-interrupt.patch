@@ -1,0 +1,219 @@
+diff --git a/vendor/quickjs/libregexp.c b/vendor/quickjs/libregexp.c
+--- a/vendor/quickjs/libregexp.c
++++ b/vendor/quickjs/libregexp.c
+@@ -54,6 +54,9 @@ typedef enum {
+ 
+ #define CAPTURE_COUNT_MAX 255
+ #define STACK_SIZE_MAX 255
++/* must be large enough to have a negligible runtime cost and small
++   enough to call the interrupt callback often. */
++#define INTERRUPT_COUNTER_INIT 10000
+ 
+ /* unicode code points */
+ #define CP_LS   0x2028
+@@ -1931,6 +1934,7 @@ typedef struct {
+     BOOL multi_line;
+     BOOL ignore_case;
+     BOOL is_unicode;
++    int interrupt_counter;
+     void *opaque; /* used for stack overflow check */
+ 
+     size_t state_size;
+@@ -1977,7 +1981,17 @@ static int push_state(REExecContext *s,
+     return 0;
+ }
+ 
+-/* return 1 if match, 0 if not match or -1 if error. */
++static int lre_poll_timeout(REExecContext *s)
++{
++    if (unlikely(--s->interrupt_counter <= 0)) {
++        s->interrupt_counter = INTERRUPT_COUNTER_INIT;
++        if (lre_check_timeout(s->opaque))
++            return LRE_RET_TIMEOUT;
++    }
++    return 0;
++}
++
++/* return 1 if match, 0 if not match or < 0 if error. */
+ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+                                    StackInt *stack, int stack_len,
+                                    const uint8_t *pc, const uint8_t *cptr,
+@@ -2008,6 +2022,8 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+                 ret = 0;
+             recurse:
+                 for(;;) {
++                    if (lre_poll_timeout(s))
++                        return LRE_RET_TIMEOUT;
+                     if (s->state_stack_len == 0)
+                         return ret;
+                     rs = (REExecState *)(s->state_stack +
+@@ -2097,7 +2113,7 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+                 ret = push_state(s, capture, stack, stack_len,
+                                  pc1, cptr, RE_EXEC_STATE_SPLIT, 0);
+                 if (ret < 0)
+-                    return -1;
++                    return LRE_RET_MEMORY_ERROR;
+                 break;
+             }
+         case REOP_lookahead:
+@@ -2109,12 +2125,14 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+                              RE_EXEC_STATE_LOOKAHEAD + opcode - REOP_lookahead,
+                              0);
+             if (ret < 0)
+-                return -1;
++                return LRE_RET_MEMORY_ERROR;
+             break;
+ 
+         case REOP_goto:
+             val = get_u32(pc);
+             pc += 4 + (int)val;
++            if (lre_poll_timeout(s))
++                return LRE_RET_TIMEOUT;
+             break;
+         case REOP_line_start:
+             if (cptr == s->cbuf)
+@@ -2179,6 +2197,8 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+             pc += 4;
+             if (--stack[stack_len - 1] != 0) {
+                 pc += (int)val;
++                if (lre_poll_timeout(s))
++                    return LRE_RET_TIMEOUT;
+             }
+             break;
+         case REOP_push_char_pos:
+@@ -2353,9 +2373,12 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+ 
+                 q = 0;
+                 for(;;) {
++                    if (lre_poll_timeout(s))
++                        return LRE_RET_TIMEOUT;
+                     res = lre_exec_backtrack(s, capture, stack, stack_len,
+                                              pc1, cptr, TRUE);
+-                    if (res == -1)
++                    if (res == LRE_RET_MEMORY_ERROR ||
++                        res == LRE_RET_TIMEOUT)
+                         return res;
+                     if (!res)
+                         break;
+@@ -2373,7 +2396,7 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+                                      RE_EXEC_STATE_GREEDY_QUANT,
+                                      q - quant_min);
+                     if (ret < 0)
+-                        return -1;
++                        return LRE_RET_MEMORY_ERROR;
+                 }
+             }
+             break;
+@@ -2383,7 +2406,7 @@ static intptr_t lre_exec_backtrack(REExecContext *s, uint8_t **capture,
+     }
+ }
+ 
+-/* Return 1 if match, 0 if not match or -1 if error. cindex is the
++/* Return 1 if match, 0 if not match or < 0 if error (see LRE_RET_x). cindex is the
+    starting position of the match and must be such as 0 <= cindex <=
+    clen. */
+ int lre_exec(uint8_t **capture,
+@@ -2405,6 +2428,7 @@ int lre_exec(uint8_t **capture,
+     s->cbuf_type = cbuf_type;
+     if (s->cbuf_type == 1 && s->is_unicode)
+         s->cbuf_type = 2;
++    s->interrupt_counter = INTERRUPT_COUNTER_INIT;
+     s->opaque = opaque;
+ 
+     s->state_size = sizeof(REExecState) +
+diff --git a/vendor/quickjs/libregexp.h b/vendor/quickjs/libregexp.h
+--- a/vendor/quickjs/libregexp.h
++++ b/vendor/quickjs/libregexp.h
+@@ -36,6 +36,9 @@
+ #define LRE_FLAG_INDICES    (1 << 6) /* Unused by libregexp, just recorded. */
+ #define LRE_FLAG_NAMED_GROUPS (1 << 7) /* named groups are present in the regexp */
+ 
++#define LRE_RET_MEMORY_ERROR (-1)
++#define LRE_RET_TIMEOUT      (-2)
++
+ uint8_t *lre_compile(int *plen, char *error_msg, int error_msg_size,
+                      const char *buf, size_t buf_len, int re_flags,
+                      void *opaque);
+@@ -50,6 +53,8 @@ int lre_parse_escape(const uint8_t **pp, int allow_utf16);
+ 
+ /* must be provided by the user, return non zero if overflow */
+ int lre_check_stack_overflow(void *opaque, size_t alloca_size);
++/* must be provided by the user, return non zero if time out */
++int lre_check_timeout(void *opaque);
+ void *lre_realloc(void *opaque, void *ptr, size_t size);
+ 
+ #endif /* LIBREGEXP_H */
+diff --git a/vendor/quickjs/quickjs.c b/vendor/quickjs/quickjs.c
+--- a/vendor/quickjs/quickjs.c
++++ b/vendor/quickjs/quickjs.c
+@@ -6836,15 +6836,19 @@ static JSValue JS_ThrowTypeErrorInvalidClass(JSContext *ctx, int class_id)
+     return JS_ThrowTypeErrorAtom(ctx, "%s object expected", name);
+ }
+ 
++static void JS_ThrowInterrupted(JSContext *ctx)
++{
++    JS_ThrowInternalError(ctx, "interrupted");
++    JS_SetUncatchableError(ctx, ctx->rt->current_exception, TRUE);
++}
++
+ static no_inline __exception int __js_poll_interrupts(JSContext *ctx)
+ {
+     JSRuntime *rt = ctx->rt;
+     ctx->interrupt_counter = JS_INTERRUPT_COUNTER_INIT;
+     if (rt->interrupt_handler) {
+         if (rt->interrupt_handler(rt, rt->interrupt_opaque)) {
+-            /* XXX: should set a specific flag to avoid catching */
+-            JS_ThrowInternalError(ctx, "interrupted");
+-            JS_SetUncatchableError(ctx, ctx->rt->current_exception, TRUE);
++            JS_ThrowInterrupted(ctx);
+             return -1;
+         }
+     }
+@@ -43914,12 +43918,20 @@ static JSValue js_regexp_toString(JSContext *ctx, JSValueConst this_val,
+     return JS_EXCEPTION;
+ }
+ 
+-BOOL lre_check_stack_overflow(void *opaque, size_t alloca_size)
++int lre_check_stack_overflow(void *opaque, size_t alloca_size)
+ {
+     JSContext *ctx = opaque;
+     return js_check_stack_overflow(ctx->rt, alloca_size);
+ }
+ 
++int lre_check_timeout(void *opaque)
++{
++    JSContext *ctx = opaque;
++    JSRuntime *rt = ctx->rt;
++    return (rt->interrupt_handler &&
++            rt->interrupt_handler(rt, rt->interrupt_opaque));
++}
++
+ void *lre_realloc(void *opaque, void *ptr, size_t size)
+ {
+     JSContext *ctx = opaque;
+@@ -43987,7 +43999,11 @@ static JSValue js_regexp_exec(JSContext *ctx, JSValueConst this_val,
+                     goto fail;
+             }
+         } else {
+-            JS_ThrowInternalError(ctx, "out of memory in regexp execution");
++            if (rc == LRE_RET_TIMEOUT) {
++                JS_ThrowInterrupted(ctx);
++            } else {
++                JS_ThrowInternalError(ctx, "out of memory in regexp execution");
++            }
+             goto fail;
+         }
+     } else {
+@@ -44183,7 +44199,11 @@ static JSValue JS_RegExpDelete(JSContext *ctx, JSValueConst this_val, JSValueCon
+                         goto fail;
+                 }
+             } else {
+-                JS_ThrowInternalError(ctx, "out of memory in regexp execution");
++                if (ret == LRE_RET_TIMEOUT) {
++                    JS_ThrowInterrupted(ctx);
++                } else {
++                    JS_ThrowInternalError(ctx, "out of memory in regexp execution");
++                }
+                 goto fail;
+             }
+             break;
