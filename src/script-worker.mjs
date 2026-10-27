@@ -626,7 +626,7 @@ try {
           (workerData.requestSnapshot
             ? "(" +
               nativeRequestSnapshotSource +
-              ')(data.requestSnapshot,data.extractions.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source))'
+              ')(data.requestSnapshot,data.extractions.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source),()=>JSON5.parse)'
             : "null") +
           ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
           nativeAssertionsInstallerSource +

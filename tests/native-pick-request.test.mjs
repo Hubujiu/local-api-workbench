@@ -128,22 +128,14 @@ test("request source errors stay deferred to their task and unrelated unsupporte
       ),
     /ordered before source/,
   );
-  for (const body of [
-    "",
-    "null",
-    "42",
-    "{unquoted:1}",
-    '{"x":1,}',
-    '{"x":1e400}',
-    '{"x":"\\ud800"}',
-  ])
+  for (const body of ["null", "42", '{"x":1e400}', '{"x":"\\ud800"}'])
     await assert.rejects(async () =>
       phase([pick("requestBody", "$")], { bodyType: "raw", body }),
     );
-  for (const bodyType of ["none", "binary", "graphql", "msgpack"])
+  for (const bodyType of ["binary", "graphql", "msgpack"])
     await assert.rejects(
       async () => phase([pick("requestBody", "$")], { bodyType }),
-      /严格JSON/,
+      /JSON5/,
     );
 });
 

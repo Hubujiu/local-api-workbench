@@ -1,3 +1,5 @@
+> 本文记录初始严格 JSON 子集。后续 JSON5 与空正文兼容沿用同一阶段/资源/回滚边界，最新规则见 [提取 ADR](ADR-NATIVE-RESPONSE-EXTRACTION.md) 和精确提交检查点；旧语法拒绝说明不代表当前状态。
+
 # Pre-only configured request snapshots (WIP)
 
 Adds native `requestHeader` and `requestBody` pickVars only in the before phase.

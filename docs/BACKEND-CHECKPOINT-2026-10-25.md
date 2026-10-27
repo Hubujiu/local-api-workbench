@@ -1,8 +1,17 @@
-# 后端检查点 · 2026-10-27 09:15 UTC
+# 后端检查点 · 2026-10-27 09:55 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 09:15 复用模型定义图候选
+## 09:55 JSON5 与空正文快照候选
+
+- 最近完整 GREEN 为 `00b7f241b6e3ed3ae77b01a3e2695830f5c75432` / local `480e69bc5314ade204e5be6341e2d97798675211` / tree `8d500bb1b8f1d0f253f22cfe1a509529e6a2bf96`。CI `40480343196` 首次19/19成功，全部实际checkout同树；12产物363文件91/91/91/90完整互斥，三平台各1879通过，模型图/文档/API/冻结往返、数据库、production stdio和固定引擎通过。旧f83/8b5 Windows XML RED仍保留，不宣称根因已修。
+- 本候选同PR25复用已锁定JSON5 2.2.3 MIT及现有同VM入口，不安装新库或修改loader/预算/权限。私有阶段启动快照只在非空raw/json正文需要解析时取得解析函数；64KiB有效Unicode输入、64层资源预检、10000节点、有限值/对象数组根/保留键/字节检查保持。词法预检识别单双引号、转义与注释，只计资源，语法由成熟解析器判断。
+- none/缺失正文/精确空字符串按已核静态事实为空对象快照，空白或仅注释不是空正文。primitive/nonfinite/非法Unicode/GraphQL/file等仍拒绝；错误receipt仍到实际任务才抛，原阶段隔离、全部行先验、回滚/严格停止保持。原始JSON5正文和声明不改写；SDK编辑仅影响发送数据。既有json空body发送{}，none/raw发送空串，测试按既有发送语义验证，不因快照统一{}改变wire。
+- Feature remote `b981f82a18b952f42cfe3ef93fa2f86efd09f2c4` / local `6c40db5eb4e5e6b9d8cb07871100a9b600593a2c` / tree `16ce938d41dd04979cc87676f65c7537f17d5df1`，base f896不变。独立 CI `40482464410` 首次19/19成功，实际checkout `a95a5eb9234434e985bd3236a42ef2de550351f2` 同树；12实际清单257文件65/64/64/64完整，三平台各1258通过。早期新夹具对json空wire、同步throws/空结果字段的假设错误保留并纠正，没有改生产去迎合它们。
+- 根合并保留原assertion/pick共享私有工厂，仅向请求快照追加既有JSON5解析入口。四整文件36/36通过；主原生断言/提取完整SDK HTTP/stdio、CLI与往返链改用带注释/单引号/hex/尾逗号的初始正文，证明snapshot原文不变、提取为7而wire经SDK改为99。该主链与模型/文档MCP矩阵、原生任务出口三整文件26/26通过；全format/check/diff通过。
+- 新组合仍须自己的CI；未更改发送canonicalization、原版运行/暂停审查状态、main/develop或部署状态。
+
+## 09:15 历史复用模型定义图候选
 
 - 前一文档组合 `f83ccd81711ee8f73856334606f1152bcb7d29ad` / tree `d3d401e8e5a558de23314d0ffba3e8cfd90d832c` 的 CI `40472886178` 首次为 **18 成功、1 失败**。Windows shard2 的既有 native-pick-xml-boundaries 输入/节点边界触发250ms预算（compatibility51ms + userScript199ms，CPU47ms+109ms，elapsed450ms，无网络/数据库），具体子边界和根因未确定；没有重跑、放宽预算或重启暂停审查。19实际checkout、12产物362文件91/91/90/90完整核对；Linux/macOS各1875通过，Windows1874通过/1失败。文档新流程三平台通过但不能抵消整体RED。最近完整GREEN仍为25315dac。
 - 本候选修复非空 modelFolders 在两个原生出口被静默丢失，并支持有界静态复用模型图。dictionary与同ID components.schemas 必须一致；保留空目录、目录关系/排序/说明、模型定义、同模型局部及跨模型整根引用、API请求/响应关联，不展开复制图、不改字面example/default/enum等数据。使用现有模型验证、schema位置分类和导入器回读，不新增schema解释器或执行路径。

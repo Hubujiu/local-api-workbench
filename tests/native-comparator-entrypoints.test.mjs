@@ -69,6 +69,8 @@ const invoke = (client, name, args) =>
   client.callTool({ name, arguments: args });
 const forge =
   'for(const entry of tests)entry.passed=true;tests.length=0;tests.push({name:"forged success",passed:true});';
+const initialRequestBody =
+  "/* initial snapshot */ {count:0x7, label:'initial-body',}";
 function sourceFor(base, version = "1.1", requestSnapshots = false) {
   const source = modernApipostFixture();
   source.global.envs = [];
@@ -94,7 +96,7 @@ function sourceFor(base, version = "1.1", requestSnapshots = false) {
       ];
       api.request.body = {
         mode: "raw",
-        raw: '{"count":7,"label":"initial-body"}',
+        raw: initialRequestBody,
       };
       const requestPick = (id, source, expression, name, type) =>
         task(id, "pickVars", {
@@ -776,6 +778,7 @@ function successfulRun(run, names) {
   assert.equal(run.results[3].request.auth.token, "wire-selected");
   assert.equal(run.results[3].response.body, " Alpha 雪 ");
   assert.equal(run.results[3].scriptResponse.body, "16");
+  assert.equal(run.snapshot.steps[0].request.body, initialRequestBody);
   assert.equal(run.variables.pickedHeader, "initial-header");
   assert.equal(run.variables.pickedCount, 7);
   assert.deepEqual(
