@@ -54,3 +54,45 @@ test("native extended protocol graph and exact derived messages roundtrip both f
   assert.deepEqual(source, original);
   assert.deepEqual(p, before);
 });
+
+test("extended source ambiguity and all unrepresentable mutations reject without changing state", () => {
+  const source = extendedProtocolFixture(),
+    base = blank();
+  importIntoProject(base, source);
+  const mutations = [
+    (p) => p.plans.pop(),
+    (p) => p.plans.push({ ...structuredClone(p.plans[0]), id: "extra" }),
+    (p) => (p.plans[0].steps[0].enabled = false),
+    (p) => (p.plans[0].environmentId = "changed"),
+    (p) => (p.plans[0].source = "ai"),
+    (p) => (p.plans[0].steps[0].socketio.commands[0].args = ["changed"]),
+    (p) => (p.settings.grpcDefinitions[0].target = "grpc://127.0.0.1:9"),
+    (p) => (p.settings.apipostProtocolSources[0].source.parent_id = "unknown"),
+    (p) =>
+      (p.settings.apipostProtocolSources[0].source.url = "https://localhost/"),
+    (p) => p.settings.apipostProtocolSources[0].notes.push("edited"),
+    (p) =>
+      p.settings.apipostProtocolSources[1].source.protos[0].services[0].methods[0].request.metadata.parameter.push(
+        { key: "authorization", is_checked: -1 },
+      ),
+  ];
+  for (const change of mutations)
+    for (const encode of exporters) {
+      const p = structuredClone(base);
+      change(p);
+      const before = structuredClone(p);
+      assert.throws(() => encode(p));
+      assert.deepEqual(p, before);
+    }
+  const a = structuredClone(source.apis[1]),
+    b = structuredClone(a);
+  a.target_id = "a:b";
+  a.protos[0].services[0].methods[0].grpc_method_id = "c";
+  b.target_id = "a";
+  b.protos[0].services[0].methods[0].grpc_method_id = "b:c";
+  const collision = blank();
+  importIntoProject(collision, { ...source, apis: [a, b] });
+  assert.equal(collision.settings.grpcDefinitions.length, 1);
+  for (const encode of exporters)
+    assert.throws(() => encode(collision), /身份冲突/);
+});

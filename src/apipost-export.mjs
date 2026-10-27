@@ -1,4 +1,8 @@
 import {
+  prepareExtendedProtocolExport,
+  verifyExtendedProtocolExport,
+} from "./apipost-extended-protocol-export.mjs";
+import {
   prepareSampleExport,
   verifySampleDefinitions,
 } from "./apipost-sample-export.mjs";
@@ -149,6 +153,9 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  const originalProject = project;
+  const extended = prepareExtendedProtocolExport(project);
+  project = extended.base;
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -432,7 +439,10 @@ export function exportApipost(project, options = {}) {
       folder,
     }),
   );
-  apis.push(...protocolExport.emit(folder));
+  apis.push(
+    ...protocolExport.emit(folder),
+    ...extended.emit(projectId, apipostExportId),
+  );
   if (apis.length > 5000) throw Error("Apipost最多5000条资源");
   const document = {
     project_id: projectId,
@@ -486,7 +496,12 @@ export function exportApipost(project, options = {}) {
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
-  if (samples.length) {
+  if (
+    samples.length ||
+    extended.derivedPlans.length ||
+    originalProject.settings?.grpcDefinitions?.length ||
+    originalProject.settings?.socketioDefinitions?.length
+  ) {
     const check = {
       requests: [],
       environments: [],
@@ -496,6 +511,7 @@ export function exportApipost(project, options = {}) {
     };
     importIntoProject(check, document, options);
     verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
+    verifyExtendedProtocolExport(originalProject, check);
   }
   return document;
 }
