@@ -293,3 +293,10 @@ or generation path is enabled. It also checks empty directories, literal referen
 annotations, persisted source identity in backup, unrelated-project isolation and
 atomic refusal of unrepresentable graphs. No original program or special runtime
 stress/audit was used.
+
+Boolean **model** definitions and API `$ref` to such a model are distinct from a
+direct API boolean schema. This slice rejects a direct request boolean before
+normalization, which would otherwise replace false with `{}`; it does not change
+generic normalization or recover information already discarded on earlier input.
+The response exporter retains its existing object-schema contract. No boolean
+schema execution acceptance is claimed.

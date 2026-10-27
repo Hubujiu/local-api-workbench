@@ -268,6 +268,10 @@ export function exportApipost(project) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
+    if (typeof input.schema === "boolean")
+      throw Error(
+        "原生导出不支持API直接布尔schema；请引用明确模型或使用项目备份",
+      );
     const r = normalizeRequest(input);
     if (r.scriptURLMode === "sdk")
       throw Error("Apipost导出不能保留SDK URL对象模式；请使用项目备份");

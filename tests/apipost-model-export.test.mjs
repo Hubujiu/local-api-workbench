@@ -290,3 +290,44 @@ test("unsupported model graphs and naming are rejected atomically", () => {
     assert.deepEqual(q, before);
   }
 });
+
+test("boolean models remain definitions while direct API booleans reject before normalization", () => {
+  const p = {
+    id: "p",
+    name: "Model Project",
+    requests: [],
+    environments: [],
+    settings: {},
+  };
+  const source = fixture("http://127.0.0.1/unused");
+  source.models.push({
+    model_id: "never",
+    model_type: "model",
+    name: "Never",
+    schema: false,
+  });
+  source.apis.find((x) => x.target_type === "api").request.body.raw_schema = {
+    $ref: "never",
+  };
+  importIntoProject(p, source);
+  for (const exporter of exporters) {
+    const q = {
+      id: "q",
+      name: "Model Project",
+      requests: [],
+      environments: [],
+      settings: {},
+    };
+    importIntoProject(q, exporter(p));
+    const m = q.dictionary.find((x) => x.name === "Model Project / Never");
+    assert.equal(m.schema, false);
+    assert.equal(q.openapiComponents.schemas[m.id], false);
+    assert.equal(q.requests[0].schema.$ref, "#/components/schemas/" + m.id);
+  }
+  for (const value of [false, true]) {
+    const q = structuredClone(p);
+    q.requests[0].schema = value;
+    for (const exporter of exporters)
+      assert.throws(() => exporter(q), /直接布尔schema/);
+  }
+});
