@@ -460,3 +460,23 @@ emitted row list. Groups with absent sort use sibling-local fallback indices as
 well; explicit group sort remains exact. Regression fixtures interleave APIs and
 groups and mix omitted sort with 0.5 across both formats and two generations.
 The earlier candidate's test/CI result cannot certify this corrected tree.
+
+## Extended protocol graph continuation (WIP)
+
+The proposed bounded slice retains complete root source-backed plaintext inline
+Proto unary/server-stream gRPC and HTTP/v4 Socket.IO default-configuration text
+messages/Ack. Metadata rows, stripped handshake values, runtime credentials,
+TLS, WS/WSS, non-root resources and edited/incomplete derived-message graphs
+remain rejected. Re-running the existing source converter must exactly match
+current definitions and every generated frozen message plan before encoding.
+These plans are derived from saved protocol messages, not native automated tests;
+no native automation is fabricated. Native identity and generated-plan timestamps
+are regenerated on import; only Workbench backup preserves historical identity
+and timestamps. All executable plan fields, including enabled/expected status,
+extract/assertions/environment/source/provenance, must match the unedited source
+conversion; user-edited plans cannot be silently rebuilt.
+
+Both public export formats must reimport the complete output and compare all
+protocol definitions/message plans after explicit identity remapping. Export
+only converts inert definitions and never connects, signs, fetches Proto files,
+executes messages, restores credentials, or enables a new execution permission.
