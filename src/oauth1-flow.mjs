@@ -96,7 +96,8 @@ export class OAuth1Manager {
     for (const [id, f] of this.flows)
       if (f.expiresAt <= Date.now()) this.forget(id);
   }
-  active(flow) {
+  active(flow, signal) {
+    if (signal?.aborted) this.forget(flow.id);
     this.assertOpen();
     this.prune();
     if (this.flows.get(flow.id) !== flow || flow.controller.signal.aborted)
@@ -107,9 +108,9 @@ export class OAuth1Manager {
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
     try {
-      this.active(flow);
+      this.active(flow, signal);
       const result = await operation();
-      this.active(flow);
+      this.active(flow, signal);
       return result;
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -187,6 +188,7 @@ export class OAuth1Manager {
           controller.signal,
         ),
       );
+      this.active(flow, signal);
       if (data.get("oauth_callback_confirmed") !== "true")
         throw Error("OAuth1服务未确认回调");
       flow.temporaryToken = data.get("oauth_token");
@@ -259,6 +261,7 @@ export class OAuth1Manager {
       throw Error("OAuth1回调令牌不匹配");
     try {
       const result = await this.token(flow, data.get("oauth_verifier"), signal);
+      this.active(flow, signal);
       flow.result = {
         accessToken: result.get("oauth_token"),
         tokenSecret: result.get("oauth_token_secret"),
@@ -292,6 +295,7 @@ export class OAuth1Manager {
     if (!validVerifier(verifier)) throw Error("OAuth1 verifier无效");
     try {
       const data = await this.token(flow, verifier, signal);
+      this.active(flow, signal);
       return {
         accessToken: data.get("oauth_token"),
         tokenSecret: data.get("oauth_token_secret"),

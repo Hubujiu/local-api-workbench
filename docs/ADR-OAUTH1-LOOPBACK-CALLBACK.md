@@ -80,3 +80,15 @@ Platform CI and broader regressions remain pending. This is a backend-only draft
 not full vendor parity, a new UI, or permission to merge/deploy. Some providers
 require registered fixed callback URLs or add nonstandard callback fields; those
 are not silently accepted by this narrow per-flow loopback contract.
+
+### Resolved-promise cancellation boundary
+
+Review found that checking ownership only inside an inner exchange promise leaves
+an additional completion continuation before publishing the outer result. The
+final implementation rechecks flow identity, expiry, closed state and caller
+cancellation immediately after each public start/callback/OOB-complete await.
+A deterministic fixture still performs the real signed local-provider exchange,
+then delivers cancellation at the resolved inner-promise boundary. The initial
+stage failed with a missing expected rejection; the correction rejects both
+callback and OOB results and leaves no flow to resurrect. This is a test-owned
+scheduling seam, not a claim about arbitrary real-provider timing or revocation.

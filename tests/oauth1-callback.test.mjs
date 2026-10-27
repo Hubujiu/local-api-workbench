@@ -646,3 +646,38 @@ test(
     assert.equal(f.accesses.length, 1);
   },
 );
+
+test("cancellation at the completed-transport promise boundary cannot publish or resurrect callback/OOB results", async (t) => {
+  const f = await fixture(t);
+  for (const callbackMode of ["loopback", "oob"]) {
+    const manager = new OAuth1Manager();
+    const controller = new AbortController();
+    const flow = await manager.start({ ...f.config, callbackMode }, f.app.url);
+    const token = manager.token.bind(manager);
+    // The actual signed HTTP exchange still runs; deliver cancellation exactly
+    // between its resolved inner promise and the public completion continuation.
+    manager.token = async (...args) => {
+      const data = await token(...args);
+      controller.abort();
+      return data;
+    };
+    if (callbackMode === "loopback")
+      await assert.rejects(
+        manager.callback(
+          new URL(flow.redirectUri).pathname,
+          redirect(flow).search,
+          controller.signal,
+        ),
+        /关闭|过期|取消/,
+      );
+    else
+      await assert.rejects(
+        manager.complete({ id: flow.id, verifier: "pin" }, controller.signal),
+        /关闭|过期|取消/,
+      );
+    assert.equal(manager.flows.size, 0);
+    manager.close();
+  }
+  assert.equal(f.accesses.length, 2);
+  assert(f.accesses.every((record) => record.signatureValid));
+});
