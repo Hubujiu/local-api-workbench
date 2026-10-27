@@ -333,7 +333,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
           ? "原生断言支持前后置tempVars/envVars/globalVars，以及后置responseCode/严格responseJson/有可信传输证据的responseHeader/有可信唯一普通名证据的responseCookie/有界string(P) responseXml/当前responseText/responseTime/responseSize与14种非正则比较及有界无flags regularmatch（四种一元比较可省预期值）；compareValue支持有界19轮当前变量原始值展开，不支持内置变量、对象转换、路径模板、自动回退XML或任意路径表达式。比较失败记为失败断言但继续任务与普通计划；未完成声明任务会导致阶段错误。"
           : "") +
         (tasks.some((task) => task.type === "pickVars")
-          ? "pickVars请求来源仅支持前置配置Header/严格JSON或文本表单Body快照，非完整传输投影；响应来源仅支持后置严格JSON单值路径、有完整唯一传输证据的字面响应头、有界XML string(P)唯一叶元素/属性、完整当前Text字符串正文或当前Code/Time/Size有限JSON原始值（不转换为字符串），不回退其他来源，不执行任意路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"
+          ? "pickVars请求来源仅支持前置配置Header/严格JSON或文本表单Body快照，非完整传输投影；响应来源仅支持后置严格JSON单值路径、有完整唯一传输证据的字面响应头、有完整匹配传输证据的普通名称Cookie当前字符串、有界XML string(P)唯一叶元素/属性、完整当前Text字符串正文或当前Code/Time/Size有限JSON原始值（不转换为字符串），不回退其他来源，不执行任意路径函数；含启用提取的请求失败停止后续计划步骤，失败后置阶段不应用内存变量；持久化失败可能结果未确认，不承诺磁盘回滚，不撤销已发生的请求或脚本子请求。"
           : ""),
     };
   };

@@ -162,7 +162,7 @@ function sourceFor(base, version = "1.1", requestSnapshots = false) {
       api.request.pre_tasks.push(
         script(
           "metadata to wire",
-          'pm.setRequestHeader("X-Request-Picked",pm.environment.get("pickedHeader")+"/"+pm.globals.get("pickedCount"));pm.setRequestHeader("X-Meta-Code",String(pm.environment.get("metaCode")));pm.setRequestHeader("X-Meta-Time",String(pm.globals.get("globalTime")));pm.setRequestHeader("X-Meta-Size",String(pm.environment.get("metaSize")));',
+          'pm.setRequestHeader("X-Cookie-Picked",encodeURIComponent(pm.environment.get(" cookiePicked ")));pm.setRequestHeader("X-Request-Picked",pm.environment.get("pickedHeader")+"/"+pm.globals.get("pickedCount"));pm.setRequestHeader("X-Meta-Code",String(pm.environment.get("metaCode")));pm.setRequestHeader("X-Meta-Time",String(pm.globals.get("globalTime")));pm.setRequestHeader("X-Meta-Size",String(pm.environment.get("metaSize")));',
         ),
       );
     }
@@ -332,7 +332,7 @@ function sourceFor(base, version = "1.1", requestSnapshots = false) {
     ),
     script(
       "metadata current view",
-      'pm.environment.set("wireCodeSnapshot",pm.response.code);pm.environment.set("wireTimeSnapshot",pm.response.responseTime);pm.environment.set("wireSizeSnapshot",pm.response.responseSize);apt.response.setCode(201);pm.response.responseTime=12.5;pm.response.responseSize=2048;pm.environment.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.globals.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.variables.set=()=>{throw Error("PUBLIC_META_SETTER")};',
+      'pm.environment.set("rawCookieSnapshot",response.cookies.Session);response.cookies.Session="edited-token=雪";response.cookies={Session:"forged-cookie"};pm.environment.set("wireCodeSnapshot",pm.response.code);pm.environment.set("wireTimeSnapshot",pm.response.responseTime);pm.environment.set("wireSizeSnapshot",pm.response.responseSize);apt.response.setCode(201);pm.response.responseTime=12.5;pm.response.responseSize=2048;pm.environment.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.globals.set=()=>{throw Error("PUBLIC_META_SETTER")};pm.variables.set=()=>{throw Error("PUBLIC_META_SETTER")};',
     ),
     ...[
       ["responseCode", "Code"],
@@ -368,6 +368,14 @@ function sourceFor(base, version = "1.1", requestSnapshots = false) {
       "2048",
     ),
     task("bounded wait", "wait", 10),
+    task("Cookie current captured value", "pickVars", {
+      source: "responseCookie",
+      variables: [
+        { name: " cookiePicked ", type: "envVars", expression: " Session " },
+        { name: "globalCookie", type: "globalVars", expression: "Session" },
+        { name: "tempCookie", type: "tempVars", expression: "Session" },
+      ],
+    }),
   ]);
   add("text", "/text", [
     assertion("Text eq", "responseText", undefined, "eq", "{{expectedText}}"),
@@ -480,6 +488,11 @@ async function fixture(t, version = "1.1") {
           req.headers["x-meta-size"] ?? "-",
         ].join("|"),
       );
+      res.setHeader("x-cookie-echo", req.headers["x-cookie-picked"] ?? "-");
+      if (req.url === "/xml")
+        res.setHeader("set-cookie", [
+          "Session=original-token%3D%E9%9B%AA; Path=/",
+        ]);
       if (req.url === "/duplicate")
         res.setHeader("x-duplicate", ["one", "two"]);
       if (req.url === "/collection")
@@ -780,6 +793,14 @@ function successfulRun(run, names) {
   assert.equal(
     run.results[3].response.headers["x-request-pick-echo"],
     "initial-header/7",
+  );
+  assert.equal(run.variables.rawCookieSnapshot, "original-token=雪");
+  assert.equal(run.variables[" cookiePicked "], "edited-token=雪");
+  assert.equal(run.variables.globalCookie, "edited-token=雪");
+  assert(!Object.hasOwn(run.variables, "cookiePicked"));
+  assert.equal(
+    run.results[3].response.headers["x-cookie-echo"],
+    encodeURIComponent("edited-token=雪"),
   );
   assert.equal(run.variables.metaCode, 201);
   assert.equal(run.variables.metaTime, 12.5);

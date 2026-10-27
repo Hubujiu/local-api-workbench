@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 06:23 UTC
+# 后端检查点 · 2026-10-27 06:42 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 06:23 条件 Mock 往返候选
+## 06:42 Cookie 提取候选
+
+- 最近完整 GREEN 为 `0b0a9ddb801cbebeb2ad4c7a3d71ec50f04e66a1` / local `f93f91bafb80517683244e79810a469eafe057e6` / tree `27f51c880416e8b34b88150d39631e072022b755`。CI `40460959814` 首次 19/19 成功，全部 actual checkout/tree 已核；12 份实际产物覆盖 354 文件（89/89/88/88），三平台各 1849 通过，Mock/SDK/CLI/恢复、DB/production stdio/固定引擎均通过。旧 `8b5` 的 Windows XML 超时保留为 RED，不据本次通过证明原因已修复。
+- PR14 Mock 出口 `bbf1feed` 的独立 CI `40460664108` 已首次 19/19 成功，三平台各 1134；全部 actual checkout `ee131ef80ae75e06774f8e2c09c426d7e21733d0` 同 feature tree `1b76ac81`，12 清单完整覆盖 247 文件。仍 draft，无合并或部署。
+- 本候选同 PR25 添加 AFTER-only responseCookie pick，保留原始目标名，仅 expression trim。使用现有完整传输证据和普通唯一名称子集，不新建 Cookie parser；bootstrap 固定并验证原 map，后续允许原来有证据字段的当前安全字符串编辑，公开 map/方法替换不能换源。新增/删除/访问器/非字符串/歧义/过限等明确失败，所有行验证完才写入，原阶段回滚/strict-stop 及预算不变。
+- 纯公共依赖 `deps/native-cookie-evidence` 的远端 `875943c81e777ec79cadbeeff77b9aabc2998186` 从 GitHub develop `88f70bb` 的精确 tree `107767d4` 恢复出发；旧本地 develop tree 不同，未沿用。两个生产模块逐字等于当前根已有实现，仅增加独立证据测试，公共分支本身不代表接入 transport。PR25 纯 base `f8965e98d46a12386d259a94bdd4caaf51191efe` 只包含 PR9/common/PR3/35/38，无 PR25/26 业务祖先。
+- PR25 Cookie feature `87b2b4cdf6bef0d3b2c1b82944ee0e1f9d215472` / local `4241159bbbc019cf07a48ddddc48bd42e98acdab` / tree `c02188ba054922d64b221dd03c33cbc186223e5f`，独立 CI `40462248586` 首次 19/19 成功：全部实际 checkout `5831ec396f07197cec22967a4eb70dd45139f6b5` 同 feature tree，三平台各 1249 通过，256 文件每分片64完整覆盖。PR26 未为纯祖先调整而改动；根共用同一 Cookie evidence，assertion 入口保持原样，只向 pick 增加当前捕获 map 与证据参数。
+- 根定向四整文件 30/30 通过：H1/H2 Set-Cookie、三作用域、当前编辑/缺失回滚/冻结恢复，及真实 MCP HTTP/stdio、CLI、两格式往返主链。主链首个 Cookie pick 之前已编辑原 map 并替换公开 map/setters，提取后下一请求回显 edited-token，而非伪造 map；目标前后空白保留、原始 Cookie 快照与提取结果区分。既有 62 个原生断言与任务16项上限不减少。
+- 前置请求快照/metadata、Mock SDK/CLI 往返、原生任务导出四整文件 12/12 通过；全量 format/check/diff 通过。本候选须自己的完整 CI；不将十类来源均有有界实现等同于原版完整兼容或产品交付。原版 GUI、XML 独立审查及关闭的实验运行时仍未完成且未重启。
+
+## 06:23 历史条件 Mock 往返候选
 
 - 前一请求快照组合 `8b5bb079c3779333e115257da61b77db3027dcda` / tree `91dfa9163d5322d907c3ba1c8b6a9f5141084e30` 的首次 CI `40459167073` 为 **18 成功、1 失败**。唯一失败为 Windows 既有 XML 输入/节点边界测试触发 250ms 活动预算（compatibility 160ms + userScript 91ms）；不认定为环境偶发，也不重跑或放宽预算。19 个 checkout 和 12 份实际产物已核，352 文件四等分无漏重；Linux/macOS 各 1844 通过，Windows 1843 通过、1 失败。新增请求提取、MCP/CLI/导出完整链均三平台通过，但不抵消组合 RED。
 - 请求快照 PR25 最终 `5011486601df6c910cf7b81421da4c50bb81a586` / tree `79200c4123d36cd027abb9bbc4fa74d6ffdea8c3` 独立 CI `40459090937` 首次 10/10 成功，三平台各 1197；全部实际 merge `18d3c8c124a754fe9864df72b643468f2f07f916` 同树。前阶段取消的部分结果保留，不当作最终验收。
