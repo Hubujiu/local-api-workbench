@@ -1,3 +1,7 @@
+import {
+  validateInheritancePlans,
+  verifyInheritancePlans,
+} from "./native-inheritance-plans.mjs";
 import { verifyNativeInheritanceExport } from "./native-inheritance-export.mjs";
 import { verifySampleDefinitions } from "./apipost-sample-export.mjs";
 import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
@@ -10,8 +14,7 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
-  if (project.settings?.nativeInheritance && plans.length)
-    throw Error("原生继承图出口首片不支持冻结计划；请使用完整项目备份");
+  if (project.settings?.nativeInheritance) validateInheritancePlans(plans);
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
@@ -132,8 +135,16 @@ export function exportApipostDirectory(project, options = {}) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
+      const snapshotSettings = { ...base.settings };
+      delete snapshotSettings.nativeInheritance;
       const frozen = exportApipost(
-        { ...base, requests: [snapshotRequest], cases: [], caseFolders: [] },
+        {
+          ...base,
+          settings: snapshotSettings,
+          requests: [snapshotRequest],
+          cases: [],
+          caseFolders: [],
+        },
         options,
       );
       for (const folder of frozen.apis.filter(
@@ -387,5 +398,7 @@ export function exportApipostDirectory(project, options = {}) {
         step.request.afterScript !== flows[i].steps[j].post_script
       )
         throw Error("原生目录步骤脚本回读不一致");
+  if (project.settings?.nativeInheritance)
+    verifyInheritancePlans(project, check, flows);
   return result;
 }

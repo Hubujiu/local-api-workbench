@@ -212,3 +212,23 @@ flow bases are introduced. Official SDK execute/create/update negatives cover
 existing enabled urlencoded and disabled multipart Content-Type rows, including
 old-flow updates after live parent rows are cleared; a standard urlencoded patch
 remains a real-wire positive. The SDK negatives were also RED before this guard.
+
+## Candidate: graph plus independent directory HTTP flows
+
+Only the native directory format can carry this combination. Live API definitions
+retain editable own/project/folder intent; flow snapshots are converted using the
+full original project/folder context once, then stored as independent strict200
+HTTP snapshots with explicit environment identity. The own-layer import draft
+must never be used as the flow's inheritance context. The first slice excludes
+functions, executable or inert tasks, historical MCP flow metadata, protocol or
+repeat nodes, samples and automated_testings. JSON still has no plan encoding.
+
+The directory exporter must reimport the complete final graph+flow package and
+compare every frozen request, environment binding, step identity/order and plan
+metadata. A parent field newly introduced after a freeze may otherwise leak into
+the source's step conversion; such drift must reject the entire export, with no
+source mutation, rather than strip parent layers or invent a disconnect marker.
+The ordinary HTTP codec may encode a detached snapshot internally, but only the
+final graph-preserving reimport is acceptance evidence. Workbench backup remains
+the fallback for unrepresentable combinations. This section is a candidate until
+its exact implementation and end-to-end tests pass.

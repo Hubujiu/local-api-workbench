@@ -1,5 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
-import { importIntoProject } from "./core.mjs";
+import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
+import { validateInheritancePlans } from "./native-inheritance-plans.mjs";
+import { importIntoProject, normalizeRequest, snapshotPlan } from "./core.mjs";
 import {
   assertEmptyInheritanceTarget,
   prepareNativeInheritanceSource,
@@ -9,6 +11,9 @@ import {
 
 export function importPreservedNativeInheritance(project, source, options) {
   assertEmptyInheritanceTarget(project);
+  const flows = options.directoryFlows || [];
+  source = structuredClone(source);
+  if (options.directoryFlows !== undefined) delete source.nativeExecutionFlows;
   const prepared = prepareNativeInheritanceSource(source);
   const draft = structuredClone(project);
   draft.environments = [];
@@ -44,6 +49,23 @@ export function importPreservedNativeInheritance(project, source, options) {
       parentId: own.parentId,
     });
   }
+  draft.plans = prepareDirectoryPlans(source, flows, draft, {
+    normalizeRequest,
+    snapshotPlan,
+    modelNameMode: options.modelNameMode,
+  });
+  validateInheritancePlans(draft.plans);
+  // The native converter materializes effective snapshots; validate their raw
+  // source definitions too, so unsupported metadata/tasks are not silently lost.
+  for (const flow of flows)
+    for (const step of flow.steps)
+      prepareNativeInheritanceSource({
+        ...source,
+        apis: [
+          ...source.apis.filter((node) => node.target_type === "folder"),
+          step.api_snapshot,
+        ],
+      });
   draft.settings.nativeInheritance = prepared.graph;
   validateNativeInheritanceProject(draft);
   for (const request of draft.requests) {
