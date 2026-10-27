@@ -88,7 +88,32 @@ export async function createApp({
   const requestedPort = port;
   const store = new Store(path.resolve(root));
   await store.init();
-  const protocolSessions = new ProtocolSessions();
+  function saveWireSession(session) {
+    if (!session.projectId) return;
+    if (session.recordSaved || session.recordPromise)
+      return session.recordPromise;
+    session.recordPromise = (async () => {
+      try {
+        const recordId = await finalizeWireSession(
+          store,
+          session.projectId,
+          session,
+          session.finalSnapshot,
+        );
+        session.recordSaved = true;
+        session.receipt = recordSaveSuccess(recordId);
+      } catch (error) {
+        session.receipt = recordSaveFailure(
+          session.projectId,
+          session.finalRecord?.id ?? null,
+          error,
+        );
+      }
+      return session.receipt;
+    })();
+    return session.recordPromise;
+  }
+  const protocolSessions = new ProtocolSessions({ onFinish: saveWireSession });
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
@@ -862,14 +887,15 @@ export async function createApp({
               )
                 throw Error("交互协议会话使用固定生命周期，不接受单次捕获选项");
               const prepared = prepareWireExecution(p, input),
-                result = protocolSessions.start(prepared.request),
+                result = protocolSessions.start(prepared.request, {
+                  projectId: p.id,
+                  definition: prepared.definition,
+                }),
                 session = protocolSessions.get(result.id);
-              session.projectId = p.id;
-              session.definition = prepared.definition;
               return json(res, 200, {
                 ...protocolSessions.snapshot(session.id),
                 projectId: p.id,
-                recordSaved: false,
+                ...(session.receipt || { recordSaved: false }),
               });
             }
             const session = protocolSessions.get(sessionId);
@@ -879,8 +905,7 @@ export async function createApp({
               return json(res, 200, {
                 ...protocolSessions.snapshot(sessionId),
                 projectId: p.id,
-                recordSaved: session.recordSaved === true,
-                ...(session.recordSaved ? { recordId: sessionId } : {}),
+                ...(session.receipt || { recordSaved: false }),
               });
             if (req.method !== "POST") throw Error("协议会话操作无效");
             const input = await body(req);
@@ -899,44 +924,17 @@ export async function createApp({
             if (operation === "stop") {
               if (Object.keys(input).length)
                 throw Error("协议停止不接受额外字段");
-              protocolSessions.stop(sessionId);
-              session.finalSnapshot ??= protocolSessions.snapshot(sessionId);
-              if (session.recordSaved)
-                return json(res, 200, {
-                  ...session.finalSnapshot,
-                  projectId: p.id,
-                  ...recordSaveSuccess(sessionId),
-                });
-              const pending = (session.recordPromise ??= (async () => {
-                try {
-                  const recordId = await finalizeWireSession(
-                    store,
-                    p.id,
-                    session,
-                    session.finalSnapshot,
-                  );
-                  session.recordSaved = true;
-                  return {
-                    ...session.finalSnapshot,
-                    projectId: p.id,
-                    ...recordSaveSuccess(recordId),
-                  };
-                } catch (error) {
-                  return {
-                    ...session.finalSnapshot,
-                    projectId: p.id,
-                    ...recordSaveFailure(
-                      p.id,
-                      session.finalRecord?.id ?? null,
-                      error,
-                    ),
-                  };
-                }
-              })());
-              const result = await pending;
-              if (!result.recordSaved && session.recordPromise === pending)
+              // A previous completed failure may retry storage, never transport.
+              // Capture before stop: stop itself can synchronously start the first save.
+              if (session.receipt && !session.recordSaved)
                 session.recordPromise = null;
-              return json(res, 200, result);
+              protocolSessions.stop(sessionId);
+              const receipt = await saveWireSession(session);
+              return json(res, 200, {
+                ...session.finalSnapshot,
+                projectId: p.id,
+                ...receipt,
+              });
             }
             throw Error("未知协议会话操作");
           }
@@ -1393,13 +1391,23 @@ export async function createApp({
       });
     }
   });
+  let protocolShutdown;
   server.on("close", () => {
-    protocolSessions.close();
+    protocolShutdown ??= protocolSessions.close();
     socketioSessions.close();
     oauth.close();
     oauth1.close();
     databaseSessions.close();
   });
+  // Preserve Node's server API while making its completion callback acknowledge
+  // graceful transport finalization and the one automatic persistence attempt.
+  const closeServer = server.close.bind(server);
+  server.close = (callback) => {
+    protocolShutdown ??= protocolSessions.close();
+    return closeServer((error) => {
+      Promise.resolve(protocolShutdown).then(() => callback?.(error));
+    });
+  };
   const listen = (listenPort) =>
     new Promise((resolve, reject) => {
       server.once("error", reject);

@@ -31,7 +31,8 @@ async function fixture(t) {
       s.on("close", () => sockets.delete(s));
       s.on("data", (b) => {
         sends++;
-        s.write(b);
+        if (b.toString() === "finish") s.end("last-tcp");
+        else s.write(b);
       });
     });
   tcp.listen(0, "127.0.0.1");
@@ -46,7 +47,10 @@ async function fixture(t) {
     ws.on("error", () => {});
     ws.on("message", (b, binary) => {
       sends++;
-      if (burst) {
+      if (b.toString() === "finish") {
+        ws.send("last-ws");
+        ws.close();
+      } else if (burst) {
         for (let i = 0; i < 250; i++) ws.send("event-" + i);
       } else ws.send(b, { binary });
     });
@@ -295,19 +299,21 @@ test("failed connections remain failed after stop and pre-write storage failures
   await once(closed, "listening");
   const port = closed.address().port;
   await new Promise((r) => closed.close(r));
-  const created = await f.post("", { type: "tcp", host: "127.0.0.1", port }),
-    id = created.value.id;
-  await until(async () => (await f.get(id)).value.state === "error");
   const append = f.app.store.append.bind(f.app.store);
   let attempts = 0;
   f.app.store.append = async (...args) => {
     if (++attempts === 1) throw Error("fixture disk before write");
     return append(...args);
   };
-  const first = await f.post("/" + id + "/stop");
+  const created = await f.post("", { type: "tcp", host: "127.0.0.1", port }),
+    id = created.value.id;
+  await until(async () => (await f.get(id)).value.persistenceError);
+  const first = await f.get(id);
   assert.equal(first.value.state, "error");
   assert.equal(first.value.recordSaved, false);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, 0);
+  await f.get(id);
+  assert.equal(attempts, 1, "GET never retries storage");
   const second = await f.post("/" + id + "/stop");
   assert.equal(second.value.recordSaved, true, JSON.stringify(second));
   assert.equal(second.value.state, "error");
@@ -353,4 +359,46 @@ test("large SSE display framing retains a bounded honest preview without lowerin
   assert(record.result.events[0].dataBytes > 2 * 1024 * 1024);
   assert(record.result.dataBytes <= 8 * 1024 * 1024);
   assert.equal(record.result.events[0].data.length, 100000);
+});
+
+test("remote TCP, WebSocket and SSE terminal histories persist without stop and survive restart", async (t) => {
+  const f = await fixture(t);
+  const ids = [];
+  for (const definitionId of ["tcp", "ws", "sse"]) {
+    const started = await f.post("", {
+      definitionId,
+      ...(definitionId === "ws"
+        ? { headers: { Authorization: "Bearer session-fixture" } }
+        : {}),
+    });
+    assert.equal(started.status, 200);
+    const id = started.value.id;
+    ids.push(id);
+    if (definitionId !== "sse") {
+      await until(async () => (await f.get(id)).value.state === "open");
+      await f.post("/" + id + "/send", { message: "finish" });
+    }
+    await until(async () => (await f.get(id)).value.recordSaved);
+    const receipt = (await f.get(id)).value;
+    assert.equal(receipt.recordId, id);
+    assert.equal(receipt.closeReason, "remote");
+    assert.equal((await f.get(id, f.other.id)).status, 400);
+  }
+  const saved = await new Store(f.root).get(f.p.id);
+  assert.equal(saved.protocolRuns.length, 3);
+  for (const id of ids) {
+    const record = saved.protocolRuns.find((x) => x.id === id);
+    assert.equal(record.status, "completed");
+    assert(record.result.events.some((x) => x.direction === "received"));
+  }
+  assert.equal((await f.app.store.get(f.other.id)).protocolRuns.length, 0);
+  assert.equal(f.sends(), 2);
+  f.app.server.closeAllConnections();
+  await new Promise((resolve) => f.app.server.close(resolve));
+  const restarted = await createApp({ root: f.root, port: 0 });
+  assert.deepEqual(
+    (await restarted.store.get(f.p.id)).protocolRuns,
+    saved.protocolRuns,
+  );
+  await new Promise((resolve) => restarted.server.close(resolve));
 });
