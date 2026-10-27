@@ -39,7 +39,8 @@ async function fixture(t) {
   await once(tcp, "listening");
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/event-stream" });
-    res.end("id: live\ndata: session-event\n\n");
+    if (req.url === "/hold") res.write("data: live-session\n\n");
+    else res.end("id: live\ndata: session-event\n\n");
   });
   const wss = new WebSocketServer({ server, perMessageDeflate: false });
   wss.on("connection", (ws, req) => {
@@ -522,10 +523,15 @@ test("real pre-journal and post-journal filesystem failures retain readable rece
 test("graceful shutdown waits for automatic live-session saves and never reconnects on restart", async (t) => {
   const f = await fixture(t);
   const ids = [];
-  for (const definitionId of ["tcp", "ws"]) {
+  for (const definitionId of ["tcp", "ws", "sse"]) {
     const id = (
       await f.post("", {
-        definitionId,
+        ...(definitionId === "sse"
+          ? {
+              type: "sse",
+              url: f.p.protocols.find((x) => x.id === "sse").url + "/hold",
+            }
+          : { definitionId }),
         ...(definitionId === "ws"
           ? { headers: { Authorization: "Bearer session-fixture" } }
           : {}),
@@ -553,7 +559,7 @@ test("graceful shutdown waits for automatic live-session saves and never reconne
       r();
     }),
   );
-  await until(() => calls === 2);
+  await until(() => calls === 3);
   assert.equal(finished, false);
   release();
   await closing;
@@ -565,4 +571,121 @@ test("graceful shutdown waits for automatic live-session saves and never reconne
     ),
   );
   assert.equal(f.sends(), 0);
+});
+
+test("real SSE and WebSocket rejected handshakes automatically save failed evidence without stop", async (t) => {
+  const f = await fixture(t);
+  let handshakes = 0;
+  const peer = http.createServer((_req, res) => {
+    handshakes++;
+    res.writeHead(503);
+    res.end("unavailable");
+  });
+  peer.on("upgrade", (_req, socket) => {
+    handshakes++;
+    socket.end(
+      "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    );
+  });
+  await new Promise((r) => peer.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    peer.closeAllConnections();
+    await new Promise((r) => peer.close(r));
+  });
+  for (const type of ["sse", "websocket"]) {
+    const started = await f.post("", {
+      type,
+      url: `${type === "sse" ? "http" : "ws"}://127.0.0.1:${peer.address().port}`,
+    });
+    assert.equal(started.status, 200);
+    const id = started.value.id;
+    await until(async () =>
+      (await new Store(f.root).get(f.p.id)).protocolRuns.some(
+        (x) => x.id === id,
+      ),
+    );
+    const record = (await f.app.store.get(f.p.id)).protocolRuns.find(
+      (x) => x.id === id,
+    );
+    assert.equal(record.status, "failed");
+    assert.equal(record.result.state, "error");
+    assert.equal(record.result.closeReason, "error");
+    assert.equal((await f.get(id)).value.recordSaved, true);
+  }
+  assert.equal(handshakes, 2);
+});
+
+test("application close reports real unsaved shutdown evidence instead of equating settled with durable", async (t) => {
+  const f = await fixture(t);
+  const id = (await f.post("", { definitionId: "tcp" })).value.id;
+  await until(async () => (await f.get(id)).value.state === "open");
+  const file = path.join(
+    f.app.store.directory(f.p.id),
+    "history",
+    "requests.json",
+  );
+  const before = await readFile(file, "utf8");
+  await writeFile(file, '{"private-password":');
+  const pending = f.app.close();
+  assert.equal(f.app.close(), pending, "application shutdown is idempotent");
+  const result = await pending;
+  assert.equal(result.allRecordsSaved, false);
+  assert.equal(result.protocolSessions.length, 1);
+  const receipt = result.protocolSessions[0];
+  assert.equal(receipt.sessionId, id);
+  assert.equal(receipt.projectId, f.p.id);
+  assert.equal(receipt.recordSaved, false);
+  assert.equal(receipt.recordId, null);
+  assert.equal(receipt.attemptedRecordId, id);
+  assert.equal(receipt.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(
+    JSON.stringify(receipt),
+    /private-password|requests.json/,
+  );
+  await writeFile(file, before);
+  assert.equal((await new Store(f.root).get(f.p.id)).protocolRuns.length, 0);
+  assert.equal(f.sends(), 0);
+});
+
+test("shutdown freezes the retry set even when an authenticated stop body completes after close begins", async (t) => {
+  const f = await fixture(t);
+  let attempts = 0;
+  f.app.store.append = async () => {
+    attempts++;
+    throw Error("owned failed save");
+  };
+  const id = (await f.post("", { definitionId: "sse" })).value.id;
+  await until(async () => (await f.get(id)).value.persistenceError);
+  let request;
+  const response = new Promise((resolve, reject) => {
+    request = http.request(
+      f.endpoint("/" + id + "/stop"),
+      {
+        method: "POST",
+        headers: { ...f.headers, "content-length": "2", connection: "close" },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () =>
+          resolve({ status: res.statusCode, value: JSON.parse(data) }),
+        );
+      },
+    );
+    request.on("error", reject);
+  });
+  const entered = once(f.app.server, "request");
+  request.write("{");
+  await entered;
+  const shutdown = f.app.close();
+  request.end("}");
+  const stopped = await response;
+  assert.equal(stopped.status, 200);
+  assert.equal(stopped.value.recordSaved, false);
+  assert.equal(
+    attempts,
+    1,
+    "late stop cannot start a retry outside the shutdown drain",
+  );
+  assert.equal((await shutdown).allRecordsSaved, false);
 });

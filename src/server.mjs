@@ -939,7 +939,8 @@ export async function createApp({
               if (
                 session.receipt &&
                 !session.recordSaved &&
-                !session.recordPending
+                !session.recordPending &&
+                !protocolSessions.closing
               )
                 session.recordPromise = null;
               protocolSessions.stop(sessionId);
@@ -1451,7 +1452,26 @@ export async function createApp({
     });
   }
 
+  let appClose;
+  const close = () =>
+    (appClose ??= new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING")
+          return reject(error);
+        Promise.resolve(protocolShutdown).then(
+          (protocolSessions) =>
+            resolve({
+              allRecordsSaved: protocolSessions.every(
+                (receipt) => receipt.recordSaved,
+              ),
+              protocolSessions,
+            }),
+          reject,
+        );
+      });
+    }));
   return {
+    close,
     server,
     store,
     oauthAllowed: (url) => oauth.allowed(url) || oauth1.allowed(url),

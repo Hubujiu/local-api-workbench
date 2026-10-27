@@ -337,7 +337,22 @@ export class ProtocolSessions {
     await Promise.all(
       [...this.sessions.values()].map((session) => session.recordPromise),
     );
+    const receipts = [...this.sessions.values()]
+      .filter((session) => session.projectId)
+      .map((session) => ({
+        projectId: session.projectId,
+        sessionId: session.id,
+        ...structuredClone(
+          session.receipt ||
+            recordSaveFailure(
+              session.projectId,
+              session.finalRecord?.id ?? null,
+              Error("保存未确认"),
+            ),
+        ),
+      }));
     // Retain failed receipts for callers inspecting graceful shutdown.
     for (const session of this.sessions.values()) this.discard(session);
+    return receipts;
   }
 }
