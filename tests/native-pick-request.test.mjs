@@ -87,6 +87,9 @@ test("request picks are pre-only with independent response phase guard and inert
 
 test("request snapshots precede custom scripts, remain isolated and preserve scoped scalar values", async () => {
   const tasks = [
+    script(
+      'pm.request.headers.upsert({key:"X-A",value:"before-first-pick"});pm.request.body.update("{\\"x\\":77}");',
+    ),
     pick("requestHeader", "x-a", "first"),
     pick("requestBody", "$.x", "number"),
     script(

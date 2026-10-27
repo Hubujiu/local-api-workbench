@@ -238,5 +238,54 @@ for (const version of ["1.1", "2"])
     });
     assert.equal(offlineRun.status, "failed");
     assert.equal(seen.length, offlineCount);
+    for (const failure of ["soft", "throw"]) {
+      const postFailure = structuredClone(network);
+      postFailure.url = base + "/post-error";
+      postFailure.headers[0].value = "saved-pre-" + failure;
+      postFailure.nativeTasks.after = [
+        script(
+          'pm.environment.set("afterMarker","uncommitted");pm.globals.set("afterGlobal","uncommitted");' +
+            (failure === "soft"
+              ? 'pm.test("soft failure",()=>{throw Error("intentional false")});'
+              : 'throw Error("intentional post exception");'),
+        ),
+      ];
+      const prior = seen.length;
+      const failurePlan = await app.post(`/api/projects/${p.id}/plans`, {
+        steps: [{ request: postFailure }, later],
+      });
+      const failureRun = await app.post(`/api/projects/${p.id}/run`, {
+        planId: failurePlan.id,
+      });
+      assert.equal(failureRun.status, "failed");
+      assert.equal(failureRun.results[0].response.status, 200);
+      assert.equal(seen.length, prior + 1);
+      const after = await app.store.get(p.id);
+      assert.equal(after.environments[0].variables.h, "saved-pre-" + failure);
+      assert(!Object.hasOwn(after.environments[0].variables, "afterMarker"));
+      assert(!Object.hasOwn(after.globalVariables, "afterGlobal"));
+    }
+    const disabled = structuredClone(network);
+    disabled.url = base + "/disabled";
+    disabled.nativeTasks.before[0].enabled = 0;
+    disabled.nativeTasks.after = [
+      script(
+        'pm.environment.set("ordinaryAfter","committed");pm.test("ordinary soft failure",()=>{throw Error("intentional false")});',
+      ),
+    ];
+    const disabledPlan = await app.post(`/api/projects/${p.id}/plans`, {
+      steps: [{ request: disabled }, later],
+    });
+    const disabledCount = seen.length;
+    const disabledRun = await app.post(`/api/projects/${p.id}/run`, {
+      planId: disabledPlan.id,
+    });
+    assert.equal(disabledRun.status, "failed");
+    assert.equal(seen.length, disabledCount + 2);
+    assert.equal(disabledRun.results[1].status, "passed");
+    assert.equal(
+      (await app.store.get(p.id)).environments[0].variables.ordinaryAfter,
+      "committed",
+    );
     assert.deepEqual(await app.store.get(other.id), isolated);
   });
