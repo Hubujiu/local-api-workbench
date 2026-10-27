@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-27 23:07 UTC
+# 后端检查点 · 2026-10-27 23:47 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 23:47 OAuth2 原始回调编码与显式 TCP 接收编码
+
+- 最后完整GREEN为 remote `1ffdb16149dd96c2c01055c167289f550e55a526` / local `c62522346bb0afeb7382fce91865879d6d91dc5e` / tree `890097509c979e1f45e04201586a64367cfb0d9c`，首次CI `40600032562` 19/19成功。19实际checkout、12实际core ZIP大小/SHA256/CRC/完整TAP及402文件互斥清单已核，hash `8a49b41cfd1cbd2e3e47198a259bdbeee6c583bfa793b96436a5d5c49064da76`；Linux/macOS2140通过，Windows2133通过/7明确平台skip，无fail/cancel/todo。4恢复身份与20服务隔离用例三OS全部通过。PR17 `82336c42` 自身CI `40599797851` 首次10/10，实际checkout `73d727f93a6902ee655577c2fb616505df45b67b` 同树，3实际ZIP验证，Linux/macOS1055通过、Windows1052通过/3权限skip；旧SQLite unknown写结果原因仍未知。
+- OAuth2真实RED：旧PR31代码接收raw HTTP `code=%FF`返回200，真实loopback token端点收到`code=%EF%BF%BD`，凭据被URLSearchParams自动修复后发送。新PR31 local `d1070b1125635a78ce018d8681abc912a30de7a6` / remote `6350e7ef07b18ccef2956bdf793b2bde91419821` / tree `b59004b01a58cc042d5daebf88cb8bf1b35e0d92` 已保存，CI `40604083282` 待验证。只在原始query进入参数值使用前加严格percent/UTF8检查，解析失败像原duplicate guard一样在state领取前拒绝；合法Unicode/U+FFFD/百分号/加号空格保持，validly decoded语义错误/提供商拒绝仍按原规则消费state。
+- OAuth2新3完整工作流与实际4整文件25/25通过，独立固定树新文件3/3通过；check/全量format/diff通过。一次命令还列入不存在的root-only oauth2-workbench-entrypoints文件，Node忽略该路径；它不计入4文件或25项证据，随后根组合才执行该真实存在文件。无真实第三方账户或新授权。
+- TCP真实RED：显式项目交互会话要求hex，真实peer发送六字节`00 ff c3 28 80 01`，旧代码却产生并持久化UTF8事件。新PR40 local `ae076a3ffb940f9eb59f5c63d5e78cd3497289ab` / remote `b4a180b65ddc1f068cb1e73994876bf8c9d501c9` / tree `195c793dd0df234db776831e4b1b599d262225a1` 已保存，CI `40604138726` 待验证。仅选择显式input.receiveEncoding；有saved定义时仍取其保存值/默认UTF8，不开放临时覆盖，不改finite TCP body合同/TLS/预算。
+- TCP新4流程覆盖hex/base64逐事件重组真实字节、默认UTF8、非法编码零连接/零写入、saved优先、停止/拒绝连接、备份重启及授权读取；6整文件41/41通过，独立新文件4/4通过。该feature新文件使用直接createMCP分发器，不是官方SDK传输，不扩大描述。
+- 两功能自动无冲突合入根 `9bb5dab032f43ba8f80234250094605ffb2673eb` / tree `03f6cd645fd4672fbcf462180a2041ff11b3a3a9`。预先检查路径存在后执行9完整文件50/50通过，无fail/cancel/skip，16.52秒；包含root-only OAuth2 SDK完整工作流及既有native session SDK流程。固定HEAD/tree前后一致，check/全量format/diff通过，不把不同夹具的覆盖拼成新binary传输证明。
+- 根专用SDK补充 `8cfa2f56dda1e6a10b5856c35c9e454f24612c62` cherry-pick为 `ef7b57b493f782a7c03feee47f4c46ff4ab82d22`，完整同树 `e49b67b06f95319f8d5e8df7fda2eb5f26205a9c`。新增单文件两个完整官方SDK HTTP/stdio流程2/2通过：每链真实hex+base64两连接，owner导出恢复、app重启后原/恢复项目列表和详情完整相等，原始字节再解码一致，真实存在project/record的未授权访问被拒绝，读回没有额外TCP连接/发送。无生产修改，新文件格式/diff通过；之后仅本文变更，根仍须自身CI。
+- 没有前端开发、预算放宽、VM/XML专项、原版GUI运行、main/develop合并或部署。SQLServer审计/许可、原生自动化完整格式证明及旧间歇中断根因缺口保留。
 
 ## 23:07 备份恢复记录身份完整性候选
 

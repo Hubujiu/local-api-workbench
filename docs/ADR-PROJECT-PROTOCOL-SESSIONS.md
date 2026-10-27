@@ -25,3 +25,19 @@ The desktop main process registers its close hook as soon as the service is read
 Normal HTTP work retains Node's existing graceful finish/timeout behavior. There is no new forced-connection cancellation, shutdown deadline or retry policy. `app.close()` acknowledges project TCP/WS/SSE history only; this is not a new promise that all background import work is durable. Strong termination, crashes, power loss, OS session shutdown, and desktop exits before a service exists are not covered. In particular, Electron does not emit `will-quit` for Windows shutdown/restart/logout; those are not normal application quit. POSIX child-process signal tests are explicitly unavailable on Windows because `child.kill()` there does not deliver these catchable signals; portable handler tests and actual packaged Electron quit tests cover different contracts, not a substitute claim of Windows POSIX behavior.
 
 `host-shutdown-process.test.mjs` uses the real Node main, loopback TCP/WS/SSE, new Store reads, process restart, genuine filesystem corruption and in-flight owner HTTP. `desktop-shutdown-smoke.mjs` is a separate packaged Electron CI check for renderer cancellation, successful three-protocol shutdown/restart and failed persistence exit; it does not run script probes. Local environments without Electron/Xvfb cannot claim that GUI-host test passed. No new dependency or runtime budget is introduced.
+
+## Explicit TCP receive encoding
+
+Project-owned sessions accept the same `utf8` (default), `hex`, and `base64`
+receive encodings as the direct transport. Explicit configurations now carry
+`receiveEncoding` through preparation into both the live decoder and the frozen
+history definition. Invalid explicit values fail validation before opening a
+socket or reserving a session. A saved definition remains authoritative, including
+an absent encoding's UTF-8 default; this does not add a temporary override.
+
+Real loopback regression reproduced the old preparation bug: an explicitly
+requested hex session persisted a UTF-8 received event for non-UTF-8 bytes.
+Coverage verifies binary reconstruction from hex/base64 events, valid Unicode and
+default text, manual stop and refused-connection outcomes, inert backup restore,
+restart and project-scoped MCP readback. No finite TCP response shape, TLS policy,
+transport limit, persistence receipt or retry behavior changes.
