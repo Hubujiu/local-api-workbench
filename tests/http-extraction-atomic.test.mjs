@@ -208,8 +208,8 @@ test("HTTP successful prior scopes survive failed extraction lists in frozen pla
   const execute = async (project) => {
     const result = await runPlan(project.plans[0], {}, executeRequest, {
       variableScopes: projectScopes(project, envId),
-      onScopeChanges: (changes) =>
-        persistScopeChanges(store, project.id, envId, changes),
+      onScopeChanges: async (changes) =>
+        (await persistScopeChanges(store, project.id, envId, changes)).scopes,
     });
     assert.deepEqual(
       result.results.map((r) => r.status),
