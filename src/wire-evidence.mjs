@@ -1,3 +1,4 @@
+import { resolveHandshake } from "./protocol-handshake.mjs";
 import {
   protocolTemplateContext,
   resolveProtocolDefinition,
@@ -48,6 +49,7 @@ export function prepareWireExecution(project, input) {
         "body",
         "completion",
         "templateMode",
+        "sendEmptyMessage",
       ].some((key) => input[key] !== undefined) ||
       (input.type !== undefined && input.type !== saved.type)
     )
@@ -130,6 +132,8 @@ export function prepareWireExecution(project, input) {
       : { url: definition.url }),
     ...(type !== "sse" ? { message: definition.message } : {}),
   };
+  if (type !== "tcp")
+    request.headers = resolveHandshake(definition, input.headers);
   if (type === "websocket") {
     const config = websocketConfiguration(request);
     options.requestedProtocols = [...config.protocols];
