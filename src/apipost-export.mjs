@@ -1,4 +1,5 @@
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
+import { exportApipostDocuments } from "./apipost-document-export.mjs";
 import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
@@ -150,7 +151,6 @@ export function exportApipost(project) {
     "plans",
     "cases",
     "protocols",
-    "documents",
     "apiResourceTrash",
     "dictionary",
     "parameterDictionary",
@@ -401,6 +401,14 @@ export function exportApipost(project) {
       }),
     });
   }
+  apis.push(
+    ...exportApipostDocuments(project, {
+      projectId,
+      id: apipostExportId,
+      folder,
+    }),
+  );
+  if (apis.length > 5000) throw Error("Apipost最多5000条资源");
   const document = {
     project_id: projectId,
     name: project.name,

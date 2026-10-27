@@ -1,10 +1,10 @@
 # Local API Workbench
 
-开发中，尚未通过完整复刻验收。 当前优先验证后端，最新功能分支、精确提交/CI与未完成边界见 [后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。新增功能按独立 draft PR 保存，组合分支仅用于集成验证，未合入 main 或部署。当前完整逐项清单见 [PARITY-CURRENT](docs/PARITY-CURRENT.md)，差异与核验版本见 [CURRENT-PARITY](docs/CURRENT-PARITY.md)，逐轮实现与 CI 证据见 [迭代记录](docs/ITERATION-2026-10-18.md)。
+开发中，尚未完成 Apipost 全功能复刻验收。当前以后端完整流程为重点，最新已验证提交、功能边界与遗留问题统一见 [后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。历史逐项清单与交付候选记录仅代表各自版本，不作为当前能力或最新验收结论。改动按功能保存在独立 draft PR，同功能修复更新原 PR；组合分支用于集成验证，尚未合入 main 或部署。
 
 本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
 
-**交付候选版 0.1.0。功能与可验证范围见 [交付清单](docs/DELIVERY.md)，不能将公开文档范围的独立实现等同于全部专有行为或像素级一致。**
+历史 0.1.0 候选记录见 [历史交付清单](docs/DELIVERY.md)，旧逐项清单见 [历史功能对照](docs/PARITY-CURRENT.md) 与 [历史核验摘要](docs/CURRENT-PARITY.md)。可运行、某次 CI 通过或下面的能力列表均不等于完整复刻交付。
 
 ## 启动
 
@@ -17,7 +17,7 @@ npm start
 
 浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。每个项目使用独立 ID 目录，apis/envs/settings/plans/cases 分文件保存；history 默认不纳入新建项目的 Git 跟踪。写入使用事务日志恢复、项目锁与冲突检测。旧版单个 JSON 在第一次保存时迁移，原文件保留为备份。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
-桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 便携包在 PR 的最新成功 Actions 运行中下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
+桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
 ## 已实现的核心
 
@@ -25,7 +25,7 @@ npm start
 - 隔离脚本支持有界 Promise/await、HTTP、定时器、await $.ajax/异步回调、CSV/XML响应解析；所有作用域共享原运行配额。
 - Schema支持常用约束、局部引用、元组以及保守的allOf交集样例；无法安全求解时明确要求example。
 - 文档可插入有大小/像素限制的本地PNG/JPEG，离线HTML/Markdown保留图片；不自动加载远程图片或执行原始HTML。
-- OAuth1提供显式OOB/PIN令牌申请/交换，服务必须支持该流程；临时秘密仅在内存，获取后仍需手工保存接口。
+- OAuth1 提供显式 OOB/PIN 和有界本机回调流程，包含单次领取、取消和过期处理；临时秘密仅在内存，交换后仍须显式保存接口，不自动取得第三方账号授权。
 
 
 - 项目/精确目录共享前后置脚本：异步完成后再进入下一作用域、单独关闭继承、用例冻结；计划仅执行显式代码，不自动加入共享脚本。见 [顺序与隔离边界](docs/ADR-SHARED-SCRIPTS.md)。
@@ -34,14 +34,16 @@ npm start
 
 - 项目/精确目录 Header / Query / Cookie / 表单文本：集中编辑、接口覆盖/关闭继承，新计划与用例冻结，旧快照不漂移；共享认证支持单独继承/禁用并冻结快照，共享脚本采用明确作用域次序及统一预算，执行计划不自动继承。见 [范围与优先级](docs/ADR-GLOBAL-PARAMETERS.md)。
 
-- 项目、接口、目录、搜索、复制、软删除恢复、环境变量与本地持久化
-- HTTP/HTTPS 参数、认证、Cookie、JSON/raw/表单/文件/Base64 二进制/MessagePack 请求，真实响应、超时、取消、8 MiB 限制
-- OpenAPI JSON/YAML / Postman / cURL 导入，项目/OpenAPI/cURL/Markdown 导出
-- 接口说明、数据字典、JSON Schema 定义、响应示例与 loopback Mock
-- 声明式前后置操作、断言和变量提取；固定快照执行计划、逐步结果、计划 hash 与最近 50 条运行记录
-- 有界压测（最大 100 请求、10 并发），不用于未经授权的目标
-- SQLite/PostgreSQL/MySQL/Redis/MongoDB/ClickHouse 默认只读查询、显式确认的 SQLite 单语句写入，MCP stdio 授权项目读写与计划执行
-- 浅色/深色工作台；无 CDN、无遥测、无内置云模型
+### 后端完整流程与范围
+
+- **项目与往返：** 本地持久化、事务恢复、备份及受支持原生 JSON／目录定义导入导出，衔接冻结执行、再导出、恢复重启和项目隔离。不能表达的语义明确拒绝；原生交换不等于完整备份，输出身份可能重新映射。
+- **请求与认证：** 支持已列明的协议、认证、超时和取消。原生两格式、Postman、OpenAPI 的明确无认证声明不会被目标共享认证覆盖。原生导出不能保留 SDK URL 对象模式时明确拒绝，不静默丢失行为；旧保存记录不猜测迁移。
+- **前后置任务：** 有界脚本、等待、数据库查询、原生提取和断言可按受支持顺序混排。提取有十类来源的限定子集，断言有十一类来源、十五种比较；阶段限制、状态隔离、完成性检查及共享预算保持，不代表全量原版 SDK。
+- **Mock 与数据库：** 受支持的条件 Mock 定义可导出再导入并真实调用。数据库默认只读；SQLite／PostgreSQL／MySQL 有限写入须逐次明确授权。CLI／MCP 可取得限定临时只读权限，不因此获得写权限。
+- **计划与结果：** 冻结配置不随 live 修改漂移，结果记录实际执行环境，同时保留计划默认值。成功、失败、保存失败、未知提交和恢复分别保留真实证据；不把保存失败说成请求失败，也不自动重放网络操作。
+- **MCP 后端：** 官方 SDK HTTP／stdio 的协商、项目及权限隔离、原生交换和冻结计划执行，与实际 CLI、持久化和恢复衔接；并非所有外部宿主客户端都已实机验收。
+
+另外提供有界压测（最大100请求、10并发），禁止用于未授权目标；现有工作台无 CDN、遥测或内置云模型。本文不把测试数量换算成交付率，具体提交的验收仍以后端检查点为准。
 
 ## MCP
 
@@ -65,14 +67,14 @@ node tests/ui-smoke.mjs
 
 ## 当前差距（不隐藏）
 
-- 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
-- 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；涵盖保存竞争、脚本、导入、目录/文档持久化、OAuth、SSE 与 MCP 开关
-- 已创建 PR #1，多个候选版本十项 CI 全绿；最新迭代以对应提交的 CI 结果为准
-- 支持本地循环 OpenAPI 引用保留，外部 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
-- PostgreSQL/MySQL 仅提供只读查询；SQLite 可逐次明确允许单条 INSERT/UPDATE/DELETE，拒绝多语句/DDL/REPLACE。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
-- 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
+- 原版 GUI 的当前完整流程尚未验收，像素一致性和签名发行未完成；当前不新增前端或视觉打磨。
+- 独立 XML／运行时专项未完成；PR37 实验默认关闭、未进入生产组合。历史失败不因后续 CI 通过而改判，既有 Windows XML 预算超时的根因不宣称已解决。
+- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server 等许可前提未确认的验证不冒充完成。
+- 本地循环 OpenAPI 引用可保留，外部引用不自动拉取。原生定义交换无法保留的依赖、历史来源或配置明确拒绝，完整状态使用 Workbench 备份。
+- SSE/WebSocket/TCP 提供有界采集与交互会话，最长15分钟、总计8MiB、最近200条消息，不代表全部协议扩展。
+- 不包含付款、License 激活、在线团队/账号协同或商业 AI 服务，不绕过原版授权。
 
-源文件和文档将通过一个固定开发分支的 PR 迭代；未经批准不合入 main、不部署。
+功能与修复按各自 draft PR 保存，组合验证按精确提交单独记账；未经批准不合入 main、不部署。
 
 ## 脚本
 
@@ -94,9 +96,9 @@ HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨�
 
 URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等163个可选名称（含别名）的基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
 
-## 数据库查询与显式 SQLite 写入
+## 数据库查询与逐次授权写入
 
-支持 SQLite、PostgreSQL、MySQL、Redis有界命令和MongoDB find。Redis输入JSON命令数组；MongoDB输入collection/filter/projection/sort/limit等JSON查询对象，结果采用Extended JSON。均不自动保存连接凭据，不提供任意脚本执行。SQLite 另提供逐次勾选并确认的单语句 DML，带事务和结果限额；超时可能结果不确定，需先查询再决定是否重试。只操作可信数据库并先备份；详见 docs/ADR-SQLITE-WRITES.md。具体限额见 docs/ADR-REDIS-READS.md、docs/ADR-MONGODB-FIND.md。
+SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体命令／查询子集及参数限制见各自 ADR。SQLite／PostgreSQL／MySQL 的受限单语句 DML 须逐次明确确认，保留事务、超时、取消、锁与结果限额；结果不确定时先查证，不能自动重试。连接凭据不自动永久保存，不开放任意脚本。只操作可信数据库并先备份。详见 [SQLite 写入](docs/ADR-SQLITE-WRITES.md)、[PostgreSQL 写入](docs/ADR-POSTGRES-WRITES.md)、[MySQL 写入](docs/ADR-MYSQL-WRITES.md)。
 
 ## 参数化压测
 
@@ -104,7 +106,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 
 ## 现代 Apipost JSON 导入
 
-完整现代 JSON 可通过“导入接口到当前项目”迁移受支持的 HTTP API/目录、环境与服务地址、全局变量、生命周期状态及平级数据模型（含受支持的引用重写）。选择导入环境后再发送；Mock开关和原版自动响应校验不自动启用，接口备注明确提示。嵌套模型/自定义模型组合、非空用例/自动化测试/前后置任务或其他未支持依赖整批拒绝，不执行导入内容、不访问源服务。依据公开导出格式和原版静态资料实现，不等同于Offline2原生目录完整迁移。边界与来源见 docs/ADR-MODERN-APIPOST-IMPORT.md。
+现代 Apipost JSON 和 Offline2 原生目录支持各自列明的有界资源、环境、模型、用例／计划及前后置任务迁移。受支持任务保持声明顺序，并可进入冻结计划、真实执行和受支持定义往返；导入本身不执行请求、不恢复数据库凭据。请求提取仅支持前置配置快照，响应提取仅支持后置；未知任务、资源依赖或无法保留的语义整批拒绝。完整范围见后端检查点及对应 ADR，不代表全资源或跨版本完全兼容。
 
 ## NTLMv2（有限旧服务兼容）
 
@@ -120,7 +122,7 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 
 ### 数据库前后置操作
 
-数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
+数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限；CLI/MCP 可分别显式获得限定临时只读权限，凭据不随项目备份恢复。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
 
 ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
 

@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 07:39 UTC
+# 后端检查点 · 2026-10-27 08:18 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 07:39 实际执行环境证据候选
+## 08:18 活动文档定义往返候选
+
+- 最近完整 GREEN 为 `25315dacf17bcd793037a9bbf901c50ef7462870` / local `7992413978a1b1f97c1c2c598f533669031735dc` / tree `097982cf0f5b6e9798212f511158c8b81934e391`。CI `40468749549` 首次 19/19 成功，19 checkout 同树；12 实际产物完整覆盖 361 文件（91/90/90/90），三平台各 1873 通过。实际环境身份、保存失败/未知提交、MCP/CLI/恢复、数据库、production stdio 和固定引擎均通过；旧 8b5 XML RED 保留。
+- 本候选让活动原生文档与可表达的普通文本 Workbench 文档进入 JSON/目录定义往返。title/content/folder/type/current status 和已验证 sort/version/status 保持；正文原样，不渲染、插值、执行或获取 URL/附件。当前 statusId 优先于历史 mark；输出 project/target/parent/mark 引用自洽。原生身份重映射，旧 document/apipostSource ID 精确保留仅由完整备份承担，不私造历史扩展或塞进正文。
+- 未映射属性、自定义说明、未知来源字段、结构化富文本/附件、过长原生标题、deletedAt 和回收档案明确拒绝。正文中的链接只是原样文本，不承诺链接资源迁移。原版 GUI 往返未执行，既有独立专项边界不变。
+- 同 PR14 feature remote `ab6f08352c489e6441de8567ab4b64889f73b903` / local `879dae255d1f739cb992421b75e2e1c48d303feb` / tree `23ba3b69e7f2a9911329eda9861b09d2f2dbb39b`。纯 base 快进为 `c34807260a0f3429cb4f3f7d56b8841da6bf59c7`，仅旧 pure base 加 PR21（其必要 PR20），无 PR14/root 自身祖先。独立 CI `40470326194` 首次 19/19 成功，全部实际 checkout `92bab4abd9415e61a78b36c5aeb391f7a8a1dc1b` 同树，三平台各 1154，12 工件完整覆盖254文件。
+- 根合并只添加出口能力，保留原生任务导出、认证隔离、完整运行时、结果收据和74个MCP工具。把根专属旧“活动文档导出400”改成真实回读阳性，删除后apiResourceTrash仍400。三个整文件9/9通过：owner编辑/双代回读/备份重启，以及官方SDK HTTP/stdio×两格式MCP；documentIds准确、文字和目录保持、同名不同色状态链接正确、doc不能作为HTTP API执行、转换零网络、未授权项目不可读。
+- 原API出口、条件Mock SDK/CLI、四格式认证/环境override、原生任务出口五整文件28/28通过；全量格式/语法检查通过。README现在按六模块和当前边界描述能力，旧逐项清单及旧交付候选标记为历史，不再把任务全拒绝/PG与MySQL仅只读/单固定PR当现状。
+- 此新组合仍待自己的 CI，不用独立PR或上一个GREEN代替；未合 main/develop、未部署、未新增前端。
+
+## 07:39 历史实际执行环境证据候选
 
 - 最近完整 GREEN 为 `a8273f248277fd0dd110fdb29380c6edf6754763` / local `c3b901e6b463f75ae57f02274e26ce1c0ed1be7f` / tree `593f7d7ee9eb88689ac069b1341885cdeee43b5d`。CI `40466431993` 首次 19/19 成功，全部 checkout 同树；12 实际产物完整覆盖 360 文件（四分片各90），三平台各 1869 通过，跨格式 opt-out、MCP/CLI/恢复、数据库、production stdio 和固定引擎均通过。旧 8b5 XML RED 不改判。
 - 本候选修复 owner/CLI 实际执行环境身份丢失：冻结计划默认 A、本次覆盖 B 时虽然真实请求使用 B，但历史只保存 snapshot 默认 A。现在复用 selectedEnvironment 解析一次真实 ID，供变量/作用域/Cookie/服务选择及 run.environmentId 共用；snapshot.environmentId 保留原计划默认，不改执行结果或既有 MCP 行为。相同变量值的两个环境也能明确辨认，缺失旧记录不猜测回填。

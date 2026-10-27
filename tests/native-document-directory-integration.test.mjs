@@ -13,7 +13,7 @@ import { nativeAPIDetail, nativeAPIList } from "../src/native-mcp-tools.mjs";
 import { deleteAPIResources } from "../src/api-resource-lifecycle.mjs";
 
 // Synthetic source contract only; not a vendor-produced document directory.
-test("native directory doc import, deletion and full backup survive restart while lossy native exports fail closed", async (t) => {
+test("native directory active doc export and deletion backup survive restart without losing archives", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "document-directory-flow-"));
   let app = await createApp({ root, port: 0 });
   const stop = async () => {
@@ -59,8 +59,16 @@ test("native directory doc import, deletion and full backup survive restart whil
       app.url + "/api/projects/" + p.id + "/export?format=" + format,
       { headers: headers() },
     );
-    assert.equal(response.status, 400);
-    assert.match(await response.text(), /documents.*项目备份/);
+    assert.equal(response.status, 200);
+    const output = await response.json();
+    const roundtrip = await app.store.create("doc definition roundtrip");
+    importIntoProject(roundtrip, output);
+    await app.store.save(roundtrip);
+    assert.equal(roundtrip.documents.length, 1);
+    assert.equal(roundtrip.documents[0].content, content);
+    assert.equal(roundtrip.documents[0].folder, "Group");
+    assert.equal(roundtrip.documents[0].title, document.title);
+    assert.equal(roundtrip.requests.length, current.requests.length);
   }
   const dispatch = createMCP({
     store: app.store,

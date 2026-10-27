@@ -1,10 +1,10 @@
 > 以下为历史功能盘点，不是最新提交状态；后续后端功能 PR、组合验证及失败记录以 [后端检查点](BACKEND-CHECKPOINT-2026-10-25.md) 和精确 CI 为准。
 
-# 当前复刻进度
+# 历史复刻进度盘点
 
-完整98项核验见 [PARITY-CURRENT.md](PARITY-CURRENT.md) / [parity-current.json](parity-current.json)。原始基线 PARITY-AUDIT.md / parity-matrix.json 不改写。
+该阶段98项历史核验见 [PARITY-CURRENT.md](PARITY-CURRENT.md) / [parity-current.json](parity-current.json)。原始基线 PARITY-AUDIT.md / parity-matrix.json 不改写。
 
-## 最近已核验
+## 该阶段已核验
 
 MCP 独立状态/授权展示与默认隐藏的六客户端配置预览已通过浏览器；官方 SDK 的真实 HTTP/stdio 协商、工具发现、项目隔离、令牌撤销及获准 loopback 执行已验证，不代表六种宿主客户端均已实机接入。现代导入模型目录、空目录、持久化/备份以及编辑时保留ID/目录、更新关联组件已验证；本地目录CRUD新增改动仍须自己的CI。
 
@@ -32,7 +32,7 @@ dde1ea720242bb9dda15eae985563fa05a7146b6 / Actions39743195242：10项全部通�
 - 内联证书/文件/动态签名cURL导出、更多数据库类型、高级压测、NTLM高级部署及OAuth1非OOB自动授权缺口。
 - Trae等真实外部客户端连接仍未执行；不派发外部Agent任务。
 
-仍在同一PR #1 / develop迭代，未合入main、未部署。CI全绿只证明此提交的固定验收通过，不代表已完成完整复刻。
+当时在同一PR #1 / develop迭代，未合入main、未部署。CI全绿只证明此提交的固定验收通过，不代表已完成完整复刻。
 
 CI触发异常曾在673acb3/3eabe40出现；用户授权后于08:59UTC关闭并重开同一PR一次，恢复运行。Windows CLI早前一次失败未重现、原因未定，stdout诊断保留。
 

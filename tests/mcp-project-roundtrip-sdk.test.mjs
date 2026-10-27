@@ -10,13 +10,35 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import { normalizeRequest, snapshotPlan } from "../src/core.mjs";
+import {
+  normalizeRequest,
+  snapshotPlan,
+  restoreProject,
+} from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 
 const decode = (result) => {
   assert.notEqual(result.isError, true, result.content?.[0]?.text);
   return JSON.parse(result.content[0].text);
 };
+const documentDefinitions = (project) =>
+  (project.documents || []).map((doc) => {
+    const state = project.settings?.statuses?.find(
+      (item) => item.id === doc.statusId,
+    );
+    assert(!doc.statusId || state, "document status reference must exist");
+    return {
+      title: doc.title,
+      content: doc.content,
+      folder: doc.folder || "",
+      status: state ? { name: state.name, color: state.color } : null,
+      ...Object.fromEntries(
+        ["sort", "version", "status"]
+          .filter((key) => doc.apipostSource?.[key] !== undefined)
+          .map((key) => ["source_" + key, doc.apipostSource[key]]),
+      ),
+    };
+  });
 const closeServer = async (server) => {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
@@ -88,6 +110,38 @@ for (const transport of ["http", "stdio"])
             'apt.setRequestHeader("x-proof","frozen");apt.environment.set("executed","yes");',
         });
         source.requests = [request];
+        source.settings.statuses = [
+          { id: "state-a", name: "Same label", color: "#112233" },
+          { id: "state-b", name: "Same label", color: "#445566" },
+        ];
+        source.folders = ["Guides", "Guides/深层", "Other"];
+        source.documents = [
+          {
+            id: "owned-document",
+            title: "Guide",
+            content:
+              "# 中文🌏\r\n{{inert}} <script>literal only</script> https://invalid.example/a",
+            folder: "Guides/深层",
+            statusId: "state-b",
+            apipostSource: {
+              projectId: "old-project",
+              targetId: "old-document",
+              parentId: "old-folder",
+              mark_id: "old-mark",
+              sort: 7,
+              version: 3,
+              status: 0,
+            },
+          },
+          {
+            id: "plain-document",
+            title: "Guide",
+            content: "",
+            folder: "Other",
+          },
+        ];
+        const expectedDocuments = documentDefinitions(source);
+
         if (format === "apipost-directory")
           source.plans = [
             snapshotPlan({
@@ -185,6 +239,47 @@ for (const transport of ["http", "stdio"])
           /fictional-saved-secret/,
         );
         assert.deepEqual(await store.get(source.id), originalSource);
+        const exportedNodes =
+          format === "apipost"
+            ? exported.document.apis
+            : exported.document.files
+                .filter(
+                  (file) =>
+                    file.path.startsWith("apis/") &&
+                    file.path !== "apis/index.json",
+                )
+                .map((file) => JSON.parse(file.text).data);
+        const marks =
+          format === "apipost"
+            ? exported.document.global.marks
+            : JSON.parse(
+                exported.document.files.find(
+                  (file) => file.path === "settings/marks.json",
+                ).text,
+              );
+        const documentNodes = exportedNodes.filter(
+          (node) => node.target_type === "doc",
+        );
+        assert.equal(documentNodes.length, 2);
+        const marked = documentNodes.find(
+          (node) => node.description === source.documents[0].content,
+        );
+        assert.equal(
+          marks.find((mark) => mark.mark_id === marked.mark_id).color,
+          "#445566",
+        );
+        for (const node of documentNodes) {
+          assert(
+            exportedNodes.some(
+              (parent) =>
+                parent.target_type === "folder" &&
+                parent.target_id === node.parent_id,
+            ),
+          );
+          assert.notEqual(node.target_id, "old-document");
+          assert.notEqual(node.project_id, "old-project");
+        }
+
         await failure("import_project", {
           projectId: target.id,
           format,
@@ -350,8 +445,18 @@ for (const transport of ["http", "stdio"])
             )
             .map((item) => item.id),
         );
-        for (const key of ["caseIds", "protocolIds", "documentIds"])
+        for (const key of ["caseIds", "protocolIds"])
           assert.deepEqual(imported.imported[key], []);
+        assert.deepEqual(
+          imported.imported.documentIds,
+          saved.documents.map((doc) => doc.id),
+        );
+        assert.deepEqual(documentDefinitions(saved), expectedDocuments);
+        assert(
+          saved.documents.every(
+            (doc) => !saved.requests.some((request) => request.id === doc.id),
+          ),
+        );
         assert.deepEqual(importedRequest.auth, request.auth);
         assert.equal(importedRequest.url, request.url);
         assert.equal(saved.history.length, 0);
@@ -374,6 +479,7 @@ for (const transport of ["http", "stdio"])
         });
         const secondState = await store.get(second.id);
         assert.equal(secondState.requests.length, 2);
+        assert.deepEqual(documentDefinitions(secondState), expectedDocuments);
         assert.equal(secondState.runs.length, 0);
         assert.equal(wire.length, 0);
         assert.deepEqual(
@@ -411,7 +517,15 @@ for (const transport of ["http", "stdio"])
           app = await createApp({ root, port: 0 });
         }
         await connect({ write: true, execute: true });
+        await failure("execute_api", {
+          projectId: target.id,
+          apiId: beforeRestart.documents[0].id,
+        });
         assert.deepEqual(await store.get(target.id), beforeRestart);
+        assert.deepEqual(
+          documentDefinitions(await store.get(target.id)),
+          expectedDocuments,
+        );
         assert.equal(wire.length, 0);
         const result = await success("run_plan", {
           projectId: target.id,
@@ -432,6 +546,14 @@ for (const transport of ["http", "stdio"])
         ]);
         const executed = await store.get(target.id);
         assert.equal(executed.runs.length, 1);
+        assert.deepEqual(documentDefinitions(executed), expectedDocuments);
+        const restored = restoreProject(executed);
+        await store.save(restored);
+        assert.deepEqual(
+          (await store.get(restored.id)).documents,
+          executed.documents,
+        );
+        await failure("export_project", { projectId: restored.id, format });
         assert.equal(
           executed.environments.find((env) => env.id === plan.environmentId)
             .variables.executed,
