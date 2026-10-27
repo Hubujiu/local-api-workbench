@@ -12,7 +12,8 @@ import {
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
-import { watch, renameSync } from "node:fs";
+import { existsSync, renameSync } from "node:fs";
+import filesystem from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { fork } from "node:child_process";
 import { once } from "node:events";
@@ -422,39 +423,44 @@ test("complete custom commit followed by failed readback retains identity and do
   const { root, custom, store } = await fixture(t),
     read = store.readUnlocked.bind(store);
   let key,
-    watcher,
-    moved = false,
-    fixtureError;
-  t.after(() => watcher?.close());
+    moved = false;
+  const originalReadFile = filesystem.readFile;
   store.readUnlocked = async (id, base) => {
     key = id;
-    const target = path.join(base, id);
-    // Watch one concrete write boundary, without mocking filesystem methods.
-    // Move only the just-published metadata; apply's remaining .gitignore/journal
-    // operations can finish, but the separate final readback cannot find it.
-    watcher = watch(target, (_event, filename) => {
-      if (String(filename) !== "project.json" || moved || fixtureError) return;
-      try {
-        renameSync(
-          path.join(target, "project.json"),
-          path.join(target, "readback-fixture.json"),
-        );
-        moved = true;
-      } catch (error) {
-        fixtureError = error;
-      }
-      watcher.close();
-    });
     return read(id, base);
   };
-  await assert.rejects(store.create("readback committed", custom), (error) => {
-    assert.ifError(fixtureError);
-    assert.equal(error.code, "PROJECT_COMMIT_UNCERTAIN");
-    assert.equal(error.projectId, key);
-    assert.equal(error.cause.code, "ENOENT");
-    assert.equal(error.cause.path, path.join(custom, key, "project.json"));
-    return true;
-  });
+  // Test-only synchronization at the exact post-journal read boundary. Rename
+  // real metadata, then perform the original filesystem read to produce ENOENT.
+  // Unlike fs.watch, this cannot race ahead of or behind the final readback.
+  filesystem.readFile = async (file, ...args) => {
+    if (
+      key &&
+      !moved &&
+      file === path.join(custom, key, "project.json") &&
+      existsSync(file) &&
+      !existsSync(path.join(custom, key, ".transaction.json"))
+    ) {
+      renameSync(file, path.join(custom, key, "readback-fixture.json"));
+      moved = true;
+    }
+    return originalReadFile(file, ...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      store.create("readback committed", custom),
+      (error) => {
+        assert.equal(error.code, "PROJECT_COMMIT_UNCERTAIN");
+        assert.equal(error.projectId, key);
+        assert.equal(error.cause.code, "ENOENT");
+        assert.equal(error.cause.path, path.join(custom, key, "project.json"));
+        return true;
+      },
+    );
+  } finally {
+    filesystem.readFile = originalReadFile;
+    syncBuiltinESMExports();
+  }
   assert.equal(moved, true);
   await assert.rejects(readFile(path.join(custom, key, ".transaction.json")), {
     code: "ENOENT",
