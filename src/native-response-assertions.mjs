@@ -1,3 +1,4 @@
+import { nativeCookieName } from "./native-cookie-name.mjs";
 import { nativeXMLPath } from "./native-xml-path.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import {
@@ -33,6 +34,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
       "responseCode",
       "responseJson",
       "responseHeader",
+      "responseCookie",
       "responseXml",
       "responseText",
       "responseTime",
@@ -43,7 +45,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     ].includes(value.type)
   )
     throw Error(
-      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText/responseTime/responseSize/tempVars/envVars/globalVars",
+      "原生断言仅支持responseCode/responseJson/responseHeader/responseCookie/responseXml/responseText/responseTime/responseSize/tempVars/envVars/globalVars",
     );
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
@@ -74,6 +76,8 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
       (hasExpected && /\{\{/.test(expression.compareValue)))
   )
     throw Error("原生断言模板尚未支持，不能替换为不同的变量展开语义");
+  if (enabled && value.type === "responseCookie" && !nativeCookieName(path))
+    throw Error("原生Cookie断言仅支持普通非保留名称");
   if (enabled && value.type === "responseJson")
     jsonPathSegments(expression.path || "$");
   if (enabled && value.type === "responseXml") nativeXMLPath(expression.path);
@@ -112,6 +116,7 @@ export function compileNativeAssertions(value = []) {
     ...(data.type === "responseHeader"
       ? { header: data.expression.path.toLowerCase() }
       : {}),
+    ...(data.type === "responseCookie" ? { cookie: data.expression.path } : {}),
     ...(data.type === "responseXml"
       ? { xmlPath: nativeXMLPath(data.expression.path) }
       : {}),
@@ -148,10 +153,13 @@ function installNativeAssertions(
   readText,
   metricResponse,
   variableMaps,
+  cookies,
+  cookieEvidenceJSON,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
     hasOwn = Object.hasOwn,
+    ownKeys = Reflect.ownKeys,
     charCode = Function.prototype.call.bind(String.prototype.charCodeAt),
     indexOf = Function.prototype.call.bind(String.prototype.indexOf),
     finite = Number.isFinite,
@@ -164,7 +172,23 @@ function installNativeAssertions(
   const operations = parse(json),
     evidence = create(null),
     headerEvidence = parse(headerEvidenceJSON),
-    initialHeaders = create(null);
+    initialHeaders = create(null),
+    cookieEvidence = cookieEvidenceJSON ? parse(cookieEvidenceJSON) : null;
+  let cookiesMatch = cookieEvidence?.complete === true;
+  if (cookiesMatch && cookies && typeof cookies === "object") {
+    const keys = ownKeys(cookies),
+      expected = ownKeys(cookieEvidence.values);
+    cookiesMatch = keys.length === expected.length;
+    for (let at = 0; cookiesMatch && at < keys.length; at++) {
+      const actual = descriptor(cookies, keys[at]),
+        known = descriptor(cookieEvidence.values, keys[at]);
+      cookiesMatch =
+        !!known &&
+        actual?.enumerable === true &&
+        hasOwn(actual, "value") &&
+        actual.value === known.value;
+    }
+  } else cookiesMatch = false;
   // Capture only presence, before user tasks run. A wire field missing from the
   // initial Node projection is unknown, not an observed script-side deletion.
   for (let index = 0; index < operations.length; index++) {
@@ -229,6 +253,20 @@ function installNativeAssertions(
     }
     return value;
   };
+  const readCookie = (name) => {
+    if (!cookiesMatch) throw Failure("原生Cookie断言需要完整且匹配的传输证据");
+    const known = descriptor(cookieEvidence.values, name),
+      current = descriptor(cookies, name);
+    if (!known && current) throw Failure("原生Cookie断言字段缺少传输证据");
+    if (!current) return undefined;
+    if (
+      !current.enumerable ||
+      !hasOwn(current, "value") ||
+      typeof current.value !== "string"
+    )
+      throw Failure("原生Cookie断言只读取当前自有字符串数据");
+    return boundedString(current.value);
+  };
   const readVariable = (type, name) => {
     const map =
       type === "tempVars"
@@ -264,6 +302,7 @@ function installNativeAssertions(
     // Header/XML/Text bypass the eager body/code reader. Text and XML share
     // their private current-body readers with pick; Code/JSON stays unchanged.
     const response =
+      op.type === "responseCookie" ||
       op.type === "responseHeader" ||
       op.type === "responseXml" ||
       op.type === "responseText" ||
@@ -275,19 +314,21 @@ function installNativeAssertions(
         ? null
         : readResponse();
     let value =
-      op.type === "responseHeader"
-        ? readHeader(op.header)
-        : op.type === "responseXml"
-          ? readXML()(op.xmlPath)
-          : op.type === "responseText"
-            ? readText()
-            : op.type === "responseTime" || op.type === "responseSize"
-              ? readMetric(op.type)
-              : op.type === "tempVars" ||
-                  op.type === "envVars" ||
-                  op.type === "globalVars"
-                ? readVariable(op.type, op.variable)
-                : response.status;
+      op.type === "responseCookie"
+        ? readCookie(op.cookie)
+        : op.type === "responseHeader"
+          ? readHeader(op.header)
+          : op.type === "responseXml"
+            ? readXML()(op.xmlPath)
+            : op.type === "responseText"
+              ? readText()
+              : op.type === "responseTime" || op.type === "responseSize"
+                ? readMetric(op.type)
+                : op.type === "tempVars" ||
+                    op.type === "envVars" ||
+                    op.type === "globalVars"
+                  ? readVariable(op.type, op.variable)
+                  : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);

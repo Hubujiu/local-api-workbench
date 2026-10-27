@@ -3,7 +3,10 @@ import {
   compileNativeAssertions,
   isNativeVariableAssertion,
 } from "./native-response-assertions.mjs";
-import { readResponseHeaderEvidence } from "./response-header-evidence.mjs";
+import {
+  readResponseHeaderEvidence,
+  readResponseCookieEvidence,
+} from "./response-header-evidence.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
@@ -143,6 +146,7 @@ export function runScript(code, input, options = {}) {
         nativeWaits,
         // Never trust serialized fields supplied by a request, response or VM.
         responseHeaderEvidence: readResponseHeaderEvidence(input.response),
+        responseCookieEvidence: readResponseCookieEvidence(input.response),
         code,
         input,
         activityBudgetMs,

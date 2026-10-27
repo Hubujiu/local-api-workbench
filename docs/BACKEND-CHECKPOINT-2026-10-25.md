@@ -1,4 +1,11 @@
-# 后端检查点 · 2026-10-27 02:04 UTC
+# 后端检查点 · 2026-10-27 02:23 UTC
+
+## 02:23 更新
+
+- 变量独立PR26 head7fdc的CI40436210974首轮10/10成功，三OS1304，actual mergef8f5a260f76d7d64a85b3302090b6f21fded0683同tree2ea810a。组合5962cca4b81a3dc9eb87603fdb3b82923f0f6457/treee694470d05b1dfdb0057aa94f8c803359abaa56d的CI40436500912为12成功/1Mac shard失败：旧script-url-state:104直接QuickJS URLSDK求值被250ms中断；Ubuntu/Windows1774，Mac1773，13checkout和340文件170/170无漏项均已核实。测试/URLSDK/engine相对前一绿树未变，但不能据此断言调度根因，未重跑或放宽。
+- Cookie当前PR26 head8edf0483efa1954be2aa754023a3fbf9fec5eedc/tree8a66b5b4eb7f0c614ff8df363439ad19db466914=local98638b4ffdfb781ac4c10fb0945532fb9efd1672，CI40437862173待终态。独立Cookie私有transport证据与Header证据分离；raw Set-Cookie必须全量有界、普通唯一名/非空无外围空白。任何重复/路径/原型名/不完整映射令Cookie来源失败关闭，不改变公开parser或Header完整性。可信初值精确匹配后读取捕获map当前own字符串/删除，拒绝无传输证据的新值；只有已证明不存在才支持notexist。
+- 新组合已有11种来源与14种非正则比较器在明确有限primitive/absence合同内连通，既有完整入口矩阵扩展53条断言，覆盖H1/H2、官方HTTP/stdio MCP、CLI、原生导出/回读、备份/重启及重复Cookie不可伪装缺失。32项本地模块/入口/导出通过，完整format/check通过，新组合仍需自己的CI；不是原版任意Cookie路径或全量正则功能。
+- 固定库bytecode仍为PR37实验，基于heap修复独立依赖分支，不进入默认运行时。原生regularmatch尚未支持，正在核实成熟上游正则中断实现，不用无中断回溯正则或放宽运行预算换功能完成。
 
 ## 02:04 更新
 

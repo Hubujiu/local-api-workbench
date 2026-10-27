@@ -205,6 +205,19 @@ function sourceFor(base, version = "1.1") {
       "notexist",
       "ignored literal",
     ),
+    assertion(
+      "Cookie decoded equals value",
+      "responseCookie",
+      "native-cookie",
+      "eq",
+      "token=雪",
+    ),
+    assertion(
+      "Cookie proven missing",
+      "responseCookie",
+      "missing-cookie",
+      "notexist",
+    ),
   ]);
   add("xml", "/xml", [
     assertion("XML eq", "responseXml", "string(/root/value)", "eq", "Alpha"),
@@ -298,6 +311,13 @@ async function fixture(t, version = "1.1") {
     res.setHeader("x-num", "10");
     res.setHeader("x-choice", "blue");
     if (req.url === "/duplicate") res.setHeader("x-duplicate", ["one", "two"]);
+    if (req.url === "/collection")
+      res.setHeader("set-cookie", [
+        "native-cookie=token%3D%E9%9B%AA; Path=/",
+        "Another=two; HttpOnly",
+      ]);
+    if (req.url === "/duplicate-cookie")
+      res.setHeader("set-cookie", ["native-cookie=one", "native-cookie=two"]);
     const body = req.url.startsWith("/numbers/")
       ? JSON.stringify({
           token: "wire-" + req.url.split("/").at(-1),
@@ -545,7 +565,7 @@ function unaryShape(requests) {
         absent++;
       }
     }
-  assert.equal(absent, 10);
+  assert.equal(absent, 11);
   assert.equal(provided, 1);
 }
 function successfulRun(run, names) {
@@ -581,7 +601,7 @@ for (const [version, transport] of [
   ["2", "stdio"],
 ])
   test(
-    `fourteen native comparators and ten sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
+    `fourteen native comparators and eleven sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
     { timeout: 30000 },
     async (t) => {
       const f = await fixture(t, version),
@@ -592,7 +612,7 @@ for (const [version, transport] of [
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 51);
+      assert.equal(names.length, 53);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])
@@ -874,6 +894,17 @@ for (const activePick of [false, true])
     },
   );
 const readFailures = [
+  {
+    name: "duplicate Cookie",
+    route: "/duplicate-cookie",
+    assertion: assertion(
+      "ambiguous Cookie cannot be absent",
+      "responseCookie",
+      "native-cookie",
+      "notexist",
+    ),
+    error: /Cookie.*完整|Cookie.*证据/,
+  },
   {
     name: "duplicate Header",
     route: "/duplicate",

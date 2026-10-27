@@ -88,7 +88,6 @@ native-task-plan、dynamic-values、script-test-registration、apipost-modern �
 这里的 receipt 是本分支已有手工 execute 入口。组合分支的 typed journal、CLI/MCP、
 API-local export/reimport 与惰性来源仍须另外验收，不声称本片独立包含这些组合依赖。
 
-
 ## responseXml：WIP 有界字符串断言
 
 本增量在同一 PR26 内复用 PR25 的私有 QuickJS XML 运行时及锁定 MIT 依赖；
@@ -123,7 +122,6 @@ API-local export/reimport 与惰性来源仍须另外验收，不声称本片独
 失败计划/变量持久化、手工 execute receipt、冻结、备份恢复重启、项目环境隔离及取消；
 资源矩阵覆盖 64 KiB UTF-8、2000 节点属性、32 层、共享测试及输出限额。现有正式安全
 回归与构建重现检查保持启用。此处不宣称原版完整 XML parity 或独立安全专项已完成。
-
 
 ## responseText 与通用 includes/unincludes
 
@@ -163,7 +161,6 @@ setBody 合同，不新增编码、stream、HTML/XML 自动识别或公开 text(
 和请求→失败run/作用域保存→receipt→冻结/恢复/重启及项目环境隔离、取消；混排五种来源，
 并验证 Text pick 共用正文、缺失/类型错误、getter零调用、模板样式诊断的来源往返及配额。
 现有XML独立guard专项仍保持中断未完成状态，本增量没有重启该审查；既有正式安全测试保留。
-
 
 ## 十个非 regex 比较器：数值、一元与精确集合
 
@@ -305,3 +302,57 @@ post soft failure continuing plans, saved results, independent projects,
 original task-data preservation, backup restore and process restart. Native
 reverse export and official SDK/CLI entrypoint checks remain integration-level
 work because their feature dependencies are not in this branch.
+
+## Bounded responseCookie increment (2026-10-27)
+
+`responseCookie` is post-response only. Selectors are required literal ordinary
+ASCII names (`A-Z a-z 0-9 _ - ~`), at most the existing 1000-character path bound;
+all Object.prototype names and `prototype` are forbidden. No Lodash nested path,
+regex, template, cookie jar, duplicate-name override or full original parity is
+claimed. Existing fourteen comparators and phase/quota/resource policies remain.
+
+Legal static sender SHA256
+`5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`,
+LF-normalized Unicode character offsets: 33562972 splits at the first equals;
+33572150 creates ordinary response.cookies, writes nonempty name/value via
+Lodash set, decodes URI components and retains raw value on decode error;
+33584942 selects via Lodash get. HeaderList.toObject near 30672527 preserves
+multiple Set-Cookie lines as arrays. This ordinary-name subset agrees without
+copying vendor code or executing the original. Original nested paths, whitespace,
+empty-value and duplicate behavior remain unsupported. Node's received rawHeaders
+are parser-produced strings, not a claimed byte-for-byte raw wire recording.
+
+A separate private WeakMap records Cookie transport evidence during the existing
+HTTP1/HTTP2 raw-header capture. Existing complete-header bounds and truncation
+refusal remain; all Set-Cookie lines including attributes additionally total at
+most 64 KiB UTF-8 and must contain valid Unicode. First-semicolon/first-equals
+parsing requires unique supported names and nonempty values without outer
+whitespace. URI decoding failure retains the original value. Any unsupported
+cookie makes the entire Cookie evidence incomplete, without downgrading Header
+evidence, failing the request itself, or changing the public cookie parser.
+Different valid names in multiple headers are supported; absence is trustworthy
+only when this entire closed-world evidence is complete.
+
+Before any user tasks, the captured response.cookies map's exact own enumerable
+data keys/values must match the private initial wire projection. Missing,
+additional, accessor or unequal initial fields fail closed. Later reads use the
+captured map and descriptor intrinsics, not public get or replacement maps.
+Known fields may be edited to bounded Unicode strings or deleted. An initially
+absent field remains absent only while no current own field exists; a newly
+invented field fails rather than claiming transport provenance. Source errors
+cannot pass notexist. Public getter/map replacement cannot forge private tests.
+This private authority does not survive copied/imported response objects or
+serialized historical records; fresh real transport establishes fresh authority.
+
+Formal checks cover real HTTP1/HTTP2 multiple names, case, equals, Unicode,
+invalid percent sequences and encoded spaces; invalid/duplicate/path/reserved
+names, empty/outer-space values, zero cookies, truncation and total-line limit;
+Header preservation, forged/copied identity, missing/mismatched initial
+projection, current edit/delete/type/Unicode/size errors, zero accessor/body
+reads, public replacements, and imported real HTTP failed comparisons with
+ordinary continuation/scopes, frozen declarations, saved results, isolation,
+backup restore and restart. Test-development corrections are not production
+fixes: synchronous stage rejection uses throws, HTTP outer-space fixture uses
+space before semicolon (line-final whitespace is removed by the HTTP parser),
+and private evidence is checked by name after public tests erasure rather than
+assuming its merged array order. No XML-special audit was run.

@@ -1,3 +1,5 @@
+> 以下为历史功能盘点，不是最新提交状态；后续后端功能 PR、组合验证及失败记录以 [后端检查点](BACKEND-CHECKPOINT-2026-10-25.md) 和精确 CI 为准。
+
 # 当前复刻进度
 
 完整98项核验见 [PARITY-CURRENT.md](PARITY-CURRENT.md) / [parity-current.json](parity-current.json)。原始基线 PARITY-AUDIT.md / parity-matrix.json 不改写。
