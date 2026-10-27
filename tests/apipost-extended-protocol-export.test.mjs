@@ -261,3 +261,22 @@ test("extended collection and ordinary-plan identity accessors are not invoked",
     assert.equal(calls, 0);
   }
 });
+
+test("plan array hooks and symbol properties reject without invocation", () => {
+  for (const key of ["filter", Symbol.iterator, Symbol("setting")]) {
+    const p = blank();
+    importIntoProject(p, extendedProtocolFixture());
+    let calls = 0;
+    const object = key.description === "setting" ? p.settings : p.plans;
+    const value = object[key];
+    Object.defineProperty(object, key, {
+      enumerable: true,
+      get() {
+        calls++;
+        return value;
+      },
+    });
+    for (const encode of exporters) assert.throws(() => encode(p));
+    assert.equal(calls, 0);
+  }
+});

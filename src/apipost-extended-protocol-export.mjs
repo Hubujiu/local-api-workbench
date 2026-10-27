@@ -19,10 +19,10 @@ function dataObject(object) {
     ![Object.prototype, null].includes(Object.getPrototypeOf(object))
   )
     fail("对象类型");
-  for (const descriptor of Object.values(
-    Object.getOwnPropertyDescriptors(object),
-  ))
-    if (!("value" in descriptor)) fail("访问器字段");
+  const descriptors = Object.getOwnPropertyDescriptors(object);
+  for (const key of Reflect.ownKeys(descriptors))
+    if (typeof key !== "string" || !("value" in descriptors[key]))
+      fail("访问器或非JSON字段");
   return object;
 }
 
@@ -94,6 +94,21 @@ export function prepareExtendedProtocolExport(project) {
     !definitions.socketio.length
   )
     return { base: project, derivedPlans: [], emit: () => [] };
+
+  // Validate the collection itself before iteration/method lookup, without
+  // rejecting existing HTTP snapshots' own undefined optional data fields.
+  const planDescriptors = Object.getOwnPropertyDescriptors(plans);
+  if (
+    Object.getPrototypeOf(plans) !== Array.prototype ||
+    Reflect.ownKeys(planDescriptors).length !== plans.length + 1
+  )
+    fail("计划数组属性");
+  for (let i = 0; i < plans.length; i++)
+    if (
+      !planDescriptors[String(i)]?.enumerable ||
+      !("value" in planDescriptors[String(i)])
+    )
+      fail("计划数组访问器/空洞");
   const protocolPlanIds = new Set();
   validateResourceJSON({
     sources,
