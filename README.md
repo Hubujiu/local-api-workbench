@@ -19,11 +19,11 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最近完整根 `4fe9edb4` / CI `40545009149` 首次19项GREEN，实际checkout/树及12份产物已核；验证原生协议身份歧义拒绝、受限gRPC／Socket.IO定义与派生消息往返、HTTP继承图＋独立冻结目录flow，连同此前完整后端链。Linux／macOS全通过；Windows四项不可捕获POSIX child signal测试明确跳过，真实桌面正常退出三平台均验证。原生交换只覆盖明确可逆的子集，不代表任意项目迁移；完整Workbench备份保留不可表达的历史和元数据。
+最后完整已验证根为 `da97a0e9` / CI `40549158177`（19项通过，实际提交／树及产物已核）。较新的结构编辑组合 `6c238a41` / CI `40551216982` 为18通过／1失败：macOS脚本跨作用域配额测试的scope为project而非request，底层原因未记录，仍未知。新增结构编辑流程通过不抵消该失败，不以旧绿灯或单功能CI宣布新根已验收。
 
-Mock标量schema及原文出口已保存：schema不采样，raw不解析归一化，完整回读保护保留；其根组合提交 `da97a0e9` 正独立CI验收。当前下一候选提供保图项目的owner结构编辑接口，支持现有目录改名／移动及绑定API移动，必须带configRevision并在锁内重算。live请求按新父层执行，旧case／plan／repeat及history保持冻结；普通PUT不能绕过结构约束，回收／恢复／解绑仍拒绝。原生出口仍不能表达所有冻结目录关系，完整备份保留旧快照；不为导出重造已移走目录或改写旧folder。**新结构编辑组合CI尚待**，前端结构操作接线未在本批新增。
+当前候选补保图API软回收／恢复：保留binding、请求ID、own配置和旧case／plan／history；stored tombstone阻断live／cURL及伪造旧bound调用，精确已存冻结请求仍可执行。owner、既有MCP回收权限、真实CLI、备份重启与repeat交叉已本地验证；普通PUT不能切换回收状态，native批次历史不静默清除。永久清除、解绑、目录回收仍拒绝，原生出口不冒充完整历史备份。另仅为配额断言增加失败诊断，未改runtime／预算或降低预期，不声称已修根因。**此新组合CI尚待。**
 
-正常退出保存、canonical有界repeat、文本表单继承等既有能力保持；强杀／断电／系统注销不在正常退出保证内。原生automated_testings仍缺执行树装配证据，不猜测解锁。历史XML／桌面脚本RED根因未修复或改判，原版GUI／第三方许可和暂停专项未由后续绿灯替代。当前六模块范围与最新精确证据见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
+仍未完整交付：原生automated_testings装配/非空项目样本缺证；部分协议和原生交换语义不能保真；SQL Server、Oracle、达梦provider尚未实现（不只是差测试），SQL Server运行许可确认另行待定；原版新GUI与暂停专项未完成，前端按要求暂缓。SQLite额外能力不抵消原版数据库缺口。六模块已验证流程及剩余拒绝边界见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)，不按测试数量折算完成率。
 
 ## 已实现的核心
 
@@ -74,7 +74,7 @@ node tests/ui-smoke.mjs
 
 - 原版 GUI 的当前完整流程尚未验收，像素一致性和签名发行未完成；当前不新增前端或视觉打磨。
 - 独立 XML／运行时专项未完成；PR37 实验默认关闭、未进入生产组合。历史失败不因后续 CI 通过而改判，既有 Windows XML 预算超时的根因不宣称已解决。
-- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server 等许可前提未确认的验证不冒充完成。
+- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server／Oracle／达梦的provider与实际验证仍缺失，许可和运行条件须另行确认，不冒充完成。
 - 本地循环 OpenAPI 引用可保留，外部引用不自动拉取。原生定义交换无法保留的依赖、历史来源或配置明确拒绝，完整状态使用 Workbench 备份。
 - SSE/WebSocket/TCP 提供有界采集与交互会话，最长15分钟、总计8MiB、最近200条消息，不代表全部协议扩展。
 - 不包含付款、License 激活、在线团队/账号协同或商业 AI 服务，不绕过原版授权。

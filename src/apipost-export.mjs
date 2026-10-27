@@ -173,6 +173,11 @@ export function exportApipost(project, options = {}) {
     project.environments.length > 100
   )
     throw Error("Apipost导出项目结构无效或超过限制");
+  if (
+    project.settings?.nativeInheritance &&
+    project.requests.some((r) => r.deletedAt)
+  )
+    throw Error("原生继承图含已回收接口；请恢复后导出或使用完整项目备份");
   // This is a definition interchange, not a backup, execution archive or grant.
   for (const key of [
     "plans",

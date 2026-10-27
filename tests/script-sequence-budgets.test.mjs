@@ -100,9 +100,22 @@ test("lower sequence quotas are cumulative across fresh script scopes", async ()
         options,
       ),
       (error) => {
-        assert.equal(error.scriptScope, "request");
-        assert.match(error.message, message);
-        assert.equal(error.sequenceActivity.length, 1);
+        // Report only this synthetic fixture's error and accounting metadata.
+        // A different early failure must still fail, not count as quota success.
+        const diagnostic = JSON.stringify({
+          requestedQuotas: options,
+          message: error.message,
+          scope: error.scriptScope,
+          stage: error.scriptStage,
+          operation: error.activityOperation,
+          diagnostics: error.scriptDiagnostics,
+          activity: error.activityMetrics,
+          cpu: error.activityCPUTimeUs,
+          completedScopes: error.sequenceActivity?.length,
+        });
+        assert.equal(error.scriptScope, "request", diagnostic);
+        assert.match(error.message, message, diagnostic);
+        assert.equal(error.sequenceActivity.length, 1, diagnostic);
         return true;
       },
     );

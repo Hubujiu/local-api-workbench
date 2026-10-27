@@ -754,6 +754,21 @@ export function createMCP({
               break;
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
+              if (p.settings?.nativeInheritance) {
+                await store.editNativeInheritance(
+                  p.id,
+                  {
+                    configRevision: p.configRevision,
+                    operation: {
+                      type: "recycle-requests",
+                      requestIds: args.apiIds,
+                    },
+                  },
+                  { nativeTrash: Boolean(nativeName) },
+                );
+                output = [...args.apiIds];
+                break;
+              }
               if (nativeName) {
                 const deletion = deleteAPIResources(p, args.apiIds);
                 await store.save(deletion.project);

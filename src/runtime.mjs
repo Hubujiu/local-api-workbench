@@ -240,7 +240,7 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async editNativeInheritance(projectId, input) {
+  async editNativeInheritance(projectId, input, { nativeTrash = false } = {}) {
     if (
       !input ||
       typeof input !== "object" ||
@@ -255,11 +255,29 @@ export class Store {
     const current = await this.get(projectId);
     if (input.configRevision !== current.configRevision)
       throw Error("项目已有其他修改，请重新加载");
-    const next = editNativeInheritance(current, input.operation);
+    const context =
+      input.operation?.type === "recycle-requests"
+        ? {
+            deletedAt: new Date().toISOString(),
+            ...(nativeTrash ? { nativeTrash: true, batchId: id() } : {}),
+          }
+        : {};
+    const next = editNativeInheritance(current, input.operation, context);
     const operation = structuredClone(input.operation);
-    return this.save(next, { nativeInheritanceEdit: operation });
+    return this.save(next, {
+      nativeInheritanceEdit: operation,
+      nativeInheritanceEditContext: context,
+    });
   }
-  async save(p, { activity = false, signal, nativeInheritanceEdit } = {}) {
+  async save(
+    p,
+    {
+      activity = false,
+      signal,
+      nativeInheritanceEdit,
+      nativeInheritanceEditContext,
+    } = {},
+  ) {
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
@@ -380,6 +398,7 @@ export class Store {
             identityPrevious,
             p,
             nativeInheritanceEdit,
+            nativeInheritanceEditContext,
           );
           if (
             previous &&

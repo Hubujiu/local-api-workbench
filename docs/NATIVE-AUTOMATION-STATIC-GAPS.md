@@ -114,3 +114,11 @@
 ---
 
 生成时间：2026-10-27 UTC。仅将本轮已有结论落盘；没有为此扩大搜索、创建分支/PR或修改产品实现。
+
+## 2026-10-27 公开原厂CLI补证（未闭合映射）
+
+[官方CLI文档](https://wiki.apipost.cn/docs/clitool/) 指向 apipost-cli-pro。公开npm版本3.0.19的元数据license为UNLICENSED；官方所链GitHub仓库本轮公开GET为404。这不足以判断仓库永久不存在，也不能把文档“开源”一词当可复制代码的许可。仅阅读字段事实，没有安装/运行CLI、复制专有实现、打开文档中的带token执行URL或检查字节码。
+
+[版本元数据](https://registry.npmjs.org/apipost-cli-pro/3.0.19) 所列tarball的实际SHA1及SHA512 integrity均匹配。包内dist/apipost-cli/测试.html的SHA256为 `3bb7e59e7df9837a73345cf51de88bfe9e7b1a0c178c7a9891c5927ca509e7a1`。只用JSON解析其内嵌data，不执行HTML：test_events有三个事件，root api(sort1)、root while(sort2)、while下if(sort1)，含parent_event_id；报告顶层children为空。未复制其中身份、地址、用户或请求内容。
+
+这是非空的**报告事件材料**，不是项目automated_testings/event_list出口。它支持flat父引用形态，不证明saved settings到runner options或有序children的转换。当前仍未取得非空同源项目出口和完整装配链，不能据此开启原生自动化迁移，也不能将canonical repeat包装为该格式兼容。

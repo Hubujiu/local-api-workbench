@@ -1,7 +1,10 @@
 import { planLeaves, validateRepeatGraph } from "./plan-repeat.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { moveFolderTree } from "../public/folder-tree.js";
-import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
+import {
+  validateResourceJSON,
+  deleteAPIResources,
+} from "./api-resource-lifecycle.mjs";
 import { importApipostAuth, importApipostRows } from "./apipost-import.mjs";
 import { validateGlobalParameters } from "../public/global-parameters.js";
 import { validateSharedAuthSettings } from "../public/shared-auth.js";
@@ -581,13 +584,19 @@ export function validateNativeInheritanceProject(project) {
     const r = requests.get(b.requestId);
     if (
       !r ||
-      r.deletedAt ||
       r.folder !==
         ancestry(b.parentId)
           .map((f) => f.name)
           .join("/")
     )
       fail("接口缺失、已删除或目录关系变化");
+    if (
+      Object.hasOwn(r, "deletedAt") &&
+      (typeof r.deletedAt !== "string" ||
+        !Number.isFinite(Date.parse(r.deletedAt)) ||
+        new Date(r.deletedAt).toISOString() !== r.deletedAt)
+    )
+      fail("回收时间必须为有效ISO日期");
     const binding = normalizeNativeInheritanceBinding(r.nativeInheritance);
     if (
       !binding ||
@@ -663,6 +672,7 @@ export function resolveNativeInheritance(
   }
   if (!b) fail("临时请求不属于当前项目绑定");
   const stored = project.requests.find((r) => r.id === b.requestId);
+  if (stored.deletedAt) fail("接口已回收，不能作为live接口执行");
   ownRequest(request, stored.nativeInheritance);
   if (request.folder !== stored.folder) fail("临时请求不能改变绑定目录");
   const layers = [
@@ -714,19 +724,66 @@ export function resolveNativeInheritance(
 
 // Explicit owner operations preserve identities; generic project saves remain
 // unable to detach or replace a graph. Recomputed again against locked storage.
-export function editNativeInheritance(project, operation) {
+export function editNativeInheritance(project, operation, context = {}) {
   validateResourceJSON(operation, 4096);
   const state = validateNativeInheritanceProject(project);
   if (!state) fail("当前项目没有可编辑的继承图");
+  const lifecycle = ["recycle-requests", "restore-requests"].includes(
+    operation?.type,
+  );
   fields(
     operation,
-    operation?.type === "move-folder"
-      ? ["type", "sourceId", "parentId", "name"]
-      : ["type", "requestId", "parentId"],
+    lifecycle
+      ? ["type", "requestIds"]
+      : operation?.type === "move-folder"
+        ? ["type", "sourceId", "parentId", "name"]
+        : ["type", "requestId", "parentId"],
     "结构操作",
   );
+  if (lifecycle) {
+    const ids = operation.requestIds;
+    if (
+      !Array.isArray(ids) ||
+      !ids.length ||
+      ids.length > 1000 ||
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => typeof id !== "string" || !state.bound.has(id))
+    )
+      fail("回收/恢复接口必须为当前项目唯一HTTP绑定ID");
+    const recycle = operation.type === "recycle-requests";
+    for (const id of ids) {
+      const request = project.requests.find((r) => r.id === id);
+      if (Boolean(request.deletedAt) === recycle)
+        fail(recycle ? "接口已回收" : "接口尚未回收");
+    }
+    if (
+      recycle &&
+      (typeof context.deletedAt !== "string" ||
+        !Number.isFinite(Date.parse(context.deletedAt)) ||
+        new Date(context.deletedAt).toISOString() !== context.deletedAt)
+    )
+      fail("回收缺少后端生成日期");
+    let next;
+    if (recycle && context.nativeTrash) {
+      if (typeof context.batchId !== "string" || !context.batchId)
+        fail("回收缺少后端批次ID");
+      next = deleteAPIResources(project, ids, {
+        deletedAt: context.deletedAt,
+        batchId: context.batchId,
+      }).project;
+    } else {
+      next = structuredClone(project);
+      for (const request of next.requests)
+        if (ids.includes(request.id)) {
+          if (recycle) request.deletedAt = context.deletedAt;
+          else delete request.deletedAt;
+        }
+    }
+    validateNativeInheritanceProject(next);
+    return next;
+  }
   if (!["move-folder", "move-request"].includes(operation.type))
-    fail("仅支持目录改名/移动或接口移动");
+    fail("仅支持目录/接口移动及HTTP接口软回收恢复");
   identifier(operation.parentId);
   if (operation.parentId !== "0" && !state.folders.has(operation.parentId))
     fail("目标父目录不属于当前项目");
@@ -772,6 +829,8 @@ export function editNativeInheritance(project, operation) {
       !state.bound.has(operation.requestId)
     )
       fail("源接口不属于当前项目");
+    if (project.requests.find((r) => r.id === operation.requestId).deletedAt)
+      fail("已回收接口不能单独移动，请先恢复");
     next = structuredClone(project);
     next.settings.nativeInheritance.bindings.find(
       (b) => b.requestId === operation.requestId,
@@ -784,14 +843,19 @@ export function editNativeInheritance(project, operation) {
 
 // Structural edits need a deliberate graph-aware operation, not a partial CRUD
 // update. Value-only layer/own-request changes remain allowed.
-export function assertNativeInheritanceIdentity(previous, next, operation) {
+export function assertNativeInheritanceIdentity(
+  previous,
+  next,
+  operation,
+  context,
+) {
   const prior = validateNativeInheritanceProject(previous || {});
   if (!prior) return;
   const current = validateNativeInheritanceProject(next);
   const edited =
     operation === undefined
       ? undefined
-      : editNativeInheritance(previous, operation);
+      : editNativeInheritance(previous, operation, context);
   const expected = edited ? edited.settings.nativeInheritance : prior.graph;
   if (edited) {
     // A dedicated structural operation cannot edit live values or snapshots.
@@ -806,9 +870,18 @@ export function assertNativeInheritanceIdentity(previous, next, operation) {
       "runs",
       "history",
       "protocolRuns",
+      "apiResourceTrash",
     ])
       if (!isDeepStrictEqual(edited[key], next[key]))
         fail("结构操作不能夹带其他配置或冻结证据修改");
+  }
+  if (!edited) {
+    const statuses = (p) =>
+      p.requests
+        .map((r) => [r.id, Object.hasOwn(r, "deletedAt"), r.deletedAt])
+        .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    if (!isDeepStrictEqual(statuses(previous), statuses(next)))
+      fail("普通保存不能切换回收状态，请使用显式操作");
   }
   const identity = (g) => ({
     sourceProjectId: g.sourceProjectId,

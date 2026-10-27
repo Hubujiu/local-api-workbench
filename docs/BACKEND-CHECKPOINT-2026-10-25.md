@@ -1,6 +1,19 @@
-# 后端检查点 · 2026-10-27 17:24 UTC
+# 后端检查点 · 2026-10-27 18:34 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 18:34 保图API软回收／恢复与诊断组合候选
+
+- 最近根 `6c238a4181dc898ddaebded7c5dd7b4881b702f0` / local `e8d421fccb9184dc5576305b60c11b6f0ef0d75e` / tree `68ac43179dc6e15395953ee79dda2657c25089cc` 的首次CI `40551216982` 真实18/19：唯一macOS shard4 job122355165512在script-sequence-budgets.test.mjs的cumulative quota作用域断言失败，实际project、预期request，836ms；原日志未暴露具体quota变体或底层error，根因未知。全19actual同根，12实际ZIP／manifest／TAP393文件99/98/98/98完整，hash `b8092817b2c2301c9e240073969507b4f85dfb9a8119def171628744b5505cc4`。Linux2033通过、mac2032通过/1失败、Windows2029通过/4POSIX skip，0cancel。新增结构移动／repeat／history及Mock、DB／stdio／desktop／ac4822通过，不能抵消此RED，未重跑或改预算。
+- 最后完整根GREEN为 `da97a0e92045fca96538092b1d624816fac17924` / tree `d869200a5daa57fd404e2567303835fd35071bd0`，首次CI `40549158177` 19/19；19actual同根，12实际392文件4×98，hash `faa15e361f2805005de2733cd90e685e5722cae538bcb7c11875fb0326a449d7`。Linux/mac2029通过，Windows2025通过+4POSIX skip；Mock13完整媒体及两SDK/CLI链、旧迁移、DB/stdio/桌面/ac4822均过，原本地聚合30s取消仍保留。
+- 软回收同PR43 final local `a4235ad5d9cb72059e49dcd226e8c4fc66eada7f` / remote `979fa1d88f182fb578ef83c340c0181a262be7a8` / tree `e1a8f7347134287c5e7e6e40397f59316854d06f`；独立CI `40555843698` 首次19/19 GREEN，19actual `5ad5e6f558b37287ce6a78ba0bc61f4583ab775f` 精确同树，parents9c66155+979fa。12ZIP摘要及278文件70/70/69/69完整核验，hash `29776f37f4778074a5835a04469b678382cccb3d8411a11e7189b4da8c389c96`；三OS各1246通过无fail/cancel/skip。旧40555596360取消，不改判。
+- 复用request.deletedAt，不删binding／父层／own请求／case／plan／history。日期及native批次ID由后端生成并锁内重算；普通PUT不得切换状态。resolver以项目stored状态阻断旧bound、删date伪装及cURL，只有同项目精确已存解绑快照沿原可信合同可执行。回收API不能单移，整目录移动同步绑定；恢复live使用当前父，冻结仍旧父。MCP原write/project权限与确认要求保留，native纯HTTP批次保apiResourceTrash历史，混目录／重复／foreign输入整体拒绝，不逐个save产生半批。
+- 独立review发现状态数组按请求顺序比较误拒正常重排，已按ID排序修；实际反例及owner/native SDK整批复验通过。每条owner/canonical/native链在回收备份重启后、恢复后分别跑真实CLI，核wire、exact run ID/source=cli及新Store收据，未拿已有泛CLI用例替代。active tombstone原生出口拒；native删除历史恢复后仍保留且不能原生导出，不偷偷删历史；完整Workbench备份保留。永久purge／解绑／目录回收不在本片。
+- PR3仅诊断 local `c7b0277919de7df0a921b8b3513742a718180b3b` / remote `1cb557d4bd1cf56c0878cd305f2ef13f569956f2` / tree `35c7ccfa16e2f0b76703eb880bf1c81434155720`：只给原断言附合成fixture的quota/error/accounting上下文，原scope／错误信息／完成scope数预期不变，无runtime/VM/预算/额外负载改动，未专门重现暂停专项。其独立CI `40553144565` 首次10/10 GREEN，actual `e43587d340755c6f799a57caf34e01264fec952b` 的PR merge同树、三份实际TAP各1038通过；该旧feature运行时e12c1e8b不是根ac4822，不能解释或修复6c失败。只用于后续正常CI若复发时保留原因。
+- 根生产合并 `800ae23` 加上述仅诊断 `4b4de60326292695054a64570b647d111aeb688b`，保留Store activity／signal两次取消检查并接nativeEdit/context，既有typed收据及MCP授权不丢。根只测试提交 `97fdf0423771915314bb24121e6d2f5446f70772` / tree `aae8f9988166dfabbfbdcd8c577b88a62d7c66a1` 补owner repeat在回收、备份真重启、恢复后的三轮执行，稳定group/child/iteration、planHash、快照及真实run IDs；原线性CLI和MCP批次断言保留。25完整文件118/118、0fail/cancel/skip、54.1s，check／全库format／diff通过。之后仅文档更新，新根CI尚待；本地通过不抹6c RED。
+- 新公共来源补证仅发现官方CLI发布包中的非空报告test_events，不是原生项目automated_testings出口，缺口仍在，详见[NATIVE-AUTOMATION-STATIC-GAPS](NATIVE-AUTOMATION-STATIC-GAPS.md)。未运行CLI或访问文档中的带token地址；包license=UNLICENSED，不复制其实现。
+- 更正数据库剩余范围：SQL Server、Oracle、达梦provider当前未实现，包/registry/实际入口均未接入，不只是待跑许可验收。原renderer的provider列表和[官方数据库文档](https://wiki.apipost.cn/docs/project_set/database/)均有这些类型；已有SQLite是额外能力。SQL Server适配器受限只读设计可独立推进，但真实SQL Server 2022 Developer运行尚待[微软许可](https://www.microsoft.com/content/dam/microsoft/usetm/documents/sql-server/sql-server-2022-developer-express-evaluation/retail-packaged/SQLServer2022_SQLServer2022DeveloperExpressEvaluation_English.pdf)确认；没有设置ACCEPT_EULA或启动服务，不能把readOnlyIntent路由当只读安全保护。
+- 没有新前端、没有main/develop合并或部署。原版新GUI、未知原生交换范围和已暂停专项仍未完成；本项目不宣称完整交付。
 
 ## 17:24 保图结构编辑与冻结证据组合候选
 
