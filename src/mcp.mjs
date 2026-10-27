@@ -134,7 +134,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存可观察的独立快照计划",
+            "保存独立快照计划；支持单层HTTP repeat组，count为1至100整数，潜在展开最多200步",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
@@ -661,6 +661,7 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              const totalSteps = activePlanStepCount(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -683,7 +684,7 @@ export function createMCP({
                   onStep: (step) =>
                     onProgress({
                       completed: ++completed,
-                      total: activePlanStepCount(plan),
+                      total: totalSteps,
                       ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,

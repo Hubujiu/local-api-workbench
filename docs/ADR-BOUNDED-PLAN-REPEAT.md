@@ -20,6 +20,11 @@ The existing 200-step limit is also the maximum potential expanded leaf count.
 Disabled groups and children remain fully validated and count toward this budget;
 they produce no HTTP request or successful result. Enabling a node cannot bypass
 preflight. Existing plans without repeat groups retain their current contract.
+Repeat plans also have a 4MiB frozen-definition limit and a 4MiB logical expanded
+configuration limit (sum of each serialized leaf times its count, including
+disabled definitions). Validation precedes occurrence construction; occurrences
+hold references rather than cloning all future requests. Dynamic URLs/responses
+still fail through the existing leaf runtime, not a fictitious all-error preflight.
 
 All group leaves are frozen through the same service/auth/parameter resolver as
 ordinary steps, before any execution. The stored snapshot and hash retain the
@@ -55,3 +60,17 @@ repeat execution and preflight. It is a saved work-in-progress, not acceptance.
 Final acceptance must cover login → repeated extraction/consumption → final
 request, failure/atomicity/cancel, owner/MCP/CLI, project isolation, frozen live
 edits, backup/restart, and generic/typed-unknown saves without network replay.
+
+The next coherent stage passes those ordinary HTTP workflows through owner HTTP,
+the official MCP SDK HTTP and real stdio subprocess, CLI and restarted/restored
+Store. An actual held response is cancelled in iteration two; only four started
+occurrences are recorded, with no following request. Real malformed-history
+pre-journal and ordinary-file post-journal obstacles retain completed wire results
+and truthful distinct receipts; repair/recovery does not send any new request.
+The specification's two RED tests now pass. Original linear plan/protocol and
+HTTP atomic extraction regressions also pass in focused batches.
+
+This remains WIP: exact-head CI, native consumer guards/leaf-aware grant and
+restore adapters, combined strict native extraction, and aggregate result-growth
+policy still require completion. No root combination is represented by these
+standalone tests, and no unimplemented native export path is called supported.

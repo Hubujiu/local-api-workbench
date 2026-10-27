@@ -126,6 +126,26 @@ export class MCPActivity {
         this.record[key] = progress[key];
     if (typeof progress.stepId === "string")
       this.record.stepId = progress.stepId;
+    if (
+      progress.repeat &&
+      ["groupId", "childId"].every(
+        (key) =>
+          typeof progress.repeat[key] === "string" &&
+          progress.repeat[key].length <= 200,
+      ) &&
+      Number.isInteger(progress.repeat.iteration) &&
+      progress.repeat.iteration >= 0 &&
+      progress.repeat.iteration < 100 &&
+      typeof progress.repeat.occurrenceId === "string" &&
+      progress.repeat.occurrenceId.length <= 2500
+    )
+      this.record.repeat = {
+        groupId: progress.repeat.groupId,
+        childId: progress.repeat.childId,
+        iteration: progress.repeat.iteration,
+        occurrenceId: progress.repeat.occurrenceId,
+      };
+    else delete this.record.repeat;
     const status = progress.stepStatus || progress.status;
     if (["passed", "failed", "cancelled"].includes(status))
       this.record.stepStatus = status;
