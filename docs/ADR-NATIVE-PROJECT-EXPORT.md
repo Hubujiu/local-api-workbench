@@ -362,3 +362,49 @@ POST payload after both roundtrips and restart. AWS templated secret credentials
 remain templates in exported/frozen definitions and resolve against the selected
 saved environment only at explicit execution. EdgeGrid's nonempty signing baseURL
 uses a fictional host for the MAC while all HTTP traffic stays on loopback.
+
+## Source-backed TCP/SSE resource graphs (bounded subset)
+
+Native JSON and directory output now support complete source-backed TCP socket
+containers with UTF-8 raw socket_method children and GET/POST SSE definitions.
+This is protocol **definition** interchange, not native protocol flow execution
+or a claim that all imported resources can be exported. WS/WSS, Socket.IO/gRPC,
+non-native-created definitions, missing/deleted children, orphan containers,
+ambiguous source identities, changed executable names/endpoints/payloads/timeouts,
+and stripped or runtime-required handshake credentials reject the whole output.
+No history, current credential binding or private metadata is used to rebuild a
+secret, and no empty credential is invented. Original inert descriptions, response
+examples and accepted configurations remain inert. Export performs pure forward
+reimport verification and never connects or sends.
+
+The identity key is the original project ID plus target ID, verified against the
+existing deterministic resource factory. TCP containers reserve their exact
+canonical folder path rather than also creating a plain folder of the same name.
+Directory target and parent IDs use one complete node map, including socket
+parents. Known ordinary parent-folder identities are collected before creating
+missing intermediate folders; A and A/B work in either input order. Original
+ordinary folder names were not archived: their current unambiguous canonical
+paths may be remapped, not falsely described as unchanged historical names.
+Container names and each executable definition still require exact source-backed
+agreement. Unknown/custom provenance notes are not silently discarded.
+
+The first slice deliberately rejects WS, including ws://. Legal static analysis
+of send.asar/index.js (SHA-256
+`5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`)
+shows `rejectUnauthorized: false` at LF-normalized Unicode-character offset
+37654343, system-level certificate settings at 37654475, and the resource handshake
+timeout at 37667842. These offsets are characters, not bytes or UTF-16 units.
+The reconnect setting at 33908681 belongs to another Socket.IO call path and is
+not evidence for a WS no-retry profile. No verified resource-only secure TLS /
+no-retry profile was established. Copying archived defaults or guessing flags
+would not prove safe equivalence; no original application was executed here.
+
+Tests use independently authored loopback inputs, not vendor exports. JSON and
+directory each make two pure generations alongside HTTP/document/model resources,
+then create and execute Workbench frozen protocol plans, modify live definitions,
+and retain execution through backup/restore/restart with project isolation.
+Workbench protocol-step plans remain unsupported in native directory flow output;
+projects containing such plans still require backup or an explicit separate
+supported-definition projection. Frozen execution/backup evidence must not be
+reported as native complex-plan roundtrip support. Existing framing, file-count,
+4 MiB export and runtime permissions/budgets remain unchanged.

@@ -147,6 +147,8 @@ export function prepareProtocolExport(project, { projectId, id }) {
       if (!paths.has(node.target_id)) fail("孤立TCP容器");
       const folder = paths.get(node.target_id),
         parent = node.parent_id;
+      if (folder && !(project.folders || []).includes(folder))
+        fail("当前父目录缺失");
       if (!parent || parent === "0") {
         if (folder) fail("来源根目录已移动");
       } else if (entries.has(parent)) {
@@ -169,13 +171,21 @@ export function prepareProtocolExport(project, { projectId, id }) {
       occupied = new Set(entries.keys()),
       folderIds = new Map();
     for (const [parent, folder] of parents) {
+      if (folderIds.has(folder) && folderIds.get(folder) !== parent)
+        fail("歧义父目录身份");
+      folderIds.set(folder, parent);
+    }
+    for (const [parent, folder] of parents) {
       const parts = folder.split("/");
       let ancestor = "0",
         current = "";
       for (let i = 0; i < parts.length; i++) {
         current = [current, parts[i]].filter(Boolean).join("/");
         const folderId =
-          i === parts.length - 1 ? parent : "export-folder-" + id("f", current);
+          folderIds.get(current) ??
+          (i === parts.length - 1
+            ? parent
+            : "export-folder-" + id("f", current));
         if (occupied.has(folderId)) fail("父目录ID冲突");
         if (folderIds.has(current) && folderIds.get(current) !== folderId)
           fail("歧义父目录身份");
