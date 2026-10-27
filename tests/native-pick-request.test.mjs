@@ -256,3 +256,26 @@ test("request Body supports unique enabled text forms and strict JSON values wit
   });
   assert.equal(result.scopes.environment.picked, '[[["}]]');
 });
+
+test("request snapshot arrays reject holes masked by extra keys and array-prototype impostors", () => {
+  const sparse = new Array(1);
+  sparse.extra = { key: "x", value: "lost" };
+  const extra = [{ key: "x", value: "valid" }];
+  extra.extra = { key: "y", value: "extra" };
+  const impostor = Object.create(Array.prototype);
+  impostor.key = "x";
+  impostor.value = "fake";
+  for (const rows of [sparse, extra, [impostor]]) {
+    assert.throws(
+      () => nativeRequestSnapshotInput({ headers: rows }, ["requestHeader"]),
+      /数组|普通数据/,
+    );
+    assert.throws(
+      () =>
+        nativeRequestSnapshotInput({ bodyType: "urlencoded", form: rows }, [
+          "requestBody",
+        ]),
+      /数组|普通数据/,
+    );
+  }
+});

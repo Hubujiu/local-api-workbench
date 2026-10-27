@@ -27,17 +27,29 @@ export function nativeRequestSnapshotInput(request, sources) {
     )
       return value;
     if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (
-      !value ||
-      typeof value !== "object" ||
-      ![Object.prototype, null, Array.prototype].includes(
-        Object.getPrototypeOf(value),
-      )
-    )
+    if (!value || typeof value !== "object")
       throw Error("请求提取快照必须是普通数据");
     const array = Array.isArray(value),
-      result = array ? [] : Object.create(null);
-    if (array && value.length > 10000) throw Error("请求提取快照数组超限");
+      prototype = Object.getPrototypeOf(value);
+    if (
+      array
+        ? prototype !== Array.prototype
+        : ![Object.prototype, null].includes(prototype)
+    )
+      throw Error("请求提取快照必须是普通数据");
+    const result = array ? [] : Object.create(null);
+    if (array) {
+      if (
+        value.length > 10000 ||
+        Reflect.ownKeys(value).length !== value.length + 1
+      )
+        throw Error("请求提取快照数组无效或超限");
+      for (let index = 0; index < value.length; index++) {
+        const item = Object.getOwnPropertyDescriptor(value, index);
+        if (!item?.enumerable || !Object.hasOwn(item, "value"))
+          throw Error("请求提取快照数组不能稀疏或有访问器");
+      }
+    }
     for (const key of Reflect.ownKeys(value)) {
       if (array && key === "length") continue;
       const item = Object.getOwnPropertyDescriptor(value, key);
