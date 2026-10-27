@@ -52,3 +52,33 @@ export remains `{projectId, format, document}`, import remains
 `{projectId, format, imported}`. No additional frame bytes or model-ID summary is
 introduced, so existing response-frame acceptance thresholds remain meaningful.
 The native adapter's name, graph and conflict limits apply unchanged.
+
+## Optional native inheritance graph import
+
+Only `import_project` accepts optional `inheritanceMode: "flatten" | "preserve"`.
+Omission retains flatten semantics. The option is validated as a plain own data
+field before forwarding to core; accessors are not invoked. Preserve accepts only
+the existing bounded modern native HTTP graph subset into a pristine empty
+project. Existing graph projects cannot append or synchronize. Unsupported
+metadata, ambiguous graphs and nonempty destinations reject before Store.save;
+this is not a generic merge mode. Export automatically preserves a saved graph
+and adds no option, permission, tool or response key. The 4 MiB document and
+8 MiB complete-frame caps remain unchanged.
+
+The SDK test uses HTTP/stdio × JSON/directory, two export/reimport generations,
+read-only/cross-project/invalid graph/nonempty denial with unchanged disk and zero
+wire, default flatten, and separate explicitly authorized owner/MCP live and
+frozen execution. Source IDs legitimately remap; graph layers and references,
+not historical ID strings, are compared. The initial test incorrectly compared
+historical folder IDs; correcting that fixture assertion did not change production.
+This stage depends on PR43's graph implementation; final dependency and own CI
+must be verified independently, not inferred from PR43 or prior PR29 GREEN.
+
+Final prerequisite is PR43 local `4c2ec16`, joined into the prior pure dependency
+base without a PR29 or integration-branch ancestor. Its bound-API override guards
+and native-flow single-freeze path are retained. On that joined tree, eight complete
+related files pass 39 tests, including existing native task export and native MCP
+workflow/API paths; full check/format/diff pass. New four SDK chains also restore
+and execute the frozen plan with independent persisted run histories. This is
+local evidence; this PR's new exact-head CI remains pending until independently
+checked. Stage tests on the earlier PR43 tree do not substitute for that result.

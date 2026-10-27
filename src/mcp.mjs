@@ -1,3 +1,4 @@
+import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
   listImportedExecutionRuns,
   getImportedExecutionRun,
@@ -250,6 +251,7 @@ export function createMCP({
       {
         ...projectArg,
         format: projectFormat,
+        inheritanceMode: { type: "string", enum: ["flatten", "preserve"] },
         modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
         document: {
           type: "object",
@@ -352,6 +354,7 @@ export function createMCP({
           planId: str,
           environmentId: str,
           grpcCredentials: { type: "object" },
+          protocolCredentials: { type: "object" },
           socketioCredentials: { type: "object" },
         },
         ["projectId", "planId"],
@@ -730,7 +733,10 @@ export function createMCP({
                   functions: args.plan.functions || p.settings?.functions || [],
                 },
                 "ai",
-                p,
+                // Native args were just materialized by buildNativeMCPPlan from
+                // this authorized project. Re-freezing its unbound snapshots
+                // would reconnect fresh native steps to live definitions.
+                nativePlanArgs ? undefined : p,
               );
               const index = p.plans.findIndex((r) => r.id === output.id);
               if (index < 0) p.plans.push(output);
@@ -802,18 +808,22 @@ export function createMCP({
                 freezeServiceBinding(p, request),
                 environmentId,
               );
+              const temporaryInput = nativeName
+                ? inputAuth(effectiveRequest, args.input)
+                : args.input;
+              assertNativeInheritanceMCPInput(
+                p,
+                request,
+                effectiveRequest,
+                temporaryInput,
+              );
               const plan = snapshotPlan({
                 name: request.name,
                 ...(nativeName ? { statusPolicy: "strict200" } : {}),
                 functions: p.settings?.functions || [],
                 steps: [
                   {
-                    request: applyMCPInput(
-                      effectiveRequest,
-                      nativeName
-                        ? inputAuth(effectiveRequest, args.input)
-                        : args.input,
-                    ),
+                    request: applyMCPInput(effectiveRequest, temporaryInput),
                   },
                 ],
               });

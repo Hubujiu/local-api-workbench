@@ -1,3 +1,4 @@
+import { normalizeHandshake, resolveHandshake } from "./protocol-handshake.mjs";
 import { legacySocket } from "./socketio-legacy.mjs";
 import { BoundedPolling, BoundedWebSocket } from "./socketio-polling.mjs";
 import { validateHeaderName, validateHeaderValue } from "node:http";
@@ -114,6 +115,7 @@ export function normalizeSocketIODefinition(input) {
           "events",
           "transport",
           "version",
+          "handshake",
         ].includes(k),
     )
   )
@@ -128,7 +130,9 @@ export function normalizeSocketIODefinition(input) {
   const id = input.id || randomUUID();
   if (typeof id !== "string" || !/^[A-Za-z0-9_.-]{1,200}$/.test(id))
     throw Error("Socket.IO定义ID无效");
+  const handshake = normalizeHandshake(input.handshake, "socketio");
   return {
+    ...(handshake === undefined ? {} : { handshake }),
     id,
     name: String(input.name || "Socket.IO").slice(0, 200),
     ...urlDefinition(input),
@@ -163,13 +167,23 @@ function connection(input) {
           "connectTimeoutMs",
           "transport",
           "version",
+          "handshake",
         ].includes(k),
     )
   )
     throw Error("Socket.IO连接字段无效");
   const definition = normalizeSocketIODefinition(
     Object.fromEntries(
-      ["id", "name", "url", "path", "events", "transport", "version"]
+      [
+        "id",
+        "name",
+        "url",
+        "path",
+        "events",
+        "transport",
+        "version",
+        "handshake",
+      ]
         .filter((k) => input[k] !== undefined)
         .map((k) => [k, input[k]]),
     ),
@@ -187,7 +201,10 @@ function connection(input) {
   if (definition.version === 2 && Object.keys(auth).length)
     throw Error("Socket.IO v2不支持v4 auth，请显式使用query或headers认证");
   const query = input.query ?? {},
-    headers = input.headers ?? {};
+    headers = resolveHandshake(
+      { type: "socketio", handshake: definition.handshake },
+      input.headers,
+    );
   for (const [obj, label] of [
     [query, "query"],
     [headers, "headers"],

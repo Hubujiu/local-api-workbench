@@ -1,3 +1,6 @@
+import { verifyNativeInheritanceExport } from "./native-inheritance-export.mjs";
+import { verifySampleDefinitions } from "./apipost-sample-export.mjs";
+import { verifyProtocolDefinitions } from "./apipost-protocol-export.mjs";
 import { verifyApipostDocumentDefinitions } from "./apipost-document-export.mjs";
 import { exportApipost, apipostExportId } from "./apipost-export.mjs";
 import { importIntoProject, snapshotPlan } from "./core.mjs";
@@ -7,6 +10,8 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
+  if (project.settings?.nativeInheritance && plans.length)
+    throw Error("原生继承图出口首片不支持冻结计划；请使用完整项目备份");
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
@@ -18,6 +23,19 @@ export function exportApipostDirectory(project, options = {}) {
     project.updatedAt || project.createdAt || new Date().toISOString();
   if (!Number.isFinite(Date.parse(timestamp))) throw Error("原生目录时间无效");
   const folders = new Map();
+  const nativeIds = new Map(
+    document.apis.map((node) => [
+      node.target_id,
+      scoped(
+        node.target_type === "folder"
+          ? "f"
+          : node.target_type === "doc"
+            ? "d"
+            : "a",
+        node.target_id,
+      ),
+    ]),
+  );
   const mapNode = (node) => {
     const copy = structuredClone(node);
     copy.target_id = scoped(
@@ -28,7 +46,9 @@ export function exportApipostDirectory(project, options = {}) {
           : "a",
       node.target_id,
     );
-    copy.parent_id = node.parent_id === "0" ? "0" : scoped("f", node.parent_id);
+    copy.parent_id =
+      node.parent_id === "0" ? "0" : nativeIds.get(node.parent_id);
+    if (copy.parent_id === undefined) throw Error("原生目录父资源不存在");
     if (node.mark_id) copy.mark_id = scoped("m", node.mark_id);
     for (const phase of ["pre_tasks", "post_tasks"])
       for (const [i, task] of (copy.request?.[phase] || []).entries())
@@ -117,7 +137,7 @@ export function exportApipostDirectory(project, options = {}) {
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
       const frozen = exportApipost(
-        { ...base, requests: [snapshotRequest] },
+        { ...base, requests: [snapshotRequest], cases: [], caseFolders: [] },
         options,
       );
       for (const folder of frozen.apis.filter(
@@ -247,7 +267,53 @@ export function exportApipostDirectory(project, options = {}) {
       }));
     put("settings/" + file + ".json", value);
   }
-  put("samples/index.json", { project_id: projectId, items: [] });
+  const sampleIds = new Map(
+    document.samples.map((sample) => [
+      sample.sample_id,
+      scoped("sample", sample.sample_id),
+    ]),
+  );
+  const samples = document.samples.map((sample) => ({
+    ...sample,
+    sample_id: sampleIds.get(sample.sample_id),
+    target_id: nativeIds.get(sample.target_id),
+    parent_id: sample.parent_id === "0" ? "0" : sampleIds.get(sample.parent_id),
+  }));
+  const sampleMetadata = ({
+    sample_id,
+    project_id,
+    parent_id,
+    target_id,
+    name,
+    type,
+    method,
+    url,
+    sort,
+  }) => ({
+    sample_id,
+    project_id,
+    parent_id,
+    target_id,
+    name,
+    type,
+    method,
+    url,
+    sort,
+  });
+  put("samples/index.json", {
+    project_id: projectId,
+    items: samples.map(sampleMetadata),
+  });
+  for (const sample of samples) {
+    if (!sample.target_id || sample.parent_id === undefined)
+      throw Error("原生目录样例身份映射缺失");
+    put("samples/" + sample.sample_id + ".json", {
+      ...sampleMetadata(sample),
+      created_at: timestamp,
+      updated_at: timestamp,
+      data: sample,
+    });
+  }
   put("schemas/index.json", {
     project_id: projectId,
     items: document.models.map(({ schema, ...metadata }) => metadata),
@@ -292,7 +358,22 @@ export function exportApipostDirectory(project, options = {}) {
     documents: [],
     dictionary: [],
   };
-  importIntoProject(check, result, options);
+  importIntoProject(check, result, {
+    ...options,
+    ...(project.settings?.nativeInheritance
+      ? { inheritanceMode: "preserve" }
+      : {}),
+  });
+  verifyNativeInheritanceExport(
+    project,
+    result,
+    (id) => nativeIds.get(apipostExportId("a", id)),
+    options,
+  );
+  verifyProtocolDefinitions(project.protocols, check.protocols);
+  verifySampleDefinitions(project, check, (id) =>
+    nativeIds.get(apipostExportId("a", id)),
+  );
   const withStatus = (p) =>
     (p.documents || []).map((d) => ({
       ...d,

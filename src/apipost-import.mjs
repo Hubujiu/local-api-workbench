@@ -1,3 +1,4 @@
+import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { importApipostDocument } from "./apipost-documents.mjs";
 import { randomUUID } from "node:crypto";
@@ -28,7 +29,7 @@ function schema(value, depth = 0) {
     ]),
   );
 }
-function rows(value = []) {
+export function importApipostRows(value = []) {
   if (!Array.isArray(value) || value.length > 5000)
     throw Error("Apipost参数须为至多5000项的数组");
   return value.map((row) => {
@@ -66,7 +67,7 @@ function rows(value = []) {
     };
   });
 }
-function auth(value = { type: "noauth" }) {
+export function importApipostAuth(value = { type: "noauth" }) {
   if (!value || value.type === "noauth" || value.type === "none")
     return { type: "none" };
   if (value.type === "jwt") return importJwtConfig(value.jwt);
@@ -81,10 +82,14 @@ function auth(value = { type: "noauth" }) {
       type: "bearer",
       token: String(value.bearer?.key ?? value.bearer?.token ?? ""),
     };
+  const extended = importExtendedApipostAuth(value);
+  if (extended) return extended;
   throw Error(
     "Apipost认证格式尚未支持，请先转换为OpenAPI/Postman: " + value.type,
   );
 }
+const rows = importApipostRows;
+const auth = importApipostAuth;
 function inheritedParameters(request) {
   return (
     request &&
@@ -329,6 +334,10 @@ export function importApipost(
       body: raw,
       form,
       auth: auth(request.auth),
+      // Explicit native noauth/none is an opt-out, never target-project inheritance.
+      ...(["noauth", "none"].includes(request.auth?.type)
+        ? { inheritAuth: false }
+        : {}),
       schema: schema(body.raw_schema || {}),
       examples,
       responses,

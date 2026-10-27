@@ -1,3 +1,4 @@
+import { inheritanceMode as resolveInheritanceMode } from "./native-inheritance.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { importIntoProject } from "./core.mjs";
 import { apipostDocument } from "./apipost-import.mjs";
@@ -147,6 +148,7 @@ export async function importMCPProject(store, project, args, requestId) {
   validateMCPProjectArguments(args);
   format(args.format);
   resolveModelNameMode(args.modelNameMode);
+  resolveInheritanceMode(args.inheritanceMode);
   boundedDocument(args.document);
   const directory = isApipostDirectoryDocument(args.document);
   if (
@@ -159,6 +161,7 @@ export async function importMCPProject(store, project, args, requestId) {
   const draft = structuredClone(project);
   importIntoProject(draft, structuredClone(args.document), {
     sync: false,
+    inheritanceMode: args.inheritanceMode,
     modelNameMode: args.modelNameMode,
   });
   const imported = {};
