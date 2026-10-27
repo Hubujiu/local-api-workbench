@@ -73,10 +73,43 @@ async function fixture(t) {
       });
       let stdout = "",
         stderr = "";
-      child.stdout.on("data", (x) => (stdout += x));
-      child.stderr.on("data", (x) => (stderr += x));
-      child.on("error", reject);
-      child.on("close", (code) => resolve({ code, stdout, stderr }));
+      let failure,
+        outBytes = 0,
+        errBytes = 0;
+      const stop = (message) => {
+        if (failure) return;
+        failure = Error(message);
+        child.kill();
+      };
+      const timer = setTimeout(
+        () => stop("CLI fixture exceeded 15 seconds"),
+        15000,
+      );
+      const abort = () => stop("CLI fixture test aborted");
+      t.signal.addEventListener("abort", abort, { once: true });
+      const cleanup = () => {
+        clearTimeout(timer);
+        t.signal.removeEventListener("abort", abort);
+      };
+      child.stdout.on("data", (x) => {
+        outBytes += x.length;
+        if (outBytes > 2 * 1024 * 1024)
+          return stop("CLI fixture stdout exceeded 2 MiB");
+        if (!failure) stdout += x;
+      });
+      child.stderr.on("data", (x) => {
+        errBytes += x.length;
+        if (errBytes > 16384) return stop("CLI fixture stderr exceeded 16 KiB");
+        if (!failure) stderr += x;
+      });
+      child.on("error", (error) => {
+        cleanup();
+        reject(error);
+      });
+      child.on("close", (code) => {
+        cleanup();
+        failure ? reject(failure) : resolve({ code, stdout, stderr });
+      });
     });
   return {
     root,
@@ -97,104 +130,112 @@ async function fixture(t) {
   };
 }
 for (const entry of ["owner", "cli"])
-  test(`${entry} plan evidence records actual environment without rewriting frozen default across persistence and restart`, async (t) => {
-    const f = await fixture(t);
-    for (const [defaultEnv, override, status] of [
-      ["A", "B", "ok"],
-      ["A", undefined, "fail"],
-      ["", undefined, "ok"],
-    ]) {
+  test(
+    `${entry} plan evidence records actual environment without rewriting frozen default across persistence and restart`,
+    { timeout: 30000 },
+    async (t) => {
+      const f = await fixture(t);
+      for (const [defaultEnv, override, status] of [
+        ["A", "B", "ok"],
+        ["A", undefined, "fail"],
+        ["", undefined, "ok"],
+      ]) {
+        const plan = await f.post(`/api/projects/${f.p.id}/plans`, {
+          environmentId: defaultEnv,
+          statusPolicy: "strict200",
+          steps: [{ request: f.request(status) }],
+        });
+        const expected = override || defaultEnv || "B";
+        const execute = async (projectId) => {
+          if (entry === "owner")
+            return f.post(`/api/projects/${projectId}/run`, {
+              planId: plan.id,
+              ...(override === undefined ? {} : { environmentId: override }),
+            });
+          const r = await f.cli(projectId, plan.id, override);
+          assert.equal(r.code, status === "fail" ? 1 : 0, r.stderr);
+          return JSON.parse(r.stdout);
+        };
+        let count = f.seen.length;
+        const result = await execute(f.p.id);
+        assert.equal(f.seen.length, count + 1);
+        assert.equal(f.seen.at(-1), "Env " + expected);
+        assert.equal(result.environmentId, expected);
+        assert.equal(result.snapshot.environmentId, defaultEnv);
+        assert.equal(result.status, status === "fail" ? "failed" : "passed");
+        assert.equal(result.recordSaved, true);
+        const disk = await new Store(f.root).get(f.p.id);
+        assert.equal(
+          disk.runs.find((r) => r.id === result.id).environmentId,
+          expected,
+        );
+        assert.equal(
+          disk.plans.find((p) => p.id === plan.id).environmentId,
+          defaultEnv,
+        );
+        const restored = await f.post("/api/restore", { document: disk }, 201);
+        assert.equal(
+          restored.runs.find((r) => r.id === result.id).environmentId,
+          expected,
+        );
+        await f.restart();
+        count = f.seen.length;
+        const again = await execute(restored.id);
+        assert.equal(f.seen.length, count + 1);
+        assert.equal(again.environmentId, expected);
+        assert.equal(again.snapshot.environmentId, defaultEnv);
+      }
       const plan = await f.post(`/api/projects/${f.p.id}/plans`, {
-        environmentId: defaultEnv,
-        statusPolicy: "strict200",
-        steps: [{ request: f.request(status) }],
+        environmentId: "A",
+        steps: [{ request: f.request() }],
       });
-      const expected = override || defaultEnv || "B";
-      const execute = async (projectId) => {
-        if (entry === "owner")
-          return f.post(`/api/projects/${projectId}/run`, {
-            planId: plan.id,
-            ...(override === undefined ? {} : { environmentId: override }),
-          });
-        const r = await f.cli(projectId, plan.id, override);
-        assert.equal(r.code, status === "fail" ? 1 : 0, r.stderr);
-        return JSON.parse(r.stdout);
-      };
-      let count = f.seen.length;
-      const result = await execute(f.p.id);
-      assert.equal(f.seen.length, count + 1);
-      assert.equal(f.seen.at(-1), "Env " + expected);
-      assert.equal(result.environmentId, expected);
-      assert.equal(result.snapshot.environmentId, defaultEnv);
-      assert.equal(result.status, status === "fail" ? "failed" : "passed");
-      assert.equal(result.recordSaved, true);
-      const disk = await new Store(f.root).get(f.p.id);
-      assert.equal(
-        disk.runs.find((r) => r.id === result.id).environmentId,
-        expected,
-      );
-      assert.equal(
-        disk.plans.find((p) => p.id === plan.id).environmentId,
-        defaultEnv,
-      );
-      const restored = await f.post("/api/restore", { document: disk }, 201);
-      assert.equal(
-        restored.runs.find((r) => r.id === result.id).environmentId,
-        expected,
-      );
-      await f.restart();
-      count = f.seen.length;
-      const again = await execute(restored.id);
-      assert.equal(f.seen.length, count + 1);
-      assert.equal(again.environmentId, expected);
-      assert.equal(again.snapshot.environmentId, defaultEnv);
-    }
+      const count = f.seen.length;
+      if (entry === "owner")
+        await f.post(
+          `/api/projects/${f.p.id}/run`,
+          { planId: plan.id, environmentId: "absent" },
+          400,
+        );
+      else {
+        const r = await f.cli(f.p.id, plan.id, "absent");
+        assert.equal(r.code, 2);
+        assert.match(r.stderr, /环境不存在/);
+      }
+      assert.equal(f.seen.length, count);
+      assert.deepEqual(await f.store.get(f.other.id), f.untouched);
+    },
+  );
+test(
+  "MCP retains existing actual environment identity and old records remain unguessed",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t);
     const plan = await f.post(`/api/projects/${f.p.id}/plans`, {
       environmentId: "A",
       steps: [{ request: f.request() }],
     });
-    const count = f.seen.length;
-    if (entry === "owner")
-      await f.post(
-        `/api/projects/${f.p.id}/run`,
-        { planId: plan.id, environmentId: "absent" },
-        400,
-      );
-    else {
-      const r = await f.cli(f.p.id, plan.id, "absent");
-      assert.equal(r.code, 2);
-      assert.match(r.stderr, /环境不存在/);
-    }
-    assert.equal(f.seen.length, count);
-    assert.deepEqual(await f.store.get(f.other.id), f.untouched);
-  });
-test("MCP retains existing actual environment identity and old records remain unguessed", async (t) => {
-  const f = await fixture(t);
-  const plan = await f.post(`/api/projects/${f.p.id}/plans`, {
-    environmentId: "A",
-    steps: [{ request: f.request() }],
-  });
-  const mcp = createMCP({
-    store: f.store,
-    projects: [f.p.id],
-    write: true,
-    execute: true,
-  });
-  const r = await mcp({
-    id: 1,
-    method: "tools/call",
-    params: {
-      name: "localapi_execute_flow",
-      arguments: { projectId: f.p.id, planId: plan.id, environmentId: "B" },
-    },
-  });
-  assert.notEqual(r.result.isError, true, JSON.stringify(r));
-  const result = JSON.parse(r.result.content[0].text);
-  assert.equal(result.environmentId, "B");
-  assert.equal(result.snapshot.environmentId, "A");
-  assert.equal(f.seen.at(-1), "Env B");
-  const disk = await new Store(f.root).get(f.p.id);
-  delete disk.runs[0].environmentId;
-  const restored = await f.post("/api/restore", { document: disk }, 201);
-  assert.equal(Object.hasOwn(restored.runs[0], "environmentId"), false);
-});
+    const mcp = createMCP({
+      store: f.store,
+      projects: [f.p.id],
+      write: true,
+      execute: true,
+    });
+    const r = await mcp({
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "localapi_execute_flow",
+        arguments: { projectId: f.p.id, planId: plan.id, environmentId: "B" },
+      },
+    });
+    assert.notEqual(r.result.isError, true, JSON.stringify(r));
+    const result = JSON.parse(r.result.content[0].text);
+    assert.equal(result.environmentId, "B");
+    assert.equal(result.snapshot.environmentId, "A");
+    assert.equal(f.seen.at(-1), "Env B");
+    const disk = await new Store(f.root).get(f.p.id);
+    delete disk.runs[0].environmentId;
+    const restored = await f.post("/api/restore", { document: disk }, 201);
+    assert.equal(Object.hasOwn(restored.runs[0], "environmentId"), false);
+  },
+);
