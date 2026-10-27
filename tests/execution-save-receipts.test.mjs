@@ -344,6 +344,46 @@ test("real pre-journal malformed-history read failure preserves the response wit
   assert.equal(f.hits(), 1);
 });
 
+test("plan environment evidence survives generic record failure without false persistence or replay", async (t) => {
+  const f = await fixture(t);
+  f.project.environments.push({
+    id: "override",
+    name: "Override",
+    variables: {},
+  });
+  await f.app.store.save(f.project);
+  const plan = await f.post(`/api/projects/${f.project.id}/plans`, {
+    environmentId: f.project.environments[0].id,
+    steps: [{ request: f.request }],
+  });
+  const directory = f.app.store.directory(f.project.id);
+  const history = path.join(directory, "history", "requests.json");
+  const before = await readFile(history, "utf8");
+  f.beforeRespond(() => writeFile(history, '{"owned-malformed":'));
+  const { status, value } = await f.post(`/api/projects/${f.project.id}/run`, {
+    planId: plan.value.id,
+    environmentId: "override",
+  });
+  assert.equal(status, 200);
+  assert.equal(value.environmentId, "override");
+  assert.equal(value.snapshot.environmentId, f.project.environments[0].id);
+  assert.equal(value.status, "passed");
+  assert.equal(value.recordSaved, false);
+  assert.equal(value.recordId, null);
+  assert.deepEqual(value.persistenceOutcome, {
+    code: "RECORD_SAVE_FAILED",
+    retry_safe: false,
+  });
+  assert.equal(f.hits(), 1);
+  await assert.rejects(readFile(path.join(directory, ".transaction.json")), {
+    code: "ENOENT",
+  });
+  await writeFile(history, before);
+  const repaired = await new Store(f.root).get(f.project.id);
+  assert.equal(repaired.runs.length, 0);
+  assert.equal(f.hits(), 1);
+});
+
 test("HTTP plan retains completed execution and a typed recoverable record receipt", async (t) => {
   const f = await fixture(t);
   const plan = await f.post(`/api/projects/${f.project.id}/plans`, {

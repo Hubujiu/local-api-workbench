@@ -50,3 +50,28 @@ script evidence retain their existing semantics and may contain user data. It
 only prevents storage-error metadata from leaking filesystem or credential data.
 No new persistence is added to load tests or database operations, and no script,
 authentication, protocol, execution or security budget is changed.
+
+
+## Actual plan execution environment
+
+Owner HTTP and CLI plan runs now resolve `selectedEnvironment(...).id` once before
+execution and reuse that concrete ID for variable scopes, cookies, service URLs
+and the returned/saved `run.environmentId`. This matches the existing MCP flow
+entrypoint. Selection priority is unchanged: explicit execution override, plan
+default, then the existing current/first environment fallback. Invalid IDs remain
+errors before network execution. No environment identity is guessed from values.
+
+`run.snapshot.environmentId` remains the frozen plan default; an execution override
+must not rewrite the saved plan or its hash. Two environments with identical
+variables still produce distinguishable execution-environment evidence. Older
+records with no environment field remain readable and are not backfilled.
+
+The regression was reproduced before correction through real localhost owner and
+CLI execution: the peer observed the overridden environment's script header, but
+both returned records omitted environmentId. The existing MCP execute_flow
+control passed. New actual HTTP workflows cover default, override, current fallback,
+success and failed response, persisted record readback, backup/restore/restart,
+invalid-environment no-I/O and another project. Existing real journal-obstacle and
+new pre-journal malformed-owned-file tests verify the environment survives unknown
+or generic record-save failure, while recordSaved stays false and no request is
+replayed. Ordinary tests do not change external transaction semantics.
