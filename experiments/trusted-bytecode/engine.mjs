@@ -29,6 +29,7 @@ export async function instantiateVerifiedEngine(wasm, glue) {
       return module;
     },
   });
+  const extensions = module.quickjsEmscriptenInit();
   const bind = (name, argc) =>
     module.cwrap(name, "number", Array(argc).fill("number"));
   return {
@@ -39,6 +40,6 @@ export async function instantiateVerifiedEngine(wasm, glue) {
     write: bind("QTS_TrustedBytecodeWrite", 3),
     readEval: bind("QTS_TrustedBytecodeReadEval", 3),
     mallocSize: bind("QTS_TrustedMallocSize", 1),
-    memory: module.quickJSEmscriptenExtensions.getWasmMemory(),
+    memory: extensions.getWasmMemory(),
   };
 }

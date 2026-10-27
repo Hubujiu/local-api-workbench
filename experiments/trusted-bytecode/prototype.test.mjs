@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Worker } from "node:worker_threads";
+import { performance } from "node:perf_hooks";
 import { createExperimentSession } from "./runtime.mjs";
 import { ActivityBudget } from "./budget.mjs";
 import { LIMITS, FLAGS, fixedSource } from "./catalog.mjs";
@@ -90,15 +91,50 @@ test("ordinary identity, ABI, source, filename, flags and truncated bytes fail b
   const glue = readFileSync(new URL("engine.mjs", assets));
   const loader = readFileSync(new URL("./engine.mjs", import.meta.url));
   verifyEngine(engine, wasm, glue, loader);
-  for (const changed of [
-    { ...engine, abi: "other" },
-    { ...engine, wasmSha256: "other" },
-    { ...engine, glueSha256: "other" },
+  const productionWasm = Buffer.from(
+    readFileSync(
+      new URL(
+        "../../src/vendor/quickjs-tracked/emscripten-module.wasm.b64",
+        import.meta.url,
+      ),
+      "utf8",
+    ).trim(),
+    "base64",
+  );
+  assert.throws(
+    () => verifyEngine(engine, productionWasm, glue, loader),
+    /identity mismatch/,
+  );
+  for (const field of [
+    "abi",
+    "sourceCommit",
+    "emscripten",
+    "emsdkCommit",
+    "wasmSha256",
+    "glueSha256",
+    "loaderSha256",
+    "bridgeSha256",
+    "interfaceBaseSha256",
+    "patchedQuickJSSourceSha256",
+    "patchedMakefileSha256",
+    "baselinePatchSha256",
+    "heapPatchSha256",
+    "builderSha256",
+    "inputVerifierSha256",
+    "buildRecipeSha256",
+    "sourceInputsSha256",
+    "sdkDistributionSha256",
   ])
     assert.throws(
-      () => verifyEngine(changed, wasm, glue, loader),
+      () => verifyEngine({ ...engine, [field]: "other" }, wasm, glue, loader),
       /identity mismatch/,
     );
+  for (const [w, g, l] of [
+    [wasm.subarray(0, -1), glue, loader],
+    [wasm, glue.subarray(0, -1), loader],
+    [wasm, glue, loader.subarray(0, -1)],
+  ])
+    assert.throws(() => verifyEngine(engine, w, g, l), /identity mismatch/);
 });
 
 test("hash/copy/read/eval wall time is cumulative and late success cannot pass", () => {
@@ -147,6 +183,8 @@ test("fresh instances, memories, runtimes and contexts never share guest globals
     assert.notEqual(a.raw.memory, b.raw.memory);
     assert.notEqual(a.runtime, b.runtime);
     assert.notEqual(a.context, b.context);
+    assert.equal(Object.hasOwn(a.budget.metrics, "verify-bundle"), false);
+    assert.equal(Object.hasOwn(b.budget.metrics, "verify-bundle"), false);
     a.load("fixture");
     a.load("fixture");
     assert.equal(evaluate(a, "__trustedFixture"), 2);
@@ -159,7 +197,21 @@ test("fresh instances, memories, runtimes and contexts never share guest globals
         ).join(","),
         "undefined,undefined,undefined,undefined",
       );
-    assert.throws(() => a.load("../schema"), /Unknown/);
+    const original = a.raw.readEval;
+    let cCalls = 0;
+    a.raw.readEval = (...args) => {
+      cCalls++;
+      return original(...args);
+    };
+    for (const [id, mode] of [
+      ["../schema"],
+      [Buffer.from("fixture")],
+      ["schema", "module"],
+      ["schema", { flags: 3 }],
+    ])
+      assert.throws(() => a.load(id, mode), /Unknown/);
+    assert.equal(cCalls, 0);
+    a.raw.readEval = original;
   } finally {
     a.dispose();
     b.dispose();
@@ -211,6 +263,31 @@ test("borrowed compile handle and writer buffer are released exactly once", asyn
     }
     assert.equal(raw.mallocSize(runtime.rt.value), before);
     assert.equal(evaluate(session, "typeof __trustedFixture"), "undefined");
+  } finally {
+    session.dispose();
+  }
+});
+
+test("writer refuses ordinary non-bytecode handles without consuming them", async () => {
+  const session = await createExperimentSession();
+  const { raw, context, runtime } = session;
+  try {
+    const before = raw.mallocSize(runtime.rt.value);
+    const value = context.newNumber(7);
+    let size = 0;
+    try {
+      size = raw.alloc(context.ctx.value, 4);
+      assert(size);
+      assert.equal(raw.write(context.ctx.value, value.value, size), 0);
+      assert.equal(new DataView(raw.memory.buffer).getUint32(size, true), 0);
+      assert.equal(context.getNumber(value), 7);
+    } finally {
+      if (size) raw.free(context.ctx.value, size);
+      value.dispose();
+    }
+    assert.equal(raw.mallocSize(runtime.rt.value), before);
+    session.load("fixture");
+    assert.equal(evaluate(session, "__trustedFixture"), 1);
   } finally {
     session.dispose();
   }
@@ -287,6 +364,7 @@ test("same fixed script-libraries bytecode and text retain ordinary library sema
   for (const mode of ["source", "bytecode"]) {
     const session = await createExperimentSession();
     try {
+      session.load("library-prelude", mode);
       session.load("libraries", mode);
       outputs.push(
         evaluate(
@@ -304,27 +382,43 @@ test("same fixed script-libraries bytecode and text retain ordinary library sema
 // WorkerData carries only fixed enum selections; never source, bytes or paths.
 const workerRun = (operation, cancel = false) =>
   new Promise((resolve, reject) => {
+    const started = performance.now();
+    let settled = false;
     const worker = new Worker(new URL("./worker.mjs", import.meta.url), {
       workerData: { operation },
     });
     const timer = setTimeout(() => {
+      settled = true;
       worker.terminate();
       reject(Error("2s worker wall deadline"));
     }, LIMITS.wallMs);
     worker.once("error", (error) => {
+      settled = true;
       clearTimeout(timer);
       reject(error);
     });
+    worker.once("exit", (code) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(Error("Worker exited without result: " + code));
+      }
+    });
     worker.on("message", async (message) => {
+      if (settled) return;
       if (cancel && message.kind === "ready") {
+        settled = true;
         clearTimeout(timer);
         await worker.terminate();
         resolve({ canceled: true });
       }
       if (message.kind === "result") {
+        settled = true;
         clearTimeout(timer);
+        const late = performance.now() - started >= LIMITS.wallMs;
         await worker.terminate();
-        resolve(message);
+        if (late) reject(Error("2s worker wall deadline"));
+        else resolve(message);
       }
     });
   });
@@ -337,7 +431,7 @@ test("interruptible ordinary loop fails within unchanged active/worker budgets",
 });
 
 test("cancellation terminates its isolated worker and does not contaminate a fresh run", async () => {
-  assert.deepEqual(await workerRun("wait", true), { canceled: true });
+  assert.deepEqual(await workerRun("loop", true), { canceled: true });
   const result = await workerRun("fixture");
   assert.equal(result.ok, true);
 });

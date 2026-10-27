@@ -1,0 +1,122 @@
+{
+  "abi": "localapi-private-trusted-bytecode-v1",
+  "engine": {
+    "abi": "localapi-private-trusted-bytecode-v1",
+    "sourceCommit": "235f6da2fd4f7354fa4765fde4aea880d2a4aef5",
+    "sourceInputsSha256": "cb7428f2b10c9e410ffda129a8f82d1fe853a2f422fcc9b40afd7f2159f161ec",
+    "bridgeSha256": "a31885c588e12bdfe35a59076e5a1baf3f8d1aef2c11e1e88b65e96086c1eb0b",
+    "interfaceBaseSha256": "f8ac718fbcd925c9c51d03a3fcbd9557bc9b0b7fd38cc16170996283e25ec454",
+    "patchedSourceSha256": "f375bfcd2037d55a63a444af6389e1cc4a1ec00b4f67bb6b4627d5802c6f1e01",
+    "patchedQuickJSSourceSha256": "ea37ef190747d83b42b307fb9c331e164f0c83c82f36c1338bc3933b694f2c58",
+    "patchedMakefileSha256": "346fe9caebe1bd37d8f331975aa7099eefaae30939ad90a0c1ea3afbdc3074c9",
+    "baselinePatchSha256": "b820ef29facac7ccc60dbc6abe967b0528bce04a79d2f51d0665e1eaba3ae03c",
+    "heapPatchSha256": "a1532273a27327553f5188339e4006851c463dfbf339d6bed110210e8aecd849",
+    "emscripten": "3.1.65",
+    "emsdkCommit": "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d",
+    "sdkRelease": "fdcf56c75a1d27fdff6525a7e03423595485ca19",
+    "sdkTrackedSha256": "6fd98e5ef42e2d4f196769b3a77b5ce83b637a8e66d0049b7c9afbee7d5c6e96",
+    "sdkDistributionSha256": "1d4987c1af39b5fa46dd17d1044ceb7f763ba65614248d1795cd6c4856d92cc5",
+    "sdkNodeSha256": "563a678816281a08dc7da9fd3ece4e1fc5fcc01f68ffe404f6cdd1f715821b8f",
+    "sdkConfigSha256": "3d24a679242c3093c2b016d398a35e9187c3a99a8a809c1fdf341305d6fdbe64",
+    "builderSha256": "dd0d0ffacf20c975cb5ec4d8a6d82b90b7e45d56bbda03669d6419850b8a7e9c",
+    "inputVerifierSha256": "a990d9de55b1f8befcc90c2e5de30015b7ad7d04b31754b39db79f228d55c0f9",
+    "buildRecipeSha256": "da6a898dd85decc2f66e593a15377e19c3b9868e473e094c00740f60bc96fbc1",
+    "executionRecipeSha256": "cad7166f9cf49215cb2830cec9682281017eec8acd6db8ab8edf8980c9e9e646",
+    "loaderSha256": "4eb400da896445365ca485306264c94f1429b5e6f7adc97fdaa438302a04d0ac",
+    "wasmSha256": "12ccc975fbc668837b17f77ae0606e125eedade6733df3704d625dda7eaa58f6",
+    "glueSha256": "59c0544e03c487e3f290c22b168edefb5e48afcdcb9ca453523aa3ecfacf5f57"
+  },
+  "bundles": {
+    "schema": {
+      "id": "schema",
+      "sourceSha256": "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
+      "wrapperSha256": "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
+      "filename": "localapi:trusted/schema.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 274651,
+      "bytecodeSha256": "a5d95af0a11f7e83527a93fc72b63e1735139ff6bccb3a4750f55d86f8fdd1fb"
+    },
+    "library-prelude": {
+      "id": "library-prelude",
+      "sourceSha256": "6bd3749ec4d0bf37d1b4aa3092035d7630f643219793f5720e6fa41a3a232eda",
+      "wrapperSha256": "6bd3749ec4d0bf37d1b4aa3092035d7630f643219793f5720e6fa41a3a232eda",
+      "filename": "localapi:trusted/library-prelude.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 1194,
+      "bytecodeSha256": "bfcadcd897ca7aa67bc1c3739da95b42fff666f8930bf315abc14423801bd2ba"
+    },
+    "libraries": {
+      "id": "libraries",
+      "sourceSha256": "05d269abaff3374cd7f15b6ec0f08520286134cf513bf37a9f06232c57747888",
+      "wrapperSha256": "05d269abaff3374cd7f15b6ec0f08520286134cf513bf37a9f06232c57747888",
+      "filename": "localapi:trusted/libraries.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 544450,
+      "bytecodeSha256": "091a27723a3e43caba50b17252da8d8c13b8265609595168dc29ccd6c3c7e926"
+    },
+    "fixture": {
+      "id": "fixture",
+      "sourceSha256": "364f013035afd871d762d23730876138064dd7cd349b6e6188f17f1dce5d0312",
+      "wrapperSha256": "364f013035afd871d762d23730876138064dd7cd349b6e6188f17f1dce5d0312",
+      "filename": "localapi:trusted/fixture.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 140,
+      "bytecodeSha256": "08feaa507cf10383c4e13c1162591c6933ff6678389c5c7c5327e95186808ea3"
+    },
+    "throwing": {
+      "id": "throwing",
+      "sourceSha256": "7ad1ea453d0e9b71d55a12190634b005f9543fd39438165b18ab4b8abd92f65e",
+      "wrapperSha256": "7ad1ea453d0e9b71d55a12190634b005f9543fd39438165b18ab4b8abd92f65e",
+      "filename": "localapi:trusted/throwing.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 99,
+      "bytecodeSha256": "52a992537c3d8831da3314bd26732bd57e703399dba0535a4a7ca2dfa951d2ff"
+    },
+    "allocating": {
+      "id": "allocating",
+      "sourceSha256": "bcdb80f85be391231a9c03433f4ed973ec95fe9267bc7ae1903b548f9d402485",
+      "wrapperSha256": "bcdb80f85be391231a9c03433f4ed973ec95fe9267bc7ae1903b548f9d402485",
+      "filename": "localapi:trusted/allocating.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 125,
+      "bytecodeSha256": "fd386e6792f399b4d5e3382de680271cf252bcc2a4feb1aaa15f61ef684502c5"
+    },
+    "looping": {
+      "id": "looping",
+      "sourceSha256": "dd6fd499a6e4b561d738acf6fafb5ad37174a49ffaa95aeac17486fcb9271293",
+      "wrapperSha256": "dd6fd499a6e4b561d738acf6fafb5ad37174a49ffaa95aeac17486fcb9271293",
+      "filename": "localapi:trusted/looping.js",
+      "flags": {
+        "compile": 32,
+        "write": 1,
+        "read": 1
+      },
+      "byteLength": 57,
+      "bytecodeSha256": "aa6a70068d4386a8ca5322add5b2c9b0048363c8125059ce04b93a492d7ce97f"
+    }
+  }
+}

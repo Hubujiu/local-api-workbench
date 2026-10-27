@@ -14,3 +14,9 @@
 /src/vendor/native-mock-library.js -text
 /src/vendor/native-mock-library.json -text
 /src/vendor/APIPOST-MOCK-LICENSE.txt -text
+
+# Trusted bytecode identity compares the reviewed bytes on every OS.
+/experiments/trusted-bytecode/** -text
+/src/vendor/schema-library.js -text
+/src/vendor/script-libraries.js -text
+/src/vendor/quickjs-tracked/*.patch -text

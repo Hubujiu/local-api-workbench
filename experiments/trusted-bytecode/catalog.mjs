@@ -21,6 +21,11 @@ const entries = Object.freeze({
     sourceSha256:
       "64274e65d90ffe31110dfad16a771b4f20dcca269f36b56022dec243ce481d5f",
   },
+  "library-prelude": {
+    path: "./library-prelude.js",
+    sourceSha256:
+      "6bd3749ec4d0bf37d1b4aa3092035d7630f643219793f5720e6fa41a3a232eda",
+  },
   libraries: {
     path: "../../src/vendor/script-libraries.js",
     sourceSha256:
