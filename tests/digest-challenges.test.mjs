@@ -2,7 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { executeRequest } from "../src/runtime.mjs";
+import { executeRequest, Store } from "../src/runtime.mjs";
+import { digestAuthorization } from "../src/digest.mjs";
+import { createApp } from "../src/server.mjs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const credentials = {
   type: "digest",
@@ -76,7 +85,7 @@ function verify(header, req, body, expected) {
     (!qop || fields.nc === "00000001")
   );
 }
-export async function challengeOrigin(t, challenges, expected) {
+async function challengeOrigin(t, challenges, expected) {
   const requests = [],
     failures = [];
   const server = http.createServer(async (req, res) => {
@@ -121,7 +130,7 @@ const selected = {
   algorithm: "SHA-256",
   qop: "auth-int",
 };
-export const requestFor = (url) => ({
+const requestFor = (url) => ({
   url,
   method: "POST",
   auth: credentials,
@@ -202,6 +211,31 @@ for (const [name, challenges, expected] of [
       opaque: 'opaque, "a"\\b',
     },
   ],
+  [
+    "empty realm and opaque are retained",
+    [offer({ realm: "", opaque: "" })],
+    { ...selected, realm: "", opaque: "" },
+  ],
+  [
+    "escaped backslash before quoted comma",
+    [offer({ realm: "back\\,comma" })],
+    { ...selected, realm: "back\\,comma" },
+  ],
+  [
+    "BWS and token-valued parameters",
+    'Digest realm \t= fixture, nonce=fixture-nonce, algorithm="SHA-256", qop=auth-int',
+    selected,
+  ],
+  [
+    "legacy omitted algorithm and qop",
+    'Digest realm="fixture", nonce="fixture-nonce"',
+    { ...selected, algorithm: "MD5", qop: undefined },
+  ],
+  [
+    "session algorithm without qop",
+    'Digest realm="fixture", nonce="fixture-nonce", algorithm=SHA-256-sess',
+    { ...selected, algorithm: "SHA-256-sess", qop: undefined },
+  ],
   ...[
     "MD5",
     "SHA-256",
@@ -227,6 +261,10 @@ for (const [name, challenges, expected] of [
 }
 
 for (const [name, challenges] of [
+  [
+    "empty algorithm is not omitted MD5",
+    `${offer().replace("algorithm=SHA-256", 'algorithm=""')}, Digest realm="other", nonce="other"`,
+  ],
   ["case-insensitive duplicate realm", `${offer()}, REALM="contaminated"`],
   ["duplicate nonce", `${offer()}, nonce="other"`],
   ["duplicate extension", `${offer()}, x-extension=a, X-Extension=b`],
@@ -268,4 +306,204 @@ test("authenticated failure never triggers a third request", async (t) => {
   const target = await challengeOrigin(t, ['Basic realm="fallback"', offer()]);
   assert.equal((await executeRequest(requestFor(target.url))).status, 401);
   assert.equal(target.requests.length, 2);
+});
+
+test("Digest direct parser bounds, full tokens, header arrays and literal quoted-pairs", () => {
+  const sign = (header) =>
+    digestAuthorization(header, credentials, "GET", "/", "", "fixture-cnonce");
+  for (const header of [
+    'Digest realm="x", nonce="n\r\n"',
+    'Digest realm="x", nonce="n\u007f"',
+    'Digest realm="x", nonce="n\u0100"',
+    'Digest realm="x", nonce="n", qop="auth;invalid"',
+    'Digest realm="x", nonce="n", algorithm=""',
+    'Digest realm="x", nonce="n", algorithm=MD5/',
+    offer() +
+      ", " +
+      Array.from({ length: 65 }, (_, i) => `extension${i}=value`).join(", "),
+    Array.from({ length: 65 }, () => "Basic"),
+    ",".repeat(514) + offer(),
+    offer({ realm: "x".repeat(16384) }),
+    { arbitrary: true },
+  ])
+    assert.throws(() => sign(header), /Digest/);
+  assert.equal(sign(["Basic realm=ignored", "Bearer abc=="]), null);
+  assert.match(sign(["Basic realm=ignored", offer()]), /^Digest /);
+  assert.match(
+    sign('Digest realm="escaped\\!pair", nonce="x", qop=auth'),
+    /realm="escaped!pair"/,
+  );
+});
+
+for (const transport of ["owner", "mcp-http", "mcp-stdio"]) {
+  test(
+    `Digest combined challenges authenticate through ${transport} with isolated persisted requests`,
+    { timeout: 15000 },
+    async (t) => {
+      const target = await challengeOrigin(
+        t,
+        ['Basic realm="fallback"', offer()],
+        selected,
+      );
+      const malformedTarget = await challengeOrigin(
+        t,
+        [offer() + ', NONCE="duplicate"'],
+        selected,
+      );
+      const noDigest = await challengeOrigin(t, [
+        'Basic realm="fallback"',
+        "Bearer abc==",
+      ]);
+      const root = await mkdtemp(path.join(tmpdir(), "digest-challenge-path-"));
+      const app =
+        transport === "mcp-stdio" ? null : await createApp({ root, port: 0 });
+      const store = app?.store || new Store(root);
+      await store.init();
+      let client;
+      t.after(async () => {
+        if (client) await client.close();
+        if (app) {
+          app.server.closeAllConnections();
+          await new Promise((resolve) => app.server.close(resolve));
+        }
+        await rm(root, { recursive: true, force: true });
+      });
+      const project = await store.create("Digest selected transport");
+      const deniedProject = await store.create("Not granted");
+      project.requests = [target, malformedTarget, noDigest].map(
+        (fixture, i) => ({
+          ...requestFor(fixture.url),
+          id: "digest-" + i,
+          name: "Digest fixture " + i,
+        }),
+      );
+      await store.save(project);
+      const before = structuredClone((await store.get(project.id)).requests);
+      const owner = async (route, data) =>
+        fetch(app.url + route, {
+          method: "POST",
+          headers: {
+            "x-local-token": app.token,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(data),
+        });
+      if (transport !== "owner") {
+        client = new Client(
+          { name: "digest-auth-fixture", version: "1.0.0" },
+          { capabilities: {} },
+        );
+        if (transport === "mcp-http") {
+          const configured = await owner("/api/mcp/config", {
+            enabled: true,
+            projects: [project.id],
+            execute: true,
+            write: true,
+            remember: false,
+          });
+          assert.equal(configured.status, 200);
+          const { token } = await configured.json();
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+              requestInit: { headers: { Authorization: "Bearer " + token } },
+            }),
+          );
+        } else {
+          await client.connect(
+            new StdioClientTransport({
+              command: process.execPath,
+              args: [
+                fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+                "--project",
+                project.id,
+                "--execute",
+                "--write",
+              ],
+              env: { LOCAL_API_DATA: root },
+              stderr: "pipe",
+            }),
+          );
+        }
+        const rejected = await client.callTool({
+          name: "localapi_execute_api",
+          arguments: { projectId: deniedProject.id, apiId: "digest-0" },
+        });
+        assert.equal(rejected.isError, true);
+        assert.equal(target.requests.length, 0);
+      } else {
+        const forbidden = await fetch(
+          app.url + "/api/projects/" + project.id + "/execute",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ request: project.requests[0] }),
+          },
+        );
+        assert.equal(forbidden.status, 403);
+        assert.equal(target.requests.length, 0);
+      }
+      for (let i = 0; i < project.requests.length; i++) {
+        if (transport === "owner") {
+          const response = await owner(
+            "/api/projects/" + project.id + "/execute",
+            { request: project.requests[i] },
+          );
+          const value = await response.json();
+          if (i === 1) assert(value.error || value.status === 0);
+          else assert.equal(value.status, i === 0 ? 200 : 401);
+        } else {
+          const result = await client.callTool({
+            name: "localapi_execute_api",
+            arguments: { projectId: project.id, apiId: "digest-" + i },
+          });
+          if (i === 1) {
+            const value = JSON.parse(result.content[0].text);
+            assert(result.isError || value.status === "failed");
+          } else {
+            assert.notEqual(result.isError, true);
+            const value = JSON.parse(result.content[0].text);
+            assert.equal(value.results[0].response.status, i === 0 ? 200 : 401);
+          }
+        }
+      }
+      assertReplay(target);
+      assert.equal(malformedTarget.requests.length, 1);
+      assert.equal(malformedTarget.requests[0].authorized, false);
+      assert.equal(noDigest.requests.length, 1);
+      assert.equal(noDigest.requests[0].authorized, false);
+      assert.deepEqual(
+        (await new Store(root).get(project.id)).requests,
+        before,
+      );
+    },
+  );
+}
+
+test("combined Digest challenge cannot replay after cancellation or shared deadline exhaustion", async (t) => {
+  for (const mode of ["cancel", "deadline"]) {
+    const target = await challengeOrigin(
+      t,
+      ['Basic realm="fallback"', offer()],
+      selected,
+    );
+    const controller = new AbortController();
+    await assert.rejects(
+      executeRequest(
+        { ...requestFor(target.url), timeout: 100 },
+        controller.signal,
+        {
+          cookieSession: {
+            header: async () => null,
+            capture: async () => {
+              if (mode === "cancel") controller.abort();
+              else await new Promise((resolve) => setTimeout(resolve, 140));
+            },
+          },
+        },
+      ),
+      mode === "cancel" ? /取消|abort/i : /超时/,
+    );
+    assert.equal(target.requests.length, 1);
+    assert.equal(target.requests[0].authorized, false);
+  }
 });
