@@ -1,5 +1,9 @@
 import { readResponseHeaderEvidence } from "./response-header-evidence.mjs";
-import { compilePickVarsOperations } from "./native-response-extraction.mjs";
+import { nativeRequestSnapshotInput } from "./native-request-snapshot.mjs";
+import {
+  compilePickVarsOperations,
+  isNativeRequestPick,
+} from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
   databaseAssignments,
@@ -43,8 +47,20 @@ export function runScript(
   const responseExtractions = compilePickVarsOperations(
     suppliedResponseExtractions,
   );
-  if (responseExtractions.length && !input.response)
-    throw Error("pickVars需要后置响应");
+  if (
+    responseExtractions.some((operation) =>
+      isNativeRequestPick(operation.source)
+        ? Boolean(input.response)
+        : !input.response,
+    )
+  )
+    throw Error("请求pickVars仅支持前置阶段，响应pickVars仅支持后置响应");
+  const requestSources = responseExtractions
+    .map((operation) => operation.source)
+    .filter(isNativeRequestPick);
+  const requestSnapshot = requestSources.length
+    ? nativeRequestSnapshotInput(input.request || {}, requestSources)
+    : undefined;
   const databaseOperations = normalizeDatabaseOperations(
     suppliedDatabaseOperations,
   );
@@ -109,6 +125,7 @@ export function runScript(
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
+        requestSnapshot,
         // Never trust serialized fields supplied by a request, response or VM.
         responseHeaderEvidence: readResponseHeaderEvidence(input.response),
         code,

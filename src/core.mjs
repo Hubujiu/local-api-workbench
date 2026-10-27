@@ -498,6 +498,9 @@ export async function runPlan(
     const extractionPostPolicy = step.request?.nativeTasks?.after.some(
       (task) => task.type === "pickVars" && task.enabled === 1,
     );
+    const extractionRequestPolicy = step.request?.nativeTasks?.before.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -780,7 +783,8 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
-        extractionPostStarted = extractionPostPolicy === true;
+        extractionPostStarted =
+          extractionPostPolicy === true || extractionRequestPolicy === true;
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -874,7 +878,8 @@ export async function runPlan(
             ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
           );
         }
-        if (!extractionPostPolicy) await commitScopes();
+        if (!extractionPostPolicy && !extractionRequestPolicy)
+          await commitScopes();
         const hasStatusAssertion = record.assertions.some(
           (a) => a.target === "status",
         );
@@ -890,12 +895,19 @@ export async function runPlan(
             ? "passed"
             : "failed";
         if (extractionPostStarted && record.status !== "passed")
-          throw Error("原生响应提取阶段断言或原始响应状态失败，变量未提交");
-        if (extractionPostPolicy) await commitScopes();
+          throw Error(
+            extractionRequestPolicy
+              ? "原生提取请求响应阶段失败；仅后置变量变更未提交，成功前置变量已提交"
+              : "原生响应提取阶段断言或原始响应状态失败，变量未提交",
+          );
+        if (extractionPostPolicy || extractionRequestPolicy)
+          await commitScopes();
       }
     } catch (error) {
       stopAfterExtractionFailure =
-        extractionPostPolicy || isNativeExtractionPhaseFailure(error);
+        extractionPostPolicy ||
+        extractionRequestPolicy ||
+        isNativeExtractionPhaseFailure(error);
       record.status = "failed";
       if (error.databaseQueries?.length)
         (record.databaseQueries ||= []).push(

@@ -2,6 +2,7 @@ import {
   nativeDataArray,
   nativeDataObject,
   normalizePickVarsData,
+  isNativeRequestPick,
 } from "./native-response-extraction.mjs";
 import { randomBytes } from "node:crypto";
 import { normalizeDatabaseOperations } from "./script-database-tasks.mjs";
@@ -44,7 +45,12 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
         enabled: task.enabled === 1,
       });
       if (task.enabled === 1) {
-        if (!input.response) throw Error("启用pickVars仅支持后置响应阶段");
+        if (
+          isNativeRequestPick(data.source)
+            ? Boolean(input.response)
+            : !input.response
+        )
+          throw Error("请求pickVars仅支持前置阶段，响应pickVars仅支持后置阶段");
         const index = responseExtractions.push(data) - 1;
         code.push(`\n${pickPrefix}(${index});\n`);
       }

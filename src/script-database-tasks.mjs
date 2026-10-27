@@ -2,6 +2,7 @@ import {
   nativeDataArray,
   nativeDataObject,
   normalizePickVarsData,
+  isNativeRequestPick,
 } from "./native-response-extraction.mjs";
 import { mongoQuery } from "./mongodb.mjs";
 import { redisCommand } from "./redis.mjs";
@@ -225,8 +226,12 @@ export function normalizeNativeTaskRequest(request) {
           throw Error("任务脚本合计最多64KiB");
         data = task.data;
       } else if (task.type === "pickVars") {
-        if (task.enabled === 1 && phase !== "after")
-          throw Error("启用pickVars仅支持后置响应阶段");
+        if (
+          task.enabled === 1 &&
+          phase !==
+            (isNativeRequestPick(task.data?.source) ? "before" : "after")
+        )
+          throw Error("请求pickVars仅支持前置阶段，响应pickVars仅支持后置阶段");
         data = normalizePickVarsData(task.data, {
           enabled: task.enabled === 1,
         });
