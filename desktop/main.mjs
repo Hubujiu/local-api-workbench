@@ -20,6 +20,7 @@ else
         root: path.join(app.getPath("userData"), "projects"),
         port: 0,
       });
+      installDesktopShutdown(app, service);
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       );
@@ -91,7 +92,6 @@ else
       await win.loadURL(service.launchUrl);
       console.error("DESKTOP_READY", service.url);
       app.on("window-all-closed", () => app.quit());
-      installDesktopShutdown(app, service);
       app.on("second-instance", () => {
         if (win.isMinimized()) win.restore();
         win.focus();

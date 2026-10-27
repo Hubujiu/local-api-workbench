@@ -1,8 +1,11 @@
+import { writeSync } from "node:fs";
 // Host lifecycle only: the service owns transport shutdown and persistence.
 // Never retry a request or reinterpret an unconfirmed write as a rollback.
 export function createHostShutdown(
   service,
-  report = (line) => console.error(line),
+  report = (line) => {
+    writeSync(2, line + "\n");
+  },
 ) {
   let pending;
   return () =>
@@ -15,11 +18,15 @@ export function createHostShutdown(
       } catch {
         // Do not expose filesystem paths, credentials or raw provider errors.
       }
-      report(
-        code === 0
-          ? "LOCAL_API_SHUTDOWN_SAVED"
-          : "LOCAL_API_SHUTDOWN_UNCONFIRMED: session history may be incomplete; no network replay attempted",
-      );
+      try {
+        report(
+          code === 0
+            ? "LOCAL_API_SHUTDOWN_SAVED"
+            : "LOCAL_API_SHUTDOWN_UNCONFIRMED: session history may be incomplete; no network replay attempted",
+        );
+      } catch {
+        code = 2;
+      }
       return code;
     })());
 }
