@@ -33,7 +33,11 @@ import {
   normalizeCookieEncoding,
   requestCookieHeader,
 } from "./request-cookies.mjs";
-import { appendRequestQuery, setURLQuery } from "./query-serialization.mjs";
+import {
+  appendRequestQuery,
+  setURLQuery,
+  setAPIKeyQuery,
+} from "./query-serialization.mjs";
 import { requestHeaderMap } from "./request-headers.mjs";
 import {
   importResponseExamples,
@@ -943,7 +947,13 @@ export function importDocument(doc) {
               ),
             ).values(),
           ];
+          const selectedSecurity = Object.hasOwn(op, "security")
+            ? op.security
+            : doc.security;
           return normalizeRequest({
+            ...(Array.isArray(selectedSecurity) && selectedSecurity.length === 0
+              ? { inheritAuth: false }
+              : {}),
             name: op.summary || op.operationId || path,
             sourceOperationId: op.operationId || "",
             method,
@@ -1199,6 +1209,9 @@ export function importDocument(doc) {
                 ? req.description
                 : req.description?.content || "",
             auth: auth(req.auth || inheritedAuth),
+            ...((req.auth || inheritedAuth)?.type === "noauth"
+              ? { inheritAuth: false }
+              : {}),
             headers: (req.header || []).map((h) => ({
               key: h.key,
               value: h.value,
@@ -1685,7 +1698,7 @@ export function toCurl(input) {
   if (["bearer", "oauth2"].includes(r.auth.type))
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
+    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
     else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);

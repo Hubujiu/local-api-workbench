@@ -1,3 +1,4 @@
+import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { randomUUID } from "node:crypto";
 const truth = (value) => value === true || value === 1 || value === "1";
@@ -80,6 +81,8 @@ function auth(value = { type: "noauth" }) {
       type: "bearer",
       token: String(value.bearer?.key ?? value.bearer?.token ?? ""),
     };
+  const extended = importExtendedApipostAuth(value);
+  if (extended) return extended;
   throw Error(
     "Apipost认证格式尚未支持，请先转换为OpenAPI/Postman: " + value.type,
   );
@@ -306,6 +309,10 @@ export function importApipost(
       body: raw,
       form,
       auth: auth(request.auth),
+      // Explicit native noauth/none is an opt-out, never target-project inheritance.
+      ...(["noauth", "none"].includes(request.auth?.type)
+        ? { inheritAuth: false }
+        : {}),
       schema: schema(body.raw_schema || {}),
       examples,
       responses,

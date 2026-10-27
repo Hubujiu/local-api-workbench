@@ -686,3 +686,199 @@ test("Postman query auth survives frozen plans, real Store backup/restart and co
   assert.equal(failedSave.recordSaved, false);
   assert.equal(server.captured.length, beforeSave);
 });
+
+test("native S3 Query import preserves inherited mode through HTTP frozen execution, backup and restart without crossing identities", async (t) => {
+  const { createApp } = await import("../src/server.mjs"),
+    { importIntoProject } = await import("../src/core.mjs"),
+    { modernApipostFixture } = await import("./fixtures/apipost-modern.mjs");
+  const upstream = await endpoint(t),
+    root = await mkdtemp(path.join(tmpdir(), "native-s3-query-"));
+  let app = await createApp({ root, port: 0 });
+  const close = async () => {
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+  };
+  t.after(async () => {
+    await close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const headers = () => ({
+    "x-local-token": app.token,
+    "content-type": "application/json",
+  });
+  const projects = [];
+  for (const identity of identities.keys()) {
+    const source = modernApipostFixture(),
+      p = await app.store.create(identity);
+    source.project_id = "native-source-" + identity;
+    source.global.envs[0].server_list[0].uri = upstream.url;
+    const { type: _type, ...nativeAuth } = auth(identity);
+    source.global.global_param.auth = { type: "awsv4", awsv4: nativeAuth };
+    source.apis[1].url = "/object%2Fkey?tag=two&tag=one&X-Amz-Expires=60";
+    source.apis[1].request.query = { parameter: [] };
+    const before = structuredClone(source);
+    importIntoProject(p, source);
+    assert.deepEqual(source, before);
+    assert.equal(p.requests[0].auth.addAuthDataToQuery, true);
+    assert.equal(p.requests[0].auth.accessKey, identity);
+    p.plans = [
+      snapshotPlan({
+        id: "native-query",
+        environmentId: p.environments.find(
+          (env) => env.serverUrls?.[p.requests[0].serviceId],
+        ).id,
+        steps: [{ request: p.requests[0] }],
+      }),
+    ];
+    await app.store.save(p);
+    projects.push({ id: p.id, identity, source });
+  }
+  const execute = async ({ id, identity }) => {
+    const before = await app.store.get(id);
+    const response = await fetch(app.url + "/api/projects/" + id + "/run", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ planId: "native-query" }),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    assert.equal(result.status, "passed", JSON.stringify(result.results));
+    assert.equal(result.recordSaved, true);
+    assert.equal(
+      JSON.parse(result.results[0].response.body).identity,
+      identity,
+    );
+    assert.equal(result.results[0].request.auth.addAuthDataToQuery, true);
+    const after = await app.store.get(id);
+    assert.deepEqual(after.requests, before.requests);
+    assert.deepEqual(after.plans, before.plans);
+    assert.equal(
+      after.plans[0].steps[0].request.url.includes("X-Amz-Signature"),
+      false,
+    );
+    assert(
+      after.runs.some((run) => run.id === result.id && run.status === "passed"),
+    );
+    return result;
+  };
+  await Promise.all(projects.map(execute));
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { StreamableHTTPClientTransport } = await import(
+    "@modelcontextprotocol/sdk/client/streamableHttp.js"
+  );
+  const configured = await fetch(app.url + "/api/mcp/config", {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      enabled: true,
+      projects: projects.map((p) => p.id),
+      write: true,
+      execute: true,
+      remember: false,
+    }),
+  });
+  assert.equal(configured.status, 200);
+  const policy = await configured.json(),
+    client = new Client({ name: "native-s3-query", version: "1" });
+  t.after(() => client.close().catch(() => {}));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+      requestInit: { headers: { Authorization: "Bearer " + policy.token } },
+    }),
+  );
+  for (const item of projects) {
+    const p = await app.store.get(item.id);
+    const response = await client.callTool({
+      name: "localapi_execute_api",
+      arguments: {
+        projectId: p.id,
+        apiId: p.requests[0].id,
+        environmentId: p.plans[0].environmentId,
+      },
+    });
+    assert.notEqual(response.isError, true, response.content?.[0]?.text);
+    const result = JSON.parse(response.content[0].text);
+    assert.equal(result.status, "passed");
+    // The develop-based canonical API returns a plan envelope; the combined
+    // newer MCP adapter also reports persistence explicitly. Verify actual
+    // fresh disk evidence in both, never infer it from an absent flag.
+    if (Object.hasOwn(result, "recordSaved"))
+      assert.equal(result.recordSaved, true);
+    const step = result.results?.[0] || result;
+    assert.equal(JSON.parse(step.response.body).identity, item.identity);
+    assert(
+      (await app.store.get(p.id)).history.some(
+        (r) =>
+          r.id === result.id &&
+          r.source === "mcp" &&
+          r.status === "passed" &&
+          JSON.parse(r.response.body).identity === item.identity,
+      ),
+    );
+  }
+  await client.close();
+  const restoredProjects = [];
+  for (const p of projects) {
+    const current = await app.store.get(p.id);
+    current.requests[0].auth = auth(
+      p.identity === "fixture-A" ? "fixture-B" : "fixture-A",
+      { addAuthDataToQuery: false },
+    );
+    current.requests[0].url = "/changed-live-never-requested";
+    await app.store.save(current);
+    await execute(p);
+    const backup = await (
+      await fetch(app.url + "/api/projects/" + p.id + "/export", {
+        headers: headers(),
+      })
+    ).json();
+    const restoredResponse = await fetch(app.url + "/api/restore", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ document: backup }),
+    });
+    assert.equal(restoredResponse.status, 201);
+    const restored = await restoredResponse.json();
+    restoredProjects.push({ id: restored.id, identity: p.identity });
+    await execute(restoredProjects.at(-1));
+    for (const badFlag of ["true", 1, null]) {
+      const invalid = structuredClone(p.source),
+        untouched = structuredClone(current);
+      invalid.global.global_param.auth.awsv4.addAuthDataToQuery = badFlag;
+      assert.throws(() => importIntoProject(current, invalid), /布尔/);
+      assert.deepEqual(current, untouched);
+    }
+    const unsupported = structuredClone(p.source),
+      untouched = structuredClone(current);
+    unsupported.global.global_param.auth.awsv4.service = "execute-api";
+    assert.throws(() => importIntoProject(current, unsupported), /S3/);
+    assert.deepEqual(current, untouched);
+  }
+  await close();
+  app = await createApp({ root, port: 0 });
+  await Promise.all(restoredProjects.map(execute));
+  assert.equal(upstream.captured.length, 10);
+  assert(upstream.captured.every((request) => request.valid));
+  assert(
+    upstream.captured.every(
+      (request) => request.headers.authorization === undefined,
+    ),
+  );
+  assert(
+    upstream.captured.every(
+      (request) =>
+        new URL(request.rawURL, upstream.url).searchParams.get(
+          "X-Amz-Expires",
+        ) === "60",
+    ),
+  );
+  for (const request of upstream.captured)
+    for (const value of identities.values())
+      assert.equal(
+        JSON.stringify({
+          url: request.rawURL,
+          headers: request.headers,
+        }).includes(value.secret),
+        false,
+      );
+});
