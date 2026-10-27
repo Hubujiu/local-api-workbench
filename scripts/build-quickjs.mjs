@@ -19,7 +19,9 @@ if (
   throw Error("Unapproved runtime source");
 const root = path.resolve(directory),
   patch = fileURLToPath(new URL("rejection-tracker.patch", assets)),
-  heapPatch = fileURLToPath(new URL("heap-accounting.patch", assets));
+  heapPatch = fileURLToPath(new URL("heap-accounting.patch", assets)),
+  regexpPatch = fileURLToPath(new URL("regexp-interrupt.patch", assets)),
+  unicodePatch = fileURLToPath(new URL("unicode-script-oom.patch", assets));
 if (
   hash((await readFile(patch, "utf8")).replace(/\r\n/g, "\n")) !==
   manifest.patchSha256
@@ -30,6 +32,20 @@ if (
   manifest.heapPatchSha256
 )
   throw Error("Heap accounting patch integrity mismatch");
+if (
+  manifest.regexpInterruptSourceCommit !==
+    "25aaa7737020d7ca98926abc532acc6c5755d562" ||
+  hash((await readFile(regexpPatch, "utf8")).replace(/\r\n/g, "\n")) !==
+    manifest.regexpInterruptPatchSha256
+)
+  throw Error("RegExp interruption patch integrity mismatch");
+if (
+  manifest.unicodeScriptOOMSourceCommit !==
+    "817509a87c3c0af362df576574784bae0dae8129" ||
+  hash((await readFile(unicodePatch, "utf8")).replace(/\r\n/g, "\n")) !==
+    manifest.unicodeScriptOOMPatchSha256
+)
+  throw Error("Unicode Script OOM patch integrity mismatch");
 const git = (...args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 if (mode === "prepare") {
@@ -61,10 +77,17 @@ if (mode === "prepare") {
   git("apply", patch);
   git("apply", "--check", heapPatch);
   git("apply", heapPatch);
+  git("apply", "--check", regexpPatch);
+  git("apply", regexpPatch);
+  git("apply", "--check", unicodePatch);
+  git("apply", unicodePatch);
   const expected = [
     "c/interface.c",
     "packages/variant-quickjs-wasmfile-release-sync/Makefile",
     "vendor/quickjs/quickjs.c",
+    "vendor/quickjs/libregexp.c",
+    "vendor/quickjs/libregexp.h",
+    "vendor/quickjs/libunicode.c",
   ];
   if (
     JSON.stringify(git("diff", "--name-only").split("\n").sort()) !==
@@ -114,6 +137,9 @@ async function verifySource() {
     "packages/variant-quickjs-wasmfile-release-sync/Makefile":
       manifest.patchedMakefileSha256,
     "vendor/quickjs/quickjs.c": manifest.patchedQuickJSSourceSha256,
+    "vendor/quickjs/libregexp.c": manifest.patchedRegExpSourceSha256,
+    "vendor/quickjs/libregexp.h": manifest.patchedRegExpHeaderSha256,
+    "vendor/quickjs/libunicode.c": manifest.patchedUnicodeSourceSha256,
   };
   if (
     git("rev-parse", "HEAD") !== manifest.sourceCommit ||
