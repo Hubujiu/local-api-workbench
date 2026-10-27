@@ -408,3 +408,43 @@ projects containing such plans still require backup or an explicit separate
 supported-definition projection. Frozen execution/backup evidence must not be
 reported as native complex-plan roundtrip support. Existing framing, file-count,
 4 MiB export and runtime permissions/budgets remain unchanged.
+
+## Bounded frozen HTTP sample and group graph export
+
+The same project exporter now prepares HTTP cases as native `sample` records and
+case folders as `sample_group` records, with complete API ownership and parent
+identity mapping. Directory output writes real `samples/index.json` and matching
+wrapped detail records. Empty groups and numeric group sort values are retained.
+Cases are emitted in current effective order (`sort` when explicitly present,
+otherwise array position); the importer does not retain historical sample sort
+numbers, so this contract preserves order, not those original numeric values.
+IDs and source namespaces are remapped, not restored from names.
+
+All four snapshot flags must be true. Unknown case/group/request metadata,
+missing/deleted API ownership, conflicting IDs, cross-API/cyclic parents and
+unrepresentable fields fail the complete conversion without mutation. The first
+slice excludes sample scripts/tasks/functions, schema/response/example metadata,
+custom status and SDK URL mode; existing API encoder guards also remain. It
+reuses the existing HTTP/auth/body/query mapper and pure importer, not a new
+protocol, parser, signer or engine. Current case and request names and API-folder
+association must agree. No inheritance graph export is added.
+
+The original-informed importer distinguishes root samples from grouped samples:
+only grouped samples include the origin API's own request layer. Therefore both
+outputs are forward-imported and their full supported frozen request semantics,
+API ownership, group relations and order checked before returning. A live-only
+header/query/cookie/form field or task that would be reinjected makes export fail;
+disabled children are not invented as masks. Explicit frozen noauth and own body
+are retained even when the live API's auth or raw body differs. This does not
+promise exportability for every local case. See the existing root-sample and
+sample-group import ADRs for legal static-source references; no original app was
+executed for this change.
+
+The new cohesive tests cover both formats twice, same-named APIs, empty nested
+groups, two source namespaces sharing original sample IDs, effective ordering,
+whole-export rejection/no mutation, actual loopback frozen case execution after
+live API edits, stored history, backup/restart and source/third-project isolation.
+The initial tests correctly encountered the existing multiple-service export
+restriction and selected an empty default environment; fixture setup was corrected
+without weakening guards. Four new groups pass locally. Exact final independent
+CI remains pending until the updated PR14 tree is published and verified.
