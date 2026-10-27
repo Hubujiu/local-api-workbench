@@ -1,6 +1,15 @@
-# 后端检查点 · 2026-10-27 19:27 UTC
+# 后端检查点 · 2026-10-27 19:39 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 19:39 自选目录创建事务组合候选
+
+- 最新完整WS组合GREEN为 remote `8d72c6c86674725bd2c99bb6fabb509e15409f6a` / local `d5e9db7357e10a993dedbbe7a385382604da2620` / tree `05c8475384003e2dc283edbede6ff15c45763f2d`；首次CI `40569396940` 19/19，通过全部实际checkout同根核对。12实际ZIP摘要/manifest/TAP：396文件四分片各99，每OS完整互斥，manifest SHA256 `afa436531c57c04840078a1851d3976b190dc6246491d3a65b18eca1e678872a`；Linux/macOS2047通过，Windows2043通过+4明确POSIX signal skip，0fail/cancel。10个新增WS入口实际全部通过，真实DB/生产stdio/三平台桌面关闭与ac4822重建亦通过。先前import-only `37f9a614` 的CI `40568508762` 是14success/5cancelled，不算通过。
+- PR14最终 `25175a10` / local `85c6920` / tree `7fb0b16b298c36dd299421ffb02c2e2e02f13f08` 的首次CI `40569090203` 已19/19 GREEN；all actual `bfb794329d95f97e96000d24153aa301567e751a` 同树；12实际ZIP摘要/280文件70×4及TAP完整，manifest `c02599a940cadd703c581e68a1bd83c413b1d6bf45310cb0c64b9ef4ec5535ef`，三OS各1259通过无fail/cancel/skip。功能HEAD未为自证CI再推进。
+- 本轮真实owner POST在测试自有不可写自选目录复现：先发布.locations、后保存前EACCES，无project/journal却留下登记，重启后新建全被恢复保护阻断。沿用PR17修复，保持.locations格式，私有版本化创建意图在注册表锁→项目锁顺序下发布，独占保留全新ID目录，项目可恢复后才公开登记。中断意图只在确认无提交标记时退役，不删除任何用户目录/数据；已发表登记即使文件后来缺失也保留，不当成未提交清理。未知锁/EACCES保留对应ID恢复证据和新建保护，不阻止其他健康项目/服务启动；该ID的get/save均拒绝，健康ID仍能读写。
+- PR17 final local `4337d2df49f729375034e033794eb66620b4a993` / remote `6492409935c3833d862fe6dc57d03b5f1ce1a2f3` / tree `b4d214ac76709c281491980559326c9217c97ed6` 已推送，首次CI `40570778466` 尚待。真实进程关键窗口中断、固定并发交错、目录碰撞、pre/postjournal错误、注册/清理故障和最终读回ENOENT后同ID revision1恢复均已测试。最终独立2整文件25/25、作者10整文件62/62及4项有限HTTP入口通过；不能替代跨平台证据。
+- 根生产组合 `bd82976049ac0cc2883621cfd52dc1065b3acd6c` / tree `12d0ab55c701f4326b10dfcfc21fdabeacd53649` 上20完整文件139/139通过，0fail/cancel/skip，51.327秒；check、完整format:check、diff通过。根另加默认/自选目录×HTTP/stdio官方SDK的真实import postjournal故障→相同事务修复→重启→原生出口链，保留不执行请求、不重试导入、无其他项目改变断言。合并保留description、磁盘/legacy继承图验证、全部现有validator、两处取消检查、锁内图身份及操作context；独立对照无丢失。此后仅本文变化，新组合CI尚待，8d72不能借作新存储根通过。
+- main/develop未合入、未部署。SQL Server仍仅PR45契约WIP，真实驱动和原版许可缺口不变；旧配额偶发失败根因未知，不以新GREEN遮盖。
 
 ## 19:27 明文 WebSocket 完整组组合候选
 

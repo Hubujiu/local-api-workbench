@@ -36,7 +36,7 @@ const closeServer = async (server) => {
   await new Promise((resolve) => server.close(resolve));
 };
 
-async function fixture(t, kind) {
+async function fixture(t, kind, custom = false) {
   const directory = await mkdtemp(path.join(tmpdir(), "mcp-project-storage-"));
   const root = path.join(directory, "data"),
     wire = [];
@@ -56,7 +56,21 @@ async function fixture(t, kind) {
   if (kind === "http") app = await createApp({ root, port: 0 });
   const store = app?.store || new Store(root);
   await store.init();
-  const target = await store.create("Existing import destination");
+  const customBase = path.join(directory, "custom-projects");
+  const target = await store.create(
+    "Existing import destination",
+    custom ? customBase : undefined,
+  );
+  if (custom) {
+    assert.equal(store.directory(target.id), path.join(customBase, target.id));
+    assert.equal(
+      JSON.parse(await readFile(path.join(root, ".locations.json"), "utf8"))[
+        target.id
+      ],
+      customBase,
+    );
+    assert.deepEqual(await new Store(root).get(target.id), target);
+  }
   const other = await store.create("Unrelated project must remain unchanged");
   target.requests = [
     normalizeRequest({
@@ -234,161 +248,163 @@ function nativeDocument(base, marker) {
 }
 
 for (const kind of ["http", "stdio"])
-  test(
-    `official SDK ${kind} import reports real published-journal uncertainty without retry or execution`,
-    { timeout: 30000 },
-    async (t) => {
-      const f = await fixture(t, kind);
-      const before = await f.store.get(f.target.id),
-        otherBefore = await f.store.get(f.other.id);
-      const marker = "only-this-import-" + randomUUID();
-      const directory = f.store.directory(f.target.id);
-      const config = {
-        projectId: f.target.id,
-        marker,
-        history: path.join(directory, "history"),
-        keptHistory: path.join(directory, "history-kept"),
-        observation: path.join(f.directory, "fault-observation.json"),
-      };
-      let restore = () => {};
-      t.after(() => restore());
-      if (kind === "http") {
-        await f.connect();
-        restore = installBoundaryFault(f.store, config);
-      } else {
-        const preload = path.join(f.directory, "owned-fault-preload.mjs");
-        await writeFile(
-          preload,
-          [
-            'import { rename, writeFile } from "node:fs/promises";',
-            `import { Store } from ${JSON.stringify(new URL("../src/runtime.mjs", import.meta.url).href)};`,
-            `import { ProjectCommitUncertain } from ${JSON.stringify(new URL("../src/project-commit-outcome.mjs", import.meta.url).href)};`,
-            installBoundaryFault.toString(),
-            `installBoundaryFault(Store.prototype, ${JSON.stringify(config)});`,
-          ].join("\n"),
-        );
-        await f.connect(["--import", pathToFileURL(preload).href]);
-      }
-      const source = nativeDocument(f.base, marker),
-        sourceBefore = structuredClone(source);
-      const reply = await f.call("import_project", {
-        projectId: f.target.id,
-        format: "apipost",
-        document: source,
-      });
-      assert.equal(reply.isError, true, JSON.stringify(reply));
-      const outcome = JSON.parse(reply.content[0].text);
-      assert.deepEqual(outcome, {
-        error: "项目提交结果不确定；恢复并读取现有项目后再决定是否重试",
-        code: "PROJECT_COMMIT_UNCERTAIN",
-        project_id: f.target.id,
-        commit_outcome: "unknown",
-        retry_safe: false,
-      });
-      const serialized = JSON.stringify(reply);
-      assert(Buffer.byteLength(serialized) < 2048);
-      for (const secret of [
-        f.directory,
-        JSON.stringify(f.directory).slice(1, -1),
-        "fictional-import-secret",
-        "cause",
-        "ENOTDIR",
-        "EEXIST",
-      ])
-        assert(!serialized.includes(secret), secret);
-      assert.deepEqual(source, sourceBefore);
-      const observed = JSON.parse(await readFile(config.observation, "utf8"));
-      assert.equal(observed.attempts, 1);
-      assert.equal(observed.readBarriers, 1);
-      assert.equal(observed.oldRevision, before.revision);
-      assert.equal(observed.typed, true);
-      assert.equal(observed.code, "PROJECT_COMMIT_UNCERTAIN");
-      assert.equal(observed.projectId, f.target.id);
-      assert.equal(typeof observed.causeCode, "string");
-      restore();
-
-      // The operation did not roll back: the real journal and imported API file
-      // exist while final metadata still references the old project revision.
-      assert.equal((await stat(config.history)).isFile(), true);
-      const journalFile = path.join(directory, ".transaction.json");
-      const journal = JSON.parse(await readFile(journalFile, "utf8"));
-      assert.equal(journal.revision, before.revision + 1);
-      const imported = journal.requests.filter(
-        (request) => request.name === marker,
-      );
-      assert.equal(imported.length, 1);
-      assert.equal(imported[0].auth.password, "fictional-import-secret");
-      const apiFiles = await Promise.all(
-        (await readdir(path.join(directory, "apis")))
-          .filter((name) => name.endsWith(".json"))
-          .map(async (name) =>
-            JSON.parse(
-              await readFile(path.join(directory, "apis", name), "utf8"),
-            ),
-          ),
-      );
-      assert.equal(
-        apiFiles.filter((request) => request.id === imported[0].id).length,
-        1,
-      );
-      assert.equal(
-        JSON.parse(await readFile(path.join(directory, "project.json"), "utf8"))
-          .revision,
-        before.revision,
-      );
-      await assert.rejects(
-        new Store(f.root).get(f.target.id),
-        (error) => error instanceof ProjectCommitUncertain,
-      );
-      await f.client.ping();
-      assert.deepEqual(f.wire, []);
-      assert.deepEqual(await f.store.get(f.other.id), otherBefore);
-
-      // Repair only this test's ordinary-file obstacle. Recovery applies the same
-      // transaction; never call import again to "retry" this uncertain result.
-      await rm(config.history);
-      await rename(config.keptHistory, config.history);
-      const recovered = await new Store(f.root).get(f.target.id);
-      assert.equal(recovered.revision, journal.revision);
-      assert.equal(recovered.configRevision, journal.configRevision);
-      assert.equal(recovered.requests.length, before.requests.length + 1);
-      assert.deepEqual(
-        recovered.requests.find((request) => request.id === "keep-existing"),
-        before.requests[0],
-      );
-      assert.deepEqual(
-        recovered.requests.find((request) => request.id === imported[0].id),
-        imported[0],
-      );
-      assert.deepEqual(recovered.history, before.history);
-      assert.deepEqual(recovered.runs, before.runs);
-      assert(
-        recovered.environments.every(
-          (env) => env.variables.mustNotExecute === undefined,
-        ),
-      );
-      await assert.rejects(readFile(journalFile), { code: "ENOENT" });
-      await f.restart();
-      const exported = decode(
-        await f.call("export_project", {
+  for (const custom of [false, true])
+    test(
+      `official SDK ${kind} ${custom ? "custom-directory" : "default-directory"} import reports real published-journal uncertainty without retry or execution`,
+      { timeout: 30000 },
+      async (t) => {
+        const f = await fixture(t, kind, custom);
+        const before = await f.store.get(f.target.id),
+          otherBefore = await f.store.get(f.other.id);
+        const marker = "only-this-import-" + randomUUID();
+        const directory = f.store.directory(f.target.id);
+        const config = {
+          projectId: f.target.id,
+          marker,
+          history: path.join(directory, "history"),
+          keptHistory: path.join(directory, "history-kept"),
+          observation: path.join(f.directory, "fault-observation.json"),
+        };
+        let restore = () => {};
+        t.after(() => restore());
+        if (kind === "http") {
+          await f.connect();
+          restore = installBoundaryFault(f.store, config);
+        } else {
+          const preload = path.join(f.directory, "owned-fault-preload.mjs");
+          await writeFile(
+            preload,
+            [
+              'import { rename, writeFile } from "node:fs/promises";',
+              `import { Store } from ${JSON.stringify(new URL("../src/runtime.mjs", import.meta.url).href)};`,
+              `import { ProjectCommitUncertain } from ${JSON.stringify(new URL("../src/project-commit-outcome.mjs", import.meta.url).href)};`,
+              installBoundaryFault.toString(),
+              `installBoundaryFault(Store.prototype, ${JSON.stringify(config)});`,
+            ].join("\n"),
+          );
+          await f.connect(["--import", pathToFileURL(preload).href]);
+        }
+        const source = nativeDocument(f.base, marker),
+          sourceBefore = structuredClone(source);
+        const reply = await f.call("import_project", {
           projectId: f.target.id,
           format: "apipost",
-        }),
-      );
-      assert.equal(
-        exported.document.apis.filter((api) => api.name === marker).length,
-        1,
-      );
-      assert.deepEqual(await new Store(f.root).get(f.target.id), recovered);
-      assert.deepEqual(await f.store.get(f.other.id), otherBefore);
-      assert.deepEqual(
-        JSON.parse(await readFile(config.observation, "utf8")),
-        observed,
-      );
-      assert.deepEqual(f.wire, []);
-      assert(!f.stderr.join("").includes("fictional-import-secret"));
-    },
-  );
+          document: source,
+        });
+        assert.equal(reply.isError, true, JSON.stringify(reply));
+        const outcome = JSON.parse(reply.content[0].text);
+        assert.deepEqual(outcome, {
+          error: "项目提交结果不确定；恢复并读取现有项目后再决定是否重试",
+          code: "PROJECT_COMMIT_UNCERTAIN",
+          project_id: f.target.id,
+          commit_outcome: "unknown",
+          retry_safe: false,
+        });
+        const serialized = JSON.stringify(reply);
+        assert(Buffer.byteLength(serialized) < 2048);
+        for (const secret of [
+          f.directory,
+          JSON.stringify(f.directory).slice(1, -1),
+          "fictional-import-secret",
+          "cause",
+          "ENOTDIR",
+          "EEXIST",
+        ])
+          assert(!serialized.includes(secret), secret);
+        assert.deepEqual(source, sourceBefore);
+        const observed = JSON.parse(await readFile(config.observation, "utf8"));
+        assert.equal(observed.attempts, 1);
+        assert.equal(observed.readBarriers, 1);
+        assert.equal(observed.oldRevision, before.revision);
+        assert.equal(observed.typed, true);
+        assert.equal(observed.code, "PROJECT_COMMIT_UNCERTAIN");
+        assert.equal(observed.projectId, f.target.id);
+        assert.equal(typeof observed.causeCode, "string");
+        restore();
+
+        // The operation did not roll back: the real journal and imported API file
+        // exist while final metadata still references the old project revision.
+        assert.equal((await stat(config.history)).isFile(), true);
+        const journalFile = path.join(directory, ".transaction.json");
+        const journal = JSON.parse(await readFile(journalFile, "utf8"));
+        assert.equal(journal.revision, before.revision + 1);
+        const imported = journal.requests.filter(
+          (request) => request.name === marker,
+        );
+        assert.equal(imported.length, 1);
+        assert.equal(imported[0].auth.password, "fictional-import-secret");
+        const apiFiles = await Promise.all(
+          (await readdir(path.join(directory, "apis")))
+            .filter((name) => name.endsWith(".json"))
+            .map(async (name) =>
+              JSON.parse(
+                await readFile(path.join(directory, "apis", name), "utf8"),
+              ),
+            ),
+        );
+        assert.equal(
+          apiFiles.filter((request) => request.id === imported[0].id).length,
+          1,
+        );
+        assert.equal(
+          JSON.parse(
+            await readFile(path.join(directory, "project.json"), "utf8"),
+          ).revision,
+          before.revision,
+        );
+        await assert.rejects(
+          new Store(f.root).get(f.target.id),
+          (error) => error instanceof ProjectCommitUncertain,
+        );
+        await f.client.ping();
+        assert.deepEqual(f.wire, []);
+        assert.deepEqual(await f.store.get(f.other.id), otherBefore);
+
+        // Repair only this test's ordinary-file obstacle. Recovery applies the same
+        // transaction; never call import again to "retry" this uncertain result.
+        await rm(config.history);
+        await rename(config.keptHistory, config.history);
+        const recovered = await new Store(f.root).get(f.target.id);
+        assert.equal(recovered.revision, journal.revision);
+        assert.equal(recovered.configRevision, journal.configRevision);
+        assert.equal(recovered.requests.length, before.requests.length + 1);
+        assert.deepEqual(
+          recovered.requests.find((request) => request.id === "keep-existing"),
+          before.requests[0],
+        );
+        assert.deepEqual(
+          recovered.requests.find((request) => request.id === imported[0].id),
+          imported[0],
+        );
+        assert.deepEqual(recovered.history, before.history);
+        assert.deepEqual(recovered.runs, before.runs);
+        assert(
+          recovered.environments.every(
+            (env) => env.variables.mustNotExecute === undefined,
+          ),
+        );
+        await assert.rejects(readFile(journalFile), { code: "ENOENT" });
+        await f.restart();
+        const exported = decode(
+          await f.call("export_project", {
+            projectId: f.target.id,
+            format: "apipost",
+          }),
+        );
+        assert.equal(
+          exported.document.apis.filter((api) => api.name === marker).length,
+          1,
+        );
+        assert.deepEqual(await new Store(f.root).get(f.target.id), recovered);
+        assert.deepEqual(await f.store.get(f.other.id), otherBefore);
+        assert.deepEqual(
+          JSON.parse(await readFile(config.observation, "utf8")),
+          observed,
+        );
+        assert.deepEqual(f.wire, []);
+        assert(!f.stderr.join("").includes("fictional-import-secret"));
+      },
+    );
 
 // SDK Client assigns numeric IDs. This deliberate boundary request instead uses
 // its public stdio transport.send/onmessage to send a real frame with a legal
