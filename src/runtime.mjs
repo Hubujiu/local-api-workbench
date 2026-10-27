@@ -1,3 +1,7 @@
+import {
+  ProjectCommitUncertain,
+  ProjectRecoveryRequired,
+} from "./project-commit-outcome.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -45,6 +49,7 @@ import {
   rename,
   readdir,
   rm,
+  lstat,
 } from "node:fs/promises";
 import path from "node:path";
 import { id, normalizeRequest, snapshotPlan } from "./core.mjs";
@@ -53,20 +58,134 @@ export class Store {
     this.root = root;
     this.pending = Promise.resolve();
     this.locations = {};
+    this.pendingLocations = {};
+    this.creationErrors = {};
   }
   async init() {
     await mkdir(this.root, { recursive: true });
+    const release = await acquireFileLock(
+      path.join(this.root, ".registry.lock"),
+    );
+    let primaryError;
     try {
-      this.locations = JSON.parse(
-        await readFile(path.join(this.root, ".locations.json"), "utf8"),
+      await this.#loadRegistry();
+    } catch (error) {
+      primaryError = error;
+      throw error;
+    } finally {
+      try {
+        await release();
+      } catch (error) {
+        throw primaryError || error;
+      }
+    }
+  }
+  async #readRegistryFile(name) {
+    try {
+      let value = JSON.parse(
+        await readFile(path.join(this.root, name), "utf8"),
       );
+      if (name === ".creations.json") {
+        if (
+          value?.version !== 1 ||
+          Object.keys(value).sort().join(",") !== "projects,version"
+        )
+          throw Error("项目创建登记格式无效");
+        value = value.projects;
+      }
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Object.entries(value).some(
+          ([key, base]) =>
+            !/^[a-zA-Z0-9-]+$/.test(key) ||
+            typeof base !== "string" ||
+            !path.isAbsolute(base),
+        )
+      )
+        throw Error("项目位置登记格式无效");
+      return value;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
+      return {};
+    }
+  }
+  async #writeRegistryFile(name, value) {
+    const temporary = path.join(this.root, name + "." + id() + ".tmp");
+    try {
+      await writeFile(
+        temporary,
+        JSON.stringify(
+          name === ".creations.json" ? { version: 1, projects: value } : value,
+          null,
+          2,
+        ),
+        {
+          mode: 0o600,
+          flag: "wx",
+        },
+      );
+      await rename(temporary, path.join(this.root, name));
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+  // Called only under the registry lock. Creation intents are not projects: an
+  // interrupted pre-journal attempt can retire only its registration, never data.
+  async #loadRegistry() {
+    this.locations = await this.#readRegistryFile(".locations.json");
+    const pending = await this.#readRegistryFile(".creations.json");
+    this.pendingLocations = {};
+    this.creationErrors = {};
+    for (const [key, base] of Object.entries(pending)) {
+      if (Object.hasOwn(this.locations, key) && this.locations[key] !== base)
+        throw Error("项目创建登记位置冲突");
+      let release, primaryError;
+      try {
+        release = await acquireFileLock(path.join(base, key + ".json.lock"));
+        const recoverable =
+          (await this.#pathExists(path.join(base, key, "project.json"))) ||
+          (await this.#pathExists(path.join(base, key, ".transaction.json"))) ||
+          (await this.#pathExists(path.join(base, key + ".json")));
+        // A published registration is evidence of a recoverable commit, even
+        // if files were later moved or made unavailable. Never erase it here.
+        if (recoverable && base !== path.resolve(this.root))
+          this.locations[key] = base;
+        await this.#writeRegistryFile(".locations.json", this.locations);
+        delete pending[key];
+        await this.#writeRegistryFile(".creations.json", pending);
+      } catch (error) {
+        primaryError = error;
+      } finally {
+        try {
+          await release?.();
+        } catch (error) {
+          primaryError ||= error;
+        }
+      }
+      if (primaryError) {
+        // An unavailable custom disk or unknown project lock must not prevent
+        // startup/access to healthy projects. Keep the intent and report this ID
+        // as unresolved; the create guard still fails closed.
+        this.pendingLocations[key] = base;
+        this.creationErrors[key] = new ProjectRecoveryRequired([key]);
+      }
+    }
+  }
+  async #pathExists(file) {
+    try {
+      await lstat(file);
+      return true;
+    } catch (error) {
+      if (error.code === "ENOENT") return false;
+      throw error;
     }
   }
   base(key) {
     if (!/^[a-zA-Z0-9-]+$/.test(key)) throw Error("无效项目 ID");
-    return this.locations[key] || this.root;
+    return this.locations[key] || this.pendingLocations[key] || this.root;
   }
   directory(key) {
     return path.join(this.base(key), key);
@@ -83,6 +202,9 @@ export class Store {
   }
   async list() {
     await this.init();
+    return this.#listRegistered();
+  }
+  async #listRegistered() {
     const entries = await readdir(this.root, { withFileTypes: true });
     const keys = new Set([
       ...entries
@@ -105,11 +227,12 @@ export class Store {
         )
         .map((entry) => entry.name),
       ...Object.keys(this.locations),
+      ...Object.keys(this.pendingLocations),
     ]);
     const out = [];
     for (const key of keys) {
       try {
-        const p = await this.get(key);
+        const p = await this.#getRegistered(key);
         out.push({
           id: p.id,
           name: p.name,
@@ -126,27 +249,44 @@ export class Store {
     }
     return out;
   }
-  async readUnlocked(key) {
-    const directory = this.directory(key);
+  async readUnlocked(key, base = this.base(key)) {
+    const directory = path.join(base, key);
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
     )
       return readProject(directory, key);
-    const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    const project = JSON.parse(
+      await readFile(path.join(base, key + ".json"), "utf8"),
+    );
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
   async get(key) {
     await this.init();
-    const release = await acquireFileLock(this.lockFile(key));
+    return this.#getRegistered(key);
+  }
+  async #getRegistered(key) {
+    const base = this.base(key);
+    if (Object.hasOwn(this.creationErrors, key)) throw this.creationErrors[key];
+    const release = await acquireFileLock(path.join(base, key + ".json.lock"));
+    let primaryError;
     try {
-      return await this.readUnlocked(key);
+      return await this.readUnlocked(key, base);
+    } catch (error) {
+      primaryError = error;
+      throw error;
     } finally {
-      await release();
+      try {
+        await release();
+      } catch (error) {
+        throw primaryError || error;
+      }
     }
   }
   async create(name, directory) {
+    if (directory && !path.isAbsolute(directory))
+      throw Error("存储位置必须是绝对路径");
     const p = {
       version: 1,
       id: id(),
@@ -170,28 +310,120 @@ export class Store {
       documents: [],
       settings: {},
     };
-    if (directory) {
-      if (!path.isAbsolute(directory)) throw Error("存储位置必须是绝对路径");
-      await this.init();
-      await mkdir(directory, { recursive: true });
-      const registryLock = path.join(this.root, ".registry.lock");
-      const releaseRegistry = await acquireFileLock(registryLock);
+    this.#validateProject(p);
+    const task = this.pending
+      .catch(() => {})
+      .then(() => this.#createProject(p, directory));
+    this.pending = task;
+    return task;
+  }
+  async #createProject(p, directory) {
+    await mkdir(this.root, { recursive: true });
+    const releaseRegistry = await acquireFileLock(
+      path.join(this.root, ".registry.lock"),
+    );
+    let committed = false,
+      primaryError;
+    try {
+      await this.#loadRegistry();
+      const unresolved = (await this.#listRegistered()).filter(
+        (project) => project.error,
+      );
+      if (unresolved.length)
+        throw new ProjectRecoveryRequired(
+          unresolved.map((project) => project.id),
+        );
+      const base = path.resolve(directory || this.root),
+        target = path.join(base, p.id);
+      await mkdir(base, { recursive: true });
+      if (
+        Object.hasOwn(this.locations, p.id) ||
+        (await this.#pathExists(path.join(this.root, p.id))) ||
+        (await this.#pathExists(path.join(this.root, p.id + ".json")))
+      )
+        throw Error("项目ID或存储目录已存在");
+      const release = await acquireFileLock(
+        path.join(base, p.id + ".json.lock"),
+      );
+      let writeError,
+        intent = false;
       try {
-        await this.init();
-        this.locations[p.id] = path.resolve(directory);
-        const temporary = path.join(this.root, ".locations." + id() + ".tmp");
-        await writeFile(temporary, JSON.stringify(this.locations, null, 2), {
-          mode: 0o600,
-        });
-        await rename(temporary, path.join(this.root, ".locations.json"));
+        if (
+          (await this.#pathExists(target)) ||
+          (await this.#pathExists(path.join(base, p.id + ".json")))
+        )
+          throw Error("项目ID或存储目录已存在");
+        // Exclusive reservation: never initialize inside a pre-existing user directory.
+        await mkdir(target);
+        await this.#writeRegistryFile(".creations.json", { [p.id]: base });
+        intent = true;
+        try {
+          await this.#saveLocked(p, {}, base, true);
+          committed = true;
+        } catch (error) {
+          if (error instanceof ProjectCommitUncertain) committed = true;
+          throw error;
+        }
+      } catch (error) {
+        writeError = error;
+      }
+      try {
+        if (intent) {
+          if (!committed && writeError) {
+            // Never retire an intent if actual disk evidence is ambiguous. The
+            // ordinary pre-journal error remains definite only with proven absence.
+            try {
+              committed =
+                (await this.#pathExists(path.join(target, "project.json"))) ||
+                (await this.#pathExists(
+                  path.join(target, ".transaction.json"),
+                )) ||
+                (await this.#pathExists(path.join(base, p.id + ".json")));
+            } catch (error) {
+              throw new ProjectCommitUncertain(p.id, error);
+            }
+            if (committed && !(writeError instanceof ProjectCommitUncertain))
+              writeError = new ProjectCommitUncertain(p.id, writeError);
+          }
+          if (committed && base !== path.resolve(this.root)) {
+            this.locations[p.id] = base;
+            await this.#writeRegistryFile(".locations.json", this.locations);
+          }
+          await this.#writeRegistryFile(".creations.json", {});
+        }
+      } catch (error) {
+        // A committed project remains discoverable through its durable intent.
+        writeError =
+          error instanceof ProjectCommitUncertain
+            ? error
+            : writeError ||
+              (committed ? new ProjectCommitUncertain(p.id, error) : error);
       } finally {
+        try {
+          await release();
+        } catch (error) {
+          writeError =
+            writeError ||
+            (committed ? new ProjectCommitUncertain(p.id, error) : error);
+        }
+      }
+      if (writeError) throw writeError;
+      return p;
+    } catch (error) {
+      primaryError = error;
+      throw error;
+    } finally {
+      try {
         await releaseRegistry();
+      } catch (error) {
+        throw (
+          primaryError ||
+          (committed ? new ProjectCommitUncertain(p.id, error) : error)
+        );
       }
     }
-    await this.save(p);
-    return p;
   }
-  async save(p, { activity = false } = {}) {
+  #validateProject(p) {
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -251,55 +483,84 @@ export class Store {
       if (new Set(p.cases.map((item) => item.id)).size !== p.cases.length)
         throw Error("用例ID重复");
     }
+  }
+  async save(p, { activity = false } = {}) {
+    this.#validateProject(p);
     const task = this.pending
       .catch(() => {})
       .then(async () => {
         await this.init();
-        const lock = this.lockFile(p.id);
-        const release = await acquireFileLock(lock);
+        const base = this.base(p.id);
+        if (Object.hasOwn(this.creationErrors, p.id))
+          throw this.creationErrors[p.id];
+        const release = await acquireFileLock(
+          path.join(base, p.id + ".json.lock"),
+        );
+        let committed = false,
+          primaryError;
         try {
-          let previous;
-          try {
-            previous = await this.readUnlocked(p.id);
-          } catch (e) {
-            if (e.code !== "ENOENT") throw e;
-          }
-          if (
-            previous &&
-            p._diskFingerprint &&
-            p._diskFingerprint !== previous._diskFingerprint
-          )
-            throw Error("项目文件已被其他窗口或 Git 修改，请重新加载后再保存");
-          const previousConfiguration =
-            previous?.configRevision ?? previous?.revision ?? 0;
-          const expectedConfiguration = p.configRevision ?? p.revision ?? 0;
-          if (
-            previous &&
-            (activity
-              ? (p.revision || 0) !== (previous.revision || 0)
-              : expectedConfiguration !== previousConfiguration)
-          )
-            throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
-          const next = structuredClone(p);
-          next.revision = (previous?.revision || 0) + 1;
-          next.configRevision = activity
-            ? previousConfiguration
-            : previousConfiguration + 1;
-          if (!activity && previous) {
-            next.history = previous.history;
-            next.runs = previous.runs;
-            next.protocolRuns = previous.protocolRuns || [];
-          }
-          next.updatedAt = new Date().toISOString();
-          await writeProject(this.directory(p.id), next);
-          Object.assign(p, await readProject(this.directory(p.id), p.id));
+          await this.#saveLocked(p, { activity }, base);
+          committed = true;
           return p;
+        } catch (error) {
+          primaryError = error;
+          throw error;
         } finally {
-          await release();
+          try {
+            await release();
+          } catch (error) {
+            throw (
+              primaryError ||
+              (committed ? new ProjectCommitUncertain(p.id, error) : error)
+            );
+          }
         }
       });
     this.pending = task;
     return task;
+  }
+  async #saveLocked(p, { activity = false }, base, creating = false) {
+    let previous;
+    try {
+      previous = await this.readUnlocked(p.id, base);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (creating && previous) throw Error("项目ID或存储目录已存在");
+    if (
+      previous &&
+      p._diskFingerprint &&
+      p._diskFingerprint !== previous._diskFingerprint
+    )
+      throw Error("项目文件已被其他窗口或 Git 修改，请重新加载后再保存");
+    const previousConfiguration =
+      previous?.configRevision ?? previous?.revision ?? 0;
+    const expectedConfiguration = p.configRevision ?? p.revision ?? 0;
+    if (
+      previous &&
+      (activity
+        ? (p.revision || 0) !== (previous.revision || 0)
+        : expectedConfiguration !== previousConfiguration)
+    )
+      throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
+    const next = structuredClone(p);
+    next.revision = (previous?.revision || 0) + 1;
+    next.configRevision = activity
+      ? previousConfiguration
+      : previousConfiguration + 1;
+    if (!activity && previous) {
+      next.history = previous.history;
+      next.runs = previous.runs;
+      next.protocolRuns = previous.protocolRuns || [];
+    }
+    next.updatedAt = new Date().toISOString();
+    await writeProject(path.join(base, p.id), next);
+    try {
+      Object.assign(p, await readProject(path.join(base, p.id), p.id));
+    } catch (error) {
+      throw new ProjectCommitUncertain(p.id, error);
+    }
+    return p;
   }
   async append(key, field, value, limit = 50) {
     for (let attempt = 0; attempt < 5; attempt++) {
