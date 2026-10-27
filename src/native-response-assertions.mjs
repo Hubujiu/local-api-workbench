@@ -70,7 +70,7 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     (compareType !== undefined && !comparisons.includes(compareType)) ||
     (enabled && compareType === undefined)
   )
-    throw Error("原生断言仅支持有界文字路径与声明比较");
+    throw Error("原生断言仅支持有界文字路径与声明字面比较");
   if (
     compareType === "regularmatch" &&
     (!hasExpected ||
