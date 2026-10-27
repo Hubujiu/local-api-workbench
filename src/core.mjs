@@ -1756,6 +1756,16 @@ export function restoreProject(document) {
     throw Error("执行记录备份格式无效");
   if ((document.history || []).some((item) => typeof item.id !== "string"))
     throw Error("请求历史备份格式无效");
+  // Both collections share the execution-result lookup namespace. Validate
+  // the entire input before retention truncation, without rewriting evidence
+  // identities or imposing a new migration rule on already persisted projects.
+  const executionIds = new Set();
+  for (const field of ["history", "runs"])
+    for (const record of document[field] || []) {
+      if (!record.id || executionIds.has(record.id))
+        throw Error("备份执行记录ID不能为空或重复");
+      executionIds.add(record.id);
+    }
   if (
     (document.documents || []).some(
       (item) =>

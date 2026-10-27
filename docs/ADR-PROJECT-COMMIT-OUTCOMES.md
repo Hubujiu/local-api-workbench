@@ -96,3 +96,23 @@ collisions, structural corruption, isolation, and real child-process interruptio
 before journaling, with a journal, and after manifest application. Permission
 fixtures run only where POSIX permission bits are effective; all other creation
 fixtures also run on Windows. Tests preserve user sentinel files throughout.
+
+## Restore execution-record identity
+
+New backup restores validate nonempty string record IDs and shared uniqueness
+across API `history` and flow `runs` before any write. Validation covers the whole
+input, including records beyond the existing first-50 retention limit. A restore
+must not report success for evidence that the shared execution-result lookup
+cannot address unambiguously. IDs are opaque: no trimming, normalization,
+regeneration, merging, or deduplication occurs. Correlation `runId` fields are not
+record identities; protocol history and different projects remain separate
+namespaces. Legacy optional source/timing fields remain optional.
+
+This restriction applies only to new restores. Existing ambiguous disk evidence
+remains inspectable; its existing detail-lookup ambiguity error stays unchanged,
+and no global Store migration or project-read rejection is introduced. Tests use
+actual API and plan execution, owner export/restore, restart, official SDK HTTP
+and stdio detail readback, invalid-input byte-for-byte disk preservation, and
+unchanged peer call counts. The pre-fix reproduction returned 201, persisted two
+same-ID entries across restart, and listed both through the SDK while detail
+retrieval failed as ambiguous. These are functional tests, not script workloads.
