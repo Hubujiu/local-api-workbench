@@ -326,7 +326,21 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
-          assertNativeInheritanceIdentity(previous, p, nativeInheritanceEdit);
+          // Disk JSON omits optional undefined fields. Compare both sides after
+          // the same existing snapshot normalization, not raw disk vs JS shape.
+          const identityPrevious =
+            nativeInheritanceEdit && previous
+              ? {
+                  ...previous,
+                  plans: previous.plans.map(snapshotPlan),
+                  cases: previous.cases?.map(snapshotCase),
+                }
+              : previous;
+          assertNativeInheritanceIdentity(
+            identityPrevious,
+            p,
+            nativeInheritanceEdit,
+          );
           if (
             previous &&
             p._diskFingerprint &&

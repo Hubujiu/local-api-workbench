@@ -305,3 +305,23 @@ combinations. This is a backend operation, with no new UI or MCP authority.
 Initial owner rename specification failed with 404 before implementation; its
 first path now passes. Full lifecycle/roundtrip/entrypoint verification and exact
 CI remain pending at this stage; this is not final acceptance.
+
+The first complete saved-case/plan workflow exposed a real stage bug: comparing
+raw stored JSON against re-normalized snapshots rejected valid moves because
+optional undefined fields exist only in memory. Locked verification now applies
+the same existing snapshotPlan/snapshotCase normalizers to previous and candidate
+before exact comparison; it does not ignore arbitrary fields or allow snapshot
+edits. The full formerly failing owner flow now passes. An independently run
+review fixture reproduced this same stage failure before the correction.
+
+Four lifecycle tests cover subtree rename/reparent, API reparent, unchanged source
+identities and old frozen case/plan/history, actual live/frozen Authorization and
+headers, two native formats through two generations, backup/server restart and
+independent Store reads. Native export of the full project with cases remains a
+negative; roundtrip uses an explicit definition-only restored copy, never drops
+cases implicitly. Official SDK HTTP confirms actual live/frozen execution and
+unchanged write/execute/project gates; it gains no graph-edit tool. Whole-file
+regressions include form/flow/inheritance, folder moves, resource validation,
+MCP deletion confirmation and plan versioning. Exact final CI is still pending.
+Test setup corrections (restore returns201; invalid owner token403; MCP execution
+requires write plus execute) follow existing contracts and are not product fixes.
