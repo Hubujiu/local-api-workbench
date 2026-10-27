@@ -4,7 +4,12 @@
 export function assertNativeProtocolIdentities(source, archived = []) {
   const seen = new Map();
   function visit(node, projectId) {
-    if (!["grpc", "socketio"].includes(node?.target_type)) return;
+    if (
+      !["grpc", "socketio", "websocket2", "socket_method", "sse"].includes(
+        node?.target_type,
+      )
+    )
+      return;
     function claim(kind, parts) {
       if (parts.some((part) => typeof part !== "string"))
         throw Error("原生协议身份字段无效");
@@ -14,7 +19,12 @@ export function assertNativeProtocolIdentities(source, archived = []) {
         throw Error("原生协议身份拼接歧义；不会合并不同来源定义或消息");
       seen.set(key, tuple);
     }
-    if (node.target_type === "socketio") {
+    if (node.target_type === "websocket2") {
+      for (const message of node.message || [])
+        claim("protocol", [node.target_id, message.param_id]);
+    } else if (["socket_method", "sse"].includes(node.target_type)) {
+      claim("protocol", [node.target_id]);
+    } else if (node.target_type === "socketio") {
       claim("socketio", [node.target_id]);
       for (const message of node.message || []) {
         claim("native-message-plan", [node.target_id, message.param_id]);

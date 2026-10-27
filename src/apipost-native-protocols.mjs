@@ -396,6 +396,7 @@ export function prepareNativeProtocols(source, resource) {
           ...(handshake ? { handshake } : {}),
           url: urlQuery(node),
           message: payload ?? "",
+          ...((payload ?? "") === "" ? { sendEmptyMessage: true } : {}),
           ...textTemplateMode(payload, "WebSocket正文"),
           name: name + " / " + text(message.name, "消息名称", 200),
         });
