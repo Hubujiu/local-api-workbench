@@ -446,5 +446,7 @@ whole-export rejection/no mutation, actual loopback frozen case execution after
 live API edits, stored history, backup/restart and source/third-project isolation.
 The initial tests correctly encountered the existing multiple-service export
 restriction and selected an empty default environment; fixture setup was corrected
-without weakening guards. Four new groups pass locally. Exact final independent
-CI remains pending until the updated PR14 tree is published and verified.
+without weakening guards. Four new groups and eight complete related files (46 tests) pass locally,
+including root-only samples that correctly exclude extra live API headers/query.
+Full format/check/diff checks pass. Exact final independent CI remains pending
+until the updated PR14 tree is published and verified.

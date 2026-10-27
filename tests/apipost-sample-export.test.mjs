@@ -139,6 +139,24 @@ test("sample export rejects unrepresentable live API reinheritance and incomplet
       assert.throws(() => encode(p));
       assert.deepEqual(p, before);
     }
+  // Root samples intentionally exclude the API layer, unlike grouped samples.
+  const roots = structuredClone(original);
+  roots.cases = roots.cases.filter((c) => !c.folderId);
+  roots.caseFolders = [];
+  roots.requests[0].headers.push({ key: "X-Live-Only", value: "not-in-root" });
+  roots.requests[0].query.push({ key: "liveOnly", value: "not-in-root" });
+  for (const encode of formats) {
+    const q = imported(encode(roots), "root-only");
+    assert.equal(q.cases.length, 2);
+    assert(
+      q.cases.every(
+        (c) => !c.request.headers.some((h) => h.key === "X-Live-Only"),
+      ),
+    );
+    assert(
+      q.cases.every((c) => !c.request.query.some((h) => h.key === "liveOnly")),
+    );
+  }
   // Explicit noauth overrides live API auth; raw API body is not inherited.
   const auth = structuredClone(original);
   auth.requests[0].auth = { type: "bearer", token: "fictional-live-only" };
