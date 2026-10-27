@@ -566,6 +566,7 @@ try {
           assertions: workerData.responseAssertions || [],
           extractions: workerData.responseExtractions || [],
           evidence: workerData.responseHeaderEvidence,
+          cookieEvidence: workerData.responseCookieEvidence,
         }),
       );
       context.setProp(context.global, "__nativeResponseDataJSON", data);
@@ -590,7 +591,7 @@ try {
             : "null") +
           ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
           nativeAssertionsInstallerSource +
-          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response?.headers,JSON.stringify(data.evidence),readXML,readText,pm.response,{local:localVariables,effective:variables,environment:scopeState.environment,globals:scopeState.globals});globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
+          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response?.headers,JSON.stringify(data.evidence),readXML,readText,pm.response,{local:localVariables,effective:variables,environment:scopeState.environment,globals:scopeState.globals},response?.cookies,JSON.stringify(data.cookieEvidence));globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
           pickVarsInstallerSource +
           ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
       );
