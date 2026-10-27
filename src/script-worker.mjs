@@ -39,13 +39,36 @@ const activityMetrics = {
   promiseStateMs: 0,
   serializationMs: 0,
 };
+// Diagnostics only: all admission/interruption budgets still use wall time.
+const threadCPU = () => {
+  try {
+    return typeof process.threadCpuUsage === "function"
+      ? process.threadCpuUsage()
+      : null;
+  } catch {
+    return null;
+  }
+};
+const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
-  const started = Date.now();
+  const started = Date.now(),
+    cpuStarted = threadCPU();
   try {
     return fn();
   } finally {
     activityMetrics[metric] += Math.max(0, Date.now() - started);
+    const cpuFinished = threadCPU();
+    if (cpuStarted && cpuFinished)
+      activityCPUTimeUs[metric.replace(/Ms$/, "Us")] =
+        (activityCPUTimeUs[metric.replace(/Ms$/, "Us")] || 0) +
+        Math.max(
+          0,
+          cpuFinished.user +
+            cpuFinished.system -
+            cpuStarted.user -
+            cpuStarted.system,
+        );
   }
 };
 const callbacks = new Map(),
@@ -814,6 +837,7 @@ try {
     result: {
       ...serializedResult,
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {
         ...activityMetrics,
         fakerLoadMs: fakerProviderLoadMs(),
@@ -825,11 +849,17 @@ try {
         serializationStart,
     },
   };
+  // Native JSON/string conversion can finish between QuickJS interrupt checks.
+  // The already charged serialization and host parsing tail must not publish
+  // a successful result after consuming more than the requested active budget.
+  if (outcome.result.activityMs > workerData.activityBudgetMs)
+    throw Error("脚本执行超时");
 } catch (error) {
   outcome = {
     error: error.message,
     scriptStage,
     activityOperation,
+    activityCPUTimeUs: { ...activityCPUTimeUs },
     activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
     scriptDiagnostics: {
       activityBudgetMs: workerData.activityBudgetMs,

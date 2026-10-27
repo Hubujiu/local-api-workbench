@@ -159,7 +159,7 @@ test("four unary comparators alone preserve omitted expected fields; active and 
         /自有/,
       );
   for (const comparison of [
-    "regularmatch",
+    "unsupportedComparison",
     "regex",
     "empty",
     "contains",

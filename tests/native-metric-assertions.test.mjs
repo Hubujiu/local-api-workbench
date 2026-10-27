@@ -45,7 +45,7 @@ test("metric paths are optional inert diagnostics; only declared bounded compari
       { compareType: "eq" },
       { compareType: "eq", compareValue: 4 },
       { compareType: "eq", compareValue: "{{active}}" },
-      { compareType: "regularmatch", compareValue: "4" },
+      { compareType: "unsupportedComparison", compareValue: "4" },
       { compareType: "exist", path: undefined },
     ])
       assert.throws(() => normalizeNativeAssertionData({ type, expression }));
