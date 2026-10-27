@@ -8,7 +8,7 @@ service, image, ACCEPT_EULA setting or automatic SQL Server CI is introduced.
 
 ## Implemented inert contract
 
-- Reuse the existing pinned MIT node-sql-parser 5.4.0 TransactSQL parser. A strict
+- Reuse the existing pinned Apache-2.0 node-sql-parser 5.4.0 TransactSQL parser. A strict
   AST whitelist reconstructs SQL; input text is never an execution payload.
 - Only one local `schema.table` SELECT, explicit unqualified columns/aliases,
   AND comparisons to @pN, simple column ordering. First slice intentionally
@@ -70,3 +70,19 @@ Official references checked read-only:
 A fresh worktree npm ci --ignore-scripts used its exact unchanged lock, not shared
 node_modules. Offline install lacked cached zod-to-json-schema; normal install
 succeeded. No new package/version or lock modification was needed for this stage.
+
+## Injected adapter state-machine stage (still no installed transport)
+
+`runSQLServerReadWIP` requires an explicitly injected unconnected port. No default
+factory exists, so calling it cannot discover/start a driver. The port contract
+is exercised only with fake transports: ordered READ_ONLY probe then rebuilt
+query, exact bigint/text/basic values, one-result metadata, row/byte rejection,
+abort before/during connect/prerequisite/user query, ignored late callbacks,
+single destroy and confirmed-close before success, redacted failure. These tests
+do not prove Tedious wire behavior or SQL Server semantics. A real adapter,
+precise driver version/license/lock, cancellation transport ownership and real
+server validation still remain. SQL Server EULA remains pending.
+
+License correction: the baseline node-sql-parser 5.4.0 package reports Apache-2.0
+and contains that LICENSE; the first PR stage incorrectly called this parser MIT.
+Tedious itself is MIT. No parser code was copied and no dependency was added.
