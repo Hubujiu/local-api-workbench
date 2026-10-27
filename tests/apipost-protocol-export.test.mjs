@@ -190,7 +190,8 @@ test("source-backed export rejects incomplete graphs changed wire definitions st
         bearer: { key: "fictional-removed" },
       };
     else if (kind === "websocket") {
-      const ws = nativeProtocolFixture().apis[0];
+      const ws = nativeProtocolFixture({ ws: "wss://127.0.0.1:1/echo?x=one" })
+        .apis[0];
       ws.project_id = source.project_id;
       source.apis.push(ws);
     } else

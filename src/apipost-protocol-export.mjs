@@ -14,7 +14,7 @@ const fail = (reason) => {
 
 // A source archive is inert provenance, never authority to resurrect a deleted
 // definition or to reconstruct stripped handshake credentials. This first slice
-// deliberately requires an exact, complete TCP/SSE source-backed graph.
+// deliberately requires an exact, complete source-backed graph; plaintext WS groups are indivisible.
 export function prepareProtocolExport(project, { projectId, id }) {
   const definitions = project.protocols ?? [],
     sources = project.settings?.apipostProtocolSources ?? [];
@@ -94,7 +94,11 @@ export function prepareProtocolExport(project, { projectId, id }) {
         entry.source.project_id !== entry.sourceProjectId)
     )
       fail("来源身份");
-    if (!["socket", "socket_method", "sse"].includes(entry.source.target_type))
+    if (
+      !["socket", "socket_method", "sse", "websocket2"].includes(
+        entry.source.target_type,
+      )
+    )
       fail("WS/扩展协议尚未证明的反向配置");
     if (entry.source.mark_id) fail("协议状态引用");
     const group = groups.get(entry.sourceProjectId) ?? new Map();
@@ -109,6 +113,46 @@ export function prepareProtocolExport(project, { projectId, id }) {
       parents = new Map();
     for (const node of nodes) {
       if (node.target_type === "socket") continue;
+      if (node.target_type === "websocket2") {
+        if (
+          typeof node.url !== "string" ||
+          !node.url.startsWith("ws://") ||
+          node.url.includes("{{")
+        )
+          fail("仅支持明文字面量WS地址");
+        const url = new URL(node.url);
+        if (url.protocol !== "ws:" || url.username || url.password || url.hash)
+          fail("WS地址或凭据");
+        if (!Array.isArray(node.message) || !node.message.length)
+          fail("完整WS消息组");
+        let groupFolder;
+        for (const message of node.message) {
+          if (
+            typeof message?.request?.raw !== "string" ||
+            !message.request.raw ||
+            message.request.raw.includes("{{")
+          )
+            fail("WS非空字面量文本消息");
+          const defId = resource(
+              "protocol",
+              node.target_id + ":" + message.param_id,
+            ),
+            definition = byId.get(defId);
+          if (!definition || covered.has(defId)) fail("缺失/重用的WS活动定义");
+          covered.add(defId);
+          if (definition.handshake?.requiredHeaders?.length)
+            fail("已移除的运行时握手凭据");
+          const folder = definition.folder || "";
+          if (groupFolder !== undefined && groupFolder !== folder)
+            fail("WS消息组目录拆分");
+          groupFolder = folder;
+        }
+        for (const kind of ["header", "cookie"])
+          for (const row of node.request?.[kind]?.parameter ?? [])
+            if (!Object.hasOwn(row, "value")) fail("已移除的握手来源值");
+        paths.set(node.target_id, groupFolder);
+        continue;
+      }
       const defId = resource("protocol", node.target_id),
         definition = byId.get(defId);
       if (!definition || covered.has(defId)) fail("缺失/重用的活动定义");
