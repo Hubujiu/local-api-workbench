@@ -132,3 +132,20 @@ A non-default empty environment is not pristine: only the exact Store default
 shape may be replaced. Reads as well as saves/restores validate graph closure;
 manual graph damage on disk fails closed, rather than silently running own-only
 requests. No partial resource detach/move/delete operation is implemented.
+
+
+### Saved frozen-case execution
+
+A frozen case retains its original request ID but has no live binding. Direct
+owner execution, cURL/load and creation of another plan may reuse it only when
+the complete request exactly matches an already saved case or plan snapshot in
+that same project (and all four snapshot flags are present). Flags or ID alone
+do not establish this context. Unsaved modifications must first go through an
+existing case/step edit context; this does not reconstruct parent values. Actual
+HTTP acceptance covers create case → parent edit → saved case execution and plan
+creation → backup restore/server restart → execution, with a changed-field fake
+rejected before network. Environment placeholders remain dynamic as above.
+
+Preserved-graph case records must also associate `sourceRequestId` with that same
+request ID in the current bound graph; inconsistent associations reject at Store
+save/read and backup restore, before execution.

@@ -353,6 +353,34 @@ test("absolute URL graph executes through official SDK HTTP and CLI frozen plans
   });
   p.currentEnvironmentId = "selected";
   await app.store.save(p);
+  // A saved frozen case is executable evidence, not a forged unbound live API.
+  await call(route("execute"), { request: editedCase.request });
+  assert.equal(wire.at(-1).headers["x-shared"], "project");
+  assert.equal(wire.at(-1).headers.authorization, "Bearer selected-token");
+  const casePlan = await call(route("plans"), {
+    name: "Plan from saved case",
+    environmentId: "selected",
+    steps: [{ request: editedCase.request }],
+  });
+  await call(route("run"), { planId: casePlan.id });
+  assert.equal(wire.at(-1).headers["x-shared"], "project");
+  const tampered = structuredClone(editedCase.request);
+  tampered.headers[0].value = "not-the-saved-case";
+  const caseCount = wire.length;
+  await call(route("execute"), { request: tampered }, 400);
+  assert.equal(wire.length, caseCount);
+  const validCaseProject = await app.store.get(p.id);
+  const badCaseProject = structuredClone(validCaseProject);
+  badCaseProject.cases[0].sourceRequestId = "foreign-api";
+  await assert.rejects(
+    app.store.save(badCaseProject),
+    /来源接口与请求身份不一致/,
+  );
+  assert.throws(
+    () => restoreProject(badCaseProject),
+    /来源接口与请求身份不一致/,
+  );
+  assert.deepEqual(await app.store.get(p.id), validCaseProject);
   const flatTarget = await app.store.create("Default flatten control");
   const flat = await call(`projects/${flatTarget.id}/import`, { document: d });
   const conf = await call("mcp/config", {
@@ -485,6 +513,15 @@ test("absolute URL graph executes through official SDK HTTP and CLI frozen plans
   await client.close();
   const restarted = await restart();
   const loaded = await restarted.store.get(p.id);
+  const restoredCaseProject = restoreProject(loaded);
+  await restarted.store.save(restoredCaseProject);
+  await call(`projects/${restoredCaseProject.id}/execute`, {
+    request: restoredCaseProject.cases[0].request,
+  });
+  assert.equal(wire.at(-1).headers["x-shared"], "project");
+  assert.equal(wire.at(-1).headers.authorization, "Bearer selected-token");
+  await call(`projects/${restoredCaseProject.id}/run`, { planId: casePlan.id });
+  assert.equal(wire.at(-1).headers["x-shared"], "project");
   await call(route("execute"), { request: loaded.requests[0] });
   assert.equal(wire.at(-1).headers.authorization, "Bearer selected-token");
   assert.equal(wire.at(-1).headers["x-shared"], "live-parent");

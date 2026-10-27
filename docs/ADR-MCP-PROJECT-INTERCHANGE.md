@@ -74,7 +74,7 @@ historical folder IDs; correcting that fixture assertion did not change producti
 This stage depends on PR43's graph implementation; final dependency and own CI
 must be verified independently, not inferred from PR43 or prior PR29 GREEN.
 
-Final prerequisite is PR43 local `4c2ec16`, joined into the prior pure dependency
+Final prerequisite is PR43 local `565173c`, joined into the prior pure dependency
 base without a PR29 or integration-branch ancestor. Its bound-API override guards
 and native-flow single-freeze path are retained. On that joined tree, eight complete
 related files pass 39 tests, including existing native task export and native MCP
@@ -82,3 +82,9 @@ workflow/API paths; full check/format/diff pass. New four SDK chains also restor
 and execute the frozen plan with independent persisted run histories. This is
 local evidence; this PR's new exact-head CI remains pending until independently
 checked. Stage tests on the earlier PR43 tree do not substitute for that result.
+
+The first published inheritance adapter head `49b3c3c` had stage CI
+`40507833336` green (19 jobs). PR43 subsequently fixed execution of exact saved
+frozen case/plan requests; this dependency update is included here and needs new
+exact-head CI. Stage GREEN is not final acceptance, and the frozen-request
+exception does not trust caller flags or a copied live API ID.

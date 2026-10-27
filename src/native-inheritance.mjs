@@ -536,6 +536,12 @@ export function validateNativeInheritanceProject(project) {
     (project.requests || []).length !== bound.size
   )
     fail("项目接口与绑定图不完整");
+  for (const item of project.cases || [])
+    if (
+      !bound.has(item.sourceRequestId) ||
+      item.request?.id !== item.sourceRequestId
+    )
+      fail("冻结用例来源接口与请求身份不一致");
   for (const frozen of [
     ...(project.plans || []).flatMap((p) =>
       (p.steps || []).map((s) => s.request),
@@ -558,10 +564,27 @@ export function resolveNativeInheritance(
   }
   const b = state.bound.get(request.id);
   if (request.nativeInheritance === undefined) {
-    if (
-      b &&
-      !(allowFrozen && snapshots.every((flag) => request[flag] === true))
-    )
+    const frozenFlags = snapshots.every((flag) => request[flag] === true);
+    // Snapshot flags or a live API ID alone are not proof of freezing. A direct
+    // execution/new plan can reuse only an exact snapshot already stored in this
+    // project. Edited old cases/steps use their separate trusted save context.
+    const savedSnapshot =
+      frozenFlags &&
+      [
+        ...(project.cases || [])
+          .filter((item) => item.sourceRequestId === request.id)
+          .map((item) => item.request),
+        ...(project.plans || []).flatMap((plan) =>
+          (plan.steps || []).map((step) => step.request),
+        ),
+      ].some(
+        (saved) =>
+          saved &&
+          saved.nativeInheritance === undefined &&
+          snapshots.every((flag) => saved[flag] === true) &&
+          isDeepStrictEqual(saved, request),
+      );
+    if (b && !(frozenFlags && (allowFrozen || savedSnapshot)))
       fail("live接口丢失绑定，不能静默降级");
     return request;
   }
