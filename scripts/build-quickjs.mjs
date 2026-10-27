@@ -18,12 +18,18 @@ if (
 )
   throw Error("Unapproved runtime source");
 const root = path.resolve(directory),
-  patch = fileURLToPath(new URL("rejection-tracker.patch", assets));
+  patch = fileURLToPath(new URL("rejection-tracker.patch", assets)),
+  heapPatch = fileURLToPath(new URL("heap-accounting.patch", assets));
 if (
   hash((await readFile(patch, "utf8")).replace(/\r\n/g, "\n")) !==
   manifest.patchSha256
 )
   throw Error("Runtime patch integrity mismatch");
+if (
+  hash((await readFile(heapPatch, "utf8")).replace(/\r\n/g, "\n")) !==
+  manifest.heapPatchSha256
+)
+  throw Error("Heap accounting patch integrity mismatch");
 const git = (...args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 if (mode === "prepare") {
@@ -53,9 +59,12 @@ if (mode === "prepare") {
     throw Error("Runtime source revision mismatch");
   git("apply", "--check", patch);
   git("apply", patch);
+  git("apply", "--check", heapPatch);
+  git("apply", heapPatch);
   const expected = [
     "c/interface.c",
     "packages/variant-quickjs-wasmfile-release-sync/Makefile",
+    "vendor/quickjs/quickjs.c",
   ];
   if (
     JSON.stringify(git("diff", "--name-only").split("\n").sort()) !==
@@ -65,6 +74,7 @@ if (mode === "prepare") {
   const code = await readFile(path.join(root, "c/interface.c"), "utf8");
   if (hash(code) !== manifest.patchedSourceSha256)
     throw Error("Patched C source mismatch");
+  await verifySource();
   const symbols = [];
   for (const match of code.matchAll(
     /^([\w()* ]+[\s*]+)(QTS_\w+)\((.*?)\) ?\{/gm,
@@ -84,12 +94,7 @@ if (mode === "prepare") {
     await writeFile(path.join(wrapper, name), JSON.stringify(value));
   console.log("QUICKJS_SOURCE_PREPARED", manifest.sourceCommit, symbols.length);
 } else {
-  if (
-    git("rev-parse", "HEAD") !== manifest.sourceCommit ||
-    hash(await readFile(path.join(root, "c/interface.c"))) !==
-      manifest.patchedSourceSha256
-  )
-    throw Error("Runtime source does not match the reviewed patch");
+  await verifySource();
   const dist = path.join(
     root,
     "packages/variant-quickjs-wasmfile-release-sync/dist",
@@ -101,4 +106,22 @@ if (mode === "prepare") {
   if (hash(wasm) !== manifest.wasmSha256 || hash(glue) !== manifest.glueSha256)
     throw Error("Rebuilt runtime differs from bundled runtime");
   console.log("QUICKJS_REPRODUCIBLE_BUILD_PASS", manifest.wasmSha256);
+}
+
+async function verifySource() {
+  const expected = {
+    "c/interface.c": manifest.patchedSourceSha256,
+    "packages/variant-quickjs-wasmfile-release-sync/Makefile":
+      manifest.patchedMakefileSha256,
+    "vendor/quickjs/quickjs.c": manifest.patchedQuickJSSourceSha256,
+  };
+  if (
+    git("rev-parse", "HEAD") !== manifest.sourceCommit ||
+    JSON.stringify(git("diff", "HEAD", "--name-only").split("\n").sort()) !==
+      JSON.stringify(Object.keys(expected).sort())
+  )
+    throw Error("Runtime source paths differ from the reviewed patches");
+  for (const [name, digest] of Object.entries(expected))
+    if (hash(await readFile(path.join(root, name))) !== digest)
+      throw Error("Runtime source does not match reviewed patches: " + name);
 }
