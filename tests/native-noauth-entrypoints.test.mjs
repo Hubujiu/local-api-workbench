@@ -23,7 +23,7 @@ const closeServer = async (server) => {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
 };
-function cli(root, projectId, planId) {
+function cli(root, projectId, planId, environmentId) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -33,6 +33,9 @@ function cli(root, projectId, planId) {
         projectId,
         "--plan",
         planId,
+        ...(environmentId === undefined
+          ? []
+          : ["--environment", environmentId]),
       ],
       {
         cwd: fileURLToPath(new URL("..", import.meta.url)),
@@ -132,6 +135,11 @@ for (const [transport, format] of [
         },
       };
       target.folders = ["Public"];
+      target.environments.push({
+        id: "override-env",
+        name: "Override identity",
+        variables: structuredClone(target.environments[0].variables),
+      });
       target.requests = [
         normalizeRequest({
           id: "control",
@@ -294,7 +302,9 @@ for (const [transport, format] of [
           steps: [{ request }],
         },
       });
-      const checkRun = (run) => {
+      const checkRun = (run, frozenDefault = plan.environmentId) => {
+        assert.equal(run.environmentId, "override-env");
+        assert.equal(run.snapshot.environmentId, frozenDefault);
         assert.equal(run.status, "passed", JSON.stringify(run));
         assert.equal(run.recordSaved, true);
         assert.deepEqual(JSON.parse(run.results[0].response.body), {
@@ -303,7 +313,11 @@ for (const [transport, format] of [
         assert.equal(run.results[0].request.auth.type, "none");
       };
       checkRun(
-        await call("execute_flow", { projectId: target.id, planId: plan.id }),
+        await call("execute_flow", {
+          projectId: target.id,
+          planId: plan.id,
+          environmentId: "override-env",
+        }),
       );
       assert.equal(request.inheritAuth, false);
       if (format === "apipost-directory") {
@@ -312,7 +326,10 @@ for (const [transport, format] of [
           await call("execute_flow", {
             projectId: target.id,
             planId: imported.imported.planIds[0],
+            environmentId: "override-env",
           }),
+          saved.plans.find((p) => p.id === imported.imported.planIds[0])
+            .environmentId,
         );
       }
       const controls = await call("create_execution_flow", {
@@ -328,6 +345,7 @@ for (const [transport, format] of [
         planId: controls.id,
       });
       assert.equal(controlRun.status, "passed");
+      assert.equal(controlRun.environmentId, controls.environmentId);
       assert.equal(
         JSON.parse(controlRun.results[0].response.body).auth,
         "Bearer fictional-destination-global",
@@ -352,15 +370,30 @@ for (const [transport, format] of [
       live.inheritAuth = true;
       live.auth = { type: "bearer", token: "fictional-live-change" };
       await app.store.save(saved);
-      const result = await cli(root, target.id, plan.id);
+      const result = await cli(root, target.id, plan.id, "override-env");
       assert.equal(result.code, 0, result.stderr);
       checkRun(JSON.parse(result.stdout));
       const persisted = await app.store.get(target.id),
         restored = restoreProject(persisted);
+      for (const project of [persisted, restored]) {
+        const records = project.runs.filter(
+          (run) => run.snapshot?.id === plan.id,
+        );
+        assert(
+          records.length >= 2,
+          "both MCP and CLI records must actually exist",
+        );
+        assert(records.every((run) => run.environmentId === "override-env"));
+      }
       await app.store.save(restored);
       await closeServer(app.server);
       app = await createApp({ root, port: 0 });
-      const restoredResult = await cli(root, restored.id, plan.id);
+      const restoredResult = await cli(
+        root,
+        restored.id,
+        plan.id,
+        "override-env",
+      );
       assert.equal(restoredResult.code, 0, restoredResult.stderr);
       checkRun(JSON.parse(restoredResult.stdout));
       assert(wire.filter((r) => r.path === "/public").length >= 3);

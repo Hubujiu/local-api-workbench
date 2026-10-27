@@ -1714,7 +1714,10 @@ export async function createApp({
             const controller = new AbortController();
             controllers.set(runId, controller);
             try {
-              const environmentId = b.environmentId || plan.environmentId;
+              const environmentId = selectedEnvironment(
+                p,
+                b.environmentId || plan.environmentId,
+              ).id;
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
@@ -1735,6 +1738,7 @@ export async function createApp({
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
               });
+              run.environmentId = environmentId;
               return json(
                 res,
                 200,

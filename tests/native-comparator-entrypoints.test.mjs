@@ -758,6 +758,7 @@ function unaryShape(requests) {
   assert.equal(provided, 1);
 }
 function successfulRun(run, names) {
+  assert.equal(run.environmentId, run.snapshot.environmentId);
   assert.equal(run.status, "passed", JSON.stringify(run));
   assert.equal(run.recordSaved, true);
   assert.equal(run.recordId, run.id);

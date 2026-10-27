@@ -8,6 +8,7 @@ import { projectCookieSession } from "../src/cookie-jar.mjs";
 import { scopedExecution } from "../src/variable-scopes.mjs";
 import {
   environmentVariables,
+  selectedEnvironment,
   resolveServiceRequest,
 } from "../src/environments.mjs";
 import path from "node:path";
@@ -48,9 +49,12 @@ if (!args.includes("--project") || !args.includes("--plan")) {
         project.settings?.apipostDatabases || [],
       );
     delete credentials.databaseConnections;
-    const environmentId = args.includes("--environment")
-      ? option("--environment")
-      : plan.environmentId;
+    const environmentId = selectedEnvironment(
+      project,
+      args.includes("--environment")
+        ? option("--environment")
+        : plan.environmentId,
+    ).id;
     let run = await runPlan(
       plan,
       environmentVariables(project, environmentId),
@@ -73,6 +77,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
           process.stderr.write(`${step.status.toUpperCase()} ${step.name}\n`),
       },
     );
+    run.environmentId = environmentId;
     run = await recordPlanRun(store, project.id, run, "cli");
     const json = JSON.stringify(run, null, 2) + "\n";
     if (args.includes("--output"))

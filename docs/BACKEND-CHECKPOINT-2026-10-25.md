@@ -1,8 +1,17 @@
-# 后端检查点 · 2026-10-27 07:16 UTC
+# 后端检查点 · 2026-10-27 07:39 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 07:16 跨格式明确无认证候选
+## 07:39 实际执行环境证据候选
+
+- 最近完整 GREEN 为 `a8273f248277fd0dd110fdb29380c6edf6754763` / local `c3b901e6b463f75ae57f02274e26ce1c0ed1be7f` / tree `593f7d7ee9eb88689ac069b1341885cdeee43b5d`。CI `40466431993` 首次 19/19 成功，全部 checkout 同树；12 实际产物完整覆盖 360 文件（四分片各90），三平台各 1869 通过，跨格式 opt-out、MCP/CLI/恢复、数据库、production stdio 和固定引擎均通过。旧 8b5 XML RED 不改判。
+- 本候选修复 owner/CLI 实际执行环境身份丢失：冻结计划默认 A、本次覆盖 B 时虽然真实请求使用 B，但历史只保存 snapshot 默认 A。现在复用 selectedEnvironment 解析一次真实 ID，供变量/作用域/Cookie/服务选择及 run.environmentId 共用；snapshot.environmentId 保留原计划默认，不改执行结果或既有 MCP 行为。相同变量值的两个环境也能明确辨认，缺失旧记录不猜测回填。
+- 同 PR30 最终 remote `7c5afb162c6814964ea7cc7ce8047caddcadc603` / local `244cb64475c7957a8d13f827e69d15629c56cb35` / tree `78d0db16c3fc88c56a70e1809a7b3622ad4728d9`。独立 CI `40467260432` 首次 10/10 成功，全部 actual checkout `4b9cb56ac66b8cc4c89d274ab8f4fe68e452d665` 同树，三平台各 1056 通过。旧33cc阶段 CI40467039737 因后续测试提交取消，保留历史，不用于验收。
+- 真实 owner/CLI 验证默认、当前环境及覆盖、200/500、返回/磁盘/备份/恢复重启。原先实际 header 已显示 B 而结果身份 undefined 的 RED 保留。generic 保存失败和 typed 未知提交均保留 actual environmentId，但 recordSaved:false、不伪造持久化、不自动网络重放。测试 CLI 子进程15s/输出上限/abort清理只约束测试，不改应用250ms/2s等预算。
+- 根合并保留原 CLI database-stdin 授权与凭据清理逻辑，仅补实际环境选择/字段。完整原生断言/提取主链额外核默认 ID；四格式认证隔离流程新增 HTTP/stdio MCP 和 CLI 覆盖环境 B、冻结仍 A（原生导入计划保留自己的默认），并要求实际存在的 MCP/CLI 历史记录在备份恢复后仍记录 B。普通继承对照保持原默认。
+- 四整文件 37/37 通过；强化历史记录非空断言后，认证SDK/CLI、CLI数据库授权、保存收据三个整文件 21/21 通过。旧/新记录、保存失败、不确定提交、恢复与项目隔离一起验证。本候选仍须自己的组合 CI，无合并 main/develop 或部署。
+
+## 07:16 历史跨格式明确无认证候选
 
 - 最近完整 GREEN 为 `4bef1ab170f81de0e623f3cebbd6366b08917a67` / local `ab8f04fa3257b832b310bd781c9337bec4bd6785` / tree `dd1d0ae9dd8f017cc0c42f641b00a297ba9aeec2`。CI `40464723874` 首次 19/19 成功，全部 checkout 已核；12 实际产物完整覆盖 359 文件（90/90/90/89），三平台各 1866 通过，原生 noauth、SDK URL 防丢失、数据库、production stdio、固定引擎均通过。它不包含以下 Postman/OpenAPI 增量。
 - 同 PR8 后续修复两个明确来源 opt-out：Postman 使用既有 collection→folder→request 有效认证解析结果，仅 type=noauth 关闭目标继承；缺省/null 子可继承明确父 noauth，显式子认证优先。OpenAPI 仅选中的有效 security 空数组关闭继承，operation 自有声明优先于 root。缺省/null 本身、optional [{}]、非空方案不改为关闭，generic shared-auth 默认不变，不从 OpenAPI 生成凭据。
