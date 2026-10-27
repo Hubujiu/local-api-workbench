@@ -146,6 +146,7 @@ export function snapshotWireStep(step) {
         ? step.protocol.message
         : (savedMessage ?? "");
     validateProtocolTemplate(definition, selectedMessage);
+    protocolRequestOptions({ ...definition, message: selectedMessage });
     protocol.message =
       definition.templateMode === undefined
         ? template(selectedMessage)

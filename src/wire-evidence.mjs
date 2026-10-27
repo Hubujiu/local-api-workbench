@@ -49,6 +49,7 @@ export function prepareWireExecution(project, input) {
         "body",
         "completion",
         "templateMode",
+        "sendEmptyMessage",
       ].some((key) => input[key] !== undefined) ||
       (input.type !== undefined && input.type !== saved.type)
     )

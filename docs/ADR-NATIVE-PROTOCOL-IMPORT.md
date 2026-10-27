@@ -261,3 +261,50 @@ denial, live open/send/stop, and records through backup/restore/server restart.
 Atomic endpoint/expression/script rejection and missing/oversize pre-open versus
 live-send failures are distinguished by real connection/write counters. Restored
 records do not resurrect sessions or grant removed handshake credentials.
+
+## Legacy composed identity collision rejection
+
+Persisted derived IDs remain unchanged, including colon-containing source IDs.
+Before any project mutation, imports now compare structured identity tuples
+against their legacy colon-joined keys. Distinct tuples cannot silently become
+one equal gRPC definition or one message plan. The check includes existing
+redacted protocol sources from the same source-project namespace, so splitting
+an ambiguous archive into successive imports (including after restart) cannot
+bypass it. Reimport of the same tuple is still idempotent; different source
+projects remain separate namespaces. Inert method/message identities reserve
+that namespace too. No archived credentials are reconstructed or transmitted.
+
+This rejects new ambiguous imports; it does not repair or reinterpret a project
+that already lost definitions before this check. Native export must independently
+reject historical collapsed graphs. Full HTTP import/Store/restart tests prove
+atomic rejection and zero endpoint connections; existing real gRPC/Socket.IO,
+TCP/WS/SSE, frozen-template and restore chains remain part of the batch.
+
+## WebSocket identity and empty text fidelity
+
+Native WebSocket message identities also share the legacy `protocol` namespace
+with single-target TCP method and SSE definitions. Structured source tuples now
+reject ambiguous colon-joined keys before mutation, including archived sources
+from earlier imports/restarts. Existing persisted ID algorithms are unchanged;
+this does not repair projects whose distinct sources already collapsed. Separate
+source projects retain separate namespaces. Native exporters must reject already
+ambiguous provenance independently.
+
+New native empty text messages carry optional `sendEmptyMessage: true`. This is
+an explicit WebSocket text-send intent, not a template mode. Only boolean values
+on WebSocket definitions are accepted; an explicitly marked message must be
+text. The field is preserved by normalization, frozen plans, CLI execution,
+record validation, persistence and restore. Saved-definition calls cannot override
+it. Nonempty messages send normally. Missing/false flags do not request an empty
+frame: old unmarked one-shot empty messages remain receive-only. Existing
+explicit template-mode empty-frame behavior and live explicit `send("")` are
+unchanged. Old projects/snapshots receive no inferred intent or migration.
+
+No TLS, redirect, message-size, duration or collection limits are relaxed. The
+native importer still uses the 64 KiB source bound and runtime uses the existing
+1 MiB message and bounded collection limits. Independent real loopback tests
+cover empty/nonempty frames, receive-only compatibility, invalid flags with zero
+connections, Store/HTTP identity rejection before and after a fresh child-process
+restart, cross-project isolation, frozen plans after live definition edits, actual
+CLI child execution and evidence/backup restore. Original app code was not run;
+this is bounded Workbench behavior, not a claim of complete native WS parity.

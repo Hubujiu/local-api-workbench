@@ -105,3 +105,45 @@ test("native authorization metadata migrates only its requirement, not a stored 
   assert.doesNotMatch(JSON.stringify(p), /fixture-source-secret/);
   assert.equal(JSON.stringify(source), original);
 });
+
+test("ambiguous legacy protocol identity tuples reject atomically in one or successive imports", () => {
+  const source = extendedProtocolFixture();
+  const a = source.apis[1],
+    b = structuredClone(a);
+  a.target_id = "a:b";
+  b.target_id = "a";
+  for (const n of [a, b])
+    n.protos[0].services[0].methods = n.protos[0].services[0].methods.slice(
+      0,
+      1,
+    );
+  a.protos[0].services[0].methods[0].grpc_method_id = "c";
+  b.protos[0].services[0].methods[0].grpc_method_id = "b:c";
+  source.apis = [a, b];
+  const original = structuredClone(source);
+  const empty = project(),
+    before = structuredClone(empty);
+  assert.throws(() => importIntoProject(empty, source), /身份拼接歧义/);
+  assert.deepEqual(empty, before);
+  const p = project();
+  importIntoProject(p, { ...source, apis: [a] });
+  const saved = structuredClone(p);
+  importIntoProject(p, { ...source, apis: [a] });
+  assert.deepEqual(p, saved, "same source reimport remains idempotent");
+  assert.throws(
+    () => importIntoProject(p, { ...source, apis: [b] }),
+    /身份拼接歧义/,
+  );
+  assert.deepEqual(p, saved);
+  importIntoProject(p, {
+    ...source,
+    project_id: "another-project",
+    apis: [{ ...b, project_id: "another-project" }],
+  });
+  assert.equal(
+    p.settings.grpcDefinitions.length,
+    2,
+    "different source projects remain isolated",
+  );
+  assert.deepEqual(source, original);
+});
