@@ -1,6 +1,14 @@
-# 后端检查点 · 2026-10-27 19:39 UTC
+# 后端检查点 · 2026-10-27 19:46 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 19:46 读回故障夹具修正，独立桌面失败仍待解释
+
+- PR17旧final `64924099` 的首次CI `40570778466` 为9 GREEN/1 macOS core RED：实际1051项中1050通过、1失败，唯一readback夹具报Missing expected rejection；Linux1051通过，Windows1048通过+3明确POSIX权限skip。三份实际ZIP摘要/TAP已核对。异步fs.watch没有保证先于最终read执行，未制造预定故障；不是放宽产品语义可解决的问题，不重跑旧tree。
+- 同PR17 test-only local `c303dc6c921156e6b202e9809ea334a10c909a5a` / remote `f3e30234315085e46d13d52e6c88c63f945d486e` / tree `385d34c191453c4328b17a5364c4deba9b0fa301` 已保存，新CI `40571911488` 尚待。仅测试内包装精确目标readFile，确认metadata存在且journal已移除后，真实rename该metadata，再调用原readFile获得真实ENOENT，finally还原builtin。没有伪造Store错误、产品hook、等待调参或预算放宽。功能相关完整文件批次44项测试通过；原20文件139结果保留但不替代新组合自身验证。
+- 根旧存储 `9e65bcc5280297d28477187a31cc4e2ed1ea785f` / tree `a49ba916ed4717d3728b3a9eba3cc11647d09465` 的首次CI `40571220917` 已观测两项独立失败（当时尚未全部结束）：macOS shard2 job122425619283同一readback夹具455pass/1fail；另macOS desktop job122425618783在desktop-smoke.mjs:236报DESKTOP_ORIGINAL_SCRIPT_FAILURE，脚本250ms预算下userScriptMs373、CPU78418us、elapsed981ms、promise-state。后者根因未定，不能归为存储夹具、不能凭后续绿色证明修复；production stdio及新shutdown测试此前通过。没有另跑VM/XML压力或专项复现、未更改预算。
+- 根test-only合并点 `afd75b0f4569aa3032c293c229fca9d49ad47bc6` / tree `8cb8ac4a9ab30290a5075d95cc0be5ec4296ec5a` 上3完整文件（创建、提交outcome、自选/默认目录MCP故障恢复）30/30通过，0fail/cancel/skip，11.011秒；check/完整format/diff通过。生产实现与已跑20文件组合完全相同；仅确定性测试及静态研究/检查点文档新增。新根仍须自己的CI，最后完整GREEN仍8d72。
+- 新静态补证已写入NATIVE-AUTOMATION-STATIC-GAPS：样例默认设置适配器不等于saved automation，原sandbox已证变量返回抑制而非运行隔离；原生平级事件图构树缺口未因补证消失。
 
 ## 19:39 自选目录创建事务组合候选
 

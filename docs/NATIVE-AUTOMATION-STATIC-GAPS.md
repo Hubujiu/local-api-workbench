@@ -122,3 +122,14 @@
 [版本元数据](https://registry.npmjs.org/apipost-cli-pro/3.0.19) 所列tarball的实际SHA1及SHA512 integrity均匹配。包内dist/apipost-cli/测试.html的SHA256为 `3bb7e59e7df9837a73345cf51de88bfe9e7b1a0c178c7a9891c5927ca509e7a1`。只用JSON解析其内嵌data，不执行HTML：test_events有三个事件，root api(sort1)、root while(sort2)、while下if(sort1)，含parent_event_id；报告顶层children为空。未复制其中身份、地址、用户或请求内容。
 
 这是非空的**报告事件材料**，不是项目automated_testings/event_list出口。它支持flat父引用形态，不证明saved settings到runner options或有序children的转换。当前仍未取得非空同源项目出口和完整装配链，不能据此开启原生自动化迁移，也不能将canonical repeat包装为该格式兼容。
+
+## 2026-10-27 19:44 补证：样例运行器不是保存的自动化图
+
+仅静态检索既有合法提取的231个renderer JS文件（合计42,244,518 bytes），并沿模块和直接别名查找；未执行原版、未读取字节码、未调用真实runner端点，以下只记录契约事实，不复制实现。
+
+- 新来源chunk `5509.478a5be6cfa8.js` SHA256 `d34370de3042ed4bba723fa1b18422003658c9b58e3cea0e82b50577dbd65437`，module65509：Unicode偏移4198处，在15861.q(scene:auto_test)返回后将execute_count赋给iterationCount、interval_time赋给sleep，并传递ignore_error/enable_sandbox。偏移4761明确来自82896.lp样例默认设置，不是saved automated_testings.settings；10404处调用472049.s4，后者转交/proxy/v2/runner。只证明真实静态样例调用链，不据此启用原生自动化迁移。
+- 默认来源chunk `657.b6a76120fe76.js` SHA256 `3fa10dbb181bbeca693bf5f4b18f476d077222bafa56a611a1d4e244f057eb16`，module82896、偏移1665：样例默认execute_count1/interval_time0/ignore_error1/enable_sandbox-1。5509偏移4657从原samples数组筛选，4847按筛选数组顺序生成sort；传给659068.tJ后API/sample叶子不保留该sort，运行顺序已在数组中。这不证明saved parent_event_id/sort如何装配成children。
+- 既有sender SHA256 `5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`，module842216，LF规范化Unicode偏移33641671、33641725：auto_test完成时enable_sandbox>0会将返回的variables.globals/environment置空。5509偏移8257/8794随后进入变量处理/写回函数。因此已证“变量结果抑制”，不代表进程/VM隔离、网络关闭或全部副作用回滚，更不证明saved automation字段如何传入。
+- 这些offset均为完整文件0-based Unicode字符位置，不是UTF-8字节。main renderer仍按既有20bb6e21哈希固定；659068.tJ偏移3570508（函数）、3571526（API/sample叶）、3573819（仅已有children递归）。直接别名搜索只找到新增sample调用；未排除间接导出、计算属性、其他版本或服务端装配。
+
+**仍未关闭：**保存的平级event_list如何有序构树、saved settings来源/覆盖顺序、同来源非空原生项目导出样本。保持原生自动化不支持的明确边界；样例适配器和报告结构不能代替缺失证据。
