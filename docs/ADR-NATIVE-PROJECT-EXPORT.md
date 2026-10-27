@@ -353,3 +353,12 @@ owner400 without altering persisted definitions. The first fixture's stale-revis
 cleanup PUT was correctly refused by Store; the fixture was corrected, not the
 optimistic-lock policy. The old blanket-Hawk rejection test now rejects an unmapped
 user extension instead, preserving its unsupported-data error path.
+
+Wire coverage also asserts fixed AWS region/service/date-scope, Hawk timestamp,
+nonce/ext/app/delegation, and EdgeGrid timestamp/nonce rather than merely accepting
+self-consistent signatures. A Workbench-edited Hawk definition without algorithm
+or payloadHash is exported with explicit defaults and authenticates its actual
+POST payload after both roundtrips and restart. AWS templated secret credentials
+remain templates in exported/frozen definitions and resolve against the selected
+saved environment only at explicit execution. EdgeGrid's nonempty signing baseURL
+uses a fictional host for the MAC while all HTTP traffic stays on loopback.
