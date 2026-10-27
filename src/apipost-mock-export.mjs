@@ -26,19 +26,14 @@ export function exportApipostMock(value, { projectId, targetId }) {
   if (value === undefined) return {};
   const mock = normalizeNativeMock(value);
   const response = (entry, key) => {
-    if (entry.serialization !== undefined)
-      throw Error("原生Mock导出暂不支持标量或XML序列化");
+    // The importer already distinguishes scalar schemas from opaque raw text.
+    // Keep the schema as a definition; never sample it or parse/normalize raw.
+    if (
+      entry.serialization !== undefined &&
+      entry.serialization !== "scalar-text"
+    )
+      throw Error("原生Mock导出不支持XML或未知序列化");
     if (entry.schema !== undefined) inlineSchema(entry.schema);
-    else {
-      let body;
-      try {
-        body = JSON.parse(entry.body);
-      } catch {
-        throw Error("原生Mock导出正文须为普通JSON对象或数组");
-      }
-      if (!body || typeof body !== "object")
-        throw Error("原生Mock导出正文须为普通JSON对象或数组");
-    }
     return {
       example_id: id(targetId, "example:" + key),
       raw_parameter: [],
