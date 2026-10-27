@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { watch, renameSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { fork } from "node:child_process";
 import { once } from "node:events";
@@ -399,6 +400,12 @@ test(
     try {
       const restart = new Store(root);
       assert.equal((await restart.get(healthy.id)).name, "healthy");
+      healthy.name = "healthy saved";
+      await restart.save(healthy);
+      assert.equal((await restart.get(healthy.id)).name, "healthy saved");
+      await assert.rejects(restart.save({ ...healthy, id: key }), {
+        code: "PROJECT_RECOVERY_REQUIRED",
+      });
       assert.equal((await pending(root))[key], custom);
       assert((await restart.list()).find((p) => p.id === key).error);
       await assert.rejects(restart.create("unsafe"), {
@@ -410,3 +417,62 @@ test(
     assert.equal((await new Store(root).list()).length, 1);
   },
 );
+
+test("complete custom commit followed by failed readback retains identity and does not replay", async (t) => {
+  const { root, custom, store } = await fixture(t),
+    read = store.readUnlocked.bind(store);
+  let key,
+    watcher,
+    moved = false,
+    fixtureError;
+  t.after(() => watcher?.close());
+  store.readUnlocked = async (id, base) => {
+    key = id;
+    const target = path.join(base, id);
+    // Watch one concrete write boundary, without mocking filesystem methods.
+    // Move only the just-published metadata; apply's remaining .gitignore/journal
+    // operations can finish, but the separate final readback cannot find it.
+    watcher = watch(target, (_event, filename) => {
+      if (String(filename) !== "project.json" || moved || fixtureError) return;
+      try {
+        renameSync(
+          path.join(target, "project.json"),
+          path.join(target, "readback-fixture.json"),
+        );
+        moved = true;
+      } catch (error) {
+        fixtureError = error;
+      }
+      watcher.close();
+    });
+    return read(id, base);
+  };
+  await assert.rejects(store.create("readback committed", custom), (error) => {
+    assert.ifError(fixtureError);
+    assert.equal(error.code, "PROJECT_COMMIT_UNCERTAIN");
+    assert.equal(error.projectId, key);
+    assert.equal(error.cause.code, "ENOENT");
+    assert.equal(error.cause.path, path.join(custom, key, "project.json"));
+    return true;
+  });
+  assert.equal(moved, true);
+  await assert.rejects(readFile(path.join(custom, key, ".transaction.json")), {
+    code: "ENOENT",
+  });
+  const applied = JSON.parse(
+    await readFile(path.join(custom, key, "readback-fixture.json"), "utf8"),
+  );
+  assert.equal(applied.name, "readback committed");
+  assert.equal(applied.revision, 1);
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, ".locations.json"), "utf8"))[key],
+    custom,
+  );
+  renameSync(
+    path.join(custom, key, "readback-fixture.json"),
+    path.join(custom, key, "project.json"),
+  );
+  const restart = new Store(root);
+  assert.equal((await restart.get(key)).revision, 1);
+  assert.equal((await restart.list()).length, 1);
+});

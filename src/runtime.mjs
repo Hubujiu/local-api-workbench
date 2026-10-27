@@ -491,6 +491,8 @@ export class Store {
       .then(async () => {
         await this.init();
         const base = this.base(p.id);
+        if (Object.hasOwn(this.creationErrors, p.id))
+          throw this.creationErrors[p.id];
         const release = await acquireFileLock(
           path.join(base, p.id + ".json.lock"),
         );
