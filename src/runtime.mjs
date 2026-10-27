@@ -148,9 +148,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateNativeInheritanceProject(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validateNativeInheritanceProject(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }

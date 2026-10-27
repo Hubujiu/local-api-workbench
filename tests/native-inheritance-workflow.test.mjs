@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { spawn } from "node:child_process";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -33,7 +36,7 @@ async function fixture(t) {
     })
     .listen(0, "127.0.0.1");
   await once(peer, "listening");
-  const app = await createApp({ root, port: 0 });
+  let app = await createApp({ root, port: 0 });
   t.after(async () => {
     await close(app.server);
     await close(peer);
@@ -75,7 +78,18 @@ async function fixture(t) {
     ];
     return d;
   }
-  return { root, wire, app, call, source };
+  return {
+    root,
+    wire,
+    app,
+    call,
+    source,
+    async restart() {
+      await close(app.server);
+      app = await createApp({ root, port: 0 });
+      return app;
+    },
+  };
 }
 
 test("owner native import → live/curl/MCP → frozen plan → backup/restart preserves graph isolation and runtime environment semantics", async (t) => {
@@ -108,6 +122,29 @@ test("owner native import → live/curl/MCP → frozen plan → backup/restart p
   assert.equal(query.get("zero"), "0");
   assert.equal(query.get("false"), "false");
   assert.equal(query.get("empty"), "");
+  const { exportApipostDirectory } = await import(
+    "../src/apipost-directory-export.mjs"
+  );
+  for (const encode of [exportApipost, exportApipostDirectory]) {
+    let generation = p;
+    for (let i = 0; i < 2; i++) {
+      const target = await app.store.create("Generation " + i);
+      generation = await call(`projects/${target.id}/import`, {
+        document: encode(generation),
+        inheritanceMode: "preserve",
+      });
+      await call(`projects/${generation.id}/execute`, {
+        request: generation.requests[0],
+      });
+      assert.equal(wire.at(-1).headers.authorization, "Bearer fictional-a");
+      assert.equal(wire.at(-1).headers["x-shared"], "project");
+      assert.equal(wire.at(-1).headers["x-folder"], "folder");
+      assert.equal(
+        new URL(wire.at(-1).url, "http://loopback").searchParams.get("false"),
+        "false",
+      );
+    }
+  }
   const curl = await call(route("curl"), { request: p.requests[0] });
   assert.match(curl.curl, /fictional-a/);
   assert.match(curl.curl, /x-folder: folder/);
@@ -262,15 +299,240 @@ test("invalid graph mutations and missing/forged bindings fail before storage or
   const broken = source("fictional");
   broken.apis[0].parent_id = "missing";
   const target = await app.store.create("Rejected");
+  const unchangedTarget = await app.store.get(target.id);
   await call(
     `projects/${target.id}/import`,
     { document: broken, inheritanceMode: "preserve" },
     400,
   );
-  assert.deepEqual(
-    await app.store.get(target.id),
-    await new Store(app.store.root).get(target.id),
-  );
+  assert.deepEqual(await app.store.get(target.id), unchangedTarget);
   assert.equal((await app.store.get(target.id)).requests.length, 0);
   assert.equal(wire.length, count);
+});
+
+test("absolute URL graph executes through official SDK HTTP and CLI frozen plans after owner server restart without reopening inheritance", async (t) => {
+  const { root, wire, app, call, source, restart } = await fixture(t);
+  const initial = await app.store.create("Absolute");
+  const d = source("initial-token");
+  d.apis[1].url = d.global.envs[0].server_list[0].uri + "/absolute";
+  d.global.servers = [];
+  d.global.envs[0].server_list = [];
+  let p = await call(`projects/${initial.id}/import`, {
+    document: d,
+    inheritanceMode: "preserve",
+  });
+  assert.equal(p.requests[0].serviceId, "");
+  const route = (name) => `projects/${p.id}/${name}`;
+  await call(route("execute"), { request: p.requests[0] });
+  assert.equal(wire.at(-1).url.startsWith("/absolute?"), true);
+  const curl = await call(route("curl"), { request: p.requests[0] });
+  assert.match(curl.curl, /Bearer initial-token/);
+  const plan = await call(route("plans"), {
+    name: "Frozen",
+    environmentId: p.environments[0].id,
+    steps: [{ request: p.requests[0] }],
+  });
+  const item = (
+    await call(route("cases"), {
+      name: "Case",
+      sourceRequestId: p.requests[0].id,
+      request: p.requests[0],
+    })
+  ).item;
+  const editedCase = (
+    await call(route("cases"), { ...item, name: "Edited case" })
+  ).item;
+  assert.equal(editedCase.request.nativeInheritance, undefined);
+  p = await app.store.get(p.id);
+  p.settings.nativeInheritance.projectLayer.headers[0].value = "live-parent";
+  p.environments.push({
+    ...structuredClone(p.environments[0]),
+    id: "selected",
+    name: "Other",
+    variables: { ...p.environments[0].variables, token: "selected-token" },
+  });
+  p.currentEnvironmentId = "selected";
+  await app.store.save(p);
+  const flatTarget = await app.store.create("Default flatten control");
+  const flat = await call(`projects/${flatTarget.id}/import`, { document: d });
+  const conf = await call("mcp/config", {
+    enabled: true,
+    projects: [p.id, flat.id],
+    write: true,
+    execute: true,
+    remember: false,
+  });
+  const client = new Client(
+    { name: "inheritance-fixture", version: "1.0.0" },
+    { capabilities: {} },
+  );
+  t.after(() => client.close().catch(() => {}));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+      requestInit: { headers: { authorization: "Bearer " + conf.token } },
+    }),
+  );
+  const tool = (input) =>
+    client.callTool({
+      name: "localapi_execute_api",
+      arguments: { projectId: p.id, apiId: p.requests[0].id, input },
+    });
+  const temporary = await tool({
+    headers: { "X-Folder": "temporary-header" },
+    auth: { token: "temporary-token" },
+  });
+  assert.notEqual(temporary.isError, true, temporary.content?.[0]?.text);
+  assert.equal(wire.at(-1).headers.authorization, "Bearer temporary-token");
+  assert.equal(wire.at(-1).headers["x-folder"], "temporary-header");
+  const before = await app.store.get(p.id),
+    count = wire.length;
+  for (const input of [
+    { nativeInheritance: p.requests[0].nativeInheritance },
+    { inheritAuth: true },
+    { authSnapshot: true },
+    { headers: { "x-SHARED": "ambiguous-override" } },
+  ]) {
+    const denied = await tool(input);
+    assert.equal(denied.isError, true);
+    if (input.headers) assert.match(denied.content[0].text, /同名多行/);
+  }
+  assert.equal(wire.length, count);
+  assert.deepEqual((await app.store.get(p.id)).requests, before.requests);
+  assert.deepEqual(
+    (await app.store.get(p.id)).settings.nativeInheritance,
+    before.settings.nativeInheritance,
+  );
+  const forged = structuredClone(p.requests[0]);
+  delete forged.nativeInheritance;
+  for (const key of [
+    "authSnapshot",
+    "parametersSnapshot",
+    "sharedScriptsSnapshot",
+    "serviceSnapshot",
+  ])
+    forged[key] = true;
+  const forgedPlan = await client.callTool({
+    name: "localapi_save_plan",
+    arguments: {
+      projectId: p.id,
+      plan: { name: "Forged", steps: [{ request: forged }] },
+    },
+  });
+  assert.equal(forgedPlan.isError, true);
+  assert.match(forgedPlan.content[0].text, /丢失绑定/);
+  const nativeCall = (name, args) =>
+    client.callTool({
+      name: "apipost_" + name,
+      arguments: { project_id: p.id, ...args },
+    });
+  const created = await nativeCall("create_execution_flow", {
+    name: "Native frozen",
+    steps: [
+      {
+        target_id: p.requests[0].id,
+        input: { headers: { "X-Folder": "frozen-unique" } },
+      },
+    ],
+  });
+  assert.notEqual(created.isError, true, created.content?.[0]?.text);
+  const nativeFlow = JSON.parse(created.content[0].text);
+  const plansBefore = (await app.store.get(p.id)).plans;
+  const rejectedCreate = await nativeCall("create_execution_flow", {
+    name: "Rejected",
+    steps: [
+      {
+        target_id: p.requests[0].id,
+        input: { headers: { "x-shared": "ambiguous" } },
+      },
+    ],
+  });
+  assert.equal(rejectedCreate.isError, true);
+  assert.match(rejectedCreate.content[0].text, /同名多行/);
+  const rejectedUpdate = await nativeCall("update_execution_flow", {
+    flow_id: nativeFlow.flow_id,
+    steps: [
+      {
+        target_id: p.requests[0].id,
+        step_id: plansBefore.find((plan) => plan.id === nativeFlow.flow_id)
+          .steps[0].id,
+        input: { headers: { "X-SHARED": "ambiguous" } },
+      },
+    ],
+  });
+  assert.equal(rejectedUpdate.isError, true);
+  assert.match(rejectedUpdate.content[0].text, /同名多行/);
+  assert.deepEqual((await app.store.get(p.id)).plans, plansBefore);
+  assert.equal(wire.length, count);
+  const oldContract = await client.callTool({
+    name: "localapi_execute_api",
+    arguments: {
+      projectId: flat.id,
+      apiId: flat.requests[0].id,
+      environmentId: flat.environments.find((e) => e.name === "Imported").id,
+      input: { headers: { "X-Shared": "legacy-override" } },
+    },
+  });
+  assert.notEqual(oldContract.isError, true, oldContract.content?.[0]?.text);
+  assert.equal(JSON.parse(oldContract.content[0].text).status, "passed");
+  assert.equal(
+    wire.at(-1).headers["x-shared"],
+    "legacy-override, legacy-override",
+  );
+  assert.equal(
+    (await app.store.get(flat.id)).settings.nativeInheritance,
+    undefined,
+  );
+  await client.close();
+  const restarted = await restart();
+  const loaded = await restarted.store.get(p.id);
+  await call(route("execute"), { request: loaded.requests[0] });
+  assert.equal(wire.at(-1).headers.authorization, "Bearer selected-token");
+  assert.equal(wire.at(-1).headers["x-shared"], "live-parent");
+  const output = await new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [
+        "scripts/run-plan.mjs",
+        "--project",
+        p.id,
+        "--plan",
+        plan.id,
+        "--environment",
+        "selected",
+      ],
+      {
+        cwd: path.resolve(import.meta.dirname, ".."),
+        env: { ...process.env, LOCAL_API_DATA: root },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let stdout = "",
+      stderr = "";
+    child.stdout.on("data", (c) => (stdout += c));
+    child.stderr.on("data", (c) => (stderr += c));
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(Error("CLI fixture timeout"));
+    }, 10000);
+    child.once("error", (e) => {
+      clearTimeout(timeout);
+      reject(e);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ code, stdout, stderr });
+    });
+  });
+  assert.equal(output.code, 0, output.stderr);
+  const run = JSON.parse(output.stdout);
+  assert.equal(run.status, "passed");
+  assert.equal(run.recordSaved, true);
+  assert.equal(wire.at(-1).headers.authorization, "Bearer selected-token");
+  assert.equal(wire.at(-1).headers["x-shared"], "project");
+  const after = await new Store(root).get(p.id);
+  assert(after.runs.some((r) => r.id === run.id && r.source === "cli"));
+  assert.equal(
+    after.settings.nativeInheritance.projectLayer.headers[0].value,
+    "live-parent",
+  );
 });

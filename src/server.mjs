@@ -1361,7 +1361,11 @@ export async function createApp({
               throw Error("来源接口不存在");
             const item = snapshotCase({
               ...data,
-              request: freezeServiceBinding(p, data.request),
+              request: freezeServiceBinding(p, data.request, {
+                allowNativeSnapshot: Boolean(
+                  p.cases?.some((item) => item.id === data.id),
+                ),
+              }),
               functions: data.functions || p.settings?.functions || [],
             });
             p.cases ??= [];

@@ -1,3 +1,4 @@
+import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
@@ -2043,6 +2044,7 @@ export function importIntoProject(
       }
     }
   }
+  if (preserveInheritance) validateResourceJSON(original);
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);

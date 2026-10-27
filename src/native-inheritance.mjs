@@ -239,23 +239,25 @@ export function assertEmptyInheritanceTarget(project) {
     if (populated(project[key]))
       fail("preserve必须导入空项目，不能覆盖已有业务数据");
   const environments = project.environments || [];
-  if (
-    !Array.isArray(environments) ||
-    environments.length > 1 ||
-    environments.some(
-      (env) =>
-        (populated(env.variables) &&
-          !(
-            env.name === "默认环境" &&
-            isDeepStrictEqual(env.variables, {
-              baseUrl: "http://127.0.0.1:4318",
-            })
-          )) ||
-        populated(env.variableDefinitions) ||
-        populated(env.serverUrls),
-    )
-  )
+  if (!Array.isArray(environments) || environments.length > 1)
     fail("preserve必须导入空项目，已有环境包含业务数据");
+  if (environments.length) {
+    const env = environments[0];
+    if (
+      !env ||
+      typeof env.id !== "string" ||
+      !env.id ||
+      Object.keys(env).some(
+        (key) => !["id", "name", "variables"].includes(key),
+      ) ||
+      env.name !== "默认环境" ||
+      !isDeepStrictEqual(env.variables, { baseUrl: "http://127.0.0.1:4318" }) ||
+      (project.currentEnvironmentId !== undefined &&
+        project.currentEnvironmentId !== env.id)
+    )
+      fail("preserve必须导入空项目，仅可替换未修改的Store默认环境");
+  } else if (project.currentEnvironmentId !== undefined)
+    fail("preserve空项目不能保留已有环境选择");
 }
 export function prepareNativeInheritanceSource(source) {
   validateResourceJSON(source);
@@ -295,7 +297,31 @@ export function prepareNativeInheritanceSource(source) {
   const apiLayers = new Map(),
     byId = new Map();
   for (const node of source.apis) {
+    fields(
+      node,
+      [
+        "target_id",
+        "target_type",
+        "project_id",
+        "parent_id",
+        "name",
+        "description",
+        "method",
+        "url",
+        "protocol",
+        "sort",
+        "version",
+        "status",
+        "attribute_info",
+        "server_id",
+        "mark_id",
+        "request",
+        "response",
+      ],
+      "HTTP资源",
+    );
     identifier(node.target_id);
+    if (node.target_id === "0") fail("源资源不能占用根父标识0");
     if (
       byId.has(node.target_id) ||
       !["api", "folder"].includes(node.target_type)
@@ -377,6 +403,17 @@ function ownRequest(request, binding) {
   )
     fail("preserve首片不支持请求任务");
   for (const kind of kinds) rows(request[kind] || [], kind);
+  if (
+    (request.form || []).some(
+      (row) =>
+        row.type === "file" ||
+        row.requiresFile ||
+        row.filename ||
+        row.filePath ||
+        row.fileBase64,
+    )
+  )
+    fail("preserve首片不支持文件参数");
   if (binding.authMode !== "own" && request.auth?.type !== "none")
     fail("继承或noauth接口不能携带own认证");
   if (binding.authMode === "own") auth({ mode: "own", value: request.auth });
@@ -598,4 +635,41 @@ export function assertNativeInheritanceIdentity(previous, next) {
     !isDeepStrictEqual(identity(prior.graph), identity(current.graph))
   )
     fail("本片不支持移除、移动或替换已绑定资源图；请使用独立项目");
+}
+
+// The source request comes from the authorized project's stored API, not tool
+// input. Retain that context across freeze (which intentionally removes binding).
+// Ordinary/flattened APIs keep the pre-existing MCP row-override contract.
+export function assertNativeInheritanceMCPInput(
+  project,
+  sourceRequest,
+  effective,
+  input,
+) {
+  const state = validateNativeInheritanceProject(project);
+  if (!state || !state.bound.has(sourceRequest.id)) return;
+  const stored = project.requests.find((r) => r.id === sourceRequest.id);
+  ownRequest(sourceRequest, stored.nativeInheritance);
+  if (!input || typeof input !== "object" || Array.isArray(input)) return;
+  const fields = [
+    ["headers", "headers"],
+    ["query", "query"],
+    ["path", "path"],
+    ["cookies", "cookies"],
+  ];
+  if (["urlencoded", "form-data"].includes(effective.bodyType))
+    fields.push(["body", "form"]);
+  for (const [inputKey, rowsKey] of fields) {
+    const patch = input[inputKey];
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) continue;
+    const canonical = (key) =>
+      rowsKey === "headers" ? key.toLowerCase() : key;
+    for (const key of Object.keys(patch))
+      if (
+        (effective[rowsKey] || []).filter(
+          (row) => canonical(row.key || "") === canonical(key),
+        ).length > 1
+      )
+        fail("MCP临时输入不能覆盖同名多行参数");
+  }
 }

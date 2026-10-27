@@ -122,6 +122,10 @@ URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}�
 
 ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
 
+### 显式保留原生 HTTP 继承图
+
+后端 owner `POST /api/projects/:id/import` 可传 `{document, inheritanceMode:"preserve"}`，仅向空业务项目导入有界 HTTP 项目→目录→API 的认证和 Header/Query/Cookie 自有层；不传仍按原方式导入时展开。保存的父层修改影响后续 live 请求，创建计划/用例时保存当时合并后的配置并移除 live 绑定；环境占位符仍按运行时所选环境解析。原生 JSON/目录出口自动保图，首片含计划/用例的图项目须用完整项目备份，不静默丢图。暂不支持图资源移动/删除/解绑、追加导入、共享 Body、源任务或其他未知继承字段；不从旧展开项目猜父值。保存/恢复验证项目内完整绑定，来源 ID 不是跨项目授权。无新增前端。详见 [继承图合同](docs/ADR-NATIVE-INHERITANCE-GRAPH.md)。
+
 ### Apipost Faker 占位符
 
 支持已列明的 $fakerjs.Company.name、$fakerjs.Internet.displayName/password 等固定无参数路径，并提供沙箱内 mockExp(text)。沿用英文Faker及原有大小/次数/执行预算，不开放任意属性路径或完整Mock.js语法。完整可选名单由参数助手展示，具体兼容范围见 docs/ADR-APIPOST-FAKER-ALIASES.md。

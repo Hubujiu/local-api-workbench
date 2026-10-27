@@ -11,7 +11,7 @@ owner HTTP import endpoint opt into this mode. Omission or `"flatten"` retains
 the existing import-time snapshot behavior. Unknown modes reject. Preservation
 requires an empty business project: no requests, folders, plans, cases, documents,
 models, protocols, history, custom settings or global/environment values. A sole
-pristine empty environment created by Store is replaceable by imported source
+pristine default environment created by Store is replaceable by imported source
 environments. Existing project identity and authorization do not change.
 Neither preserve nor ordinary import may append to an already preserved graph.
 Old flattened projects cannot recover discarded parent values and are not
@@ -114,6 +114,21 @@ Current local acceptance covers both native formats over two generations, actual
 owner HTTP/cURL/canonical MCP execution, parent edits versus frozen configuration,
 0/false/empty environment interpolation, explicit noauth, same-source-ID project
 isolation, Store roundtrip/backup restoration and invalid-graph fail-closed paths.
-The MCP check uses the real canonical dispatcher, not an official SDK transport
-claim. Additional transport/restart/CLI composition evidence will be reported
-separately rather than inferred from these checks.
+The final local workflow also covers an absolute-URL/no-service graph via official
+SDK HTTP, safe temporary input overrides, invalid binding/flag overrides with zero
+network, closing/reopening the owner server, and a separate CLI child executing a
+stored frozen plan against a selected environment. A restored case snapshot can be
+edited without reconnecting to its live graph.
+
+MCP temporary input for a preserved bound API rejects a selected parameter name
+matching more than one effective row (Header case-insensitive; other kinds
+case-sensitive), including active-parent/disabled-child pairs. The check retains
+trusted stored-API context across freezing and also covers native-compatible plan
+construction. Unique matches retain existing semantics. Ordinary/flattened APIs'
+pre-existing multiple-row override behavior is unchanged. This restriction does
+not make disabled source rows into masks or change the stored graph.
+
+A non-default empty environment is not pristine: only the exact Store default
+shape may be replaced. Reads as well as saves/restores validate graph closure;
+manual graph damage on disk fails closed, rather than silently running own-only
+requests. No partial resource detach/move/delete operation is implemented.
