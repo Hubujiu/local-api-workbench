@@ -150,3 +150,33 @@ test("inert SQLServer metadata, precision and result failures publish no partial
   assert.equal(r.rows.length, 1000);
   assert.equal(r.truncated, true);
 });
+
+test("inert SQLServer closure failures and factory errors cannot report success or leak credentials", async () => {
+  await assert.rejects(
+    run(input, {
+      factory: () => {
+        throw Error("password secret");
+      },
+    }),
+    (e) => e.message === "SQL Server WIP transport initialization failed",
+  );
+  const p = port();
+  p.closed = Promise.reject(Error("private driver detail"));
+  await assert.rejects(
+    run(input, { factory: () => p }),
+    (e) =>
+      e.message ===
+      "SQL Server transport closure not confirmed; no result published",
+  );
+  assert.equal(p.destroys, 1);
+  const tooMany = port({
+    query: async (s) => {
+      s.metadata([{ name: "v", type: "Int" }]);
+      for (let i = 0; i < 1002; i++) s.row([i]);
+    },
+  });
+  await assert.rejects(
+    run(input, { factory: () => tooMany }),
+    /no result published/,
+  );
+});

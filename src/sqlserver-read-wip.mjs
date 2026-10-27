@@ -114,7 +114,12 @@ export async function runSQLServerReadWIP(input, { factory, signal } = {}) {
     plan = compileSQLServerRead(input.sql, input.parameters);
   if (typeof factory !== "function")
     throw Error("SQL Server WIP has no installed transport");
-  const port = factory(config);
+  let port;
+  try {
+    port = factory(config);
+  } catch {
+    throw Error("SQL Server WIP transport initialization failed");
+  }
   if (
     !port ||
     typeof port.connect !== "function" ||
