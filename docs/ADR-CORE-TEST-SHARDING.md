@@ -12,7 +12,9 @@ job limit, **not direct confirmation of the cancellation cause**: its cancellati
 annotation was not readable. No retry, historical-result replacement, or
 application timeout relaxation is part of this change.
 
-Core now has two independent shards on **each** of Linux, Windows and macOS.
+The initial version used two independent shards on **each** of Linux, Windows and macOS.
+The controlled isolation revision below supersedes that allocation; the initial
+evidence is retained as history, not reclassified as a new-version pass.
 Every job retains `timeout-minutes: 10`, Node 24 and
 `--test-concurrency=2`; matrix fail-fast remains disabled. All other jobs, audits,
 permissions, checks and application resource limits remain unchanged. Tests inside
@@ -108,3 +110,58 @@ remain failures. These fixtures do not substitute for application or three-OS CI
 Any future CI result proves only its actual checkout tree. A green independent
 `develop`-based PR is not evidence that the much larger combined tree, unrelated
 heap changes, or the whole product has passed.
+
+## Controlled per-job resource isolation revision (2026-10-27)
+
+The current workflow uses **four disjoint exhaustive shards per OS** and
+**one test-file process per job**. Its 12 core jobs (19 jobs overall) use the
+same standard runners, Node 24 selection and ten-minute caps. Ordinary
+`npm test` still uses two file processes. No test, application budget, retry,
+failure policy, runtime version pin, non-core job or security check is changed.
+The manifest is version 2 and explicitly records `fileConcurrency: 1`; that
+same value constructs the Node command. The existing modulo partition is
+unchanged, now used with `--shard=INDEX/4` in CI.
+
+This is a controlled isolation experiment, **not a proven root-cause fix**.
+Initial two-shard PR CI [40433509485](https://github.com/Hubujiu/local-api-workbench/actions/runs/40433509485)
+and combined runs [40433701023](https://github.com/Hubujiu/local-api-workbench/actions/runs/40433701023)
+and [40434862187](https://github.com/Hubujiu/local-api-workbench/actions/runs/40434862187)
+were green. Later combined runs
+[40436500912](https://github.com/Hubujiu/local-api-workbench/actions/runs/40436500912)
+and [40438420588](https://github.com/Hubujiu/local-api-workbench/actions/runs/40438420588)
+remain red: one macOS core shard failed in each. The latter script-sequence
+failure recorded 264 ms compatibility wall time against 9,525 microseconds CPU.
+Scheduling/contention is plausible, not uniquely established. Its failing and
+passing macOS shards also used different image and Node patch versions.
+
+Every core launcher prints only an explicit diagnostic allowlist: Node version,
+platform, architecture, `os.availableParallelism()`, CPU array length, total
+memory and optional ImageOS/ImageVersion. No environment dump is emitted.
+These are observations, not CPU reservations or a replacement for source-tree
+and actual artifact verification.
+
+Node's default file process isolation and `--test-concurrency` affect concurrent
+test-file processes, not concurrent operations inside a file. Existing in-file
+Promise.all project A/C requests, file-lock competing processes and lifecycle
+fixture batches remain untouched. The lifecycle fixture's five rounds of three
+four-concurrent-worker batches still exercise 60 worker executions, not 60
+simultaneously. The real sharder fixture now runs all five files across four
+shards, uses an exclusive shared marker to reject file overlap, and retains
+coordinated simultaneous nested subtests: serializing those subtests would hang
+and fail. All assertion, spawn, signal and cancellation error paths remain tested.
+An independent original-glob comparison covers totals one through four; no hidden
+selection filter or list-only CI execution is allowed by the contract.
+
+Four jobs with one file each retain four outer file processes per OS across
+four VMs instead of two. This can reduce unrelated suites competing on one VM,
+but cannot remove within-test concurrency, host scheduling or other causes.
+It doubles core setup/install/artifact overhead and may roughly double core VM
+minutes, increase queueing and use more concurrency quota. Equal file counts do
+not promise equal runtime; reduced I/O overlap can also hurt. No larger/paid
+runner is introduced. Fresh exact-head CI must establish the actual behavior;
+historical green runs and this change alone do not prove product delivery.
+
+Local revision verification: all ten contract tests pass, including actual file
+execution, nested concurrency and failure propagation. Independent branch scope
+is still 225 files, now allocated 57 / 56 / 56 / 56 with the same full-list hash.
+No full local suite is repeated solely to seek a green timing outcome.
