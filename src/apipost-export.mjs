@@ -165,6 +165,10 @@ export function exportApipost(project) {
     for (const [key, value] of Object.entries(project.openapiComponents))
       unsupported(value, "模型组件 " + key);
   }
+  // false is meaningful here: absence enables Mock serving. Native definitions
+  // have no verified project-wide equivalent, so never silently reopen it.
+  if (project.settings?.mockEnabled === false)
+    throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (!["statuses", "recursiveFolderScopes"].includes(key))
       unsupported(value, `设置 ${key}`);
