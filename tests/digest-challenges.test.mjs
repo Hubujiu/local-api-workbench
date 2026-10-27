@@ -265,6 +265,10 @@ for (const [name, challenges] of [
     "empty algorithm is not omitted MD5",
     `${offer().replace("algorithm=SHA-256", 'algorithm=""')}, Digest realm="other", nonce="other"`,
   ],
+  ...["", " , , "].map((qop) => [
+    "empty qop cannot downgrade: " + JSON.stringify(qop),
+    [offer({ qop }), offer({ algorithm: "MD5" })],
+  ]),
   ["case-insensitive duplicate realm", `${offer()}, REALM="contaminated"`],
   ["duplicate nonce", `${offer()}, nonce="other"`],
   ["duplicate extension", `${offer()}, x-extension=a, X-Extension=b`],
@@ -316,6 +320,7 @@ test("Digest direct parser bounds, full tokens, header arrays and literal quoted
     'Digest realm="x", nonce="n\u007f"',
     'Digest realm="x", nonce="n\u0100"',
     'Digest realm="x", nonce="n", qop="auth;invalid"',
+    'Digest realm="x", nonce="n", qop="\u00a0auth"',
     'Digest realm="x", nonce="n", algorithm=""',
     'Digest realm="x", nonce="n", algorithm=MD5/',
     offer() +
@@ -378,6 +383,8 @@ for (const transport of ["owner", "mcp-http", "mcp-stdio"]) {
         }),
       );
       await store.save(project);
+      deniedProject.requests = [structuredClone(project.requests[0])];
+      await store.save(deniedProject);
       const before = structuredClone((await store.get(project.id)).requests);
       const owner = async (route, data) =>
         fetch(app.url + route, {
@@ -429,6 +436,7 @@ for (const transport of ["owner", "mcp-http", "mcp-stdio"]) {
           arguments: { projectId: deniedProject.id, apiId: "digest-0" },
         });
         assert.equal(rejected.isError, true);
+        assert.match(rejected.content[0].text, /项目未授权/);
         assert.equal(target.requests.length, 0);
       } else {
         const forbidden = await fetch(

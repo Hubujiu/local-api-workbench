@@ -99,8 +99,14 @@ function selectChallenge(value) {
     // RFC 7616 §3.7: first supported challenge in server preference order.
     if (!algorithmName) continue;
     if (!Object.hasOwn(fields, "realm") || !fields.nonce) throw malformed();
-    const qops = fields.qop?.split(",").map((qop) => qop.trim());
-    if (qops?.some((qop) => qop && !TOKEN.test(qop))) throw malformed();
+    const qops = fields.qop
+      ?.split(",")
+      .map((qop) => qop.replace(/^[ \t]+|[ \t]+$/g, ""));
+    if (
+      qops &&
+      (!qops.some(Boolean) || qops.some((qop) => qop && !TOKEN.test(qop)))
+    )
+      throw malformed();
     const qop = qops?.includes("auth")
       ? "auth"
       : qops?.includes("auth-int")
