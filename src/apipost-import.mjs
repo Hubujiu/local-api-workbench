@@ -332,6 +332,10 @@ export function importApipost(
       body: raw,
       form,
       auth: auth(request.auth),
+      // Explicit native noauth/none is an opt-out, never target-project inheritance.
+      ...(["noauth", "none"].includes(request.auth?.type)
+        ? { inheritAuth: false }
+        : {}),
       schema: schema(body.raw_schema || {}),
       examples,
       responses,

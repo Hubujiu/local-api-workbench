@@ -116,3 +116,35 @@ No source URL is populated with generated signature parameters. This is not a
 new original GUI run or real AWS account verification. Definitions/history may
 contain explicitly configured secrets and wire session tokens; follow the
 sensitive-storage boundary in ADR-AWS-QUERY-PRESIGNING.md.
+
+
+## Explicit no-auth and resolved-source isolation
+
+A confirmed importer bug mapped native `noauth`/`none` to Workbench `none` but
+left target inheritance enabled. Importing into an existing project with global
+Bearer authentication could then add unrelated target credentials to a source
+request explicitly requiring none. This was reproduced with fictional values;
+no real credentials or accounts are used.
+
+Legacy explicit `noauth` **and** `none` now set `inheritAuth:false`. Completely
+absent legacy authentication retains its previous default; this fix does not
+redefine ambiguous old-format omission, generic Workbench `none`, OpenAPI/Postman
+imports or ordinary target-project requests' inheritance settings.
+
+The modern JSON/directory adapter already resolves project → ancestor folder →
+request native authentication before calling the legacy field mapper. All those
+resolved requests now set `inheritAuth:false`, including explicit none/noauth,
+source `inherit` resolved to none, and a fully absent modern source chain (whose
+existing native default is noauth). Source Bearer/Basic/signing values and existing
+source precedence stay unchanged. This prevents a second resolution against the
+destination's unrelated global/folder credentials. It grants no DB access and does
+not restore stripped credentials.
+
+Independently authored fixtures verify actual localhost Authorization through the
+owner HTTP import/plan/run APIs, not only stored models: both modern JSON and native
+directory input, source scopes, explicit noauth/none, absent modern source,
+Bearer/Basic, frozen plans, changed live models and target auth, backup/restore and
+restart, and another project remaining unchanged. Legacy explicit spellings and
+ordinary/absent-legacy inheritance are separate controls. Native export/reimport
+and MCP/CLI historical-flow combined verification belongs to the integration
+branch because this independent feature base does not contain those exporters.

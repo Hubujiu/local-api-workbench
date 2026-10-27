@@ -199,3 +199,19 @@ conditional Mock and verified runtime/CI prerequisites without root integration.
 MCP export is absent from this isolated baseline and requires root integration
 acceptance rather than importing an unrelated MCP feature. Exact-commit CI is
 required before acceptance; local workflow results are not full compatibility.
+
+## Explicit SDK URL mode must not silently downgrade
+
+A request using scriptURLMode=sdk and pm.request.url.query.add previously exported
+successfully, but native import kept its script and dropped the mode. Re-execution
+then failed because the imported URL was a string. No verified native field carries
+this Workbench mode, so both exporters now reject it explicitly, even without an
+active script. Frozen directory steps pass through the same guard. No script
+rewriting, inference or global import-default change is attempted.
+
+The ordinary HTTP workflow proves the original SDK query edit reaches the wire,
+authenticated native exports return400 without mutation or execution, and the full
+Workbench backup preserves the frozen SDK step through restore/restart and actual
+HTTP execution. Editing the live API to ordinary mode does not erase the frozen
+step's restriction. Ordinary legacy/apipost8 definitions retain positive coverage.
+This small format guard does not change the URL implementation or script runtime.

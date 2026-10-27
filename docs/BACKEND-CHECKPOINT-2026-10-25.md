@@ -1,8 +1,18 @@
-# 后端检查点 · 2026-10-27 06:42 UTC
+# 后端检查点 · 2026-10-27 06:59 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 06:42 Cookie 提取候选
+## 06:59 认证与 URL 模式往返修复候选
+
+- 最近完整 GREEN 为 `ad5192b0081ab3549c2da3eec56138000dcc187d` / local `a04b8cd9acacfe66775f1a4f15c38ea0fcf7319d` / tree `f12d9d5e8b27f4b94f7f6532ae511ffc7f750d03`。CI `40462874730` 首次 19/19 成功，19 checkout 同树；12 实际产物完整覆盖 357 文件（90/89/89/89），三平台各 1860 通过。Cookie、完整 SDK/CLI/原生往返、数据库、production stdio 和 ac4822 重建均通过；旧 8b5 Windows XML RED 不改判。
+- 本候选修复真实 noauth 语义丢失：原生明确 noauth/none 导入后原先会因默认 inheritAuth=true 取目标项目/目录的认证。PR8 只对 legacy 显式两种拼写置 false；modern 来源项目/目录/接口认证已解析后统一锁定不继承目标。全系统普通 none 默认及 legacy 完全缺省不改；来源显式认证仍保留，不恢复数据库凭据。
+- PR8 保存为 remote `86fb79f1a0e4fe04d2377f3ce38a85e98519c36a` / local `5116ff9d298b9271f91f15e0fc17aaa908c7ca7b` / tree `70750a2ece38a2fbec9e535f1f93ee96bdc8e5f7`，仍 target PR22 的 feat/aws-query-presigning，不把导出器或 root 倒灌。独立最新 CI 待终态；功能本地六整文件 49/49 通过。
+- PR14 同时修复 SDK URL 模式丢失：原生导出没有已验证模式字段时明确拒绝 scriptURLMode=sdk，包括无脚本接口及冻结步骤；不默默变成 legacy 或改写脚本。已有真实 SDK query 编辑照常发 proof=kept，完整备份恢复/重启后仍可执行。remote `54e6438769297c1345f2ef962cb4eb753082f7a6` / local `e8519f4b58c2e8c8313836d804c709fd44a3d672` / tree `b500b1f9c462612ba54e6d1a4794530095f9bf2e`，pure base 87ffd 未变，独立本地三整文件 22/22；此新头 CI `40463524805` 首次 19/19 成功，全部实际检出同 tree，12 份分片清单已核，不沿用 bbf1 的绿灯。
+- 根新增 SDK HTTP/JSON 与 stdio/目录的实际 noauth 全链：导出→MCP 导入已有 global/folderAuth 的目标→冻结计划→MCP 和 CLI 真实执行→live/全局认证变化→恢复/重启。修复前两个有效夹具都从真实上游收到虚构 folder Basic Authorization；修复后两个上游响应均 auth:null。目录导入的原生冻结计划也实际执行，目标原有普通继承请求仍取得其本来 Bearer/Basic，源和其他项目不变。没有访问真实账户或发送真实秘密。
+- 首次目录测试夹具遗漏 strict200，因此被既有导出保护拒绝；只修夹具，未放宽出口。有效 RED 反例与之后 PASS 分开保留。最终六整文件 32/32 通过，包含新两修复、MCP 四种格式/transport、原生任务导出及备份冻结链；全 format/check/diff 通过。
+- 本候选尚须独立组合 CI；没有 main/develop 合并、部署、新增前端或重启被暂停审查。
+
+## 06:42 历史 Cookie 提取候选
 
 - 最近完整 GREEN 为 `0b0a9ddb801cbebeb2ad4c7a3d71ec50f04e66a1` / local `f93f91bafb80517683244e79810a469eafe057e6` / tree `27f51c880416e8b34b88150d39631e072022b755`。CI `40460959814` 首次 19/19 成功，全部 actual checkout/tree 已核；12 份实际产物覆盖 354 文件（89/89/88/88），三平台各 1849 通过，Mock/SDK/CLI/恢复、DB/production stdio/固定引擎均通过。旧 `8b5` 的 Windows XML 超时保留为 RED，不据本次通过证明原因已修复。
 - PR14 Mock 出口 `bbf1feed` 的独立 CI `40460664108` 已首次 19/19 成功，三平台各 1134；全部 actual checkout `ee131ef80ae75e06774f8e2c09c426d7e21733d0` 同 feature tree `1b76ac81`，12 清单完整覆盖 247 文件。仍 draft，无合并或部署。

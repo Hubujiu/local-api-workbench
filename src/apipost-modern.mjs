@@ -828,6 +828,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       for (const task of [row.beforeTask, row.afterTask])
         if (task) request.importNotes.push(task.note);
     }
+    // Native project/folder inheritance was already resolved above. A resolved
+    // none must not acquire unrelated credentials from the destination project.
+    request.inheritAuth = false;
     request.attributes = attributes.values(
       empty(row.node.attribute_info) ? {} : row.node.attribute_info,
     );

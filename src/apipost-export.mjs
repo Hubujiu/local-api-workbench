@@ -278,6 +278,8 @@ export function exportApipost(project) {
     requestIds.add(input.id);
     const pipeline = exportApipostTaskPipeline(input);
     const r = normalizeRequest(input);
+    if (r.scriptURLMode === "sdk")
+      throw Error("Apipost导出不能保留SDK URL对象模式；请使用项目备份");
     for (const key of [
       "importedNativeTaskSource",
       "bodyDynamic",
