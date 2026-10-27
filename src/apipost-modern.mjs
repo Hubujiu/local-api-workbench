@@ -345,7 +345,7 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   const nodes = [...apiNodes, ...samples.nodes];
   const ids = new Map();
   for (const node of nodes) {
-    if (!object(node) || !["api", "folder"].includes(node.target_type))
+    if (!object(node) || !["api", "folder", "doc"].includes(node.target_type))
       throw Error("Apipost包含未支持的资源类型");
     const id = safe(String(node.target_id));
     if (ids.has(id)) throw Error("Apipost资源ID重复");
@@ -404,6 +404,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   )
     throw Error("Apipost空项目表单参数尚不能保留，不会丢弃来源");
   const mapped = nodes.map((node) => {
+    if (node.target_type === "doc") {
+      if (node.mark_id && !marks.has(String(node.mark_id)))
+        throw Error("Apipost文档状态引用不存在");
+      // Keep documents out of all request/task/inheritance conversion paths.
+      return { node, legacy: node };
+    }
     const request = node.request ?? {};
     if (!object(request)) throw Error("Apipost请求无效");
     if (request.body !== undefined && !object(request.body))
@@ -694,8 +700,12 @@ export function importModernApipost(source, project, { sync = false } = {}) {
   });
   const legacy = importApipost(
     { apis: mapped.map((x) => x.legacy) },
-    { preserveEmptyExamples: true },
+    { preserveEmptyExamples: true, documentProjectId: source.project_id },
   );
+  for (const document of legacy.documents) {
+    const markId = document.apipostSource.mark_id;
+    if (markId) document.statusId = resource("mark", markId);
+  }
   const sampleCases = [],
     ordinaryRequests = [];
   for (const request of legacy.requests) {

@@ -1,4 +1,5 @@
 import { importJwtConfig } from "../public/jwt-auth-model.js";
+import { importApipostDocument } from "./apipost-documents.mjs";
 import { randomUUID } from "node:crypto";
 const truth = (value) => value === true || value === 1 || value === "1";
 const checked = (value) => value === undefined || truth(value);
@@ -95,7 +96,7 @@ function inheritedParameters(request) {
 }
 export function importApipost(
   document,
-  { preserveEmptyExamples = false } = {},
+  { preserveEmptyExamples = false, documentProjectId } = {},
 ) {
   const source = apipostDocument(document);
   if (!source) throw Error("不是支持的Apipost公共JSON格式");
@@ -136,7 +137,7 @@ export function importApipost(
     if (!Array.isArray(list) || depth > 30)
       throw Error("Apipost目录结构无效或过深");
     for (const node of list) {
-      if (!node || !["folder", "api"].includes(node.target_type))
+      if (!node || !["folder", "api", "doc"].includes(node.target_type))
         throw Error("Apipost包含未支持的资源类型");
       if (entries.length >= 5000) throw Error("Apipost最多5000条资源");
       if (typeof node.name === "string" && node.name.length > 200)
@@ -171,8 +172,30 @@ export function importApipost(
       ? [prefix, String(node.name || "未命名目录")].filter(Boolean).join("/")
       : prefix;
   };
-  const output = [];
+  // Path-based Workbench identity cannot represent two distinct source folders
+  // at the same path. Reject before any project mutation, never silently merge.
+  const folderPaths = new Set();
+  for (const node of entries.filter(
+    (entry) => entry.target_type === "folder",
+  )) {
+    const path = location(node);
+    if (folderPaths.has(path))
+      throw Error("Apipost不同来源目录映射到同一路径，不会合并目录");
+    folderPaths.add(path);
+  }
+  const output = [],
+    documents = [];
   for (const node of entries) {
+    if (node.target_type === "doc") {
+      documents.push(
+        importApipostDocument(
+          node,
+          location(node),
+          documentProjectId ?? source.project_id,
+        ),
+      );
+      continue;
+    }
     if (node.target_type === "folder") {
       if (inheritedParameters(node.request))
         throw Error("Apipost目录参数继承尚未支持");
@@ -314,6 +337,7 @@ export function importApipost(
   }
   return {
     requests: output,
+    documents,
     folders: entries
       .filter((node) => node.target_type === "folder")
       .map((node) => location(node)),

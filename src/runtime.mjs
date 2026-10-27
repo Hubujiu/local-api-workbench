@@ -6,6 +6,7 @@ import {
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
 import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
+import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
@@ -153,11 +154,12 @@ export class Store {
       await release();
     }
   }
-  async create(name, directory) {
+  async create(name, directory, { description } = {}) {
     const p = {
       version: 1,
       id: id(),
       name: String(name || "新项目").slice(0, 100),
+      ...(description === undefined ? {} : { description }),
       requests: [],
       environments: [
         {
@@ -199,6 +201,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

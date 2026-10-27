@@ -1,6 +1,7 @@
+import { ensureNativeDefaults } from "./native-mcp-environments.mjs";
 import { importIntoProject, resolveLocalReferences } from "./core.mjs";
 const methods = ["get", "post", "put", "patch", "delete", "head", "options"];
-export function syncMCPOpenAPI(project, args) {
+export function syncMCPOpenAPI(project, args, { native = false } = {}) {
   const document =
     typeof args.document === "string"
       ? JSON.parse(args.document)
@@ -87,11 +88,32 @@ export function syncMCPOpenAPI(project, args) {
   if (imported.length !== operations.length)
     throw Error("OpenAPI 操作映射不一致");
   const output = [];
+  const summary = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    deleted: 0,
+    sync_items: [],
+  };
   for (let index = 0; index < imported.length; index++) {
     const request = imported[index],
       operation = operations[index];
+    if (native) {
+      if (
+        !operation.url.startsWith("/") ||
+        operation.url.startsWith("//") ||
+        /[?#\s]/.test(operation.url)
+      )
+        throw Error("原版同步路径须为以单个/开头且不含Query或片段的相对路径");
+      request.url = operation.url;
+      request.serviceId =
+        draft.settings?.folderServices?.[
+          [folder, request.folder].filter(Boolean).join("/")
+        ] || ensureNativeDefaults(draft).serverId;
+    }
     request.folder = [folder, request.folder].filter(Boolean).join("/");
     const script = scripts.get(operation.method + " " + operation.url);
+    if (native && script) request.scriptDialect = "apipost8";
     if (script)
       for (const key of ["beforeScript", "afterScript"])
         if (Object.hasOwn(script, key)) request[key] = script[key];
@@ -106,11 +128,26 @@ export function syncMCPOpenAPI(project, args) {
               (mode !== "url_and_folder" ||
                 (old.folder || "") === request.folder),
           );
-    if (mode === "ignore" && match >= 0) continue;
+    if (mode === "ignore" && match >= 0) {
+      summary.skipped++;
+      continue;
+    }
     if (match >= 0) {
       request.id = draft.requests[match].id;
       draft.requests[match] = request;
     } else draft.requests.push(request);
+    const status = match >= 0 ? "updated" : "created";
+    summary[status]++;
+    summary.sync_items.push({
+      target_id: request.id,
+      parent_id: request.folder ? "folder:" + request.folder : "0",
+      target_type: "api",
+      name: request.name,
+      method: request.method,
+      url: request.url,
+      sort: output.length + 1,
+      sync_status: status,
+    });
     output.push(request);
   }
   draft.folders = [
@@ -120,5 +157,12 @@ export function syncMCPOpenAPI(project, args) {
     ]),
   ];
   Object.assign(project, draft);
-  return output;
+  return native
+    ? {
+        project_id: project.id,
+        folder_id: folder ? "folder:" + folder : "0",
+        api_cover_mode: mode,
+        ...summary,
+      }
+    : output;
 }

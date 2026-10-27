@@ -144,6 +144,8 @@ export function manageEnvironment(project, operation, args = {}) {
         (env.variables ??= {}).baseUrl = address(args.baseUrl);
       return structuredClone(env);
     case "delete_environment":
+      if (project.nativeMCPDefaults?.environmentId === env.id)
+        throw Error("默认环境不能删除");
       if (project.environments.length <= 1) throw Error("至少保留一个环境");
       project.environments = project.environments.filter(
         (e) => e.id !== env.id,
@@ -151,7 +153,10 @@ export function manageEnvironment(project, operation, args = {}) {
       if (project.currentEnvironmentId === env.id)
         project.currentEnvironmentId = project.environments[0].id;
       for (const plan of project.plans || [])
-        if (plan.environmentId === env.id)
+        if (
+          plan.environmentId === env.id &&
+          !plan.steps?.some((step) => step.nativeMCP !== undefined)
+        )
           plan.environmentId =
             project.currentEnvironmentId || project.environments[0].id;
       return { deletedId: env.id };
@@ -183,6 +188,8 @@ export function manageEnvironment(project, operation, args = {}) {
       };
     }
     case "delete_environment_server": {
+      if (project.nativeMCPDefaults?.serverId === args.serverId)
+        throw Error("默认服务不能删除");
       if (!project.servers.some((s) => s.id === args.serverId))
         throw Error("服务不存在");
       project.servers = project.servers.filter((s) => s.id !== args.serverId);
@@ -268,6 +275,25 @@ export function debugEnvironment(project, environmentId, cache) {
 }
 
 export function validateEnvironmentModel(project) {
+  if (project.nativeMCPDefaults !== undefined) {
+    const d = project.nativeMCPDefaults;
+    if (
+      !d ||
+      typeof d !== "object" ||
+      Array.isArray(d) ||
+      Object.keys(d).some(
+        (k) => !["version", "environmentId", "serverId"].includes(k),
+      ) ||
+      d.version !== 1 ||
+      typeof d.environmentId !== "string" ||
+      typeof d.serverId !== "string" ||
+      !Array.isArray(project.environments) ||
+      !Array.isArray(project.servers) ||
+      !project.environments.some((e) => e.id === d.environmentId) ||
+      !project.servers.some((s) => s.id === d.serverId)
+    )
+      throw Error("原版MCP默认资源引用无效");
+  }
   const bindings = project.settings?.folderServices || {};
   if (
     typeof bindings !== "object" ||
