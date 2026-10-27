@@ -1,8 +1,16 @@
-# 后端检查点 · 2026-10-27 06:59 UTC
+# 后端检查点 · 2026-10-27 07:16 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 06:59 认证与 URL 模式往返修复候选
+## 07:16 跨格式明确无认证候选
+
+- 最近完整 GREEN 为 `4bef1ab170f81de0e623f3cebbd6366b08917a67` / local `ab8f04fa3257b832b310bd781c9337bec4bd6785` / tree `dd1d0ae9dd8f017cc0c42f641b00a297ba9aeec2`。CI `40464723874` 首次 19/19 成功，全部 checkout 已核；12 实际产物完整覆盖 359 文件（90/90/90/89），三平台各 1866 通过，原生 noauth、SDK URL 防丢失、数据库、production stdio、固定引擎均通过。它不包含以下 Postman/OpenAPI 增量。
+- 同 PR8 后续修复两个明确来源 opt-out：Postman 使用既有 collection→folder→request 有效认证解析结果，仅 type=noauth 关闭目标继承；缺省/null 子可继承明确父 noauth，显式子认证优先。OpenAPI 仅选中的有效 security 空数组关闭继承，operation 自有声明优先于 root。缺省/null 本身、optional [{}]、非空方案不改为关闭，generic shared-auth 默认不变，不从 OpenAPI 生成凭据。
+- 功能 remote `426d423fbbfaf09fbba541d3a3330a494efd8bc9` / local `c0e68e4617ea8c23a2c1ff317ee3fc2c877af4ba` / tree `61362903484a2f97f3077ac7619ec7d0101ed8e5`；CI `40465267461` 首次 10/10 成功，全部 actual checkout `0a4f9ca17246afa9a49ded90cd0af236634b2285` 同树，三平台各 1040 通过。独立整链12种源覆盖中保留修复前真实上游收到虚构 Bearer 的 RED，修复后相同输入返回无认证；没有真实账户。
+- 根组合保持原生两格式 MCP 导入/导出闭环，并新增 Postman owner 导入→HTTP MCP 与 OpenAPI owner 导入→stdio MCP，随后均冻结、真实执行、CLI、live/目标认证变化、备份恢复和重启。MCP interchange 仍只接受其声明的原生格式，未为测试扩大工具格式。五整文件 36/36 通过，全量 format/check/diff 通过；本候选须自己的组合 CI。
+- 这不是已保存旧请求的自动迁移：过去已丢失的来源意图不能靠猜测恢复，不批量改写用户现有继承选择。标准无效的 OpenAPI null 与其既有元数据回退差异也不宣称已解决。旧 Windows XML RED 和原版/实验专项未完成边界继续保留。
+
+## 06:59 历史认证与 URL 模式往返修复候选
 
 - 最近完整 GREEN 为 `ad5192b0081ab3549c2da3eec56138000dcc187d` / local `a04b8cd9acacfe66775f1a4f15c38ea0fcf7319d` / tree `f12d9d5e8b27f4b94f7f6532ae511ffc7f750d03`。CI `40462874730` 首次 19/19 成功，19 checkout 同树；12 实际产物完整覆盖 357 文件（90/89/89/89），三平台各 1860 通过。Cookie、完整 SDK/CLI/原生往返、数据库、production stdio 和 ac4822 重建均通过；旧 8b5 Windows XML RED 不改判。
 - 本候选修复真实 noauth 语义丢失：原生明确 noauth/none 导入后原先会因默认 inheritAuth=true 取目标项目/目录的认证。PR8 只对 legacy 显式两种拼写置 false；modern 来源项目/目录/接口认证已解析后统一锁定不继承目标。全系统普通 none 默认及 legacy 完全缺省不改；来源显式认证仍保留，不恢复数据库凭据。

@@ -117,7 +117,6 @@ new original GUI run or real AWS account verification. Definitions/history may
 contain explicitly configured secrets and wire session tokens; follow the
 sensitive-storage boundary in ADR-AWS-QUERY-PRESIGNING.md.
 
-
 ## Explicit no-auth and resolved-source isolation
 
 A confirmed importer bug mapped native `noauth`/`none` to Workbench `none` but
@@ -148,3 +147,29 @@ restart, and another project remaining unchanged. Legacy explicit spellings and
 ordinary/absent-legacy inheritance are separate controls. Native export/reimport
 and MCP/CLI historical-flow combined verification belongs to the integration
 branch because this independent feature base does not contain those exporters.
+
+## Explicit Postman / OpenAPI opt-out isolation
+
+Postman effective source authentication is resolved through the existing collection,
+folder and request hierarchy. Only effective `type: "noauth"` disables Workbench
+shared-auth inheritance. Missing/null children can inherit a parent's explicit
+noauth; explicit child credentials still override it. Missing/null without such a
+parent retain the existing Workbench inheritance policy.
+
+OpenAPI operation-owned `security` overrides the root for this decision. Only a
+selected array of length zero sets `inheritAuth: false`. Absent declarations,
+null, optional `[{}]`, and nonempty schemes are not reinterpreted as opt-outs.
+Existing security metadata is retained unchanged. This does not implement credential
+generation from OpenAPI security schemes or change generic shared-auth defaults.
+
+Official contracts: [Postman No Auth](https://learning.postman.com/docs/use/send-requests/authorization/authorization-types/),
+[Postman inheritance](https://learning.postman.com/docs/use/send-requests/authorization/specifying-authorization-details/),
+[OpenAPI 3.0.3 Operation Object](https://spec.openapis.org/oas/v3.0.3#operation-object).
+
+`interchange-noauth-import.test.mjs` records real loopback Authorization headers
+for twelve source hierarchy / override / inheritance cases through authenticated
+owner import, frozen execution, subsequent live/shared-auth edits, restore and
+restart. Source inputs and an unrelated project remain unchanged. Before the fix,
+the explicit Postman request opt-out sent `Bearer fictional-global` instead of no
+Authorization header. The existing native opt-out and core whole-file regressions
+remain part of the same focused batch; no real accounts or secrets are used.

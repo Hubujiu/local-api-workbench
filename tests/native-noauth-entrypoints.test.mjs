@@ -71,9 +71,11 @@ function cli(root, projectId, planId) {
 for (const [transport, format] of [
   ["http", "apipost"],
   ["stdio", "apipost-directory"],
+  ["http", "postman"],
+  ["stdio", "openapi"],
 ])
   test(
-    `explicit native noauth ${transport}/${format} stays isolated through real frozen MCP CLI and restore`,
+    `explicit imported noauth ${transport}/${format} stays isolated through real frozen MCP CLI and restore`,
     { timeout: 30000 },
     async (t) => {
       const root = await mkdtemp(path.join(tmpdir(), "native-noauth-")),
@@ -196,15 +198,88 @@ for (const [transport, format] of [
         decode(
           await client.callTool({ name: "localapi_" + name, arguments: args }),
         );
-      const exported = await call("export_project", {
-        projectId: source.id,
-        format,
-      });
-      const imported = await call("import_project", {
-        projectId: target.id,
-        format,
-        document: exported.document,
-      });
+      let imported;
+      if (format === "apipost" || format === "apipost-directory") {
+        const exported = await call("export_project", {
+          projectId: source.id,
+          format,
+        });
+        imported = await call("import_project", {
+          projectId: target.id,
+          format,
+          document: exported.document,
+        });
+      } else {
+        const document =
+          format === "postman"
+            ? {
+                info: { name: "Explicit Postman opt-out" },
+                item: [
+                  {
+                    name: "Public",
+                    item: [
+                      {
+                        name: "Public",
+                        request: {
+                          method: "GET",
+                          url: base + "/public",
+                          auth: { type: "noauth" },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }
+            : {
+                openapi: "3.0.3",
+                info: { title: "Explicit OpenAPI opt-out", version: "1" },
+                servers: [{ url: base }],
+                security: [{ sourceBearer: [] }],
+                components: {
+                  securitySchemes: {
+                    sourceBearer: { type: "http", scheme: "bearer" },
+                  },
+                },
+                paths: {
+                  "/public": {
+                    get: {
+                      operationId: "public",
+                      summary: "Public",
+                      tags: ["Public"],
+                      security: [],
+                      responses: { 200: { description: "ok" } },
+                    },
+                  },
+                },
+              };
+        const original = structuredClone(document);
+        // These formats are accepted by the owner import API, not by the
+        // explicitly native-only MCP interchange tool. Execution still uses
+        // the same real MCP/CLI frozen-plan path below.
+        const response = await fetch(
+          app.url + `/api/projects/${target.id}/import`,
+          {
+            method: "POST",
+            headers: {
+              "x-local-token": app.token,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ document }),
+          },
+        );
+        const output = await response.json();
+        assert.equal(response.status, 200, JSON.stringify(output));
+        assert.deepEqual(document, original);
+        imported = {
+          imported: {
+            requestIds: output.requests
+              .filter((request) => request.name === "Public")
+              .map((request) => request.id),
+            planIds: [],
+          },
+        };
+        assert.equal(imported.imported.requestIds.length, 1);
+      }
       let saved = await app.store.get(target.id);
       const request = saved.requests.find(
         (r) => r.id === imported.imported.requestIds[0],
