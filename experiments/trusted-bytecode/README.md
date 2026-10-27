@@ -54,7 +54,10 @@ its complete private IIFE, not expose its library/factory.
 Baseline engine rebuild: passed locally. The private bridge, fixed-source build
 and load adapter, and test sources are drafted but NOT compiled/executed. The
 `pins.mjs` and `artifacts/` inputs do not yet exist: the experiment fails closed
-until its explicit build is completed. Work is paused pending the separate
-`fix/quickjs-heap-accounting` prerequisite. Performance/equivalence evidence is
+until its explicit build is completed. The verified `fix/quickjs-heap-accounting` prerequisite is now an explicit
+branch dependency; PR #37 targets that branch to retain experiment-only review.
+Ownership cleanup now retains a provisional context before the budget callback
+can throw, and three deterministic late-success/setup/disposal checks pass.
+Build-input provenance hardening and actual bridge compilation are in progress. Performance/equivalence evidence is
 not established. Not ready for production or merge. Existing CI and all
 acceptance checks remain required.

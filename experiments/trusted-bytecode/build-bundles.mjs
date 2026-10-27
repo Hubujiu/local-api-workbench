@@ -3,13 +3,14 @@ import {
   ABI,
   IDS,
   FLAGS,
-  LIMITS,
   fixedSource,
   expectedEntry,
   hash,
 } from "./catalog.mjs";
 import { instantiateVerifiedEngine } from "./engine.mjs";
 import { verifyEngine } from "./integrity.mjs";
+import { ActivityBudget } from "./budget.mjs";
+import { createOwnedRuntime } from "./ownership.mjs";
 
 if (process.argv.length > 2)
   throw Error(
@@ -31,26 +32,36 @@ verifyEngine(
 const manifest = { abi: ABI, engine, bundles: {} };
 for (const id of IDS) {
   // The compiler is the exact same private WASM engine, not native qjsc.
-  const raw = await instantiateVerifiedEngine(wasm, glue);
-  const runtime = raw.engine.newRuntime();
-  runtime.setMemoryLimit(LIMITS.memory);
-  runtime.setMaxStackSize(LIMITS.stack);
-  const context = runtime.newContext();
+  const budget = new ActivityBudget();
+  const raw = await budget.runAsync("instantiate-compiler", () =>
+    instantiateVerifiedEngine(wasm, glue),
+  );
+  const owned = createOwnedRuntime(raw, budget);
+  const { context } = owned;
   let compiled,
     sizePointer = 0,
     pointer = 0;
   try {
     const source = fixedSource(id);
-    compiled = context.unwrapResult(
-      context.evalCode(source.source, source.filename, FLAGS.compile),
-    );
+    budget.run("compile-fixed-source", () => {
+      compiled = context.unwrapResult(
+        context.evalCode(source.source, source.filename, FLAGS.compile),
+      );
+    });
     sizePointer = raw.alloc(context.ctx.value, 4);
     if (!sizePointer) throw Error("Trusted writer size allocation failed");
-    pointer = raw.write(context.ctx.value, compiled.value, sizePointer);
+    budget.run("write-fixed-bytecode", () => {
+      pointer = raw.write(context.ctx.value, compiled.value, sizePointer);
+    });
     if (!pointer) throw Error("Trusted bytecode write failed");
-    const size = new DataView(raw.memory.buffer).getUint32(sizePointer, true);
-    const bytes = Buffer.from(new Uint8Array(raw.memory.buffer, pointer, size));
-    manifest.bundles[id] = expectedEntry(id, bytes);
+    const bytes = budget.run("copy-hash-compiler-output", () => {
+      const size = new DataView(raw.memory.buffer).getUint32(sizePointer, true);
+      const bytes = Buffer.from(
+        new Uint8Array(raw.memory.buffer, pointer, size),
+      );
+      manifest.bundles[id] = expectedEntry(id, bytes);
+      return bytes;
+    });
     writeFileSync(
       new URL(id + ".bytecode.b64", assets),
       bytes.toString("base64") + "\n",
@@ -59,8 +70,7 @@ for (const id of IDS) {
     if (pointer) raw.free(context.ctx.value, pointer);
     if (sizePointer) raw.free(context.ctx.value, sizePointer);
     compiled?.dispose();
-    context.dispose();
-    runtime.dispose();
+    owned.dispose();
   }
 }
 const bytes = Buffer.from(JSON.stringify(manifest, null, 2) + "\n");

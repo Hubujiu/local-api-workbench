@@ -42,6 +42,7 @@ uint8_t *QTS_TrustedBytecodeWrite(JSContext *ctx, JSValueConst *val, size_t *len
  * After JS_EvalFunction consumes code, NEVER JS_FreeValue(code) again.
  */
 int QTS_TrustedBytecodeReadEval(JSContext *ctx, const uint8_t *buffer, size_t length) {
+  if (!buffer || length == 0 || length > QTS_TRUSTED_MAX_BYTES) return -1;
   JSValue code = JS_ReadObject(ctx, buffer, length, JS_READ_OBJ_BYTECODE);
   if (JS_IsException(code)) {
     qts_trusted_drop_exception(ctx);

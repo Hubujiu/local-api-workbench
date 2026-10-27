@@ -4,6 +4,7 @@ import { ActivityBudget } from "./budget.mjs";
 import { instantiateVerifiedEngine } from "./engine.mjs";
 import { verifyEngine, verifyBundle } from "./integrity.mjs";
 import { manifestSha256 } from "./pins.mjs";
+import { createOwnedRuntime } from "./ownership.mjs";
 
 const assets = new URL("./artifacts/", import.meta.url);
 // This module is not imported by any production source. Its sole high-level
@@ -34,17 +35,8 @@ export async function createExperimentSession() {
   const raw = await budget.runAsync("instantiate-engine", () =>
     instantiateVerifiedEngine(verified.wasm, verified.glue),
   );
-  const runtime = raw.engine.newRuntime();
-  runtime.setMemoryLimit(LIMITS.memory);
-  runtime.setMaxStackSize(LIMITS.stack);
-  runtime.setInterruptHandler(() => budget.expired());
-  let context;
-  try {
-    context = budget.run("create-context", () => runtime.newContext());
-  } catch (error) {
-    runtime.dispose();
-    throw error;
-  }
+  const owned = createOwnedRuntime(raw, budget);
+  const { runtime, context } = owned;
   let disposed = false;
   const alive = () => {
     if (disposed) throw Error("Experiment session disposed");
@@ -69,17 +61,23 @@ export async function createExperimentSession() {
       }
       // Read once -> verify exactly these bytes -> copy exactly these bytes.
       // There is no second file read, async interleave or mutable shared buffer.
-      const bytes = Buffer.from(
-        readFileSync(new URL(id + ".bytecode.b64", assets), "utf8").trim(),
-        "base64",
-      );
-      verifyBundle(verified.manifest, verified.engine, id, bytes);
+      const bytes = budget.run("verify-bundle", () => {
+        const bytes = Buffer.from(
+          readFileSync(new URL(id + ".bytecode.b64", assets), "utf8").trim(),
+          "base64",
+        );
+        verifyBundle(verified.manifest, verified.engine, id, bytes);
+        return bytes;
+      });
       const pointer = raw.alloc(context.ctx.value, bytes.length);
       if (!pointer) throw Error("Trusted bytecode input allocation failed");
       try {
-        new Uint8Array(raw.memory.buffer, pointer, bytes.length).set(bytes);
-        budget.check();
-        const status = raw.readEval(context.ctx.value, pointer, bytes.length);
+        budget.run("copy-bytecode", () => {
+          new Uint8Array(raw.memory.buffer, pointer, bytes.length).set(bytes);
+        });
+        const status = budget.run("read-evaluate-bytecode", () =>
+          raw.readEval(context.ctx.value, pointer, bytes.length),
+        );
         if (status !== 0)
           throw Error("Trusted bytecode evaluation failed: " + status);
       } finally {
@@ -97,8 +95,7 @@ export async function createExperimentSession() {
     dispose() {
       if (!disposed) {
         disposed = true;
-        context.dispose();
-        runtime.dispose();
+        owned.dispose();
       }
     },
   };
