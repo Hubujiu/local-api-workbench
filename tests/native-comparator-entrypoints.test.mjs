@@ -136,6 +136,13 @@ function sourceFor(base, version = "1.1") {
         "local",
       ),
       assertion(
+        "pre env regularmatch",
+        "envVars",
+        "{{beforeProof}}",
+        "regularmatch",
+        "/^committed$/",
+      ),
+      assertion(
         "pre current global",
         "globalVars",
         "{{globalProof}}",
@@ -238,6 +245,13 @@ function sourceFor(base, version = "1.1") {
     ),
     assertion("XML empty null", "responseXml", "string(/root/empty)", "null"),
     assertion("XML exists", "responseXml", "string(/root/value)", "exist"),
+    assertion(
+      "XML regularmatch",
+      "responseXml",
+      "string(/root/value)",
+      "regularmatch",
+      "/^A[a-z]+$/",
+    ),
     task("bounded wait", "wait", 10),
   ]);
   add("text", "/text", [
@@ -265,6 +279,13 @@ function sourceFor(base, version = "1.1") {
       "first, Alpha 雪 ,last",
     ),
     assertion("Text exists", "responseText", undefined, "exist"),
+    assertion(
+      "Text regularmatch",
+      "responseText",
+      undefined,
+      "regularmatch",
+      "/^ Alpha 雪 $/",
+    ),
     assertion("Time nonnegative", "responseTime", undefined, "gte", "0"),
     assertion(
       "Time bounded transport",
@@ -601,7 +622,7 @@ for (const [version, transport] of [
   ["2", "stdio"],
 ])
   test(
-    `fourteen native comparators and eleven sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
+    `fifteen native comparators and eleven sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
     { timeout: 30000 },
     async (t) => {
       const f = await fixture(t, version),
@@ -612,7 +633,7 @@ for (const [version, transport] of [
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 53);
+      assert.equal(names.length, 56);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])
@@ -637,6 +658,7 @@ for (const [version, transport] of [
           "notexist",
           "belongscollection",
           "notbelongscollection",
+          "regularmatch",
         ].sort(),
       );
       const original = await f.seed(source),
@@ -895,6 +917,18 @@ for (const activePick of [false, true])
   );
 const readFailures = [
   {
+    name: "invalid regular expression is a runtime stage failure",
+    route: "/text",
+    assertion: assertion(
+      "invalid pattern",
+      "responseText",
+      undefined,
+      "regularmatch",
+      "(",
+    ),
+    error: /expecting|SyntaxError|invalid.*regexp/i,
+  },
+  {
     name: "duplicate Cookie",
     route: "/duplicate-cookie",
     assertion: assertion(
@@ -1026,7 +1060,7 @@ test(
   },
 );
 test(
-  "raw comparator import rejects missing binary, templates, regex and invalid operands atomically with no execution",
+  "raw comparator import rejects missing binary, templates, invalid regex bounds and operands atomically with no execution",
   { timeout: 10000 },
   async (t) => {
     const f = await fixture(t),
@@ -1053,8 +1087,15 @@ test(
         expression: { compareType: "bogus", compareValue: "x" },
       },
       {
-        name: "regular expression",
-        expression: { compareType: "regularmatch", compareValue: ".*" },
+        name: "enabled empty regular expression",
+        expression: { compareType: "regularmatch", compareValue: "" },
+      },
+      {
+        name: "oversize regular expression",
+        expression: {
+          compareType: "regularmatch",
+          compareValue: "x".repeat(1025),
+        },
       },
       {
         name: "regex disabled",

@@ -356,3 +356,75 @@ fixes: synchronous stage rejection uses throws, HTTP outer-space fixture uses
 space before semicolon (line-final whitespace is removed by the HTTP parser),
 and private evidence is checked by name after public tests erasure rather than
 assuming its merged array order. No XML-special audit was run.
+
+## Bounded regularmatch increment (2026-10-27; runtime dependency required)
+
+This increment depends on the reviewed PR38 official QuickJS matcher with its
+separate upstream Unicode Script OOM fix, PR3 terminal charged-budget check,
+PR35 CI isolation and existing PR25 extraction dependencies. It does not modify
+C code, invent a pattern compiler, reset budgets or promise new hard preemption.
+The dependency-only base contains no native assertion feature commits; PR26 is
+compared to that base so runtime/workflow dependencies are not feature diff.
+
+Native original sender SHA256 remains
+`5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`.
+At LF-normalized Unicode character offset **33591968**, the native assert
+regularmatch branch skips empty expected input, trims every edge slash, constructs
+RegExp and only then registers pm.test. Do not confuse the unrelated helper at
+33552515, which uses substring rather than this native trim semantics. No original
+execution, license acceptance or proprietary-code copying took place.
+
+Workbench supports a literal raw pattern of at most **1024 UTF-16 code units and
+4096 UTF-8 bytes**, with valid Unicode. Trimming can only shrink it, so the same
+bounds also hold for the compiled pattern. Enabled raw empty input is an explicit
+configuration error instead of silently omitting native evidence (a documented
+stricter subset of the original skip). Disabled/inert empty or syntactically
+invalid literal text stays inert under the same data bounds; no user regex is
+compiled by host normalization, import, plan storage or bootstrap. Expected
+variable templates are still unsupported. Existing source path grammars remain.
+
+Only all consecutive leading/trailing `/` characters are removed; whitespace is
+not trimmed and no flags syntax exists. `//abc//` becomes `abc`; `/abc/i` becomes
+`abc/i` (not case-insensitive abc); `///` produces an allowed empty regex. The
+raw source text is preserved in stored declarations and roundtrips.
+
+Bootstrap captures trusted RegExp and direct RegExp.prototype.exec together with
+required intrinsic string operations. At each native TASK, safe source reading
+and finite-primitive/absence validation occur first, then captured String
+conversion and valid-Unicode/64-KiB UTF-8 input enforcement, then slash stripping,
+construction and direct exec. No replaceable public exec/test, Symbol.match,
+String method, user object coercion or new host callback is used. Code/JSON source
+strings are explicitly included in the matching input cap. Syntax/OOM/source
+errors occur outside pm.test and fail the stage; no match is a completed soft
+false. Public constructor/exec/test/pm.test replacements and erased public test
+arrays cannot manufacture private completion or successful native evidence.
+
+All eleven source readers retain their existing current-value and authority
+contracts; only temp/env/global sources also run before response. Before false
+blocks main HTTP and scope commit; after soft false keeps ordinary continuation;
+enabled pick retains strict rollback/plan-stop. Invalid syntax stored in a frozen
+plan fails only when its task executes, with existing stage rollback policy.
+Failed stages cannot claim completed assertions, and later fresh invocations
+remain isolated. No already performed network/disk work is promised rollback.
+
+Configured 250-ms charged activity, final over-budget rejection, 2-s outer wall,
+16-MiB VM, shared quota and all source/output limits stay unchanged. Native tests
+exercise difficult matching rejection and bounded-phase OOM followed by a fresh
+successful invocation. The OOM test deliberately verifies the whole stage; it
+does not falsely isolate the exact failing allocator/constructor instruction.
+The runtime PR separately verifies its matcher/compiler/Unicode allocation paths.
+
+New formal suite covers all eleven sources/current values and pre variables,
+raw/trimmed/no-flags/primitive semantics, invalid syntax surviving normalization,
+source-before-syntax ordering, input/Unicode limits, accessor refusal, captured
+intrinsics/private failure records, interruption/OOM isolation, and real imported
+HTTP precondition failure/zero traffic, post soft continuation, syntax rollback,
+active-pick strict policy, frozen declarations, saved results, project isolation,
+backup restore/restart. Four historical unsupported-regularmatch negatives now
+use stable `unsupportedComparison`; other unknown operators and safety negatives
+remain. Existing fourteen comparators are unchanged. MCP/CLI/native reverse
+export verification belongs to the combined tree, not this standalone claim.
+
+The independent XML intrinsic-guard audit remains incomplete and was not
+restarted. Passing regularmatch tests or dependency CI does not complete that
+separate audit or explain historical activity-budget intermittency.

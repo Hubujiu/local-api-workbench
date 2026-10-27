@@ -22,6 +22,7 @@ const comparisons = [
   ...unaryComparisons,
   "belongscollection",
   "notbelongscollection",
+  "regularmatch",
 ];
 const text = (value, max) =>
   typeof value === "string" && value.isWellFormed() && value.length <= max;
@@ -69,7 +70,15 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
     (compareType !== undefined && !comparisons.includes(compareType)) ||
     (enabled && compareType === undefined)
   )
-    throw Error("原生断言仅支持有界文字路径与14种非正则字面比较");
+    throw Error("原生断言仅支持有界文字路径与声明字面比较");
+  if (
+    compareType === "regularmatch" &&
+    (!hasExpected ||
+      !text(expression.compareValue, 1024) ||
+      Buffer.byteLength(expression.compareValue) > 4096 ||
+      (enabled && expression.compareValue.length === 0))
+  )
+    throw Error("原生正则断言需要非空有界字面模式（1024字符/4096字节）");
   if (
     enabled &&
     ((!isText && !isNativeVariableAssertion(value.type) && /\{\{/.test(path)) ||
@@ -165,6 +174,9 @@ function installNativeAssertions(
     finite = Number.isFinite,
     number = Number,
     string = String,
+    Pattern = RegExp,
+    executePattern = Function.prototype.call.bind(RegExp.prototype.exec),
+    slice = Function.prototype.call.bind(String.prototype.slice),
     Failure = Error,
     stringify = JSON.stringify,
     create = Object.create,
@@ -235,20 +247,19 @@ function installNativeAssertions(
   };
   const boundedString = (value) => {
     if (typeof value === "string") {
-      if (value.length > 65536)
-        throw Failure("原生指标或变量断言字符串超过64KiB");
+      if (value.length > 65536) throw Failure("原生断言字符串超过64KiB");
       let bytes = 0;
       for (let at = 0; at < value.length; at++) {
         const code = charCode(value, at);
         if (code >= 0xd800 && code <= 0xdbff) {
           const next = charCode(value, ++at);
           if (!(next >= 0xdc00 && next <= 0xdfff))
-            throw Failure("原生指标或变量断言字符串包含无效Unicode");
+            throw Failure("原生断言字符串包含无效Unicode");
           bytes += 4;
         } else if (code >= 0xdc00 && code <= 0xdfff)
-          throw Failure("原生指标或变量断言字符串包含无效Unicode");
+          throw Failure("原生断言字符串包含无效Unicode");
         else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
-        if (bytes > 65536) throw Failure("原生指标或变量断言字符串超过64KiB");
+        if (bytes > 65536) throw Failure("原生断言字符串超过64KiB");
       }
     }
     return value;
@@ -367,6 +378,21 @@ function installNativeAssertions(
     let passed = false,
       message = "响应值不满足声明比较";
     switch (op.comparison) {
+      case "regularmatch": {
+        // Pattern syntax is evaluated only after this task reads a safe source.
+        // No flags grammar: remove all literal edge slashes, not whitespace.
+        boundedString(actual);
+        let first = 0,
+          last = op.expected.length;
+        while (first < last && charCode(op.expected, first) === 47) first++;
+        while (last > first && charCode(op.expected, last - 1) === 47) last--;
+        const pattern = slice(op.expected, first, last);
+        // Normalization already bounds the raw pattern; trimming only shrinks it.
+        const expression = new Pattern(pattern);
+        passed = executePattern(expression, actual) !== null;
+        message = "响应值不匹配声明正则";
+        break;
+      }
       case "eq":
         passed = actual === op.expected;
         message = "响应值与预期不相等";
