@@ -16,7 +16,7 @@ const empty = () => ({
   cases: [],
   caseFolders: [],
 });
-function fixture(url = "http://127.0.0.1:4318") {
+function fixture(url = "http://127.0.0.1:4318", form = false) {
   const source = nativeInheritanceFixture();
   source.global.global_param.auth = { type: "noauth" };
   source.global.envs[0].server_list[0].uri = url;
@@ -37,6 +37,16 @@ function fixture(url = "http://127.0.0.1:4318") {
     value: "{{selected}}",
     is_checked: 1,
   });
+  if (form) {
+    source.global.global_param.body = {
+      parameter: [{ key: "parentForm", value: "雪😀", is_checked: 1 }],
+    };
+    source.apis[1].method = "POST";
+    source.apis[1].request.body = {
+      mode: "urlencoded",
+      parameter: [{ key: "ownForm", value: "a+b &=", is_checked: 1 }],
+    };
+  }
   const document = nativeDirectoryFixture(source);
   const flow = {
     project_id: source.project_id,
@@ -196,8 +206,10 @@ for (const transport of ["http", "stdio"])
     async (t) => {
       const root = await mkdtemp(path.join(tmpdir(), "graph-flow-")),
         wire = [];
-      const peer = http.createServer((req, res) => {
-        wire.push({ url: req.url, headers: req.headers });
+      const peer = http.createServer(async (req, res) => {
+        let body = "";
+        for await (const chunk of req) body += chunk;
+        wire.push({ url: req.url, headers: req.headers, body });
         res.end("ok");
       });
       await new Promise((r) => peer.listen(0, "127.0.0.1", r));
@@ -224,7 +236,10 @@ for (const transport of ["http", "stdio"])
       };
       const other = await app.store.create("Unrelated"),
         otherBefore = await app.store.get(other.id);
-      const original = fixture(`http://127.0.0.1:${peer.address().port}`),
+      const original = fixture(
+          `http://127.0.0.1:${peer.address().port}`,
+          transport === "stdio",
+        ),
         originalBefore = structuredClone(original);
       const seed = await app.store.create("Native");
       let p = await owner(`projects/${seed.id}/import`, {
@@ -268,6 +283,17 @@ for (const transport of ["http", "stdio"])
               r.headers["x-extra"] === undefined,
           ),
         );
+        if (transport === "stdio")
+          for (const row of rows) {
+            assert.equal(
+              row.headers["content-type"],
+              "application/x-www-form-urlencoded",
+            );
+            assert.deepEqual(
+              Object.fromEntries(new URLSearchParams(row.body)),
+              { parentForm: "雪😀", ownForm: "a+b &=" },
+            );
+          }
         const stored = await new Store(root).get(run.projectId || p.id);
         assert(stored.runs.some((r) => r.id === run.id));
       };
@@ -421,7 +447,7 @@ for (const transport of ["http", "stdio"])
           count = wire.length;
         assert.throws(
           () => exportApipostDirectory(drift),
-          /独立HTTP冻结|继承表单/,
+          transport === "stdio" ? /独立HTTP冻结/ : /独立HTTP冻结|继承表单/,
         );
         assert.deepEqual(drift, unchanged);
         assert.equal(wire.length, count);
