@@ -1,3 +1,8 @@
+import {
+  validateRepeatGraph,
+  mapPlanLeaves,
+  planLeaves,
+} from "./plan-repeat.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import { freezeWireStep } from "./wire-plan.mjs";
@@ -6,14 +11,15 @@ import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  validateRepeatGraph(input.steps);
   const importedNativeFlowSource =
     readImportedNativeFlowSource(input) ??
     (previous ? readImportedNativeFlowSource(previous) : undefined);
   if (source === "manual" && previous && Array.isArray(input.steps)) {
     input = {
       ...input,
-      steps: input.steps.map((step) => {
-        const old = previous.steps.find((s) => s.id === step.id);
+      steps: mapPlanLeaves(input.steps, (step) => {
+        const old = planLeaves(previous.steps).find((s) => s.id === step.id);
         if (
           old?.nativeMCP &&
           isDeepStrictEqual(step.nativeMCP, old.nativeMCP) &&
@@ -34,13 +40,15 @@ export function versionPlan(previous, input, source = "manual", project) {
   if (project && Array.isArray(input.steps))
     input = {
       ...input,
-      steps: input.steps.map((step) => {
+      steps: mapPlanLeaves(input.steps, (step) => {
         if (step.type === "protocol") return freezeWireStep(project, step);
         if (step.type === "grpc") return freezeGrpcStep(project, step);
         if (step.type === "socketio") return freezeSocketIOStep(project, step);
-        const oldStep = previous?.steps?.find(
-          (item) => item.id && item.id === step.id,
-        );
+        const oldStep =
+          previous?.steps &&
+          planLeaves(previous.steps).find(
+            (item) => item.id && item.id === step.id,
+          );
         const request =
           oldStep && !Object.hasOwn(step.request || {}, "serviceSnapshot")
             ? { ...step.request, serviceSnapshot: true }

@@ -143,6 +143,28 @@ export class MCPActivity {
         this.record.stepIdOmitted = true;
       }
     }
+    if (
+      progress.repeat &&
+      ["groupId", "childId"].every((key) =>
+        validMetadata(progress.repeat[key]),
+      ) &&
+      Number.isInteger(progress.repeat.iteration) &&
+      progress.repeat.iteration >= 0 &&
+      progress.repeat.iteration < 100 &&
+      typeof progress.repeat.occurrenceId === "string" &&
+      validMetadata(progress.repeat.occurrenceId, 1500) &&
+      Buffer.byteLength(JSON.stringify(progress.repeat)) <= 2048
+    )
+      this.record.repeat = {
+        groupId: progress.repeat.groupId,
+        childId: progress.repeat.childId,
+        iteration: progress.repeat.iteration,
+        occurrenceId: progress.repeat.occurrenceId,
+      };
+    else delete this.record.repeat;
+    if (progress.repeat && !this.record.repeat)
+      this.record.repeatOmitted = true;
+    else delete this.record.repeatOmitted;
     const status = progress.stepStatus || progress.status;
     if (["passed", "failed", "cancelled"].includes(status))
       this.record.stepStatus = status;

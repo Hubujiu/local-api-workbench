@@ -1,3 +1,4 @@
+import { hasRepeatSteps } from "./plan-repeat.mjs";
 import { filteredExecutionHistory } from "./execution-history.mjs";
 import {
   activeAPIFolders,
@@ -351,7 +352,15 @@ export function nativeAPIDetail(project, apiId) {
     },
   };
 }
+export function assertNativeLinearResult(run) {
+  if (
+    hasRepeatSteps(run.snapshot?.steps) ||
+    run.results?.some((result) => result.repeat)
+  )
+    throw Error("原版兼容结果不支持canonical循环组；请使用canonical结果工具");
+}
 export function nativeRunResult(projectId, run, scope = "flow") {
+  assertNativeLinearResult(run);
   const results = run.results || [],
     failed = results
       .filter((r) => r.status !== "passed")
@@ -396,6 +405,7 @@ export function nativeExecutionHistory(project, args) {
   if (args.status !== undefined && !["passed", "failed"].includes(args.status))
     throw Error("原版记录状态无效");
   const rows = filteredExecutionHistory(project, args);
+  for (const { record } of rows) assertNativeLinearResult(record);
   return {
     total: rows.length,
     records: rows.slice(0, args.limit ?? 20).map(({ record, scope }) => {

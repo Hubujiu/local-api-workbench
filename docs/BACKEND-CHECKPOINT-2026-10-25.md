@@ -1,6 +1,26 @@
-# 后端检查点 · 2026-10-27 13:20 UTC
+# 后端检查点 · 2026-10-27 15:49 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 15:49 文本表单继承与有界循环组合候选
+
+- 最后已验证远端根仍为 `35ea4371273f6c3e44ff86dcb526b83bb6e11452` / tree `c9cb53f80ec3a7fb1dbb5146a8eaa8ebe8289fb8`，首次 CI `40513156978` 19/19 GREEN。12份实际产物覆盖379文件，三OS均1970通过；它不包含本次两个功能的组合。以下历史段落中的“最近”“尚待”均为当时记录，不覆盖本节状态。
+- 本地组合生产提交 `a6c04095066c2789d7e9b5f9fc378c8233904a6a` / tree `888e4798d2c5b659417443e045e568c488aef6d6` 已合入 PR43 最终文本表单与 PR44 最终循环及文档修正；最终交叉测试提交 `5dbd3e1520b2f74cb77926d80295bb080596cbe4` / tree `5c4517a5561590b045cb4f7cb4c8179cb8f90782` 已通过12个完整相关文件54/54，无失败／取消／跳过；check、format:check及diff检查通过。补强既有graph-bound循环测试：父／目录／接口URLencoded文本继承、UTF8／空值／禁用不遮蔽，修改live父表单后冻结循环与备份恢复后的真实CLI仍发送原值且持久结果一致。仅测试补强，无生产补丁。根组合待推送后CI验证，不能称跨平台组合已验收。
+- PR43 local `feeb4b4d5044bb8abeaecc97f55e5f3e8551a7aa` / remote `856c0e61575b1ee5887a23207bf63e0708b9ae3c` / tree `7ac982061af07f35e9e125fec0cf714dd8277a21`：CI `40530114999` 首轮18/19，仅macOS桌面产物上传DNS ENOTFOUND失败，发生于smoke已通过之后；仅该失败job重试，第二次19/19。两次实际checkout `eb4e2f508bd342090928115443fc97e148e18abb` 树相同；其他18job及12份core产物不变，276文件完整不重叠，三OS各1234通过。未将功能断言失败当作基础设施重试。
+- preserve图现在支持接口显式urlencoded／form-data模式中的祖先文本form行；父层不替接口选择body模式，禁用子行不遮蔽父行，重名正文参数区分大小写。真实编码、两格式两代往返、冻结定义、SDK／CLI／备份重启分别验证。文件、raw／JSON继承、动态生成、未知元数据和GET／HEAD表单保持明确拒绝。无Content-Type时由运行时生成；urlencoded仅接受已证实的标准类型，multipart拒显式激活该头。MCP临时覆盖检查冻结请求实际bodyType，即使live父层清空也不放宽；此限制亦适用于preserve图内own-only表单，普通flatten请求不变。
+- PR44 latest local `709b1e21551d296e187b259869c496fb93b5a6f0` / remote `3625fe7aafb31ae5fb7cd29b3006c1d84d279bc6` / tree `6e646ac530026934e032473bc1731d46968f8248` 仅修正文档：CLI是invocation-scoped grants及原有per-query／per-stage限制，没有总TTL或总调用额度。自动CI `40531601845` 首次19/19，全部checkout `37251c8d998387ef7c16b7d5922c56519381571e` 精确同树。生产前版 `380a8d50` / remote `3b8ecf27` 的 CI `40524121998` 首次19/19，12份产物覆盖308文件，三OS各1439通过；不把前版结果替换最新文档头证据。
+- 合并保留所有循环叶子遍历、来源累计、冻结绑定校验与既有PRE／JSON5提取阶段政策；未调整脚本时限、堆栈或堆限制。历史d9的macOS桌面脚本预算及XML链失败原因未修复，后续绿色不能改判；PR37仍关闭，暂停专项、原版GUI与许可边界不变。没有合入main/develop或部署。
+
+## 15:23 canonical 有界循环与原生请求提取组合候选
+
+- 最近完整根 `35ea` / CI `40513156978` 已19/19 GREEN；该结果覆盖此前继承组合，不包含本次循环。历史d9的macOS桌面预算／XML链RED及更早RED保持原判，本轮未诊断暂停专项、不重跑旧CI、不调预算。
+- 本候选生产合并点 `d5f8897c4f9ee3e13dbdbf867119cbcb7098688c` / tree `558f2f3606efc833ca85534b0d5bc5be89f7d2ae`，合入PR44 local `380a8d50ad8ba5cfb01e1057091b070719bd8e3d` / remote `3b8ecf274dab86dc6a7a483e009fef5d886fadfe` / tree `d59172ca9c1ac4d975c72eed598855139b0b2b2c`。root保留最新原生PRE Header／JSON5Body、严格阶段政策、旧CLI非DB任务限制及既有预算；新增组合测试本地提交 `283a850d70d8867743678c66d8b30d8b515dbb82`。本轮无root生产补丁，**当前根候选CI尚待**，独立功能CI不能替代组合验收。
+- 单层HTTP固定次数repeat保留定义图、group/child/iteration/occurrence身份，count1–100、潜在展开≤200、冻结和逻辑展开配置≤4MiB；disabled也计潜在上限，不生成假成功记录。保留普通HTTP失败继续与原生严格提取停止差异，不增加重试、并行、条件、数据源或嵌套，不宣称原生automated_testings兼容。
+- 消费者统一遍历叶子：Store/restore、来源累计、冻结图、CLI只扫描启用定义一次并复用原invocation连接授权。原生MCP流程创建/修改/查看/执行及结果/历史投影明确拒循环，canonical历史保留真实逐轮身份；原生目录计划出口继续拒绝。现有各查询/阶段限制未放宽，不臆称CLI具有不存在的总TTL或总次数额度。
+- 新官方SDK HTTP／stdio两条整链从原生输入导入BEFORE Header与JSON5 Body提取；创建3轮冻结计划后改live URL/header/body。SDK、真实CLI和备份恢复/真正服务器重启后的CLI均只发送两次：第1轮200、第2轮500；成功PRE变量持久化，第三轮和组后请求零发送。每次failed执行均recordSaved=true，CLI exit1，recordId/attemptedRecordId、快照hash、逐轮身份与新Store记录一致；源项目、另一项目及原生输入不变。
+- 初始六个完整文件22/22通过；新文件首次2/2通过。最终15个完整相关文件85/85通过、无失败/取消/跳过，含四个repeat流程、组合新文件、CLI grants、native任务出口、请求提取/JSON5、既有stdio DB grants/workflow/nativeDB入口、HTTP与协议原子提取、继承图workflow。复用真实数据库授权入口，不新增未经确认的grant组合合同。全库check、format:check及diff检查通过。该证据仅本地精确候选，不代表所有后端交付完成或跨平台验收。
+- 循环完成证据累计超过8MiB时仅在下一叶子前停止，取消和严格提取停止优先；最后完成叶子原样保留，不合成未执行记录。此非硬输出上限；MCP stdio既有帧限制可能在已保存后拒绝全量回复，canonical小历史摘要仍可读取，不能重放网络。
+- 未新增前端、运行原版、接受许可、合main/develop或部署；PR37和暂停专项保持边界。
 
 ## 13:20 有界原生 HTTP 继承图与 MCP 导入组合候选
 

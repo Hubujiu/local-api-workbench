@@ -1,3 +1,4 @@
+import { hasRepeatSteps } from "./plan-repeat.mjs";
 import {
   validateNativeInheritanceProject,
   assertNativeInheritanceIdentity,
@@ -264,7 +265,10 @@ export class Store {
       throw Error("计划最多1000个");
     p.plans = p.plans.map(snapshotPlan);
     for (const run of p.runs || [])
-      if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
+      if (run.snapshot) {
+        readImportedNativeFlowSource(run.snapshot);
+        if (hasRepeatSteps(run.snapshot.steps)) snapshotPlan(run.snapshot);
+      }
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,

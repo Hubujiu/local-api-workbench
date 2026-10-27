@@ -49,7 +49,14 @@ export function importPreservedNativeInheritance(project, source, options) {
   for (const request of draft.requests) {
     const resolved = resolveNativeInheritance(draft, request);
     const expected = bySource.get(request.sourceOperationId);
-    for (const key of ["auth", "headers", "query", "cookies"])
+    for (const key of [
+      "auth",
+      "headers",
+      "query",
+      "cookies",
+      "form",
+      "bodyType",
+    ])
       if (!isDeepStrictEqual(resolved[key], expected?.[key]))
         throw Error("原生继承图：来源继承不能按当前转换合同保真");
   }

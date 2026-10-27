@@ -19,9 +19,9 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最后完整根GREEN仍为 `bd127` / CI `40497772310`。较新的根 `d9cd5c0e` / CI `40503613446` 为 **17/19 RED**（macOS桌面脚本超时及native XML assertion链失败），本轮不将其改判或宣称已修。当前候选增加有界原生HTTP继承图：owner／MCP导入可显式选 `inheritanceMode: preserve`，默认flatten不变；只在空业务项目保留项目／目录／接口认证及Header/Query/Cookie层，出口自动保图，无法表达的样例、任务、协议等在该模式继续拒绝。默认模式既有样例图、任务、模型、签名和TCP/SSE出口能力保持各自范围，不因此全部获得继承图支持。
+最近完整根 `35ea` / CI `40513156978` 已19项GREEN，验证既有继承图组合，不包含本次循环计划。历史 `d9cd5c0e` 及更早XML／桌面脚本RED保留，不以新功能宣称已修。当前候选新增canonical单层HTTP固定次数 `repeat`：count为1–100，潜在展开总数最多200，保存循环图与每轮身份；不支持条件、嵌套、并行或数据源循环，也不声称兼容原生automated_testings。原生流程／历史投影遇循环明确拒绝，canonical工具与Workbench备份保留完整定义和证据。
 
-真实SDK双传输／双格式两代、live与冻结case／plan执行、CLI及恢复已有本地组合证据；PR43／PR29独立CI通过，**新根组合CI尚待**，不借独立结果替代根验收。来源身份可能重映射，原始历史用Workbench备份；WS/WSS及原生协议计划出口仍拒绝。HTTP500／断言失败仍可提取，与协议passed-only和原生严格阶段分别保持旧合同。项目会话失败只显式重试存储；`app.close()`可观察保存结果，但桌面退出／信号终止尚未接入，不宣称耐崩溃保存。最新精确提交、验证与遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
+本次循环已有官方SDK HTTP／stdio、CLI、备份恢复与真实服务器重启的本地组合证据；普通失败继续与原生严格提取停止分别保持合同。第2轮HTTP500时成功BEFORE Header／JSON5 Body提取保留，后续轮次和组后请求不发送；preserve继承图另新增urlencoded／multipart文本表单层，保留接口body模式及严格Content-Type边界；**新根循环＋文本表单组合CI尚待**，不借上一根或独立PR绿色替代。来源身份可能重映射，原始历史用Workbench备份；WS/WSS及原生协议计划出口仍拒绝。HTTP500／断言失败仍可提取，与协议passed-only和原生严格阶段分别保持旧合同。项目会话失败只显式重试存储；`app.close()`可观察保存结果，但桌面退出／信号终止尚未接入，不宣称耐崩溃保存。最新精确提交、验证与遗留问题见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。
 
 ## 已实现的核心
 
@@ -130,6 +130,10 @@ SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体
 数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限；CLI/MCP 可分别显式获得限定临时只读权限，凭据不随项目备份恢复。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
 
 ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
+
+### 有界固定次数循环计划（候选）
+
+canonical计划的顶层步骤可保存 `{type:"repeat", id, count, steps:[HTTP步骤]}`。所有叶子先冻结，变量仍按当前运行环境解析；按轮次串行执行并共享既有作用域，不自动重试。禁用定义也计入潜在200步／4MiB配置上限，但不产生执行结果。实际结果保留groupId、childId、零起始iteration和occurrenceId，计划hash保留循环意图。仅循环计划的完成记录累计超过8MiB后，在下一请求前停止；保留已完成证据，不是8MiB硬输出保证，过大的MCP响应仍可能在保存后被现有帧上限拒绝，须查历史而非重放。CLI数据库连接仍需每次显式授权，不把循环变成持久授权。详见[循环合同](docs/ADR-BOUNDED-PLAN-REPEAT.md)。
 
 ### 显式保留原生 HTTP 继承图
 

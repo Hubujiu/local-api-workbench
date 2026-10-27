@@ -1,3 +1,11 @@
+import {
+  validateRepeatGraph,
+  REPEAT_EVIDENCE_BYTES,
+  repeatEvidenceExceeded,
+  mapPlanLeaves,
+  planLeaves,
+  planOccurrences,
+} from "./plan-repeat.mjs";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
@@ -438,7 +446,8 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
-  for (const step of plan.steps || [])
+  const repeated = validateRepeatGraph(plan.steps);
+  for (const step of planLeaves(plan.steps || []))
     if (step.request?.nativeInheritance !== undefined)
       throw Error("冻结计划须先解析原生继承图，不能保留live绑定");
   const nativeMCPBudget = { bytes: 0 };
@@ -464,7 +473,7 @@ export function snapshotPlan(plan) {
     provenance: plan.provenance || { fields: {}, steps: {} },
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
-    steps: plan.steps.map((s) =>
+    steps: mapPlanLeaves(plan.steps, (s) =>
       s.type === "grpc"
         ? {
             ...snapshotGrpcStep(s),
@@ -511,11 +520,28 @@ export function snapshotPlan(plan) {
               },
     ),
   };
+  if (repeated) {
+    snapshot.steps = snapshot.steps.map((step) =>
+      step.type === "repeat"
+        ? {
+            type: "repeat",
+            id: step.id || id(),
+            name: step.name ?? "循环组",
+            enabled: step.enabled !== false,
+            count: step.count,
+            steps: step.steps,
+          }
+        : step,
+    );
+    validateRepeatGraph(snapshot.steps, { requireIds: true });
+    if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
+      throw Error("循环计划冻结定义最多4MiB");
+  }
   let sourceBytes =
     importedNativeFlowSource === undefined
       ? 0
       : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
-  for (const step of snapshot.steps) {
+  for (const step of planLeaves(snapshot.steps)) {
     const source = step.request?.importedNativeTaskSource;
     if (source !== undefined)
       sourceBytes += Buffer.byteLength(JSON.stringify(source));
@@ -546,30 +572,39 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
-  const snapshot = structuredClone(plan);
+  const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
-  for (const step of snapshot.steps)
+  for (const step of planLeaves(snapshot.steps))
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
-  for (const step of snapshot.steps)
+  for (const step of planLeaves(snapshot.steps))
     if (step.request?.nativeTasks !== undefined)
       step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
-  if (!snapshot.steps.some((step) => step.enabled !== false)) {
+  const occurrences = planOccurrences(snapshot.steps);
+  if (!occurrences.length) {
     throw Error("计划没有可执行步骤");
   }
-  for (const step of snapshot.steps) {
+  let evidenceBytes = 0,
+    evidenceStopped = false;
+  for (const { step, repeat } of occurrences) {
     if (signal?.aborted) break;
+    if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
+      evidenceStopped = true;
+      break;
+    }
     if (step.enabled === false) continue;
     const record = {
       stepId: step.id,
+      ...(repeat ? { repeat: { ...repeat } } : {}),
       name: step.name,
       startedAt: new Date().toISOString(),
       status: "failed",
@@ -1096,6 +1131,7 @@ export async function runPlan(
     }
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
+    if (repeated) evidenceBytes += Buffer.byteLength(JSON.stringify(record));
     await onStep?.(record);
     if (stopAfterExtractionFailure) break;
   }
@@ -1111,9 +1147,32 @@ export async function runPlan(
     createdAt: new Date().toISOString(),
     status: signal?.aborted
       ? "cancelled"
-      : results.every((r) => r.status === "passed")
+      : !evidenceStopped && results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
+    ...(evidenceStopped
+      ? {
+          stopReason: "evidence-limit",
+          evidenceBudget: {
+            limitBytes: REPEAT_EVIDENCE_BYTES,
+            recordedBytes: evidenceBytes,
+            executed: results.length,
+            remaining: occurrences.length - results.length,
+            last: {
+              stepId: results.at(-1).stepId,
+              ...(results.at(-1).repeat
+                ? { repeat: results.at(-1).repeat }
+                : {}),
+            },
+            next: {
+              stepId: occurrences[results.length].step.id,
+              ...(occurrences[results.length].repeat
+                ? { repeat: occurrences[results.length].repeat }
+                : {}),
+            },
+          },
+        }
+      : {}),
     results,
     initialVariables: structuredClone(variables),
     variables: vars,
@@ -2042,12 +2101,18 @@ export function restoreProject(document) {
   for (const item of document.cases || [])
     validateRequestTaskSource(item.request);
   for (const plan of document.plans || []) {
+    validateRepeatGraph(plan.steps);
     readImportedNativeFlowSource(plan);
-    for (const step of plan.steps || [])
+    for (const step of planLeaves(plan.steps || []))
       validateRequestTaskSource(step.request);
   }
   for (const run of document.runs || [])
-    if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
+    if (run.snapshot) {
+      if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
+      readImportedNativeFlowSource(run.snapshot);
+      for (const step of planLeaves(run.snapshot.steps || []))
+        validateRequestTaskSource(step.request);
+    }
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

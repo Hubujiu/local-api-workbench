@@ -1,3 +1,8 @@
+import { hasRepeatSteps } from "./plan-repeat.mjs";
+export function assertNativeLinearPlan(plan) {
+  if (hasRepeatSteps(plan?.steps))
+    throw Error("原版兼容流程不支持canonical循环组；请使用canonical计划工具");
+}
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import { resolveNativeEnvironment } from "./native-mcp-environments.mjs";
 import { randomUUID } from "node:crypto";
@@ -139,6 +144,7 @@ export function normalizeNativeMCPState(
   return state;
 }
 export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
+  assertNativeLinearPlan(previous);
   const update = Boolean(previous);
   const name = own(args, "name") ? args.name : previous?.name;
   if (typeof name !== "string" || !name.trim() || name.length > 200)
@@ -250,6 +256,7 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
   };
 }
 export function nativeFlowView(projectId, plan) {
+  assertNativeLinearPlan(plan);
   return {
     flow_id: plan.id,
     project_id: projectId,
