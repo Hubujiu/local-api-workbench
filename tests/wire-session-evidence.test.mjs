@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import http from "node:http";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { WebSocketServer } from "ws";
@@ -123,6 +123,9 @@ async function fixture(t) {
       burst = v;
     },
     tcpPort: tcp.address().port,
+    endTCP: () => {
+      for (const socket of sockets) socket.end("peer-end");
+    },
   };
 }
 test("project-bound interactive TCP sends twice, rejects foreign/global access, finalizes once and restores inert evidence", async (t) => {
@@ -401,4 +404,165 @@ test("remote TCP, WebSocket and SSE terminal histories persist without stop and 
     saved.protocolRuns,
   );
   await new Promise((resolve) => restarted.server.close(resolve));
+});
+
+test("failed automatic save shares concurrent storage-only retries without repeating transport", async (t) => {
+  const f = await fixture(t);
+  const append = f.app.store.append.bind(f.app.store);
+  let calls = 0,
+    release;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  f.app.store.append = async (...args) => {
+    calls++;
+    if (calls === 1) throw Error("owned pre-write failure");
+    await gate;
+    return append(...args);
+  };
+  const id = (await f.post("", { definitionId: "sse" })).value.id;
+  await until(async () => (await f.get(id)).value.persistenceError);
+  const first = f.post("/" + id + "/stop");
+  await until(() => calls === 2);
+  const second = f.post("/" + id + "/stop");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(calls, 2, "both stop calls share the pending retry");
+  release();
+  for (const result of await Promise.all([first, second]))
+    assert.equal(result.value.recordSaved, true);
+  assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, 1);
+  assert.equal(f.sends(), 0);
+});
+
+test("real pre-journal and post-journal filesystem failures retain readable receipts and reconcile storage only", async (t) => {
+  for (const phase of ["before", "after"])
+    await t.test(phase, async (t) => {
+      const f = await fixture(t);
+      const id = (await f.post("", { definitionId: "tcp" })).value.id;
+      await until(async () => (await f.get(id)).value.state === "open");
+      const dir = f.app.store.directory(f.p.id),
+        history = path.join(dir, "history"),
+        file = path.join(history, "requests.json"),
+        kept = path.join(dir, "history-kept"),
+        journal = path.join(dir, ".transaction.json");
+      const original = await readFile(file, "utf8");
+      const save = f.app.store.save,
+        read = f.app.store.readUnlocked;
+      let attempts = 0;
+      if (phase === "before") await writeFile(file, '{"private-marker":');
+      else
+        f.app.store.save = async function (project, options) {
+          if (!options?.activity) return save.call(this, project, options);
+          attempts++;
+          this.readUnlocked = async function (projectId) {
+            const state = await read.call(this, projectId);
+            this.readUnlocked = read;
+            await rename(history, kept);
+            await writeFile(history, "private filesystem obstacle");
+            return state;
+          };
+          try {
+            return await save.call(this, project, options);
+          } finally {
+            this.readUnlocked = read;
+          }
+        };
+      // A real peer closes independently; no owner stop is required to attempt save.
+      // send requires readable project, so use the connection already opened above.
+      if (phase === "before") {
+        // End the remote side via a dedicated normal request before corrupting its
+        // history: the retained fixture socket is exposed only to this test.
+        f.endTCP();
+      } else await f.post("/" + id + "/send", { message: "finish" });
+      await until(async () => (await f.get(id)).value.persistenceError);
+      const failed = (await f.get(id)).value;
+      assert.equal(failed.recordSaved, false);
+      assert.equal(failed.recordId, null);
+      assert.equal(failed.attemptedRecordId, id);
+      assert.equal(
+        failed.persistenceOutcome.code,
+        phase === "after" ? "PROJECT_COMMIT_UNCERTAIN" : "RECORD_SAVE_FAILED",
+      );
+      assert.equal(failed.persistenceOutcome.retry_safe, false);
+      assert.doesNotMatch(
+        JSON.stringify(failed.persistenceOutcome),
+        /private|history-kept/,
+      );
+      assert.equal((await f.get(id, f.other.id)).status, 400);
+      const unauth = await fetch(f.endpoint("/" + id));
+      assert.equal(unauth.status, 403);
+      await f.get(id);
+      await f.get(id);
+      if (phase === "after") {
+        assert.equal(attempts, 1);
+        assert.equal(
+          typeof JSON.parse(await readFile(journal, "utf8")),
+          "object",
+        );
+        f.app.store.save = save;
+        await rm(history);
+        await rename(kept, history);
+      } else {
+        await assert.rejects(readFile(journal), { code: "ENOENT" });
+        await writeFile(file, original);
+      }
+      const retried = await Promise.all([
+        f.post("/" + id + "/stop"),
+        f.post("/" + id + "/stop"),
+      ]);
+      assert(retried.every((r) => r.value.recordSaved));
+      const saved = await new Store(f.root).get(f.p.id);
+      assert.equal(saved.protocolRuns.length, 1);
+      assert.equal(saved.protocolRuns[0].id, id);
+      assert.equal(saved.protocolRuns[0].status, "completed");
+      assert.equal(f.sends(), phase === "after" ? 1 : 0);
+    });
+});
+
+test("graceful shutdown waits for automatic live-session saves and never reconnects on restart", async (t) => {
+  const f = await fixture(t);
+  const ids = [];
+  for (const definitionId of ["tcp", "ws"]) {
+    const id = (
+      await f.post("", {
+        definitionId,
+        ...(definitionId === "ws"
+          ? { headers: { Authorization: "Bearer session-fixture" } }
+          : {}),
+      })
+    ).value.id;
+    ids.push(id);
+    await until(async () => (await f.get(id)).value.state === "open");
+  }
+  const append = f.app.store.append.bind(f.app.store);
+  let release,
+    finished = false,
+    calls = 0;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  f.app.store.append = async (...args) => {
+    calls++;
+    await gate;
+    return append(...args);
+  };
+  f.app.server.closeAllConnections();
+  const closing = new Promise((r) =>
+    f.app.server.close(() => {
+      finished = true;
+      r();
+    }),
+  );
+  await until(() => calls === 2);
+  assert.equal(finished, false);
+  release();
+  await closing;
+  const saved = await new Store(f.root).get(f.p.id);
+  assert.deepEqual(saved.protocolRuns.map((x) => x.id).sort(), ids.sort());
+  assert(
+    saved.protocolRuns.every(
+      (x) => x.status === "partial" && x.result.closeReason === "manual",
+    ),
+  );
+  assert.equal(f.sends(), 0);
 });

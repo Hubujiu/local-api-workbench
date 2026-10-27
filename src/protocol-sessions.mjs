@@ -1,3 +1,4 @@
+import { recordSaveFailure } from "./execution-evidence.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -42,7 +43,30 @@ export class ProtocolSessions {
       session.finishedAt = new Date().toISOString();
       session.closeReason = reason;
       session.finalSnapshot = this.snapshot(session.id);
-      this.onFinish?.(session);
+      // A persistence observer must never interrupt socket cleanup or surface
+      // as an unhandled transport rejection. Production observer also handles
+      // its own errors, while these guards cover synchronous hook failures.
+      try {
+        const pending = this.onFinish?.(session);
+        if (pending?.catch)
+          session.recordPromise = pending.catch((error) => {
+            session.receipt = recordSaveFailure(
+              session.projectId,
+              session.finalRecord?.id ?? null,
+              error,
+            );
+            session.recordPending = false;
+            return session.receipt;
+          });
+      } catch (error) {
+        session.receipt = recordSaveFailure(
+          session.projectId,
+          session.finalRecord?.id ?? null,
+          error,
+        );
+        session.recordPending = false;
+        session.recordPromise = Promise.resolve(session.receipt);
+      }
     }
     clearTimeout(session.deadline);
   }

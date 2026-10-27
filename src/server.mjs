@@ -92,6 +92,7 @@ export async function createApp({
     if (!session.projectId) return;
     if (session.recordSaved || session.recordPromise)
       return session.recordPromise;
+    session.recordPending = true;
     session.recordPromise = (async () => {
       try {
         const recordId = await finalizeWireSession(
@@ -109,6 +110,7 @@ export async function createApp({
           error,
         );
       }
+      session.recordPending = false;
       return session.receipt;
     })();
     return session.recordPromise;
@@ -479,8 +481,16 @@ export async function createApp({
           return json(res, 200, { ok: true });
         }
         if (parts[1] === "projects" && parts[2]) {
-          const p = await store.get(parts[2]);
           const action = parts[3];
+          // Existing terminal evidence must remain readable while its project
+          // storage is damaged or requires recovery. Ownership is checked below;
+          // only GET/stop bypass a project read, never start/send execution.
+          const evidenceOnly =
+            action === "protocol-sessions" &&
+            parts[4] &&
+            ((req.method === "GET" && !parts[5]) ||
+              (req.method === "POST" && parts[5] === "stop"));
+          const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
             const jar = projectCookieSession(
@@ -926,7 +936,11 @@ export async function createApp({
                 throw Error("协议停止不接受额外字段");
               // A previous completed failure may retry storage, never transport.
               // Capture before stop: stop itself can synchronously start the first save.
-              if (session.receipt && !session.recordSaved)
+              if (
+                session.receipt &&
+                !session.recordSaved &&
+                !session.recordPending
+              )
                 session.recordPromise = null;
               protocolSessions.stop(sessionId);
               const receipt = await saveWireSession(session);
