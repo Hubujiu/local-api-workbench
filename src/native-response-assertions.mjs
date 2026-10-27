@@ -32,14 +32,18 @@ export function normalizeNativeAssertionData(value, { enabled = true } = {}) {
       "responseHeader",
       "responseXml",
       "responseText",
+      "responseTime",
+      "responseSize",
     ].includes(value.type)
   )
     throw Error(
-      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText",
+      "原生断言仅支持responseCode/responseJson/responseHeader/responseXml/responseText/responseTime/responseSize",
     );
   const expression = value.expression;
   nativeDataObject(expression, ["path", "compareType", "compareValue"]);
-  const isText = value.type === "responseText",
+  const isText = ["responseText", "responseTime", "responseSize"].includes(
+      value.type,
+    ),
     hasPath = Object.hasOwn(expression, "path"),
     hasExpected = Object.hasOwn(expression, "compareValue");
   const path = hasPath ? expression.path : undefined;
@@ -105,7 +109,7 @@ export function compileNativeAssertions(value = []) {
     ...(data.type === "responseXml"
       ? { xmlPath: nativeXMLPath(data.expression.path) }
       : {}),
-    ...(data.type === "responseText"
+    ...(["responseText", "responseTime", "responseSize"].includes(data.type)
       ? {
           diagnostic: Object.hasOwn(data.expression, "path")
             ? data.expression.path
@@ -130,6 +134,7 @@ function installNativeAssertions(
   headerEvidenceJSON,
   readXML,
   readText,
+  metricResponse,
 ) {
   const parse = JSON.parse,
     descriptor = Object.getOwnPropertyDescriptor,
@@ -191,6 +196,30 @@ function installNativeAssertions(
     }
     return value;
   };
+  const readMetric = (name) => {
+    const property = descriptor(metricResponse, name);
+    if (!property) return undefined;
+    if (!property.enumerable || !hasOwn(property, "value"))
+      throw Failure("原生指标断言只读取当前自有数据字段");
+    const value = property.value;
+    if (typeof value === "string") {
+      if (value.length > 65536) throw Failure("原生指标断言字符串超过64KiB");
+      let bytes = 0;
+      for (let at = 0; at < value.length; at++) {
+        const code = charCode(value, at);
+        if (code >= 0xd800 && code <= 0xdbff) {
+          const next = charCode(value, ++at);
+          if (!(next >= 0xdc00 && next <= 0xdfff))
+            throw Failure("原生指标断言字符串包含无效Unicode");
+          bytes += 4;
+        } else if (code >= 0xdc00 && code <= 0xdfff)
+          throw Failure("原生指标断言字符串包含无效Unicode");
+        else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+        if (bytes > 65536) throw Failure("原生指标断言字符串超过64KiB");
+      }
+    }
+    return value;
+  };
   const safeArray = () => {
     const value = [];
     define(value, "toJSON", { value: undefined });
@@ -206,7 +235,9 @@ function installNativeAssertions(
     const response =
       op.type === "responseHeader" ||
       op.type === "responseXml" ||
-      op.type === "responseText"
+      op.type === "responseText" ||
+      op.type === "responseTime" ||
+      op.type === "responseSize"
         ? null
         : readResponse();
     let value =
@@ -216,7 +247,9 @@ function installNativeAssertions(
           ? readXML()(op.xmlPath)
           : op.type === "responseText"
             ? readText()
-            : response.status;
+            : op.type === "responseTime" || op.type === "responseSize"
+              ? readMetric(op.type)
+              : response.status;
     if (op.type === "responseJson") {
       try {
         value = parse(response.body);
@@ -317,8 +350,7 @@ function installNativeAssertions(
       default:
         throw Failure("原生断言比较类型无效");
     }
-    if (op.type === "responseText" && op.diagnostic)
-      message = op.diagnostic + ": " + message;
+    if (op.diagnostic) message = op.diagnostic + ": " + message;
     const before = publicTests.length;
     registerTest(op.name, () => {
       if (!passed) throw Failure(message);

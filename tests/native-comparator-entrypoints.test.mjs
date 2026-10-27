@@ -231,11 +231,33 @@ function sourceFor(base, version = "1.1") {
       "first, Alpha 雪 ,last",
     ),
     assertion("Text exists", "responseText", undefined, "exist"),
+    assertion("Time nonnegative", "responseTime", undefined, "gte", "0"),
+    assertion(
+      "Time bounded transport",
+      "responseTime",
+      "{{METRIC_DIAGNOSTIC_ONLY}}",
+      "lte",
+      "20000",
+    ),
+    assertion(
+      "Size counts Unicode bytes",
+      "responseSize",
+      undefined,
+      "eq",
+      String(Buffer.byteLength(" Alpha 雪 ")),
+    ),
     script("numeric current Text", 'apt.response.setBody("16");'),
     assertion("expected hexadecimal", "responseText", undefined, "gte", "0x10"),
     assertion("expected binary", "responseText", undefined, "lte", "0b10000"),
     assertion("expected octal", "responseText", undefined, "gte", "0o20"),
     assertion("expected whitespace", "responseText", undefined, "gt", " \t "),
+    assertion(
+      "Size survives current body edit",
+      "responseSize",
+      undefined,
+      "eq",
+      String(Buffer.byteLength(" Alpha 雪 ")),
+    ),
   ]);
   return source;
 }
@@ -538,7 +560,7 @@ for (const [version, transport] of [
   ["2", "stdio"],
 ])
   test(
-    `fourteen native comparators and five sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
+    `fourteen native comparators and seven sources survive HTTP/${version} official ${transport} SDK, CLI, export and restart`,
     { timeout: 30000 },
     async (t) => {
       const f = await fixture(t, version),
@@ -549,7 +571,7 @@ for (const [version, transport] of [
           .filter((entry) => entry.type === "assert")
           .map((entry) => entry.name),
       );
-      assert.equal(names.length, 44);
+      assert.equal(names.length, 48);
       const comparisons = new Set(
         source.apis.flatMap((api) =>
           (api.request.post_tasks ?? [])
