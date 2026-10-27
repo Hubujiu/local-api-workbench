@@ -576,7 +576,7 @@ try {
             : "null") +
           ";const state=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText,pm.response);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
