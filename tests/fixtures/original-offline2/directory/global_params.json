@@ -1,0 +1,115 @@
+{
+  "auth": {
+    "asap": {
+      "alg": "",
+      "aud": "",
+      "claims": "",
+      "exp": "",
+      "iss": "",
+      "kid": "",
+      "privateKey": "",
+      "sub": ""
+    },
+    "awsv4": {
+      "accessKey": "",
+      "addAuthDataToQuery": false,
+      "region": "",
+      "secretKey": "",
+      "service": "",
+      "sessionToken": ""
+    },
+    "basic": {
+      "password": "",
+      "username": ""
+    },
+    "bearer": {
+      "key": ""
+    },
+    "digest": {
+      "algorithm": "",
+      "cnonce": "",
+      "nc": "",
+      "nonce": "",
+      "opaque": "",
+      "password": "",
+      "qop": "",
+      "realm": "",
+      "username": ""
+    },
+    "edgegrid": {
+      "accessToken": "",
+      "baseURi": "",
+      "clientSecret": "",
+      "clientToken": "",
+      "headersToSign": "",
+      "nonce": "",
+      "timestamp": ""
+    },
+    "hawk": {
+      "algorithm": "",
+      "authId": "",
+      "authKey": "",
+      "default": "",
+      "delegation": "",
+      "extraData": "",
+      "includePayloadHash": false,
+      "nonce": "",
+      "timestamp": "",
+      "user": ""
+    },
+    "jwt": {
+      "addTokenTo": "",
+      "algorithm": "",
+      "header": "",
+      "headerPrefix": "",
+      "isSecretBase64Encoded": false,
+      "payload": "",
+      "queryParamKey": "",
+      "secret": ""
+    },
+    "kv": {
+      "in": "",
+      "key": "",
+      "value": ""
+    },
+    "ntlm": {
+      "disableRetryRequest": false,
+      "entity": "",
+      "password": "",
+      "username": "",
+      "workstation": ""
+    },
+    "oauth1": {
+      "addEmptyParamsToSign": false,
+      "addParamsToHeader": false,
+      "callback": "",
+      "consumerKey": "",
+      "consumerSecret": "",
+      "disableHeaderEncoding": false,
+      "includeBodyHash": false,
+      "nonce": "",
+      "realm": "",
+      "signatureMethod": "",
+      "timestamp": "",
+      "token": "",
+      "tokenSecret": "",
+      "verifier": "",
+      "version": ""
+    },
+    "type": "noauth"
+  },
+  "body": {
+    "parameter": []
+  },
+  "cookie": {
+    "parameter": []
+  },
+  "header": {
+    "parameter": []
+  },
+  "post_tasks": [],
+  "pre_tasks": [],
+  "query": {
+    "parameter": []
+  }
+}

@@ -1,0 +1,73 @@
+# Offline2 export query fidelity
+
+## Original runtime evidence
+
+On 2026-10-25, the unmodified official Apipost Offline 2.0.0 Linux package was
+started normally on the isolated desktop with a fictional profile. No sandbox,
+license or payment checks were disabled. The official DEB SHA-256 was
+`7c66b8963960dd22a384072ecb714c9d8ba1164bb2ecd8f2d90d325fa3d83942`.
+The normal trial UI created `Workbench Native Fixture` and `Native Echo`.
+
+The committed `tests/fixtures/original-offline2/native-echo-original.json` is the
+actual Apipost export produced by the UI, not a manually assembled native sample.
+Only fictional request data were entered. It contains no application code,
+installation binary, real credentials or brand artwork. The export selected one
+API, zero models and the default environment. Native on-disk storage was separately
+observed as project.json, apis/<id>.json, apis/index.json and envs/<id>.json; this
+change does not implement a directory reader or claim full directory migration.
+
+A real local HTTP server observed POST `/echo?fixture=original` with body
+`{"message":"fictional","number":7}`. The export repeats `fixture=original` in
+both the URL and request.query.parameter. Importing the unmodified export with
+our existing importer then executing it sent the query twice. A failing real-HTTP
+regression reproduced this mismatch, including after backup restore. Disabling
+the original Query row removed the query from both the original URL and wire
+request; no network requests were sent to third-party services.
+
+## Independent fix
+
+For modern Apipost imports only, strip mirrored URL query occurrences using the
+source Query rows as a multiset. Preserve duplicate rows, unrelated raw query
+bytes, fragments, relative/template URLs and existing queryAddEqual behavior.
+Do not globally deduplicate ordinary Workbench requests: those may intentionally
+contain both a literal URL parameter and an additional parameter row.
+
+The regression uses the genuine export and changes only its destination port for
+a disposable local server. It verifies import, source immutability, save/reload,
+backup restore into a new project, and equivalent actual method/path/body.
+Separate synthetic cases are explicitly labeled and cover repeated pairs,
+percent encoding, blank values, disabled rows and independent raw query fields.
+
+This is one verified Offline2 JSON-export workflow, not complete project/native
+format roundtrip, all original modules, or re-export into the original format.
+
+## Original-to-original roundtrip observation
+
+The same exported JSON was imported through the original UI into a separately
+created `Workbench Restored Fixture` project. The API and default environment
+were explicitly selected. Sending the restored API returned HTTP 200 and the
+same observed method/path/body. The UI then produced
+`native-echo-reexport.json`, also retained as an unmodified fictional fixture.
+Source and destination project/API IDs differ, as expected for this operation;
+request URL and body remain equal. Both actual exports now pass the independent
+Workbench import/save/restore/HTTP acceptance. This is not a Workbench exporter
+back into the original native format, nor coverage of models/scripts/plans.
+
+## Actual original script export
+
+A third UI-generated fixture, `native-echo-scripts.json`, adds our own short
+pre-script setting `native_value` and post-script extracting response.fixture
+into `native_after`. The original successfully sent JSON with message
+`from-before`, then exported both task records and current environment values.
+The original environment file retains blank initial definitions; the export
+contains current values separately. No proprietary SDK implementation is copied.
+
+Workbench acceptance clears those imported current values before execution, so
+it cannot pass merely by reading values left over from the original. Actual HTTP,
+pre/post log order, environment scope commits, disk reload, another project's
+isolation and backup-preserved script source are verified. Explicitly synthetic
+pre/post throwing variants check no request after pre-failure and retained HTTP
+evidence after post-failure; these are Workbench safety contracts, not claimed
+observations of original error semantics. The first temporary probe was launched
+with Node `--input-type`, which workers inherit and reject; the real file-based
+acceptance runs without that probe flag. No production limits were changed.

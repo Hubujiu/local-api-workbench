@@ -149,6 +149,9 @@ async function resolveDynamicRequestBase(
     "afterScript",
     "sharedBeforeScripts",
     "sharedAfterScripts",
+    "nativeTasks",
+    "importedScriptTasks",
+    "importedNativeTaskSource",
   ])
     if (Object.hasOwn(clone, key)) {
       scriptSources[key] = clone[key];

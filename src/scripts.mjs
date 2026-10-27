@@ -1,3 +1,11 @@
+import { compileNativeWaits } from "./native-wait-tasks.mjs";
+import { compileNativeAssertions } from "./native-response-assertions.mjs";
+import { compilePickVarsOperations } from "./native-response-extraction.mjs";
+import {
+  normalizeDatabaseOperations,
+  databaseAssignments,
+  databaseResultRows,
+} from "./script-database-tasks.mjs";
 import { finalBodyLiteral } from "./script-final-body.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import {
@@ -14,22 +22,15 @@ import { Worker } from "node:worker_threads";
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
 
-/** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
-export function runScript(
-  code,
-  input,
-  {
-    signal,
-    cookieSession,
-    activityBudgetMs = 250,
-    wallBudgetMs = 2000,
-    requestLimit = 10,
-    timerLimit = 100,
-    fakerLimit = 1000,
-    jobLimit = 10000,
-    assertionLimit = 1000,
-  } = {},
-) {
+function scriptBudgets({
+  activityBudgetMs = 250,
+  wallBudgetMs = 2000,
+  requestLimit = 10,
+  timerLimit = 100,
+  fakerLimit = 1000,
+  jobLimit = 10000,
+  assertionLimit = 1000,
+} = {}) {
   if (
     !Number.isFinite(activityBudgetMs) ||
     activityBudgetMs <= 0 ||
@@ -50,6 +51,56 @@ export function runScript(
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
+  return {
+    activityBudgetMs,
+    wallBudgetMs,
+    requestLimit,
+    timerLimit,
+    fakerLimit,
+    jobLimit,
+    assertionLimit,
+  };
+}
+
+/** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
+export function runScript(code, input, options = {}) {
+  const {
+    signal,
+    cookieSession,
+    databaseQuery,
+    databaseOperations: suppliedDatabaseOperations,
+    responseExtractions: suppliedResponseExtractions,
+    responseAssertions: suppliedResponseAssertions,
+    nativeWaits: suppliedNativeWaits,
+  } = options;
+  const {
+    activityBudgetMs,
+    wallBudgetMs,
+    requestLimit,
+    timerLimit,
+    fakerLimit,
+    jobLimit,
+    assertionLimit,
+  } = scriptBudgets(options);
+  const nativeWaits = compileNativeWaits(suppliedNativeWaits);
+  const responseAssertions = compileNativeAssertions(
+    suppliedResponseAssertions,
+  );
+  if (responseAssertions.length && !input.response)
+    throw Error("原生断言需要后置响应");
+  const responseExtractions = compilePickVarsOperations(
+    suppliedResponseExtractions,
+  );
+  if (responseExtractions.length && !input.response)
+    throw Error("pickVars需要后置响应");
+  const databaseOperations = normalizeDatabaseOperations(
+    suppliedDatabaseOperations,
+  );
+  if (databaseOperations.length && typeof databaseQuery !== "function")
+    throw Error("此执行入口未授权数据库任务");
+  if (responseAssertions.length > assertionLimit)
+    throw Error("声明的原生断言超过本次共享断言预算");
+
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -87,6 +138,10 @@ export function runScript(
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
+        databaseTaskCount: databaseOperations.length,
+        responseExtractions,
+        responseAssertions,
+        nativeWaits,
         code,
         input,
         activityBudgetMs,
@@ -99,7 +154,10 @@ export function runScript(
       resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 },
     });
     const controller = new AbortController(),
-      networkRequests = [];
+      networkRequests = [],
+      databaseQueries = [];
+    let nextDatabase = 0,
+      databaseActive = false;
     let completedMessage,
       settled = false,
       total = 0,
@@ -110,6 +168,8 @@ export function runScript(
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
       controller.abort();
+      for (const record of databaseQueries)
+        if (record.status === "running") record.status = "interrupted";
       if (terminate) await worker.terminate();
       if (error) {
         error.elapsedMs ??= Math.round(performance.now() - startedAt);
@@ -119,6 +179,7 @@ export function runScript(
             record.status = "interrupted";
             record.error = error.message;
           }
+        error.databaseQueries = structuredClone(databaseQueries);
         error.networkRequests = structuredClone(networkRequests);
         reject(error);
       } else {
@@ -134,6 +195,7 @@ export function runScript(
               Boolean(input.response),
               true,
             ),
+            databaseQueries,
             networkRequests,
           });
         } catch (error) {
@@ -165,6 +227,63 @@ export function runScript(
       if (settled) return;
       if (message.kind === "stage") {
         lastWorkerStage = message.stage;
+        return;
+      }
+      if (message.kind === "database") {
+        if (
+          databaseActive ||
+          message.index !== nextDatabase ||
+          !databaseOperations[nextDatabase]
+        ) {
+          finish(Error("数据库任务次序无效或重复调用"));
+          return;
+        }
+        const operation = databaseOperations[nextDatabase++];
+        databaseActive = true;
+        const evidence = {
+          index: message.index,
+          connectionId: operation.connectionId,
+          status: "running",
+        };
+        databaseQueries.push(evidence);
+        let response, error;
+        try {
+          const result = await databaseQuery(
+            {
+              connectionId: operation.connectionId,
+              sql: operation.query,
+              parameters: [],
+            },
+            controller.signal,
+          );
+          if (settled || controller.signal.aborted) return;
+          response = {
+            assignments: databaseAssignments(operation, result),
+            ...(operation.isConsoleOutput === 1
+              ? { rows: databaseResultRows(operation, result) }
+              : {}),
+          };
+          if (Buffer.byteLength(JSON.stringify(response)) > 262144)
+            throw Error("数据库任务结果超过256KiB");
+          evidence.status = "completed";
+        } catch (caught) {
+          // Cancellation already records an interrupted query. A late driver
+          // rejection must not rewrite that evidence or publish a worker reply.
+          if (settled || controller.signal.aborted) return;
+          error = String(caught.message).slice(0, 2000);
+          evidence.status = "failed";
+          evidence.error = error;
+          response = undefined;
+        } finally {
+          databaseActive = false;
+        }
+        if (!settled)
+          worker.postMessage({
+            kind: "database",
+            id: message.id,
+            error,
+            response,
+          });
         return;
       }
       if (message.kind === "http") {
@@ -236,6 +355,7 @@ export function runScript(
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
                 activityOperation: completedMessage.activityOperation,
                 activityMetrics: completedMessage.activityMetrics,
+                activityCPUTimeUs: completedMessage.activityCPUTimeUs,
               })
             : null,
           completedMessage.result,
@@ -262,13 +382,14 @@ export async function runScriptSequence(stages, input, options = {}) {
     stages.reduce((sum, stage) => sum + stage.code.length, 0) > 100000
   )
     throw Error("脚本阶段格式无效，最多34阶段、源码合计100000字符");
-  const deadline = performance.now() + 2000;
-  let remaining = 250,
-    requestLimit = 10,
-    timerLimit = 100,
-    fakerLimit = 1000,
-    jobLimit = 10000,
-    assertionLimit = 1000,
+  const budgets = scriptBudgets(options);
+  const deadline = performance.now() + budgets.wallBudgetMs;
+  let remaining = budgets.activityBudgetMs,
+    requestLimit = budgets.requestLimit,
+    timerLimit = budgets.timerLimit,
+    fakerLimit = budgets.fakerLimit,
+    jobLimit = budgets.jobLimit,
+    assertionLimit = budgets.assertionLimit,
     state = structuredClone(input);
   state.responseOverride = null;
   state.responseOriginals = null;
@@ -320,6 +441,7 @@ export async function runScriptSequence(stages, input, options = {}) {
       timerCount: result.usage.timers,
       requestCount: result.networkRequests.length,
       activityMetrics: { ...result.activityMetrics },
+      activityCPUTimeUs: { ...result.activityCPUTimeUs },
     });
     if (result.responseOverride) {
       state.responseWire ??= structuredClone(input.response);
@@ -397,6 +519,6 @@ export async function runScriptSequence(stages, input, options = {}) {
     logs,
     tests,
     networkRequests,
-    activityMs: 250 - remaining,
+    activityMs: budgets.activityBudgetMs - remaining,
   };
 }

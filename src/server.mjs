@@ -5,6 +5,17 @@ import {
   recordSaveSuccess,
 } from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
+import { resolveNativeInheritance } from "./native-inheritance.mjs";
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
+import { exportApipostDirectory } from "./apipost-directory-export.mjs";
+import { exportApipost } from "./apipost-export.mjs";
+import {
+  listImportedExecutionRuns,
+  getImportedExecutionRun,
+} from "./imported-execution-history.mjs";
+import { resolveNativeMockRoute } from "./native-mock-route.mjs";
+import { nativeMockResponse } from "./native-mock-runtime.mjs";
+import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -22,7 +33,10 @@ import {
   sdkCurlDefinition,
 } from "./script-url-export.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
-import { DatabaseSessions } from "./database-sessions.mjs";
+import {
+  DatabaseSessions,
+  assertDatabaseBindingRequirements,
+} from "./database-sessions.mjs";
 import { OAuth1Manager } from "./oauth1-flow.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -92,10 +106,14 @@ export async function createApp({
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
-  const databaseSessions = new DatabaseSessions();
+  const databaseSessions = new DatabaseSessions({
+    resolveProject: (id) => store.get(id),
+  });
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
+  const mcpHTTPSessions = new MCPHTTPSessions();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpSessionProjects = [],
     mcpToken = "",
     mcpLastActivity = null;
   const persistedMCP = await loadMCPConfig(path.resolve(root));
@@ -224,52 +242,149 @@ export async function createApp({
       if (u.pathname === "/mcp") {
         if (!mcp.enabled || req.headers.authorization !== "Bearer " + mcpToken)
           return json(res, 403, { error: "MCP disabled or unauthorized" });
-        if (req.method !== "POST") {
-          res.setHeader("Allow", "POST");
-          return json(res, 405, { error: "Only POST is supported" });
+        const sessionHeader = req.headers["mcp-session-id"];
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
+        if (req.method === "DELETE" && sessionHeader !== undefined) {
+          mcpHTTPSessions.delete(sessionHeader);
+          res.writeHead(204);
+          return res.end();
         }
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST, DELETE");
+          return json(res, 405, {
+            error: "Only POST and session DELETE are supported",
+          });
+        }
+        const requestEpoch = mcpHTTPSessions.capture();
+        const incomingToken = mcpToken;
         const message = await body(req);
+        if (
+          requestEpoch !== mcpHTTPSessions.capture() ||
+          incomingToken !== mcpToken
+        )
+          return json(res, 403, { error: "MCP authorization changed" });
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
+        let sessionId = sessionHeader;
+        if (message.method === "initialize" && message.id !== undefined) {
+          if (sessionId !== undefined)
+            return json(res, 400, { error: "Session already initialized" });
+          sessionId = mcpHTTPSessions.create(message.id);
+          res.setHeader("Mcp-Session-Id", sessionId);
+        }
+        if (
+          message.method === "notifications/cancelled" &&
+          message.id === undefined
+        ) {
+          if (sessionId !== undefined)
+            mcpHTTPSessions.cancel(sessionId, message.params?.requestId);
+          res.writeHead(202);
+          return res.end();
+        }
+        const cancellable =
+          message.method === "tools/call" &&
+          [
+            "localapi_execute_api",
+            "localapi_execute_flow",
+            "localapi_run_plan",
+            "apipost_execute_api",
+            "apipost_execute_flow",
+          ].includes(message.params?.name);
+        const execution =
+          sessionId !== undefined && message.id !== undefined
+            ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
+            : { signal: undefined, finish() {} };
         const activityId = id();
         if (message.method === "tools/call") {
           const active = [...mcpActivities.values()].filter(
             (a) => a.status === "running",
           );
-          if (active.length >= 10)
+          if (active.length >= 10) {
+            execution.finish();
             return json(res, 429, { error: "MCP并发任务达到上限" });
+          }
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
           });
         }
-        const dispatch = createMCP({
-          store,
-          ...mcp,
-          debugEnvironments,
-          grpcExecutor: executePlanGrpc,
-          protocolExecutor: executePlanWire,
-          socketioExecutor: (projectId, input, signal) =>
-            executeSocketIOFlow(input, signal, {
-              projectId,
-              sessions: socketioSessions,
-            }),
-          onProgress: (progress) => {
-            const activity = mcpActivities.get(activityId);
-            if (activity)
-              Object.assign(activity, { ...progress, status: "running" });
-          },
-        });
-        const result = await dispatch(message);
+        let result;
+        try {
+          const dispatch = createMCP({
+            store,
+            ...mcp,
+            sessionProjects: mcpSessionProjects,
+            debugEnvironments,
+            grpcExecutor: executePlanGrpc,
+            protocolExecutor: executePlanWire,
+            socketioExecutor: (projectId, input, signal) =>
+              executeSocketIOFlow(input, signal, {
+                projectId,
+                sessions: socketioSessions,
+              }),
+            onProgress: (progress) => {
+              const activity = mcpActivities.get(activityId);
+              if (activity)
+                Object.assign(activity, { ...progress, status: "running" });
+            },
+          });
+          result = await dispatch(message, { signal: execution.signal });
+        } catch {
+          result = {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "MCP执行异常；请检查活动与历史，不要自动重放",
+                },
+              ],
+            },
+          };
+        } finally {
+          execution.finish();
+        }
         if (message.method === "tools/call") {
           const activity = mcpActivities.get(activityId);
+          let output;
+          try {
+            output = JSON.parse(result?.result?.content?.[0]?.text);
+          } catch {}
+          const outcome = cancellable ? output?.status : undefined;
+          const recordSaved = cancellable
+            ? (output?.recordSaved ?? output?.record_saved)
+            : undefined;
           Object.assign(activity, {
-            status: result?.result?.isError ? "failed" : "completed",
+            status:
+              recordSaved === false
+                ? "failed"
+                : outcome === "cancelled"
+                  ? "cancelled"
+                  : result?.result?.isError || outcome === "failed"
+                    ? "failed"
+                    : "completed",
+            ...(typeof recordSaved === "boolean" ? { recordSaved } : {}),
+            ...(recordSaved === false
+              ? {
+                  executionStatus: outcome,
+                  persistenceError:
+                    "执行记录保存失败，请检查项目存储；不会重新执行请求",
+                }
+              : {}),
             finishedAt: new Date().toISOString(),
           });
           mcpLastActivity = activity;
@@ -292,15 +407,46 @@ export async function createApp({
           ))
             mcpActivities.delete(old.id);
         }
-        if (result === null) {
+        if (result === null || execution.cancelledByNotification) {
           res.writeHead(202);
           return res.end();
         }
+        if (requestEpoch !== mcpHTTPSessions.capture())
+          return json(res, 200, {
+            jsonrpc: "2.0",
+            id: message.id,
+            error: {
+              code: -32000,
+              message:
+                "MCP authorization changed; inspect authorized history for operation outcome",
+            },
+          });
         return json(res, 200, result);
       }
-      if (parts[0] === "mock") {
-        const p = await store.get(parts[1]),
-          r = p.requests.find((r) => r.id === parts[2] && !r.deletedAt);
+      const nativeMockAlias =
+        parts[0] === "app" && parts[1] === "mock" && parts[2] === "project";
+      if (parts[0] === "mock" || nativeMockAlias) {
+        const offset = nativeMockAlias ? 3 : 1;
+        const p = await store.get(parts[offset]);
+        // The old ID route keeps priority and its query arguments stay ordinary data.
+        let r =
+          !nativeMockAlias && parts.length === 3
+            ? p.requests.find((r) => r.id === parts[2] && !r.deletedAt)
+            : undefined;
+        if (!r) {
+          try {
+            r = resolveNativeMockRoute(
+              p,
+              req.method,
+              "/" + parts.slice(offset + 1).join("/"),
+              u.searchParams,
+            );
+          } catch (error) {
+            if (error.statusCode === 409)
+              return json(res, 409, { error: error.message });
+            throw error;
+          }
+        }
         if (!r) return json(res, 404, { error: "Mock not found" });
         if (p.settings?.mockEnabled === false)
           return json(res, 503, { error: "Mock服务已关闭" });
@@ -316,18 +462,28 @@ export async function createApp({
         try {
           incoming = JSON.parse(raw);
         } catch {}
-        if (u.searchParams.getAll("example").length > 1)
+        if (
+          r.nativeMock === undefined &&
+          u.searchParams.getAll("example").length > 1
+        )
           throw Error("Mock示例索引不能重复");
-        const selected = selectMockResponse(
-          r,
-          {
-            method: req.method,
-            query: Object.fromEntries(u.searchParams),
-            headers: req.headers,
-            body: incoming,
-          },
-          () => schemaMockResponse(p, r),
-        );
+        const selected =
+          r.nativeMock !== undefined
+            ? await nativeMockResponse(p, r, {
+                query: Object.fromEntries(u.searchParams),
+                headers: req.headers,
+                body: incoming,
+              })
+            : selectMockResponse(
+                r,
+                {
+                  method: req.method,
+                  query: Object.fromEntries(u.searchParams),
+                  headers: req.headers,
+                  body: incoming,
+                },
+                () => schemaMockResponse(p, r),
+              );
         if (selected.delayMs)
           await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
         res.writeHead(selected.status, {
@@ -347,7 +503,11 @@ export async function createApp({
           return json(res, 403, { error: "Session token required" });
         if (u.pathname === "/api/protocol-sessions" && req.method === "POST") {
           const input = await body(req);
-          if (input.projectId !== undefined)
+          if (
+            input.projectId !== undefined ||
+            input.templateMode !== undefined ||
+            input.environmentId !== undefined
+          )
             throw Error("项目会话请使用项目专属入口");
           return json(res, 200, protocolSessions.start(input));
         }
@@ -418,7 +578,11 @@ export async function createApp({
               token: nextToken,
               port: server.address().port,
             });
+            mcpHTTPSessions.advance({
+              dropSessions: !next.enabled || nextToken !== mcpToken,
+            });
             mcp = next;
+            mcpSessionProjects = [];
             mcpToken = nextToken;
             mcpWarning = "";
           } else if (req.method !== "GET")
@@ -456,6 +620,34 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (action === "imported-execution-runs") {
+            if (req.method !== "GET")
+              return json(res, 405, { error: "原始记录查询仅支持GET" });
+            if (parts.length === 4) {
+              const options = {};
+              for (const [key, value] of u.searchParams) {
+                if (
+                  !["sourceProjectId", "offset", "limit"].includes(key) ||
+                  Object.hasOwn(options, key)
+                )
+                  throw Error("原始记录查询参数无效或重复");
+                options[key] =
+                  key === "sourceProjectId" ? value : Number(value);
+              }
+              return json(res, 200, listImportedExecutionRuns(p, options));
+            }
+            if (parts.length === 6 && u.searchParams.size === 0) {
+              const result = getImportedExecutionRun(
+                p,
+                decodeURIComponent(parts[4]),
+                decodeURIComponent(parts[5]),
+              );
+              return result
+                ? json(res, 200, result)
+                : json(res, 404, { error: "原始执行记录不存在" });
+            }
+            return json(res, 404, { error: "原始记录查询路径无效" });
+          }
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
             const jar = projectCookieSession(
@@ -565,6 +757,10 @@ export async function createApp({
             b.runs = p.runs;
             b.history = p.history;
             const saved = await store.save(b);
+            if (b.archived)
+              mcpSessionProjects = mcpSessionProjects.filter(
+                (id) => id !== b.id,
+              );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
@@ -575,16 +771,37 @@ export async function createApp({
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
-            importIntoProject(p, b.document);
+            importIntoProject(p, b.document, {
+              modelNameMode: b.modelNameMode,
+              inheritanceMode: b.inheritanceMode,
+            });
             await store.save(p);
             return json(res, 200, p);
           }
-          if (action === "export" && req.method === "GET")
+          if (action === "export" && req.method === "GET") {
+            const values = u.searchParams.getAll("modelNameMode");
+            if (values.length > 1) throw Error("modelNameMode查询参数重复");
+            const modelNameMode = values[0];
+            resolveModelNameMode(modelNameMode);
+            if (
+              values.length &&
+              !["apipost", "apipost-directory"].includes(
+                u.searchParams.get("format"),
+              )
+            )
+              throw Error("modelNameMode仅支持Apipost原生格式");
             return json(
               res,
               200,
-              u.searchParams.get("format") === "openapi" ? exportOpenAPI(p) : p,
+              u.searchParams.get("format") === "apipost-directory"
+                ? exportApipostDirectory(p, { modelNameMode })
+                : u.searchParams.get("format") === "apipost"
+                  ? exportApipost(p, { modelNameMode })
+                  : u.searchParams.get("format") === "openapi"
+                    ? exportOpenAPI(p)
+                    : p,
             );
+          }
           if (action === "grpc-reflection" && req.method === "POST") {
             const { runId, ...input } = await body(req);
             return await withGrpcTask(runId, async (runId, signal) =>
@@ -800,6 +1017,7 @@ export async function createApp({
                   "service",
                   "method",
                   "timeoutMs",
+                  "requiredMetadata",
                 ]
                   .filter((key) => definition[key] !== undefined)
                   .map((key) => [key, definition[key]]),
@@ -862,10 +1080,14 @@ export async function createApp({
               )
                 throw Error("交互协议会话使用固定生命周期，不接受单次捕获选项");
               const prepared = prepareWireExecution(p, input),
-                result = protocolSessions.start(prepared.request),
+                result = protocolSessions.start(prepared.request, {
+                  templateContext: prepared.templateContext,
+                }),
                 session = protocolSessions.get(result.id);
               session.projectId = p.id;
               session.definition = prepared.definition;
+              if (prepared.templateProvenance)
+                session.templateProvenance = prepared.templateProvenance;
               return json(res, 200, {
                 ...protocolSessions.snapshot(session.id),
                 projectId: p.id,
@@ -887,12 +1109,8 @@ export async function createApp({
             if (operation === "send") {
               if (Object.keys(input).some((key) => key !== "message"))
                 throw Error("协议会话发送字段无效");
-              const message =
-                input.message !== undefined
-                  ? input.message
-                  : (session.definition.message ?? "");
               return json(res, 200, {
-                ...protocolSessions.send(sessionId, message),
+                ...protocolSessions.send(sessionId, input.message),
                 projectId: p.id,
               });
             }
@@ -1002,12 +1220,16 @@ export async function createApp({
           if (action === "database-connections") {
             if (req.method === "GET")
               return json(res, 200, databaseSessions.list(p.id));
-            if (req.method === "POST")
-              return json(
-                res,
-                200,
-                databaseSessions.register(p.id, await body(req)),
-              );
+            if (req.method === "POST") {
+              const config = await body(req);
+              if (config.bindingId !== undefined) {
+                const source = p.settings?.apipostDatabases?.find(
+                  (item) => item.id === config.bindingId,
+                );
+                assertDatabaseBindingRequirements(source, config);
+              }
+              return json(res, 200, databaseSessions.register(p.id, config));
+            }
             if (req.method === "DELETE") {
               databaseSessions.revoke(p.id, (await body(req)).id);
               return json(res, 200, { revoked: true });
@@ -1118,10 +1340,11 @@ export async function createApp({
           }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req);
+            const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
-              data.request?.scriptURLMode === "sdk"
-                ? applySharedScripts(p, data.request)
-                : data.request;
+              inheritedRequest?.scriptURLMode === "sdk"
+                ? applySharedScripts(p, inheritedRequest)
+                : inheritedRequest;
             assertSDKCurlDefinition(exportRequest);
             const context = debugEnvironment(
               p,
@@ -1223,6 +1446,7 @@ export async function createApp({
                 extracted: { ...single.variables, ...result.extracted },
                 logs: result.logs,
                 subrequests: result.subrequests,
+                databaseQueries: result.databaseQueries,
                 visualization: result.visualization,
                 scriptResponse: result.scriptResponse,
                 scriptStage: result.scriptStage,
@@ -1245,7 +1469,11 @@ export async function createApp({
               throw Error("来源接口不存在");
             const item = snapshotCase({
               ...data,
-              request: freezeServiceBinding(p, data.request),
+              request: freezeServiceBinding(p, data.request, {
+                allowNativeSnapshot: Boolean(
+                  p.cases?.some((item) => item.id === data.id),
+                ),
+              }),
               functions: data.functions || p.settings?.functions || [],
             });
             p.cases ??= [];
@@ -1394,6 +1622,7 @@ export async function createApp({
     }
   });
   server.on("close", () => {
+    mcpHTTPSessions.advance({ dropSessions: true });
     protocolSessions.close();
     socketioSessions.close();
     oauth.close();

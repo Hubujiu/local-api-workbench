@@ -1,3 +1,7 @@
+import {
+  explicitPostgresOptions,
+  createExplicitPostgresClient,
+} from "./postgres-client.mjs";
 import { openDatabaseSSH } from "./database-ssh.mjs";
 import { postgresValueTypes } from "./postgres-values.mjs";
 import {
@@ -14,7 +18,8 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
     throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
   if (input.type === "clickhouse") return queryClickHouse(input);
   if (input.type === "redis") return queryRedis(input);
-  if (input.type === "mongodb") return queryMongo(input);
+  if (input.type === "mongodb")
+    return queryMongo(input, { signal: dependencies.signal });
   const { type, sql } = input;
   const parameters = databaseParameters(
     input.parameters === undefined ? [] : input.parameters,
@@ -29,21 +34,18 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
     throw Error("远程数据库仅接受 SELECT / WITH 查询");
   if (!Array.isArray(parameters)) throw Error("参数必须是数组");
   const boundedSQL = `SELECT * FROM (${sql.trim().replace(/;\s*$/, "")}) AS localapi_result LIMIT 1001`;
-  const config = remoteConnectionConfig(input);
+  const config =
+    type === "postgres"
+      ? explicitPostgresOptions(input)
+      : remoteConnectionConfig(input);
   const tunnel = await openDatabaseSSH(input);
   if (tunnel) config.stream = tunnel.stream;
   let rows, columns;
   try {
     if (type === "postgres") {
-      const { Client } = dependencies.Client
-        ? dependencies
-        : await import("pg");
-      const client = new Client({
-        ...config,
+      const client = await createExplicitPostgresClient(config, {
+        Client: dependencies.Client,
         types: postgresValueTypes,
-        connectionTimeoutMillis: 3000,
-        statement_timeout: 2000,
-        query_timeout: 3000,
       });
       client.on?.("error", () => {}); // Active query promises report connection failures.
       try {

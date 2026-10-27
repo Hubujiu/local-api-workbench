@@ -75,6 +75,12 @@ test("manual debug returns bounded script diagnostics and retains them in histor
   assert.equal(result.scriptDiagnostics.activityBudgetMs, 250);
   assert.equal(result.scriptDiagnostics.requestCount, 0);
   assert.equal(result.scriptDiagnostics.fakerCalls, 0);
+  if (typeof process.threadCpuUsage === "function") {
+    assert.ok(
+      Number.isSafeInteger(result.scriptDiagnostics.compatibilityCPUUs),
+    );
+    assert.ok(Number.isSafeInteger(result.scriptDiagnostics.userScriptCPUUs));
+  }
   const saved = await call(`/api/projects/${project.id}`);
   assert.deepEqual(
     saved.history[0].scriptDiagnostics,
@@ -295,5 +301,33 @@ test("sequence failures retain bounded successful-stage timings without input or
       ],
     }).sequenceActivity,
     [{ stageIndex: 0 }],
+  );
+});
+
+test("CPU diagnostic projection admits only bounded numeric counters, never arbitrary worker data", async () => {
+  const { scriptFailureDetails } = await import(
+    "../src/script-diagnostics.mjs"
+  );
+  assert.deepEqual(
+    scriptFailureDetails({
+      activityCPUTimeUs: {
+        compatibilityUs: 1250,
+        userScriptUs: Infinity,
+        callbackUs: -1,
+        microtaskUs: 60000001,
+        serializationUs: 0.5,
+        secret: "not exposed",
+      },
+      sequenceActivity: [
+        {
+          stageIndex: 0,
+          activityCPUTimeUs: { userScriptUs: 250, arbitrary: "not exposed" },
+        },
+      ],
+    }),
+    {
+      scriptDiagnostics: { compatibilityCPUUs: 1250 },
+      sequenceActivity: [{ stageIndex: 0, userScriptCPUUs: 250 }],
+    },
   );
 });
