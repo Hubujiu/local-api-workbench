@@ -7,7 +7,7 @@ import { projectCookieSession } from "../src/cookie-jar.mjs";
 import { scopedExecution } from "../src/variable-scopes.mjs";
 import {
   environmentVariables,
-  resolveServiceRequest,
+  createServiceRequestResolver,
 } from "../src/environments.mjs";
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -51,8 +51,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
           executeSocketIOFlow(input, signal, { projectId: project.id }),
         cookieSession: projectCookieSession(store, project, environmentId),
         signal: controller.signal,
-        prepareRequest: (request) =>
-          resolveServiceRequest(project, request, environmentId),
+        prepareRequest: createServiceRequestResolver(project, environmentId),
         onStep: (step) =>
           process.stderr.write(`${step.status.toUpperCase()} ${step.name}\n`),
       },
