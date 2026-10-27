@@ -139,7 +139,35 @@ SHA-256 is `167561877db123fb16ccbd2c682dfa2e05acd6c639885ae422a2cf92c82e8316`;
 the patched `libunicode.c` SHA-256 is
 `b151067a56841a0812d1087f02d2b9fe5ccc0dcf1f39a251f202d8ad34c03172`.
 
-The prior matching-only head's green CI does not validate this changed WASM.
-Bounded Unicode OOM regression and exact new-head CI are required separately.
+Two bounded regression cases use the authored valid patterns
+`\p{Script=Common}` and `\p{Script_Extensions=Common}`, both with `u`,
+solely to exercise this engine error path. These flags do not change the
+still-unsupported native assertion's intended no-flags semantics. Each fresh
+worker retains the unchanged 16 MiB VM / 512 KiB stack / 250 ms activity /
+two-second wall limits. A single guest ArrayBuffer fills measured available
+capacity except for 512 bytes; this is not an unbounded fill/search loop.
+For two fixed rounds, compilation returns the existing catchable
+`SyntaxError: out of memory`, no deadline callback expires, and releasing all
+test handles returns both allocator count and allocated bytes exactly to the
+pre-round baseline. The same runtime then allocates 1 MiB and successfully
+compiles/matches the same Unicode pattern, again returning to that baseline.
+
+The identical Script=Common case was run once against a clean archive of the
+prior matching-only head with verified old WASM `c09ec397…`. It failed RED at
+its two-second worker guard (2009.8 ms) and was terminated, with no retries.
+This is causal old-hang/new-return evidence, not a passing timeout result. The
+old Script_Extensions failure path was not executed. No original proprietary
+runtime, malformed bytecode or XML-special audit was involved.
+
+The prior matching-only head's green CI does not validate this changed WASM;
+exact new-head CI is required separately.
+
+The default full local suite passes **1039/1039** (146.7 s), with no failures,
+cancellations or skips. The final three focused test files pass **11/11**;
+syntax, complete formatting and diff checks pass. An independent read-only review confirms the exact
+upstream one-line change, six source hashes, both builds, unchanged QTS
+interface and complete import-section bytes, and unchanged names/kinds/function
+signatures for all 76 exports. No existing heap/rejection/regexp patch, LICENSE,
+glue or production worker/budget ledger changed.
 No old CI rerun or budget relaxation is used. New exact-head platform CI is
 still required; unrelated historical macOS budget failures are not claimed fixed.
