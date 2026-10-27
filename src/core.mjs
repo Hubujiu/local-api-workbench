@@ -14,6 +14,7 @@ import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { mergeImportedDocuments } from "./apipost-documents.mjs";
+import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -596,13 +597,27 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
+          const mode = validated.protocol.definition.templateMode;
+          const definition = resolveProtocolDefinition(
+            validated.protocol.definition,
+            vars,
+            validated.protocol.message,
+          );
           const message =
             validated.protocol.message === undefined
               ? undefined
-              : interpolate(validated.protocol.message, vars);
+              : mode === "variables"
+                ? definition.message
+                : mode === "literal"
+                  ? validated.protocol.message
+                  : interpolate(validated.protocol.message, vars);
+          // SSE body and WS/TCP message in the result are the actual resolved payload.
+          if (definition.type !== "sse") delete definition.message;
+          record.protocol.definition = definition;
           if (message !== undefined) record.protocol.message = message;
           request = {
             ...validated.protocol,
+            definition,
             ...(message !== undefined ? { message } : {}),
             ...wireCredentials.get(step.id),
           };
@@ -2027,6 +2042,22 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const modern = isModernApipost(source)
     ? importModernApipost(source, project, { sync })
     : null;
+  if (modern?.nativeProtocolPlans?.length) {
+    const plans = structuredClone(project.plans || []);
+    for (const raw of modern.nativeProtocolPlans) {
+      const previous = plans.find((p) => p.id === raw.id);
+      const plan = snapshotPlan({
+        ...raw,
+        createdAt: previous?.createdAt,
+        updatedAt: previous?.updatedAt,
+      });
+      if (previous && JSON.stringify(previous) !== JSON.stringify(plan))
+        throw Error("原生协议消息计划冲突，请导入新项目");
+      if (!previous) plans.push(plan);
+    }
+    if (plans.length > 1000) throw Error("计划最多1000个");
+    modern.metadata.plans = plans;
+  }
   const legacy = modern || (source ? importApipost(original) : null);
   const importedDocuments = mergeImportedDocuments(project, legacy?.documents, {
     sync,
