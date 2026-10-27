@@ -80,3 +80,17 @@ Separate default-budget success, output-size/circular-value rejection, sequence
 failure and fresh-worker isolation checks retain their specific expectations.
 Initial focused validation: 10/10 terminal and sequence budget cases pass. Broader
 related checks and exact platform CI remain pending at this checkpoint.
+
+## Failure observability, not a runtime repair
+
+Root commit 6c238a4181dc898ddaebded7c5dd7b4881b702f0 / run40551216982
+failed the cumulative-quota scope assertion on macOS (project instead of request).
+The old assertion did not expose which quota variant or the underlying error,
+so its cause remains unknown. The regression now includes the synthetic quota,
+error and existing accounting metadata in assertion failures. It does not log
+source/variables/credentials, add workloads, change any assertion expectation,
+run a new VM probe, or relax runtime/worker/CI limits. All original quota, phase
+and completed-scope assertions remain mandatory; an earlier timeout is not
+accepted as quota validation. No diagnostic success can retroactively fix or
+reclassify the old failed commit. Ordinary CI on a later commit can provide
+useful evidence if the failure recurs; this change itself is not a root-cause fix.
