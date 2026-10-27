@@ -96,7 +96,7 @@ function sourceFor(base, version = "1.1") {
     "/numbers/{{tenant}}",
     [
       assertion("Code lt", "responseCode", "", "lt", "300"),
-      assertion("Code lte", "responseCode", "", "lte", "200"),
+      assertion("Code lte", "responseCode", "", "lte", "{{statusLimit}}"),
       assertion("Header gt", "responseHeader", "X-NUM", "gt", "9"),
       assertion("Header gte", "responseHeader", "x-num", "gte", "10"),
       json("binary conversion", "$.binary", "gte", "3"),
@@ -119,14 +119,14 @@ function sourceFor(base, version = "1.1") {
     [
       script(
         "before",
-        'pm.environment.set("beforeProof","committed");pm.variables.set("temporaryProof","local");pm.globals.set("globalProof","shared");pm.environment.set("beforeCount",(pm.environment.get("beforeCount")||0)+1);',
+        'pm.environment.set("beforeProof","committed");pm.environment.set("statusLimit",200);pm.environment.set("expectedBefore","committed");pm.environment.set("expectedText","{{textPart}}");pm.environment.set("textPart"," Alpha 雪 ");pm.environment.set("regexText"," Alpha");pm.globals.set("collectionChoices","red, blue");pm.variables.set("temporaryProof","local");pm.globals.set("globalProof","shared");pm.environment.set("beforeCount",(pm.environment.get("beforeCount")||0)+1);',
       ),
       assertion(
         "pre current environment",
         "envVars",
         "{{{beforeProof}}}",
         "eq",
-        "committed",
+        "{{expectedBefore}}",
       ),
       assertion(
         "pre current temporary",
@@ -158,7 +158,7 @@ function sourceFor(base, version = "1.1") {
       "whitespace member exact",
       "$.space",
       "belongscollection",
-      "red, blue",
+      "{{collectionChoices}}",
     ),
     json(
       "whitespace is not trimmed",
@@ -255,7 +255,7 @@ function sourceFor(base, version = "1.1") {
     task("bounded wait", "wait", 10),
   ]);
   add("text", "/text", [
-    assertion("Text eq", "responseText", undefined, "eq", " Alpha 雪 "),
+    assertion("Text eq", "responseText", undefined, "eq", "{{expectedText}}"),
     assertion(
       "Text uneq",
       "responseText",
@@ -284,7 +284,7 @@ function sourceFor(base, version = "1.1") {
       "responseText",
       undefined,
       "regularmatch",
-      "/^ Alpha 雪 $/",
+      "/^{{regexText}} 雪 $/",
     ),
     assertion("Time nonnegative", "responseTime", undefined, "gte", "0"),
     assertion(
@@ -301,8 +301,17 @@ function sourceFor(base, version = "1.1") {
       "eq",
       String(Buffer.byteLength(" Alpha 雪 ")),
     ),
-    script("numeric current Text", 'apt.response.setBody("16");'),
-    assertion("expected hexadecimal", "responseText", undefined, "gte", "0x10"),
+    script(
+      "numeric current Text",
+      'apt.response.setBody("16");pm.environment.set("expectedHex","0x10");pm.variables.replaceIn=()=>{throw Error("PUBLIC_EXPECTED_REPLACE_MUST_NOT_RUN")};',
+    ),
+    assertion(
+      "expected hexadecimal",
+      "responseText",
+      undefined,
+      "gte",
+      "{{expectedHex}}",
+    ),
     assertion("expected binary", "responseText", undefined, "lte", "0b10000"),
     assertion("expected octal", "responseText", undefined, "gte", "0o20"),
     assertion("expected whitespace", "responseText", undefined, "gt", " \t "),
@@ -917,6 +926,31 @@ for (const activePick of [false, true])
   );
 const readFailures = [
   {
+    name: "provided unary expected still rejects unsupported builtin at runtime",
+    route: "/text",
+    assertion: assertion(
+      "builtin is not a successful unused operand",
+      "responseText",
+      undefined,
+      "exist",
+      "{{$timestamp}}",
+    ),
+    error: /变量展开不支持内置或保留名称/,
+  },
+  {
+    name: "expanded invalid regex fails only at task execution",
+    route: "/text",
+    prefix: script("set invalid regex", 'pm.environment.set("badRegex","(");'),
+    assertion: assertion(
+      "expanded invalid pattern",
+      "responseText",
+      undefined,
+      "regularmatch",
+      "{{badRegex}}",
+    ),
+    error: /expecting|SyntaxError|invalid.*regexp/i,
+  },
+  {
     name: "invalid regular expression is a runtime stage failure",
     route: "/text",
     assertion: assertion(
@@ -1060,7 +1094,7 @@ test(
   },
 );
 test(
-  "raw comparator import rejects missing binary, templates, invalid regex bounds and operands atomically with no execution",
+  "raw comparator import rejects missing binary, invalid Unicode, regex bounds and operands atomically with no execution",
   { timeout: 10000 },
   async (t) => {
     const f = await fixture(t),
@@ -1075,12 +1109,12 @@ test(
         enabled: 0,
       },
       {
-        name: "enabled template",
-        expression: { compareType: "gt", compareValue: "{{token}}" },
+        name: "invalid Unicode expected",
+        expression: { compareType: "gt", compareValue: "\ud800" },
       },
       {
-        name: "unary provided template",
-        expression: { compareType: "exist", compareValue: "{{token}}" },
+        name: "unary non-string expected",
+        expression: { compareType: "exist", compareValue: 0 },
       },
       {
         name: "unknown",

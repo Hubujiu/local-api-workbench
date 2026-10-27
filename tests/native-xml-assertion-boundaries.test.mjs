@@ -68,7 +68,7 @@ test("native XML assertions preserve stored path but compile only bounded string
       /XML|模板|字面/,
     );
   for (const invalid of [
-    data(undefined, "{{expected}}"),
+    data(undefined, ["{{expected}}"]),
     data(undefined, 0),
     data(undefined, "real", "contains"),
     data(undefined, "x".repeat(65536)),

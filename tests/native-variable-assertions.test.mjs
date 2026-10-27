@@ -67,7 +67,7 @@ test("variable source paths strip only edge brace characters and preserve origin
     }
     assert.throws(() =>
       normalizeNativeAssertionData(
-        variable(type, "x", "eq", "{{expected}}").data,
+        variable(type, "x", "eq", ["{{expected}}"]).data,
       ),
     );
     assert.throws(() =>

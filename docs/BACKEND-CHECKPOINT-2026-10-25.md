@@ -1,11 +1,22 @@
-# 后端检查点 · 2026-10-27 03:43 UTC
+# 后端检查点 · 2026-10-27 04:36 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
-## 最新已核实与本次候选
+## 04:36 当前更新
+
+- 最新完整绿色组合9b3ca434b63c30c22291a329e6304dc6d10e38ec/tree95e1efb7f68a53b23452bc2df3815ccce78bcd0a=local6c05a6952d5049608f900cda079710f03685b035，CI40445982435首轮19/19，全部实际checkout/tree已核。三OS1819，12清单347文件87/87/87/86互斥完整，hash79f8066978f836f3f6f245a5fdea987c05f2c0f7e8f72cb86e57624c6dc7ae9f。15比较/11来源MCP HTTP/stdio、CLI、原生往返/恢复与Unicode OOM清理、DB/生产stdio/固定ac4822引擎重建均通过。
+- 当前同PR26新增有界compareValue展开：feature9f268e51ad3154eea225050475bd45b7c5b5babe/treee516b356422a225a3c5896aea44d53151392ff4d=local688d14de7bf3b079c80ae329b9d758fefd6ae03e。独立CI40449589366首轮19/19，actual mergedbfb99312ec150f97f6a040a16623f9655e85263同树、三OS1369；12清单263文件66/66/66/65完整。仍target纯依赖base4a79927b，差异仅断言相关24文件。
+- 预期值在安全actual读取后、比较或RegExp构造前按当前own scalar映射展开；精确键不trim、不解释路径。最多19轮、无变化固定点可提前停，阶段共享1000次匹配尝试。缺失保留marker、own undefined遮蔽下层并为空串，null/false/0正确转换，替换值$&保持字面；每片追加前计算Unicode/64KiB UTF8上限，regex展开后再限1024 UTF16码元/4096字节。不调用公开replaceIn/has/get、getter或对象转换，不额外扫描第20轮新marker；遇到$builtin、原型保留名或非标量明确失败。支持普通变量预期，不声称动态函数/原版完整scope层等价。
+- 本次组合37项定向通过：原生两格式往返、HTTP1/2+官方MCP+CLI+重启，新增前置当前变量、嵌套Text预期、集合/数值/正则展开，以及实际替换公开helper后仍读取私有当前map。MCP另验证一元provided expected也拒绝builtin、展开后非法regex到实际任务才失败。原配置始终保留marker，不把展开结果写回定义。新组合仍需自己的CI。
+- 首WIP410020e/CI40448948787实际mergef91aee05af927c59d5d4a558f8539414003635e5同tree5c09cdc8，7成功/12core失败，各OS1362/1367；五处旧“模板导入拒绝”fixture不再符合新增支持，改成真实结构错误，另补执行期builtin/各来源错误路径，并非放宽检查。该RED保留。
+- PR37最新实验a423f480b1c52f40c7e7669a2b0ada6a77ac0eee/tree4d459c5572bd2b49a4bcd2515dab9bc844f52a99，CI40448807120独立10/10成功（三OS1039+36、Linux来源9）；真实in-VM lazy getter路径已有测试。但source-mode13MiB下parser/disposal assertion仍保留，最终独立ownership/reentry/budget复核未完成，相关进一步复核暂停，默认关闭且不并入本次组合。实验GREEN不是生产启用许可，也不证明外层生产worker错误恢复已经覆盖。
+
+以下保留先前阶段的精确记录，以本节最新状态为准。
+
+## 先前已核实与候选
 
 - 最新完整绿色组合6e138867a9a44f2cf50a06aab29f24023213d911/tree81ad150cd6af0c0ec4e1653289ed294a485c77b3=local7f3c392822633450d5635db2c8afa60dad3f7bc8，CI40441667524首轮19/19；全部实际checkout/head/tree核实。三OS1807，12清单345文件87/86/86/86完整无重漏，hash2ae68cf19473b1a2f31e57708748f6ab26ed213e5d396dd3352a5d9be49da922。新OAuth1完整SDK/CLI/冻结认证/重启链、11来源14比较器及真实DB/stdio/固定c09引擎重建全部通过；不因此改判历史Mac RED或宣称唯一根因已修复。
-- 本次新候选在同PR26接入第15种regularmatch：原始/trim后模式≤1024 UTF-16码元及4096 UTF-8字节、有效Unicode；实际有限原始值String后≤64KiB UTF-8。仅去除边缘斜杠、无flags，不将/abc/i误作忽略大小写；///为空模式仍执行。活跃原始空串明确拒绝（原版跳过），动态expected仍不支持。到任务实际执行才构造，语法错误在pm.test之外成为阶段错误；captured构造器/direct exec、私有完成性及全部共享预算保留。
+- 本次新候选在同PR26接入第15种regularmatch：原始/trim后模式≤1024 UTF-16码元及4096 UTF-8字节、有效Unicode；实际有限原始值String后≤64KiB UTF-8。仅去除边缘斜杠、无flags，不将/abc/i误作忽略大小写；///为空模式仍执行。活跃原始空串明确拒绝（原版跳过），该历史阶段动态expected尚不支持；本次已按上文支持纯标量变量。到任务实际执行才构造，语法错误在pm.test之外成为阶段错误；captured构造器/direct exec、私有完成性及全部共享预算保留。
 - 正则编译与部分C内循环不是250ms硬抢占；编译/匹配/结果处理全部进入既有charged-wall与最终超额拒绝，仍有2s worker终止。没有新增host async权限或重置每条断言预算，也不以尺寸cap冒充毫秒保证。
 - 新候选使用PR38最新官方Unicode OOM一行修复817509a87c3c0af362df576574784bae0dae8129，新WASM ac4822f75275ccf8cb936649383dc947843511784379518948cf61087a418c9e；六源hash、双干净构建和CI已核。没有引入大型自制compiler取消补丁。
 - 新组合15比较器/11来源入口、运行期坏pattern经MCP失败、两原生格式往返与备份重启26项通过；新operator正式8项与原等待/终态预算在前一组合批次也通过。那次批次35/36，唯一失败是root旧fixture仍把合法regularmatch当unsupported；保留未知operator/别名拒绝，改为实际空模式和超模式限额拒绝，补运行期语法错误后重新通过。没有改生产来迎合旧fixture。新组合仍等自己的CI。
