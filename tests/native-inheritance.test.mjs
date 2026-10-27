@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { importIntoProject } from "../src/core.mjs";
 import { freezeServiceBinding } from "../src/environments.mjs";
-import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
+import { nativeInheritanceFixture as source } from "./fixtures/native-inheritance.mjs";
 
 const empty = (id = "target") => ({
   id,
@@ -17,27 +17,6 @@ const empty = (id = "target") => ({
   cases: [],
   documents: [],
 });
-function source() {
-  const d = modernApipostFixture();
-  d.global.marks = [];
-  delete d.apis[1].mark_id;
-  d.apis[1].response = { example: [] };
-  d.global.global_param.auth = {
-    type: "bearer",
-    bearer: { key: "{{token}}" },
-    basic: { username: "inactive", password: "must-not-retain" },
-  };
-  d.global.global_param.header.parameter = [
-    { key: "X-Shared", value: "project", is_checked: 1 },
-  ];
-  d.apis[0].request.header = {
-    parameter: [{ key: "X-Folder", value: "folder", is_checked: 1 }],
-  };
-  d.apis[1].request.header.parameter = [
-    { key: "X-Shared", value: "disabled-child", is_checked: -1 },
-  ];
-  return d;
-}
 
 test("preserve imports own definitions and resolves the active graph without changing default flatten", () => {
   const d = source(),
@@ -92,4 +71,39 @@ test("preserve refuses nonempty targets and unknown modes without partial import
     () => importIntoProject(empty(), source(), { inheritanceMode: "guess" }),
     /inheritanceMode/,
   );
+});
+
+// The graph's source identities are deliberately rebased by each native export.
+// Compare the editable layers and effective definitions, not those generated IDs.
+test("both native formats preserve layered intent over two generations", async () => {
+  const { exportApipost } = await import("../src/apipost-export.mjs");
+  const { exportApipostDirectory } = await import(
+    "../src/apipost-directory-export.mjs"
+  );
+  for (const encode of [exportApipost, exportApipostDirectory]) {
+    let p = empty("first");
+    importIntoProject(p, source(), { inheritanceMode: "preserve" });
+    for (let i = 0; i < 2; i++) {
+      const original = structuredClone(p);
+      const document = encode(p);
+      assert.deepEqual(p, original);
+      const next = empty("generation" + i);
+      importIntoProject(next, document, { inheritanceMode: "preserve" });
+      assert.deepEqual(
+        next.settings.nativeInheritance.projectLayer,
+        p.settings.nativeInheritance.projectLayer,
+      );
+      assert.deepEqual(
+        next.settings.nativeInheritance.folders.map((f) => f.layer),
+        p.settings.nativeInheritance.folders.map((f) => f.layer),
+      );
+      assert.equal(next.requests[0].nativeInheritance.authMode, "inherit");
+      assert.deepEqual(next.requests[0].headers, p.requests[0].headers);
+      assert.equal(
+        freezeServiceBinding(next, next.requests[0]).auth.type,
+        "bearer",
+      );
+      p = next;
+    }
+  }
 });

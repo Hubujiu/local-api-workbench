@@ -1,3 +1,7 @@
+import {
+  validateNativeInheritanceProject,
+  assertNativeInheritanceIdentity,
+} from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
@@ -206,6 +210,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validateNativeInheritanceProject(p);
     validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
@@ -297,6 +302,7 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
+          assertNativeInheritanceIdentity(previous, p);
           if (
             previous &&
             p._diskFingerprint &&
@@ -347,6 +353,8 @@ export class Store {
   }
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
+  if (input?.nativeInheritance !== undefined)
+    throw Error("请求须先按当前项目解析原生继承图");
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))

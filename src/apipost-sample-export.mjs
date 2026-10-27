@@ -165,7 +165,7 @@ export function prepareSampleExport(project, { projectId, id, encodeRequest }) {
 
 // Compare execution definitions, not regenerated IDs/import notes. The complete
 // forward import is also the oracle for grouped samples' implicit API ancestry.
-function semanticRequest(input, project) {
+export function semanticRequest(input, project) {
   const r = normalizeRequest(input);
   const server = r.serviceId
     ? project.servers?.find((s) => s.id === r.serviceId)

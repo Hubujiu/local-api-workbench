@@ -83,3 +83,37 @@ network and no partial Store mutation. Owner execution, existing MCP execution,
 CLI frozen plans and cURL must agree or reject explicitly. The optional import
 argument for PR29's separate MCP interchange feature is a later composition
 adapter, not a reason to import root feature ancestry into this branch.
+
+## First implementation checkpoint
+
+The graph resolver runs before generic shared defaults in owner execution,
+load execution, canonical MCP execution and plan creation; cURL uses the same
+resolver. Raw transport and snapshot constructors reject unresolved bindings.
+Previously saved frozen steps can be edited without reconnecting them to the
+live graph. Store saves reject removal/reparenting/replacement of graph identities;
+value-only parent layers and own request configuration remain editable. Restore
+validates the graph entirely inside the restored project, with no cross-project
+registry or grant implied by a source identifier.
+
+A frozen request is **the request configuration merged at that time, with the
+live graph binding removed**. It is not a frozen environment: placeholders are
+still resolved against the selected environment/global variables under the
+existing execution contract. Editing a parent literal does not alter old frozen
+configuration; editing an environment variable may affect an old snapshot.
+
+Native graph export automatically preserves the graph (no opt-in export switch).
+This first slice explicitly rejects native export with plans/cases/case groups;
+full project backup retains them. Export/reimport the graph first, then construct
+and execute frozen plans in either generation. The default flatten mode's existing
+sample/flow/protocol capabilities are unchanged. Parent Query/Cookie encoding
+switches, shared bodies and request-internal descriptions are rejected rather than
+silently discarded. A Store-created untouched default environment (including its
+known loopback `baseUrl`) is treated as pristine and replaced on import.
+
+Current local acceptance covers both native formats over two generations, actual
+owner HTTP/cURL/canonical MCP execution, parent edits versus frozen configuration,
+0/false/empty environment interpolation, explicit noauth, same-source-ID project
+isolation, Store roundtrip/backup restoration and invalid-graph fail-closed paths.
+The MCP check uses the real canonical dispatcher, not an official SDK transport
+claim. Additional transport/restart/CLI composition evidence will be reported
+separately rather than inferred from these checks.
