@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-28 01:11 UTC
+# 后端检查点 · 2026-10-28 01:56 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 01:56 正向代理请求目标与原生自动化补证
+
+- 最近完整GREEN根为 remote `297511b4540a52f53feeae31173b036d535a58c3` / local `d951c98ce4222c3323de86337f5dffc7a6b5b020` / tree `304d5e14e4e328082311e29114479939a0af453a`。首次CI `40613598340` 19/19，19实际checkout、12实际core ZIP摘要/CRC/完整TAP和409文件互斥manifest已核；hash `a271818cbd62812e837aaa97d17fe61da4d120c8878fabd22286bd3bf8d336be`。Linux/macOS2175通过，Windows2168通过/7明确skip。10诊断与3Postman/5进度/8组合三平台通过，未输出新增CLI诊断；上一根XML失败原因仍未知。
+- PR26自身 `86968e69` / CI `40613438996` 是18 GREEN/1 Windows SQLite RED，不因root绿改判。19实际日志与12实际ZIP/265文件清单核验，Linux/macOS1389通过，Windows1388通过/1失败；新增10纯诊断全过。唯一sqlite-process写超时案例8466.5536ms，未捕获SQLITE_WRITE_OUTCOME_UNKNOWN；源码支持“初始预期错误已在子进程捕获，后续独立恢复UPDATE出现未知结果”的推断，TAP无timer/IPC/phase/提交结果，原因与写入状态未知，未重放。
+- 本轮真实代理RED：HTTP和可信自签CA的HTTPS代理实际收到URL字面fragment并返回400，同一直接请求200；IPv6绝对target亦保留fragment。原代码target.href直接进入absolute-form。原创最小修复克隆URL并清除hash，不修改保存URL/冻结计划/历史定义，不改变encoded %23、重复query、空?、IPv6 authority、端口、URLuserinfo拒绝、TLS、代理/目标认证或重试。
+- 新独立draft PR48 `fix/http-proxy-request-target → develop`，阶段local `40733399d2f21bd171df97a9a275ee195abfd269` / remote `7911f687ce2d747306de85bf7b89b77030943fd5` 先保存。补SDK/签名测试local `fb7341c283bb08273a4743c1126761777b8ec3ff` / remote `4ae1449d38fcb40e7cf988fe842fd0e864b81b9d`。独立review指出SDK负例缺少真实接口、可能以不存在错误假通过；仅补真实接口和精确“项目未授权”断言后，最终local `346ffdf2ea0e31bba5d7c65491596924d009cefb` / remote `a59eba6b30c4b4bb34b734559b6af20661690e94` / tree `b8486941dd24e1d881abc2d04143560eb36e3aac`，自身CI `40617738320` 待验证。阶段run40617378153取消，非最终验收。
+- 六整文件33/33通过来自补SDK后的固定生产版本，最后测试负例修正后完整feature文件6/6通过。独立固定stage归档运行4/4，最终test-only修正另独立静态复核通过，不混为同一执行证据。真实owner保存→冻结与live编辑隔离→CLI→备份恢复重启、官方SDK HTTP/stdio、精确请求次数与history落盘均有验证。IPv6case只证明absolute-form，不证明IPv6 origin连接；新OAuth1固定参数对照证明direct/proxy签名与body相等，不是算法独立oracle；fixture代理自己剥离Proxy-Authorization，不能宣称替任意第三方代理保证转发隔离。
+- 根无冲突组合 `7b2c956dc1255bac2a9ab0e3004b5a88b3b9e580` / tree `45df0c86d428c9bd27ca6880d1365e023824d345`，11完整相关文件102/102通过，无fail/cancel/skip；包括HTTP/HTTPS代理、HTTP2、OAuth1/AWS/Hawk、Digest challenge/replay及服务上下文。运行前后HEAD/tree相同，check/全量format/diff通过，无VM/XML专项或全量重复。之后仅本文更新，新根仍待自身CI。
+- 原生自动化只读复核231个既有JS：vendor505165是外部格式→flat events，而非保存flat图→ordered children；其他test_events命中归为单请求/Socket/压力/AI样例/CI详情。精确source hash、字符/字节偏移已加入NATIVE-AUTOMATION-STATIC-GAPS。该范围未找到桥不等于全局不存在，仍不启用无证据兼容导入，没有执行原版或搬用无许可实现。
+- Mock路由/配置/持久化链只读审计未发现可确认新增缺陷，不为凑提交改动。SQLServer审计/许可、完整自动化格式与旧间歇故障仍未解决；无新增前端、main/develop合并或部署。
 
 ## 01:11 集成失败保留与 CLI 诊断候选
 

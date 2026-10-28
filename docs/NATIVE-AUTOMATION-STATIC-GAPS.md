@@ -150,3 +150,16 @@
 - 这些MIT适配器可作为独立实现参考，但复用仍须署名和依赖审查；没有复制到本项目。仓库34,280,179-byte bundled runtime（blob `3be9e627b70b946fc774376b8a7e81ed685146e5`）未获取/复用，不能把根MIT声明当作所有内嵌依赖的许可证。
 
 原版平级事件构树、saved settings实际优先级/映射、manual/frequency含义及原版往返执行仍未关闭。没有因此启用原生自动化；没有运行原版或调用真实产品API。
+
+## 2026-10-28 原版组装桥的有界静态排除
+
+只读复核既有合法提取的 Offline2 renderer 231 个 JS 文件（42,244,518 bytes），未执行原版、调用产品接口或接受新许可。event_list 字面量仅 main 21处；parent_event_id 为 main 4处、vendor 2处。vendor 模块505165的两处是外部格式导入时生成扁平事件，不是 saved flat event_list → ordered children：vendor-c93cd7e95d6e.js，SHA256 `e36400513dae9613377093f13c137a1e9de2d467032138d5debe7f31c0dc4808`，0-based Unicode字符偏移5193481/5218759，对应UTF-8字节偏移5467087/5492509。
+
+复核该集合所有test_events字面量的生产/读取上下文：除了已知样例适配器，还包括以下路径，没有取得新的saved automation树或settings来源证明。这里只保留定位元数据，不复制原版实现。
+
+- main index-0d1d8198fa5a.js，SHA256 `20bb6e21fd678ead16bd91807dc9623b8cd3e7019d44ac874a167c31a37f39fb`，模块954040/628319，Unicode字符偏移1042903/2683305：CI详情读取/单请求。
+- 657.b6a76120fe76.js，SHA256 `3fa10dbb181bbeca693bf5f4b18f476d077222bafa56a611a1d4e244f057eb16`，模块531281，偏移21968/73070：AI样例组装/读取。
+- 5934.7307816c0e10.js，SHA256 `5aea294b1f2083564cb0ea00175170d1dd4cbbcd75a09e7db7c4e2449afb9dd1`，模块295934，偏移3167：压力测试前单请求组装。
+- 5720.ca2c1a69877d.js，SHA256 `902c8c9728324994765246db19ca3d57feaef3a12932d18ee42e5a424d0f2616`，模块505720，偏移1542：Socket单请求组装。
+
+上述偏移均按完整文件0-based Unicode字符记录。结论只是这些材料及字面量/调用上下文检索中未找到，不是全局不存在证明；间接/计算属性、其他文件/版本或服务端实现仍未排除。保存事件图构树与settings实际映射仍未闭合，不能据此推定排序、启用兼容导入或宣称已完成原版往返。
