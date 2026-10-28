@@ -74,6 +74,14 @@ function metadata(row) {
   return marker;
 }
 export function validatePathSerialization(request) {
+  if (!object(request)) throw Error("接口定义必须是对象");
+  for (const group of ["path", "query", "headers", "cookies", "form"])
+    if (
+      request[group] !== undefined &&
+      (!Array.isArray(request[group]) ||
+        request[group].some((row) => !object(row)))
+    )
+      throw Error(group + " 必须是对象数组");
   for (const group of ["query", "headers", "cookies", "form"])
     if (
       (request[group] || []).some((row) => row && own(row, "pathSerialization"))
@@ -87,8 +95,9 @@ export function validatePathSerialization(request) {
     /^(?:https?:\/\/[^/?#]*|\{\{[^{}]+\}\})(\/[^?#]*)?(?:[?#]|$)/u.exec(
       request.url,
     );
-  if (!match) fail();
-  const path = match[1] || "";
+  const relative = request.url.startsWith("/") && !request.url.startsWith("//");
+  if (!relative && !match) fail();
+  const path = relative ? request.url.split(/[?#]/u)[0] : match[1] || "";
   const segments = path.split("/");
   const names = new Set();
   for (const row of request.path || []) {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   importOpenAPIPath,
   bindPathTemplates,
@@ -9,6 +10,29 @@ import {
   validatePathTemplateVariables,
 } from "../src/path-serialization.mjs";
 import { applyMCPInput } from "../src/mcp-request-input.mjs";
+test("dynamic entry imports its path admission guard before SDK resolution", () => {
+  // Source-only regression: do not import or execute the dynamic/VM module here.
+  const source = readFileSync(
+    new URL("../src/dynamic-values.mjs", import.meta.url),
+    "utf8",
+  );
+  const imported = source.match(
+    /import\s*\{([^}]+)\}\s*from\s*["']\.\/path-serialization\.mjs["']/u,
+  );
+  assert(imported, "path serializer must be statically imported");
+  assert(
+    imported[1]
+      .split(",")
+      .some((name) => name.trim() === "validatePathSerialization"),
+    "the entry guard must have a bound import, not an unbound global",
+  );
+  const entry = source.slice(
+    source.indexOf("export async function resolveDynamicRequest("),
+  );
+  const guard = entry.indexOf("validatePathSerialization(request);");
+  assert(guard >= 0);
+  assert(guard < entry.indexOf("normalizeScriptURLMode("));
+});
 const row = (style = "simple", value = "blue", extra = {}) =>
   importOpenAPIPath(
     {
@@ -25,6 +49,49 @@ const row = (style = "simple", value = "blue", extra = {}) =>
 const request = (item = row()) => ({
   url: "https://example.test/items/{color}?q=keep#fragment",
   path: [item],
+});
+test("path admission preserves object-array errors before scanning any row group", () => {
+  for (const input of [undefined, null, false, 0, "request", []])
+    assert.throws(
+      () => validatePathSerialization(input),
+      /接口定义必须是对象/u,
+    );
+  for (const group of ["path", "query", "headers", "cookies", "form"])
+    for (const value of [
+      {},
+      "invalid",
+      null,
+      false,
+      0,
+      [null],
+      [false],
+      [[]],
+      ["x"],
+    ]) {
+      const input = { url: "https://example.test/", [group]: value },
+        before = structuredClone(input);
+      assert.throws(
+        () => validatePathSerialization(input),
+        (error) =>
+          !(error instanceof TypeError) &&
+          error.message === group + " 必须是对象数组",
+      );
+      assert.deepEqual(input, before);
+    }
+  validatePathSerialization({ url: "https://example.test/" });
+});
+test("closed SDK facade preflights table shape before scanning path metadata", () => {
+  const source = readFileSync(
+    new URL("../src/script-url-runtime.mjs", import.meta.url),
+    "utf8",
+  );
+  const entry = source.slice(
+    source.indexOf("export function initializeQueryRuntime("),
+  );
+  const preflight = entry.indexOf('throw Error("SDK URL参数表最多1000项")'),
+    marker = entry.indexOf('Object.hasOwn(row, "pathSerialization")'),
+    construct = entry.indexOf("new sdk.Url(raw)");
+  assert(preflight >= 0 && marker > preflight && construct > marker);
 });
 test("scalar simple label and matrix preserve delimiters and encode data once", () => {
   const value = "中文 /%?!'()*;=,+";
@@ -203,4 +270,22 @@ test("typed template binding preserves single-pass interpolation and numeric ide
     query: [{ key: "q", value: "x", pathSerialization: {} }],
   };
   assert.throws(() => validatePathSerialization(misplaced));
+});
+
+test("service-relative pathname definitions retain markers without admitting authority references", () => {
+  const relative = {
+    ...request(row("matrix", "42")),
+    url: "/v1/one%2Ftwo/items/{color}",
+  };
+  validatePathSerialization(relative);
+  assert.equal(serializeRequestPath(relative), "/v1/one%2Ftwo/items/;color=42");
+  assert.throws(() =>
+    validatePathSerialization({ ...relative, url: "//{color}/items" }),
+  );
+  assert.throws(() =>
+    validatePathSerialization({
+      ...relative,
+      url: "//example.test/items/{color}",
+    }),
+  );
 });

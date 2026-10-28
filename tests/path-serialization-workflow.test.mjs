@@ -186,7 +186,7 @@ test("scalar paths preserve real wire URLs through owner execution cURL frozen p
     enabled: true,
     projects: [project.id],
     execute: true,
-    write: false,
+    write: true,
     remember: false,
   });
   const client = new Client(
@@ -199,10 +199,14 @@ test("scalar paths preserve real wire URLs through owner execution cURL frozen p
       requestInit: { headers: { Authorization: "Bearer " + config.token } },
     }),
   );
+  const executeTool = (await client.listTools()).tools.find(
+    (tool) => tool.name === "localapi_execute_api",
+  );
+  assert(executeTool, "fixture requires the explicit write and execute grants");
   const before = await f.call(url),
     matrix = before.requests.find((r) => r.sourceOperationId === "matrix");
   const result = await client.callTool({
-    name: "localapi_execute_api",
+    name: executeTool.name,
     arguments: {
       projectId: project.id,
       apiId: matrix.id,
@@ -223,7 +227,7 @@ test("scalar paths preserve real wire URLs through owner execution cURL frozen p
     "false",
   ]) {
     const rejected = await client.callTool({
-      name: "localapi_execute_api",
+      name: executeTool.name,
       arguments: {
         projectId: project.id,
         apiId: matrix.id,

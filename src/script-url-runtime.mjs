@@ -173,12 +173,6 @@ export function validateQueryRuntime(input) {
 }
 // Query/path metadata remains outside SDK members and follows object identity across each phase.
 export function initializeQueryRuntime(request) {
-  if (
-    (request.path || []).some(
-      (row) => row && Object.hasOwn(row, "pathSerialization"),
-    )
-  )
-    throw Error("SDK URL不支持OpenAPI path serialization；请使用普通HTTP请求");
   const raw = request.url ?? "";
   if (typeof raw !== "string" || raw.length > 65536)
     throw Error("SDK URL输入须为64KiB以内文本");
@@ -204,6 +198,12 @@ export function initializeQueryRuntime(request) {
       )
     )
       throw Error("OpenAPI Query数组: 尚不支持与SDK URL模式组合");
+  if (
+    (request.path || []).some(
+      (row) => row && Object.hasOwn(row, "pathSerialization"),
+    )
+  )
+    throw Error("SDK URL不支持OpenAPI path serialization；请使用普通HTTP请求");
   const url = new sdk.Url(raw);
   const origins = url.query.members.map(() => ({ encoding: "raw" })),
     variableOrigins = [],
