@@ -1228,6 +1228,7 @@ export async function createApp({
                 ...result.response,
                 outcome: result.status,
                 failure: result.failure,
+                redirectFailure: result.redirectFailure,
                 variableWrites: scoped.receipt(),
                 assertions: result.assertions,
                 extracted: { ...single.variables, ...result.extracted },
