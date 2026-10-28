@@ -372,7 +372,10 @@ test("native responseXml rejects unsafe or ambiguous login XML atomically, prese
       assert.equal(run.results.length, 1);
       withCLIResultDiagnostics(
         () =>
-          assert.match(run.results[0].error, sample.error ?? /XML|XPath|pickVars/),
+          assert.match(
+            run.results[0].error,
+            sample.error ?? /XML|XPath|pickVars/,
+          ),
         JSON.stringify(run),
       );
       assert.deepEqual(seen, ["/login"]);
