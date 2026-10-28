@@ -1,3 +1,8 @@
+import {
+  hasQuerySerialization,
+  parseQueryArray,
+  validateQueryArrayRequest,
+} from "./openapi-query-arrays.mjs";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -98,6 +103,15 @@ async function resolveDynamicRequestBase(
   validateApipostTemplateRequest(request);
   const clone = structuredClone(request),
     specs = [];
+  const arrayValues = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (!hasQuerySerialization(row)) continue;
+    // Remove JSON text before generic interpolation; interpolate parsed scalar
+    // elements and reserialize so quotes/backslashes cannot alter the grammar.
+    if (!row.dynamic || row.enabled === false)
+      arrayValues.push({ index, value: parseQueryArray(row) });
+    row.value = "[]";
+  }
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
     for (const [index, row] of (clone[group] || []).entries()) {
       if (!row.dynamic) continue;
@@ -155,6 +169,8 @@ async function resolveDynamicRequestBase(
       delete clone[key];
     }
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
+  for (const { index, value } of arrayValues)
+    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
   for (const { group, index, spec } of specs) {
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
@@ -186,6 +202,7 @@ async function resolveDynamicRequestBase(
   resolved.body = parts.join("");
   if (bodySpecs.length && resolved.body.length > 1024 * 1024)
     throw Error("动态Body超过1MiB");
+  validateQueryArrayRequest(resolved);
   return resolved;
 }
 
@@ -196,6 +213,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  validateQueryArrayRequest(request);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&

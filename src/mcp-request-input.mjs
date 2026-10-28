@@ -1,3 +1,7 @@
+import {
+  hasQuerySerialization,
+  validateQueryArrayRequest,
+} from "./openapi-query-arrays.mjs";
 const own = (o, k) => Object.hasOwn(o, k);
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function dictionary(value, label) {
@@ -24,6 +28,8 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
     for (const row of matches) {
       if (form && (row.type === "file" || row.filename || row.requiresFile))
         throw Error("不支持临时覆盖文件字段");
+      if (hasQuerySerialization(row) && !Array.isArray(value))
+        throw Error("OpenAPI Query数组临时输入须为数组");
       row.value = textValue(value);
       row.enabled = true;
     }
@@ -84,5 +90,6 @@ export function applyMCPInput(request, input) {
     else throw Error("此请求体不支持该临时输入");
   }
   if (own(input, "auth")) authOverride(result.auth, input.auth);
+  validateQueryArrayRequest(result);
   return result;
 }

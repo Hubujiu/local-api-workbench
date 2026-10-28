@@ -1,3 +1,4 @@
+import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import sdk from "./vendor/url-sdk-host.js";
 import {
   captureURLSnapshot,
@@ -173,6 +174,7 @@ export function validateQueryRuntime(input) {
 }
 // Query/path metadata remains outside SDK members and follows object identity across each phase.
 export function initializeQueryRuntime(request) {
+  validateQueryArrayRequest(request);
   const raw = request.url ?? "";
   if (typeof raw !== "string" || raw.length > 65536)
     throw Error("SDK URL输入须为64KiB以内文本");
