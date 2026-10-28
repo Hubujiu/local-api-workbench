@@ -246,3 +246,29 @@ three scopes, SDK wire edits, later request consumption, frozen definitions,
 backup/restart, isolation and later-row/phase failure. Empty bodies and strict
 JSON are controls. The new grammar/empty-source fixtures failed before this
 change; existing source/accessor/array/depth protections remain regression tests.
+
+## 2026-10-28: preserve bounded evidence on future XML workflow assertion failures
+
+Two ordinary integration CI runs failed at the same error-message assertion in
+`native-pick-xml-workflow.test.mjs`: run `40664410994`, commit
+`3e3265b5c9a5b0dad0d99c6c90b7198611d80d3a` (external DTD), and run
+`40670485753`, commit `5433e1531f76e2730e2dde7b70cbafcec472b6b7`
+(cross-task catch). Both returned `interrupted` instead of the expected error
+pattern. Their TAP omitted the existing response's script diagnostics, and the
+subsequent network/state assertions did not execute. This does not establish a
+root cause or prove those cases' isolation checks passed.
+
+The original assertion now uses the existing `withCLIResultDiagnostics` helper.
+The two helpers and their existing pure tests are copied byte-for-byte from
+integration commit `f2982e2e850cd363ba419604a84719574bfcb0dc`, keeping this
+feature branch self-contained. Although named for CLI output, the helper accepts
+the same JSON run shape returned by the owner HTTP endpoint. On assertion failure
+it retains only allowlisted numeric/enumerated metadata, with bounded parsing,
+step count and output size. It does not print bodies, variables, URLs or source.
+The original regex, assertion order and all later checks remain unchanged.
+
+This is evidence retention, not an interruption fix. No runtime, resource budget,
+concurrency or CI configuration changes are made. Local verification is restricted
+to the two reviewed pure diagnostic tests and syntax checking the XML test; no
+XML/VM/database workload or old CI rerun is requested. Future natural failures in
+ordinary existing CI can now retain the available diagnostic fields.

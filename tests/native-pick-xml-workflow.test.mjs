@@ -1,4 +1,5 @@
 import test from "node:test";
+import { withCLIResultDiagnostics } from "./helpers/cli-result-diagnostics.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -369,7 +370,14 @@ test("native responseXml rejects unsafe or ambiguous login XML atomically, prese
       assert.equal(run.status, "failed", JSON.stringify(run));
       assert.equal(run.recordSaved, true);
       assert.equal(run.results.length, 1);
-      assert.match(run.results[0].error, sample.error ?? /XML|XPath|pickVars/);
+      withCLIResultDiagnostics(
+        () =>
+          assert.match(
+            run.results[0].error,
+            sample.error ?? /XML|XPath|pickVars/,
+          ),
+        JSON.stringify(run),
+      );
       assert.deepEqual(seen, ["/login"]);
       assert.equal(run.variables.token, "stale");
       assert(!Object.hasOwn(run.variables, "postOnly"));
