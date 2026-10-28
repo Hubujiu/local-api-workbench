@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { applySharedAuth } from "./shared-auth.mjs";
 
 // Definition-only projection. Imported security is not executable auth configuration.
@@ -30,7 +31,12 @@ export function openAPIAuthDefinition(project, request, registry) {
       if (
         typeof auth.key !== "string" ||
         !auth.key.trim() ||
-        /[\r\n]/.test(auth.key) ||
+        auth.key.length > 256 ||
+        !auth.key.isWellFormed() ||
+        /\{\{/.test(auth.key) ||
+        /[\x00-\x1f\x7f]/.test(auth.key) ||
+        ((auth.in ?? "header") === "header" &&
+          !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(auth.key)) ||
         ![undefined, "header", "query"].includes(auth.in)
       )
         throw Error("OpenAPI API Key 定义须包含有效名称和 header/query 位置");
@@ -70,7 +76,9 @@ export function openAPIAuthDefinition(project, request, registry) {
   if (
     registry &&
     Object.hasOwn(registry, name) &&
-    JSON.stringify(registry[name]) !== JSON.stringify(scheme)
+    (legacy
+      ? JSON.stringify(registry[name]) !== JSON.stringify(scheme)
+      : !isDeepStrictEqual(registry[name], scheme))
   )
     throw Error(legacy ? "OpenAPI JWT认证方案冲突" : "OpenAPI 认证方案冲突");
   return {

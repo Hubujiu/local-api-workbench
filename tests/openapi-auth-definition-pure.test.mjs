@@ -179,3 +179,101 @@ test("JWT/ASAP retain legacy names and scheme definitions", () => {
     "Authorization",
   );
 });
+test("closed native scopes, folder none and nonrecursive settings stay isolated and immutable", () => {
+  const project = {
+    settings: {
+      globalAuth: { type: "bearer", token: "SECRET" },
+      folderAuth: {
+        parent: { type: "basic", password: "SECRET" },
+        "parent/closed": { type: "none" },
+      },
+    },
+  };
+  const before = structuredClone(project);
+  assert.equal(
+    scheme(definition({ type: "none" }, { folder: "parent/other" }, project))
+      .scheme,
+    "bearer",
+  );
+  assert.deepEqual(
+    definition({ type: "none" }, { folder: "parent/closed" }, project),
+    { security: [] },
+  );
+  assert.deepEqual(
+    definition({ type: "none" }, { inheritAuth: false }, project),
+    { security: [] },
+  );
+  assert.deepEqual(project, before);
+  const registry = JSON.parse(
+    '{"__proto__":{"note":"keep"},"constructor":{"note":"also keep"}}',
+  );
+  const result = definition({ type: "basic" }, {}, {}, registry);
+  assert.deepEqual(result.securitySchemes.__proto__, registry.__proto__);
+  assert.deepEqual(result.securitySchemes.constructor, registry.constructor);
+  assert.equal(Object.getPrototypeOf(result.securitySchemes), Object.prototype);
+  for (const key of ["Bad Key", "Bad:Key", "Bad\tKey", "Bad\0Key"])
+    assert.throws(() => definition({ type: "apiKey", key }), /API Key/);
+});
+test("API Key query names are bounded well-formed public text without controls", () => {
+  for (const key of [
+    "x".repeat(257),
+    "bad\ud800",
+    "bad\udfff",
+    "bad\u007f",
+    "bad\u0001",
+    "{{environment_key}}",
+  ])
+    assert.throws(
+      () => definition({ type: "apiKey", key, in: "query", value: "secret" }),
+      /API Key/,
+    );
+  assert.equal(
+    scheme(
+      definition({
+        type: "apiKey",
+        key: "公共🔑",
+        in: "query",
+        value: "secret",
+      }),
+    ).name,
+    "公共🔑",
+  );
+});
+test("new mechanism registry equality ignores key order but rejects extra or changed properties", () => {
+  for (const auth of [
+    { type: "basic" },
+    { type: "bearer" },
+    { type: "apiKey", key: "X-Key", in: "header" },
+    { type: "apiKey", key: "key", in: "query" },
+  ]) {
+    const generated = definition(auth);
+    const name = Object.keys(generated.securitySchemes)[0];
+    const reversed = Object.fromEntries(
+      Object.entries(generated.securitySchemes[name]).reverse(),
+    );
+    const registry = { [name]: reversed };
+    const before = structuredClone(registry);
+    assert.deepEqual(definition(auth, {}, {}, registry), generated);
+    assert.deepEqual(registry, before);
+    for (const conflict of [
+      { ...reversed, description: "additional" },
+      { ...reversed, type: "changed" },
+    ]) {
+      const bad = { [name]: conflict },
+        snapshot = structuredClone(bad);
+      assert.throws(() => definition(auth, {}, {}, bad), /认证方案冲突/);
+      assert.deepEqual(bad, snapshot);
+    }
+  }
+  const jwt = definition({ type: "jwt" });
+  const name = Object.keys(jwt.securitySchemes)[0];
+  const reordered = {
+    [name]: Object.fromEntries(
+      Object.entries(jwt.securitySchemes[name]).reverse(),
+    ),
+  };
+  assert.throws(
+    () => definition({ type: "jwt" }, {}, {}, reordered),
+    /JWT认证方案冲突/,
+  );
+});
