@@ -54,6 +54,7 @@ import {
   exportOpenAPIQueryArray,
   validateQueryArrayRequest,
 } from "./openapi-query-arrays.mjs";
+import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1918,46 +1919,14 @@ export function exportOpenAPI(project) {
     const requestBody = exportOpenAPIBody(r);
     const original = structuredClone(r.openapiOperation || {});
     delete original.requestBody;
-    if (["jwt", "asap"].includes(r.auth?.type)) {
-      const scheme =
-        r.auth.type === "jwt" && r.auth.addTokenTo === "queryParam"
-          ? {
-              type: "apiKey",
-              in: "query",
-              name: r.auth.queryParamKey ?? "token",
-              description: "JWT; signing credentials are not exported",
-            }
-          : r.auth.type === "asap" ||
-              (r.auth.headerPrefix ?? "Bearer") === "Bearer"
-            ? { type: "http", scheme: "bearer", bearerFormat: "JWT" }
-            : {
-                type: "apiKey",
-                in: "header",
-                name: "Authorization",
-                description:
-                  "JWT with an explicit custom prefix; signing credentials are not exported",
-              };
-      components.securitySchemes ??= {};
-      if (
-        typeof components.securitySchemes !== "object" ||
-        Array.isArray(components.securitySchemes)
-      )
-        throw Error("OpenAPI securitySchemes 无效");
-      const name =
-        "localapi_jwt_" +
-        createHash("sha256")
-          .update(JSON.stringify(scheme))
-          .digest("hex")
-          .slice(0, 12);
-      if (
-        Object.hasOwn(components.securitySchemes, name) &&
-        JSON.stringify(components.securitySchemes[name]) !==
-          JSON.stringify(scheme)
-      )
-        throw Error("OpenAPI JWT认证方案冲突");
-      components.securitySchemes[name] = scheme;
-      original.security = [{ [name]: [] }];
-    }
+    const authentication = openAPIAuthDefinition(
+      project,
+      source,
+      components.securitySchemes,
+    );
+    original.security = authentication.security;
+    if (authentication.securitySchemes)
+      components.securitySchemes = authentication.securitySchemes;
 
     const baseVariable = /^\{\{[^{}]+\}\}/.exec(queryDefinition.pathURL)?.[0];
     if (
