@@ -5,11 +5,13 @@ Never run this helper locally. It does not provision hosts, log in to a registry
 modify host trust, expose plaintext Oracle, or upload raw database output.
 """
 
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -22,6 +24,54 @@ DIGEST = PIN.split("@", 1)[1]
 LABEL = "com.local-api.oracle-tcps-ci"
 CERT_MOUNT = "/opt/oracle/ci-tcps"
 PHASE = "guard"
+
+# Fixed software-location classes only. These are diagnostics, not fallback
+# executable paths: the fixture continues to require the documented PATH/API.
+PROBE_TOOLS = ("sqlplus", "lsnrctl", "orapki", "openssl", "sha256sum")
+PROBE_BIN_ROOTS = {
+    "oracle23_bin": "/opt/oracle/product/23ai/dbhomeFree/bin",
+    "oracle26_bin": "/opt/oracle/product/26ai/dbhomeFree/bin",
+    "oracle_common_bin": "/opt/oracle/bin",
+    "usr_bin": "/usr/bin",
+    "bin": "/bin",
+}
+PROBE_CONFIG_LOCATIONS = {
+    "canonical": "/opt/oracle/configTcps.sh",
+    "scripts": "/opt/oracle/scripts/configTcps.sh",
+    "setup_scripts": "/opt/oracle/scripts/setup/configTcps.sh",
+    "startup_scripts": "/opt/oracle/scripts/startup/configTcps.sh",
+    "oracle23_home": "/opt/oracle/product/23ai/dbhomeFree/configTcps.sh",
+    "oracle26_home": "/opt/oracle/product/26ai/dbhomeFree/configTcps.sh",
+}
+PROBE_INTERFACES = {
+    "tcps_certs_location": "TCPS_CERTS_LOCATION",
+    "cert_crt": "cert.crt",
+    "client_key": "client.key",
+    "ca_crt": "ca.crt",
+    "pkcs12_import": "import_pkcs12",
+}
+
+
+def capability_checks():
+    checks = {f"tool_{tool}_in_path": ["command", "-v", tool]
+              for tool in (*PROBE_TOOLS, "grep")}
+    for location, root in PROBE_BIN_ROOTS.items():
+        for tool in PROBE_TOOLS:
+            checks[f"tool_{tool}_{location}"] = ["test", "-x", root + "/" + tool]
+    for location, filename in PROBE_CONFIG_LOCATIONS.items():
+        for kind, flag in (("exists", "-e"), ("regular", "-f"), ("readable", "-r"), ("executable", "-x")):
+            checks[f"config_{location}_{kind}"] = ["test", flag, filename]
+    for key, marker in PROBE_INTERFACES.items():
+        checks[f"config_interface_{key}"] = ["grep", "-F", "-q", "--", marker, PROBE_CONFIG_LOCATIONS["canonical"]]
+    return checks
+
+
+PROBE_CHECKS = capability_checks()
+PROBE_REQUIRED = (
+    *(f"tool_{tool}_in_path" for tool in (*PROBE_TOOLS, "grep")),
+    *(f"config_canonical_{kind}" for kind in ("exists", "regular", "readable", "executable")),
+    *(f"config_interface_{kind}" for kind in ("tcps_certs_location", "cert_crt", "client_key")),
+)
 
 
 class Failure(Exception):
@@ -151,6 +201,94 @@ def budget(deadline, cap, label):
     return min(cap, remaining)
 
 
+def probe_script():
+    # Every check runs even when an earlier one is false. No environment dump,
+    # file contents, arbitrary paths, stderr, or tool output reaches stdout.
+    lines = ["set -u", """probe() {
+  local key="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf '%s=true\\n' "$key"
+  else
+    printf '%s=false\\n' "$key"
+  fi
+}"""]
+    for key, args in PROBE_CHECKS.items():
+        lines.append("probe " + " ".join(shlex.quote(value) for value in (key, *args)))
+    lines.append("exit 0")
+    return "\n".join(lines)
+
+
+def parse_capabilities(data):
+    # Unobserved and uninspectable capabilities are null (unknown), never false.
+    unknown = dict.fromkeys(PROBE_CHECKS)
+    if len(data) > 16 * 1024:
+        return unknown, "output_limit"
+    try:
+        lines = data.decode("ascii").splitlines()
+    except UnicodeDecodeError:
+        return unknown, "invalid_encoding"
+    values = {}
+    for line in lines:
+        match = re.fullmatch(r"([a-z][a-z0-9_]{1,79})=(true|false)", line)
+        if match is None or match[1] not in PROBE_CHECKS or match[1] in values:
+            return unknown, "invalid_schema"
+        values[match[1]] = match[2] == "true"
+    complete = set(values) == set(PROBE_CHECKS)
+    result = {**unknown, **values}
+    if (result["tool_grep_in_path"] is not True
+            or result["config_canonical_regular"] is not True
+            or result["config_canonical_readable"] is not True):
+        for key in PROBE_INTERFACES:
+            result[f"config_interface_{key}"] = None
+    return result, "complete" if complete else "incomplete"
+
+
+def shipped_tool_preflight():
+    phase("shipped_tool_preflight")
+    # Save an unknown baseline first: even failure to launch the shell, a timeout,
+    # or malformed output must leave an explicit safe diagnostic artifact.
+    capabilities = dict.fromkeys(PROBE_CHECKS)
+    report(capabilities=capabilities, capabilityProbeStatus="not_completed",
+           capabilityProbeExitCode=None, capabilityRequired=list(PROBE_REQUIRED),
+           capabilityUnknownMeaning="null means not observed or not inspectable",
+           capabilityLocations="fixed software locations only; no PATH fallback",
+           capabilityCaCrtRequired=False)
+    try:
+        exit_code, output = docker(
+            "run", "--name", NAME + "-probe", "--label", LABEL + "=" + NAME,
+            "--network", "none", "--no-healthcheck", "--entrypoint", "/bin/bash",
+            PIN, "-c", probe_script(), label="capability_probe_execution_failed",
+            timeout=60, check=False)
+    except Failure as error:
+        report(capabilityProbeStatus=error.label)
+        raise
+    except Exception:
+        report(capabilityProbeStatus="probe_execution_error")
+        raise Failure("capability_probe_execution_failed") from None
+    capabilities, status = parse_capabilities(output)
+    missing = [key for key in PROBE_REQUIRED if capabilities[key] is False]
+    unknown = [key for key in PROBE_REQUIRED if capabilities[key] is None]
+    report(capabilities=capabilities, capabilityProbeStatus=status,
+           capabilityProbeExitCode=exit_code, capabilityMissingRequired=missing,
+           capabilityUnknownRequired=unknown)
+    # A complete map is persisted before each fail-closed gate. ca.crt is advisory
+    # because the supported cert.crt chain fallback was already part of the plan.
+    require(exit_code == 0, "capability_probe_nonzero_exit")
+    require(status == "complete", "capability_probe_invalid_output")
+    require(not missing and not unknown, "pinned_lite_tcps_tools_incompatible")
+    # Copy only the fixed, validated software file to obtain its hash. Never
+    # execute it on the host or retain its source in the evidence directory.
+    destination = ROOT / "shipped-configTcps.sh"
+    docker("cp", "-L", NAME + "-probe:/opt/oracle/configTcps.sh", str(destination),
+           label="shipped_script_hash_read_failed", timeout=15)
+    require(destination.is_file() and not destination.is_symlink()
+            and destination.stat().st_size <= 256 * 1024, "shipped_script_size_invalid")
+    report(shippedConfigTcpsSha256=hashlib.sha256(destination.read_bytes()).hexdigest())
+    destination.unlink()
+    docker("rm", NAME + "-probe", label="probe_cleanup_failed")
+
+
 def generate_certificates():
     for authority in ("a", "b"):
         command(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
@@ -264,22 +402,7 @@ def setup():
     health_test = image.get("Config", {}).get("Healthcheck", {}).get("Test", [])
     require(bool(health_test) and health_test[0] != "NONE", "pinned_image_healthcheck_missing")
     report(imageId=image["Id"], digestVerified=True)
-    phase("shipped_tool_preflight")
-    probe = """set -eu
-test -x /opt/oracle/configTcps.sh
-for tool in orapki openssl sqlplus lsnrctl; do command -v "$tool" >/dev/null; done
-grep -q TCPS_CERTS_LOCATION /opt/oracle/configTcps.sh
-grep -q cert.crt /opt/oracle/configTcps.sh
-grep -q client.key /opt/oracle/configTcps.sh
-sha256sum /opt/oracle/configTcps.sh
-"""
-    _, proof = docker("run", "--name", NAME + "-probe", "--label", LABEL + "=" + NAME,
-                      "--network", "none", "--no-healthcheck", "--entrypoint", "/bin/bash", PIN, "-c", probe,
-                      label="pinned_lite_tcps_tools_incompatible", timeout=60)
-    script_hash = proof.decode().split()[0]
-    require(re.fullmatch(r"[0-9a-f]{64}", script_hash) is not None, "invalid_script_fingerprint")
-    report(shippedConfigTcpsSha256=script_hash)
-    docker("rm", NAME + "-probe", label="probe_cleanup_failed")
+    shipped_tool_preflight()
     phase("generate_private_certificates")
     generate_certificates()
     activate_files("good")
