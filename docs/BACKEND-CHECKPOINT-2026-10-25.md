@@ -1,6 +1,19 @@
-# 后端检查点 · 2026-10-27 23:47 UTC
+# 后端检查点 · 2026-10-28 00:55 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 00:55 Postman 简写导入与进度故障证据保存
+
+- 最后完整GREEN为 remote `eac00a6c2dbfc900d9a81b4b20465d24a487ce56` / local `50d31d4bb4c8b9fa75ef4679c33d7724c5f8b2e8` / tree `b673ac4ec16ae0747663277befb62c9e8d53ecaa`，首次CI `40604621126` 19/19成功。19实际checkout、12实际core ZIP大小/SHA256/CRC/完整TAP和405文件互斥清单已核，hash `7e0ab0e1f5d3b40d1d6bae3e7a57859b52e28322b315fe2cd3d8efa6790adea2`；Linux/macOS2149通过，Windows2142通过/7明确skip，无fail/cancel/todo。PR31与PR40各自CI40604083282/40604138726亦首次10/10，实际三OS产物已核；旧间歇故障根因仍未知。
+- Postman真实RED：合法字符串item.request导入返回成功却落盘空URL，重启冻结计划执行Invalid URL。官方SDK固定来源支持字符串为GET URL：https://github.com/postmanlabs/postman-collection/blob/4ae76c15974011ea67b13c1895c4a02f4cbd3746/lib/collection/request.js 。schema站未成功读取，不声称schema验证。原创最小规范化不修改对象URL拼装、空URL草稿或事件SDK。
+- 新独立draft PR47 `fix/postman-request-shorthand → develop`，local `b07b1c6d78f414931886a6ac0b6d51b1ebd07475` / remote `a6b924ff8953cb6359dc6306990217d537c3b19a` / tree `33f1a14f0d9d5587bdc7e7b17ec6513675a67b8f`。首次CI `40610995334` 10/10成功；10actual checkout `bda81bd9ce60cd99e67a475787bb02a6be954163` 同树，3实际core ZIP大小/摘要/CRC/完整TAP核验，各OS1026通过无fail/cancel/skip，3新增流程各OS通过。真实owner导入、变量环境、认证/重复query、冻结计划、错误导入原子性、备份恢复重启与CLI落盘验证；另项目相等是修改隔离，不冒充SDK授权测试。事件文本只静态保留，不执行脚本。
+- 另一真实RED：stdio第一HTTP响应与变量提交成功，受控活动目录被替换为普通文件产生ENOTDIR；后续执行停止，但最终runs为空。原PR19改为保持fail-stop并保存已完成证据；不把进度故障伪装成HTTP失败、不继续下一叶、不重放，记录固定非敏感EXECUTION_PROGRESS_FAILED。外部取消仍优先；journal自身原始错误/重试和stdio单generic RPC error合同不变，路径持续损坏时不承诺立即返回receipt。
+- PR19阶段 local `6f44b3a073f2aa4c7cea96c551a471c459556964` / remote `55c3c8e227289394fe014f7457b129741234123f` 已先保存；补取消验证后最终local `f69fcdb630d05b844f368cdea3200eb2ac9df798` / remote `f6ea4ac965476a2f44f18846c4c68c4b9af17099` / tree `db6a00b8100aed6651500c708fcc81a2246fc47e`。5新真实故障/取消用例及4整文件24/24通过，check/fullformat/diff通过。阶段CI40611160416被新提交取消，不能算通过；最终CI40611209544仍待终态。
+- PR19 actual PR merge为 `c645444587ab09069abd2d84db200aa95f5a90a6` / tree `1540f03345e607134c5a6205adae2536235e82e0`，**不同于feature tree**。当前PR3 base带入4文件：ADR、script-worker最终charged活动预算5行、script-final-budget测试、script-sequence诊断测试；不是只有诊断文案。CI只证明此明确PR组合，不冒充纯feature tree执行。未为消除差异更改预算或重新运行专项。
+- 根合并 `0f672adef8d269c65c46089afb63b9ff82363d74` / tree `5e91763a7a82542471012998afdfc68c93f4bb5c`，三处core冲突保留planOccurrences、重复evidenceBytes、提取fail-stop和evidence-limit，同时加入progress-failure与取消优先。独立静态审查确认；native摘要仍可能failed且failed HTTP列表为空，不伪造HTTP错误，完整结果详情保留诊断。
+- 根only交叉文件 `d1fc5cb5186ae12b5ddc4290cc53354369495176` cherry-pick为 `10b7af0a33c6c10150a267a4d2a50e27fe60116a`，完整同树 `c2af30ecc62c6b9c3b1b5e9b31e062b416a34289`。5整文件32/32加完整Postman文件3/3通过，check/fullformat/diff通过。8新完整链涵盖canonical/native API与flow、真实TCP/HTTP、canonical repeat（native保持线性限制）、永久stdio故障和typed未知保存。未知保存用真实Store原方法和磁盘障碍产生ProjectCommitUncertain及.transaction.json，事务恢复同attempted ID一次；之后独立SDK重启和备份恢复副本逐条完整读回，无下一叶/重放/跨项目变化。
+- 独立审查后补测试活动计时器清理 `59edc8e2bc9bc1c2064f46d62f7418db0475a17b` / tree `4e490f863bea4ebd82b4c5c9297f7c10b9e65550`：fixture删除前finish自己创建的MCPActivity，生产不变，新8完整链重新8/8通过，0fail/cancel/skip，14.359秒。根之后仅本文更新，尚须其自身CI，不借上一根GREEN。
+- SQLServer依赖审计与许可、原生自动化格式证据及旧偶发中断仍未解决。没有前端新增、VM/XML专项或原版GUI运行，没有main/develop合并或部署。
 
 ## 23:47 OAuth2 原始回调编码与显式 TCP 接收编码
 

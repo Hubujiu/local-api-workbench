@@ -589,6 +589,7 @@ export async function runPlan(
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
+  let progressFailure;
   const occurrences = planOccurrences(snapshot.steps);
   if (!occurrences.length) {
     throw Error("计划没有可执行步骤");
@@ -1132,7 +1133,20 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     if (repeated) evidenceBytes += Buffer.byteLength(JSON.stringify(record));
-    await onStep?.(record);
+    try {
+      await onStep?.(record);
+    } catch {
+      // The completed response is evidence, even when its progress observer fails.
+      // Stop before another request; do not recast this as a transport failure.
+      progressFailure = {
+        code: "EXECUTION_PROGRESS_FAILED",
+        message:
+          "Execution stopped because progress reporting failed; inspect saved results, do not replay.",
+        retry_safe: false,
+      };
+      record.progressFailure = progressFailure;
+      break;
+    }
     if (stopAfterExtractionFailure) break;
   }
   return {
@@ -1147,7 +1161,9 @@ export async function runPlan(
     createdAt: new Date().toISOString(),
     status: signal?.aborted
       ? "cancelled"
-      : !evidenceStopped && results.every((r) => r.status === "passed")
+      : !progressFailure &&
+          !evidenceStopped &&
+          results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
     ...(evidenceStopped
@@ -1172,6 +1188,9 @@ export async function runPlan(
             },
           },
         }
+      : {}),
+    ...(progressFailure
+      ? { stopReason: "progress-failure", progressFailure }
       : {}),
     results,
     initialVariables: structuredClone(variables),
@@ -1479,7 +1498,10 @@ export function importDocument(doc) {
             item.auth || inheritedAuth,
             currentEvents,
           );
-        const req = item.request || {},
+        const req =
+            typeof item.request === "string"
+              ? { url: item.request }
+              : item.request || {},
           body = req.body || {};
         const rawURL =
           typeof req.url === "string" ? req.url : req.url?.raw || "";
