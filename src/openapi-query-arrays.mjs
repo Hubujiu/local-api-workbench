@@ -199,7 +199,10 @@ export function importOpenAPIQuery(parameters, { swagger = false } = {}) {
         ...(parameter.allowEmptyValue === undefined
           ? {}
           : { allowEmptyValue: parameter.allowEmptyValue }),
-        schema: Object.keys(schema).length ? schema : { type: "string" },
+        schema:
+          typeof schema === "boolean" || Object.keys(schema).length
+            ? schema
+            : { type: "string" },
         required: parameter.required === true,
         description: parameter.description || "",
         value: parameter.example ?? parameter.schema?.default ?? "",

@@ -177,3 +177,23 @@ test("SDK initialization preflights raw input and table sizes before constructin
     /最多1000/,
   );
 });
+
+test("SDK initialization rejects array metadata before lossy conversion without reading it", () => {
+  for (const group of ["query", "path"]) {
+    let reads = 0;
+    const row = { key: "q", value: '["a","b"]' };
+    Object.defineProperty(row, "querySerialization", {
+      enumerable: true,
+      get() {
+        reads++;
+        throw Error("must not read");
+      },
+    });
+    assert.throws(
+      () =>
+        initializeQueryRuntime({ url: "https://example.test", [group]: [row] }),
+      /尚不支持与SDK URL模式/,
+    );
+    assert.equal(reads, 0);
+  }
+});

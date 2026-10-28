@@ -313,3 +313,13 @@ test("CSV rejects AWS query presigning without blocking header auth, repeated ar
   ])
     assert.doesNotThrow(() => validateQueryArrayRequest(request));
 });
+
+test("unmarked boolean parameter schemas remain boolean", () => {
+  for (const schema of [false, true]) {
+    const imported = importOpenAPIQuery([
+      { name: "q", in: "query", schema },
+    ])[0];
+    assert.equal(imported.schema, schema);
+    assert.equal(Object.hasOwn(imported, "querySerialization"), false);
+  }
+});
