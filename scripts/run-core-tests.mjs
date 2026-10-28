@@ -4,6 +4,7 @@ import { lstat, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { pathToFileURL } from "node:url";
+import { allocateWeighted, loadWeights } from "./core-test-allocation.mjs";
 
 export function parseOptions(args) {
   const options = {};
@@ -46,12 +47,13 @@ export async function discoverCoreTests(cwd) {
 export async function createPlan(cwd, options) {
   const files = await discoverCoreTests(cwd);
   if (options.total > files.length) throw Error("Every shard must be nonempty");
-  const shards = Array.from({ length: options.total }, () => []);
-  files.forEach((file, position) =>
-    shards[position % options.total].push(file),
+  const { shards, allocation } = allocateWeighted(
+    files,
+    options.total,
+    await loadWeights(),
   );
   return {
-    version: 2,
+    version: 3,
     fileConcurrency: 1,
     pattern: "tests/*.test.mjs",
     order: "UTF-16 code-unit ascending; forward-slash relative paths",
@@ -59,6 +61,8 @@ export async function createPlan(cwd, options) {
       .update(files.join("\n") + "\n")
       .digest("hex"),
     files,
+    allocation,
+    selectedEstimatedUs: allocation.estimatedUs[options.index - 1],
     shards,
     index: options.index,
     total: options.total,

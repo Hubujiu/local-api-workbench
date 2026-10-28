@@ -205,3 +205,77 @@ concurrency and failure/cancellation contracts remain in the same batch.
 No application, VM, XML, native database or pressure workload is run for this
 change. Local Node 24.22.1 fixture results do not establish Node 24.21, Windows or
 macOS runtime acceptance; those still require exact-head CI after review.
+
+## Frozen duration-weighted allocation (supersedes round-robin only)
+
+The current matrix remains exactly **four shards per OS**, file concurrency **1**,
+Node 24, and the existing ten-minute job budget. Production budgets, all tests,
+internal test concurrency, process isolation, outcome/exit handling and `npm test`
+are unchanged. This revision replaces only membership selection. The historical
+round-robin descriptions and failed/cancelled evidence above remain historical.
+
+`scripts/core-test-weights.json` is a checked-in, digest-pinned input, never fetched
+or automatically retuned in CI. `.gitattributes` forces LF for this exact JSON
+path, preserving its raw-byte digest even with Windows `core.autocrlf=true`.
+Its 463 path weights use ONLY prior runs
+[40769853798](https://github.com/Hubujiu/local-api-workbench/actions/runs/40769853798)
+(head `eb855b915a873755397f71f5a1abeccc04c8c912`) and
+[40772663326](https://github.com/Hubujiu/local-api-workbench/actions/runs/40772663326)
+(head `e5cd1fb8bc997dc0b0b27ca0a1e1d28fad2772c8`). All 24 raw progress JSONL
+filenames and byte SHA-256 values are recorded in `sources`. Reconstruct each
+weight by reading these exact bytes, selecting `test:complete` records whose
+`name` (backslashes normalized to `/`) equals `file`, converting `durationMs` to
+integer microseconds with `ceil(durationMs * 1000)`, and taking the maximum over
+both runs and all OS. **Do not filter by status**: failed whole-file observations
+are retained; nested test durations are not added. Incomplete files provide no
+finished duration, not a zero or a pass. This is elapsed file-process time,
+including startup/exit, not CPU time. File `test:summary` alone undercounts that
+cost. No observations from the later TRACE run are used in the frozen weights.
+
+Allocation discovers the same actual glob, sorts by descending frozen weight
+(tie: code-unit path), and assigns each path once to the least loaded shard
+(tie: lowest shard index). Assigned files execute in lexical path order. New or
+unknown paths use the fixed largest historical weight, **54,879,087 microseconds**
+(54.879087 seconds; upward rounding), rather than zero. Absent historical paths
+are never selected. A changed file can retain a stale path estimate: weights
+are scheduling hints, not a source checksum, execution authorization or capacity
+guarantee. The actual checkout tree and exhaustive discovered path union remain
+the coverage identity. No manually maintained weight entry can remove a test.
+
+Version-3 manifests retain full paths, complete shard membership and path-union
+hash, and add policy, pinned weights digest, provenance, effective per-file
+weights, unknown/fallback paths, all shard estimates and selected estimate.
+The parser reads at most 256 KiB plus one rejection byte, pins the exact JSON
+hash, validates closed metadata/provenance schemas, path/weight limits, duplicate
+source records and the fallback maximum, and fails closed before launching Node.
+Source changes require deliberate reviewed updates to both JSON and digest.
+
+### Prospective estimate, not a capacity guarantee
+
+A read-only simulation froze the two runs above before evaluating later run
+40776245608 (465 files). Its two new TRACE files received the historical-maximum
+fallback. Estimated slowest file-process totals became Linux **315.5 s**, macOS
+**356.2 s**, Windows **442.1 s**, versus original round-robin **418.6 / 432.7 /
+580.6 s**. Windows lacked six completed files; those were explicitly imputed
+from earlier observations, never recorded as passed. Windows setup consumed
+about 32 s before tests. The manifest itself uses only the conservative frozen
+training envelope, not these later evaluation timings: for those 465 paths it
+reports about **644.3 s per shard**, including the maximum fallback for both
+unknown TRACE paths. It must not be relabeled as a measured 442 s result.
+These are counterfactual sums with host/order variance,
+not timings of an actual rebalanced run and not a root-cause repair.
+
+The conservative per-file maximum across all OS/history can combine incompatible
+slow-host observations: the later 465-file envelope totals 2515.9 s, giving a
+four-shard lower bound of **629 s**, already above 600 s before setup. Even
+per-OS historical maxima leave macOS about 586.5 s plus setup. Thus the unchanged
+four-shard budget cannot be guaranteed against that envelope. This allocation
+only removes observed imbalance; it does not justify skipping tests, hiding
+failures, increasing limits, adding retries or replacing retained failed runs.
+
+Pure local fixtures cover exhaustive glob equality, add/remove/unknown/stale
+paths, deterministic ties, malformed bounded weights, actual tiny child tests
+with distinct weighted paths, process isolation, nested concurrent tests, and
+unchanged failure/signal/cancellation exit semantics. No local application, VM,
+XML or database workloads are part of this validation. Exact-head CI is pending
+parent review/publication; simulations and pure fixtures are not full acceptance.

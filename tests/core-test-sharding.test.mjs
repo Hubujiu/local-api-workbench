@@ -13,6 +13,14 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import {
+  allocateWeighted,
+  loadWeights,
+  parseWeights,
+  MAX_WEIGHT_BYTES,
+  WEIGHTS_SHA256,
+} from "../scripts/core-test-allocation.mjs";
 import {
   createPlan,
   discoverCoreTests,
@@ -75,7 +83,153 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
       assert.equal(plan.fileConcurrency, 1);
       assert.equal(plan.filesSha256, plans[0].filesSha256);
       assert.deepEqual(plan.shards, plans[0].shards);
+      assert.equal(plan.allocation.weightsSha256, WEIGHTS_SHA256);
+      assert.equal(
+        plan.selectedEstimatedUs,
+        plan.allocation.estimatedUs[plan.index - 1],
+      );
+      assert.deepEqual(plan.selected, [...plan.selected].sort());
     }
+  }
+});
+
+test("frozen weights preserve exact provenance, worst-known fallback and bounded parsing", async () => {
+  const data = await loadWeights();
+  assert.equal(data.sources.length, 24);
+  assert.deepEqual(
+    [...new Set(data.sources.map((source) => source.runId))],
+    [40769853798, 40772663326],
+  );
+  assert.equal(Object.keys(data.weights).length, 463);
+  assert.equal(data.fallbackUs, 54879087);
+  const attributes = await readFile(path.join(root, ".gitattributes"), "utf8");
+  assert.match(attributes, /^\/scripts\/core-test-weights\.json text eol=lf$/m);
+  const bytes = await readFile(
+    path.join(root, "scripts/core-test-weights.json"),
+  );
+  assert.equal(
+    createHash("sha256").update(bytes).digest("hex"),
+    WEIGHTS_SHA256,
+  );
+  assert.throws(
+    () => parseWeights(Buffer.concat([bytes, Buffer.from(" ")])),
+    /digest/,
+  );
+  assert.throws(
+    () => parseWeights(Buffer.alloc(MAX_WEIGHT_BYTES + 1)),
+    /bounded/,
+  );
+  const check = (edit) => {
+    const changed = JSON.parse(bytes);
+    edit(changed);
+    const input = Buffer.from(JSON.stringify(changed));
+    assert.throws(() =>
+      parseWeights(input, createHash("sha256").update(input).digest("hex")),
+    );
+  };
+  for (const value of [0, -1, 0.5, null, "1", 3_600_000_001])
+    check((data) => {
+      data.weights[Object.keys(data.weights)[0]] = value;
+    });
+  for (const key of [
+    "../escape.test.mjs",
+    "tests/nested/a.test.mjs",
+    "tests/.hidden.test.mjs",
+    "tests/[skip].test.mjs",
+    "__proto__",
+  ])
+    check((data) => {
+      Object.defineProperty(data.weights, key, { value: 10, enumerable: true });
+    });
+  check((data) => {
+    data.fallbackUs++;
+  });
+  check((data) => {
+    data.version = 2;
+  });
+  check((data) => {
+    data.extra = true;
+  });
+  check((data) => {
+    data.weights = [];
+  });
+  check((data) => {
+    data.sources[0] = data.sources[1];
+  });
+  check((data) => {
+    data.sources[0].runId = 40776245608;
+  });
+  check((data) => {
+    data.sources[0].sha256 = "bad";
+  });
+  const malformed = Buffer.from("{");
+  assert.throws(
+    () =>
+      parseWeights(
+        malformed,
+        createHash("sha256").update(malformed).digest("hex"),
+      ),
+    SyntaxError,
+  );
+});
+
+test("LPT is deterministic across additions, removals, stale weights and ties", async () => {
+  const frozen = await loadWeights();
+  const data = {
+    ...frozen,
+    weights: {
+      "tests/a.test.mjs": 20,
+      "tests/b.test.mjs": 20,
+      "tests/c.test.mjs": 10,
+      "tests/absent.test.mjs": 100,
+    },
+    fallbackUs: 100,
+  };
+  const files = [
+    "tests/a.test.mjs",
+    "tests/b.test.mjs",
+    "tests/c.test.mjs",
+    "tests/new.test.mjs",
+    "tests/z.test.mjs",
+  ];
+  for (const subset of [files, files.slice(1), files.slice(0, 4)]) {
+    const actual = allocateWeighted(subset, 4, data);
+    assert.deepEqual(actual.shards.flat().sort(), [...subset].sort());
+    assert.equal(new Set(actual.shards.flat()).size, subset.length);
+    assert(!actual.shards.flat().includes("tests/absent.test.mjs"));
+    assert.deepEqual(
+      allocateWeighted([...subset].reverse(), 4, data).shards,
+      actual.shards,
+    );
+    assert.deepEqual(
+      actual.allocation.estimatedUs,
+      actual.shards.map((shard) =>
+        shard.reduce((sum, file) => sum + actual.allocation.weights[file], 0),
+      ),
+    );
+    assert(
+      actual.shards.every(
+        (shard) => JSON.stringify(shard) === JSON.stringify([...shard].sort()),
+      ),
+    );
+  }
+  assert.deepEqual(allocateWeighted(files, 4, data).shards, [
+    ["tests/new.test.mjs"],
+    ["tests/z.test.mjs"],
+    ["tests/a.test.mjs", "tests/c.test.mjs"],
+    ["tests/b.test.mjs"],
+  ]);
+  assert.throws(() => allocateWeighted([...files, files[0]], 4, data));
+  assert.throws(() => allocateWeighted(files, 6, data));
+  // Historical weight-key bounds must not narrow the existing discovery domain.
+  const longUnknown = `tests/${"x".repeat(242)}.test.mjs`;
+  const controlUnknown = "tests/unknown\tfixture.test.mjs";
+  const discovered = [...files, longUnknown, controlUnknown];
+  const extended = allocateWeighted(discovered, 4, data);
+  assert.deepEqual(extended.shards.flat().sort(), [...discovered].sort());
+  for (const file of [longUnknown, controlUnknown]) {
+    assert(extended.allocation.fallbackFiles.includes(file));
+    assert.equal(extended.allocation.weights[file], data.fallbackUs);
   }
 });
 
@@ -180,10 +334,19 @@ test("glob-like filenames cannot be silently ignored by Node", async (t) => {
 test("real shards execute every file and nested concurrent test exactly once with separate TAP evidence", async (t) => {
   const cwd = await fixture(t);
   await mkdir(path.join(cwd, "seen"));
-  const names = ["z", "a space", "中", "A", "é"];
+  const names = [
+    "mcp-imported-archive-chunk-workflow",
+    "active-project-import",
+    "中",
+    "A",
+    "é",
+  ];
   for (const name of names) {
     const source = `import test from 'node:test';
+import assert from 'node:assert/strict';
 import { writeFile, unlink } from 'node:fs/promises';
+assert.equal(globalThis.sharderFixtureFile, undefined, 'file process isolation');
+globalThis.sharderFixtureFile = ${JSON.stringify(name)};
 test(${JSON.stringify(name)}, { concurrency: true, timeout: 5000 }, async (t) => {
   await writeFile('file-active', 'exclusive outer file', {flag: 'wx'});
   let started = 0, release;
@@ -206,6 +369,10 @@ test(${JSON.stringify(name)}, { concurrency: true, timeout: 5000 }, async (t) =>
       `test-results/core-fixture-shard-${shard}-of-4`,
     );
     const manifest = JSON.parse(await readFile(`${prefix}.json`, "utf8"));
+    assert.equal(
+      manifest.allocation.policy,
+      "frozen-prior-whole-file-max-lpt-v1",
+    );
     observed.push(...manifest.selected);
     const tap = await readFile(`${prefix}.tap`, "utf8");
     assert.match(tap, new RegExp(`# tests ${manifest.selected.length * 3}\\b`));

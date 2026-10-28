@@ -14,3 +14,5 @@
 /src/vendor/native-mock-library.js -text
 /src/vendor/native-mock-library.json -text
 /src/vendor/APIPOST-MOCK-LICENSE.txt -text
+# Frozen scheduling evidence is pinned by raw bytes on every checkout platform.
+/scripts/core-test-weights.json text eol=lf
