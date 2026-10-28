@@ -68,10 +68,22 @@ function metadata(fields) {
 
 // Only returns source text. Never compile scripts, resolve references or fetch src.
 // The output is canonical active code, not a lossless Postman source archive.
-export function postmanEventScripts(input) {
+export function postmanEventScripts(
+  input,
+  inherited = { prerequest: [], test: [] },
+) {
   const output = { prerequest: [], test: [] };
-  if (input === undefined) return output;
   const lengths = { prerequest: 0, test: 0 };
+  const append = (listen, line) => {
+    if (typeof line !== "string") throw fail("exec仅支持文本或文本数组");
+    lengths[listen] += line.length + (output[listen].length ? 1 : 0);
+    if (lengths[listen] > LIMIT) throw fail("阶段源码合计最多100000字符");
+    output[listen].push(line);
+  };
+  const parent = record(inherited, ["prerequest", "test"]);
+  for (const listen of ["prerequest", "test"])
+    for (const line of array(value(parent, listen))) append(listen, line);
+  if (input === undefined) return output;
   for (const event of array(input)) {
     const fields = record(
       event,
@@ -102,12 +114,7 @@ export function postmanEventScripts(input) {
     if (!script.exec) continue;
     const exec = value(script, "exec");
     const lines = typeof exec === "string" ? (exec ? [exec] : []) : array(exec);
-    for (const line of lines) {
-      if (typeof line !== "string") throw fail("exec仅支持文本或文本数组");
-      lengths[listen] += line.length + (output[listen].length ? 1 : 0);
-      if (lengths[listen] > LIMIT) throw fail("阶段源码合计最多100000字符");
-      output[listen].push(line);
-    }
+    for (const line of lines) append(listen, line);
   }
   return output;
 }

@@ -1,3 +1,4 @@
+import { postmanEventScripts } from "./postman-event-scripts.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1144,11 +1145,7 @@ export function importDocument(doc) {
       inheritedEvents = postmanEventScripts(doc.event),
     ) =>
       items.flatMap((item) => {
-        const ownEvents = postmanEventScripts(item.event);
-        const currentEvents = {
-          prerequest: [...inheritedEvents.prerequest, ...ownEvents.prerequest],
-          test: [...inheritedEvents.test, ...ownEvents.test],
-        };
+        const currentEvents = postmanEventScripts(item.event, inheritedEvents);
         if (item.item)
           return walk(
             item.item,

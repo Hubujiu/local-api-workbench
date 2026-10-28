@@ -207,3 +207,27 @@ test("normalization is all-or-error and respects the existing 100000 character p
     /100000/,
   );
 });
+
+test("nested inheritance keeps both phase orders and checks the combined limit before joining", () => {
+  const root = postmanEventScripts([
+    event("C"),
+    event("c", { listen: "test" }),
+  ]);
+  const folder = postmanEventScripts(
+    [event("F"), event("f", { listen: "test" })],
+    root,
+  );
+  const leaf = postmanEventScripts(
+    [event("R"), event("r", { listen: "test" })],
+    folder,
+  );
+  assert.deepEqual(leaf, {
+    prerequest: ["C", "F", "R"],
+    test: ["c", "f", "r"],
+  });
+  assert.deepEqual(root, { prerequest: ["C"], test: ["c"] });
+  assert.deepEqual(postmanEventScripts(undefined, root), root);
+  const full = postmanEventScripts([event("x".repeat(100000))]);
+  assert.throws(() => postmanEventScripts([event("x")], full), /100000/);
+  assert.throws(() => postmanEventScripts([event([""])], full), /100000/);
+});
