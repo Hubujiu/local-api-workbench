@@ -2,6 +2,7 @@
 // fixtures, real SDK transports, CLI, sockets and owned filesystem faults.
 // No original executable, account or separately scoped intrinsic audit is used.
 import test from "node:test";
+import { withCLIResultDiagnostics } from "./helpers/cli-result-diagnostics.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
 import http2 from "node:http2";
@@ -954,7 +955,10 @@ for (const [version, transport] of [
         200,
       );
       const command = await cli(f.root, copy.id, plan.id);
-      assert.equal(command.code, 0, command.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(command.code, 0, command.stderr),
+        command.stdout,
+      );
       assert.equal(command.signal, null);
       successfulRun(JSON.parse(command.stdout), names);
       assert.deepEqual(f.wire, [...expectedWire, ...expectedWire]);

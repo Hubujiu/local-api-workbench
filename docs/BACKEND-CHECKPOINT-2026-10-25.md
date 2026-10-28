@@ -1,6 +1,16 @@
-# 后端检查点 · 2026-10-28 00:55 UTC
+# 后端检查点 · 2026-10-28 01:11 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 01:11 集成失败保留与 CLI 诊断候选
+
+- 根 remote `db80a4479fd741297f2b73f7da7a162cf17fc1ad` / tree `d10905725cdea8def85d23f709313cde4d8eb654` 的首次CI `40611930588` 终态18 GREEN/1 macOS shard2 RED，**未验收**。19实际checkout、12实际core ZIP大小/SHA256/CRC/完整TAP与408文件互斥清单已核，manifest hash `ad3a444ca8abc3a9d4e33ade6ec4801608b658e66645b4db4fe647662fadaa2d`。Linux2165通过，macOS2164通过/1失败，Windows2158通过/7明确skip；新增3Postman+5进度+8组合流程在三OS均通过，不抵消整体失败。
+- 唯一失败是native-comparator-entrypoints.test.mjs:957的CLI退出码1；同用例较早SDK与落盘检查通过，后续冻结计划CLI stderr只有PASSED numbers/PASSED collection/FAILED xml，没有保留stdout JSON的详细失败字段。源码与前绿eac00a6c相同blob `cc12199f18d9f2e220bfde6fe019d29bcd15411f`，这不证明原因。底层XML失败原因仍未知，不能自动归为预算/调度或宣布新功能无交互影响。未重跑、未进行VM/XML专项。
+- PR19最终CI `40611209544` 首次10/10 GREEN，所有实际checkout是上节明确的PR merge `c6454445` / tree `1540f033`，不是纯feature tree。3实际ZIP核验，各OS1070通过无fail/cancel/skip；5新进度故障及既有stdio/activity/rename全部通过。保留4文件PR3生产预算差异和中间阶段取消记录。最后完整GREEN仍eac00a6c。
+- 为避免下一次只留下退出码，在同PR26保存**仅测试诊断** local `e10e4a3b5effeea08d4befcb08460e7cc16df06e` / remote `86968e6993bb2250ad37d9827d97de50f12a1d89` / tree `b9e9741bc27324c2848b5d2904678dcb1f50f102`。feature只新增CLI helper、10纯测试和ADR，没有将root-only完整验收文件搬入功能PR，没有改src/worker/预算/输入/调用次数。
+- helper仅断言失败时解析stdout，先限定2MiB再JSON.parse，扫描前200条最多保留4条非passed结果，新增suffix最多4096字节；将持久化flattened CPU/timing显式映射到原worker枚举/有界数值白名单，不复制响应体、error.message、源码、变量、路径、名称或凭据。原断言同步调用一次、同一AssertionError/expected/actual与原message保留；脱敏保证仅新增suffix，不冒充清洗原错误文本。
+- feature新增10+既有10纯测试20/20通过，独立固定树新增10/10通过，格式/语法/diff通过；纯fabricated JSON的Node TAP子进程证实失败输出可见且不含秘密。没有执行native/VM/XML。根接入 `0be9c0e2816ccc312bf434ca2231e88f39dd0d69` / tree `b08c02e61d5733e6bd17b13599e56406822d0228` 仅在原第957行断言外围调用helper并传已存在command.stdout，其他原输入、断言、XML和工作负载不变；根仅纯20测试通过，未将旧native执行结果当新版本通过。
+- 之后仅本文更新。新feature与根的普通CI仍待自身验证；诊断增强不等于原因定位/修复，旧RED保留。无main/develop合并或部署。
 
 ## 00:55 Postman 简写导入与进度故障证据保存
 

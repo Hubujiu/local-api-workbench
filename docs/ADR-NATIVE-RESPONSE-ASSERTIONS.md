@@ -570,3 +570,33 @@ manual CI rerun. Production source, scripts, workflows, budgets and assertion
 expectations are unchanged. An automatic ordinary CI run following the authorized
 branch push may execute its unchanged workloads. A future GREEN cannot erase the
 known failure, prove interruption cause, or complete the paused XML audit.
+
+### Bounded CLI-result failure evidence (diagnostic only)
+
+`tests/helpers/cli-result-diagnostics.mjs` adds a synchronous test-assertion wrapper
+for an already-collected CLI stdout string. It invokes the caller's assertion
+exactly once, and only when that assertion throws a writable `AssertionError`
+appends `CLI_RESULT_METADATA` to the same error. The expected/actual values and
+original message remain intact. Passing assertions do not inspect stdout.
+
+Input is rejected before JSON parsing if larger than 2 MiB (code-unit precheck
+and UTF-8 byte check). Invalid/truncated JSON, unsupported input and invalid run
+shapes produce fixed diagnostic labels, not parser errors or source excerpts.
+The helper scans at most 200 run results, retains at most four non-passed steps,
+and explicitly reports scanned/unscanned/omitted counts. Step indexes are
+zero-based; statuses and worker labels use explicit enums. Persisted flattened
+script diagnostics are translated into the existing worker metadata whitelist,
+including numeric timing/CPU fields. No step names, IDs, script scopes, bodies,
+response data, error messages, source, variables, paths or arbitrary fields are
+added. The appended suffix is capped at 4096 UTF-8 bytes; an explicit
+`metadata-too-large` label replaces an oversized suffix.
+
+The failing integration `native-comparator-entrypoints.test.mjs` is absent from
+this feature branch. This increment deliberately does not import that root-only
+test or change production, inputs, budgets, workloads or CI configuration. Its
+callsite must be wired separately on the integration branch while retaining the
+original assertion. Verification uses only fabricated JSON and pure helper tests
+(including a deliberately failing synthetic Node TAP subprocess to check emitted
+redaction). No native comparator, VM or XML workload was executed for this change.
+This improves future evidence retention; it does **not** fix or identify the cause
+of the macOS CLI failure in root commit `db80a447` / CI `40611930588`.
