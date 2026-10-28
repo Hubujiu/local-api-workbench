@@ -290,6 +290,11 @@ export function convertSwagger2Operation(document, pathItem, operation) {
         forms.some((parameter) => parameter.type === "file")
       )
         fail("文件字段需要显式multipart/form-data");
+      if (
+        media.mime === "multipart/form-data" &&
+        forms.some((parameter) => /[\x00-\x1f\x7f"\\]/.test(parameter.name))
+      )
+        fail("multipart字段名不能包含控制字符、引号或反斜杠，不会静默改名");
       const properties = Object.fromEntries(
         forms.map((parameter) => [parameter.name, formSchema(parameter)]),
       );

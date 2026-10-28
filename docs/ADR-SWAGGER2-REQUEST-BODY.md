@@ -70,7 +70,9 @@ project body/schema machinery is reused instead of writing a second encoder.
   bytes are read. Files must subsequently be explicitly selected through existing
   authorized mechanisms.
 - Array fields, collectionFormat, custom form serialization/media parameters,
-  ambiguous binary-form strings, unsupported body/form parameter fields,
+  ambiguous binary-form strings, multipart names containing control characters,
+  quotes or backslashes (not faithfully handled by the existing encoder),
+  unsupported body/form parameter fields,
   unresolved recursive body references and discriminator conversion reject.
   Ordinary acyclic local references resolve through the existing resolver first;
   literal `$ref` inside examples/defaults/extensions is data. External references

@@ -228,6 +228,21 @@ test("Swagger entirely optional forms do not make the whole request body require
   }
 });
 
+test("Swagger multipart names reject encoder-lossy characters without restricting URL encoded names", () => {
+  for (const name of ['a"b', "a\\b", "a\rb", "a\nb", "a\0b", "a\tb", "a\x7fb"])
+    assert.throws(
+      () =>
+        convert([form(name, "string", { default: "value" })], {
+          operation: { consumes: ["multipart/form-data"] },
+        }),
+      /Swagger.*字段名/,
+    );
+  const request = imported([form('a"b', "string", { default: "value" })], {
+    operation: { consumes: ["application/x-www-form-urlencoded"] },
+  });
+  assert.equal(request.form[0].key, 'a"b');
+});
+
 test("Swagger multipart file becomes a selection-required placeholder, never a path or inline payload", () => {
   const converted = convert(
     [
