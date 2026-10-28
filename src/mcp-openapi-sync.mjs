@@ -1,4 +1,5 @@
 import { importIntoProject, resolveLocalReferences } from "./core.mjs";
+import { supportedOpenAPIPathItems } from "./openapi-operation-admission.mjs";
 const methods = ["get", "post", "put", "patch", "delete", "head", "options"];
 export function syncMCPOpenAPI(project, args) {
   const document =
@@ -33,7 +34,7 @@ export function syncMCPOpenAPI(project, args) {
   )
     throw Error("目标目录不存在");
   const resolved = resolveLocalReferences(document);
-  const operations = Object.entries(resolved.paths || {}).flatMap(
+  const operations = supportedOpenAPIPathItems(resolved).flatMap(
     ([url, item]) =>
       Object.keys(item)
         .filter((method) => methods.includes(method))
