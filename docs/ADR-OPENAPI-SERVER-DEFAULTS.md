@@ -31,19 +31,19 @@ URL parsing may normalize Unicode and spaces as it already does for execution.
   Malformed/nested braces and defaults containing literal or percent-encoded
   braces are rejected, not recursively expanded or reinterpreted as path/runtime
   variables.
-- Substitution must produce an absolute HTTP(S) URL or retain a workbench
-  template. A relative server template needs a source-origin resolution policy
-  that this importer does not have and fails explicitly; existing untemplated
-  relative URL handling is unchanged. Query/fragment-bearing server
+- Absolute HTTP(S) results are checked for URL syntax. Relative servers, with
+  or without default substitution, retain the existing folder/service resolution
+  behavior; import does not invent a source-document origin. Query/fragment-bearing server
   bases, controls, literal backslashes and malformed percent escapes also fail
   explicitly, including previously accepted non-template servers. The previous
   plain concatenation was not correct support for these cases. Use operation
   query parameters or an explicit executable server base instead.
 
-The saved executable URL is materialized. OpenAPI export uses its actual origin
-and path; for legacy prefix URLs, export retains that exact prefix as the
+The saved executable URL is materialized. For absolute URLs, OpenAPI export uses
+its actual origin and path; for legacy prefix URLs, export retains that exact prefix as the
 operation server and keeps the materialized path in `paths`, avoiding duplicate
-base paths on reimport. Native backup preserves the saved request. This is **not**
+base paths on reimport. Native backup preserves the saved request and existing service bindings; OpenAPI
+is not a replacement for the native environment/folder-service configuration. This is **not**
 a server-variable editor or full server metadata roundtrip: alternate servers,
 enum choices, descriptions and original templating are not an executable
 configuration, and export does not promise to retain them. Existing operation

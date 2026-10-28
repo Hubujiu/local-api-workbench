@@ -14,7 +14,7 @@ import {
 } from "../src/core.mjs";
 import { openAPIServerURL } from "../src/openapi-server.mjs";
 import { syncMCPOpenAPI } from "../src/mcp-openapi-sync.mjs";
-import { Store } from "../src/runtime.mjs";
+import { Store, executeRequest } from "../src/runtime.mjs";
 
 const operation = (extra = {}) => ({
   responses: { 200: { description: "OK" } },
@@ -63,15 +63,23 @@ test("server defaults materialize once without touching source, scopes or same-n
   const project = {
     requests: [],
     environments: [{ id: "env", variables: { version: "environment" } }],
-    settings: { globals: { version: "global" } },
+    globalVariables: { version: "global" },
+    settings: {},
   };
-  const scopes = structuredClone([project.environments, project.settings]);
+  const scopes = structuredClone([
+    project.environments,
+    project.globalVariables,
+    project.settings,
+  ]);
   const [request] = importIntoProject(project, source);
   assert.equal(request.url, "https://example.test:8443/v1/v1/items/{version}");
   assert.match(toCurl(request), /\/v1\/v1\/items\/path-value'/);
   assert.doesNotMatch(toCurl(request), /%7Bversion%7D/);
   assert.deepEqual(source, before);
-  assert.deepEqual([project.environments, project.settings], scopes);
+  assert.deepEqual(
+    [project.environments, project.globalVariables, project.settings],
+    scopes,
+  );
 });
 
 test("operation then path then root selects only the first server at that level", () => {
@@ -134,6 +142,7 @@ test("empty defaults, replacement metacharacters and encoded URL bytes stay lite
     "%25",
     "a/b:c",
     "中文",
+    "one two",
   ]) {
     const source = document(
       server("https://example.test/prefix{v}", { v: value }),
@@ -144,6 +153,32 @@ test("empty defaults, replacement metacharacters and encoded URL bytes stay lite
     const restored = importDocument(exported)[0];
     assert.equal(new URL(restored.url).href, new URL(request.url).href);
     assert.equal(toCurl(restored), toCurl(request));
+  }
+});
+
+test("literal default metacharacters, empty strings, Unicode and spaces preserve their real wire target on roundtrip", async (t) => {
+  const received = [];
+  const target = http.createServer((req, res) => {
+    received.push(req.url);
+    res.end("ok");
+  });
+  await new Promise((resolve) => target.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    target.closeAllConnections();
+    await new Promise((resolve) => target.close(resolve));
+  });
+  const base = `http://127.0.0.1:${target.address().port}`;
+  for (const value of ["", "$&", "$`", "$'", "%2F", "%20", "中文", "one two"]) {
+    const request = importDocument(
+      document(server(base + "/prefix{v}", { v: value })),
+    )[0];
+    const restored = importDocument(
+      exportOpenAPI({ name: "Wire", requests: [request] }),
+    )[0];
+    assert.equal((await executeRequest(request)).status, 200);
+    assert.equal((await executeRequest(restored)).status, 200);
+    assert.equal(received.at(-1), received.at(-2));
+    assert.equal(received.at(-1), new URL(request.url).pathname);
   }
 });
 
@@ -245,6 +280,11 @@ test("non-prefix legacy workbench templates still import, but unsupported export
     paths: { "/items": { get: operation({ tags: ["service-folder"] }) } },
   });
   assert.equal(importDocument(relative)[0].url, "/existing/items");
+  const request = importDocument(document(server("https://{{host}}/api")))[0];
+  assert.match(
+    toCurl(interpolate(request, { host: "example.test" })),
+    /https:\/\/example.test\/api\/items'/,
+  );
 });
 
 test("invalid or ambiguous server substitutions fail closed before any project mutation", () => {
@@ -265,7 +305,6 @@ test("invalid or ambiguous server substitutions fail closed before any project m
     server("https://example.test/{v}", { v: "bad\\path" }),
     server("https://example.test\\@other.test"),
     server("https://example.test/%7Bid%7D"),
-    server("/{version}", { version: "v1" }),
     server("https://example.test/{v}", { v: "?query=one" }),
     server("https://example.test/{v}", { v: "#fragment" }),
     server("https://example.test/{v}", { v: "%zz" }),
@@ -289,7 +328,8 @@ test("invalid or ambiguous server substitutions fail closed before any project m
     const project = {
       requests: [normalizeRequest({ url: "https://existing.test/items" })],
       environments: [{ id: "env", variables: { v: "must-not-fill-default" } }],
-      settings: { globals: { v: "also-not-a-default" } },
+      globalVariables: { v: "also-not-a-default" },
+      settings: {},
       openapiComponents: { schemas: { Existing: { type: "number" } } },
     };
     const before = structuredClone(project);
@@ -424,7 +464,52 @@ test("HTTP import, execution, Store restart, OpenAPI reimport and backup restore
   assert.notEqual(restored.id, second.id);
   assert.equal(restored.requests[0].url, expectedURL);
   await execute(`/api/projects/${restored.id}`, restored.requests[0]);
-  assert.deepEqual(received, Array(4).fill("/v1/one%2Ftwo/items/42"));
+  // Relative servers still use an explicitly configured existing folder service.
+  const relativeProject = await call(
+    "/api/projects",
+    "POST",
+    { name: "Relative" },
+    201,
+  );
+  relativeProject.servers = [{ id: "service", name: "Loopback" }];
+  relativeProject.settings.folderServices = { API: "service" };
+  relativeProject.environments[0].serverUrls = {
+    service: `http://127.0.0.1:${target.address().port}`,
+  };
+  const relativeBase = `/api/projects/${relativeProject.id}`;
+  await call(relativeBase, "PUT", relativeProject);
+  for (const selected of [
+    server("/v1/one%2Ftwo"),
+    server("/{version}/{encoded}", { version: "v1", encoded: "one%2Ftwo" }),
+  ]) {
+    const relativeSource = document(selected, {
+      paths: {
+        "/items/{id}": {
+          get: operation({
+            tags: ["API"],
+            parameters: [
+              {
+                in: "path",
+                name: "id",
+                required: true,
+                schema: { type: "string" },
+                example: "42",
+              },
+            ],
+          }),
+        },
+      },
+    });
+    const saved = await call(relativeBase + "/import", "POST", {
+      document: relativeSource,
+    });
+    const request = saved.requests.at(-1);
+    assert.equal(request.url, "/v1/one%2Ftwo/items/{id}");
+    const result = await call(relativeBase + "/execute", "POST", { request });
+    assert.equal(result.status, 200);
+    assert.equal(JSON.parse(result.body).path, "/v1/one%2Ftwo/items/42");
+  }
+  assert.deepEqual(received, Array(6).fill("/v1/one%2Ftwo/items/42"));
   const before = await call(base);
   const bad = document(
     server("http://127.0.0.1:{port}", { port: String(target.address().port) }),
@@ -441,5 +526,5 @@ test("HTTP import, execution, Store restart, OpenAPI reimport and backup restore
   assert.match(rejected.error, /default/);
   assert.deepEqual(await call(base), before);
   assert.deepEqual(await new Store(root).get(created.id), before);
-  assert.equal(received.length, 4);
+  assert.equal(received.length, 6);
 });

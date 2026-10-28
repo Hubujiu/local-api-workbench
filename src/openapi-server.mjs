@@ -36,8 +36,7 @@ export function openAPIServerURL(...levels) {
         throw Error("OpenAPI server variable default超过64KiB");
     }
     let bytes = Buffer.byteLength(server.url),
-      tokens = 0,
-      substituted = false;
+      tokens = 0;
     const resolved = server.url.replace(
       /\{\{[^{}]+\}\}|\{[^{}]+\}|[{}]/g,
       (token) => {
@@ -54,7 +53,6 @@ export function openAPIServerURL(...levels) {
         if (!Object.hasOwn(variables, name))
           throw Error("OpenAPI server URL变量缺少default定义");
         const value = variables[name].default;
-        substituted = true;
         bytes += Buffer.byteLength(value) - Buffer.byteLength(token);
         if (bytes > maxBytes) throw Error("OpenAPI server URL展开后超过64KiB");
         // A callback preserves $&, $`, $' and performs no recursive substitution.
@@ -72,12 +70,6 @@ export function openAPIServerURL(...levels) {
       throw Error("OpenAPI server URL暂不支持Query或片段，请使用操作参数");
     if (/%(?![0-9a-f]{2})/i.test(literal))
       throw Error("OpenAPI server URL百分号编码无效");
-    if (
-      substituted &&
-      !resolved.includes("{{") &&
-      !/^https?:\/\//i.test(resolved)
-    )
-      throw Error("OpenAPI server URL变量须展开为HTTP(S)绝对地址或工作台模板");
     if (!resolved.includes("{{") && /^https?:\/\//i.test(resolved)) {
       try {
         new URL(resolved);

@@ -1549,7 +1549,7 @@ export function exportOpenAPI(project) {
       original.security = [{ [name]: [] }];
     }
 
-    const baseVariable = /^\{\{[^{}]+\}\}(?=\/|$)/.exec(r.url)?.[0];
+    const baseVariable = /^\{\{[^{}]+\}\}/.exec(r.url)?.[0];
     if (
       r.url.includes("{{") &&
       (!baseVariable || r.url.slice(baseVariable.length).includes("{{"))
