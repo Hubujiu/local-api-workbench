@@ -65,6 +65,15 @@ import { validateResources } from "./resources.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
+import {
+  throwIfInactive,
+  interruptionKind,
+  requestTimeout,
+} from "./request-control.mjs";
+import {
+  httpFinalizationFailure,
+  readHttpFinalizationFailure,
+} from "./http-finalization.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
@@ -714,15 +723,29 @@ export class Store {
     }
   }
 }
-// Private retry state cannot be supplied through serialized request definitions.
-const digestEntityReplay = Symbol("digest-entity-replay");
-export async function executeRequest(input, signal, options = {}) {
-  const { cookieSession } = options;
-  const replay = options[digestEntityReplay];
+export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (input?.nativeInheritance !== undefined)
     throw Error("请求须先按当前项目解析原生继承图");
 
   const r = normalizeRequest(input);
+  return executeRequestWithinDeadline(
+    r,
+    signal,
+    cookieSession,
+    performance.now() + r.timeout,
+  );
+}
+
+// Private: authentication replay cannot accept or reset a caller-supplied budget.
+async function executeRequestWithinDeadline(
+  r,
+  signal,
+  cookieSession,
+  deadline,
+  replay,
+) {
+  const controls = { signal, deadline };
+  throwIfInactive(controls);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -758,7 +781,7 @@ export async function executeRequest(input, signal, options = {}) {
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
   if (cookieHeader !== undefined) headers.cookie = cookieHeader;
   if (cookieSession) {
-    const managed = await cookieSession.header(u.href);
+    const managed = await cookieSession.header(u.href, controls);
     if (managed !== null) {
       if (managed) headers.cookie = managed;
       else delete headers.cookie;
@@ -857,10 +880,10 @@ export async function executeRequest(input, signal, options = {}) {
     headers.authorization = ntlmType1(r.auth);
     headers.connection = "keep-alive";
   }
+  throwIfInactive(controls);
   const start = performance.now();
-  const deadline = replay?.deadline ?? start + r.timeout;
   const connectionBudget = deadline - performance.now();
-  if (connectionBudget <= 0) throw Error("请求超时");
+  if (connectionBudget <= 0) throw requestTimeout();
   const connection = await prepareConnection(
     u,
     { ...r, timeout: Math.min(r.timeout, connectionBudget) },
@@ -869,11 +892,9 @@ export async function executeRequest(input, signal, options = {}) {
   );
   let authSocket;
   const requestOnce = async (headers, expectedSocket) => {
+    throwIfInactive(controls);
     const remainingTimeout = deadline - performance.now();
-    if (remainingTimeout <= 0) {
-      connection.cleanup();
-      throw Error("请求超时");
-    }
+    if (remainingTimeout <= 0) throw requestTimeout();
     return await new Promise((resolve, reject) => {
       const req = connection.client.request(
         connection.url,
@@ -971,10 +992,10 @@ export async function executeRequest(input, signal, options = {}) {
       // extraction cap. Saturated/oversized evidence is rejected independently.
       if (r.httpVersion !== "2") req.maxHeadersCount = HTTP1_HEADER_PAIR_LIMIT;
       const totalTimer = setTimeout(
-        () => req.destroy(Error("请求超时（总时限已到）")),
+        () => req.destroy(requestTimeout()),
         remainingTimeout,
       );
-      req.setTimeout(remainingTimeout, () => req.destroy(Error("请求超时")));
+      req.setTimeout(remainingTimeout, () => req.destroy(requestTimeout()));
       req.on("error", (error) => {
         clearTimeout(totalTimer);
         reject(error);
@@ -1009,13 +1030,25 @@ export async function executeRequest(input, signal, options = {}) {
       ...headers,
       authorization: ntlmType3(challenge, r.auth),
     };
-    if (cookieSession && !signal?.aborted) {
-      await cookieSession.capture(u.href, first.headers["set-cookie"]);
-      const managed = await cookieSession.header(u.href);
-      if (managed !== null) {
-        if (managed) authenticatedHeaders.cookie = managed;
-        else delete authenticatedHeaders.cookie;
+    try {
+      throwIfInactive(controls);
+      if (cookieSession) {
+        await cookieSession.capture(
+          u.href,
+          first.headers["set-cookie"],
+          controls,
+        );
+        const managed = await cookieSession.header(u.href, controls);
+        if (managed !== null) {
+          if (managed) authenticatedHeaders.cookie = managed;
+          else delete authenticatedHeaders.cookie;
+        }
       }
+      throwIfInactive(controls);
+    } catch (error) {
+      if (interruptionKind(error))
+        throw httpFinalizationFailure(first, error, "auth-cookie");
+      throw error;
     }
     const final = await requestOnce(authenticatedHeaders, authSocket);
     final.authHandshake = {
@@ -1026,14 +1059,33 @@ export async function executeRequest(input, signal, options = {}) {
     };
     return final;
   })().finally(() => connection.cleanup());
-  if (cookieSession && !signal?.aborted) {
+  try {
+    throwIfInactive(controls);
+    if (cookieSession)
+      await cookieSession.capture(
+        u.href,
+        response.headers["set-cookie"],
+        controls,
+      );
+    throwIfInactive(controls);
+  } catch (error) {
+    if (interruptionKind(error))
+      throw httpFinalizationFailure(
+        response,
+        error,
+        cookieSession ? "cookie-capture" : "response-finalization",
+      );
+    // Ordinary persistence errors remain warnings, but cannot mask an abort
+    // that arrived during the same filesystem operation.
     try {
-      await cookieSession.capture(u.href, response.headers["set-cookie"]);
-    } catch (error) {
-      response.cookieError = "Cookie保存失败：" + error.message;
+      throwIfInactive(controls);
+    } catch (interruption) {
+      throw httpFinalizationFailure(response, interruption);
     }
+    response.cookieError = "Cookie保存失败：" + error.message;
   }
   if (r.auth.type === "digest" && response.status === 401) {
+    throwIfInactive(controls);
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
       r.auth,
@@ -1042,13 +1094,10 @@ export async function executeRequest(input, signal, options = {}) {
       body || "",
     );
     if (authorization === null) return response;
-    const remaining = deadline - performance.now();
-    if (remaining <= 0) throw Error("Digest 认证超时");
-    const authenticated = await executeRequest(
+    const authenticated = await executeRequestWithinDeadline(
       {
         ...r,
         auth: { type: "none" },
-        timeout: remaining,
         headers: [
           ...r.headers.filter(
             (header) => header.key.toLowerCase() !== "authorization",
@@ -1057,15 +1106,23 @@ export async function executeRequest(input, signal, options = {}) {
         ],
       },
       signal,
-      {
-        cookieSession,
-        [digestEntityReplay]: {
-          body,
-          contentType: headers["content-type"],
-          deadline,
-        },
-      },
-    );
+      cookieSession,
+      deadline,
+      { body, contentType: headers["content-type"] },
+    ).catch((error) => {
+      // Retain newer evidence (e.g. final 200 capture) before consulting controls.
+      if (readHttpFinalizationFailure(error)) throw error;
+      if (interruptionKind(error))
+        throw httpFinalizationFailure(response, error, "auth-cookie");
+      // Native transport AbortErrors are not our branded interruptions. Use the
+      // actual controls, never an arbitrary error.code/response, to classify.
+      try {
+        throwIfInactive(controls);
+      } catch (interruption) {
+        throw httpFinalizationFailure(response, interruption, "auth-cookie");
+      }
+      throw error;
+    });
     authenticated.authHandshake = {
       status: response.status,
       duration: response.duration,

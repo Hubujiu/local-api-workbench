@@ -36,6 +36,11 @@ import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 
 import { postmanImportURL } from "./postman-url.mjs";
+import { throwIfInactive } from "./request-control.mjs";
+import {
+  httpFinalizationFailure,
+  readHttpFinalizationFailure,
+} from "./http-finalization.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -965,6 +970,17 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        // Preserve a completed response, but never run post-response work after
+        // cancellation (including a session whose capture had no Set-Cookie).
+        try {
+          throwIfInactive({ signal });
+        } catch (error) {
+          throw httpFinalizationFailure(
+            record.response,
+            error,
+            "response-finalization",
+          );
+        }
         extractionPostStarted =
           extractionPostPolicy === true || extractionRequestPolicy === true;
         if (record.response.cookieError)
@@ -1102,6 +1118,11 @@ export async function runPlan(
         extractionPostPolicy ||
         extractionRequestPolicy ||
         isNativeExtractionPhaseFailure(error);
+      const completed = readHttpFinalizationFailure(error);
+      if (completed) {
+        record.response = completed.response;
+        record.failure = completed.failure;
+      }
       record.status = "failed";
       if (error.databaseQueries?.length)
         (record.databaseQueries ||= []).push(
@@ -1150,6 +1171,7 @@ export async function runPlan(
       break;
     }
     if (stopAfterExtractionFailure) break;
+    if (record.failure) break;
   }
   return {
     id: id(),

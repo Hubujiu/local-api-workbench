@@ -1685,6 +1685,7 @@ export async function createApp({
                 runId,
                 ...receipt,
                 outcome: result.status,
+                failure: result.failure,
                 variableWrites: scoped.receipt(),
                 ...(result.scopeCommit
                   ? { scopeCommit: result.scopeCommit }
