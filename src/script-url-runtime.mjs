@@ -189,6 +189,12 @@ export function initializeQueryRuntime(request) {
       (!Array.isArray(request[key]) || request[key].length > 1000)
     )
       throw Error("SDK URL参数表最多1000项");
+  if (
+    (request.path || []).some(
+      (row) => row && Object.hasOwn(row, "pathSerialization"),
+    )
+  )
+    throw Error("SDK URL不支持OpenAPI path serialization；请使用普通HTTP请求");
   const url = new sdk.Url(raw);
   const origins = url.query.members.map(() => ({ encoding: "raw" })),
     variableOrigins = [],

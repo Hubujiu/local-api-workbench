@@ -129,3 +129,8 @@ ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0
 ### 脚本执行上下文
 
 apt.info / pm.info 提供实际脚本阶段、请求ID/名称与迭代编号；普通调试为0/1，压测使用真实迭代和CSV行。apt.iterationData / pm.iterationData 支持只读 has/get/toObject/replaceIn，不能修改测试数据。原变量优先级和脚本配额不变，见 docs/ADR-SCRIPT-EXECUTION-CONTEXT.md。
+
+OpenAPI 3 scalar path parameters retain bounded `simple`/`label`/`matrix`
+serialization across HTTP, cURL and definition export. Missing examples stay
+unbound; compound/empty values, partial segments and SDK URL combinations fail
+explicitly. See [the scalar path contract](docs/ADR-OPENAPI-SCALAR-PATH.md).

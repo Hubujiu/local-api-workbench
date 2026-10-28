@@ -1,3 +1,8 @@
+import {
+  bindPathTemplates,
+  assertPathValue,
+  validatePathSerialization,
+} from "./path-serialization.mjs";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -96,7 +101,7 @@ async function resolveDynamicRequestBase(
   literalBody,
 ) {
   validateApipostTemplateRequest(request);
-  const clone = structuredClone(request),
+  const clone = bindPathTemplates(structuredClone(request), variables),
     specs = [];
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
     for (const [index, row] of (clone[group] || []).entries()) {
@@ -166,7 +171,12 @@ async function resolveDynamicRequestBase(
     )
       throw Error("原版Query函数空结果与省略等号组合尚未兼容");
     resolved[group][index].value =
-      typeof value === "string" ? value : JSON.stringify(value);
+      group === "path" &&
+      Object.hasOwn(resolved[group][index], "pathSerialization")
+        ? assertPathValue(resolved[group][index], value)
+        : typeof value === "string"
+          ? value
+          : JSON.stringify(value);
   }
   for (const [index, part] of parts.entries()) {
     const dynamic = bodySpecs.find((item) => item.index === index);
@@ -196,6 +206,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  validatePathSerialization(request);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&
