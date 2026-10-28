@@ -47,13 +47,17 @@ export async function prepareConnection(target, request, headers, signal) {
       cleanup: () => {},
     };
   const proxy = proxyOptions(request);
-  if (target.protocol === "http:")
+  if (target.protocol === "http:") {
+    // Absolute-form excludes fragments. Clone to retain the saved URL and exact
+    // serialized path/query, including encoded hashes and an empty query marker.
+    const requestTarget = new URL(target.href);
+    requestTarget.hash = "";
     return {
       client: proxy.transport,
       url: proxy.proxy,
       options: {
         ...proxy.tlsOptions,
-        path: target.href,
+        path: requestTarget.href,
         headers: {
           ...headers,
           host: headers.host || target.host,
@@ -62,6 +66,7 @@ export async function prepareConnection(target, request, headers, signal) {
       },
       cleanup: () => {},
     };
+  }
   const socket = await openProxyTunnel(target, request, signal),
     agent = new https.Agent({ keepAlive: false });
   const host = unbracketHost(target.hostname);
