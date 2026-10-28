@@ -76,6 +76,24 @@ export function mongoQuery(input) {
       return;
     }
     if (typeof value !== "object") throw Error("MongoDB查询仅接受JSON值");
+    if (Object.hasOwn(value, "$numberLong")) {
+      const text = value.$numberLong;
+      if (
+        Array.isArray(value) ||
+        Object.keys(value).length !== 1 ||
+        typeof text !== "string" ||
+        text.length > 20 ||
+        !/^(?:\+?0|[+-]?[1-9][0-9]*)$/.test(text)
+      )
+        throw Error(
+          "MongoDB $numberLong须为独立EJSON包装及有效十进制整数字符串",
+        );
+      const integer = BigInt(text);
+      if (integer < -9223372036854775808n || integer > 9223372036854775807n)
+        throw Error(
+          "MongoDB $numberLong超出有符号64位整数范围，禁止截断或回绕",
+        );
+    }
     for (const [key, child] of Object.entries(value)) {
       if (forbidden.has(key) || key.includes("\0"))
         throw Error("MongoDB禁止写入/JavaScript/不安全字段");

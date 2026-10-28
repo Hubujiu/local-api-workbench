@@ -127,3 +127,116 @@ test("direct adapter and temporary-grant entry reject before connection access o
   assert.deepEqual(sessions.list("other"), []);
   sessions.close();
 });
+
+test("pure BSON baseline: oversized Long wraps and mixed wrappers discard fields", () => {
+  for (const [source, wrapped] of [
+    ["9223372036854775808", "-9223372036854775808"],
+    ["18446744073709551616", "0"],
+    ["-9223372036854775809", "9223372036854775807"],
+  ]) {
+    assert.equal(
+      BSON.EJSON.deserialize(
+        { $numberLong: source },
+        { relaxed: false },
+      ).toString(),
+      wrapped,
+    );
+  }
+  for (const extra of [{ extra: 2 }, { $gt: 5 }])
+    assert.equal(
+      BSON.EJSON.deserialize(
+        { $numberLong: "1", ...extra },
+        { relaxed: false },
+      ).toString(),
+      "1",
+    );
+});
+
+test("Long wrappers reject signed overflow, malformed decimal and ignored sibling fields before connection", async () => {
+  const invalid = [
+    { $numberLong: "9223372036854775808" },
+    { $numberLong: "18446744073709551616" },
+    { $numberLong: "-9223372036854775809" },
+    { $numberLong: "1", extra: 2 },
+    { $numberLong: "1", $gt: 5 },
+    ...[
+      1,
+      null,
+      {},
+      "",
+      "1.0",
+      "1e3",
+      " 1",
+      "1 ",
+      "0x10",
+      "01",
+      "-0",
+      "+01",
+      "9".repeat(21),
+    ].map((value) => ({ $numberLong: value })),
+  ];
+  const sessions = new DatabaseSessions();
+  const grant = sessions.register("source", {
+    type: "mongodb",
+    name: "not contacted",
+    host: "invalid/host",
+    database: "fixture",
+  });
+  for (const value of invalid) {
+    const query = {
+      collection: "items",
+      filter: { $and: [{ id: { $in: [value] } }] },
+    };
+    const original = structuredClone(query);
+    for (const input of [{ query }, { sql: JSON.stringify(query) }]) {
+      assert.throws(() => mongoQuery(input), /\$numberLong/);
+      for (const adapter of [queryMongo, queryRemoteDatabase])
+        await assert.rejects(
+          adapter({
+            ...input,
+            type: "mongodb",
+            get host() {
+              throw Error("connection must not be read");
+            },
+          }),
+          /\$numberLong/,
+        );
+    }
+    await assert.rejects(
+      sessions.query("source", {
+        connectionId: grant.id,
+        sql: JSON.stringify(query),
+        parameters: [],
+      }),
+      /\$numberLong/,
+    );
+    assert.deepEqual(query, original);
+  }
+  assert.deepEqual(sessions.list("source"), [grant]);
+  sessions.close();
+});
+
+test("signed Long boundaries and explicit plus keep numerical, not lexical, identity", () => {
+  for (const text of [
+    "-9223372036854775808",
+    "9223372036854775807",
+    "+9223372036854775807",
+    "0",
+    "+0",
+    "1",
+    "+1",
+    "-1",
+  ]) {
+    const filter = { id: { $numberLong: text } };
+    for (const input of [
+      { query: { collection: "items", filter } },
+      { sql: JSON.stringify({ collection: "items", filter }) },
+    ]) {
+      assert.deepEqual(mongoQuery(input).filter, filter);
+      const decoded = BSON.EJSON.deserialize(mongoQuery(input).filter, {
+        relaxed: false,
+      });
+      assert.equal(decoded.id.toString(), BigInt(text).toString());
+    }
+  }
+});

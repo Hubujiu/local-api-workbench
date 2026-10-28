@@ -76,7 +76,12 @@ const closeServer = async (server) => {
 try {
   await seed.connect();
   const fixture = seed.db("fixture").collection(collection);
+  const longMin = "-9223372036854775808";
+  const longMax = "9223372036854775807";
   await fixture.insertMany([
+    { id: Long.fromString(longMin), label: "minimum" },
+    { id: Long.fromString(longMax), label: "maximum" },
+    { id: Long.fromString("0"), label: "zero" },
     { id: Long.fromString(rounded), label: "neighbor" },
     { id: Long.fromString(intended), label: "intended" },
   ]);
@@ -93,6 +98,46 @@ try {
     (await run({ ...query, filter: { id: { $numberLong: rounded } } })).rows,
     [{ id: { $numberLong: rounded }, label: "neighbor" }],
   );
+  for (const [value, label] of [
+    [longMin, "minimum"],
+    [longMax, "maximum"],
+    ["0", "zero"],
+  ]) {
+    // Assert matching semantics, not small-Long output promotion by the driver.
+    const boundaryQuery = {
+      ...query,
+      filter: { id: { $numberLong: value } },
+      projection: { _id: 0, label: 1 },
+    };
+    for (const input of [
+      { query: boundaryQuery },
+      { sql: JSON.stringify(boundaryQuery) },
+    ]) {
+      assert.deepEqual(
+        (await queryRemoteDatabase({ ...connection, ...input })).rows,
+        [{ label }],
+      );
+    }
+  }
+  const invalidLongFilters = [
+    { id: { $numberLong: "9223372036854775808" } },
+    { id: { $numberLong: "18446744073709551616" } },
+    { id: { $numberLong: "-9223372036854775809" } },
+    { id: { $numberLong: intended, extra: "discarded" } },
+    { id: { $numberLong: intended, $gt: 0 } },
+  ];
+  for (const filter of invalidLongFilters) {
+    const invalidQuery = { ...query, filter };
+    for (const input of [
+      { query: invalidQuery },
+      { sql: JSON.stringify(invalidQuery) },
+    ]) {
+      await assert.rejects(
+        queryRemoteDatabase({ ...connection, ...input }),
+        /\$numberLong/,
+      );
+    }
+  }
   const unsafeSQL = `{"collection":"${collection}","filter":{"id":9007199254740993}}`;
   const unsafe = JSON.parse(unsafeSQL);
   for (const input of [{ query: unsafe }, { sql: unsafeSQL }]) {
@@ -107,7 +152,7 @@ try {
     .toArray();
   assert.deepEqual(
     snapshot.map((row) => row.id.toString()),
-    [rounded, intended],
+    [longMin, "0", rounded, intended, longMax],
   );
   console.log("REAL_MONGODB_INTEGER_FILTER_PRECISION_PASS");
 
@@ -210,6 +255,46 @@ try {
     snapshot,
   );
   console.log("REAL_MONGODB_INTEGER_FILTER_ATOMIC_FAILURE_PASS");
+
+  // Every invalid wrapper must fail atomically even after an earlier local operation.
+  for (const filter of invalidLongFilters) {
+    const invalidWrapperRequest = requestFor(
+      grant.id,
+      JSON.stringify({ ...query, filter }),
+    );
+    invalidWrapperRequest.before.unshift({
+      type: "set",
+      name: "unpublished",
+      value: "must-not-escape",
+    });
+    const wrapperPlan = await api(base(project.id, "plans"), {
+      steps: [{ request: invalidWrapperRequest }],
+    });
+    const wrapperFailure = await api(base(project.id, "run"), {
+      planId: wrapperPlan.id,
+    });
+    assert.equal(wrapperFailure.status, "failed");
+    assert.match(wrapperFailure.results[0].error, /\$numberLong/);
+    assert.deepEqual(wrapperFailure.variables, wrapperFailure.initialVariables);
+    assert.equal(wrapperFailure.variables.unpublished, undefined);
+    assert.equal(wrapperFailure.variables.exact, undefined);
+    assert.equal(wrapperFailure.results[0].response, undefined);
+    assert.equal(hits, 1, "invalid Long wrapper must not dispatch HTTP");
+    assert.equal(wrapperFailure.recordSaved, true);
+    const { recordSaved, ...evidence } = wrapperFailure;
+    const persisted = await app.store.get(project.id);
+    assert.deepEqual(persisted.runs[0], { ...evidence, source: "manual" });
+    assert.deepEqual(persisted.globalVariables, beforeState.globalVariables);
+    assert.deepEqual(persisted.environments, beforeState.environments);
+    assert.deepEqual(
+      await fixture
+        .find({}, { projection: { _id: 0 } })
+        .sort({ id: 1 })
+        .toArray(),
+      snapshot,
+    );
+  }
+  console.log("REAL_MONGODB_EJSON_LONG_BOUNDS_ATOMIC_FAILURE_PASS");
 
   const backup = await api(base(project.id, "export"));
   const restored = await api("/api/restore", { document: backup }, "POST", 201);
