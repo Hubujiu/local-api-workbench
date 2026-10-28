@@ -372,6 +372,9 @@ export function nativeRunResult(projectId, run, scope = "flow") {
         url: r.request?.url,
         status_code: r.response?.status,
         error: r.error || "",
+        ...(r.redirectFailure
+          ? { workbench_redirect_failure: r.redirectFailure }
+          : {}),
         ...(r.scopeCommit ? { scope_commit: r.scopeCommit } : {}),
       }));
   return {

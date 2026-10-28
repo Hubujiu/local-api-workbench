@@ -47,7 +47,7 @@ export function http2Connection(target, request, tlsOptions, tunnel) {
             {
               ...headers,
               ":method": options.method,
-              ":path": target.pathname + target.search,
+              ":path": options.path ?? target.pathname + target.search,
               ":authority": authority,
             },
             { endStream: false, signal: options.signal },

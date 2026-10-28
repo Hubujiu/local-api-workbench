@@ -1686,6 +1686,7 @@ export async function createApp({
                 ...receipt,
                 outcome: result.status,
                 failure: result.failure,
+                redirectFailure: result.redirectFailure,
                 variableWrites: scoped.receipt(),
                 ...(result.scopeCommit
                   ? { scopeCommit: result.scopeCommit }

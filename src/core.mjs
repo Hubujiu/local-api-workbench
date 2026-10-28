@@ -36,6 +36,11 @@ import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 
 import { postmanImportURL } from "./postman-url.mjs";
+import {
+  normalizeRedirect,
+  readHttpRedirectFailure,
+  assertRedirectExportable,
+} from "./http-redirect.mjs";
 import { throwIfInactive } from "./request-control.mjs";
 import {
   httpFinalizationFailure,
@@ -314,8 +319,10 @@ export function normalizeRequest(r = {}) {
     )
   )
     throw Error("仅支持 HTTP/HTTPS URL");
+  const redirect = normalizeRedirect(r.redirect);
   return {
     ...(nativeInheritance === undefined ? {} : { nativeInheritance }),
+    ...(redirect === undefined ? {} : { redirect }),
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
@@ -952,6 +959,13 @@ export async function runPlan(
             throw Error(
               "原版模板前置脚本暂仅允许变量修改，不支持请求修改或最终正文覆盖",
             );
+          if (
+            !isDeepStrictEqual(
+              normalizeRedirect(step.request.redirect),
+              normalizeRedirect(scripted.request?.redirect),
+            )
+          )
+            throw Error("前置脚本不能更改 HTTP 重定向策略");
           configuredRequest = normalizeRequest(scripted.request);
           finalizedBody = scripted.finalBody;
         }
@@ -1118,6 +1132,11 @@ export async function runPlan(
         extractionPostPolicy ||
         extractionRequestPolicy ||
         isNativeExtractionPhaseFailure(error);
+      const redirected = readHttpRedirectFailure(error);
+      if (redirected) {
+        if (redirected.response) record.response = redirected.response;
+        record.redirectFailure = redirected.failure;
+      }
       const completed = readHttpFinalizationFailure(error);
       if (completed) {
         record.response = completed.response;
@@ -1171,7 +1190,7 @@ export async function runPlan(
       break;
     }
     if (stopAfterExtractionFailure) break;
-    if (record.failure) break;
+    if (record.failure || record.redirectFailure) break;
   }
   return {
     id: id(),
@@ -1807,6 +1826,7 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    assertRedirectExportable(source);
     const r = sdkOpenAPIDefinition(project, source);
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
@@ -1970,6 +1990,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  assertRedirectExportable(input);
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),

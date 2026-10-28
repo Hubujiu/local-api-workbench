@@ -1,3 +1,4 @@
+import { normalizeRedirect } from "./http-redirect.mjs";
 import { loadTiming } from "../public/load-timing.js";
 import { parseLoadCSV } from "../public/load-data.js";
 import { memoryCookieSession } from "./cookie-jar.mjs";
@@ -12,6 +13,8 @@ import { projectScopes } from "./variable-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
 
 export async function runLoad(project, request, options = {}) {
+  if (normalizeRedirect(request.redirect))
+    throw Error("压测暂不支持 HTTP 重定向策略，请使用普通执行");
   const timing = loadTiming(options);
   const dataRows = parseLoadCSV(options.dataCSV);
   const count = Math.min(

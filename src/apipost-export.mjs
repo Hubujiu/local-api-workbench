@@ -1,3 +1,4 @@
+import { assertRedirectExportable } from "./http-redirect.mjs";
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import { validateNativeInheritanceProject } from "./native-inheritance.mjs";
 import {
@@ -308,6 +309,7 @@ export function exportApipost(project, options = {}) {
   for (const name of project.folders || []) folder(name);
   const requestIds = new Set();
   function requestNode(input) {
+    assertRedirectExportable(input);
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);

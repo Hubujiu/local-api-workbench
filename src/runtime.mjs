@@ -23,6 +23,11 @@ import {
   ProjectCommitUncertain,
   ProjectRecoveryRequired,
 } from "./project-commit-outcome.mjs";
+import {
+  normalizeRedirect,
+  validateRedirectAdmission,
+} from "./http-redirect.mjs";
+import { executePreparedRedirect } from "./http-redirect-transport.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -499,6 +504,7 @@ export class Store {
     validateAPIResourceTrash(p);
     if (p.settings?.autoImports !== undefined)
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
+    for (const request of p.requests || []) normalizeRedirect(request.redirect);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -757,6 +763,9 @@ async function executeRequestWithinDeadline(
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
   appendRequestQuery(u, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
+  validateRedirectAdmission(r, headers);
+  if (r.redirect && Buffer.byteLength(u.href) > 8192)
+    throw Error("redirect URL 超过 8 KiB");
   if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
@@ -881,6 +890,21 @@ async function executeRequestWithinDeadline(
     headers.connection = "keep-alive";
   }
   throwIfInactive(controls);
+  if (r.redirect)
+    return executePreparedRedirect(
+      r,
+      u,
+      headers,
+      body,
+      controls,
+      cookieSession,
+      (response) =>
+        captureResponseHeaderEvidence(
+          response,
+          response.rawHeaders,
+          response.protocol,
+        ),
+    );
   const start = performance.now();
   const connectionBudget = deadline - performance.now();
   if (connectionBudget <= 0) throw requestTimeout();
