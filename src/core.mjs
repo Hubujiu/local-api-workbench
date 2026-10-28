@@ -120,6 +120,7 @@ import {
   referenceModeIsAllowed,
 } from "./openapi-reference-context.mjs";
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
+import { supportedOpenAPIPathItems } from "./openapi-operation-admission.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import {
@@ -1302,7 +1303,7 @@ export function importDocument(doc) {
     const base = doc.host
       ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
       : "{{baseUrl}}";
-    return Object.entries(doc.paths || {}).flatMap(([path, item]) =>
+    return supportedOpenAPIPathItems(doc).flatMap(([path, item]) =>
       Object.entries(item)
         .filter(([m]) =>
           ["get", "post", "put", "patch", "delete", "head", "options"].includes(

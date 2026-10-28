@@ -15,7 +15,7 @@ export const referenceModeIsAllowed = (mode) => referenceModes.has(mode);
 const fields = {
   document: {
     components: "components",
-    paths: "map:pathItem",
+    paths: "paths",
     webhooks: "map:pathItem",
     definitions: "map:schema",
     parameters: "map:parameter",
@@ -74,6 +74,8 @@ export function referenceChildMode(mode, key, value, swagger = false) {
   if (mode === "generic") return "generic";
   if (mode === "map:dependency")
     return Array.isArray(value) ? "literal" : "schema";
+  // Paths Object extensions are literal data, not reusable Path Item entries.
+  if (mode === "paths") return key.startsWith("/") ? "pathItem" : "literal";
   if (mode.startsWith("map:") || mode.startsWith("list:"))
     return mode.slice(mode.indexOf(":") + 1);
   if (key.startsWith("x-")) return "literal";
