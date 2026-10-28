@@ -1,0 +1,9 @@
+# HTTP forward-proxy request target
+
+HTTP/1.1 absolute-form must not transmit a URL fragment: [RFC 9112 §3.2.2](https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.2) uses absolute-URI, and [RFC 9110 §17.11](https://www.rfc-editor.org/rfc/rfc9110.html#section-17.11) distinguishes fragments from transmitted request data.
+
+The previous HTTP-origin forward-proxy branch passed `target.href` unchanged. Real loopback HTTP and HTTPS proxies captured `#private-marker` in `req.url` and rejected the request with 400, while the same direct request succeeded. IPv6 absolute-form also retained the fragment. All three regression groups failed before the fix.
+
+The branch now clones the URL, clears only its hash, and serializes that clone. The saved request, frozen plan and execution evidence URL are not mutated. Encoded `%23`, repeated parameters, empty delimiters, a trailing empty `?`, IPv6 authority and non-default ports remain intact. Existing execution preflight still rejects origin URL userinfo; credentials belong in explicit authentication configuration. Proxy credentials remain separate from origin credentials and TLS verification remains mandatory.
+
+Targeted tests exercise actual HTTP and verified custom-CA HTTPS forward proxies, direct-origin parity, untrusted proxy rejection, userinfo rejection without network activity, and owner request → frozen plan isolated from live edits → CLI → persisted results → backup → restart → restore → execution. These tests use only owned loopback fixtures. No original GUI execution, external accounts, frontend changes or dependency changes are involved. MCP-specific feature coverage is a separate follow-on validation; this change does not claim complete project delivery.
