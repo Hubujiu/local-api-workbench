@@ -1,0 +1,60 @@
+name: Oracle TCPS Isolated Acceptance
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/oracle-tcps-integration.yml
+      - scripts/oracle-tcps-ci.py
+      - src/oracle-*.mjs
+      - tests/oracle-*.mjs
+      - tests/fixtures/oracle-*.mjs
+      - package.json
+      - package-lock.json
+permissions:
+  contents: read
+concurrency:
+  group: oracle-tcps-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  oracle-tcps:
+    # Service-license approval covers this same-repository disabled feature only.
+    if: >-
+      github.head_ref == 'feat/oracle-readonly-wip' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    # Explicit earlier step budgets leave time for owned-resource destruction.
+    timeout-minutes: 40
+    env:
+      ORACLE_TCPS_ACCEPTANCE: "1"
+      NPM_CONFIG_FETCH_TIMEOUT: "30000"
+      NPM_CONFIG_FETCH_RETRIES: "1"
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        timeout-minutes: 2
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts --no-audit
+        timeout-minutes: 3
+      - name: Start pinned isolated Oracle fixture
+        timeout-minutes: 16
+        run: python3 scripts/oracle-tcps-ci.py setup
+      - name: Exercise real TCPS and owned read boundary
+        timeout-minutes: 9
+        run: node tests/oracle-integration.mjs
+      - name: Destroy only this job's database and private material
+        if: always()
+        timeout-minutes: 5
+        run: python3 scripts/oracle-tcps-ci.py cleanup
+      - name: Preserve sanitized acceptance evidence only
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-tcps-acceptance
+          path: ${{ runner.temp }}/oracle-tcps-evidence/*.json
+          retention-days: 7
+          if-no-files-found: error

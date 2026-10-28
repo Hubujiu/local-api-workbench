@@ -11,6 +11,8 @@ const fixture = readFileSync(
   new URL("./fixtures/localhost.crt", import.meta.url),
   "utf8",
 );
+// Windows checkout may already use CRLF; do not double its carriage returns.
+const crlfFixture = fixture.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
 const certificate = new X509Certificate(fixture);
 const now = Date.parse("2026-10-28T00:00:00Z");
 const pem = (der) =>
@@ -41,7 +43,7 @@ test("Oracle CA parser canonicalizes one currently valid public CA certificate",
   for (const value of [
     fixture,
     fixture.trimEnd(),
-    fixture.replaceAll("\n", "\r\n"),
+    crlfFixture,
     pem(certificate.raw).replaceAll(/(?<!-)\n(?=[A-Za-z0-9+/])/g, ""),
   ]) {
     assert.equal(
@@ -61,6 +63,7 @@ test("Oracle CA parser rejects garbage, extra blocks, paths and private-key labe
     `\n${fixture}`,
     `${fixture}\n`,
     `${fixture}${fixture}`,
+    crlfFixture.replaceAll("\n", "\r\n"), // Deliberate malformed CRCRLF.
     `${fixture}-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----\n`,
     fixture.replaceAll("CERTIFICATE", "TRUSTED CERTIFICATE"),
     fixture.replaceAll("CERTIFICATE", "PRIVATE KEY"),
@@ -138,9 +141,7 @@ test("Oracle CA parser requires CA:true and inclusive certificate validity", () 
 test("Oracle config keeps optional canonical CA outside driver options", () => {
   const plain = oracleReadInput(input());
   assert.equal(plain.caCertificatePem, undefined);
-  const configured = oracleReadInput(
-    input({ caCertificatePem: fixture.replaceAll("\n", "\r\n") }),
-  );
+  const configured = oracleReadInput(input({ caCertificatePem: crlfFixture }));
   assert.equal(configured.caCertificatePem, certificate.toString());
   assert.deepEqual(configured.connectionOptions, plain.connectionOptions);
   assert.equal(
