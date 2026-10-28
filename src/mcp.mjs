@@ -2,6 +2,12 @@ import {
   listImportedExecutionRuns,
   getImportedExecutionRun,
 } from "./imported-execution-history.mjs";
+import {
+  importedExecutionChunkArguments,
+  importedExecutionChunkDefaultBytes,
+  importedExecutionChunkMaxBytes,
+  importedExecutionChunkError,
+} from "./imported-execution-chunk.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -268,7 +274,29 @@ export function createMCP({
       ...projectArg,
       sourceProjectId: str,
       runId: str,
+      chunk: {
+        type: "object",
+        description:
+          "可选读取原始JSON文件UTF-8字节；后续块须回传首块artifactSha256，不授予新权限",
+        properties: {
+          offsetBytes: {
+            type: "integer",
+            minimum: 0,
+            maximum: Number.MAX_SAFE_INTEGER,
+          },
+          maxBytes: {
+            type: "integer",
+            minimum: 1,
+            maximum: importedExecutionChunkMaxBytes,
+            default: importedExecutionChunkDefaultBytes,
+          },
+          expectedArtifactSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        },
+        required: ["offsetBytes"],
+        additionalProperties: false,
+      },
     },
+    ["projectId", "sourceProjectId", "runId"],
   );
   addTool("get_execution_result", "读取逐步证据", {
     ...projectArg,
@@ -357,10 +385,17 @@ export function createMCP({
         id: requestId,
         error: { code: -32601, message: "Method not found" },
       };
+    let importedChunkRequest = false;
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
-      const args = params.arguments === undefined ? {} : params.arguments;
+      let args = params.arguments === undefined ? {} : params.arguments;
+      if (tool.name === "localapi_get_imported_execution_run") {
+        importedChunkRequest = true;
+        const chunkArgs = importedExecutionChunkArguments(args);
+        importedChunkRequest = chunkArgs !== null;
+        if (chunkArgs) args = chunkArgs;
+      }
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
@@ -532,6 +567,7 @@ export function createMCP({
                 p,
                 args.sourceProjectId,
                 args.runId,
+                importedChunkRequest ? args.chunk : undefined,
               );
               if (!output) throw Error("原始执行记录不存在");
               break;
@@ -729,7 +765,14 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: importedChunkRequest
+              ? importedExecutionChunkError
+              : e.message,
+          },
+        ],
       });
     }
   };

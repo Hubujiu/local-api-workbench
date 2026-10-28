@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import { normalizeDirectoryArtifacts } from "./apipost-directory-artifacts.mjs";
+import {
+  validateImportedExecutionChunk,
+  validateImportedExecutionChunkProjectId,
+} from "./imported-execution-chunk.mjs";
 const provenance = "imported-apipost-archive";
 const id = (value) => {
   if (
@@ -77,9 +81,19 @@ export function listImportedExecutionRuns(
     items: items.slice(offset, offset + limit),
   };
 }
-export function getImportedExecutionRun(project, sourceProjectId, runId) {
+export function getImportedExecutionRun(
+  project,
+  sourceProjectId,
+  runId,
+  chunk,
+) {
   id(sourceProjectId);
   id(runId);
+  if (chunk !== undefined) {
+    chunk = validateImportedExecutionChunk(chunk);
+    validateImportedExecutionChunkProjectId(project.id);
+    if (runId === "index") throw Error("原始执行记录不存在");
+  }
   const source = sources(project).find(
     (s) => s.sourceProjectId === sourceProjectId,
   );
@@ -87,13 +101,38 @@ export function getImportedExecutionRun(project, sourceProjectId, runId) {
     (f) => f.path === "executions/runs/" + runId + ".json",
   );
   if (!file) return null;
-  return {
+  const metadata = {
     provenance,
     executedByWorkbench: false,
     projectId: project.id,
     sourceProjectId,
     runId,
     artifactSha256: hash(file.text),
-    original: JSON.parse(file.text),
+  };
+  if (chunk === undefined)
+    return { ...metadata, original: JSON.parse(file.text) };
+  if (
+    chunk.expectedArtifactSha256 !== undefined &&
+    chunk.expectedArtifactSha256 !== metadata.artifactSha256
+  )
+    throw Error("原始执行记录来源已改变");
+  // Return exact accepted source bytes, not the expanded parsed JSON. The
+  // source validator above retains the existing 4MiB archive limit and identity
+  // checks on every call; no snapshot cache or new JSON-node limit is involved.
+  const bytes = Buffer.from(file.text, "utf8");
+  if (chunk.offsetBytes > bytes.length) throw Error("原始记录分块偏移越界");
+  const end = Math.min(bytes.length, chunk.offsetBytes + chunk.maxBytes);
+  return {
+    ...metadata,
+    chunk: {
+      encoding: "base64",
+      mediaType: "application/json",
+      offsetBytes: chunk.offsetBytes,
+      chunkBytes: end - chunk.offsetBytes,
+      totalBytes: bytes.length,
+      nextOffsetBytes: end < bytes.length ? end : null,
+      eof: end === bytes.length,
+      data: bytes.subarray(chunk.offsetBytes, end).toString("base64"),
+    },
   };
 }

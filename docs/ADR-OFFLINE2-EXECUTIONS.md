@@ -125,6 +125,50 @@ and variables. A SHA-256 identifies exact imported file bytes; it is integrity
 metadata, not proof of historical authenticity or successful current execution.
 No request is replayed and no source-history record is added to project.runs.
 
+### Bounded MCP readback of accepted source artifacts
+
+`localapi_get_imported_execution_run` accepts an optional `chunk` object. Omitting
+it preserves the existing full `original` response and its error behavior; HTTP
+detail responses are unchanged. No new tool, alias, permission or execution path
+is added. This closes a source-archive readback gap: an accepted file below the
+existing 4MiB archive budget can exceed an 8MiB JSON-RPC frame when parsing expands
+numeric lexemes and the content-text envelope escapes strings again.
+
+- `offsetBytes` is a required nonnegative safe integer. `maxBytes` defaults to
+  65,536, and must be an integer from 1 through 262,144.
+- `expectedArtifactSha256` is an optional lowercase SHA-256 at offset zero and
+  required for every nonzero offset. It identifies the exact archived source
+  bytes, matching list/detail `artifactSha256`, not reserialized parsed JSON.
+- The response preserves provenance, `executedByWorkbench: false`, project/source
+  IDs, run ID and digest. Instead of `original`, it returns `chunk` containing
+  `encoding: base64`, `mediaType: application/json`, `offsetBytes`, `chunkBytes`,
+  `totalBytes`, `nextOffsetBytes`, `eof` and `data`. `nextOffsetBytes` is null at
+  EOF; offset equal to total returns an empty EOF chunk, and larger offsets reject.
+  Clients concatenate decoded bytes before UTF-8 decoding: a chunk may split a
+  Unicode character. Whitespace, number lexemes and escapes remain exact.
+- Every call checks the existing project allowlist, reloads Store state, rejects
+  archived projects, normalizes the source archive and looks up only the exact
+  source-project/run detail. The digest is not an authorization token. Changed,
+  removed or inconsistent sources reject rather than falling back to another
+  source or local runtime history. The index file is not a run detail.
+- Chunk arguments are closed data-only objects validated before generic argument
+  enumeration; proxies/accessors, unknown keys and malformed values reject without
+  invoking them or reflecting their contents. Chunk errors use a fixed short
+  message, including Store errors. Local project IDs are bounded to 1,024 UTF-8
+  bytes; source/run IDs retain the existing identifier contract. Existing source
+  file/byte limits remain; no new JSON-node limit rejects previously accepted
+  archives. No files are cached or read from caller-supplied paths or URLs.
+
+The synthetic acceptance uses 400,000 `1e20` values (about 2MiB source text,
+over 8MiB full JSON-RPC) through owner HTTP import, Store restart, backup restore
+and official SDK HTTP/stdio chunks. Smaller fixtures exercise whitespace,
+Unicode, `-0`, namespace collisions, mutation between chunks, denied/archived
+projects and invalid input while keeping sessions usable and records unchanged.
+These are newly authored synthetic data, not additional original-runtime evidence.
+The independent PR's older stdio writer has no outbound 8MiB limit; the production
+bounded-writer full-read rejection is a combined-integration acceptance, not a
+claim that this feature branch alone reproduced that transport rejection.
+
 ## Explicit step scripts are different from API tasks
 
 The original UI's expanded step editor exposes Query input and separate step
