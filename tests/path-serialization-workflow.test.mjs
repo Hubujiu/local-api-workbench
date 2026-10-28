@@ -297,7 +297,8 @@ test("scalar path errors are atomic and dynamic/template inputs are admitted bef
   for (const value of [[true], { flag: true }, null]) {
     matrix.path[0].dynamic = { source: "fixed", value };
     const failed = await f.call(url + "/execute", "POST", { request: matrix });
-    assert.notEqual(failed.status, 200);
+    assert.equal(failed.outcome, "failed");
+    assert.match(failed.error, /path/i);
   }
   delete matrix.path[0].dynamic;
   project = await f.call(url);
@@ -307,7 +308,8 @@ test("scalar path errors are atomic and dynamic/template inputs are admitted bef
     request: matrix,
     environmentId: project.environments[0].id,
   });
-  assert.notEqual(failed.status, 200);
+  assert.equal(failed.outcome, "failed");
+  assert.match(failed.error, /path/i);
   assert.equal(f.seen.length, count);
   const unbound = document(f.origin);
   delete unbound.paths["/simple/{value}"].get.parameters[0].example;
@@ -328,6 +330,7 @@ test("scalar path errors are atomic and dynamic/template inputs are admitted bef
   const missing = await f.call(`/api/projects/${target.id}/execute`, "POST", {
     request: target.requests[0],
   });
-  assert.notEqual(missing.status, 200);
+  assert.equal(missing.outcome, "failed");
+  assert.match(missing.error, /path/i);
   assert.equal(f.seen.length, count);
 });

@@ -108,6 +108,14 @@ export function validatePathSerialization(request) {
     )
       fail();
   }
+  for (const segment of segments) {
+    const literal = segment.replace(/\{\{[^{}]+\}\}/gu, "");
+    if (
+      /[{}]/u.test(literal) &&
+      ![...names].some((name) => literal === "{" + name + "}")
+    )
+      fail();
+  }
 }
 export function importOpenAPIPath(parameter, isOpenAPI3) {
   const row = {

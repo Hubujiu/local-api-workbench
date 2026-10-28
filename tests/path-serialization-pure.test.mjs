@@ -97,6 +97,7 @@ test("whole segment and uniqueness validation prevents authority/query/fragment 
     "https://example.test/{color}/{color}",
     "https://example.test/items?q={color}",
     "https://example.test/items#{color}",
+    "https://example.test/{color}/{missing}",
   ])
     assert.throws(() => validatePathSerialization({ ...request(), url }));
   assert.throws(() =>
