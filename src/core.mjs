@@ -1,3 +1,8 @@
+import { throwIfInactive } from "./request-control.mjs";
+import {
+  httpFinalizationFailure,
+  readHttpFinalizationFailure,
+} from "./http-finalization.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -732,6 +737,17 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        // Preserve a completed response, but never run post-response work after
+        // cancellation (including a session whose capture had no Set-Cookie).
+        try {
+          throwIfInactive({ signal });
+        } catch (error) {
+          throw httpFinalizationFailure(
+            record.response,
+            error,
+            "response-finalization",
+          );
+        }
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -831,6 +847,11 @@ export async function runPlan(
             : "failed";
       }
     } catch (error) {
+      const completed = readHttpFinalizationFailure(error);
+      if (completed) {
+        record.response = completed.response;
+        record.failure = completed.failure;
+      }
       record.status = "failed";
       if (error.networkRequests)
         record.subrequests.push(
@@ -854,6 +875,9 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
+    // A completed HTTP operation with interrupted finalization is not retry-safe.
+    // Stop this plan rather than starting later work after an uncertain commit.
+    if (record.failure) break;
   }
   return {
     id: id(),
