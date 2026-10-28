@@ -4,6 +4,7 @@ import {
   workerFailureMetadata,
   withWorkerRejectionDiagnostics,
 } from "./helpers/worker-rejection-diagnostics.mjs";
+import { withWorkerPhaseDiagnostics } from "./helpers/worker-phase-diagnostics.mjs";
 
 // Pure synthetic fixtures only: no script runtime, native XML, or VM imports.
 const prefix = "\nWORKER_REJECTION_METADATA ";
@@ -339,4 +340,264 @@ test("non-assertion failures pass through unchanged and no rejection is wrapped"
   assert.deepEqual(Object.getOwnPropertyDescriptors(workerError), before);
   const failure = await mismatch(workerError);
   assert.equal(failure.actual, workerError);
+});
+
+test("labelled phase success returns the same value once without inspecting metadata", async () => {
+  let calls = 0;
+  let reads = 0;
+  const value = Object.defineProperty({}, "scriptStage", {
+    get() {
+      reads++;
+      throw Error("must not inspect a successful result");
+    },
+  });
+  const result = await withWorkerPhaseDiagnostics("ascii-64k", () => {
+    calls++;
+    return value;
+  });
+  assert.equal(result, value);
+  assert.equal(calls, 1);
+  assert.equal(reads, 0);
+});
+
+test("labelled expected rejection matches its original regex before any metadata observation", async () => {
+  const workerError = Error("invalid Unicode");
+  let calls = 0;
+  let reads = 0;
+  Object.defineProperty(workerError, "scriptStage", {
+    get() {
+      reads++;
+      throw Error("must not inspect an expected rejection");
+    },
+  });
+  const before = Object.getOwnPropertyDescriptors(workerError);
+  await withWorkerPhaseDiagnostics("invalid-unicode", (capture) => {
+    calls++;
+    return assert.rejects(
+      Promise.reject(workerError).catch(capture),
+      /Unicode/,
+    );
+  });
+  assert.equal(calls, 1);
+  assert.equal(reads, 0);
+  assert.deepEqual(Object.getOwnPropertyDescriptors(workerError), before);
+});
+
+test("a label matching the expected regex cannot turn interrupted into an accepted rejection", async () => {
+  for (const expectedPattern of [/Unicode/, /unicode/, /invalid-unicode/]) {
+    const workerError = Object.assign(Error("interrupted"), expected);
+    const before = Object.getOwnPropertyDescriptors(workerError);
+    let originalFailure;
+    let originalMessage;
+    let calls = 0;
+    await assert.rejects(
+      withWorkerPhaseDiagnostics("invalid-unicode", async (capture) => {
+        calls++;
+        try {
+          await assert.rejects(
+            Promise.reject(workerError).catch(capture),
+            expectedPattern,
+          );
+        } catch (failure) {
+          originalFailure = failure;
+          originalMessage = failure.message;
+          throw failure;
+        }
+      }),
+      (failure) => {
+        assert(failure instanceof AssertionError);
+        assert.equal(failure, originalFailure);
+        assert.equal(failure.actual, workerError);
+        assert.equal(failure.expected, expectedPattern);
+        assert.equal(failure.code, "ERR_ASSERTION");
+        assert.equal(
+          failure.message.slice(0, originalMessage.length),
+          originalMessage,
+        );
+        const marker = "\nWORKER_PHASE invalid-unicode" + prefix;
+        const suffix = failure.message.slice(originalMessage.length);
+        assert(suffix.startsWith(marker));
+        assert(Buffer.byteLength(suffix, "utf8") <= 2048);
+        assert.deepEqual(JSON.parse(suffix.slice(marker.length)), expected);
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+    assert.deepEqual(Object.getOwnPropertyDescriptors(workerError), before);
+  }
+});
+
+test("unexpected labelled success-path rejection retains its original Error and bounded metadata", async () => {
+  const workerError = Object.assign(Error("interrupted"), expected, {
+    body: "never copy response content",
+    request: { secret: "never copy request content" },
+  });
+  const before = Object.getOwnPropertyDescriptors(workerError);
+  let calls = 0;
+  await assert.rejects(
+    withWorkerPhaseDiagnostics("ascii-64k", () => {
+      calls++;
+      return Promise.reject(workerError);
+    }),
+    (failure) => {
+      assert.equal(failure, workerError);
+      const marker = "\nWORKER_PHASE ascii-64k" + prefix;
+      const suffix = failure.message.slice(before.message.value.length);
+      assert.equal(
+        failure.message.slice(0, before.message.value.length),
+        "interrupted",
+      );
+      assert(suffix.startsWith(marker));
+      assert(Buffer.byteLength(suffix, "utf8") <= 2048);
+      assert.deepEqual(JSON.parse(suffix.slice(marker.length)), expected);
+      const after = Object.getOwnPropertyDescriptors(failure);
+      after.message.value = before.message.value;
+      assert.deepEqual(after, before);
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
+test("labelled unexpected fulfillment remains the original missing-rejection assertion", async () => {
+  let originalFailure;
+  let calls = 0;
+  await assert.rejects(
+    withWorkerPhaseDiagnostics("invalid-unicode", async (capture) => {
+      calls++;
+      try {
+        await assert.rejects(Promise.resolve().catch(capture), /Unicode/);
+      } catch (failure) {
+        originalFailure = failure;
+        throw failure;
+      }
+    }),
+    (failure) => {
+      assert.equal(failure, originalFailure);
+      assert(failure instanceof AssertionError);
+      assert.match(failure.message, /Missing expected rejection/);
+      assert(
+        failure.message.endsWith(
+          "\nWORKER_PHASE invalid-unicode" + prefix + "{}",
+        ),
+      );
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
+test("labelled metadata ignores throwing fields and malformed values without replacing failure", async () => {
+  let reads = 0;
+  const workerError = Object.defineProperties(Error("interrupted"), {
+    scriptStage: {
+      get() {
+        reads++;
+        throw Error("must not read stage");
+      },
+    },
+    activityMetrics: {
+      value: new Proxy(
+        {},
+        {
+          getOwnPropertyDescriptor() {
+            reads++;
+            throw Error("must not inspect proxy");
+          },
+        },
+      ),
+    },
+    elapsedMs: { value: Infinity },
+    activityCPUTimeUs: { value: { compatibilityUs: -1 } },
+  });
+  await assert.rejects(
+    withWorkerPhaseDiagnostics("depth-32", () => Promise.reject(workerError)),
+    (failure) => {
+      assert.equal(failure, workerError);
+      assert.equal(
+        failure.message,
+        "interrupted\nWORKER_PHASE depth-32" + prefix + "{}",
+      );
+      return true;
+    },
+  );
+  assert.equal(reads, 0);
+});
+
+test("unwritable, accessor, proxy and primitive failures pass through without diagnostic effects", async () => {
+  let reads = 0;
+  const frozen = Object.freeze(Error("frozen"));
+  const accessor = Object.defineProperty(Error("accessor"), "message", {
+    get() {
+      reads++;
+      throw Error("must not read message");
+    },
+  });
+  const proxy = new Proxy(Error("proxy"), {
+    get() {
+      reads++;
+      throw Error("must not read proxy");
+    },
+    getPrototypeOf() {
+      reads++;
+      throw Error("must not inspect proxy");
+    },
+    getOwnPropertyDescriptor() {
+      reads++;
+      throw Error("must not inspect proxy");
+    },
+  });
+  for (const original of [
+    frozen,
+    accessor,
+    proxy,
+    null,
+    undefined,
+    "failure",
+    0,
+  ]) {
+    let caught = Symbol("not rejected");
+    try {
+      await withWorkerPhaseDiagnostics("depth-32", () =>
+        Promise.reject(original),
+      );
+    } catch (failure) {
+      caught = failure;
+    }
+    assert.equal(caught, original);
+  }
+  assert.equal(reads, 0);
+});
+
+test("invalid diagnostic labels and observer exceptions cannot replace the workload failure", async () => {
+  for (const label of ["", "secret text", "x".repeat(65), null, undefined]) {
+    const original = Error("interrupted");
+    await assert.rejects(
+      withWorkerPhaseDiagnostics(label, () => Promise.reject(original)),
+      (failure) => failure === original && failure.message === "interrupted",
+    );
+  }
+  const original = Error("interrupted");
+  const observerError = Error("observer must not replace workload error");
+  Object.setPrototypeOf(
+    original,
+    new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw observerError;
+        },
+      },
+    ),
+  );
+  let caught;
+  try {
+    await withWorkerPhaseDiagnostics("depth-32", () =>
+      Promise.reject(original),
+    );
+  } catch (failure) {
+    caught = failure;
+  }
+  assert.equal(caught, original);
+  assert.equal(caught.message, "interrupted");
 });
