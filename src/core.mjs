@@ -1549,16 +1549,17 @@ export function exportOpenAPI(project) {
       original.security = [{ [name]: [] }];
     }
 
-    const baseVariable = /^\{\{[^{}]+\}\}/.exec(r.url)?.[0];
+    const baseVariable = /^\{\{[^{}]+\}\}/.exec(queryDefinition.pathURL)?.[0];
     if (
-      r.url.includes("{{") &&
-      (!baseVariable || r.url.slice(baseVariable.length).includes("{{"))
+      queryDefinition.pathURL.includes("{{") &&
+      (!baseVariable ||
+        queryDefinition.pathURL.slice(baseVariable.length).includes("{{"))
     )
       throw Error("OpenAPI导出工作台URL模板仅支持单个base前缀，请使用项目备份");
     try {
       if (baseVariable) original.servers = [{ url: baseVariable }];
-      else if (!r.url.includes("{{"))
-        original.servers = [{ url: new URL(r.url).origin }];
+      else if (!queryDefinition.pathURL.includes("{{"))
+        original.servers = [{ url: new URL(queryDefinition.pathURL).origin }];
     } catch {}
     paths[path][method] = {
       ...original,
