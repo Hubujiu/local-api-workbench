@@ -68,7 +68,7 @@ function observeCookieMethods(Jar, file, marker) {
 }
 
 async function fixture(t, transportKind, stage, outcome) {
-  const root = await mkdtemp(path.join(tmpdir(), "mcp-cookie-cancel-"));
+  const root = await mkdtemp(path.join(tmpdir(), "mcp-cookie-cancel- space#-"));
   let app,
     client,
     transport,
@@ -263,7 +263,7 @@ async function fixture(t, transportKind, stage, outcome) {
       transport = new StdioClientTransport({
         command: process.execPath,
         args: [
-          ...(observe ? ["--import", preload] : []),
+          ...(observe ? ["--import", pathToFileURL(preload).href] : []),
           path.join(repo, "src/mcp.mjs"),
           "--project",
           projectId,
@@ -280,7 +280,41 @@ async function fixture(t, transportKind, stage, outcome) {
       messages.push(structuredClone(args[0]));
       return pending;
     };
-    await client.connect(transport);
+    // The SDK creates this pipe before spawning. Capture startup diagnostics
+    // before connect, retain at most 8 KiB, and never log successful sessions.
+    const stderr = transportKind === "stdio" ? transport.stderr : undefined;
+    const stderrLimit = 8 * 1024;
+    let startupStderr = Buffer.alloc(0);
+    const collectStderr = (chunk) => {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      if (bytes.length >= stderrLimit) {
+        startupStderr = Buffer.from(bytes.subarray(-stderrLimit));
+      } else {
+        const previous = startupStderr.subarray(
+          Math.max(0, startupStderr.length + bytes.length - stderrLimit),
+        );
+        startupStderr = Buffer.concat([previous, bytes]);
+      }
+    };
+    stderr?.on("data", collectStderr);
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      if (!stderr) throw error;
+      const detail = startupStderr
+        .toString("utf8")
+        .replaceAll(root, "<test-fixture>")
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "?")
+        .trim();
+      throw Error(
+        `stdio SDK startup failed: ${error.message}\nStartup stderr (last 8 KiB): ${detail || "<empty>"}`,
+        { cause: error },
+      );
+    } finally {
+      stderr?.off("data", collectStderr);
+      // Later stderr is intentionally discarded, not retained with run data.
+      stderr?.resume();
+    }
   }
   if (transportKind === "http")
     restoreObserver = observeCookieMethods(ProjectCookieJar, jar.file, marker);

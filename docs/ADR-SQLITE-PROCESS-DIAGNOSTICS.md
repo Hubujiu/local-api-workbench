@@ -54,3 +54,31 @@ HTTP write timeout exercises this boundary and verifies journal recovery by a
 subsequent read, never a retry of the mutation. Missing authorization still gets
 403 without database execution. The parent timeout flag is not proof about the
 independent child watchdog or other external termination.
+
+## Test-only failure-phase visibility
+
+Windows CI40650351379 again reported `SQLITE_WRITE_OUTCOME_UNKNOWN` in the
+existing timeout/recovery test, but TAP omitted the Error's diagnostics. The
+expected initial timeout is caught inside its child and returned as JSON; a
+later independent write is a plausible failure location, not an established
+root cause. Identical earlier source/tests passed, which does not resolve this
+unknown outcome or justify replaying a write.
+
+The test now labels the existing expected-timeout child, recovery open/read,
+post-recovery read, independent write and final read phases. On failure only,
+a test helper appends a `SQLITE_PHASE_METADATA` suffix of at most 2048 bytes,
+using fixed phase labels and the existing production diagnostic whitelist fed
+by inert own-data snapshots. Proxies, accessors, arbitrary nested values and
+serialization hooks are not inspected or invoked. The original Error is
+rethrown; code, cause, stack descriptor/call sites and assertion fields are not
+rewritten. A lazy native stack may reflect the annotated message header when
+first rendered; the helper never invokes the stack getter. Unsupported or
+frozen errors pass through unchanged. Only the added suffix is redacted: the
+original message remains intact and is not claimed to be sanitized.
+
+This is diagnostic-only, not a root-cause fix. Production source, SQL, operation
+count/order, assertions, deadlines, memory limits, signals, cleanup and no-retry
+semantics are unchanged. Local verification uses only fake Errors/Promise
+callbacks and a tiny fake-error TAP child, plus syntax/format checks; it does
+not run SQLite/native/database workloads. Exact-commit CI must establish the
+next result; an old CI rerun cannot validate this change.
