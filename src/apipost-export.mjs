@@ -63,6 +63,12 @@ function variables(values, definitions) {
 
 function rows(values, kind) {
   return values.map((row, index) => {
+    // Native rows have no verified equivalent for this versioned wire contract.
+    // Reject own presence, including malformed/undefined and disabled metadata.
+    if (row && Object.hasOwn(row, "pathSerialization"))
+      throw Error(
+        "Apipost导出不能保留OpenAPI pathSerialization；请使用项目备份",
+      );
     if (typeof row.key !== "string" || typeof row.value !== "string")
       throw Error("Apipost导出参数名和值须为文本");
     unsupported(row.dynamic, `${kind}动态函数`);

@@ -1,3 +1,7 @@
+import {
+  serializeRequestPath,
+  validatePathSerialization,
+} from "./path-serialization.mjs";
 import { hasRepeatSteps } from "./plan-repeat.mjs";
 import {
   validateNativeInheritanceProject,
@@ -501,6 +505,7 @@ export class Store {
     });
   }
   #validateProject(p) {
+    for (const request of p.requests || []) validatePathSerialization(request);
     validateNativeInheritanceProject(p);
 
     validateAPIResourceTrash(p);
@@ -755,9 +760,7 @@ async function executeRequestWithinDeadline(
 ) {
   const controls = { signal, deadline };
   throwIfInactive(controls);
-  let raw = r.url;
-  for (const p of r.path.filter((p) => p.enabled !== false && p.key))
-    raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
+  const raw = serializeRequestPath(r);
   if (r.auth.type === "aws" && r.auth.addAuthDataToQuery === true)
     validateAWSQueryURL(raw);
   const u = new URL(raw);

@@ -1,3 +1,4 @@
+import { assertPathValue } from "./path-serialization.mjs";
 import {
   validateQueryRuntime,
   initializeQueryRuntime,
@@ -34,7 +35,10 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
         throw Error("不支持临时覆盖文件字段");
       if (hasQuerySerialization(row) && !Array.isArray(value))
         throw Error("OpenAPI Query数组临时输入须为数组");
-      row.value = textValue(value);
+      row.value =
+        label === "path" && own(row, "pathSerialization")
+          ? assertPathValue(row, value)
+          : textValue(value);
       delete row.dynamic;
       row.enabled = true;
     }

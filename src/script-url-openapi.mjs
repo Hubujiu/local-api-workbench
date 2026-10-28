@@ -1,3 +1,4 @@
+import { validatePathSerialization } from "./path-serialization.mjs";
 import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { scriptStages } from "../public/shared-scripts.js";
@@ -7,6 +8,7 @@ import { openAPIURLQuery } from "./openapi-url-query.mjs";
 
 // Project only a static definition, never evaluate scripts or dynamic providers.
 export function sdkOpenAPIDefinition(project, request) {
+  validatePathSerialization(request);
   validateQueryArrayRequest(request);
   if (normalizeScriptURLMode(request.scriptURLMode) !== "sdk") return request;
   if (

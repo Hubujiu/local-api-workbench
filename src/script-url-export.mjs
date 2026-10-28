@@ -1,3 +1,4 @@
+import { validatePathSerialization } from "./path-serialization.mjs";
 import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { scriptStages } from "../public/shared-scripts.js";
@@ -17,6 +18,7 @@ export function assertSDKCurlDefinition(request) {
 }
 
 export function sdkCurlDefinition(request) {
+  validatePathSerialization(request);
   validateQueryArrayRequest(request);
   if (normalizeScriptURLMode(request.scriptURLMode) !== "sdk") return request;
   assertSDKCurlDefinition(request);

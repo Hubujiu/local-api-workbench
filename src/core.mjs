@@ -1,4 +1,10 @@
 import {
+  validatePathSerialization,
+  importOpenAPIPath,
+  pathParameterDefinition,
+  serializeRequestPath,
+} from "./path-serialization.mjs";
+import {
   validateRepeatGraph,
   REPEAT_EVIDENCE_BYTES,
   repeatEvidenceExceeded,
@@ -251,6 +257,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validatePathSerialization(r);
   const nativeInheritance = normalizeNativeInheritanceBinding(
     r.nativeInheritance,
   );
@@ -1355,14 +1362,13 @@ export function importDocument(doc) {
             }),
             path: params
               .filter((p) => p.in === "path")
-              .map((p) => ({
-                key: p.name,
-                schema: p.schema ?? { type: p.type || "string" },
-                required: p.required === true,
-                description: p.description || "",
-                value: p.example ?? "",
-                enabled: true,
-              })),
+              .map((p) =>
+                importOpenAPIPath(
+                  p,
+                  typeof doc.openapi === "string" &&
+                    doc.openapi.startsWith("3."),
+                ),
+              ),
             headers: importOpenAPIHeaders(params, importedBody.contentType, {
               ignoreContentType: Boolean(doc.openapi),
             }),
@@ -1849,6 +1855,7 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     assertRedirectExportable(source);
+    validatePathSerialization(source);
     const r = sdkOpenAPIDefinition(project, source);
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
@@ -1962,7 +1969,9 @@ export function exportOpenAPI(project) {
             required: location === "path" || parameter.required === true,
             description: parameter.description || "",
             schema: parameter.schema ?? { type: "string" },
-            example: parameter.value,
+            ...(location === "path"
+              ? pathParameterDefinition(parameter)
+              : { example: parameter.value }),
             ...(location === "query"
               ? {
                   ...openAPIEmptyQueryValue(parameter.allowEmptyValue),
@@ -2035,12 +2044,7 @@ export function toCurl(input) {
     throw Error(
       "二进制、文件或内联证书请求需手工配置；不会生成不等价的 cURL。请使用原始请求/项目导出。",
     );
-  let raw = r.url;
-  for (const parameter of r.path.filter((item) => item.enabled !== false))
-    raw = raw.replaceAll(
-      "{" + parameter.key + "}",
-      encodeURIComponent(parameter.value),
-    );
+  const raw = serializeRequestPath(r);
   const url = new URL(raw);
   appendRequestQuery(url, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
