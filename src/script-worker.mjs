@@ -1,3 +1,4 @@
+import { observeBootstrap } from "./script-bootstrap-diagnostics.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -27,6 +28,7 @@ let scriptStage = "bootstrap",
   rootPromise,
   finalizing = false;
 let activityOperation = "bootstrap";
+let bootstrapObservation;
 const activityMetrics = {
   compatibilityMs: 0,
   functionLibraryMs: 0,
@@ -112,6 +114,7 @@ try {
   runtime.setMaxStackSize(512 * 1024);
   let deadline = Date.now() + 1000;
   runtime.setInterruptHandler(() => Date.now() > deadline);
+  bootstrapObservation = observeBootstrap(Date.now, threadCPU);
   context = runtime.newContext();
   const randomFunction = context.newFunction("__randomBytes", (countHandle) => {
     const count = context.getNumber(countHandle);
@@ -429,21 +432,27 @@ try {
     result.value.dispose();
   };
   parentPort.postMessage({ kind: "stage", stage: "bootstrap" });
+  bootstrapObservation.enter("input-transfer");
   const inputJSON = context.newString(JSON.stringify(workerData.input));
   try {
     context.setProp(context.global, "__localapiInputJSON", inputJSON);
   } finally {
     inputJSON.dispose();
   }
+  bootstrapObservation.enter("setup");
   run(setup);
+  bootstrapObservation.enter("url-tools");
   run("const __urlQueryTools = (" + urlQueryToolsSource + ")();");
+  bootstrapObservation.enter("trusted-libraries");
   run(trustedLibraries);
+  bootstrapObservation.enter("optional-facade");
   if (useURLFacade)
     run(
       "const __urlFacadeFactory=(()=>{" +
         facadeBundle +
         ";return URLFacadeLibrary.installURLFacade;})();",
     );
+  bootstrapObservation.enter("lazy-installers");
   const json5Source = context.newString(json5Library);
   context.setProp(context.global, "__json5Source", json5Source);
   json5Source.dispose();
@@ -734,6 +743,7 @@ try {
     activityCPUTimeUs: { ...activityCPUTimeUs },
     activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
     scriptDiagnostics: {
+      ...(scriptStage === "bootstrap" ? bootstrapObservation?.failure() : {}),
       activityBudgetMs: workerData.activityBudgetMs,
       fakerCalls,
       timerCount,

@@ -1,3 +1,4 @@
+import { bootstrapFailureDetails } from "./script-bootstrap-diagnostics.mjs";
 // Public diagnostic fields contain only known stages and bounded scalar counters.
 // Never expose worker input, source text, arbitrary error properties or host paths.
 export function scriptFailureDetails(error) {
@@ -22,6 +23,8 @@ export function scriptFailureDetails(error) {
     result.scriptScope = error.scriptScope;
   const diagnostics = {};
   const source = error.scriptDiagnostics || {};
+  if (error.scriptStage === "bootstrap")
+    Object.assign(diagnostics, bootstrapFailureDetails(source));
   const metrics = error.activityMetrics || {};
   const cpu = error.activityCPUTimeUs || {};
   for (const [key, max] of Object.entries({
