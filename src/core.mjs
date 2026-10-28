@@ -48,6 +48,7 @@ import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import { importOpenAPIBody, exportOpenAPIBody } from "./openapi-body.mjs";
+import { convertSwagger2Operation } from "./swagger2-request-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -922,7 +923,12 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
-          const importedBody = importOpenAPIBody(op.requestBody);
+          const swagger = doc.swagger
+            ? convertSwagger2Operation(doc, item, op)
+            : null;
+          const importedBody = importOpenAPIBody(
+            swagger ? swagger.requestBody : op.requestBody,
+          );
           const normalizedResponses = Object.fromEntries(
             Object.entries(op.responses || {}).map(([status, response]) => [
               status,
@@ -936,7 +942,7 @@ export function importDocument(doc) {
             ]),
           );
           const responseExamples = importResponseExamples(normalizedResponses);
-          const params = [
+          const params = swagger?.parameters ?? [
             ...new Map(
               [...(item.parameters || []), ...(op.parameters || [])].map(
                 (parameter) => [parameter.in + ":" + parameter.name, parameter],
@@ -950,7 +956,7 @@ export function importDocument(doc) {
             url:
               (op.servers?.[0]?.url || item.servers?.[0]?.url || base) + path,
             openapiOperation: structuredClone({
-              ...op,
+              ...(swagger ? swagger.operation : op),
               ...((op.security ?? doc.security)
                 ? { security: op.security ?? doc.security }
                 : {}),
@@ -1029,7 +1035,10 @@ export function importDocument(doc) {
               }),
             ),
             examples: responseExamples.examples,
-            importNotes: responseExamples.importNotes,
+            importNotes: [
+              ...responseExamples.importNotes,
+              ...(swagger?.importNotes || []),
+            ],
             openapiExampleBindingsVersion: 1,
             openapiExampleSources: responseExamples.openapiExampleSources,
           });
