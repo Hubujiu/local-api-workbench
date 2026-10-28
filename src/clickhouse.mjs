@@ -155,10 +155,13 @@ function decimalValidator(type, depth = 0) {
   if (!type) throw Error("ClickHouse列类型为空");
   // These types can hide the actual Decimal leaf type from FORMAT JSON meta.
   const tokens = typeTokens(type);
+  if (tokens.length === 1 && typeof tokens[0] !== "string")
+    throw Error("ClickHouse列类型不能是完整引用文本");
   if (
     tokens.some(
       (token, index) =>
-        ["Dynamic", "JSON", "Object"].includes(token) &&
+        typeof token === "string" &&
+        ["dynamic", "json", "object"].includes(token.toLowerCase()) &&
         isTypeToken(tokens, index),
     )
   )
@@ -185,7 +188,7 @@ function decimalValidator(type, depth = 0) {
       tokens.some(
         (token, index) =>
           typeof token === "string" &&
-          /^Decimal(?:32|64|128|256)?$/.test(token) &&
+          /^Decimal(?:32|64|128|256)?$/i.test(token) &&
           isTypeToken(tokens, index),
       )
     )

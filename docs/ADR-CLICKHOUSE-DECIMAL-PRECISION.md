@@ -23,4 +23,4 @@
 
 `tests/clickhouse-decimal.test.mjs` 是有界 HTTP 协议模拟，覆盖精确字符串、失败路径、无回退与非 Decimal 数字隔离。`tests/clickhouse.test.mjs` 保留原 GET/TLS/参数等协议检查。
 
-`tests/clickhouse-integration.mjs` 在现有数据库 CI 运行真实服务验收，新增 Decimal32/64/128/256 及授权、前置数据库变量、真实 HTTP、计划结果、备份/恢复/重启重新授权闭环。未在本地执行真实数据库或 VM 脚本测试；以新提交对应正常 CI 结果为准，不以模拟通过代替整链验收。
+`tests/clickhouse-integration.mjs` 在现有数据库 CI 运行真实服务验收，新增 Decimal32/64/128/256 及授权、前置数据库变量、真实 HTTP、计划结果、备份/恢复/重启重新授权闭环，并验证真实只读查询错误后同阶段提取回滚、初始变量不覆盖、HTTP未发送，以及显式撤销连接后原计划拒绝且HTTP未发送。未在本地执行真实数据库或 VM 脚本测试；以新提交对应正常 CI 结果为准，不以模拟通过代替整链验收。

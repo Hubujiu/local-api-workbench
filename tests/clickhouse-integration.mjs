@@ -132,9 +132,13 @@ const closeApp = async () => {
 };
 try {
   app = await createApp({ root, port: 0 });
-  const call = async (route, data) => {
+  const call = async (
+    route,
+    data,
+    method = data === undefined ? "GET" : "POST",
+  ) => {
     const response = await fetch(app.url + route, {
-      method: data === undefined ? "GET" : "POST",
+      method,
       headers: {
         "content-type": "application/json",
         "x-local-token": app.token,
@@ -217,6 +221,54 @@ try {
     await call(route(restored.id, "run"), { planId: restoredPlan.id }),
   );
   await assertDenied(project.id, plan.id);
+  // A real read-only query failure rolls back earlier extraction in the same
+  // before phase, retaining both initial variables and preventing HTTP entirely.
+  for (const [key, value] of Object.entries({
+    exact: "initial-exact",
+    guard: "initial-guard",
+  })) {
+    await call(route(restored.id, "environments"), {
+      operation: "upsert_global_variable",
+      arguments: { key, value },
+    });
+  }
+  const badRequest = request(restoredConnection.id);
+  badRequest.before.push({
+    type: "database",
+    connectionId: restoredConnection.id,
+    sql: "SELECT localapi_decimal_missing_function_fixture() AS exact",
+    parameters: [],
+    name: "guard",
+    path: "$.rows[0].exact",
+  });
+  const badPlan = await call(route(restored.id, "plans"), {
+    name: "Real query error preserves initial variables",
+    steps: [{ request: badRequest }],
+  });
+  const beforeError = hits;
+  const failed = await call(route(restored.id, "run"), { planId: badPlan.id });
+  assert.equal(failed.status, "failed", JSON.stringify(failed));
+  assert.match(failed.results[0].error, /ClickHouse查询失败/);
+  assert.equal(failed.initialVariables.exact, "initial-exact");
+  assert.equal(failed.initialVariables.guard, "initial-guard");
+  assert.equal(failed.variables.exact, "initial-exact");
+  assert.equal(failed.variables.guard, "initial-guard");
+  assert.equal(hits, beforeError, "failed before query must not reach HTTP");
+  const unchanged = await call(route(restored.id, "export"));
+  assert.equal(unchanged.globalVariables.exact, "initial-exact");
+  assert.equal(unchanged.globalVariables.guard, "initial-guard");
+  // Explicit revocation is distinct from restore/restart invalidation.
+  const revoked = await call(
+    route(restored.id, "database-connections"),
+    {
+      id: restoredConnection.id,
+    },
+    "DELETE",
+  );
+  assert.equal(revoked.revoked, true);
+  assert.deepEqual(await call(route(restored.id, "database-connections")), []);
+  await assertDenied(restored.id, restoredPlan.id);
+  console.log("REAL_CLICKHOUSE_DECIMAL_QUERY_ERROR_REVOKE_PASS");
   console.log("REAL_CLICKHOUSE_DECIMAL_PROJECT_ROUNDTRIP_PASS");
 } finally {
   await closeApp();
