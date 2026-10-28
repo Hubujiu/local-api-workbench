@@ -9,6 +9,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { executeRequest } from "../src/runtime.mjs";
 import { createApp } from "../src/server.mjs";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 const exec = promisify(execFile);
 const key = await readFile(
   new URL("./fixtures/localhost.key", import.meta.url),
@@ -27,12 +30,17 @@ async function fixture(t, secure = false) {
     originSeen = [];
   const origin = http.createServer((req, res) => {
     originSeen.push({ url: req.url, headers: req.headers });
-    res.end(
-      JSON.stringify({
-        url: req.url,
-        authorization: req.headers.authorization,
-        cookie: req.headers.cookie,
-      }),
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () =>
+      res.end(
+        JSON.stringify({
+          url: req.url,
+          authorization: req.headers.authorization,
+          cookie: req.headers.cookie,
+          body: Buffer.concat(chunks).toString("base64"),
+        }),
+      ),
     );
   });
   const originURL = "http://" + (await listen(origin, t));
@@ -250,4 +258,133 @@ test("saved owner request and frozen plan retain fragments through CLI, backup, 
     (await call("/api/projects/" + restored.id)).plans[0].steps[0].request.url,
     url,
   );
+});
+
+test(
+  "official MCP HTTP and stdio execute saved proxy definitions with grants and history isolation",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t, true);
+    const root = await mkdtemp(path.join(os.tmpdir(), "proxy-target-sdk-"));
+    const app = await createApp({ root, port: 0 });
+    const clients = [];
+    t.after(async () => {
+      await Promise.all(clients.map((client) => client.close()));
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const project = await app.store.create("SDK proxy target"),
+      denied = await app.store.create("Denied");
+    const url = f.originURL + "/sdk%23route?x=one&x=two#private-fragment";
+    project.requests = [
+      {
+        id: "sdk",
+        url,
+        proxy: f.proxyURL,
+        tls: { proxyCa: cert },
+        auth: { type: "bearer", token: "owned" },
+      },
+    ];
+    await app.store.save(project);
+    const configResponse = await fetch(app.url + "/api/mcp/config", {
+      method: "POST",
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        enabled: true,
+        projects: [project.id],
+        write: true,
+        execute: true,
+        remember: false,
+      }),
+    });
+    assert.equal(configResponse.status, 200);
+    const config = await configResponse.json();
+    for (const transport of [
+      new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+        requestInit: { headers: { Authorization: "Bearer " + config.token } },
+      }),
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [
+          path.resolve(import.meta.dirname, "../src/mcp.mjs"),
+          "--project",
+          project.id,
+          "--write",
+          "--execute",
+        ],
+        env: { LOCAL_API_DATA: root },
+        stderr: "pipe",
+      }),
+    ]) {
+      const client = new Client(
+        { name: "proxy-target-fixture", version: "1.0.0" },
+        { capabilities: {} },
+      );
+      clients.push(client);
+      await client.connect(transport);
+      const count = f.seen.length;
+      const refused = await client.callTool({
+        name: "localapi_execute_api",
+        arguments: { projectId: denied.id, apiId: "sdk" },
+      });
+      assert.equal(refused.isError, true);
+      assert.equal(f.seen.length, count);
+      const result = await client.callTool({
+        name: "localapi_execute_api",
+        arguments: { projectId: project.id, apiId: "sdk" },
+      });
+      assert.notEqual(result.isError, true, result.content?.[0]?.text);
+      const run = JSON.parse(result.content[0].text);
+      assert.equal(run.status, "passed");
+      assert.equal(f.seen.at(-1).url, url.split("#")[0]);
+      const saved = await app.store.get(project.id);
+      assert.equal(saved.requests[0].url, url);
+      assert.equal(saved.history[0].id, run.id);
+      assert.equal(saved.history[0].source, "mcp");
+    }
+    assert.equal(f.seen.length, 2);
+    assert.equal((await app.store.get(project.id)).history.length, 2);
+    assert.equal((await app.store.get(denied.id)).history.length, 0);
+  },
+);
+
+test("signed OAuth1 query and exact form body remain equivalent through a forward proxy", async (t) => {
+  const f = await fixture(t);
+  const definition = {
+    url:
+      f.originURL +
+      "/signed%23path?x=one&x=two&escaped=%23kept#private-fragment",
+    method: "POST",
+    bodyType: "urlencoded",
+    form: [
+      { key: "space", value: "a b+c" },
+      { key: "repeat", value: "one" },
+      { key: "repeat", value: "two" },
+    ],
+    auth: {
+      type: "oauth1",
+      consumerKey: "owned-consumer",
+      consumerSecret: "owned-secret",
+      accessToken: "owned-token",
+      tokenSecret: "owned-token-secret",
+      nonce: "fixed-fixture",
+      timestamp: "1700000000",
+    },
+  };
+  const direct = await executeRequest(definition);
+  const proxied = await executeRequest({ ...definition, proxy: f.proxyURL });
+  assert.equal(proxied.status, 200);
+  assert.deepEqual(JSON.parse(proxied.body), JSON.parse(direct.body));
+  const actual = JSON.parse(proxied.body);
+  assert.match(actual.authorization, /^OAuth /);
+  assert.equal(
+    Buffer.from(actual.body, "base64").toString(),
+    "space=a+b%2Bc&repeat=one&repeat=two",
+  );
+  assert.equal(f.seen.length, 1);
+  assert.equal(f.seen[0].url, definition.url.split("#")[0]);
 });
