@@ -531,3 +531,63 @@ test("internal evidence callback errors are contained as transport failure with 
   assert.equal(d.failure.responseComplete, false);
   assert.equal(f.requests.length, 1);
 });
+
+test("redirect generated authentication headers reject before proxy CONNECT and healthy header keys replay", async (t) => {
+  let connects = 0;
+  const sockets = new Set();
+  const proxy = http.createServer();
+  proxy.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  proxy.on("connect", (_request, socket) => {
+    connects++;
+    socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+  });
+  await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => proxy.close(resolve));
+  });
+  for (const httpVersion of ["1.1", "2"])
+    for (const auth of [
+      { type: "apiKey", in: "header", key: "invalid name", value: "x" },
+      { type: "apiKey", in: "header", key: "X-Key", value: "x\r\ny" },
+      { type: "bearer", token: "x\r\ny" },
+    ]) {
+      await assert.rejects(
+        executeRequest({
+          url: "https://127.0.0.1:9/",
+          redirect,
+          httpVersion,
+          auth,
+          proxy: `http://127.0.0.1:${proxy.address().port}`,
+          timeout: 1000,
+        }),
+        /header|token|character/i,
+      );
+      assert.equal(
+        connects,
+        0,
+        "invalid generated headers must not open a proxy tunnel",
+      );
+    }
+  const origin = await serve(t, (request, response) => {
+    assert.equal(request.headers["x-fixture-key"], "healthy-value");
+    if (request.url === "/first")
+      response.writeHead(307, { location: "/final" });
+    response.end("healthy");
+  });
+  const result = await executeRequest({
+    url: origin.url + "/first",
+    redirect,
+    auth: {
+      type: "apiKey",
+      in: "header",
+      key: "X-Fixture-Key",
+      value: "healthy-value",
+    },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(origin.requests.length, 2);
+});
