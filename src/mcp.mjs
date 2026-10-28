@@ -29,6 +29,12 @@ import { appendExecutionRecord } from "./execution-evidence.mjs";
 
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { realpathSync } from "node:fs";
+import {
+  importedExecutionChunkArguments,
+  importedExecutionChunkDefaultBytes,
+  importedExecutionChunkMaxBytes,
+  importedExecutionChunkError,
+} from "./imported-execution-chunk.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -338,7 +344,29 @@ export function createMCP({
       ...projectArg,
       sourceProjectId: str,
       runId: str,
+      chunk: {
+        type: "object",
+        description:
+          "可选读取原始JSON文件UTF-8字节；后续块须回传首块artifactSha256，不授予新权限",
+        properties: {
+          offsetBytes: {
+            type: "integer",
+            minimum: 0,
+            maximum: Number.MAX_SAFE_INTEGER,
+          },
+          maxBytes: {
+            type: "integer",
+            minimum: 1,
+            maximum: importedExecutionChunkMaxBytes,
+            default: importedExecutionChunkDefaultBytes,
+          },
+          expectedArtifactSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        },
+        required: ["offsetBytes"],
+        additionalProperties: false,
+      },
     },
+    ["projectId", "sourceProjectId", "runId"],
   );
   addTool("get_execution_result", "读取逐步证据", {
     ...projectArg,
@@ -484,12 +512,19 @@ export function createMCP({
           message: "项目导入导出请求ID必须为安全整数或最多256字节的字符串",
         },
       };
+    let importedChunkRequest = false;
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
       if (params.name === "localapi_get_execution_result_chunk")
         args = executionResultChunkArguments(args);
+      if (tool.name === "localapi_get_imported_execution_run") {
+        importedChunkRequest = true;
+        const chunkArgs = importedExecutionChunkArguments(args);
+        importedChunkRequest = chunkArgs !== null;
+        if (chunkArgs) args = chunkArgs;
+      }
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       if (projectInterchange) validateMCPProjectArguments(args);
@@ -750,6 +785,7 @@ export function createMCP({
                 p,
                 args.sourceProjectId,
                 args.runId,
+                importedChunkRequest ? args.chunk : undefined,
               );
               if (!output) throw Error("原始执行记录不存在");
               break;
@@ -1070,6 +1106,13 @@ export function createMCP({
         content: [{ type: "text", text: JSON.stringify(output) }],
       });
     } catch (e) {
+      // Archive chunks use a fixed error even for hostile injected Store
+      // failures. Do not inspect error properties before this boundary.
+      if (importedChunkRequest)
+        return result({
+          isError: true,
+          content: [{ type: "text", text: importedExecutionChunkError }],
+        });
       const outcome = publicProjectCommitOutcome(e);
       if (outcome.project_ids)
         outcome.project_ids = outcome.project_ids.filter((id) =>
