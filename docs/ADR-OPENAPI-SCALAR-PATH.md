@@ -20,7 +20,9 @@ or dynamic function is executed by definition export.
 
 All marked names are safe ASCII names (1–100 characters), unique, `required:true`,
 enabled and present exactly once as a whole pathname segment. Substitution
-never targets authority, query or fragment. Values use strict percent encoding
+never targets authority, query or fragment. Single-slash service-relative paths
+remain valid definitions and use the existing explicit service binding at execution;
+network-path (`//authority`) references are not admitted. Values use strict percent encoding
 (including `!'()*`); only the codec inserts label `.` or matrix `;name=`. An
 already-percent-looking value is data and is encoded once, not decoded.
 Final `.`/`..` segments are rejected before WHATWG URL normalization can erase

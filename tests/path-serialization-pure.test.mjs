@@ -271,3 +271,21 @@ test("typed template binding preserves single-pass interpolation and numeric ide
   };
   assert.throws(() => validatePathSerialization(misplaced));
 });
+
+test("service-relative pathname definitions retain markers without admitting authority references", () => {
+  const relative = {
+    ...request(row("matrix", "42")),
+    url: "/v1/one%2Ftwo/items/{color}",
+  };
+  validatePathSerialization(relative);
+  assert.equal(serializeRequestPath(relative), "/v1/one%2Ftwo/items/;color=42");
+  assert.throws(() =>
+    validatePathSerialization({ ...relative, url: "//{color}/items" }),
+  );
+  assert.throws(() =>
+    validatePathSerialization({
+      ...relative,
+      url: "//example.test/items/{color}",
+    }),
+  );
+});
