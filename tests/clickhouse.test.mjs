@@ -73,7 +73,7 @@ test("ClickHouse rejects redirects, malformed and oversized replies and truncate
     } else
       res.end(
         JSON.stringify({
-          meta: [{ name: "n" }],
+          meta: [{ name: "n", type: "UInt32" }],
           data: Array.from({ length: 1001 }, (_, n) => ({ n })),
         }),
       );
@@ -95,7 +95,12 @@ test("ClickHouse TLS verifies server certificates and accepts only explicit trus
     ),
     key = await readFile(new URL("./fixtures/localhost.key", import.meta.url));
   const server = https.createServer({ cert, key }, (_, res) =>
-    res.end(JSON.stringify({ meta: [{ name: "n" }], data: [{ n: 1 }] })),
+    res.end(
+      JSON.stringify({
+        meta: [{ name: "n", type: "UInt32" }],
+        data: [{ n: 1 }],
+      }),
+    ),
   );
   server.on("tlsClientError", () => {});
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
