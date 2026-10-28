@@ -46,6 +46,7 @@ import {
   httpFinalizationFailure,
   readHttpFinalizationFailure,
 } from "./http-finalization.mjs";
+import { importPostmanGraphQLBody } from "./postman-graphql-body.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1548,6 +1549,8 @@ export function importDocument(doc) {
         const queries =
           req.url && typeof req.url === "object" ? req.url.query || [] : [];
         const rawURL = postmanImportURL(req.url, queries.length > 0);
+        const graphql =
+          body.mode === "graphql" ? importPostmanGraphQLBody(body) : undefined;
         const mode =
           body.mode === "raw"
             ? body.options?.raw?.language === "json"
@@ -1587,8 +1590,8 @@ export function importDocument(doc) {
               value: v.value,
               enabled: true,
             })),
-            bodyType: mode,
-            body: body.raw || "",
+            bodyType: graphql?.bodyType ?? mode,
+            body: graphql ? graphql.body : body.raw || "",
             form: (body.urlencoded || body.formdata || []).map((f) => ({
               key: f.key,
               value: f.type === "file" ? "" : f.value,
