@@ -21,16 +21,22 @@ not a lossless JSON number parser, and no value is automatically guessed or
 converted into a different BSON type. The same guard applies to direct query
 objects and JSON query strings used by project-scoped declarative database tasks.
 
-`$numberLong` wrappers must contain exactly that key and a decimal string within
-`-9223372036854775808..9223372036854775807`. This is signed Int64, not unsigned;
-overflow must not wrap to a different filter target. Validation follows the
-pinned BSON EJSON decimal grammar: explicit plus is allowed (including `+0`),
-leading zeros and `-0` are not. Accepted values retain numerical semantics, not
-lexical spelling after canonical BSON serialization. No wrapper is rewritten.
-The pinned parser alone can wrap oversized Long values or discard sibling keys,
-so validation occurs before connection construction. This check does not change
-Decimal128 or explicit Double behavior, or claim to validate every EJSON type.
-Sources: [MongoDB EJSON Int64](https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/)
+The four numeric wrappers (`$numberInt`, `$numberLong`, `$numberDecimal`,
+`$numberDouble`) must each contain exactly one key with a string value. Sibling
+fields, including query operators or another numeric type key, are rejected
+before connection construction rather than silently discarded by BSON.
+`$numberInt` decimal strings must be within `-2147483648..2147483647`; explicit
+signs and leading zeros retain their integer semantics, while fractions,
+exponents, nondecimal bases and whitespace are rejected. `$numberLong` must be
+within `-9223372036854775808..9223372036854775807`; its pinned EJSON grammar
+allows explicit plus (including `+0`) but not leading zeros or `-0`.
+Neither integer type is unsigned; overflow must not wrap to another target.
+No accepted wrapper is rewritten; canonical serialization preserves numerical,
+not lexical, identity. Valid Decimal128 and explicit Double strings (including
+supported nonfinite values) continue through the existing BSON parser. This is
+not a replacement floating-point/decimal parser or complete EJSON validation;
+Date, Timestamp and Binary wrappers are not added to this validation scope.
+Sources: [MongoDB EJSON numeric types](https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/)
 and [type-wrapper parsing rules](https://specifications.readthedocs.io/en/latest/extended-json/extended-json/#parsers).
 
 Writes, arbitrary commands, aggregation, watches, server-side JavaScript and

@@ -38,7 +38,7 @@ console.log("REAL_MONGODB_FIXTURES_PASS");
 
 // This script is run only against the existing CI-owned MongoDB service.
 // Seed writes belong to this fixture; application queries remain read-only.
-const { MongoClient, Long } = await import("mongodb");
+const { MongoClient, Long, Int32 } = await import("mongodb");
 const { createServer } = await import("node:http");
 const { mkdtemp, rm } = await import("node:fs/promises");
 const { tmpdir } = await import("node:os");
@@ -76,6 +76,38 @@ const closeServer = async (server) => {
 try {
   await seed.connect();
   const fixture = seed.db("fixture").collection(collection);
+  const intFixture = seed.db("fixture").collection(collection + "_int");
+  const intBoundaries = [
+    ["-2147483648", "int-minimum"],
+    ["2147483647", "int-maximum"],
+    ["0", "int-zero"],
+  ];
+  await intFixture.insertMany(
+    intBoundaries.map(([value, label]) => ({
+      id: new Int32(Number(value)),
+      label,
+    })),
+  );
+  const intSnapshot = await intFixture
+    .find({}, { projection: { _id: 0 } })
+    .sort({ id: 1 })
+    .toArray();
+  for (const [value, label] of intBoundaries) {
+    const boundaryQuery = {
+      collection: collection + "_int",
+      filter: { id: { $numberInt: value } },
+      projection: { _id: 0, label: 1 },
+    };
+    for (const input of [
+      { query: boundaryQuery },
+      { sql: JSON.stringify(boundaryQuery) },
+    ]) {
+      assert.deepEqual(
+        (await queryRemoteDatabase({ ...connection, ...input })).rows,
+        [{ label }],
+      );
+    }
+  }
   const longMin = "-9223372036854775808";
   const longMax = "9223372036854775807";
   await fixture.insertMany([
@@ -126,15 +158,35 @@ try {
     { id: { $numberLong: intended, extra: "discarded" } },
     { id: { $numberLong: intended, $gt: 0 } },
   ];
-  for (const filter of invalidLongFilters) {
-    const invalidQuery = { ...query, filter };
+  const invalidNumericCases = [
+    ...invalidLongFilters.map((filter) => ({
+      query: { ...query, filter },
+      error: /\$numberLong/,
+    })),
+    ...["2147483648", "-2147483649", "4294967296"].map((value) => ({
+      query: {
+        ...query,
+        collection: collection + "_int",
+        filter: { id: { $numberInt: value } },
+      },
+      error: /\$numberInt/,
+    })),
+    ...["$numberInt", "$numberLong", "$numberDouble", "$numberDecimal"].flatMap(
+      (wrapper) =>
+        [{ extra: "discarded" }, { $gt: 0 }].map((extra) => ({
+          query: { ...query, filter: { id: { [wrapper]: "0", ...extra } } },
+          error: new RegExp("\\" + wrapper),
+        })),
+    ),
+  ];
+  for (const { query: invalidQuery, error } of invalidNumericCases) {
     for (const input of [
       { query: invalidQuery },
       { sql: JSON.stringify(invalidQuery) },
     ]) {
       await assert.rejects(
         queryRemoteDatabase({ ...connection, ...input }),
-        /\$numberLong/,
+        error,
       );
     }
   }
@@ -257,10 +309,10 @@ try {
   console.log("REAL_MONGODB_INTEGER_FILTER_ATOMIC_FAILURE_PASS");
 
   // Every invalid wrapper must fail atomically even after an earlier local operation.
-  for (const filter of invalidLongFilters) {
+  for (const { query: invalidQuery, error } of invalidNumericCases) {
     const invalidWrapperRequest = requestFor(
       grant.id,
-      JSON.stringify({ ...query, filter }),
+      JSON.stringify(invalidQuery),
     );
     invalidWrapperRequest.before.unshift({
       type: "set",
@@ -274,12 +326,12 @@ try {
       planId: wrapperPlan.id,
     });
     assert.equal(wrapperFailure.status, "failed");
-    assert.match(wrapperFailure.results[0].error, /\$numberLong/);
+    assert.match(wrapperFailure.results[0].error, error);
     assert.deepEqual(wrapperFailure.variables, wrapperFailure.initialVariables);
     assert.equal(wrapperFailure.variables.unpublished, undefined);
     assert.equal(wrapperFailure.variables.exact, undefined);
     assert.equal(wrapperFailure.results[0].response, undefined);
-    assert.equal(hits, 1, "invalid Long wrapper must not dispatch HTTP");
+    assert.equal(hits, 1, "invalid numeric wrapper must not dispatch HTTP");
     assert.equal(wrapperFailure.recordSaved, true);
     const { recordSaved, ...evidence } = wrapperFailure;
     const persisted = await app.store.get(project.id);
@@ -294,7 +346,15 @@ try {
       snapshot,
     );
   }
+  assert.deepEqual(
+    await intFixture
+      .find({}, { projection: { _id: 0 } })
+      .sort({ id: 1 })
+      .toArray(),
+    intSnapshot,
+  );
   console.log("REAL_MONGODB_EJSON_LONG_BOUNDS_ATOMIC_FAILURE_PASS");
+  console.log("REAL_MONGODB_EJSON_NUMERIC_WRAPPERS_ATOMIC_FAILURE_PASS");
 
   const backup = await api(base(project.id, "export"));
   const restored = await api("/api/restore", { document: backup }, "POST", 201);
@@ -350,13 +410,15 @@ try {
 } finally {
   if (app?.server.listening) await closeServer(app.server);
   if (echo.listening) await closeServer(echo);
-  await seed
-    .db("fixture")
-    .collection(collection)
-    .drop()
-    .catch((error) => {
-      if (error.codeName !== "NamespaceNotFound") throw error;
-    });
+  for (const name of [collection, collection + "_int"]) {
+    await seed
+      .db("fixture")
+      .collection(name)
+      .drop()
+      .catch((error) => {
+        if (error.codeName !== "NamespaceNotFound") throw error;
+      });
+  }
   await seed.close();
   await rm(root, { recursive: true, force: true });
 }
