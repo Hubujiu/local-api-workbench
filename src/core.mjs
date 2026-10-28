@@ -1546,13 +1546,31 @@ export function importDocument(doc) {
               ? { url: item.request }
               : item.request || {},
           body = req.body || {};
+        if (
+          Object.hasOwn(body, "disabled") &&
+          typeof body.disabled !== "boolean"
+        )
+          throw Error("Postman正文disabled必须为布尔值");
+        if (
+          body.mode !== undefined &&
+          !["raw", "urlencoded", "formdata", "file", "graphql"].includes(
+            body.mode,
+          )
+        )
+          throw Error("不支持的Postman正文模式");
+        const disabled = body.disabled === true;
+        if (!disabled && body.mode === "file")
+          throw Error("不自动导入Postman二进制文件正文，请显式选择文件");
+        const graphql =
+          !disabled && body.mode === "graphql"
+            ? importPostmanGraphQLBody(body)
+            : undefined;
         const queries =
           req.url && typeof req.url === "object" ? req.url.query || [] : [];
         const rawURL = postmanImportURL(req.url, queries.length > 0);
-        const graphql =
-          body.mode === "graphql" ? importPostmanGraphQLBody(body) : undefined;
-        const mode =
-          body.mode === "raw"
+        const mode = disabled
+          ? "none"
+          : body.mode === "raw"
             ? body.options?.raw?.language === "json"
               ? "json"
               : "raw"
@@ -1591,8 +1609,15 @@ export function importDocument(doc) {
               enabled: true,
             })),
             bodyType: graphql?.bodyType ?? mode,
-            body: graphql ? graphql.body : body.raw || "",
-            form: (body.urlencoded || body.formdata || []).map((f) => ({
+            body: disabled ? "" : graphql ? graphql.body : body.raw || "",
+            form: (disabled
+              ? []
+              : body.mode === "urlencoded"
+                ? body.urlencoded || []
+                : body.mode === "formdata"
+                  ? body.formdata || []
+                  : []
+            ).map((f) => ({
               key: f.key,
               value: f.type === "file" ? "" : f.value,
               enabled: !f.disabled,
