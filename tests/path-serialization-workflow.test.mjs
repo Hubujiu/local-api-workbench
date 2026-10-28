@@ -8,6 +8,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
+import { initializeQueryRuntime } from "../src/script-url-runtime.mjs";
 const values = { simple: "中文/%!", label: 0, matrix: false };
 const expected = {
   simple: "/simple/%E4%B8%AD%E6%96%87%2F%25%21",
@@ -271,6 +272,11 @@ test("scalar path errors are atomic and dynamic/template inputs are admitted bef
     assert.deepEqual(await f.call(url), before);
     assert.deepEqual(await files(f.app.store.directory(project.id)), disk);
   }
+  const sdk = structuredClone(project.requests[0]);
+  sdk.scriptURLMode = "sdk";
+  sdk.scriptURLRuntime = initializeQueryRuntime({ url: f.origin + "/safe" });
+  await f.call(url + "/curl", "POST", { request: sdk }, 400);
+  assert.equal(f.seen.length, 0);
   const matrix = structuredClone(
     project.requests.find((r) => r.sourceOperationId === "matrix"),
   );

@@ -202,6 +202,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  validatePathSerialization(request);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&

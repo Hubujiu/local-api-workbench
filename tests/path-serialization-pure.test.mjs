@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   importOpenAPIPath,
+  bindPathTemplates,
   validatePathSerialization,
   serializeRequestPath,
   pathParameterDefinition,
@@ -169,4 +170,36 @@ test("unmarked Swagger and native rows retain legacy substitution and output", (
   );
   assert.equal(Object.hasOwn(legacy, "pathSerialization"), false);
   assert(serializeRequestPath(request(legacy)).includes("!'()*"));
+});
+
+test("typed template binding preserves single-pass interpolation and numeric identity", () => {
+  const source = request(row("matrix", "{{v}}"));
+  const vars = { v: "{{other}}", other: "expanded" };
+  const bound = bindPathTemplates(structuredClone(source), vars);
+  assert.equal(bound.path[0].value, "{{v}}");
+  bound.path[0].value = bound.path[0].value.replace(
+    /\{\{([^{}]+)\}\}/g,
+    (_, key) => String(vars[key]),
+  );
+  assert.equal(bound.path[0].value, "{{other}}");
+  assert.throws(() => serializeRequestPath(bound), /尚未绑定/);
+  for (const value of [false, 0, 1.5]) {
+    const typed = request(
+      row("matrix", "{{v}}", { schema: { type: typeof value } }),
+    );
+    assert.equal(bindPathTemplates(typed, { v: value }).path[0].value, value);
+  }
+  for (const [type, value] of [
+    ["integer", 1.5],
+    ["boolean", "false"],
+    ["string", 1],
+  ])
+    assert.throws(() => row("simple", value, { schema: { type } }));
+  for (const extra of [{ example: "" }, { style: null }, { explode: null }])
+    assert.throws(() => row("simple", "x", extra));
+  const misplaced = {
+    ...request(),
+    query: [{ key: "q", value: "x", pathSerialization: {} }],
+  };
+  assert.throws(() => validatePathSerialization(misplaced));
 });

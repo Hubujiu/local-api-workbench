@@ -209,9 +209,10 @@ export function bindPathTemplates(request, variables) {
     )
       continue;
     const match = /^\{\{\s*([^{}]+?)\s*\}\}$/u.exec(row.value);
-    if (match && own(variables, match[1]))
-      row.value = assertPathValue(row, variables[match[1]]);
-    else if (row.value.includes("{{") && row.schema.type !== "string") fail();
+    if (match && own(variables, match[1])) {
+      const value = assertPathValue(row, variables[match[1]]);
+      if (typeof value !== "string") row.value = value;
+    } else if (row.value.includes("{{") && row.schema.type !== "string") fail();
   }
   return request;
 }
