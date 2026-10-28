@@ -86,6 +86,7 @@ export function oracleReadInput(input) {
     user,
     password,
     externalAuth: false,
+    // Connection-attempt retries only, not internal query-message re-execution.
     retryCount: 0,
     connectTimeout: 3,
     transportConnectTimeout: 3,

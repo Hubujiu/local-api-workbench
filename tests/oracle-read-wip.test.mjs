@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { runOracleReadWithDriver } from "../src/oracle-read-wip.mjs";
 
-const input = () => ({
+const input = (patch = {}) => ({
   host: "db.example.test",
   port: 1521,
   service: "FREEPDB1",
@@ -11,12 +11,15 @@ const input = () => ({
   ssl: true,
   sql: "SELECT amount FROM data WHERE id = :1",
   parameters: [{ type: "int64", value: "9223372036854775807" }],
+  ...patch,
 });
 function fixture({
   rows = [["12345678901234567890.12345"]],
   fail,
   statementType = "SELECT",
   metadata,
+  rawMetadata,
+  expectedSQL = input().sql,
 } = {}) {
   const calls = [];
   const driver = Object.fromEntries(
@@ -59,15 +62,25 @@ function fixture({
         return {};
       }
       await step("execute");
-      assert.equal(sql, input().sql);
+      assert.equal(sql, expectedSQL);
       assert.equal(options.autoCommit, false);
       assert.equal(options.resultSet, true);
       assert.equal(options.outFormat, driver.OUT_FORMAT_ARRAY);
       assert.equal(options.prefetchRows, 0);
       assert.equal(options.fetchArraySize, 1);
-      assert.deepEqual(options.fetchTypeHandler(metadata[0]), {
-        type: driver.DB_TYPE_VARCHAR,
-      });
+      // Model 26.0.0: describe/result metadata can already have renamed names,
+      // while fetchTypeHandler sees originals and future raw dbTypes are not
+      // necessarily normalized until each column's turn.
+      const raw = (rawMetadata ?? metadata).map((column) => ({ ...column }));
+      for (let i = 0; i < raw.length; i++) {
+        raw[i].dbType = metadata[i].dbType;
+        assert.deepEqual(
+          options.fetchTypeHandler({ ...raw[i] }, raw),
+          metadata[i].dbType === driver.DB_TYPE_NUMBER
+            ? { type: driver.DB_TYPE_VARCHAR }
+            : undefined,
+        );
+      }
       assert.deepEqual(binds, [
         {
           dir: driver.BIND_IN,
@@ -79,7 +92,7 @@ function fixture({
     },
     async getStatementInfo(sql) {
       await step("classify");
-      assert.equal(sql, input().sql);
+      assert.equal(sql, expectedSQL);
       return { statementType, metaData: metadata };
     },
     async rollback() {
@@ -204,7 +217,7 @@ test("failures are sanitized and cleanup continues after individual cleanup erro
   }
 });
 
-test("unsupported or duplicate metadata rejects before query execution", async () => {
+test("unsupported or already-invalid describe metadata rejects before query execution", async () => {
   for (const metadata of [
     [{ name: "DATA", dbType: "DB_TYPE_CLOB" }],
     [
@@ -237,7 +250,7 @@ test("row probe is bounded at 1001 and byte overflow fails without partial deliv
   ]);
 });
 
-test("abort after an awaited stage prevents later caller SQL without replay", async () => {
+test("abort after an awaited stage prevents adapter resubmission of caller SQL", async () => {
   for (const phase of ["setup", "classify", "query"]) {
     const f = fixture(),
       c = new AbortController();
@@ -281,4 +294,63 @@ test("tiny and large Oracle NUMBER text is returned without numeric coercion", a
   const f = fixture({ rows: [[number]] });
   const value = await runOracleReadWithDriver(input(), { driver: f.driver });
   assert.equal(value.rows[0].AMOUNT, number);
+});
+
+test("original duplicate aliases reject even when describe already renamed them", async () => {
+  const sql = "SELECT 1 AS duplicate_name, 2 AS duplicate_name FROM DUAL";
+  const f = fixture({
+    expectedSQL: sql,
+    rows: [["1", "2"]],
+    metadata: [
+      { name: "DUPLICATE_NAME", dbType: "DB_TYPE_NUMBER" },
+      { name: "DUPLICATE_NAME_1", dbType: "DB_TYPE_NUMBER" },
+    ],
+    rawMetadata: [
+      { name: "DUPLICATE_NAME", dbType: 2010 },
+      { name: "DUPLICATE_NAME", dbType: 2010 },
+    ],
+  });
+  await assert.rejects(
+    runOracleReadWithDriver(input({ sql }), { driver: f.driver }),
+    { code: "ORACLE_WIP_QUERY_FAILED" },
+  );
+  assert.ok(f.calls.includes("execute")); // Cannot promise pre-execution rejection.
+  assert.ok(!f.calls.includes("fetch"));
+  assert.deepEqual(f.calls.slice(-2), ["rollback", "connection.close"]);
+});
+
+test("unique multi-column raw names allow later columns whose types are not normalized yet", async () => {
+  const sql = "SELECT 1 AS amount, 'label' AS label FROM DUAL";
+  const f = fixture({
+    expectedSQL: sql,
+    rows: [["1", "label"]],
+    metadata: [
+      { name: "AMOUNT", dbType: "DB_TYPE_NUMBER" },
+      { name: "LABEL", dbType: "DB_TYPE_VARCHAR" },
+    ],
+    rawMetadata: [
+      { name: "AMOUNT", dbType: 2010 },
+      { name: "LABEL", dbType: 2001 },
+    ],
+  });
+  const value = await runOracleReadWithDriver(input({ sql }), {
+    driver: f.driver,
+  });
+  assert.deepEqual(value, {
+    columns: ["AMOUNT", "LABEL"],
+    rows: [{ AMOUNT: "1", LABEL: "label" }],
+    truncated: false,
+    limit: 1000,
+  });
+});
+
+test("pinned driver's UNKNOWN classification keeps WITH/CTE unsupported", async () => {
+  const sql =
+    "WITH values_cte AS (SELECT 1 AS n FROM DUAL) SELECT n FROM values_cte";
+  const f = fixture({ expectedSQL: sql, statementType: "UNKNOWN" });
+  await assert.rejects(
+    runOracleReadWithDriver(input({ sql }), { driver: f.driver }),
+    { code: "ORACLE_WIP_QUERY_FAILED" },
+  );
+  assert.ok(!f.calls.includes("execute"));
 });

@@ -126,30 +126,48 @@ export function oracleReadFetchType(metadata, driver) {
   );
 }
 
-export function oracleReadColumns(metadata, driver) {
+// Name-only validation for fetchTypeHandler's raw rowset metadata. Later
+// columns may not yet have public normalized dbType properties in driver 26.
+export function oracleReadColumnNames(metadata) {
   if (!Array.isArray(metadata) || !metadata.length || metadata.length > 128)
     throw Error("Oracle WIP result requires 1 to 128 scalar columns");
   for (let i = 0; i < metadata.length; i++)
     if (!Object.hasOwn(metadata, i))
       throw Error("Oracle WIP result metadata must be a complete column array");
-  const columns = metadata.map((column) => {
+  return databaseColumns(
+    metadata.map((column) => {
+      if (
+        !column ||
+        typeof column !== "object" ||
+        Array.isArray(column) ||
+        !validText(column.name) ||
+        !column.name.length ||
+        column.name.includes("\0") ||
+        Buffer.byteLength(column.name) > 512
+      )
+        throw Error(
+          "Oracle WIP result column name is invalid or exceeds limits",
+        );
+      return column.name;
+    }),
+  );
+}
+
+export function oracleReadColumns(metadata, driver) {
+  const columns = oracleReadColumnNames(metadata);
+  for (const column of metadata) {
     oracleReadFetchType(column, driver);
     if (
-      !validText(column.name) ||
-      !column.name.length ||
-      column.name.includes("\0") ||
-      Buffer.byteLength(column.name) > 512 ||
-      (column.byteSize !== undefined &&
-        (!Number.isInteger(column.byteSize) ||
-          column.byteSize < 0 ||
-          column.byteSize > MAX))
+      column.byteSize !== undefined &&
+      (!Number.isInteger(column.byteSize) ||
+        column.byteSize < 0 ||
+        column.byteSize > MAX)
     )
       throw Error(
         "Oracle WIP result column metadata is invalid or exceeds limits",
       );
-    return column.name;
-  });
-  return databaseColumns(columns);
+  }
+  return columns;
 }
 
 export function oracleReadRow(row, metadata, driver) {

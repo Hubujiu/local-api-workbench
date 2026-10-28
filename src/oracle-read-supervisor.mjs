@@ -27,6 +27,9 @@ function validResult(value) {
     typeof value.truncated !== "boolean"
   )
     return false;
+  // Array#some skips holes, which advanced IPC preserves.
+  for (let i = 0; i < value.columns.length; i++)
+    if (!Object.hasOwn(value.columns, i)) return false;
   if (
     Object.keys(value).some(
       (x) => !["columns", "rows", "truncated", "limit"].includes(x),
@@ -112,7 +115,7 @@ export async function runOracleReadOwned(
     const fail = (code) => {
       if (closed || failure) return;
       failure = oracleReadFailure(code);
-      // No replay, remote admin command, break-only cancellation, or driver
+      // No adapter replay, remote admin command, break-only cancellation, or driver
       // private socket access. Only this invocation's process is terminated.
       try {
         worker?.kill("SIGKILL");

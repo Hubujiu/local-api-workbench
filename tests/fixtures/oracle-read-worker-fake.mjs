@@ -21,8 +21,9 @@ driver.getConnection = async (options) => {
   const metaData = [{ name: "VALUE", dbType: driver.DB_TYPE_NUMBER }];
   return {
     thin: true,
-    async execute(sql) {
+    async execute(sql, _binds, executeOptions) {
       if (sql === "SET TRANSACTION READ ONLY") return {};
+      executeOptions.fetchTypeHandler({ ...metaData[0] }, metaData);
       return {
         metaData,
         resultSet: {

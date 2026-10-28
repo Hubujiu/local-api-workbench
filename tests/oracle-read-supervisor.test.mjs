@@ -136,7 +136,7 @@ test("abort owns only this worker and must observe exit instead of treating kill
   assert.equal(h.timers.size, 0);
 });
 
-test("connection, query, cleanup and total deadlines terminate and never replay", async () => {
+test("connection, query, cleanup and total deadlines terminate without adapter replay", async () => {
   for (const target of ["connect", "query", "cleanup", "total"]) {
     const h = harness();
     let settled = false;
@@ -241,9 +241,10 @@ test("worker query failure is sanitized and waits for exit; startup throw leaves
   assert.equal(other.timers.size, 0);
 });
 
-test("IPC collector rejects empty/malformed columns and noncanonical blobs", async () => {
+test("IPC collector rejects empty/sparse/malformed columns and noncanonical blobs", async () => {
   for (const value of [
     { ...result(), columns: [], rows: [{}] },
+    { ...result(), columns: new Array(1), rows: [] },
     { ...result(), columns: ["\ud800"], rows: [{ "\ud800": "1" }] },
     { ...result(), rows: [{ VALUE: "\ud800" }] },
     {

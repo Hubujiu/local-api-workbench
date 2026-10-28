@@ -3,14 +3,17 @@ import { oracleReadInput } from "./oracle-read-config.mjs";
 import {
   oracleBindParameters,
   oracleReadColumns,
+  oracleReadColumnNames,
   oracleReadFetchType,
   oracleReadRow,
 } from "./oracle-read-values.mjs";
 
 const messages = Object.freeze({
-  ORACLE_WIP_CANCELLED: "Oracle WIP read cancelled; no replay",
+  ORACLE_WIP_CANCELLED:
+    "Oracle WIP read cancelled; adapter will not retry or replay",
   ORACLE_WIP_DRIVER_UNAVAILABLE: "Oracle WIP requires an explicit Thin driver",
-  ORACLE_WIP_QUERY_FAILED: "Oracle WIP read failed; no replay",
+  ORACLE_WIP_QUERY_FAILED:
+    "Oracle WIP read failed; adapter will not retry or replay",
   ORACLE_WIP_CLEANUP_FAILED: "Oracle WIP cleanup failed; result withheld",
   ORACLE_WIP_TIMEOUT: "Oracle WIP deadline exceeded; owned worker terminated",
   ORACLE_WIP_WORKER_FAILED: "Oracle WIP worker failed; result withheld",
@@ -64,6 +67,7 @@ export async function runOracleReadWithDriver(
       throw oracleReadFailure();
     const expectedColumns = oracleReadColumns(info.metaData, driver);
     phase("query");
+    let originalNames;
     const value = await connection.execute(
       config.sql,
       oracleBindParameters(config.binds, driver),
@@ -74,7 +78,21 @@ export async function runOracleReadWithDriver(
         prefetchRows: 0,
         fetchArraySize: 1,
         keepInStmtCache: false,
-        fetchTypeHandler: (metadata) => oracleReadFetchType(metadata, driver),
+        fetchTypeHandler: (column, rowsetMetadata) => {
+          // Public handler metadata exposes original names before the driver
+          // normalizes duplicates. Do not type-check later raw columns yet.
+          const names = oracleReadColumnNames(rowsetMetadata);
+          const name = oracleReadColumnNames([column])[0];
+          if (
+            !names.includes(name) ||
+            (originalNames &&
+              (names.length !== originalNames.length ||
+                names.some((value, i) => value !== originalNames[i])))
+          )
+            throw oracleReadFailure();
+          originalNames = names;
+          return oracleReadFetchType(column, driver);
+        },
       },
     );
     // Capture the ResultSet before checking cancellation so cleanup owns it.
@@ -89,6 +107,9 @@ export async function runOracleReadWithDriver(
     const metadata = value.metaData ?? resultSet.metaData;
     const columns = oracleReadColumns(metadata, driver);
     if (
+      !originalNames ||
+      columns.length !== originalNames.length ||
+      columns.some((name, i) => name !== originalNames[i]) ||
       columns.length !== expectedColumns.length ||
       columns.some(
         (name, i) =>
