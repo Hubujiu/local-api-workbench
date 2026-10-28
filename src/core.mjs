@@ -1157,7 +1157,10 @@ export function importDocument(doc) {
             item.auth || inheritedAuth,
             currentEvents,
           );
-        const req = item.request || {},
+        const req =
+            typeof item.request === "string"
+              ? { url: item.request }
+              : item.request || {},
           body = req.body || {};
         const rawURL =
           typeof req.url === "string" ? req.url : req.url?.raw || "";
