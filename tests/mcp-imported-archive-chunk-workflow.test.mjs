@@ -16,6 +16,7 @@ import { serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { makeWireRecord, prepareWireExecution } from "../src/wire-evidence.mjs";
+import { readArchiveOwnerResponse } from "./helpers/archive-owner-response.mjs";
 
 const MiB = 1024 * 1024;
 const toolName = "localapi_get_imported_execution_run";
@@ -275,8 +276,7 @@ test(
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      assert(response.ok, await response.clone().text());
-      return response.json();
+      return readArchiveOwnerResponse(response);
     };
     const project = await owner("/api/projects", {
       name: "Synthetic imported archive acceptance",
