@@ -1227,6 +1227,7 @@ export async function createApp({
               return json(res, 200, {
                 ...result.response,
                 outcome: result.status,
+                failure: result.failure,
                 variableWrites: scoped.receipt(),
                 assertions: result.assertions,
                 extracted: { ...single.variables, ...result.extracted },

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { acquireFileLock } from "./file-lock.mjs";
+import { throwIfInactive } from "./request-control.mjs";
 const maximum = 500;
 function httpURL(value) {
   const u = new URL(value);
@@ -93,11 +94,18 @@ export class ProjectCookieJar {
         .digest("hex") + ".json",
     );
   }
-  async transact(fn, { write = false, expectedRevision } = {}) {
+  async transact(
+    fn,
+    { write = false, expectedRevision, signal, deadline } = {},
+  ) {
+    const controls = { signal, deadline };
+    throwIfInactive(controls);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    const release = await acquireFileLock(this.file + ".lock");
+    throwIfInactive(controls);
+    const release = await acquireFileLock(this.file + ".lock", controls);
     let temporary;
     try {
+      throwIfInactive(controls);
       let state = { version: 1, revision: 0, enabled: false, cookies: [] };
       try {
         const bytes = await readFile(this.file);
@@ -106,6 +114,7 @@ export class ProjectCookieJar {
       } catch (e) {
         if (e.code !== "ENOENT") throw e;
       }
+      throwIfInactive(controls);
       if (
         state.version !== 1 ||
         !Number.isSafeInteger(state.revision) ||
@@ -117,6 +126,7 @@ export class ProjectCookieJar {
         throw Error("Cookie已有其他修改，请重新加载");
       const jar = restore(state.cookies),
         result = await fn(state, jar);
+      throwIfInactive(controls);
       if (write && result !== false) {
         state.cookies = entries(jar);
         if (state.cookies.length > maximum) throw Error("Cookie最多500项");
@@ -125,9 +135,15 @@ export class ProjectCookieJar {
         if (Buffer.byteLength(text) > 2 * 1024 * 1024)
           throw Error("Cookie存储超过2MiB");
         temporary = this.file + "." + randomUUID() + ".tmp";
+        throwIfInactive(controls);
         await writeFile(temporary, text, { mode: 0o600 });
+        // Await our write before cleanup. Never leave an abandoned write that
+        // could recreate a removed temp file or publish after cancellation.
+        throwIfInactive(controls);
         await rename(temporary, this.file);
         temporary = null;
+        // Atomic rename is the commit point; cancellation cannot roll it back.
+        throwIfInactive(controls);
       }
       return result;
     } finally {
@@ -155,14 +171,16 @@ export class ProjectCookieJar {
       { write: true, expectedRevision },
     );
   }
-  async header(url) {
+  async header(url, controls = {}) {
     url = httpURL(url);
-    return this.transact((state, jar) =>
-      state.enabled ? jar.getCookieStringSync(url) : null,
+    return this.transact(
+      (state, jar) => (state.enabled ? jar.getCookieStringSync(url) : null),
+      controls,
     );
   }
-  async capture(url, headers) {
+  async capture(url, headers, controls = {}) {
     url = httpURL(url);
+    throwIfInactive(controls);
     if (headers === undefined) return Promise.resolve();
     const rows = Array.isArray(headers) ? headers : [headers];
     if (rows.length > 100) return Promise.resolve();
@@ -179,7 +197,7 @@ export class ProjectCookieJar {
           }
         }
       },
-      { write: true },
+      { ...controls, write: true },
     );
   }
   async setCookie(url, line, { expectedRevision }) {
@@ -236,10 +254,12 @@ export function memoryCookieSession(state) {
   if (!state) return undefined;
   const jar = restore(structuredClone(state.cookies));
   return {
-    async header(url) {
+    async header(url, controls = {}) {
+      throwIfInactive(controls);
       return state.enabled ? jar.getCookieStringSync(httpURL(url)) : null;
     },
-    async capture(url, headers) {
+    async capture(url, headers, controls = {}) {
+      throwIfInactive(controls);
       if (!state.enabled || headers === undefined) return;
       url = httpURL(url);
       const rows = Array.isArray(headers) ? headers : [headers];

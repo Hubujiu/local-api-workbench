@@ -34,6 +34,12 @@ import { validateResources } from "./resources.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
+import {
+  throwIfInactive,
+  interruptionKind,
+  requestTimeout,
+} from "./request-control.mjs";
+import { httpFinalizationFailure } from "./http-finalization.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
@@ -315,6 +321,23 @@ export class Store {
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
   const r = normalizeRequest(input);
+  return executeRequestWithinDeadline(
+    r,
+    signal,
+    cookieSession,
+    performance.now() + r.timeout,
+  );
+}
+
+// Private: authentication replay cannot accept or reset a caller-supplied budget.
+async function executeRequestWithinDeadline(
+  r,
+  signal,
+  cookieSession,
+  deadline,
+) {
+  const controls = { signal, deadline };
+  throwIfInactive(controls);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -348,7 +371,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
   if (cookieHeader !== undefined) headers.cookie = cookieHeader;
   if (cookieSession) {
-    const managed = await cookieSession.header(u.href);
+    const managed = await cookieSession.header(u.href, controls);
     if (managed !== null) {
       if (managed) headers.cookie = managed;
       else delete headers.cookie;
@@ -433,15 +456,18 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     headers.authorization = ntlmType1(r.auth);
     headers.connection = "keep-alive";
   }
+  throwIfInactive(controls);
   const start = performance.now();
-  const connection = await prepareConnection(u, r, headers, signal);
+  const connection = await prepareConnection(
+    u,
+    { ...r, timeout: deadline - performance.now() },
+    headers,
+    signal,
+  );
   let authSocket;
   const requestOnce = async (headers, expectedSocket) => {
-    const remainingTimeout = r.timeout - (performance.now() - start);
-    if (remainingTimeout <= 0) {
-      connection.cleanup();
-      throw Error("请求超时");
-    }
+    throwIfInactive(controls);
+    const remainingTimeout = deadline - performance.now();
     return await new Promise((resolve, reject) => {
       const req = connection.client.request(
         connection.url,
@@ -529,10 +555,10 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         },
       );
       const totalTimer = setTimeout(
-        () => req.destroy(Error("请求超时（总时限已到）")),
+        () => req.destroy(requestTimeout()),
         remainingTimeout,
       );
-      req.setTimeout(remainingTimeout, () => req.destroy(Error("请求超时")));
+      req.setTimeout(remainingTimeout, () => req.destroy(requestTimeout()));
       req.on("error", (error) => {
         clearTimeout(totalTimer);
         reject(error);
@@ -567,13 +593,25 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       ...headers,
       authorization: ntlmType3(challenge, r.auth),
     };
-    if (cookieSession && !signal?.aborted) {
-      await cookieSession.capture(u.href, first.headers["set-cookie"]);
-      const managed = await cookieSession.header(u.href);
-      if (managed !== null) {
-        if (managed) authenticatedHeaders.cookie = managed;
-        else delete authenticatedHeaders.cookie;
+    try {
+      throwIfInactive(controls);
+      if (cookieSession) {
+        await cookieSession.capture(
+          u.href,
+          first.headers["set-cookie"],
+          controls,
+        );
+        const managed = await cookieSession.header(u.href, controls);
+        if (managed !== null) {
+          if (managed) authenticatedHeaders.cookie = managed;
+          else delete authenticatedHeaders.cookie;
+        }
       }
+      throwIfInactive(controls);
+    } catch (error) {
+      if (interruptionKind(error))
+        throw httpFinalizationFailure(first, error, "auth-cookie");
+      throw error;
     }
     const final = await requestOnce(authenticatedHeaders, authSocket);
     final.authHandshake = {
@@ -584,20 +622,37 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     };
     return final;
   })().finally(() => connection.cleanup());
-  if (cookieSession && !signal?.aborted) {
+  try {
+    throwIfInactive(controls);
+    if (cookieSession)
+      await cookieSession.capture(
+        u.href,
+        response.headers["set-cookie"],
+        controls,
+      );
+    throwIfInactive(controls);
+  } catch (error) {
+    if (interruptionKind(error))
+      throw httpFinalizationFailure(
+        response,
+        error,
+        cookieSession ? "cookie-capture" : "response-finalization",
+      );
+    // Ordinary persistence errors remain warnings, but cannot mask an abort
+    // that arrived during the same filesystem operation.
     try {
-      await cookieSession.capture(u.href, response.headers["set-cookie"]);
-    } catch (error) {
-      response.cookieError = "Cookie保存失败：" + error.message;
+      throwIfInactive(controls);
+    } catch (interruption) {
+      throw httpFinalizationFailure(response, interruption);
     }
+    response.cookieError = "Cookie保存失败：" + error.message;
   }
   if (
     r.auth.type === "digest" &&
     response.status === 401 &&
     /^Digest\s/i.test(response.headers["www-authenticate"] || "")
   ) {
-    const remaining = r.timeout - (performance.now() - start);
-    if (remaining <= 0) throw Error("Digest 认证超时");
+    throwIfInactive(controls);
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
       r.auth,
@@ -605,20 +660,20 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       u.pathname + u.search,
       body || "",
     );
-    const authenticated = await executeRequest(
-      {
+    const authenticated = await executeRequestWithinDeadline(
+      normalizeRequest({
         ...r,
         auth: { type: "none" },
-        timeout: remaining,
         headers: [
           ...r.headers.filter(
             (header) => header.key.toLowerCase() !== "authorization",
           ),
           { key: "Authorization", value: authorization, enabled: true },
         ],
-      },
+      }),
       signal,
-      { cookieSession },
+      cookieSession,
+      deadline,
     );
     authenticated.authHandshake = {
       status: response.status,
