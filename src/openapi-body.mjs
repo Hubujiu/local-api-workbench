@@ -1,3 +1,5 @@
+import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
+
 function requestBodyAnnotations(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw Error("OpenAPI requestBody 必须是对象");
@@ -40,7 +42,7 @@ const contentTypeName = (name) =>
 export function importOpenAPIHeaders(
   parameters,
   contentType,
-  { ignoreContentType = true } = {},
+  { ignoreContentType = true, oas3 = false } = {},
 ) {
   return [
     ...parameters
@@ -54,7 +56,9 @@ export function importOpenAPIHeaders(
         schema: parameter.schema ?? { type: parameter.type || "string" },
         required: parameter.required === true,
         description: parameter.description || "",
-        value: parameter.example ?? "",
+        value: oas3
+          ? importOpenAPIScalarValue(parameter, parameter.example ?? "")
+          : (parameter.example ?? ""),
         enabled: true,
       })),
     ...(contentType

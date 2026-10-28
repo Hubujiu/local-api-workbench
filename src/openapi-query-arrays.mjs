@@ -1,5 +1,6 @@
 // Canonical array parameters are explicit. Legacy scalar rows are never guessed
 // from their schema or their spelling, and no user-supplied encoding is executed.
+import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 const LIMIT = 65536;
 const own = (value, key) => Object.hasOwn(value, key);
 const object = (value) =>
@@ -169,7 +170,10 @@ function selectedExample(parameter, schema, swagger) {
   return [];
 }
 
-export function importOpenAPIQuery(parameters, { swagger = false } = {}) {
+export function importOpenAPIQuery(
+  parameters,
+  { swagger = false, oas3 = false } = {},
+) {
   return parameters
     .filter((parameter) => parameter.in === "query")
     .map((parameter) => {
@@ -219,6 +223,7 @@ export function importOpenAPIQuery(parameters, { swagger = false } = {}) {
       )
         fail("暂不支持Query联合类型或组合Schema");
       if (schema?.type !== "array") {
+        if (oas3) row.value = importOpenAPIScalarValue(parameter, row.value);
         if (
           own(schema, "items") ||
           (row.value !== null && typeof row.value === "object") ||
