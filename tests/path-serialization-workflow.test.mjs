@@ -186,7 +186,7 @@ test("scalar paths preserve real wire URLs through owner execution cURL frozen p
     enabled: true,
     projects: [project.id],
     execute: true,
-    write: false,
+    write: true,
     remember: false,
   });
   const client = new Client(
@@ -198,6 +198,12 @@ test("scalar paths preserve real wire URLs through owner execution cURL frozen p
     new StreamableHTTPClientTransport(new URL(f.app.url + "/mcp"), {
       requestInit: { headers: { Authorization: "Bearer " + config.token } },
     }),
+  );
+  assert(
+    (await client.listTools()).tools.some(
+      (tool) => tool.name === "localapi_execute_api",
+    ),
+    "write+execute authorization must expose the execution tool",
   );
   const before = await f.call(url),
     matrix = before.requests.find((r) => r.sourceOperationId === "matrix");

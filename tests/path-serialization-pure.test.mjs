@@ -50,6 +50,49 @@ const request = (item = row()) => ({
   url: "https://example.test/items/{color}?q=keep#fragment",
   path: [item],
 });
+test("path admission preserves object-array errors before scanning any row group", () => {
+  for (const input of [undefined, null, false, 0, "request", []])
+    assert.throws(
+      () => validatePathSerialization(input),
+      /接口定义必须是对象/u,
+    );
+  for (const group of ["path", "query", "headers", "cookies", "form"])
+    for (const value of [
+      {},
+      "invalid",
+      null,
+      false,
+      0,
+      [null],
+      [false],
+      [[]],
+      ["x"],
+    ]) {
+      const input = { url: "https://example.test/", [group]: value },
+        before = structuredClone(input);
+      assert.throws(
+        () => validatePathSerialization(input),
+        (error) =>
+          !(error instanceof TypeError) &&
+          error.message === group + " 必须是对象数组",
+      );
+      assert.deepEqual(input, before);
+    }
+  validatePathSerialization({ url: "https://example.test/" });
+});
+test("closed SDK facade preflights table shape before scanning path metadata", () => {
+  const source = readFileSync(
+    new URL("../src/script-url-runtime.mjs", import.meta.url),
+    "utf8",
+  );
+  const entry = source.slice(
+    source.indexOf("export function initializeQueryRuntime("),
+  );
+  const preflight = entry.indexOf('throw Error("SDK URL参数表最多1000项")'),
+    marker = entry.indexOf('Object.hasOwn(row, "pathSerialization")'),
+    construct = entry.indexOf("new sdk.Url(raw)");
+  assert(preflight >= 0 && marker > preflight && construct > marker);
+});
 test("scalar simple label and matrix preserve delimiters and encode data once", () => {
   const value = "中文 /%?!'()*;=,+";
   const encoded = "%E4%B8%AD%E6%96%87%20%2F%25%3F%21%27%28%29%2A%3B%3D%2C%2B";
