@@ -1037,11 +1037,6 @@ export function importDocument(doc) {
     );
   }
   if (doc.info && doc.item) {
-    const events = (list, phase) =>
-      (list || [])
-        .filter((event) => event.listen === phase)
-        .flatMap((event) => event.script?.exec || [])
-        .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
       const values = Object.fromEntries(
@@ -1146,10 +1141,14 @@ export function importDocument(doc) {
       items,
       folder = "",
       inheritedAuth = doc.auth,
-      inheritedEvents = doc.event || [],
+      inheritedEvents = postmanEventScripts(doc.event),
     ) =>
       items.flatMap((item) => {
-        const currentEvents = [...inheritedEvents, ...(item.event || [])];
+        const ownEvents = postmanEventScripts(item.event);
+        const currentEvents = {
+          prerequest: [...inheritedEvents.prerequest, ...ownEvents.prerequest],
+          test: [...inheritedEvents.test, ...ownEvents.test],
+        };
         if (item.item)
           return walk(
             item.item,
@@ -1216,8 +1215,8 @@ export function importDocument(doc) {
                       .at(-1)
                   : undefined,
             })),
-            beforeScript: events(currentEvents, "prerequest"),
-            afterScript: events(currentEvents, "test"),
+            beforeScript: currentEvents.prerequest.join("\n"),
+            afterScript: currentEvents.test.join("\n"),
             examples: (item.response || []).map((example) => ({
               name: example.name,
               status: example.code || 200,
