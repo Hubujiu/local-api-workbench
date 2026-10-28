@@ -1,4 +1,5 @@
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
+import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
   snapshotSocketIOStep,
   socketioPlanCredentials,
@@ -965,7 +966,14 @@ export function importDocument(doc) {
                 schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
-                value: p.example ?? p.schema?.default ?? "",
+                value:
+                  typeof doc.openapi === "string" &&
+                  doc.openapi.startsWith("3.")
+                    ? importOpenAPIScalarValue(
+                        p,
+                        p.example ?? p.schema?.default ?? "",
+                      )
+                    : (p.example ?? p.schema?.default ?? ""),
                 enabled: true,
               })),
             path: params
@@ -986,7 +994,11 @@ export function importDocument(doc) {
                   schema: p.schema ?? { type: p.type || "string" },
                   required: p.required === true,
                   description: p.description || "",
-                  value: p.example ?? "",
+                  value:
+                    typeof doc.openapi === "string" &&
+                    doc.openapi.startsWith("3.")
+                      ? importOpenAPIScalarValue(p, p.example ?? "")
+                      : (p.example ?? ""),
                   enabled: true,
                 })),
               ...(importedBody.contentType
@@ -1006,7 +1018,14 @@ export function importDocument(doc) {
                 schema: p.schema ?? { type: p.type || "string" },
                 required: p.required === true,
                 description: p.description || "",
-                value: p.example ?? p.schema?.default ?? "",
+                value:
+                  typeof doc.openapi === "string" &&
+                  doc.openapi.startsWith("3.")
+                    ? importOpenAPIScalarValue(
+                        p,
+                        p.example ?? p.schema?.default ?? "",
+                      )
+                    : (p.example ?? p.schema?.default ?? ""),
                 enabled: true,
               })),
             bodyType: importedBody.bodyType,
