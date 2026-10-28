@@ -152,6 +152,7 @@ export class ProjectCookieJar {
       } finally {
         await release();
       }
+      throwIfInactive(controls);
     }
   }
   inspect() {

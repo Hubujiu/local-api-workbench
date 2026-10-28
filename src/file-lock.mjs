@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   throwIfInactive,
   waitForControl,
+  delayForControl,
   interruptionKind,
 } from "./request-control.mjs";
 
@@ -94,10 +95,7 @@ async function acquireDiskLock(directory, controls) {
         // Windows can keep a deleted directory pending while another handle closes.
         // Retry only this same mkdir; never chmod, remove or override another owner.
         lastTransient = error;
-        await waitForControl(
-          new Promise((resolve) => setTimeout(resolve, 20)),
-          controls,
-        );
+        await delayForControl(20, controls);
         continue;
       }
       if (error.code !== "EEXIST") throw error;
@@ -131,10 +129,7 @@ async function acquireDiskLock(directory, controls) {
         /* Incomplete or unrecognized locks are not deleted automatically. */
       }
       throwIfInactive(controls);
-      await waitForControl(
-        new Promise((resolve) => setTimeout(resolve, 20)),
-        controls,
-      );
+      await delayForControl(20, controls);
     }
   }
   throwIfInactive(controls);

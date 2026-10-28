@@ -39,7 +39,10 @@ import {
   interruptionKind,
   requestTimeout,
 } from "./request-control.mjs";
-import { httpFinalizationFailure } from "./http-finalization.mjs";
+import {
+  httpFinalizationFailure,
+  readHttpFinalizationFailure,
+} from "./http-finalization.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
@@ -674,7 +677,20 @@ async function executeRequestWithinDeadline(
       signal,
       cookieSession,
       deadline,
-    );
+    ).catch((error) => {
+      // Retain newer evidence (e.g. final 200 capture) before consulting controls.
+      if (readHttpFinalizationFailure(error)) throw error;
+      if (interruptionKind(error))
+        throw httpFinalizationFailure(response, error, "auth-cookie");
+      // Native transport AbortErrors are not our branded interruptions. Use the
+      // actual controls, never an arbitrary error.code/response, to classify.
+      try {
+        throwIfInactive(controls);
+      } catch (interruption) {
+        throw httpFinalizationFailure(response, interruption, "auth-cookie");
+      }
+      throw error;
+    });
     authenticated.authHandshake = {
       status: response.status,
       duration: response.duration,

@@ -73,3 +73,18 @@ export async function waitForControl(promise, controls = {}) {
     );
   });
 }
+
+export async function delayForControl(milliseconds, controls = {}) {
+  throwIfInactive(controls);
+  let timer;
+  try {
+    await waitForControl(
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, milliseconds);
+      }),
+      controls,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
