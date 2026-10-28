@@ -100,6 +100,35 @@ test("OpenAPI separates query and fragment from relative or templated base paths
   assert.equal(result.paths["/items"].get.parameters.length, 1);
 });
 
+test("fragment-only runtime templates do not block OpenAPI export or change the reimported target", () => {
+  for (const base of [
+    "{{baseUrl}}",
+    "{{base?opaque}}",
+    "https://example.test",
+  ]) {
+    const request = normalizeRequest({ url: base + "/pets#{{view}}" });
+    const original = structuredClone(request);
+    const exported = exportOpenAPI({ name: "Fragment", requests: [request] });
+    assert.deepEqual(Object.keys(exported.paths), ["/pets"]);
+    assert.deepEqual(exported.paths["/pets"].get.servers, [{ url: base }]);
+    assert.equal(importDocument(exported)[0].url, base + "/pets");
+    assert.deepEqual(request, original);
+  }
+  for (const url of [
+    "https://{{host}}/pets#{{view}}",
+    "{{baseUrl}}/{{path}}#{{view}}",
+  ]) {
+    assert.throws(
+      () =>
+        exportOpenAPI({
+          name: "Unresolved path",
+          requests: [normalizeRequest({ url })],
+        }),
+      /OpenAPI.*base/,
+    );
+  }
+});
+
 test("exported and reimported literal Query definitions send the same decoded values over real HTTP", async (t) => {
   const http = await import("node:http");
   const { executeRequest } = await import("../src/runtime.mjs");

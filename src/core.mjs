@@ -20,6 +20,7 @@ import {
 } from "./apipost-directory.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
 import { snapshotCase } from "./cases.mjs";
+import { openAPIServerURL } from "./openapi-server.mjs";
 import {
   openAPIURLQuery,
   openAPIEmptyQueryValue,
@@ -909,11 +910,9 @@ export function importDocument(doc) {
     throw Error("原版目录须使用完整项目导入以保留环境及资源");
   if (doc.openapi || doc.swagger) {
     doc = resolveLocalReferences(doc);
-    const base =
-      doc.servers?.[0]?.url ||
-      (doc.host
-        ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
-        : "{{baseUrl}}");
+    const base = doc.host
+      ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
+      : "{{baseUrl}}";
     return Object.entries(doc.paths || {}).flatMap(([path, item]) =>
       Object.entries(item)
         .filter(([m]) =>
@@ -948,7 +947,8 @@ export function importDocument(doc) {
             sourceOperationId: op.operationId || "",
             method,
             url:
-              (op.servers?.[0]?.url || item.servers?.[0]?.url || base) + path,
+              (openAPIServerURL(op.servers, item.servers, doc.servers) ??
+                base) + path,
             openapiOperation: structuredClone({
               ...op,
               ...((op.security ?? doc.security)
@@ -1549,9 +1549,17 @@ export function exportOpenAPI(project) {
       original.security = [{ [name]: [] }];
     }
 
+    const baseVariable = /^\{\{[^{}]+\}\}/.exec(queryDefinition.pathURL)?.[0];
+    if (
+      queryDefinition.pathURL.includes("{{") &&
+      (!baseVariable ||
+        queryDefinition.pathURL.slice(baseVariable.length).includes("{{"))
+    )
+      throw Error("OpenAPI导出工作台URL模板仅支持单个base前缀，请使用项目备份");
     try {
-      if (!r.url.includes("{{"))
-        original.servers = [{ url: new URL(r.url).origin }];
+      if (baseVariable) original.servers = [{ url: baseVariable }];
+      else if (!queryDefinition.pathURL.includes("{{"))
+        original.servers = [{ url: new URL(queryDefinition.pathURL).origin }];
     } catch {}
     paths[path][method] = {
       ...original,
