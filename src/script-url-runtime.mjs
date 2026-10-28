@@ -189,6 +189,15 @@ export function initializeQueryRuntime(request) {
       (!Array.isArray(request[key]) || request[key].length > 1000)
     )
       throw Error("SDK URL参数表最多1000项");
+  // Keep this closed facade independent of the host-only array codec (Buffer).
+  // Presence alone is enough: SDK conversion cannot preserve this metadata.
+  for (const key of ["query", "path"])
+    if (
+      (request[key] || []).some(
+        (row) => row && Object.hasOwn(row, "querySerialization"),
+      )
+    )
+      throw Error("OpenAPI Query数组: 尚不支持与SDK URL模式组合");
   const url = new sdk.Url(raw);
   const origins = url.query.members.map(() => ({ encoding: "raw" })),
     variableOrigins = [],

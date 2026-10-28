@@ -48,6 +48,12 @@ import {
 } from "./http-finalization.mjs";
 import { importPostmanGraphQLBody } from "./postman-graphql-body.mjs";
 import { postmanEventScripts } from "./postman-event-scripts.mjs";
+import {
+  assertQueryArrayCurlDefinition,
+  importOpenAPIQuery,
+  exportOpenAPIQueryArray,
+  validateQueryArrayRequest,
+} from "./openapi-query-arrays.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -293,6 +299,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
+  validateQueryArrayRequest(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
@@ -1340,17 +1347,9 @@ export function importDocument(doc) {
             }),
             description: op.description || "",
             folder: op.tags?.[0] || "",
-            query: params
-              .filter((p) => p.in === "query")
-              .map((p) => ({
-                key: p.name,
-                ...openAPIEmptyQueryValue(p.allowEmptyValue),
-                schema: p.schema ?? { type: p.type || "string" },
-                required: p.required === true,
-                description: p.description || "",
-                value: p.example ?? p.schema?.default ?? "",
-                enabled: true,
-              })),
+            query: importOpenAPIQuery(params, {
+              swagger: Boolean(doc.swagger),
+            }),
             path: params
               .filter((p) => p.in === "path")
               .map((p) => ({
@@ -1994,7 +1993,10 @@ export function exportOpenAPI(project) {
             schema: parameter.schema ?? { type: "string" },
             example: parameter.value,
             ...(location === "query"
-              ? openAPIEmptyQueryValue(parameter.allowEmptyValue)
+              ? {
+                  ...openAPIEmptyQueryValue(parameter.allowEmptyValue),
+                  ...exportOpenAPIQueryArray(parameter),
+                }
               : {}),
           })),
       ),
@@ -2011,6 +2013,7 @@ export function exportOpenAPI(project) {
 }
 export function toCurl(input) {
   assertRedirectExportable(input);
+  assertQueryArrayCurlDefinition(input);
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),

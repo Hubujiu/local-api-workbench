@@ -29,6 +29,7 @@ import {
   validatePreparedRedirectHeaders,
 } from "./http-redirect.mjs";
 import { executePreparedRedirect } from "./http-redirect-transport.mjs";
+import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -506,6 +507,7 @@ export class Store {
     if (p.settings?.autoImports !== undefined)
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
     for (const request of p.requests || []) normalizeRedirect(request.redirect);
+    for (const request of p.requests || []) validateQueryArrayRequest(request);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
