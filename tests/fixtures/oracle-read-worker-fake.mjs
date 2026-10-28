@@ -1,5 +1,18 @@
 // No real driver, sockets, database, services, credentials or module installs.
 import { startOracleReadWorker } from "../../src/oracle-read-worker-runtime.mjs";
+import tls from "node:tls";
+import { readFileSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
+import { fixtureEnvironmentState } from "./oracle-read-worker-environment.mjs";
+const environment = fixtureEnvironmentState(
+  process.env,
+  process.platform,
+  process.versions.node,
+  process.execArgv.length,
+);
+// One bounded, KEY-only test diagnostic. Production stderr remains ignored;
+// only the test-injected factory pipes/drains this stream. No extra IPC message.
+process.stderr.write(`${JSON.stringify(environment.diagnostic)}\n`);
 const driver = Object.fromEntries(
   [
     "DB_TYPE_NUMBER",
@@ -15,8 +28,18 @@ const driver = Object.fromEntries(
 driver.thin = true;
 driver.STMT_TYPE_SELECT = "SELECT";
 driver.getConnection = async (options) => {
-  if (Object.keys(process.env).length || process.execArgv.length)
-    throw Error("fixture child did not receive empty environment/execArgv");
+  if (!environment.valid)
+    throw Error("fixture child environment isolation check failed");
+  if (Object.hasOwn(options, "caCertificatePem"))
+    throw Error("CA must not become a driver option");
+  if (options.connectString.endsWith("/CUSTOM_CA")) {
+    const expected = new X509Certificate(
+      readFileSync(new URL("./localhost.crt", import.meta.url)),
+    ).toString();
+    const certs = tls.getCACertificates("default");
+    if (certs.length !== 1 || certs[0] !== expected)
+      throw Error("fixture child trust was not replaced with the sole CA");
+  }
   let count = 0;
   const metaData = [{ name: "VALUE", dbType: driver.DB_TYPE_NUMBER }];
   return {

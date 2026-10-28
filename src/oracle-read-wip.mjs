@@ -12,6 +12,8 @@ const messages = Object.freeze({
   ORACLE_WIP_CANCELLED:
     "Oracle WIP read cancelled; adapter will not retry or replay",
   ORACLE_WIP_DRIVER_UNAVAILABLE: "Oracle WIP requires an explicit Thin driver",
+  ORACLE_WIP_TLS_UNAVAILABLE:
+    "Oracle WIP custom CA trust unavailable; connection not attempted",
   ORACLE_WIP_QUERY_FAILED:
     "Oracle WIP read failed; adapter will not retry or replay",
   ORACLE_WIP_CLEANUP_FAILED: "Oracle WIP cleanup failed; result withheld",
@@ -34,10 +36,14 @@ function check(signal) {
 // READ ONLY is not a sandbox for SYS or autonomous/side-effecting functions.
 export async function runOracleReadWithDriver(
   input,
-  { driver, signal, onPhase = () => {} } = {},
+  { driver, signal, onPhase = () => {}, configuredCaCertificatePem } = {},
 ) {
   check(signal);
   const config = oracleReadInput(input);
+  // Internal worker attestation, never a request field or a driver option. A
+  // direct injected caller cannot silently accept CA input without setup.
+  if (config.caCertificatePem !== configuredCaCertificatePem)
+    throw oracleReadFailure("ORACLE_WIP_TLS_UNAVAILABLE");
   if (driver?.thin !== true || typeof driver.getConnection !== "function")
     throw oracleReadFailure("ORACLE_WIP_DRIVER_UNAVAILABLE");
   let connection, resultSet, failure, result;

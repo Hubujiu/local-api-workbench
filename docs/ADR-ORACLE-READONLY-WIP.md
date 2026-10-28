@@ -36,21 +36,56 @@ creating a connection. This is not real database acceptance.
 password, SQL, and `ssl: true`. The host is an atomic DNS name or unscoped IP;
 service and username use conservative ASCII token subsets. It generates one TCPS
 Easy Connect string. SYS/SYSTEM, proxy usernames, raw descriptors, TNS aliases,
-SID guessing, external/token/privileged authentication, wallets, custom CA,
+SID guessing, external/token/privileged authentication, wallets, CA file paths,
 configuration-provider URLs, SSH, retry settings, and arbitrary driver options
 are rejected. Quoted identifiers and scoped IPv6 are not supported in this WIP.
 
-Only standard-trust TCPS is attempted, with certificate verification left on,
+Only TCPS is attempted, with certificate verification left on,
 `sslServerDNMatch: true`, `sslAllowWeakDNMatch: false`, explicit credentials,
 `externalAuth: false`, and `retryCount: 0` for connection-attempt retries. That
 option does not disable internal query-message re-execution (see below).
 No failed TLS/auth connection falls back to plaintext, Thick mode, another
 account, or another endpoint. Real TLS
-handshake, trust-store behavior and hostname/certificate negatives are unverified.
-Custom CA/mTLS and Oracle native network encryption remain unsupported here.
+handshake, trust-store behavior and hostname/certificate negatives are unverified
+against Oracle. mTLS and Oracle native network encryption remain unsupported here.
+
+Standard trust remains the default. The optional `caCertificatePem` accepts
+exactly one inline CERTIFICATE PEM, at most 16 KiB. It rejects CA paths, private
+keys, additional blocks, surrounding garbage, malformed/noncanonical base64 and
+trailing DER data. Public `crypto.X509Certificate` parsing must report `ca: true`
+and a currently valid certificate; the accepted value is canonicalized with
+`toString()`. No user certificate file is read or written. The parent validates
+before allocating a child; the child validates the complete input again before
+changing trust or importing the driver. The CA crosses only bounded IPC and is
+never a driver option, argv value, environment variable or wallet.
+
+When supplied, the fresh worker calls public
+`tls.setDefaultCACertificates([canonicalCA])` before `loadDriver()`. This replaces,
+rather than extends, its default CA list: this query trusts **only that CA**.
+The parent's trust is untouched. The API is feature-detected (introduced in
+Node 24.5.0 and backported to 22.19.0); missing API or a setter failure rejects
+before driver import/network, without falling back to standard trust or
+plaintext. The internal injected executor requires a matching worker-only
+configured-CA marker, so calling it directly cannot silently ignore CA input.
+This marker is an internal test/lifecycle option, never a request setting.
+No CA means no call to the trust setter. These steps stay within the existing
+three-second startup/auth and eight-second total budgets.
+
+Pinned-driver source constructs its secure context with `ca`, `cert` and `key`
+from the wallet; this contract never supplies a wallet. Use of the changed Node
+default CA context when these values are undefined is a **source-based inference**,
+not an Oracle TCPS acceptance result. A separate CI-only Node TLS loopback proof
+uses that public undefined-wallet context pattern with the existing repository
+certificate/key fixture. It checks trusted success, wrong-host and untrusted
+failure, clean child closure and unchanged parent trust. It is not run locally
+and is not an Oracle protocol, DN-matching or database test. No production/user
+certificate or new account credentials are used.
 
 The supervisor forks the fixed worker entry using the fixed `process.execPath`,
-`env: {}`, `execArgv: []`, and ignored stdin/stdout/stderr plus advanced IPC.
+`env: { NODE_V8_COVERAGE: "" }`, `execArgv: []`, and ignored stdin/stdout/stderr
+plus advanced IPC. The explicit empty coverage value is required: Node otherwise
+propagates a nonempty parent `NODE_V8_COVERAGE` even with `env: {}`, allowing
+child coverage/source-map output. This is not a copied caller value.
 Neither credentials nor SQL enter argv, inherited environment, logs, errors,
 connection-list output, or saved projects. Only canonical validated input fields
 cross IPC; requests are capped at 2 MiB serialized and results at 1 MiB JSON.
@@ -58,7 +93,32 @@ A separate process avoids reusing a parent thread's Node startup TLS/debug
 configuration. No parent environment is spread, including NODE_OPTIONS,
 NODE_EXTRA_CA_CERTS, TNS_ADMIN, ORA_DEBUG_JDWP or NODE_ORACLEDB_DEBUG_PACKETS.
 Electron execution is explicitly rejected until its fixed Node-mode launch and
-packaging are verified. No Windows environment fallback is invented.
+packaging are verified. No application-created Windows environment fallback is
+invented. The runtime/OS can nevertheless add startup metadata: pinned Node's
+libuv Windows process code supplies HOMEDRIVE, HOMEPATH, LOGONSERVER, PATH,
+SYSTEMDRIVE, SYSTEMROOT, TEMP, USERDOMAIN, USERNAME, USERPROFILE and WINDIR when
+available. Apple CF source can synthesize `__CF_USER_TEXT_ENCODING` on macOS.
+Thus “no inherited credential/debug/TLS settings” is the intended boundary, not
+the incorrect assertion that every platform's child has zero environment keys.
+Windows metadata can contain profile/user/path information; no values are logged.
+
+The fake-process tests temporarily poison parent sentinel, Oracle, TLS, Node
+debug/coverage/cache variables around fork and restore every prior value before
+returning. The child accepts only an explicitly empty coverage key and the exact
+source-supported platform metadata above; unknown keys, sensitive settings and
+arbitrary `NODE_*` keys fail the fixture. Tests check no coverage/cache files were
+created in their disposable directory. A test-only fork factory changes only
+stderr from ignored to a drained pipe, retaining at most 4 KiB for one validated
+JSON record: platform, Node version, bounded key names/count, execArgv count,
+sentinel presence and coverage-empty boolean. No environment values, argv,
+connection options or raw errors are recorded; production stderr stays ignored
+and no diagnostic message is added to its IPC protocol.
+
+The first CI's Windows/macOS fake-process failures lacked these key observations.
+The source-supported allowances do not prove a particular key caused those
+earlier failures; new cross-platform CI must establish the actual runtime
+metadata and lifecycle outcome. The independent coverage propagation gap is
+fixed regardless of whether that first CI set the variable.
 
 ## Read and value contract
 
@@ -156,7 +216,11 @@ the real driver's repeat behavior, and this WIP remains disabled.
 ## Evidence and activation prerequisites
 
 Local tests use no real Oracle module/server or sockets. Pure tests cover strict
-configuration, scalar conversion/precision, metadata and byte limits. Injected
+configuration, single-CA PEM boundaries/validity, scalar conversion/precision,
+metadata and byte limits. Trust-loader tests inject a TLS facade to verify
+validation/setup/import ordering, missing-API rejection and untouched standard
+trust. A fake-driver child checks actual child-only default CA replacement with
+no network and verifies that the parent trust list is unchanged. Injected
 executor/supervisor tests cover classification, ordered guards, cancellation,
 cleanup failures, malformed/late messages, deadlines, no adapter replay and
 isolated ownership. A separate fake-driver child fixture verifies on Node 24/Linux:
@@ -177,7 +241,7 @@ Still required before any production registration:
   original duplicate aliases despite driver renaming, and row/byte-limit results.
 - A decision and actual-driver evidence for the ORA-00932/ORA-01007 internal
   repeat behavior; do not infer exactly-once execution from these fixtures.
-- Standard-trust TCPS success, hostname/certificate failures and no fallback;
+- Standard-trust and explicit-CA TCPS success, hostname/certificate failures and no fallback;
   unsupported auth/configuration rejected before I/O.
 - Real-driver stalls/cancellation at connect/auth/classification/fetch/cleanup,
   actual process/socket closure, concurrent isolation and no late results.
@@ -200,6 +264,13 @@ register a provider, merge main, or deploy anything.
 - [SET TRANSACTION limitations](https://docs.oracle.com/en/database/oracle/oracle-database/26/sqlrf/SET-TRANSACTION.html)
 - [Autonomous transactions](https://docs.oracle.com/en/database/oracle/oracle-database/26/lnpls/autonomous-transactions.html)
 - [Node public IPC unref API](https://nodejs.org/docs/latest-v24.x/api/process.html#processchannelunref)
+- [Node 24.5.0 public default-CA replacement API](https://nodejs.org/download/release/v24.5.0/docs/api/tls.html#tlssetdefaultcacertificatescerts)
+- [Node 22.19.0 default-CA API backport](https://nodejs.org/download/release/v22.19.0/docs/api/tls.html#tlssetdefaultcacertificatescerts)
+- [Node public X509Certificate API](https://nodejs.org/download/release/v24.5.0/docs/api/crypto.html#class-x509certificate)
+- [Node 24.22.1 child coverage propagation](https://github.com/nodejs/node/blob/v24.22.1/lib/child_process.js#L500-L505)
+- [Node coverage opt-out documentation](https://github.com/nodejs/node/blob/v24.22.1/doc/api/cli.md#L3681-L3690)
+- [Matching libuv Windows startup environment keys](https://github.com/nodejs/node/blob/v24.22.1/deps/uv/src/win/process.c#L47-L59)
+- [Apple CF text-encoding environment synthesis](https://github.com/apple-oss-distributions/CF/blob/main/CFStringEncodings.c#L832-L882)
 - [Oracle Free server terms](https://www.oracle.com/downloads/licenses/oracle-free-license.html)
 
 Pinned-source details inspected without importing the driver:
@@ -208,3 +279,4 @@ Pinned-source details inspected without importing the driver:
 - [26.0.0 query error retry flag](https://github.com/oracle/node-oracledb/blob/v26.0.0/lib/thin/protocol/messages/withData.js)
 - [26.0.0 protocol message reprocessing](https://github.com/oracle/node-oracledb/blob/v26.0.0/lib/thin/protocol/protocol.js)
 - [26.0.0 statement classification](https://github.com/oracle/node-oracledb/blob/v26.0.0/lib/thin/statement.js)
+- [26.0.0 public TLS-context construction path](https://github.com/oracle/node-oracledb/blob/v26.0.0/lib/thin/sqlnet/ntTcp.js)

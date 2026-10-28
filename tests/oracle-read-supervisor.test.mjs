@@ -76,6 +76,12 @@ test("pre-abort and invalid input allocate no worker", async () => {
   await assert.rejects(
     runOracleReadOwned({ ...input(), ssl: false }, h.options),
   );
+  await assert.rejects(
+    runOracleReadOwned(
+      { ...input(), caCertificatePem: "/tmp/ca.pem" },
+      h.options,
+    ),
+  );
   assert.equal(h.observed.created, undefined);
   assert.equal(h.timers.size, 0);
 });
@@ -88,7 +94,7 @@ test("worker gets isolated environment/arguments/output, and result waits for ac
     return value;
   });
   assert.equal(h.observed.options.execPath, process.execPath);
-  assert.deepEqual(h.observed.options.env, {});
+  assert.deepEqual(h.observed.options.env, { NODE_V8_COVERAGE: "" });
   assert.deepEqual(h.observed.options.execArgv, []);
   assert.deepEqual(h.observed.options.stdio, [
     "ignore",

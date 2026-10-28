@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { oracleReadParameters } from "./oracle-read-values.mjs";
+import { oracleReadCACertificate } from "./oracle-read-ca.mjs";
 
 const FIELDS = new Set([
   "host",
@@ -10,6 +11,7 @@ const FIELDS = new Set([
   "ssl",
   "sql",
   "parameters",
+  "caCertificatePem",
 ]);
 
 function text(value, label, maxBytes) {
@@ -75,8 +77,7 @@ export function oracleReadInput(input) {
   if (!/^[A-Za-z][A-Za-z0-9_$#]*$/.test(user) || /^(SYS|SYSTEM)$/i.test(user))
     throw Error("Oracle WIP requires an ordinary non-proxy read-only user");
   const password = text(input.password, "password", 65536);
-  if (input.ssl !== true)
-    throw Error("Oracle WIP supports explicit standard-trust TCPS only");
+  if (input.ssl !== true) throw Error("Oracle WIP supports explicit TCPS only");
   const sql = text(input.sql, "SQL", 200000);
   if (!sql.trim() || sql.length > 50000)
     throw Error("Oracle WIP SQL must contain at most 50000 characters");
@@ -93,10 +94,17 @@ export function oracleReadInput(input) {
     sslServerDNMatch: true,
     sslAllowWeakDNMatch: false,
   };
-  if (Buffer.byteLength(JSON.stringify(connectionOptions)) > 128 * 1024)
+  const caCertificatePem = Object.hasOwn(input, "caCertificatePem")
+    ? oracleReadCACertificate(input.caCertificatePem)
+    : oracleReadCACertificate();
+  if (
+    Buffer.byteLength(JSON.stringify({ connectionOptions, caCertificatePem })) >
+    128 * 1024
+  )
     throw Error("Oracle WIP connection configuration exceeds 128 KiB");
   return {
     connectionOptions,
+    caCertificatePem,
     sql,
     binds: oracleReadParameters(
       input.parameters === undefined ? [] : input.parameters,

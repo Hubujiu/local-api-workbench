@@ -1,9 +1,38 @@
 // Internal worker lifecycle, separated only so no-network fixtures can inject a
 // driver without installing/importing Oracle. Production entrypoint is fixed.
+import tls from "node:tls";
+import { oracleReadInput } from "./oracle-read-config.mjs";
 import {
   runOracleReadWithDriver,
   oracleReadFailure,
 } from "./oracle-read-wip.mjs";
+
+// Internal child-only operation. Tests inject a TLS facade, never mutate the
+// parent trust store. No driver code runs before full input/trust validation.
+export async function loadOracleReadWorkerDriver(
+  input,
+  loadDriver,
+  { tlsModule = tls } = {},
+) {
+  const { caCertificatePem } = oracleReadInput(input);
+  if (caCertificatePem !== undefined) {
+    if (typeof tlsModule.setDefaultCACertificates !== "function")
+      throw oracleReadFailure("ORACLE_WIP_TLS_UNAVAILABLE");
+    try {
+      // Replacement, not append: this one-query child trusts only this CA.
+      tlsModule.setDefaultCACertificates([caCertificatePem]);
+    } catch {
+      throw oracleReadFailure("ORACLE_WIP_TLS_UNAVAILABLE");
+    }
+  }
+  let driver;
+  try {
+    driver = await loadDriver();
+  } catch {
+    throw oracleReadFailure("ORACLE_WIP_DRIVER_UNAVAILABLE");
+  }
+  return { driver, configuredCaCertificatePem: caCertificatePem };
+}
 
 export function startOracleReadWorker(loadDriver) {
   let cleanupReported = false,
@@ -25,14 +54,11 @@ export function startOracleReadWorker(loadDriver) {
     let message;
     try {
       reportPhase("connect");
-      let driver;
-      try {
-        driver = await loadDriver();
-      } catch {
-        throw oracleReadFailure("ORACLE_WIP_DRIVER_UNAVAILABLE");
-      }
+      const { driver, configuredCaCertificatePem } =
+        await loadOracleReadWorkerDriver(input, loadDriver);
       const result = await runOracleReadWithDriver(input, {
         driver,
+        configuredCaCertificatePem,
         onPhase: reportPhase,
       });
       message = { kind: "oracle-result", result };

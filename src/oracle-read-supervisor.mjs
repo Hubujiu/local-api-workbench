@@ -97,6 +97,9 @@ export async function runOracleReadOwned(
     ssl: true,
     sql: normalized.sql,
     parameters: normalized.binds,
+    ...(normalized.caCertificatePem === undefined
+      ? {}
+      : { caCertificatePem: normalized.caCertificatePem }),
   };
   if (serialize(data).byteLength > 2 * 1024 * 1024)
     throw oracleReadFailure("ORACLE_WIP_QUERY_FAILED");
@@ -133,7 +136,9 @@ export async function runOracleReadOwned(
         new URL("./oracle-read-worker.mjs", import.meta.url),
         {
           execPath: process.execPath,
-          env: {},
+          // Node explicitly propagates coverage even with env: {}; an empty
+          // value opts out without copying any caller environment settings.
+          env: { NODE_V8_COVERAGE: "" },
           execArgv: [],
           stdio: ["ignore", "ignore", "ignore", "ipc"],
           serialization: "advanced",
@@ -192,6 +197,7 @@ export async function runOracleReadOwned(
             "ORACLE_WIP_QUERY_FAILED",
             "ORACLE_WIP_CLEANUP_FAILED",
             "ORACLE_WIP_DRIVER_UNAVAILABLE",
+            "ORACLE_WIP_TLS_UNAVAILABLE",
             "ORACLE_WIP_CANCELLED",
           ].includes(message.code)
         ) {
