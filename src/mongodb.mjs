@@ -69,6 +69,10 @@ export function mongoQuery(input) {
     if (value === null || ["string", "boolean"].includes(typeof value)) return;
     if (typeof value === "number") {
       if (!Number.isFinite(value)) throw Error("MongoDB查询数值无效");
+      if (Number.isInteger(value) && !Number.isSafeInteger(value))
+        throw Error(
+          "MongoDB查询裸整数超过安全精度；请用EJSON $numberLong或$numberDecimal字符串表示精确值，近似值请显式使用$numberDouble",
+        );
       return;
     }
     if (typeof value !== "object") throw Error("MongoDB查询仅接受JSON值");

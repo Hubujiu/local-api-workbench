@@ -9,6 +9,18 @@ sort1/-1, limit1..1000 and skip0..100000. Extended JSON filter values are accept
 for BSON types. Returned values use canonical Extended JSON to avoid losing
 ObjectId, date or64-bit numeric type/precision.
 
+Bare integer JSON numbers must be safe JavaScript integers, recursively including
+nested filters and arrays. Otherwise the query is rejected before opening the
+network worker: JSON parsing can already change `9007199254740993` into
+`9007199254740992`, silently selecting a different document. Supply exact values
+as EJSON strings, for example `{"id":{"$numberLong":"9007199254740993"}}` or
+`{"amount":{"$numberDecimal":"9007199254740993.125"}}`. Explicit
+`$numberDouble` strings retain the caller's intentional approximate double
+semantics. Ordinary finite fractional numbers keep IEEE-754 semantics; this is
+not a lossless JSON number parser, and no value is automatically guessed or
+converted into a different BSON type. The same guard applies to direct query
+objects and JSON query strings used by project-scoped declarative database tasks.
+
 Writes, arbitrary commands, aggregation, watches, server-side JavaScript and
 unsafe prototype keys are rejected. Recursive validation limits queries to64KiB,
 1000 nodes and10 levels. Results are capped at1MiB per document,2MiB total and
@@ -27,6 +39,13 @@ native buffers inside the driver: connect only to trusted database servers.
 
 CI starts an isolated MongoDB8.0 service with fictional documents and tests
 filtering, sorting, projection, typed values, truncation and write rejection.
+The normal service fixture also seeds adjacent Long IDs in its own isolated
+collection, checks precise EJSON selection and unsafe-number rejection, and
+exercises project grants, declarative before-operation extraction, HTTP echo,
+atomic failure evidence, backup/restore, restart and explicit regrant. These
+service checks require the real CI MongoDB service; pure BSON tests are not
+a substitute. This base branch does not include native script database tasks
+or CLI grant integration.
 Browser checks cover provider configuration and a delayed old-provider response
 that must not overwrite the newly selected provider. This does not claim a full
 MongoDB GUI/database lifecycle test or complete original-product equivalence.
