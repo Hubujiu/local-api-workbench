@@ -10,6 +10,7 @@ const reasons = new Set([
   "hops",
   "loop",
   "response-budget",
+  "header-limit",
   "transport",
   "cookie",
   "cancelled",

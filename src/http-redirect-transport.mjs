@@ -32,6 +32,7 @@ export async function executePreparedRedirect(
     complete = false,
     started = false,
     attempted = url.href;
+  const localReasons = new WeakMap();
   const trace = [],
     seen = new Set(),
     budget = { encoded: 0, decoded: 0 };
@@ -48,8 +49,8 @@ export async function executePreparedRedirect(
     }
     return interruptionKind(error) === "timeout"
       ? "timeout"
-      : error?.redirectBudget === true
-        ? "response-budget"
+      : localReasons.get(error)
+        ? localReasons.get(error)
         : "transport";
   };
   for (let hop = 0; ; hop++) {
@@ -69,7 +70,7 @@ export async function executePreparedRedirect(
     try {
       connection = await prepareConnection(
         wire,
-        { ...r, timeout: controls.deadline - performance.now() },
+        { ...r, timeout: Math.ceil(controls.deadline - performance.now()) },
         headers,
         controls.signal,
       );
@@ -91,6 +92,7 @@ export async function executePreparedRedirect(
         () => {
           started = true;
         },
+        localReasons,
       );
       complete = true;
     } catch (error) {
@@ -199,6 +201,7 @@ function exchange(
   start,
   onHeaders,
   onStarted,
+  localReasons,
 ) {
   return new Promise((resolve, reject) => {
     let req,
@@ -232,15 +235,28 @@ function exchange(
     };
     const overflow = () => {
       const error = Error("redirect response budget exceeded");
-      error.redirectBudget = true;
+      localReasons.set(error, "response-budget");
       finish(error);
     };
     try {
       throwIfInactive(controls);
+      const wire = new URL(url);
+      wire.hash = "";
+      const target = wire.href.slice(wire.origin.length);
       req = connection.client.request(
         connection.url,
-        { method, headers, signal: controls.signal, ...connection.options },
+        {
+          method,
+          headers,
+          path: target,
+          signal: controls.signal,
+          ...connection.options,
+        },
         (incoming) => {
+          if (settled) {
+            incoming.destroy();
+            return;
+          }
           res = incoming;
           response = {
             status: res.statusCode,
@@ -258,7 +274,20 @@ function exchange(
               body: body?.toString() || "",
             },
           };
-          onHeaders(response);
+          try {
+            onHeaders(response);
+          } catch (error) {
+            finish(error);
+            return;
+          }
+          if (response.rawHeaders.length >= 2000) {
+            const error = Error(
+              "redirect response headers exceed trusted pair limit",
+            );
+            localReasons.set(error, "header-limit");
+            finish(error);
+            return;
+          }
           const encoding = res.headers["content-encoding"];
           const decoder =
             encoding === "gzip"
@@ -290,6 +319,7 @@ function exchange(
           if (decoder) res.pipe(decoder);
         },
       );
+      req.maxHeadersCount = 1000;
       req.on("error", finish);
       const remaining = Math.max(
         1,

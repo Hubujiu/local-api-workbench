@@ -336,3 +336,198 @@ test("HTTP2 per-hop connections follow actual path and expose original header pa
   assert.equal(r.status, 200);
   assert.deepEqual(paths, ["/a", "/b"]);
 });
+
+test("next-hop failure before headers retains previous complete 302 without claiming a new response", async (t) => {
+  const f = await serve(t, (req, res) => {
+    if (req.url === "/a") {
+      res.writeHead(302, { location: "/b" });
+      res.end("previous-complete");
+    } else res.destroy();
+  });
+  const d = await rejected(
+    executeRequest({ url: f.url + "/a", redirect }),
+    "transport",
+    302,
+  );
+  assert.equal(d.response.body, "previous-complete");
+  assert.equal(d.response.request.url, f.url + "/a");
+  assert.equal(d.failure.attemptedUrl, f.url + "/b");
+  assert.equal(d.failure.requestStarted, true);
+  assert.equal(d.failure.responseComplete, true);
+  assert.equal(f.requests.length, 2);
+});
+test("identity encoded budget accumulates across responses and prohibits another request", async (t) => {
+  const bytes = Buffer.alloc(5 * 1024 * 1024, 66);
+  const f = await serve(t, (_req, res) => {
+    res.writeHead(302, { location: "/again" });
+    res.end(bytes);
+  });
+  const d = await rejected(
+    executeRequest({ url: f.url + "/first", redirect }),
+    "response-budget",
+    302,
+  );
+  assert.equal(d.failure.responseComplete, false);
+  assert.equal(f.requests.length, 2);
+  assert.ok(d.response.size <= 3 * 1024 * 1024);
+});
+test("intermediate cookie failure is terminal and final ordinary cookie failure remains a warning", async (t) => {
+  const f = await serve(t, (req, res) => {
+    res.writeHead(req.url === "/a" ? 302 : 200, {
+      location: "/b",
+      "set-cookie": "x=y",
+    });
+    res.end("actual");
+  });
+  const session = {
+    header: async () => null,
+    capture: async () => {
+      throw Error("fixture disk unavailable");
+    },
+  };
+  const d = await rejected(
+    executeRequest({ url: f.url + "/a", redirect }, undefined, {
+      cookieSession: session,
+    }),
+    "cookie",
+    302,
+  );
+  assert.equal(d.failure.responseComplete, true);
+  assert.equal(f.requests.length, 1);
+  const r = await executeRequest(
+    { url: f.url + "/final", redirect },
+    undefined,
+    { cookieSession: session },
+  );
+  assert.equal(r.status, 200);
+  assert.match(r.cookieError, /Cookie/);
+  assert.equal(f.requests.length, 2);
+});
+test("URL references retain empty/repeated queries and inherited fragments without template reinterpretation", async (t) => {
+  const next = ["?next=1&next=2", "?", "/literal/{{not-a-template}}", "/done#"];
+  let i = 0;
+  const f = await serve(t, (_req, res) => {
+    if (i < next.length) {
+      res.writeHead(302, { location: next[i++] });
+      res.end();
+    } else res.end("done");
+  });
+  const r = await executeRequest({
+    url: f.url + "/begin?old=1#keep",
+    redirect,
+  });
+  assert.deepEqual(
+    f.requests.map((x) => x.url),
+    [
+      "/begin?old=1",
+      "/begin?next=1&next=2",
+      "/begin?",
+      "/literal/%7B%7Bnot-a-template%7D%7D",
+      "/done",
+    ],
+  );
+  assert.equal(r.effectiveUrl, f.url + "/done#");
+});
+test("msgpack final body retains normal decoding and 307 replays exact encoded bytes", async (t) => {
+  const { encode } = await import("@msgpack/msgpack");
+  const f = await serve(t, (req, res) => {
+    if (req.url === "/a") {
+      res.writeHead(307, { location: "/b" });
+      res.end();
+    } else {
+      res.writeHead(200, { "content-type": "application/msgpack" });
+      res.end(Buffer.from(encode({ answer: 42 })));
+    }
+  });
+  const r = await executeRequest({
+    url: f.url + "/a",
+    method: "POST",
+    bodyType: "msgpack",
+    body: '{"x":7}',
+    redirect,
+  });
+  assert.deepEqual(f.requests[0].body, f.requests[1].body);
+  assert.deepEqual(JSON.parse(r.body), { answer: 42 });
+  assert.equal(typeof r.rawBodyBase64, "string");
+  assert.equal(Object.hasOwn(r, "_redirectRaw"), false);
+});
+
+test("HTTP1 parser saturation cannot hide Location or duplicate Location", async (t) => {
+  const f = await serve(t, (_req, res) => {
+    const fields = [];
+    for (let i = 0; i < 1000; i++) fields.push("x" + i, "v");
+    fields.push("Location", "/hidden");
+    res.writeHead(302, fields);
+    res.end("must not silently pass");
+  });
+  const d = await rejected(
+    executeRequest({ url: f.url, redirect }),
+    "header-limit",
+    302,
+  );
+  assert.equal(d.failure.responseComplete, false);
+  assert.equal(f.requests.length, 1);
+});
+test("late headers after cancellation do not replace evidence or invoke capture callback", async (t) => {
+  const { executePreparedRedirect } = await import(
+    "../src/http-redirect-transport.mjs"
+  );
+  const f = await serve(t, (_req, res) => {
+    setTimeout(() => {
+      res.writeHead(302, { location: "/late" });
+      res.end("late");
+    }, 50);
+  });
+  const controller = new AbortController();
+  let captured = 0;
+  const pending = executePreparedRedirect(
+    {
+      method: "GET",
+      auth: { type: "none" },
+      redirect: { ...redirect, maxHops: 2 },
+    },
+    new URL(f.url),
+    {},
+    undefined,
+    { signal: controller.signal, deadline: performance.now() + 1000 },
+    undefined,
+    () => captured++,
+  );
+  setTimeout(() => controller.abort(), 15);
+  const d = await rejected(pending, "cancelled");
+  assert.equal(d.response, undefined);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(captured, 0);
+  assert.equal(f.requests.length, 1);
+});
+
+test("internal evidence callback errors are contained as transport failure with actual partial response", async (t) => {
+  const { executePreparedRedirect } = await import(
+    "../src/http-redirect-transport.mjs"
+  );
+  const f = await serve(t, (_req, res) => {
+    res.writeHead(200);
+    res.end("actual");
+  });
+  const d = await rejected(
+    executePreparedRedirect(
+      {
+        method: "GET",
+        auth: { type: "none" },
+        redirect: { ...redirect, maxHops: 2 },
+      },
+      new URL(f.url),
+      {},
+      undefined,
+      { deadline: performance.now() + 1000 },
+      undefined,
+      () => {
+        throw Error("internal evidence fixture");
+      },
+    ),
+    "transport",
+    200,
+  );
+  assert.equal(d.failure.responseComplete, false);
+  assert.equal(f.requests.length, 1);
+});
