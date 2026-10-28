@@ -88,16 +88,14 @@ test("chunk source bytes retain Unicode, whitespace and numeric lexemes; EOF and
     assert.equal(item.original, undefined);
     assert.equal(item.executedByWorkbench, false);
     assert.equal(item.artifactSha256, full.artifactSha256);
+    assert.equal(item.chunk.version, 1);
     assert.equal(item.chunk.encoding, "base64");
     assert.equal(item.chunk.mediaType, "application/json");
     assert.equal(item.chunk.offsetBytes, offsetBytes);
     assert.equal(item.chunk.totalBytes, bytes.length);
     assert.equal(item.chunk.chunkBytes, 1);
     assert.equal(item.chunk.eof, offsetBytes + 1 === bytes.length);
-    assert.equal(
-      item.chunk.nextOffsetBytes,
-      item.chunk.eof ? null : offsetBytes + 1,
-    );
+    assert.equal(item.chunk.nextOffsetBytes, offsetBytes + 1);
     parts.push(Buffer.from(item.chunk.data, "base64"));
   }
   assert.deepEqual(Buffer.concat(parts), bytes);
@@ -107,12 +105,13 @@ test("chunk source bytes retain Unicode, whitespace and numeric lexemes; EOF and
     expectedArtifactSha256: sha(sourceText),
   }).chunk;
   assert.deepEqual(eof, {
+    version: 1,
     encoding: "base64",
     mediaType: "application/json",
     offsetBytes: bytes.length,
     chunkBytes: 0,
     totalBytes: bytes.length,
-    nextOffsetBytes: null,
+    nextOffsetBytes: bytes.length,
     eof: true,
     data: "",
   });

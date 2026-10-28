@@ -151,6 +151,7 @@ async function reconstruct(client, args, text, firstMaxBytes) {
     assert.equal(output.artifactSha256, digest);
     assert.equal(Object.hasOwn(output, "original"), false);
     const chunk = output.chunk;
+    assert.equal(chunk.version, 1);
     assert.equal(chunk.encoding, "base64");
     assert.equal(chunk.mediaType, "application/json");
     assert.equal(chunk.offsetBytes, offsetBytes);
@@ -169,7 +170,7 @@ async function reconstruct(client, args, text, firstMaxBytes) {
     chunks.push(bytes);
     offsetBytes += bytes.length;
     assert.equal(chunk.eof, offsetBytes === expected.length);
-    assert.equal(chunk.nextOffsetBytes, chunk.eof ? null : offsetBytes);
+    assert.equal(chunk.nextOffsetBytes, offsetBytes);
   } while (offsetBytes < expected.length);
   const reconstructed = Buffer.concat(chunks);
   assert.deepEqual(reconstructed, expected);
@@ -181,12 +182,13 @@ async function reconstruct(client, args, text, firstMaxBytes) {
     }),
   );
   assert.deepEqual(eof.chunk, {
+    version: 1,
     encoding: "base64",
     mediaType: "application/json",
     offsetBytes,
     chunkBytes: 0,
     totalBytes: expected.length,
-    nextOffsetBytes: null,
+    nextOffsetBytes: expected.length,
     eof: true,
     data: "",
   });

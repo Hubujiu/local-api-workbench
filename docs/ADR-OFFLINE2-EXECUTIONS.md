@@ -141,9 +141,10 @@ numeric lexemes and the content-text envelope escapes strings again.
   bytes, matching list/detail `artifactSha256`, not reserialized parsed JSON.
 - The response preserves provenance, `executedByWorkbench: false`, project/source
   IDs, run ID and digest. Instead of `original`, it returns `chunk` containing
-  `encoding: base64`, `mediaType: application/json`, `offsetBytes`, `chunkBytes`,
-  `totalBytes`, `nextOffsetBytes`, `eof` and `data`. `nextOffsetBytes` is null at
-  EOF; offset equal to total returns an empty EOF chunk, and larger offsets reject.
+  `version: 1`, `encoding: base64`, `mediaType: application/json`, `offsetBytes`,
+  `chunkBytes`, `totalBytes`, `nextOffsetBytes`, `eof` and `data`. `nextOffsetBytes`
+  always equals offset plus chunk length, including total at EOF. Offset equal
+  to total returns an empty EOF chunk with that same next offset; larger offsets reject.
   Clients concatenate decoded bytes before UTF-8 decoding: a chunk may split a
   Unicode character. Whitespace, number lexemes and escapes remain exact.
 - Every call checks the existing project allowlist, reloads Store state, rejects

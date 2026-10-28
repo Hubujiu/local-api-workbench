@@ -125,12 +125,13 @@ export function getImportedExecutionRun(
   return {
     ...metadata,
     chunk: {
+      version: 1,
       encoding: "base64",
       mediaType: "application/json",
       offsetBytes: chunk.offsetBytes,
       chunkBytes: end - chunk.offsetBytes,
       totalBytes: bytes.length,
-      nextOffsetBytes: end < bytes.length ? end : null,
+      nextOffsetBytes: end,
       eof: end === bytes.length,
       data: bytes.subarray(chunk.offsetBytes, end).toString("base64"),
     },
