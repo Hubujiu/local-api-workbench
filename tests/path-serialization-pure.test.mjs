@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   importOpenAPIPath,
   bindPathTemplates,
@@ -9,6 +10,29 @@ import {
   validatePathTemplateVariables,
 } from "../src/path-serialization.mjs";
 import { applyMCPInput } from "../src/mcp-request-input.mjs";
+test("dynamic entry imports its path admission guard before SDK resolution", () => {
+  // Source-only regression: do not import or execute the dynamic/VM module here.
+  const source = readFileSync(
+    new URL("../src/dynamic-values.mjs", import.meta.url),
+    "utf8",
+  );
+  const imported = source.match(
+    /import\s*\{([^}]+)\}\s*from\s*["']\.\/path-serialization\.mjs["']/u,
+  );
+  assert(imported, "path serializer must be statically imported");
+  assert(
+    imported[1]
+      .split(",")
+      .some((name) => name.trim() === "validatePathSerialization"),
+    "the entry guard must have a bound import, not an unbound global",
+  );
+  const entry = source.slice(
+    source.indexOf("export async function resolveDynamicRequest("),
+  );
+  const guard = entry.indexOf("validatePathSerialization(request);");
+  assert(guard >= 0);
+  assert(guard < entry.indexOf("normalizeScriptURLMode("));
+});
 const row = (style = "simple", value = "blue", extra = {}) =>
   importOpenAPIPath(
     {

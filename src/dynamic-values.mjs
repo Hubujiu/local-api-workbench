@@ -1,4 +1,8 @@
-import { bindPathTemplates, assertPathValue } from "./path-serialization.mjs";
+import {
+  bindPathTemplates,
+  assertPathValue,
+  validatePathSerialization,
+} from "./path-serialization.mjs";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
