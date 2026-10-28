@@ -91,6 +91,55 @@ export function clickhouseRequest(input) {
     },
   };
 }
+// Lex only bounded FORMAT JSON type metadata. Quoted enum labels / tuple
+// identifiers are opaque: a label named Decimal is not a Decimal constructor.
+function typeTokens(type) {
+  const tokens = [];
+  for (let index = 0; index < type.length; ) {
+    const char = type[index];
+    if (/\s/.test(char)) {
+      index++;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      const quote = char;
+      let closed = false;
+      index++;
+      while (index < type.length) {
+        if (type[index] === "\\") {
+          index += 2;
+          continue;
+        }
+        if (type[index++] === quote) {
+          if (type[index] === quote) {
+            index++;
+            continue;
+          }
+          closed = true;
+          break;
+        }
+      }
+      if (!closed) throw Error("ClickHouse列类型引号无效");
+      tokens.push({ quoted: true });
+    } else {
+      const word = /^[A-Za-z_][A-Za-z_0-9]*/.exec(type.slice(index));
+      if (word) {
+        tokens.push(word[0]);
+        index += word[0].length;
+      } else {
+        tokens.push(char);
+        index++;
+      }
+    }
+  }
+  return tokens;
+}
+function isTypeToken(tokens, index) {
+  // An unquoted tuple field name is followed by its type, not '(' or a
+  // type terminator. Quoted fields have already become opaque tokens.
+  return [undefined, "(", ")", ","].includes(tokens[index + 1]);
+}
+
 // Decimal JSON numbers cannot be recovered after JSON.parse. Require quoted
 // values and validate only the Decimal leaves of explicitly supported wrappers.
 // Complex Decimal types fail closed, including empty results (no sample inference).
@@ -103,8 +152,16 @@ function decimalValidator(type, depth = 0) {
   )
     throw Error("ClickHouse列类型无效或嵌套过深");
   type = type.trim();
+  if (!type) throw Error("ClickHouse列类型为空");
   // These types can hide the actual Decimal leaf type from FORMAT JSON meta.
-  if (/\b(?:Dynamic|JSON|Object)\b/.test(type))
+  const tokens = typeTokens(type);
+  if (
+    tokens.some(
+      (token, index) =>
+        ["Dynamic", "JSON", "Object"].includes(token) &&
+        isTypeToken(tokens, index),
+    )
+  )
     throw Error("ClickHouse动态类型无法证明Decimal精度；请投影为显式类型");
   const wrapper = /^(Nullable|Array|LowCardinality)\s*\(([\s\S]*)\)$/.exec(
     type,
@@ -124,7 +181,14 @@ function decimalValidator(type, depth = 0) {
   const decimal = /^Decimal\(\s*(\d{1,2})\s*,\s*(\d{1,2})\s*\)$/.exec(type);
   const sized = /^Decimal(32|64|128|256)\(\s*(\d{1,2})\s*\)$/.exec(type);
   if (!decimal && !sized) {
-    if (/\bDecimal(?:32|64|128|256)?\b/.test(type))
+    if (
+      tokens.some(
+        (token, index) =>
+          typeof token === "string" &&
+          /^Decimal(?:32|64|128|256)?$/.test(token) &&
+          isTypeToken(tokens, index),
+      )
+    )
       throw Error(
         "ClickHouse不支持此Decimal类型包装；请显式投影为Decimal、Nullable或Array",
       );
