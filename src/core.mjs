@@ -1,3 +1,4 @@
+import { postmanImportURL } from "./postman-url.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1162,8 +1163,7 @@ export function importDocument(doc) {
               ? { url: item.request }
               : item.request || {},
           body = req.body || {};
-        const rawURL =
-          typeof req.url === "string" ? req.url : req.url?.raw || "";
+        const rawURL = postmanImportURL(req.url);
         const queries = typeof req.url === "object" ? req.url.query || [] : [];
         const mode =
           body.mode === "raw"
