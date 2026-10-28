@@ -213,6 +213,14 @@ test("OpenAPI body annotations preserve explicit false and empty values but do n
   assert.equal(body.description, "");
   assert.equal(body["x-empty"], null);
   request.bodyType = "none";
+  assert.throws(
+    () => exportOpenAPI({ name: "fixture", requests: [request] }),
+    /Content-Type/,
+    "an enabled Content-Type cannot silently become an ignored OAS3 parameter",
+  );
+  request.headers.find(
+    (header) => header.key.toLowerCase() === "content-type",
+  ).enabled = false;
   assert.equal(
     exportOpenAPI({ name: "fixture", requests: [request] }).paths["/send"].post
       .requestBody,

@@ -47,7 +47,13 @@ import {
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
-import { importOpenAPIBody, exportOpenAPIBody } from "./openapi-body.mjs";
+import {
+  importOpenAPIBody,
+  exportOpenAPIBody,
+  importOpenAPIHeaders,
+  exportOpenAPIHeaders,
+} from "./openapi-body.mjs";
+import { convertSwagger2Operation } from "./swagger2-request-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -922,7 +928,12 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
-          const importedBody = importOpenAPIBody(op.requestBody);
+          const swagger = doc.swagger
+            ? convertSwagger2Operation(doc, item, op)
+            : null;
+          const importedBody = importOpenAPIBody(
+            swagger ? swagger.requestBody : op.requestBody,
+          );
           const normalizedResponses = Object.fromEntries(
             Object.entries(op.responses || {}).map(([status, response]) => [
               status,
@@ -936,7 +947,7 @@ export function importDocument(doc) {
             ]),
           );
           const responseExamples = importResponseExamples(normalizedResponses);
-          const params = [
+          const params = swagger?.parameters ?? [
             ...new Map(
               [...(item.parameters || []), ...(op.parameters || [])].map(
                 (parameter) => [parameter.in + ":" + parameter.name, parameter],
@@ -950,7 +961,7 @@ export function importDocument(doc) {
             url:
               (op.servers?.[0]?.url || item.servers?.[0]?.url || base) + path,
             openapiOperation: structuredClone({
-              ...op,
+              ...(swagger ? swagger.operation : op),
               ...((op.security ?? doc.security)
                 ? { security: op.security ?? doc.security }
                 : {}),
@@ -978,27 +989,9 @@ export function importDocument(doc) {
                 value: p.example ?? "",
                 enabled: true,
               })),
-            headers: [
-              ...params
-                .filter((p) => p.in === "header")
-                .map((p) => ({
-                  key: p.name,
-                  schema: p.schema ?? { type: p.type || "string" },
-                  required: p.required === true,
-                  description: p.description || "",
-                  value: p.example ?? "",
-                  enabled: true,
-                })),
-              ...(importedBody.contentType
-                ? [
-                    {
-                      key: "Content-Type",
-                      value: importedBody.contentType,
-                      enabled: true,
-                    },
-                  ]
-                : []),
-            ],
+            headers: importOpenAPIHeaders(params, importedBody.contentType, {
+              ignoreContentType: Boolean(doc.openapi),
+            }),
             cookies: params
               .filter((p) => p.in === "cookie")
               .map((p) => ({
@@ -1029,7 +1022,10 @@ export function importDocument(doc) {
               }),
             ),
             examples: responseExamples.examples,
-            importNotes: responseExamples.importNotes,
+            importNotes: [
+              ...responseExamples.importNotes,
+              ...(swagger?.importNotes || []),
+            ],
             openapiExampleBindingsVersion: 1,
             openapiExampleSources: responseExamples.openapiExampleSources,
           });
@@ -1562,7 +1558,7 @@ export function exportOpenAPI(project) {
       parameters: [
         ["query", queryDefinition.query],
         ["path", r.path],
-        ["header", r.headers],
+        ["header", exportOpenAPIHeaders(r)],
         ["cookie", r.cookies],
       ].flatMap(([location, parameters]) =>
         parameters
