@@ -287,6 +287,10 @@ test(
       },
     ];
     await app.store.save(project);
+    // This API really exists and is executable: denial must be a grant check,
+    // not an accidental missing-resource error that also avoids the network.
+    denied.requests = structuredClone(project.requests);
+    await app.store.save(denied);
     const configResponse = await fetch(app.url + "/api/mcp/config", {
       method: "POST",
       headers: {
@@ -332,6 +336,7 @@ test(
         arguments: { projectId: denied.id, apiId: "sdk" },
       });
       assert.equal(refused.isError, true);
+      assert.equal(refused.content[0].text, "项目未授权");
       assert.equal(f.seen.length, count);
       const result = await client.callTool({
         name: "localapi_execute_api",
