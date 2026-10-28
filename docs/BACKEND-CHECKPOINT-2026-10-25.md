@@ -1,6 +1,17 @@
-# 后端检查点 · 2026-10-28 01:56 UTC
+# 后端检查点 · 2026-10-28 03:02 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
+
+## 03:02 Postman 结构化 URL 与组成部分往返
+
+- 最后完整GREEN根 remote `ec30e5774dc87e9deb96bcee8426149a342c4f98` / local `4a9041c0cc9a4454e9c14c32a854de9cdba64a89` / tree `914b17772c41f3a3e190ed211ffc3572ed2a16a5`，首次CI `40618054052` 19/19成功，19实际checkout、12实际core ZIP摘要/CRC/完整TAP和410文件互斥清单已核。Linux/macOS2181通过，Windows2174通过/7明确skip，6新代理流程全过；无新增诊断输出，旧XML/SQLite根因仍未知。PR48最终a59eba6b / CI40617738320首次10/10，同树actual7fb55d79，3实际ZIP各OS1029通过；两个旧阶段取消不当最终证据。
+- 原PR47真实新RED：schema允许无raw的URL对象，但owner导入成功后目标地址被保存为空，重启cURL生成400 Invalid URL。官方schema固定commit `c5fa20c6210207d09b06a23d700f9228c31ad703`，`schemas/draft-04/v2.1.0/collection/url.json` blob `3823b9d39ebdd49d8fbe176893d4eff30a7bc091` 已取得；object没有required，raw可缺。固定SDK4ae76c1从protocol/host/path/port/hash/query/variable处理对象，不依赖raw。旧schema站不可达不再误写成本轮未核schema。
+- 原创小型serializer支持明确HTTP/HTTPS、string或string-array host/path、合法端口/IPv6、变量及hash，继续独立导入query/path-variable行；没有新增依赖，没有伪造SDK对象来调用encoder，也未复制原版专有代码。路径object、歧义分隔符、嵌入component认证、非法端口/IP等先拒绝再写项目；无scheme只允许完整baseURL变量，不猜http。不是所有schema合法形态都兼容，限制见ADR。
+- 还真实修复原rawURL的query/fragment边界问题：先分离fragment，再处理真正query；仅实际path转换/:id，不能改authority/userinfo、query或fragment里的同样文本。保留encoded%23/%2F、重复/disabled query、raw显式空串优先。独立review发现host[]/path[]空草稿回归后修正，补原始authority含fixture密码和模板scheme的静态检查；userinfo运行时拒绝未动，未用真实凭据或执行脚本。
+- PR47最终local `dc57b9f81c4353f30fdecc59526e83a62cd3a343` / remote `28c6590cdf930f7d0725b8df7b0e4e37f83c476f` / tree `6202e9ea12a24dcaa9b71b2ea998bb8b6a9358a2` 已保存，自己的CI `40624163583` 待验证。先保存的WIP10e93628 / CI40623610283终态SUCCESS，不是最终提交证明；后阶段8053146a / CI40624056064取消，不算通过。没有重复新建PR。
+- 最终两个Postman完整文件7/7通过，先前固定core+两文件30/30保留为其阶段证据。raw/component两个真实链覆盖owner导入、重启、环境host/port变量、GET/Bearer/query/path编码、冻结与live编辑隔离、备份恢复、CLI结果落盘。官方MCP SDK HTTP/stdio深比较读回当前live request、保持原导入定义的frozen plans及CLI run；明确SDK只读回，不冒充SDK执行。目标项目/记录真实存在、精确“项目未授权”及零改动；15坏形态混合批次原子拒绝。IPv6是序列化证据而非实际IPv6连通性。
+- 根合并 `37f61d7a47ea4beca3af4fc9985b47560ddfeec6` / tree `c0ae8be111c11b840f8e2e0b5dfaa05a5c248bc5` 唯一冲突为文件头import，取并集保留全部root依赖。10完整文件43/43通过，无fail/cancel/skip，含两Postman、plan冻结、query、OpenAPI、AWS、恢复identity和proxy流程；运行前后SHA/tree一致，check/全量format/diff通过。没有执行VM/XML专项或全量重复。之后仅本文修改，新根仍需自身CI，不能借ec30结果。
+- 独立最终静态审查确认上述空草稿、authority和hash问题关闭；其未执行新运行时，作者/根固定测试与独立静态证据分开。前端暂缓、原生自动化完整组装桥、SQLServer审计/许可及旧偶发失败缺口保留。无main/develop合并或部署。
 
 ## 01:56 正向代理请求目标与原生自动化补证
 

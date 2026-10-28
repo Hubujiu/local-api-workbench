@@ -35,6 +35,7 @@ import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 
+import { postmanImportURL } from "./postman-url.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1503,9 +1504,9 @@ export function importDocument(doc) {
               ? { url: item.request }
               : item.request || {},
           body = req.body || {};
-        const rawURL =
-          typeof req.url === "string" ? req.url : req.url?.raw || "";
-        const queries = typeof req.url === "object" ? req.url.query || [] : [];
+        const queries =
+          req.url && typeof req.url === "object" ? req.url.query || [] : [];
+        const rawURL = postmanImportURL(req.url, queries.length > 0);
         const mode =
           body.mode === "raw"
             ? body.options?.raw?.language === "json"
@@ -1521,10 +1522,7 @@ export function importDocument(doc) {
             name: item.name,
             folder,
             method: req.method,
-            url: (queries.length ? rawURL.split("?")[0] : rawURL).replace(
-              /\/:([A-Za-z0-9_]+)/g,
-              "/{$1}",
-            ),
+            url: rawURL,
             description:
               typeof req.description === "string"
                 ? req.description
