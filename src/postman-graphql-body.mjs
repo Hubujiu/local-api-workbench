@@ -118,7 +118,8 @@ function snapshotJSON(value) {
     ancestors.delete(input);
     return output;
   }
-  return visit(value, 0);
+  const snapshot = visit(value, 0);
+  return { value: snapshot, bytes };
 }
 
 /** Converts only an explicit, bounded static GraphQL JSON subset, not editor mode. */
@@ -135,12 +136,19 @@ export function importPostmanGraphQLBody(body) {
     )
   )
     throw fail();
+  let payloadBytes = 2;
+  const reserve = (size) => {
+    payloadBytes += size;
+    if (payloadBytes > BYTE_LIMIT) throw fail();
+  };
   const query = staticText(gql.query?.value);
+  reserve('"query":'.length + stringJSONBytes(query));
   const parts = ['"query":' + JSON.stringify(query)];
-  if (gql.operationName)
-    parts.push(
-      '"operationName":' + JSON.stringify(staticText(gql.operationName.value)),
-    );
+  if (gql.operationName) {
+    const operationName = staticText(gql.operationName.value);
+    reserve(',"operationName":'.length + stringJSONBytes(operationName));
+    parts.push('"operationName":' + JSON.stringify(operationName));
+  }
   if (gql.variables) {
     let variables = gql.variables.value;
     if (variables !== "") {
@@ -164,7 +172,11 @@ export function importPostmanGraphQLBody(body) {
       )
         throw fail();
       const snapshot = snapshotJSON(variables);
-      parts.push('"variables":' + (source ?? JSON.stringify(snapshot)));
+      reserve(
+        ',"variables":'.length +
+          (source === undefined ? snapshot.bytes : Buffer.byteLength(source)),
+      );
+      parts.push('"variables":' + (source ?? JSON.stringify(snapshot.value)));
     }
   }
   const payload = "{" + parts.join(",") + "}";

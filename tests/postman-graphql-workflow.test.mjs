@@ -223,6 +223,7 @@ test("GraphQL owner import survives restart, frozen case/CLI, backup restore and
   );
   const [fromOpenAPI] = importDocument(openapi);
   const fromCurl = importCurl(toCurl(original));
+  assert.equal(fromCurl.body, original.body);
   for (const request of [fromOpenAPI, fromCurl]) {
     assert.deepEqual(JSON.parse(request.body), payload);
     assertBody(
@@ -262,6 +263,8 @@ test("GraphQL owner import survives restart, frozen case/CLI, backup restore and
   const saved = reopened.runs.find((entry) => entry.id === run.id);
   assertBody(saved.results[0].response);
   assert.deepEqual(JSON.parse(reopened.cases[0].request.body), payload);
+  assert.equal(reopened.cases[0].request.body, original.body);
+  assert.equal(reopened.plans[0].steps[0].request.body, original.body);
   const resumed = await f.api("/projects/" + restored.id + "/run", {
     planId: "frozen-plan",
     environmentId: "selected",

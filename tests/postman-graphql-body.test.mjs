@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { importPostmanGraphQLBody } from "../src/postman-graphql-body.mjs";
-import { importDocument } from "../src/core.mjs";
+import { importDocument, importCurl, toCurl } from "../src/core.mjs";
 import { executeRequest } from "../src/runtime.mjs";
 const query = 'query Echo($id: ID!) { echo(id: $id) }\n# 中文 "quoted"';
 const definition = (graphql, extra = {}) => ({
@@ -59,6 +59,10 @@ test("GraphQL static variables preserve omitted/null/object/string JSON meaning 
     definition({ query, variables: original }),
   );
   assert(result.body.includes('"variables":' + original));
+  const request = importDocument(
+    collection(definition({ query, variables: original })),
+  )[0];
+  assert.equal(importCurl(toCurl(request)).body, result.body);
   assert.equal(Object.prototype.safe, undefined);
 });
 
