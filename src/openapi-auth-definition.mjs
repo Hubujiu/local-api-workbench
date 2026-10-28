@@ -5,6 +5,13 @@ import { applySharedAuth } from "./shared-auth.mjs";
 // Definition-only projection. Imported security is not executable auth configuration.
 export function openAPIAuthDefinition(project, request, registry) {
   if (
+    project.settings?.nativeInheritance !== undefined ||
+    request.nativeInheritance !== undefined
+  )
+    throw Error(
+      "OpenAPI 暂不支持保留的原生继承图，请使用项目备份或先显式扁平化",
+    );
+  if (
     registry !== undefined &&
     (!registry || typeof registry !== "object" || Array.isArray(registry))
   )

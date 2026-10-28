@@ -277,3 +277,34 @@ test("new mechanism registry equality ignores key order but rejects extra or cha
     /JWT认证方案冲突/,
   );
 });
+test("preserved native graphs reject before stale metadata or closed noauth can hide inherited inputs", () => {
+  for (const graph of [null, {}, { secret: "SECRET" }]) {
+    for (const [project, request] of [
+      [
+        { settings: { nativeInheritance: graph } },
+        { auth: { type: "none" }, inheritAuth: false },
+      ],
+      [
+        {},
+        {
+          auth: { type: "none" },
+          nativeInheritance: graph,
+          openapiOperation: { security: [{ Old: [] }] },
+        },
+      ],
+    ]) {
+      const before = structuredClone({ project, request });
+      assert.throws(
+        () => projectAuth(project, request),
+        (error) =>
+          /原生继承图.*项目备份/.test(error.message) &&
+          !error.message.includes("SECRET"),
+      );
+      assert.deepEqual({ project, request }, before);
+    }
+  }
+  assert.equal(
+    scheme(definition({ type: "basic" }, { inheritAuth: false })).scheme,
+    "basic",
+  );
+});
