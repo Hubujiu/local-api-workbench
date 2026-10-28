@@ -1,0 +1,144 @@
+name: Verify Oracle Image Metadata Only
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/oracle-image-metadata.yml
+      - src/oracle-*.mjs
+      - tests/oracle-*.mjs
+      - tests/fixtures/oracle-*.mjs
+      - docs/ADR-ORACLE-READONLY-WIP.md
+      - docs/licenses/oracle*
+      - package.json
+      - package-lock.json
+permissions:
+  contents: read
+jobs:
+  oracle-image-metadata:
+    if: >-
+      github.head_ref == 'feat/oracle-readonly-wip' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      # No checkout, registry login, image pull, container, or database is needed.
+      - name: Resolve and independently verify official image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+
+          image = "container-registry.oracle.com/database/free:23.26.3.0-lite-amd64"
+          evidence = pathlib.Path(os.environ["RUNNER_TEMP"]) / "oracle-image-metadata"
+          evidence.mkdir(mode=0o700, exist_ok=True)
+          report = {"image": image, "status": "incomplete", "databaseStarted": False}
+          digest_pattern = re.compile(r"sha256:[0-9a-f]{64}")
+          media_types = {
+              "application/vnd.oci.image.manifest.v1+json",
+              "application/vnd.docker.distribution.manifest.v2+json",
+              "application/vnd.oci.image.index.v1+json",
+              "application/vnd.docker.distribution.manifest.list.v2+json",
+          }
+
+          def save_report():
+              (evidence / "verification.json").write_text(json.dumps(report, indent=2) + "\n")
+
+          def require(condition, message):
+              if not condition:
+                  raise ValueError(message)
+
+          # These are read-only Docker commands. All registry access uses a fresh,
+          # empty config and a minimal environment, with no account credentials.
+          with tempfile.TemporaryDirectory(prefix="oracle-metadata-config-", dir=os.environ["RUNNER_TEMP"]) as config:
+              command_env = {"PATH": os.environ["PATH"], "HOME": config, "DOCKER_CONFIG": config, "LANG": "C.UTF-8"}
+
+              def command(arguments):
+                  result = subprocess.run(arguments, env=command_env, capture_output=True, timeout=45, check=False)
+                  require(len(result.stdout) <= 262144, "Metadata output exceeds the 256 KiB bound")
+                  if result.returncode:
+                      detail = result.stderr.decode("utf-8", errors="replace")[:4096]
+                      raise RuntimeError("Read-only command failed; no login, alternate registry, or runtime fallback: " + detail)
+                  return result.stdout
+
+              def inspect(reference):
+                  # Documented buildx fields: Manifest is an OCI descriptor (or
+                  # index plus digest); Image is config metadata, not image layers.
+                  template = '{"manifest":{{json .Manifest}},"image":{{json .Image}}}'
+                  doc = json.loads(command(["docker", "buildx", "imagetools", "inspect", reference, "--format", template]))
+                  require(isinstance(doc, dict), "Expected an object, not HTML or an authentication response")
+                  descriptor = doc.get("manifest")
+                  require(isinstance(descriptor, dict), "Missing manifest descriptor")
+                  require(isinstance(descriptor.get("digest"), str) and digest_pattern.fullmatch(descriptor["digest"]), "Missing full SHA-256 descriptor digest")
+                  require(descriptor.get("mediaType") in media_types, "Unexpected manifest media type")
+                  require(type(descriptor.get("size")) is int and 0 < descriptor["size"] <= 262144, "Unexpected manifest size")
+                  configs = doc.get("image")
+                  require(isinstance(configs, dict), "Missing image configuration metadata")
+                  configs = [configs] if "os" in configs else list(configs.values())
+                  require(len(configs) == 1 and isinstance(configs[0], dict), "Architecture-specific tag must resolve to exactly one image configuration")
+                  require(configs[0].get("os") == "linux" and configs[0].get("architecture") == "amd64", "Expected linux/amd64")
+                  if "manifests" in descriptor:
+                      children = descriptor["manifests"]
+                      require(isinstance(children, list), "Invalid index descriptors")
+                      matches = [item for item in children if isinstance(item, dict) and item.get("platform", {}).get("os") == "linux" and item.get("platform", {}).get("architecture") == "amd64"]
+                      require(len(matches) == 1 and isinstance(matches[0].get("digest"), str) and digest_pattern.fullmatch(matches[0]["digest"]), "Index lacks exactly one valid linux/amd64 descriptor")
+                  return descriptor
+
+              try:
+                  save_report()
+                  root = command(["docker", "info", "--format", "{{.DockerRootDir}}"]).decode().strip()
+                  require(os.path.isabs(root), "DockerRootDir must be an absolute path")
+                  disk = shutil.disk_usage(root)
+                  memory = {line.split(":", 1)[0]: int(line.split()[1]) * 1024 for line in pathlib.Path("/proc/meminfo").read_text().splitlines()}
+                  report["runner"] = {
+                      "os": os.environ.get("RUNNER_OS"), "arch": os.environ.get("RUNNER_ARCH"),
+                      "kernel": os.uname().release, "cpuCount": os.cpu_count(),
+                      "memoryTotalBytes": memory["MemTotal"], "memoryAvailableBytes": memory["MemAvailable"],
+                      "dockerRootDir": root, "diskTotalBytes": disk.total, "diskFreeBytes": disk.free,
+                      "atLeast13GiBFree": disk.free >= 13 * 1024**3,
+                      "atLeast2GiBMemoryAvailable": memory["MemAvailable"] >= 2 * 1024**3,
+                  }
+                  report["buildxVersion"] = command(["docker", "buildx", "version"]).decode().strip()
+                  save_report()
+                  tag_descriptor = inspect(image)
+                  report["tagDescriptor"] = tag_descriptor
+                  save_report()
+                  pin = image + "@" + tag_descriptor["digest"]
+                  pinned_descriptor = inspect(pin)
+                  require(all(pinned_descriptor.get(key) == tag_descriptor.get(key) for key in ("digest", "mediaType", "size")), "Tag and digest lookup disagree")
+                  raw = command(["docker", "buildx", "imagetools", "inspect", pin, "--raw"])
+                  # buildx --raw emits original bytes without an added newline.
+                  raw_digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+                  require(raw_digest == tag_descriptor["digest"], "Raw manifest SHA-256 does not match the descriptor")
+                  require(len(raw) == tag_descriptor["size"], "Raw manifest size does not match the descriptor")
+                  manifest = json.loads(raw)
+                  require(isinstance(manifest, dict) and manifest.get("schemaVersion") == 2, "Expected a schema-version-2 manifest")
+                  (evidence / "manifest.json").write_bytes(raw)
+                  report.update({"status": "verified", "pin": pin, "platform": "linux/amd64", "pinnedDescriptor": pinned_descriptor, "rawSha256": raw_digest, "verifiedAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+                  (evidence / "verified-pin.txt").write_text(pin + "\n")
+                  print("Verified metadata only: " + pin)
+                  with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                      summary.write("### Oracle metadata only\n\n`" + pin + "`\n\nlinux/amd64 verified by digest lookup and raw-manifest SHA-256. No image layers pulled or database started. See artifact for runner capacity; runtime remains a separate step.\n")
+              except Exception as error:
+                  report.update({"status": "failed", "error": str(error)[:4096]})
+                  raise
+              finally:
+                  save_report()
+          PY
+      - name: Preserve metadata and runner capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-image-metadata
+          path: ${{ runner.temp }}/oracle-image-metadata/
+          retention-days: 7
+          if-no-files-found: error

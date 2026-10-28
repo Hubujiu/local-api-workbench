@@ -10,8 +10,16 @@ function validResult(value) {
     !value ||
     typeof value !== "object" ||
     !Array.isArray(value.columns) ||
+    value.columns.length < 1 ||
     value.columns.length > 128 ||
-    value.columns.some((x) => typeof x !== "string") ||
+    value.columns.some(
+      (x) =>
+        typeof x !== "string" ||
+        !x.length ||
+        !x.isWellFormed() ||
+        x.includes("\0") ||
+        Buffer.byteLength(x) > 512,
+    ) ||
     new Set(value.columns).size !== value.columns.length ||
     !Array.isArray(value.rows) ||
     value.rows.length > 1000 ||
@@ -25,6 +33,7 @@ function validResult(value) {
     )
   )
     return false;
+  if (Buffer.byteLength(JSON.stringify(value)) > 1024 * 1024) return false;
   for (const row of value.rows) {
     if (
       !row ||
@@ -36,19 +45,26 @@ function validResult(value) {
     for (const column of value.columns) {
       if (!Object.hasOwn(row, column)) return false;
       const cell = row[column];
-      if (cell === null || typeof cell === "string") continue;
+      if (cell === null) continue;
+      if (typeof cell === "string") {
+        if (!cell.isWellFormed()) return false;
+        continue;
+      }
       if (
         !cell ||
         typeof cell !== "object" ||
         Array.isArray(cell) ||
         Object.keys(cell).length !== 2 ||
+        !Object.hasOwn(cell, "type") ||
+        !Object.hasOwn(cell, "base64") ||
         cell.type !== "blob" ||
-        typeof cell.base64 !== "string"
+        typeof cell.base64 !== "string" ||
+        Buffer.from(cell.base64, "base64").toString("base64") !== cell.base64
       )
         return false;
     }
   }
-  return Buffer.byteLength(JSON.stringify(value)) <= 1024 * 1024;
+  return true;
 }
 const spawnWorker = (url, options) => fork(url, [], options);
 
@@ -141,6 +157,7 @@ export async function runOracleReadOwned(
         }
         if (
           next < 1 ||
+          (next !== 4 && !connectedPhaseSeen) ||
           (next !== phaseIndex + 1 && next !== 4) ||
           phaseIndex === 4
         ) {

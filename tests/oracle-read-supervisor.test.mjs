@@ -172,6 +172,7 @@ test("malformed, premature, duplicate, oversized result and nonzero exit fail cl
   for (const event of [
     "premature",
     "cleanupOnly",
+    "setupFirst",
     "duplicate",
     "oversized",
     "phase",
@@ -184,6 +185,7 @@ test("malformed, premature, duplicate, oversized result and nonzero exit fail cl
     if (event === "premature")
       h.worker.emit("message", { kind: "oracle-result", result: result() });
     if (event === "phase") phase(h.worker, "query");
+    if (event === "setupFirst") phase(h.worker, "setup");
     if (event === "cleanupOnly") {
       phase(h.worker, "cleanup");
       h.worker.emit("message", { kind: "oracle-result", result: result() });
@@ -237,4 +239,26 @@ test("worker query failure is sanitized and waits for exit; startup throw leaves
     { code: "ORACLE_WIP_WORKER_FAILED" },
   );
   assert.equal(other.timers.size, 0);
+});
+
+test("IPC collector rejects empty/malformed columns and noncanonical blobs", async () => {
+  for (const value of [
+    { ...result(), columns: [], rows: [{}] },
+    { ...result(), columns: ["\ud800"], rows: [{ "\ud800": "1" }] },
+    { ...result(), rows: [{ VALUE: "\ud800" }] },
+    {
+      ...result(),
+      rows: [{ VALUE: { type: "blob", base64: "not canonical!" } }],
+    },
+  ]) {
+    const h = harness();
+    const pending = runOracleReadOwned(input(), h.options).catch(
+      (error) => error,
+    );
+    for (const name of ["connect", "setup", "classify", "query", "cleanup"])
+      phase(h.worker, name);
+    h.worker.emit("message", { kind: "oracle-result", result: value });
+    h.worker.emit("close", 0, null);
+    assert.equal((await pending).code, "ORACLE_WIP_WORKER_FAILED");
+  }
 });
