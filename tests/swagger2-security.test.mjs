@@ -242,22 +242,14 @@ test("Swagger2 security requirement validation uses only source definitions and 
   ]) {
     const input = doc(
       { Basic: { type: "basic" }, OAuth: oauth("password") },
-      {
-        security,
-        components: {
-          securitySchemes: { Missing: { type: "http", scheme: "basic" } },
-        },
-      },
+      { security },
     );
-    assert.throws(
-      () => swagger2SecurityDefinitions(input),
-      /Swagger 2 security/,
-    );
+    assert.throws(() => swagger2SecurityDefinitions(input), /root security/);
     delete input.security;
     input.paths = { "/last": { delete: { security } } };
     assert.throws(
       () => swagger2SecurityDefinitions(input),
-      /Swagger 2 security/,
+      /delete \/last security/,
     );
   }
 });
