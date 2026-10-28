@@ -7,8 +7,8 @@ import { mkdtemp, rename, writeFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Store } from "../src/runtime.mjs";
-import { snapshotPlan } from "../src/core.mjs";
+import { Store, executeRequest } from "../src/runtime.mjs";
+import { snapshotPlan, runPlan } from "../src/core.mjs";
 const main = fileURLToPath(new URL("../src/mcp.mjs", import.meta.url));
 const decode = (response) => {
   assert.notEqual(response.isError, true, response.content?.[0]?.text);
@@ -174,3 +174,52 @@ for (const kind of ["api", "flow"])
         "recovery and evidence readback must not repeat network effects",
       );
     });
+
+test("external cancellation wins over a real post-response progress filesystem failure", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "progress-cancel-"));
+  const journal = path.join(root, ".mcp-activities");
+  let requests = 0;
+  const peer = http.createServer((_req, res) => {
+    requests++;
+    res.end("completed");
+  });
+  await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    peer.closeAllConnections();
+    await new Promise((resolve) => peer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const { MCPActivity } = await import("../src/mcp-activity.mjs");
+  const activity = await new MCPActivity(root, {
+    tool: "localapi_execute_flow",
+    projectId: "p",
+  }).start();
+  const controller = new AbortController();
+  const run = await runPlan(
+    snapshotPlan({
+      name: "cancel at observer",
+      steps: [1, 2].map((n) => ({
+        id: "step-" + n,
+        request: { url: "http://127.0.0.1:" + peer.address().port },
+      })),
+    }),
+    {},
+    executeRequest,
+    {
+      signal: controller.signal,
+      onStep: async () => {
+        await rename(journal, journal + "-parked");
+        await writeFile(journal, "owned obstacle");
+        controller.abort();
+        await activity.update({ completed: 1, total: 2 });
+      },
+    },
+  );
+  assert.equal(run.status, "cancelled");
+  assert.equal(run.results.length, 1);
+  assert.equal(run.results[0].status, "passed");
+  assert.equal(run.results[0].response.body, "completed");
+  assert.equal(run.results[0].error, undefined);
+  assert.equal(run.progressFailure.code, "EXECUTION_PROGRESS_FAILED");
+  assert.equal(requests, 1);
+});
