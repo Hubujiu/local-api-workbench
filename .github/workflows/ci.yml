@@ -40,6 +40,7 @@ jobs:
           path: |
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.json
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.tap
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.progress.jsonl
   browser:
     timeout-minutes: 10
     runs-on: ubuntu-latest

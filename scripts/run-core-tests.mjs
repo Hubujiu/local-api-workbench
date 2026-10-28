@@ -136,6 +136,8 @@ export async function main(args, cwd = process.cwd()) {
       "--test-reporter-destination=stdout",
       "--test-reporter=tap",
       `--test-reporter-destination=${prefix}.tap`,
+      `--test-reporter=${new URL("./core-progress-reporter.mjs", import.meta.url).href}`,
+      `--test-reporter-destination=${prefix}.progress.jsonl`,
       ...plan.selected,
     ],
     { cwd },

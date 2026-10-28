@@ -284,6 +284,8 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
   const core = workflow.split("  core:")[1].split("  browser:")[0];
   assert.match(core, /shard: \[1, 2, 3, 4\]/);
   assert.match(core, /timeout-minutes: 10/);
+  assert.match(core, /if: always\(\)/);
+  assert.match(core, /of-4\.progress\.jsonl/);
   assert.match(core, /fail-fast: false/);
   assert.match(core, /node-version: "24"/);
   assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);

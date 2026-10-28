@@ -165,3 +165,43 @@ Local revision verification: all ten contract tests pass, including actual file
 execution, nested concurrency and failure propagation. Independent branch scope
 is still 225 files, now allocated 57 / 56 / 56 / 56 with the same full-list hash.
 No full local suite is repeated solely to seek a green timing outcome.
+
+## Bounded live progress observations (2026-10-28)
+
+The core launcher adds a third reporter, `core-progress-reporter.mjs`, alongside
+unchanged spec and TAP outputs. Its `.progress.jsonl` artifact is included in the
+same `if: always()` upload. No test selection, concurrency, application resource
+limit, job timeout, failure policy, runtime pin or security check changes.
+
+The reporter uses Node 24.21's immediate `test:dequeue`, `test:complete` and
+`test:summary` events, not the declaration-ordered buffered `test:start` events:
+https://nodejs.org/download/release/v24.21.0/docs/api/test.html#class-testsstream
+It projects only event type, repository-relative file, test name, line, nesting,
+reporter monotonic elapsed milliseconds, status and Node-reported duration.
+Absent fields remain absent. Test names are source-owned labels, not a place to
+put credentials. Names/files are capped at 256 characters and control characters
+are removed; absolute file names outside the checkout are omitted. It never
+copies errors, stacks, stdout/stderr, request/response bodies or environment.
+Own scalar data properties are copied without invoking getters/toJSON hooks.
+
+Output is capped at 12,000 lines and 4 MiB, including one truncation marker. After
+the cap, the reporter still drains events without further output; it does not
+stop tests or synthesize success. No per-test state map or heartbeat is retained.
+I/O has a finite additional cost: this is observation, not a performance fix.
+Elapsed time is when the parent reporter receives an event, not a CPU sample or
+proof of the exact instant execution started. IPC and stream scheduling may add
+latency. A completed test without a final file summary can help distinguish
+reported test work from waiting for process completion, but cannot identify open
+handles, prove scheduler contention, or diagnose an absent/cancelled event.
+Partial files and truncation must never be interpreted as successful acceptance.
+
+Local validation uses only pure synthetic reporter/sharder fixtures: allowlisted
+field projection, missing/malformed fields, getter avoidance, both output caps
+with continued draining, real passing/failing child fixtures preserving spec/TAP
+and exit codes, and a small fixture which reports completion while its process
+still owns an interval. The latter is terminated and verifies nonzero/signalled
+termination and retained JSONL prefix. Existing exhaustive allocation, nested
+concurrency and failure/cancellation contracts remain in the same batch.
+No application, VM, XML, native database or pressure workload is run for this
+change. Local Node 24.22.1 fixture results do not establish Node 24.21, Windows or
+macOS runtime acceptance; those still require exact-head CI after review.
