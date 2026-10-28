@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { withWorkerRejectionDiagnostics } from "./helpers/worker-rejection-diagnostics.mjs";
+import { withWorkerPhaseDiagnostics } from "./helpers/worker-phase-diagnostics.mjs";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
 import { normalizeNativeTaskRequest } from "../src/script-database-tasks.mjs";
 import {
@@ -216,33 +217,60 @@ test("native XML selection and parse errors remain stage errors rather than null
 });
 
 test("native XML assertion input, node/attribute and depth budgets match the shared extraction parser", async () => {
+  const observedPhase = (label, body, tasks) =>
+    withWorkerPhaseDiagnostics(label, () => phase(body, tasks));
+  const observedRejection = (label, body, expected) =>
+    withWorkerPhaseDiagnostics(label, (captureRejection) =>
+      assert.rejects(phase(body).catch(captureRejection), expected),
+    );
   const prefix = "<login><token>",
     suffix = "</token></login>";
   const exact =
     prefix + "x".repeat(65536 - prefix.length - suffix.length) + suffix;
   assert.equal(
-    (await phase(exact, [assertion(undefined, "short", "uneq")])).tests[0]
-      .passed,
+    (
+      await observedPhase("ascii-64k", exact, [
+        assertion(undefined, "short", "uneq"),
+      ])
+    ).tests[0].passed,
     true,
   );
-  await assert.rejects(phase(exact + " "), /64KiB/);
-  await assert.rejects(phase(prefix + "雪".repeat(21846) + suffix), /64KiB/);
-  await assert.rejects(phase(prefix + "\ud800" + suffix), /Unicode/);
+  await observedRejection("ascii-over-64k", exact + " ", /64KiB/);
+  await observedRejection(
+    "multibyte-over-64k",
+    prefix + "雪".repeat(21846) + suffix,
+    /64KiB/,
+  );
+  await observedRejection(
+    "invalid-unicode",
+    prefix + "\ud800" + suffix,
+    /Unicode/,
+  );
   const nested = "<a>".repeat(32) + "leaf" + "</a>".repeat(32),
     selected = "string(/" + Array(32).fill("a").join("/") + ")";
   assert.equal(
-    (await phase(nested, [assertion(selected, "leaf")])).tests[0].passed,
+    (await observedPhase("depth-32", nested, [assertion(selected, "leaf")]))
+      .tests[0].passed,
     true,
   );
-  await assert.rejects(
-    phase("<a>".repeat(33) + "leaf" + "</a>".repeat(33)),
+  await observedRejection(
+    "depth-33",
+    "<a>".repeat(33) + "leaf" + "</a>".repeat(33),
     /深度/,
   );
   const many = "<login><token>real</token>" + "<x/>".repeat(1996) + "</login>";
-  assert.equal((await phase(many)).tests[0].passed, true);
-  await assert.rejects(phase(many.replace("</login>", "<x/></login>")), /节点/);
-  await assert.rejects(
-    phase("<login><token>real</token>" + '<x a=""/>'.repeat(999) + "</login>"),
+  assert.equal(
+    (await observedPhase("nodes-accepted", many)).tests[0].passed,
+    true,
+  );
+  await observedRejection(
+    "nodes-rejected",
+    many.replace("</login>", "<x/></login>"),
+    /节点/,
+  );
+  await observedRejection(
+    "attributes-rejected",
+    "<login><token>real</token>" + '<x a=""/>'.repeat(999) + "</login>",
     /节点|属性/,
   );
 });
