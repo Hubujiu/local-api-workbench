@@ -21,3 +21,5 @@
 /src/vendor/native-xml-library.js -text
 /src/vendor/native-xml-library.json -text
 /src/vendor/NATIVE-XML-LICENSES.txt -text
+# Frozen scheduling evidence is pinned by raw bytes on every checkout platform.
+/scripts/core-test-weights.json text eol=lf
