@@ -1,3 +1,7 @@
+import {
+  serializeRequestPath,
+  validatePathSerialization,
+} from "./path-serialization.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -192,6 +196,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    for (const request of p.requests || []) validatePathSerialization(request);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -315,9 +320,7 @@ export class Store {
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
   const r = normalizeRequest(input);
-  let raw = r.url;
-  for (const p of r.path.filter((p) => p.enabled !== false && p.key))
-    raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
+  const raw = serializeRequestPath(r);
   const u = new URL(raw);
   if (!["http:", "https:"].includes(u.protocol))
     throw Error("仅支持 HTTP/HTTPS");
