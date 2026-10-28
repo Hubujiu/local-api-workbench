@@ -51,6 +51,7 @@ export function clickhouseRequest(input) {
     result_overflow_mode: "break",
     enable_http_compression: 0,
     output_format_json_quote_64bit_integers: 1,
+    output_format_json_quote_decimals: 1,
   }))
     url.searchParams.set(key, String(value));
   if (input.database) url.searchParams.set("database", String(input.database));
@@ -90,6 +91,69 @@ export function clickhouseRequest(input) {
     },
   };
 }
+// Decimal JSON numbers cannot be recovered after JSON.parse. Require quoted
+// values and validate only the Decimal leaves of explicitly supported wrappers.
+// Complex Decimal types fail closed, including empty results (no sample inference).
+function decimalValidator(type, depth = 0) {
+  if (
+    typeof type !== "string" ||
+    type.length === 0 ||
+    type.length > 4096 ||
+    depth > 16
+  )
+    throw Error("ClickHouse列类型无效或嵌套过深");
+  type = type.trim();
+  // These types can hide the actual Decimal leaf type from FORMAT JSON meta.
+  if (/\b(?:Dynamic|JSON|Object)\b/.test(type))
+    throw Error("ClickHouse动态类型无法证明Decimal精度；请投影为显式类型");
+  const wrapper = /^(Nullable|Array|LowCardinality)\s*\(([\s\S]*)\)$/.exec(
+    type,
+  );
+  if (wrapper) {
+    const validate = decimalValidator(wrapper[2], depth + 1);
+    if (!validate) return null;
+    return (value) => {
+      if (wrapper[1] === "Nullable" && value === null) return;
+      if (wrapper[1] === "Array") {
+        if (!Array.isArray(value))
+          throw Error("ClickHouse Decimal数组结构无效");
+        for (const item of value) validate(item);
+      } else validate(value);
+    };
+  }
+  const decimal = /^Decimal\(\s*(\d{1,2})\s*,\s*(\d{1,2})\s*\)$/.exec(type);
+  const sized = /^Decimal(32|64|128|256)\(\s*(\d{1,2})\s*\)$/.exec(type);
+  if (!decimal && !sized) {
+    if (/\bDecimal(?:32|64|128|256)?\b/.test(type))
+      throw Error(
+        "ClickHouse不支持此Decimal类型包装；请显式投影为Decimal、Nullable或Array",
+      );
+    return null;
+  }
+  const precision = decimal
+    ? Number(decimal[1])
+    : { 32: 9, 64: 18, 128: 38, 256: 76 }[sized[1]];
+  const scale = Number(decimal ? decimal[2] : sized[2]);
+  if (precision < 1 || precision > 76 || scale > precision)
+    throw Error("ClickHouse Decimal精度或小数位无效");
+  return (value) => {
+    if (
+      typeof value !== "string" ||
+      value.length > 79 ||
+      !/^-?\d+(?:\.\d+)?$/.test(value)
+    )
+      throw Error(
+        "ClickHouse Decimal必须以十进制字符串返回，禁止不精确JSON数字",
+      );
+    const [integer, fraction = ""] = value.replace(/^-/, "").split(".");
+    if (
+      integer.replace(/^0+/, "").length > precision - scale ||
+      fraction.length > scale
+    )
+      throw Error("ClickHouse Decimal值超出声明精度或小数位");
+  };
+}
+
 export async function queryClickHouse(input) {
   const { url, headers } = clickhouseRequest(input);
   const body = await new Promise((resolve, reject) => {
@@ -186,6 +250,21 @@ export async function queryClickHouse(input) {
     )
   )
     throw Error("ClickHouse结果结构无效");
+  const names = new Set();
+  const validators = value.meta.map((column) => {
+    if (names.has(column.name))
+      throw Error("ClickHouse列名重复，无法校验Decimal类型");
+    names.add(column.name);
+    return [column.name, decimalValidator(column.type)];
+  });
+  for (const row of value.data) {
+    for (const [name, validate] of validators) {
+      if (validate) {
+        if (!Object.hasOwn(row, name)) throw Error("ClickHouse Decimal列缺失");
+        validate(row[name]);
+      }
+    }
+  }
   return {
     columns: value.meta.map((column) => column.name),
     rows: value.data.slice(0, 1000),
