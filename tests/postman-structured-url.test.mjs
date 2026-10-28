@@ -376,6 +376,23 @@ test("structured URL components preserve percent escapes, IPv6, variables and fr
 test("raw Postman query and fragment text is never rewritten as path variables", () => {
   const imported = (url) =>
     importDocument(collection([{ name: "URL", request: { url } }]))[0].url;
+  for (const prefix of [
+    "https://:fixture-secret@example.test",
+    "{{scheme}}://:fixture-secret@example.test",
+    "https://normal.test",
+  ]) {
+    assert.equal(
+      imported(prefix + "/:id?q=/:literal#/:fragment"),
+      prefix + "/{id}?q=/:literal#/:fragment",
+    );
+    assert.equal(
+      imported({
+        raw: prefix + "/:id?old=1#/:fragment",
+        query: [{ key: "q", value: "/:literal" }],
+      }),
+      prefix + "/{id}#/:fragment",
+    );
+  }
   for (const raw of [
     "https://example.test/:id?q=/:literal#part?detail/:keep",
     "{{base}}/:id?q=/:literal#part?detail/:keep",

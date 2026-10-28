@@ -9,7 +9,18 @@ function rawImportURL(value, replaceQuery) {
   const queryAt = target.indexOf("?");
   const pathname = queryAt < 0 ? target : target.slice(0, queryAt);
   const query = queryAt < 0 || replaceQuery ? "" : target.slice(queryAt);
-  return pathname.replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") + query + fragment;
+  // Keep the authority opaque, including userinfo that execution rejects.
+  // This lexical boundary also accepts a template supplying only the scheme.
+  const authority =
+    pathname.match(
+      /^(?:[A-Za-z][A-Za-z0-9+.-]*|\{\{[^{}]+\}\}):\/\/[^/]*/,
+    )?.[0] || "";
+  return (
+    authority +
+    pathname.slice(authority.length).replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") +
+    query +
+    fragment
+  );
 }
 
 export function postmanImportURL(url, replaceQuery = false) {
