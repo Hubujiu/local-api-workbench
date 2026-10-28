@@ -1,6 +1,7 @@
 import {
   normalizeRedirect,
   validateRedirectAdmission,
+  validatePreparedRedirectHeaders,
 } from "./http-redirect.mjs";
 import { executePreparedRedirect } from "./http-redirect-transport.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
@@ -469,6 +470,7 @@ async function executeRequestWithinDeadline(
     headers.connection = "keep-alive";
   }
   throwIfInactive(controls);
+  if (r.redirect) validatePreparedRedirectHeaders(headers);
   if (r.redirect)
     return executePreparedRedirect(
       r,

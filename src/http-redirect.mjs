@@ -1,3 +1,4 @@
+import { validateHeaderName, validateHeaderValue } from "node:http";
 import { types } from "node:util";
 import { createHash } from "node:crypto";
 
@@ -100,6 +101,14 @@ export function validateRedirectAdmission(r, headers) {
     !/^(Basic|Bearer)\s+\S/i.test(headers.authorization)
   )
     throw Error("redirect 不支持此 Authorization 方案");
+}
+// Authentication and Cookie preparation can introduce fields after row validation.
+// Validate the complete opt-in request before prepareConnection can open a tunnel.
+export function validatePreparedRedirectHeaders(headers) {
+  for (const [name, value] of Object.entries(headers)) {
+    validateHeaderName(name);
+    validateHeaderValue(name, value);
+  }
 }
 export function redirectDecision(response, current, initialOrigin, method) {
   if (![301, 302, 303, 307, 308].includes(response.status)) return null;
