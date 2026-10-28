@@ -1,3 +1,4 @@
+import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -192,6 +193,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    for (const request of p.requests || []) validateQueryArrayRequest(request);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

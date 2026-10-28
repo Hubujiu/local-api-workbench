@@ -1,3 +1,4 @@
+import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { scriptStages } from "../public/shared-scripts.js";
 import {
@@ -16,6 +17,7 @@ export function assertSDKCurlDefinition(request) {
 }
 
 export function sdkCurlDefinition(request) {
+  validateQueryArrayRequest(request);
   if (normalizeScriptURLMode(request.scriptURLMode) !== "sdk") return request;
   assertSDKCurlDefinition(request);
   const runtime = validateQueryRuntime(
