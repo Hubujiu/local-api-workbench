@@ -297,6 +297,7 @@ export function convertSwagger2Operation(document, pathItem, operation) {
         .filter((parameter) => parameter.required === true)
         .map((parameter) => parameter.name);
       requestBody = {
+        ...(required.length ? { required: true } : {}),
         content: {
           [media.selected]: {
             schema: {

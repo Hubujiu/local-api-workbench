@@ -17,6 +17,10 @@ Primary references reviewed on 2026-10-28:
 - [OAS 2.0](https://spec.openapis.org/oas/v2.0): path/operation parameter
   identity and overriding, at most one body, body/form exclusion, operation
   `consumes` override, Schema `example`, and scalar parameter `default`.
+- [OAS 3.0.3 Request Body Object](https://spec.openapis.org/oas/v3.0.3#request-body-object):
+  whole-body requiredness is separate from required object properties and defaults
+  to false. Any required Swagger form parameter therefore also sets canonical
+  `requestBody.required:true`; an entirely optional form leaves it absent.
 
 The implementation reuses `resolveLocalReferences`, `importOpenAPIBody`,
 `exportOpenAPIBody`, the schema-position visitor and existing transport encoders.

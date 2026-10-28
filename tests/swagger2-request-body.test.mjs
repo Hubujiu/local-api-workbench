@@ -176,6 +176,7 @@ test("Swagger scalar form defaults, required flags and constraints feed the exis
     "multipart/form-data",
   ]) {
     const converted = convert(parameters, { operation: { consumes: [media] } });
+    assert.equal(converted.requestBody.required, true);
     const request = importOpenAPIBody(converted.requestBody);
     assert.deepEqual(
       request.form.map((row) => row.value),
@@ -194,8 +195,36 @@ test("Swagger scalar form defaults, required flags and constraints feed the exis
       openapiOperation: converted.operation,
     });
     const again = importOpenAPIBody(exported);
+    assert.equal(exported.required, true);
     assert.deepEqual(again.form, request.form);
     assert.equal(again.bodyType, request.bodyType);
+  }
+});
+
+test("Swagger entirely optional forms do not make the whole request body required", () => {
+  for (const media of [
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+  ]) {
+    const converted = convert(
+      [form("optional", "string", { required: false })],
+      {
+        operation: { consumes: [media] },
+      },
+    );
+    assert.equal(converted.requestBody.required, undefined);
+    assert.equal(
+      converted.requestBody.content[media].schema.required,
+      undefined,
+    );
+    const request = importOpenAPIBody(converted.requestBody);
+    assert.equal(request.form[0].required, false);
+    const exported = exportOpenAPIBody({
+      ...request,
+      openapiOperation: converted.operation,
+    });
+    assert.equal(exported.required, undefined);
+    assert.equal(importOpenAPIBody(exported).form[0].required, false);
   }
 });
 
@@ -212,6 +241,7 @@ test("Swagger multipart file becomes a selection-required placeholder, never a p
     },
   );
   const file = importOpenAPIBody(converted.requestBody).form[0];
+  assert.equal(converted.requestBody.required, true);
   assert.equal(file.type, "file");
   assert.equal(file.requiresFile, true);
   assert.equal(file.required, true);
