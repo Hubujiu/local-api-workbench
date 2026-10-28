@@ -76,23 +76,43 @@ export function mongoQuery(input) {
       return;
     }
     if (typeof value !== "object") throw Error("MongoDB查询仅接受JSON值");
-    if (Object.hasOwn(value, "$numberLong")) {
-      const text = value.$numberLong;
+    const wrapper = [
+      "$numberInt",
+      "$numberLong",
+      "$numberDouble",
+      "$numberDecimal",
+    ].find((key) => Object.hasOwn(value, key));
+    if (wrapper) {
+      const text = value[wrapper];
       if (
         Array.isArray(value) ||
         Object.keys(value).length !== 1 ||
-        typeof text !== "string" ||
-        text.length > 20 ||
-        !/^(?:\+?0|[+-]?[1-9][0-9]*)$/.test(text)
+        typeof text !== "string"
       )
-        throw Error(
-          "MongoDB $numberLong须为独立EJSON包装及有效十进制整数字符串",
-        );
-      const integer = BigInt(text);
-      if (integer < -9223372036854775808n || integer > 9223372036854775807n)
-        throw Error(
-          "MongoDB $numberLong超出有符号64位整数范围，禁止截断或回绕",
-        );
+        throw Error(`MongoDB ${wrapper}须为独立EJSON包装及字符串`);
+      if (wrapper === "$numberInt") {
+        if (!/^[+-]?[0-9]+$/.test(text))
+          throw Error("MongoDB $numberInt须为有效十进制整数字符串");
+        // Bound conversion even for a long string of leading zeros.
+        const digits = text.replace(/^[+-]?0*/, "") || "0";
+        if (digits.length > 10)
+          throw Error(
+            "MongoDB $numberInt超出有符号32位整数范围，禁止截断或回绕",
+          );
+        const integer = BigInt((text.startsWith("-") ? "-" : "") + digits);
+        if (integer < -2147483648n || integer > 2147483647n)
+          throw Error(
+            "MongoDB $numberInt超出有符号32位整数范围，禁止截断或回绕",
+          );
+      } else if (wrapper === "$numberLong") {
+        if (text.length > 20 || !/^(?:\+?0|[+-]?[1-9][0-9]*)$/.test(text))
+          throw Error("MongoDB $numberLong须为有效十进制整数字符串");
+        const integer = BigInt(text);
+        if (integer < -9223372036854775808n || integer > 9223372036854775807n)
+          throw Error(
+            "MongoDB $numberLong超出有符号64位整数范围，禁止截断或回绕",
+          );
+      }
     }
     for (const [key, child] of Object.entries(value)) {
       if (forbidden.has(key) || key.includes("\0"))

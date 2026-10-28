@@ -240,3 +240,137 @@ test("signed Long boundaries and explicit plus keep numerical, not lexical, iden
     }
   }
 });
+
+test("numeric wrapper baseline and singleton shape prevent ignored filter conditions", async () => {
+  for (const [key, text] of [
+    ["$numberInt", "1"],
+    ["$numberLong", "1"],
+    ["$numberDouble", "1.5"],
+    ["$numberDecimal", "1.5"],
+  ]) {
+    const wrapper = { [key]: text };
+    for (const extra of [
+      { extra: 2 },
+      { $gt: 5 },
+      { $numberInt: "2", $numberLong: "2" },
+    ]) {
+      const mixed = { ...wrapper, ...extra };
+      if (!Object.hasOwn(extra, "$numberInt"))
+        assert.deepEqual(
+          BSON.EJSON.serialize(
+            BSON.EJSON.deserialize(mixed, { relaxed: false }),
+            { relaxed: false },
+          ),
+          BSON.EJSON.serialize(
+            BSON.EJSON.deserialize(wrapper, { relaxed: false }),
+            { relaxed: false },
+          ),
+        );
+      for (const value of [
+        mixed,
+        { [key]: 1 },
+        { [key]: null },
+        { [key]: {} },
+        { [key]: [] },
+      ]) {
+        const query = { collection: "items", filter: { id: { $in: [value] } } };
+        for (const input of [{ query }, { sql: JSON.stringify(query) }]) {
+          assert.throws(() => mongoQuery(input), /MongoDB \$number/);
+          await assert.rejects(
+            queryRemoteDatabase({
+              ...input,
+              type: "mongodb",
+              get host() {
+                throw Error("connection must not be read");
+              },
+            }),
+            /MongoDB \$number/,
+          );
+        }
+      }
+    }
+  }
+});
+
+test("Int32 overflow baseline is rejected, decimal integer spelling retains numeric semantics", () => {
+  for (const [text, wrapped] of [
+    ["2147483648", -2147483648],
+    ["-2147483649", 2147483647],
+    ["4294967296", 0],
+  ]) {
+    assert.equal(
+      BSON.EJSON.deserialize({ $numberInt: text }, { relaxed: false }).value,
+      wrapped,
+    );
+  }
+  for (const text of [
+    "2147483648",
+    "-2147483649",
+    "4294967296",
+    "+0002147483648",
+    "1e2",
+    "0x10",
+    "1.2",
+    "",
+    " ",
+    " 1",
+    "1 ",
+    "NaN",
+    "Infinity",
+  ]) {
+    const query = { collection: "items", filter: { id: { $numberInt: text } } };
+    assert.throws(() => mongoQuery({ query }), /\$numberInt/);
+    assert.throws(
+      () => mongoQuery({ sql: JSON.stringify(query) }),
+      /\$numberInt/,
+    );
+  }
+  for (const text of [
+    "-2147483648",
+    "2147483647",
+    "+2147483647",
+    "0",
+    "+0",
+    "-0",
+    "0001",
+    "-0001",
+    "+0000",
+  ]) {
+    const query = { collection: "items", filter: { id: { $numberInt: text } } };
+    assert.deepEqual(mongoQuery({ query }).filter, query.filter);
+    assert.equal(
+      BigInt(BSON.EJSON.deserialize(query.filter, { relaxed: false }).id.value),
+      BigInt(text),
+    );
+  }
+});
+
+test("explicit Double and Decimal128 valid semantics remain delegated to BSON", () => {
+  for (const key of ["$numberDouble", "$numberDecimal"])
+    for (const text of [
+      "1.5",
+      "NaN",
+      "Infinity",
+      "-Infinity",
+      "9007199254740993",
+      "-0",
+      "1E+3",
+    ]) {
+      const filter = { id: { [key]: text } };
+      const query = { collection: "items", filter };
+      for (const input of [{ query }, { sql: JSON.stringify(query) }]) {
+        const checked = mongoQuery(input).filter;
+        assert.deepEqual(checked, filter);
+        assert.deepEqual(
+          BSON.EJSON.serialize(
+            BSON.EJSON.deserialize(checked, { relaxed: false }),
+            { relaxed: false },
+          ),
+          BSON.EJSON.serialize(
+            BSON.EJSON.deserialize(filter, { relaxed: false }),
+            { relaxed: false },
+          ),
+        );
+      }
+    }
+});

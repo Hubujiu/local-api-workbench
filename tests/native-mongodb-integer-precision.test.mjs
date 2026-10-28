@@ -18,6 +18,12 @@ const invalidQueries = [
   '{"id":{"$numberLong":"9223372036854775808"}}',
   '{"id":{"$numberLong":"-9223372036854775809"}}',
   '{"id":{"$numberLong":"1","extra":2}}',
+  ...["2147483648", "-2147483649", "4294967296"].map((value) =>
+    JSON.stringify({ id: { $numberInt: value } }),
+  ),
+  ...["$numberInt", "$numberLong", "$numberDouble", "$numberDecimal"].map(
+    (wrapper) => JSON.stringify({ id: { [wrapper]: "0", extra: 2 } }),
+  ),
 ];
 const unsafeSource = (query = invalidQueries[0]) => {
   const source = nativeMongoFixture("http://127.0.0.1:1/must-not-execute");
@@ -44,7 +50,7 @@ test("native Mongo query text rejects an unsafe integer without mutating source 
       before = structuredClone(project);
     assert.throws(
       () => importIntoProject(project, source),
-      /安全精度|numberLong/,
+      /安全精度|number(?:Long|Int|Double|Decimal)/,
     );
     assert.deepEqual(project, before);
     assert.deepEqual(source, beforeSource);
@@ -79,7 +85,10 @@ test("owner native import is atomic and exact EJSON survives save, frozen plan, 
   for (const query of invalidQueries) {
     const rejected = await upload(unsafeSource(query));
     assert.equal(rejected.status, 400);
-    assert.match(await rejected.text(), /安全精度|numberLong/);
+    assert.match(
+      await rejected.text(),
+      /安全精度|number(?:Long|Int|Double|Decimal)/,
+    );
     assert.deepEqual(await app.store.get(project.id), before);
     assert.deepEqual(await app.store.get(other.id), other);
   }
