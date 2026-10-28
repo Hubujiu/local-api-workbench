@@ -13,6 +13,10 @@ import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
+import {
+  observeToolCall,
+  toolCallFailureDiagnostic,
+} from "./helpers/mcp-cancellation-observation.mjs";
 const waitFor = async (predicate) => {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -130,15 +134,29 @@ test(
       const oldIDs = new Set(
         (await app.store.get(p.id))[collection].map((record) => record.id),
       );
-      const rejected = assert.rejects(
+      const observation = observeToolCall(
         client.callTool({ name, arguments: args }, undefined, {
           signal: controller.signal,
         }),
-        /abort|cancel/i,
       );
-      await waitFor(() => handshakes > previous);
-      controller.abort();
-      await rejected;
+      try {
+        await waitFor(() => {
+          observation.assertPending();
+          return handshakes > previous;
+        });
+        observation.assertPending();
+        controller.abort();
+        await assert.rejects(async () => {
+          const terminal = await observation.completion;
+          if (terminal.kind === "rejected") throw terminal.reason;
+          return terminal.value;
+        }, /abort|cancel/i);
+      } catch (error) {
+        t.diagnostic(toolCallFailureDiagnostic(name, observation.terminal));
+        throw error;
+      } finally {
+        controller.abort();
+      }
       await waitFor(async () =>
         (await new Store(root).get(p.id))[collection].some(
           (record) => record.status === "cancelled" && !oldIDs.has(record.id),
