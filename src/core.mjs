@@ -66,6 +66,7 @@ import {
   grpcPlanCredentials,
 } from "./grpc-plan.mjs";
 import { isDeepStrictEqual } from "node:util";
+import { swagger2SecurityDefinitions } from "./swagger2-security.mjs";
 import { sdkOpenAPIDefinition } from "./script-url-openapi.mjs";
 import {
   validateApipostTemplateRequest,
@@ -1290,6 +1291,7 @@ export function importDocument(doc) {
     throw Error("原版目录须使用完整项目导入以保留环境及资源");
   if (doc.openapi || doc.swagger) {
     doc = resolveLocalReferences(doc);
+    swagger2SecurityDefinitions(doc);
     const base = doc.host
       ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
       : "{{baseUrl}}";
@@ -2413,10 +2415,26 @@ export function importIntoProject(
         ...(request.importNotes || []),
         "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置或回收站。内置规则及原执行报告仅保留为来源备份数据，不启用、不执行，不作为本工具新运行。",
       ];
-  const components = original.components || original.openapiComponents;
+  const swaggerSecurity = original.swagger
+    ? swagger2SecurityDefinitions(resolveLocalReferences(original))
+    : undefined;
+  const components = structuredClone(
+    original.components || original.openapiComponents,
+  );
+  const importedComponents =
+    swaggerSecurity === undefined ||
+    !Object.hasOwn(original, "securityDefinitions")
+      ? components
+      : {
+          ...components,
+          securitySchemes: {
+            ...components?.securitySchemes,
+            ...swaggerSecurity,
+          },
+        };
   const mergedComponents = structuredClone(project.openapiComponents || {});
-  if (components) {
-    for (const [category, items] of Object.entries(components)) {
+  if (importedComponents) {
+    for (const [category, items] of Object.entries(importedComponents)) {
       if (["__proto__", "prototype", "constructor"].includes(category))
         throw Error("不安全的组件名称");
       mergedComponents[category] ??= {};
@@ -2427,7 +2445,9 @@ export function importIntoProject(
         if (
           !sync &&
           old !== undefined &&
-          JSON.stringify(old) !== JSON.stringify(value)
+          (swaggerSecurity !== undefined && category === "securitySchemes"
+            ? !isDeepStrictEqual(old, value)
+            : JSON.stringify(old) !== JSON.stringify(value))
         )
           throw Error("OpenAPI 组件同名冲突，请导入新项目: " + name);
         mergedComponents[category][name] = structuredClone(value);
@@ -2524,7 +2544,7 @@ export function importIntoProject(
       ...(project.caseFolders || []),
       ...importedCaseFolders,
     ];
-  if (components) project.openapiComponents = mergedComponents;
+  if (importedComponents) project.openapiComponents = mergedComponents;
   if (legacy)
     project.folders = [
       ...new Set([...(project.folders || []), ...legacy.folders]),
