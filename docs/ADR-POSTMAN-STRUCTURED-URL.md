@@ -37,3 +37,25 @@ owner workflow pass, including restart, imported environment host/port, real GET
 with Bearer authentication, repeated/disabled query, path variable, encoded slash,
 frozen plan backup/restore and CLI persistence. Broader boundary and MCP checks
 remain work in progress until separately recorded.
+
+## Boundary follow-up
+
+The same fixture exposed a second real RED: query-row replacement truncated a
+fragment containing `?`. Raw URL import also applied `/:id` replacement inside
+query and fragment text. The lexical raw formatter now separates fragment first,
+then the actual query, and only transforms the path prefix. Structured component
+URLs never have an embedded query to strip. This preserves raw precedence while
+correcting text corruption; `%23` is not treated as a fragment delimiter.
+
+Final targeted local batch: 30 tests pass (core plus shorthand and structured URL
+files). Both raw/component owner workflows run real HTTP, persist and restart,
+select imported variable environments, preserve `/ :`-like query text as the
+literal value `/:keep`, skip disabled query rows, never transmit fragments, and
+execute frozen restored plans through CLI. Actual official MCP SDK HTTP and stdio
+read back stored request and CLI run objects exactly; another project is denied
+by the read-only grant. Fifteen malformed/unsupported component variants in mixed
+valid+invalid imports leave the entire project unchanged. Static checks cover
+bracketed IPv6, ports, repeated/trailing slash, `%2F`/`%23`, empty and delimiter-rich
+fragments, empty drafts and raw precedence. IPv6 coverage here is serialization,
+not a claim of an IPv6 listener or external network execution. No whole-project
+or cross-OS acceptance is claimed from this targeted local result.

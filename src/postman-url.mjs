@@ -1,7 +1,19 @@
+import { isIP } from "node:net";
+
 // Original bounded serialization of Postman's documented URL component format.
 // Raw URLs keep their existing precedence; no URL parsing/encoding occurs here.
-export function postmanImportURL(url) {
-  if (typeof url === "string") return url;
+function rawImportURL(value, replaceQuery) {
+  const hashAt = value.indexOf("#");
+  const fragment = hashAt < 0 ? "" : value.slice(hashAt);
+  const target = hashAt < 0 ? value : value.slice(0, hashAt);
+  const queryAt = target.indexOf("?");
+  const pathname = queryAt < 0 ? target : target.slice(0, queryAt);
+  const query = queryAt < 0 || replaceQuery ? "" : target.slice(queryAt);
+  return pathname.replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") + query + fragment;
+}
+
+export function postmanImportURL(url, replaceQuery = false) {
+  if (typeof url === "string") return rawImportURL(url, replaceQuery);
   if (url === undefined || url === null) return "";
   const fail = () => {
     throw Error("Postman结构化URL字段不受支持或存在歧义");
@@ -9,7 +21,7 @@ export function postmanImportURL(url) {
   if (typeof url !== "object" || Array.isArray(url)) fail();
   if (Object.hasOwn(url, "raw")) {
     if (typeof url.raw !== "string") fail();
-    return url.raw;
+    return rawImportURL(url.raw, replaceQuery);
   }
   for (const key of ["protocol", "port", "hash"])
     if (url[key] !== undefined && typeof url[key] !== "string") fail();
@@ -37,12 +49,17 @@ export function postmanImportURL(url) {
   const literalHost = withoutVariables(host);
   if (literalHost.includes(":")) {
     // Bracketed IPv6 only; colons may not smuggle a port or credentials.
-    if (!/^\[[0-9a-fA-F:.]+\]$/.test(literalHost)) fail();
+    if (
+      !literalHost.startsWith("[") ||
+      !literalHost.endsWith("]") ||
+      isIP(literalHost.slice(1, -1)) !== 6
+    )
+      fail();
   } else if (/[\[\]]/.test(literalHost)) fail();
   let pathname = "";
   if (Array.isArray(url.path)) {
     if (url.path.some((part) => /[\\/?#]/.test(withoutVariables(part)))) fail();
-    pathname = "/" + url.path.join("/");
+    pathname = url.path.length || host ? "/" + url.path.join("/") : "";
   } else if (url.path) {
     if (/[\\?#]/.test(withoutVariables(url.path))) fail();
     pathname = url.path.startsWith("/") ? url.path : "/" + url.path;
@@ -57,7 +74,7 @@ export function postmanImportURL(url) {
     (protocol ? protocol + "://" : "") +
     host +
     (port ? ":" + port : "") +
-    pathname +
+    pathname.replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") +
     (url.hash === undefined ? "" : "#" + url.hash);
   if (/[\u0000-\u001f\u007f]/.test(value)) fail();
   return value;
