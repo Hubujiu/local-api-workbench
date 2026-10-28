@@ -340,3 +340,149 @@ test("non-assertion failures pass through unchanged and no rejection is wrapped"
   const failure = await mismatch(workerError);
   assert.equal(failure.actual, workerError);
 });
+
+const bootstrapFields = {
+  bootstrapOperation: "trusted-libraries",
+  bootstrapElapsedMs: 60000,
+  bootstrapOperationMs: 60000,
+  bootstrapCPUUs: 60000000,
+  bootstrapOperationCPUUs: 60000000,
+};
+
+test("bootstrap raw diagnostics retain only gated substep metadata and preserve missing CPU", async () => {
+  for (const bootstrapOperation of [
+    "context-and-bindings",
+    "input-transfer",
+    "setup",
+    "url-tools",
+    "trusted-libraries",
+    "optional-facade",
+    "lazy-installers",
+  ]) {
+    const fields = { ...bootstrapFields, bootstrapOperation };
+    const error = { scriptStage: "bootstrap", scriptDiagnostics: fields };
+    assert.deepEqual(plain(workerFailureMetadata(error)), {
+      scriptStage: "bootstrap",
+      scriptDiagnostics: fields,
+    });
+  }
+  for (const scriptStage of [
+    "script",
+    "compatibility",
+    "starting",
+    undefined,
+  ]) {
+    assert.equal(
+      workerFailureMetadata({ scriptStage, scriptDiagnostics: bootstrapFields })
+        .scriptDiagnostics,
+      undefined,
+    );
+  }
+  for (const bootstrapOperation of ["SECRET/path", null, 1, {}, undefined]) {
+    assert.equal(
+      workerFailureMetadata({
+        scriptStage: "bootstrap",
+        scriptDiagnostics: { ...bootstrapFields, bootstrapOperation },
+      }).scriptDiagnostics,
+      undefined,
+    );
+  }
+  const partial = {
+    bootstrapOperation: "setup",
+    bootstrapElapsedMs: 0,
+    secret: "PRIVATE",
+  };
+  const error = Object.assign(Error("interrupted"), expected, {
+    scriptStage: "bootstrap",
+    scriptDiagnostics: { ...expected.scriptDiagnostics, ...partial },
+  });
+  const fields = workerFailureMetadata(error).scriptDiagnostics;
+  assert.equal(fields.bootstrapElapsedMs, 0);
+  assert(!Object.hasOwn(fields, "bootstrapCPUUs"));
+  assert(!Object.hasOwn(fields, "bootstrapOperationCPUUs"));
+  const failure = await mismatch(error);
+  const suffix = failure.message.slice(failure.message.indexOf(prefix));
+  assert(Buffer.byteLength(suffix) <= 2048);
+  assert(!suffix.includes("PRIVATE"));
+  assert.equal(
+    JSON.parse(suffix.slice(prefix.length)).scriptDiagnostics
+      .bootstrapOperation,
+    "setup",
+  );
+  const maximum = await mismatch(
+    Object.assign(Error("interrupted"), expected, {
+      scriptStage: "bootstrap",
+      scriptDiagnostics: { ...expected.scriptDiagnostics, ...bootstrapFields },
+    }),
+  );
+  const maxSuffix = maximum.message.slice(maximum.message.indexOf(prefix));
+  assert(maxSuffix.startsWith(prefix));
+  assert(Buffer.byteLength(maxSuffix) <= 2048);
+  assert.deepEqual(
+    JSON.parse(maxSuffix.slice(prefix.length)).scriptDiagnostics,
+    { ...expected.scriptDiagnostics, ...bootstrapFields },
+  );
+});
+
+test("bootstrap raw diagnostics reject invalid numbers and never execute getters or proxies", () => {
+  for (const [key, max] of Object.entries(bootstrapFields)) {
+    if (key === "bootstrapOperation") continue;
+    for (const value of [
+      NaN,
+      Infinity,
+      -Infinity,
+      -1,
+      0.5,
+      max + 1,
+      "1",
+      1n,
+      {},
+      null,
+      undefined,
+    ]) {
+      const fields = workerFailureMetadata({
+        scriptStage: "bootstrap",
+        scriptDiagnostics: { bootstrapOperation: "setup", [key]: value },
+      }).scriptDiagnostics;
+      assert.deepEqual(plain(fields), { bootstrapOperation: "setup" });
+    }
+    assert.equal(
+      workerFailureMetadata({
+        scriptStage: "bootstrap",
+        scriptDiagnostics: { bootstrapOperation: "setup", [key]: 0 },
+      }).scriptDiagnostics[key],
+      0,
+    );
+  }
+  let calls = 0;
+  const trap = () => {
+    calls++;
+    throw Error("must not inspect");
+  };
+  for (const key of Object.keys(bootstrapFields)) {
+    const fields = { ...bootstrapFields };
+    Object.defineProperty(fields, key, { get: trap });
+    Object.defineProperty(fields, "toJSON", { get: trap });
+    const result = workerFailureMetadata({
+      scriptStage: "bootstrap",
+      scriptDiagnostics: fields,
+    });
+    assert(!Object.hasOwn(result.scriptDiagnostics || {}, key));
+  }
+  const proxy = new Proxy({}, { get: trap, getOwnPropertyDescriptor: trap });
+  assert.equal(
+    workerFailureMetadata({
+      scriptStage: "bootstrap",
+      scriptDiagnostics: proxy,
+    }).scriptDiagnostics,
+    undefined,
+  );
+  assert.equal(
+    workerFailureMetadata({
+      scriptStage: "bootstrap",
+      scriptDiagnostics: Object.create(bootstrapFields),
+    }).scriptDiagnostics,
+    undefined,
+  );
+  assert.equal(calls, 0);
+});

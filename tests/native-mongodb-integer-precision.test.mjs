@@ -13,12 +13,18 @@ import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
 
 // Definition-only tests: no request, script VM or database execution.
 const intended = "9007199254740993";
-const unsafeSource = () => {
+const invalidQueries = [
+  '{"id":9007199254740993}',
+  '{"id":{"$numberLong":"9223372036854775808"}}',
+  '{"id":{"$numberLong":"-9223372036854775809"}}',
+  '{"id":{"$numberLong":"1","extra":2}}',
+];
+const unsafeSource = (query = invalidQueries[0]) => {
   const source = nativeMongoFixture("http://127.0.0.1:1/must-not-execute");
   source.apis
     .find((node) => node.target_type === "api")
     .request.pre_tasks.find((task) => task.type === "database").data.query =
-    '{"id":9007199254740993}';
+    query;
   return source;
 };
 const operation = (request) =>
@@ -31,13 +37,18 @@ const assertExact = (request) => {
 };
 
 test("native Mongo query text rejects an unsafe integer without mutating source or project", () => {
-  const source = unsafeSource(),
-    beforeSource = structuredClone(source);
-  const project = { requests: [], environments: [], settings: {} },
-    before = structuredClone(project);
-  assert.throws(() => importIntoProject(project, source), /安全精度/);
-  assert.deepEqual(project, before);
-  assert.deepEqual(source, beforeSource);
+  for (const query of invalidQueries) {
+    const source = unsafeSource(query),
+      beforeSource = structuredClone(source);
+    const project = { requests: [], environments: [], settings: {} },
+      before = structuredClone(project);
+    assert.throws(
+      () => importIntoProject(project, source),
+      /安全精度|numberLong/,
+    );
+    assert.deepEqual(project, before);
+    assert.deepEqual(source, beforeSource);
+  }
 });
 
 test("owner native import is atomic and exact EJSON survives save, frozen plan, restore and restart without execution", async (t) => {
@@ -65,11 +76,13 @@ test("owner native import is atomic and exact EJSON survives save, frozen plan, 
       },
       body: JSON.stringify({ document }),
     });
-  const rejected = await upload(unsafeSource());
-  assert.equal(rejected.status, 400);
-  assert.match(await rejected.text(), /安全精度/);
-  assert.deepEqual(await app.store.get(project.id), before);
-  assert.deepEqual(await app.store.get(other.id), other);
+  for (const query of invalidQueries) {
+    const rejected = await upload(unsafeSource(query));
+    assert.equal(rejected.status, 400);
+    assert.match(await rejected.text(), /安全精度|numberLong/);
+    assert.deepEqual(await app.store.get(project.id), before);
+    assert.deepEqual(await app.store.get(other.id), other);
+  }
   const source = nativeMongoFixture("http://127.0.0.1:1/must-not-execute", {
     filter: { id: { $numberLong: intended } },
     pattern: "$.id.$numberLong",

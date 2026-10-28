@@ -35,6 +35,23 @@ const operations = new Set([
   "native-assertion-evidence",
   "native-wait-completion",
 ]);
+// Snapshot of PR3 src/script-bootstrap-diagnostics.mjs at
+// 00fd43ddab9398a428a7f24b53cac5db015069e5; do not import runtime modules here.
+const bootstrapOperations = new Set([
+  "context-and-bindings",
+  "input-transfer",
+  "setup",
+  "url-tools",
+  "trusted-libraries",
+  "optional-facade",
+  "lazy-installers",
+]);
+const bootstrapCounters = {
+  bootstrapElapsedMs: 60000,
+  bootstrapOperationMs: 60000,
+  bootstrapCPUUs: 60000000,
+  bootstrapOperationCPUUs: 60000000,
+};
 const counters = {
   activityBudgetMs: 250,
   fakerCalls: 1001,
@@ -101,6 +118,14 @@ export function workerFailureMetadata(error) {
     const source = ownData(error, key);
     const values = Object.create(null);
     for (const [name, max] of limits) copyNumber(values, source, name, max);
+    if (key === "scriptDiagnostics" && result.scriptStage === "bootstrap") {
+      const operation = ownData(source, "bootstrapOperation");
+      if (bootstrapOperations.has(operation)) {
+        values.bootstrapOperation = operation;
+        for (const [name, max] of Object.entries(bootstrapCounters))
+          copyNumber(values, source, name, max);
+      }
+    }
     if (Object.keys(values).length) result[key] = values;
   }
   return result;

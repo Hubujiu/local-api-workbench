@@ -241,3 +241,120 @@ test("JSON proto keys cannot inject labels or serialization hooks", () => {
   assert.equal(step.scriptDiagnostics, undefined);
   assert.ok(!JSON.stringify(step).includes(secret));
 });
+
+test("persisted bootstrap run retains substep counters without manufacturing missing CPU", () => {
+  const run = fixture();
+  const step = run.results[1];
+  step.scriptStage = "bootstrap";
+  Object.assign(step.scriptDiagnostics, {
+    bootstrapOperation: "trusted-libraries",
+    bootstrapElapsedMs: 60000,
+    bootstrapOperationMs: 60000,
+    bootstrapCPUUs: 60000000,
+    bootstrapOperationCPUUs: 60000000,
+    bootstrapSecret: secret,
+  });
+  const fields = cliResultMetadata(JSON.stringify(run)).steps[0]
+    .scriptDiagnostics;
+  for (const key of [
+    "bootstrapOperation",
+    "bootstrapElapsedMs",
+    "bootstrapOperationMs",
+    "bootstrapCPUUs",
+    "bootstrapOperationCPUUs",
+  ])
+    assert.equal(fields[key], step.scriptDiagnostics[key]);
+  assert(!JSON.stringify(fields).includes(secret));
+  delete step.scriptDiagnostics.bootstrapCPUUs;
+  delete step.scriptDiagnostics.bootstrapOperationCPUUs;
+  const partial = cliResultMetadata(JSON.stringify(run)).steps[0]
+    .scriptDiagnostics;
+  assert(!Object.hasOwn(partial, "bootstrapCPUUs"));
+  assert(!Object.hasOwn(partial, "bootstrapOperationCPUUs"));
+  for (const stage of ["script", "compatibility", "starting", undefined]) {
+    step.scriptStage = stage;
+    assert(
+      !Object.hasOwn(
+        cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+        "bootstrapOperation",
+      ),
+    );
+  }
+});
+
+test("persisted bootstrap counters reject unsafe values and keep maximum suffix bounded", () => {
+  const run = fixture();
+  const step = run.results[1];
+  step.scriptStage = "bootstrap";
+  step.scriptDiagnostics = { bootstrapOperation: "setup" };
+  for (const [key, max] of Object.entries({
+    bootstrapElapsedMs: 60000,
+    bootstrapOperationMs: 60000,
+    bootstrapCPUUs: 60000000,
+    bootstrapOperationCPUUs: 60000000,
+  })) {
+    for (const value of [
+      NaN,
+      Infinity,
+      -Infinity,
+      -1,
+      0.5,
+      max + 1,
+      "1",
+      {},
+      null,
+    ]) {
+      step.scriptDiagnostics[key] = value;
+      assert(
+        !Object.hasOwn(
+          cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+          key,
+        ),
+      );
+    }
+    step.scriptDiagnostics[key] = max;
+  }
+  for (const phase of [
+    "compatibility",
+    "functionLibrary",
+    "userScript",
+    "microtask",
+    "callback",
+    "promiseState",
+    "serialization",
+  ]) {
+    step.scriptDiagnostics[phase + "Ms"] = 60000;
+    step.scriptDiagnostics[phase + "CPUUs"] = 60000000;
+  }
+  Object.assign(step.scriptDiagnostics, {
+    activityBudgetMs: 250,
+    fakerCalls: 1001,
+    timerCount: 101,
+    requestCount: 11,
+    fakerLoadMs: 60000,
+    elapsedMs: 60000,
+    lastWorkerStage: "bootstrap",
+    activityOperation: "bootstrap",
+    secret,
+  });
+  run.results = Array.from({ length: 5 }, () => step);
+  const failure = new AssertionError({ message: "original" });
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        throw failure;
+      }, JSON.stringify(run)),
+    (error) => error === failure,
+  );
+  const suffix = failure.message.slice("original".length);
+  assert(Buffer.byteLength(suffix) <= 4096);
+  assert.match(suffix, /CLI_RESULT_METADATA/);
+  assert(!suffix.includes(secret));
+  step.scriptDiagnostics.bootstrapOperation = secret;
+  assert(
+    !Object.hasOwn(
+      cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+      "bootstrapOperation",
+    ),
+  );
+});
