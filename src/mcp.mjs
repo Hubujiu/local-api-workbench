@@ -45,6 +45,13 @@ import {
   listExecutionHistory,
   findExecutionResult,
 } from "./execution-history.mjs";
+import {
+  executionResultChunk,
+  executionResultChunkArguments,
+  executionResultChunkError,
+  EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+  EXECUTION_RESULT_CHUNK_MAX_BYTES,
+} from "./execution-result-chunk.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
@@ -337,6 +344,31 @@ export function createMCP({
     ...projectArg,
     runId: str,
   });
+  addTool(
+    "get_execution_result_chunk",
+    "分块读取已保存的完整 JSON 执行证据；后续分块必须携带首次返回的 SHA-256，不重放执行",
+    {
+      projectId: { type: "string", minLength: 1, maxLength: 4096 },
+      runId: { type: "string", minLength: 1, maxLength: 4096 },
+      offsetBytes: {
+        type: "integer",
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+      maxBytes: {
+        type: "integer",
+        minimum: 1,
+        maximum: EXECUTION_RESULT_CHUNK_MAX_BYTES,
+        default: EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+      },
+      expectedSha256: {
+        type: "string",
+        pattern: "^[a-f0-9]{64}$",
+        description: "首次响应的 SHA-256；offsetBytes 大于 0 时必填",
+      },
+    },
+    ["projectId", "runId", "offsetBytes"],
+  );
   if (write) {
     addTool("create_project", "创建并授权新本地项目", { name: str });
     addTool("create_execution_flow", "创建新计划", {
@@ -456,6 +488,8 @@ export function createMCP({
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
+      if (params.name === "localapi_get_execution_result_chunk")
+        args = executionResultChunkArguments(args);
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       if (projectInterchange) validateMCPProjectArguments(args);
@@ -698,6 +732,12 @@ export function createMCP({
                   }),
                 ),
               };
+              break;
+            case "localapi_get_execution_result_chunk":
+              output = executionResultChunk(
+                findExecutionResult(p, args.runId),
+                args,
+              );
               break;
             case "localapi_get_execution_result":
               output = findExecutionResult(p, args.runId);
@@ -1045,12 +1085,12 @@ export function createMCP({
         content: [
           {
             type: "text",
-            text: Object.keys(outcome).length
-              ? JSON.stringify({
-                  error: message,
-                  ...outcome,
-                })
-              : message,
+            text:
+              params.name === "localapi_get_execution_result_chunk"
+                ? executionResultChunkError(e)
+                : Object.keys(outcome).length
+                  ? JSON.stringify({ error: message, ...outcome })
+                  : message,
           },
         ],
       });
