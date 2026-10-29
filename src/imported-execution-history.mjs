@@ -92,7 +92,12 @@ export function getImportedExecutionRun(
   if (chunk !== undefined) {
     chunk = validateImportedExecutionChunk(chunk);
     validateImportedExecutionChunkProjectId(project.id);
-    if (runId === "index") throw Error("原始执行记录不存在");
+  }
+  // The reserved index is never a run detail, including legacy full reads.
+  // Keep each entry point's existing missing-result and chunk error contract.
+  if (runId === "index") {
+    if (chunk !== undefined) throw Error("原始执行记录不存在");
+    return null;
   }
   const source = sources(project).find(
     (s) => s.sourceProjectId === sourceProjectId,

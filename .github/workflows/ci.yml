@@ -107,6 +107,8 @@ jobs:
         if: runner.os != 'Linux'
       - run: xvfb-run --auto-servernum node tests/desktop-smoke.mjs
         if: runner.os == 'Linux'
+      - name: Verify complete portable contents before archive/upload
+        run: node scripts/verify-portable.mjs
       - name: Archive desktop executable permissions
         if: runner.os != 'Windows'
         run: tar -czf dist/LocalAPI-${{ runner.os }}.tar.gz -C dist LocalAPI
@@ -123,6 +125,7 @@ jobs:
         with:
           retention-days: 7
           name: LocalAPI-${{ runner.os }}-portable
+          include-hidden-files: true
           path: |
             dist/LocalAPI-${{ runner.os }}.tar.gz
             ${{ runner.os == 'Windows' && 'dist/LocalAPI' || 'dist/LocalAPI/build-manifest.json' }}

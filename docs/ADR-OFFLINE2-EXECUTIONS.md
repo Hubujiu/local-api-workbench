@@ -330,3 +330,34 @@ edits, project PUT, invalid-PUT atomicity, real execution and restored execution
 Cancelling a held real request records cancellation without dispatching a later
 step; its saved origin is manual, not imported MCP. Source-only edits change the
 snapshot hash, but not the wire request. No test grants new MCP authority.
+
+## Reserved index is not an imported run detail
+
+The source-history reader previously rejected the reserved run ID `index` only
+for byte chunks. A full read could mistake `executions/runs/index.json` for a run
+detail even when the catalog contained no runs. This is a reader identity defect,
+not an authorization bypass or a change to execution support.
+
+The shared reader now returns the existing missing-result value for a full read
+of `index`: owner HTTP returns 404, and read-only MCP HTTP/stdio return the existing
+missing-record tool error. Chunk reads retain their previous rejection and fixed
+public error. ID and chunk validation still run first. This deliberately corrects
+the reserved-name exception to the earlier full-read compatibility statement;
+valid full responses and all other error contracts remain unchanged.
+
+The restriction is exact and case-sensitive, and applies only to the run ID.
+Canonical retained archives may still have source project ID `index`; legal run
+IDs `Index` and `index-1` remain readable. The native directory importer has its
+own stricter project-ID rule, which is not changed. No stored archive, actual
+Workbench run, source bytes, pagination order, digest or permission is rewritten.
+
+Local evidence is limited to the pure reader/JSON fixture tests: empty/populated
+catalog refusal, case-distinct real runs, canonical source `index`, pagination,
+full/chunk digest and byte agreement, missing records, invalid parameters and
+input immutability. The existing original-history HTTP/SDK test gains a reserved
+name regression. A separate small synthetic owner import → read-only SDK HTTP
+and stdio → backup/restore → application restart workflow asserts real source
+readback and missing/index rejection, project/disk immutability and no execution
+records. Those application workflows are syntax-checked only locally and await
+ordinary CI on the published exact commit; no new runtime evidence is claimed
+before that result. Existing payloads, limits and test timeouts are unchanged.
