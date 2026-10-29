@@ -52,7 +52,12 @@ import {
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
-import { importOpenAPIBody, exportOpenAPIBody } from "./openapi-body.mjs";
+import {
+  importOpenAPIBody,
+  exportOpenAPIBody,
+  importOpenAPIHeaders,
+  exportOpenAPIHeaders,
+} from "./openapi-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -984,27 +989,9 @@ export function importDocument(doc) {
                 value: p.example ?? "",
                 enabled: true,
               })),
-            headers: [
-              ...params
-                .filter((p) => p.in === "header")
-                .map((p) => ({
-                  key: p.name,
-                  schema: p.schema ?? { type: p.type || "string" },
-                  required: p.required === true,
-                  description: p.description || "",
-                  value: p.example ?? "",
-                  enabled: true,
-                })),
-              ...(importedBody.contentType
-                ? [
-                    {
-                      key: "Content-Type",
-                      value: importedBody.contentType,
-                      enabled: true,
-                    },
-                  ]
-                : []),
-            ],
+            headers: importOpenAPIHeaders(params, importedBody.contentType, {
+              ignoreContentType: Boolean(doc.openapi),
+            }),
             cookies: params
               .filter((p) => p.in === "cookie")
               .map((p) => ({
@@ -1569,7 +1556,7 @@ export function exportOpenAPI(project) {
       parameters: [
         ["query", queryDefinition.query],
         ["path", r.path],
-        ["header", r.headers],
+        ["header", exportOpenAPIHeaders(r)],
         ["cookie", r.cookies],
       ].flatMap(([location, parameters]) =>
         parameters

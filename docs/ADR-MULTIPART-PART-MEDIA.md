@@ -100,3 +100,20 @@ CI-only workflows cover mixed-operation JSON/YAML owner rejection, both official
 SDK sync transports, unchanged project/config/history bytes and no peer connection,
 positive sync/export/import, frozen execution, backup/restore and restart. They
 remain unverified until ordinary exact-commit CI completes.
+
+### Required existing Content-Type prerequisite
+
+Feature CI 40934588148 exposed an older branch dependency: default urlencoded
+export emitted its Content-Type as a reserved OAS header parameter, and import
+then added the selected body media again. The singleton request-header guard
+correctly rejects this duplicate; it must not be weakened. The integration branch
+already contains the fix from `49daade416bbac0b74123aa26488887d13a43788`.
+This feature reuses that commit's `importOpenAPIHeaders`, `exportBodyMedia` and
+`exportOpenAPIHeaders`, the two core call sites, complete data-only Content-Type
+regressions, and the no-body export regression. No Swagger converter, scalar
+parameter implementation or unrelated integration ancestry is pulled into PR69.
+Export validates compatible static body media before excluding the reserved header;
+duplicates, incompatible media, no-body media and multipart boundary overrides
+remain explicit errors. Non-Content-Type headers and the Swagger2 compatibility
+flag keep their existing behavior. OAS3 reserved header semantics are specified at
+https://spec.openapis.org/oas/v3.0.3.html#parameter-object.
