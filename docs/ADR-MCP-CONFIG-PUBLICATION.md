@@ -50,3 +50,16 @@ change, and no replay of successful project creation. No token is logged.
 Only pure coordinator/helper checks and syntax checks run locally. Application,
 SDK and restart workflows require ordinary exact-commit CI. No VM/DB/provider
 workload, timeout change, manual CI rerun, merge, deployment or frontend work.
+
+## Dependency and production checkpoint
+
+This isolated PR targets `fix/project-archive-grant-atomicity`, not develop:
+PR64 remote `faf6a660d7e7b66990200b135119bf2dd12a2117`, equivalent local
+`af05a1414aa0461c9760c2c5746a05bdd9af7c7e`, tree
+`ec9a0da18d058f1f447012259812b2e1cc69f69c`. This preserves the existing typed
+archive-commit classification without duplicating its storage prerequisites.
+Root composition must retain its later session/grant invalidation code inside
+the owner transaction and session-project removal inside archive revocation.
+
+Production coordinator and call sites are implemented; syntax only checked.
+Whole-flow and concurrency verification remain pending. Not accepted.

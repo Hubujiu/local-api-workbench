@@ -36,6 +36,7 @@ import {
   parseParameterImport,
   previewParameterImport,
 } from "./parameter-dictionary.mjs";
+import { MCPConfigPublication } from "./mcp-config-publication.mjs";
 import { loadMCPConfig, saveMCPConfig } from "./mcp-config-store.mjs";
 import { selectMockResponse } from "./mock.mjs";
 import { snapshotCase } from "./cases.mjs";
@@ -105,6 +106,21 @@ export async function createApp({
     mcpToken = savedToken;
     if (port === 0) port = savedPort;
   }
+  const rememberedMCPSnapshot = () =>
+    mcp.remember
+      ? {
+          ...mcp,
+          projects: [...mcp.projects],
+          token: mcpToken,
+          port: server.address().port,
+        }
+      : null;
+  const persistMCP = (value) => saveMCPConfig(path.resolve(root), value);
+  const mcpPublication = new MCPConfigPublication({
+    identity: () => mcp,
+    snapshot: rememberedMCPSnapshot,
+    write: persistMCP,
+  });
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   const claimRun = (candidate) => {
@@ -243,6 +259,7 @@ export async function createApp({
             completed: 0,
           });
         }
+        const dispatchPolicy = mcp;
         const dispatch = createMCP({
           store,
           ...mcp,
@@ -273,11 +290,7 @@ export async function createApp({
             message.params?.name === "localapi_create_project" &&
             !result?.result?.isError
           )
-            await saveMCPConfig(path.resolve(root), {
-              ...mcp,
-              token: mcpToken,
-              port: server.address().port,
-            });
+            await mcpPublication.persist(dispatchPolicy);
           const completed = [...mcpActivities.values()].filter(
             (a) => a.status !== "running",
           );
@@ -389,33 +402,37 @@ export async function createApp({
         if (u.pathname === "/api/mcp/config") {
           if (req.method === "POST") {
             const config = await body(req);
-            if (!Array.isArray(config.projects))
-              throw Error("项目授权列表无效");
-            const existing = new Set(
-              (await store.list()).map((project) => project.id),
-            );
-            if (config.projects.some((id) => !existing.has(id)))
-              throw Error("不能授权不存在的项目");
-            const next = {
-              enabled: config.enabled === true,
-              remember: config.remember === true,
-              projects: config.projects,
-              write: config.write === true,
-              execute: config.write === true && config.execute === true,
-            };
-            const nextToken = next.enabled
-              ? !mcpToken || config.rotate === true
-                ? randomBytes(32).toString("hex")
-                : mcpToken
-              : "";
-            await saveMCPConfig(path.resolve(root), {
-              ...next,
-              token: nextToken,
-              port: server.address().port,
+            await mcpPublication.run(async () => {
+              if (!Array.isArray(config.projects))
+                throw Error("项目授权列表无效");
+              const existing = new Set(
+                (await store.list())
+                  .filter((project) => !project.archived && !project.error)
+                  .map((project) => project.id),
+              );
+              if (config.projects.some((id) => !existing.has(id)))
+                throw Error("不能授权不存在、已归档或不可读取的项目");
+              const next = {
+                enabled: config.enabled === true,
+                remember: config.remember === true,
+                projects: config.projects,
+                write: config.write === true,
+                execute: config.write === true && config.execute === true,
+              };
+              const nextToken = next.enabled
+                ? !mcpToken || config.rotate === true
+                  ? randomBytes(32).toString("hex")
+                  : mcpToken
+                : "";
+              await saveMCPConfig(path.resolve(root), {
+                ...next,
+                token: nextToken,
+                port: server.address().port,
+              });
+              mcp = next;
+              mcpToken = nextToken;
+              mcpWarning = "";
             });
-            mcp = next;
-            mcpToken = nextToken;
-            mcpWarning = "";
           } else if (req.method !== "GET")
             return json(res, 405, { error: "Method not allowed" });
           return json(res, 200, {
@@ -557,19 +574,21 @@ export async function createApp({
             );
             b.runs = p.runs;
             b.history = p.history;
-            const saved = await saveProjectArchive(
-              b,
-              () => store.save(b),
-              (projectId) => {
-                mcp.projects = mcp.projects.filter((id) => id !== projectId);
-              },
-            );
-            if (b.archived && mcp.remember)
-              await saveMCPConfig(path.resolve(root), {
-                ...mcp,
-                token: mcpToken,
-                port: server.address().port,
-              });
+            const saveWithArchiveRevocation = async () => {
+              const saved = await saveProjectArchive(
+                b,
+                () => store.save(b),
+                (projectId) => {
+                  mcp.projects = mcp.projects.filter((id) => id !== projectId);
+                },
+              );
+              if (b.archived && mcp.remember)
+                await persistMCP(rememberedMCPSnapshot());
+              return saved;
+            };
+            const saved = b.archived
+              ? await mcpPublication.run(saveWithArchiveRevocation)
+              : await saveWithArchiveRevocation();
             return json(res, 200, saved);
           }
           if (action === "import" && req.method === "POST") {

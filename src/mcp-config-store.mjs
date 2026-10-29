@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename } from "node:fs/promises";
+import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 export async function loadMCPConfig(root) {
@@ -62,8 +62,14 @@ export async function saveMCPConfig(root, config) {
       };
   const target = path.join(root, ".mcp-config.json"),
     temporary = target + "." + randomUUID() + ".tmp";
-  await writeFile(temporary, JSON.stringify(value, null, 2) + "\n", {
-    mode: 0o600,
-  });
-  await rename(temporary, target);
+  try {
+    await writeFile(temporary, JSON.stringify(value, null, 2) + "\n", {
+      mode: 0o600,
+    });
+    await rename(temporary, target);
+  } catch (error) {
+    // Cleanup must not replace the primary persistence failure.
+    await rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
