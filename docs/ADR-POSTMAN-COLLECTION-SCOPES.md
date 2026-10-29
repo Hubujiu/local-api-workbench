@@ -190,3 +190,15 @@ The prior root CI 40867220452 script-final-body timeout and intermediate WIP for
 failure remain retained; this acceptance specification is not a causal repair or
 permission to rerun those failures. A subsequent source run must report any failure
 truthfully rather than substitute a new test count for backend completion.
+
+### First retirement CI receipt-fixture correction
+
+CI 40894289605 exposed a test-only dependency mismatch: the new workflow asserted
+root's `recordId` receipt on this PR19-derived feature base, where `recordPlanRun`
+returns only `recordSaved: true` with the run. The observed Linux/macOS failure was
+`recordId === undefined`, not a missing collection identity. The assertion now
+uses that base's actual acknowledgement plus exact `run.id` lookup in persisted
+runs, retaining the complete snapshot/hash, backup/restart and SDK checks. No
+production receipt fields or budgets were changed. The original failed run is
+retained; subsequent ordinary CI must establish the remaining lifecycle, and this
+fixture correction does not address the separate root script-final-body timeout.

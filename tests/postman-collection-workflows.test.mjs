@@ -696,7 +696,9 @@ test(
     });
     assert.equal(run.status, "passed");
     assert.equal(run.recordSaved, true);
-    assert.equal(run.recordId, run.id);
+    // This dependency base acknowledges recordSaved, without root-only recordId.
+    assert.equal(typeof run.id, "string");
+    assert(run.id.length > 0);
     assert.deepEqual(seen, ["/retire?value=retained-value"]);
     assert.equal(
       run.snapshot.steps[0].request.postmanCollectionId,
@@ -718,6 +720,7 @@ test(
     const all = await owner(`/api/projects/${p.id}`),
       savedRun = structuredClone(all.runs.find((item) => item.id === run.id)),
       allBytes = await bytes(app.store.directory(p.id));
+    assert.equal(savedRun.id, run.id);
     assert.equal(savedRun.planHash, run.planHash);
     assert.deepEqual(savedRun.snapshot, run.snapshot);
 
