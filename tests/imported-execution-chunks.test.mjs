@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,17 @@ function archive(sourceProjectId, payload = '"界🙂\\\\quoted"') {
       ],
     },
   };
+}
+async function projectBytes(directory) {
+  const result = {};
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      for (const [name, bytes] of Object.entries(await projectBytes(filename)))
+        result[entry.name + "/" + name] = bytes;
+    } else result[entry.name] = (await readFile(filename)).toString("base64");
+  }
+  return result;
 }
 async function closeApp(app) {
   app.server.closeAllConnections();
@@ -499,5 +510,143 @@ test(
     assert.deepEqual(after.protocolRuns, before.protocolRuns);
     assert.deepEqual(after.environments, before.environments);
     assert.deepEqual(after.plans, before.plans);
+  },
+);
+
+test(
+  "owner and both read-only SDK transports reject index details across backup/restart without changing real source records",
+  { timeout: 30000 },
+  async (t) => {
+    const context = await setup(t);
+    const source = archive("source-A");
+    const empty = archive("empty-source");
+    empty.document.files = empty.document.files.filter(
+      (file) => file.path !== `executions/runs/${runId}.json`,
+    );
+    empty.document.files.find(
+      (file) => file.path === "executions/runs/index.json",
+    ).text = '{"version":2,"records":[]}';
+    const p = await owner(
+      context,
+      "/api/projects",
+      { name: "Reader consistency" },
+      201,
+    );
+    const denied = await owner(
+      context,
+      "/api/projects",
+      { name: "Reader isolation" },
+      201,
+    );
+    for (const native of [source, empty])
+      await owner(context, `/api/projects/${p.id}/import`, {
+        document: native.document,
+      });
+    const original = await context.app.store.get(p.id);
+    const check = async (projectId) => {
+      const before = await context.app.store.get(projectId);
+      const bytesBefore = await projectBytes(
+        context.app.store.directory(projectId),
+      );
+      const base = `/api/projects/${projectId}/imported-execution-runs`;
+      const listed = await owner(context, base + "?limit=1");
+      assert.equal(listed.total, 1);
+      assert.equal(listed.nextOffset, null);
+      assert.equal(listed.items[0].sourceProjectId, "source-A");
+      assert.equal(listed.items[0].runId, runId);
+      assert.equal(listed.items[0].artifactSha256, sha256(source.text));
+      const full = await owner(context, base + "/source-A/" + runId);
+      assert.deepEqual(
+        full.original,
+        JSON.parse(JSON.stringify(JSON.parse(source.text))),
+      );
+      assert.equal(full.artifactSha256, listed.items[0].artifactSha256);
+      for (const [sourceId, detailId] of [
+        ["source-A", "index"],
+        ["empty-source", "index"],
+        ["source-A", "missing"],
+        ["missing", runId],
+      ])
+        await owner(
+          context,
+          base + "/" + sourceId + "/" + detailId,
+          undefined,
+          404,
+        );
+      const clients = [
+        await httpClient(context, [projectId]),
+        await stdioClient(context, projectId),
+      ];
+      for (const client of clients) {
+        const discovery = await client.listTools();
+        assert(discovery.tools.some((tool) => tool.name === toolName));
+        assert(
+          !discovery.tools.some((tool) =>
+            /execute|create_project/.test(tool.name),
+          ),
+        );
+        const args = { projectId, sourceProjectId: "source-A", runId };
+        const detail = decode(await call(client, args));
+        assert.deepEqual(detail, full);
+        await reconstruct(client, args, source.text, 1);
+        for (const [sourceProjectId, requestedRun] of [
+          ["source-A", "index"],
+          ["empty-source", "index"],
+          ["source-A", "missing"],
+          ["missing", runId],
+        ]) {
+          const missing = { projectId, sourceProjectId, runId: requestedRun };
+          const rejectedFull = await rejected(client, missing);
+          assert.equal(rejectedFull.content[0].text, "原始执行记录不存在");
+          const rejectedChunk = await rejected(client, {
+            ...missing,
+            chunk: { offsetBytes: 0 },
+          });
+          assert.equal(
+            rejectedChunk.content[0].text,
+            "原始执行记录分块读取失败：请检查参数、项目授权及来源记录是否仍匹配",
+          );
+        }
+        for (const chunk of [undefined, { offsetBytes: 0 }])
+          await rejected(client, {
+            ...args,
+            projectId: denied.id,
+            ...(chunk === undefined ? {} : { chunk }),
+          });
+        await client.close();
+      }
+      assert.deepEqual(await context.app.store.get(projectId), before);
+      assert.deepEqual(
+        await projectBytes(context.app.store.directory(projectId)),
+        bytesBefore,
+      );
+      assert.deepEqual(
+        before.settings.apipostDirectoryArtifacts,
+        original.settings.apipostDirectoryArtifacts,
+      );
+      for (const key of ["requests", "plans", "runs", "history"])
+        assert.deepEqual(before[key], []);
+    };
+    await check(p.id);
+    const backup = await owner(context, `/api/projects/${p.id}/export`);
+    const restored = await owner(
+      context,
+      "/api/restore",
+      { document: backup },
+      201,
+    );
+    assert.notEqual(restored.id, p.id);
+    await closeApp(context.app);
+    context.app = await createApp({ root: context.root, port: 0 });
+    await check(restored.id);
+    assert.deepEqual(
+      (await context.app.store.get(p.id)).settings.apipostDirectoryArtifacts,
+      original.settings.apipostDirectoryArtifacts,
+    );
+    assert.deepEqual(
+      (await context.app.store.get(denied.id)).settings
+        .apipostDirectoryArtifacts,
+      undefined,
+    );
   },
 );

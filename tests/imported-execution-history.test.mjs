@@ -80,6 +80,7 @@ test("HTTP and official SDK read original execution archives with explicit prove
     [503, 200],
   );
   await request(base + "/" + originalProject + "/missing", 404);
+  await request(base + "/" + originalProject + "/index", 404);
   await request(base + "?limit=0", 400);
   await request(base + "?offset=-1", 400);
   await request(base + "?secret=ignored", 400);
@@ -130,6 +131,7 @@ test("HTTP and official SDK read original execution archives with explicit prove
     { projectId: denied.id, sourceProjectId: originalProject, runId },
     { projectId: p.id, sourceProjectId: "../invalid", runId },
     { projectId: p.id, sourceProjectId: originalProject, runId: "missing" },
+    { projectId: p.id, sourceProjectId: originalProject, runId: "index" },
   ])
     assert.equal(
       (await call("get_imported_execution_run", args)).isError,
