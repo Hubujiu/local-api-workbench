@@ -279,3 +279,53 @@ with distinct weighted paths, process isolation, nested concurrent tests, and
 unchanged failure/signal/cancellation exit semantics. No local application, VM,
 XML or database workloads are part of this validation. Exact-head CI is pending
 parent review/publication; simulations and pure fixtures are not full acceptance.
+
+## 2026-10-29 frozen timing refresh (PR #35)
+
+Root run 40936245088 at `5fc547d9e4389d1a43a724168a77a5917581a4f8`
+ended cancelled, not passed: Windows shard 1 completed 117/123 files before
+SQLite started at 564.738 seconds; the job stopped at its existing ten-minute
+deadline. This does not establish a SQLite hang. The other Windows shards took
+331.835, 441.696 and 489.739 seconds. The old table had only 463 weights and
+charged 30 new files the conservative 54.879-second fallback.
+
+Refresh only the frozen input table and its digest/provenance pins. Inputs are
+24 complete progress JSONL artifacts from **fully green** runs
+[40918700552](https://github.com/Hubujiu/local-api-workbench/actions/runs/40918700552)
+(`bb0b7de270ea879a87003a27332254f2ba7c6ed5`) and
+[40926521644](https://github.com/Hubujiu/local-api-workbench/actions/runs/40926521644)
+(`8fe917ead122ad3ab44e5d4b76900bae4157ad76`): four shards × three OSes each.
+The table records each input filename, exact head and raw-byte SHA-256.
+For each stream, accept each unique whole-file `test:complete` event only when
+normalized `name` equals `file`, and require passed status. Each input run must
+have exactly three OS observations per file. Convert milliseconds to integer
+microseconds with ceiling, then take the maximum across all observations.
+This yields 492 weights. The 493-file root selection adds only
+`tests/openapi-form-encoding-pure.test.mjs`; unknown files still use the largest
+known weight (34,845,034 microseconds), never zero or a guessed average.
+
+Frozen replay, summing historical whole-file durations after reassignment:
+
+| Observation | Old min–max seconds | Refreshed min–max seconds |
+| --- | --- | --- |
+| 40934761053 Linux | 233.468–385.920 | 303.829–344.536 |
+| 40934761053 macOS | 383.064–467.087 | 390.819–439.050 |
+| 40934761053 Windows | 437.673–512.214 | 472.664–494.997 |
+| 40936245088 Linux | 266.337–347.043 | 302.780–343.118 |
+| 40936245088 macOS | 275.847–448.574 | 331.614–388.574 |
+
+These are held-out complete-file timing observations, **not green-run claims**:
+40934761053 failed an unrelated macOS test and 40936245088 was cancelled.
+Current Windows has only 487/493 completed durations. Imputing its six missing
+files from 40934761053 gives old 331.835–590.639 versus refreshed
+422.760–483.596 seconds, but this is explicitly incomplete/imputed, not measured
+current completion. No cancelled duration supplies a table weight.
+
+The LPT algorithm, four shards, file concurrency one, ten-minute deadline,
+application budgets, security checks and test selection remain unchanged.
+Regression reconstructs the frozen 493-file selection from the 492 weighted
+filenames plus the explicit unknown and checks exactly-once coverage,
+deterministic assignment, estimates, provenance and maximum fallback.
+Pure scheduler fixtures do not run application/VM/XML/database workloads.
+Historical replay is not a guarantee: exact new feature/root CI must pass before
+calling the deadline issue resolved. Prior failed/cancelled evidence is retained.

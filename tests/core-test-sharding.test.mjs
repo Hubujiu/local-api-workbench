@@ -98,10 +98,10 @@ test("frozen weights preserve exact provenance, worst-known fallback and bounded
   assert.equal(data.sources.length, 24);
   assert.deepEqual(
     [...new Set(data.sources.map((source) => source.runId))],
-    [40769853798, 40772663326],
+    [40918700552, 40926521644],
   );
-  assert.equal(Object.keys(data.weights).length, 463);
-  assert.equal(data.fallbackUs, 54879087);
+  assert.equal(Object.keys(data.weights).length, 492);
+  assert.equal(data.fallbackUs, 34845034);
   const attributes = await readFile(path.join(root, ".gitattributes"), "utf8");
   assert.match(attributes, /^\/scripts\/core-test-weights\.json text eol=lf$/m);
   const bytes = await readFile(
@@ -171,6 +171,41 @@ test("frozen weights preserve exact provenance, worst-known fallback and bounded
       ),
     SyntaxError,
   );
+});
+
+test("refreshed historical 493-file selection remains exhaustive with one conservative unknown", async () => {
+  const data = await loadWeights();
+  const unknown = "tests/openapi-form-encoding-pure.test.mjs";
+  assert.equal(Object.hasOwn(data.weights, unknown), false);
+  const files = [...Object.keys(data.weights), unknown].sort();
+  assert.equal(files.length, 493);
+  const result = allocateWeighted(files, 4, data);
+  assert.deepEqual(result.shards.flat().sort(), files);
+  assert.equal(new Set(result.shards.flat()).size, 493);
+  assert.deepEqual(result.allocation.fallbackFiles, [unknown]);
+  assert.equal(
+    result.allocation.weights[unknown],
+    Math.max(...Object.values(data.weights)),
+  );
+  assert.deepEqual(
+    allocateWeighted([...files].reverse(), 4, data).shards,
+    result.shards,
+  );
+  assert.deepEqual(
+    result.allocation.estimatedUs,
+    [499496495, 499496517, 499498219, 499569735],
+  );
+  const heads = new Map([
+    [40918700552, "bb0b7de270ea879a87003a27332254f2ba7c6ed5"],
+    [40926521644, "8fe917ead122ad3ab44e5d4b76900bae4157ad76"],
+  ]);
+  for (const source of data.sources)
+    assert.equal(source.headSha, heads.get(source.runId));
+  for (const run of heads.keys()) {
+    const streams = data.sources.filter((source) => source.runId === run);
+    assert.equal(streams.length, 12);
+    assert.equal(new Set(streams.map((source) => source.file)).size, 12);
+  }
 });
 
 test("LPT is deterministic across additions, removals, stale weights and ties", async () => {
