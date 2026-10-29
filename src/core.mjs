@@ -65,6 +65,7 @@ import {
   validateQueryArrayRequest,
 } from "./openapi-query-arrays.mjs";
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
+import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
@@ -1662,11 +1663,7 @@ export function importDocument(doc) {
             })),
             beforeScript: currentEvents.prerequest.join("\n"),
             afterScript: currentEvents.test.join("\n"),
-            examples: (item.response || []).map((example) => ({
-              name: example.name,
-              status: example.code || 200,
-              body: example.body || "",
-            })),
+            examples: importPostmanResponseExamples(item.response),
           }),
         ];
       });
