@@ -58,3 +58,13 @@ It does not import the integration branch or any unrelated feature.
 Local verification is limited to the isolated parser/admission pure tests and
 syntax/format checks. Application/SDK/backup/restart workflows await ordinary
 CI on the exact saved commit; their presence is not a claim of local acceptance.
+
+Review found that existing reference resolution skips literal example/extension
+subtrees. It therefore did not bound every parsed YAML graph: a component example
+could contain a cyclic alias. The shared text parser now rejects cycles before
+sync can publish its draft, and visits the entire decoded graph with a 50,000-node
+and depth-50 ceiling, including literal subtrees. Reused acyclic aliases remain
+allowed; each occurrence counts toward the bound. This is an explicit additional
+owner text-input admission restriction too, not a claim that old owner parsing
+already enforced these limits. Existing reference expansion limits still apply
+separately. No VM or application was run to establish this static finding.

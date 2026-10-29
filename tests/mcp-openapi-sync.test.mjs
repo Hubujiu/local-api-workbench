@@ -162,3 +162,18 @@ test("OpenAPI YAML sync uses the same modes and refuses other formats before mut
     assert.deepEqual(p, before);
   }
 });
+
+test("cyclic YAML example components reject before publishing any sync mutation", () => {
+  const p = project();
+  syncMCPOpenAPI(p, { document });
+  const before = structuredClone(p);
+  assert.throws(
+    () =>
+      syncMCPOpenAPI(p, {
+        document:
+          "openapi: 3.0.3\npaths: {}\ncomponents:\n  examples:\n    Loop:\n      value: &cycle [*cycle]\n",
+      }),
+    /循环别名/,
+  );
+  assert.deepEqual(p, before);
+});
