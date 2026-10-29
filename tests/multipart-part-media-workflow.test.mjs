@@ -618,14 +618,8 @@ for (const transport of ["http", "stdio"])
               "POST",
               400,
             );
-            // Owner project import accepts JSON documents only; YAML parse
-            // rejection is not proof that the encoding boundary was reached.
-            assert.match(
-              error.error,
-              source === JSON.stringify(document)
-                ? /OpenAPI.*encoding/
-                : /JSON|Unexpected/,
-            );
+            // Owner importIntoProject/importDocument parse JSON then YAML.
+            assert.match(error.error, /OpenAPI.*encoding/);
             assert.deepEqual(await files(f.root), allBefore);
           }
           const result = await invoke(p.id, document);
@@ -792,15 +786,16 @@ for (const transport of ["http", "stdio"])
             "POST",
             400,
           );
-          const expected =
-            source === JSON.stringify(doc)
-              ? /尚不支持 OpenAPI.*(?:contentEncoding|format:byte)/
-              : /JSON|Unexpected/;
-          assert.match(error.error, expected);
+          const boundary = /尚不支持 OpenAPI.*(?:contentEncoding|format:byte)/;
+          assert.match(error.error, boundary);
           assert.deepEqual(await files(f.root), before);
           const result = await invoke(source);
           assert.equal(result.isError, true);
-          assert.match(result.content[0].text, expected);
+          // MCP sync parses string inputs with JSON.parse only, before import.
+          assert.match(
+            result.content[0].text,
+            source === JSON.stringify(doc) ? boundary : /JSON|Unexpected/,
+          );
           assert.deepEqual(await files(f.root), before);
         }
       }

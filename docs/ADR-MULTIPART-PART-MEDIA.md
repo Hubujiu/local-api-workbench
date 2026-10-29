@@ -141,10 +141,20 @@ fixtures used 3.1 format:binary while asserting 3.0 raw-file semantics, and two
 new transport workflows expected the transfer guard from YAML strings.
 Those failures are retained, not reclassified as passed or rerun.
 
-Owner project import and MCP OpenAPI sync accept JSON strings/objects, not YAML
-strings. Their YAML cases now prove explicit parser rejection and unchanged
-state only. JSON cases require the actual OpenAPI boundary error prefix, avoiding
-false matches against keyword text embedded in a JSON parser error. Direct core
-YAML parsing is not equivalent to these owner/MCP entrypoints and is not claimed
-as such. Existing legacy file fixtures now explicitly declare 3.0.3; dedicated
-3.1 literal byte/binary import and downgrade-rejection controls remain.
+The first diagnosis incorrectly generalized the MCP JSON-only parser to owner
+import. The follow-up ordinary run 40962018793 exposed that mistaken expectation:
+owner YAML reaches the guard, whereas MCP YAML fails before it. That run is also
+retained as failed (including the separate pre-existing macOS script-quota timing
+failure); no budget change or manual rerun is used.
+
+The statically verified call chain is:
+- owner `server.mjs` import route -> `importIntoProject` -> `importDocument`:
+  both helpers have JSON parsing with bounded YAML fallback;
+- `syncMCPOpenAPI`: string documents go through `JSON.parse` before calling
+  import, without YAML fallback.
+
+Owner JSON and YAML must therefore match the actual OpenAPI guard prefix.
+MCP JSON must match that guard; MCP YAML proves parser rejection only.
+Both error paths retain unchanged state and no network request. No parser was
+added or changed to satisfy these tests. Legacy file fixtures explicitly use
+3.0.3; dedicated 3.1 literal byte/binary and downgrade-rejection controls remain.
