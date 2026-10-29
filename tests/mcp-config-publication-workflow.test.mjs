@@ -126,6 +126,12 @@ for (const mode of ["disable", "rotate", "forget"]) {
         name: "localapi_create_project",
         arguments: { name: "Delayed create" },
       });
+      // Root has authorization generations: the admitted operation may finish,
+      // but its stale response must not be presented as current authorization.
+      const createOutcome = create.then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
       await enteredCreate.promise;
       const enteredOwner = deferred(),
         releaseOwner = deferred(),
@@ -165,7 +171,9 @@ for (const mode of ["disable", "rotate", "forget"]) {
       const after = await owner;
       // The canonical project creation happened exactly once even if root's later
       // authorization-generation response intentionally hides its stale result.
-      await create;
+      const outcome = await createOutcome;
+      assert.equal(outcome.error?.code, -32000);
+      assert.match(outcome.error.message, /authorization changed/);
       createMock.mock.restore();
       listMock.mock.restore();
       persistMock.mock.restore();
@@ -377,5 +385,111 @@ test(
     await f.restart();
     assert.equal((await f.policy()).enabled, false);
     await rejectedBearer(f, before.token);
+  },
+);
+
+// Root-only native HTTP grants are ephemeral and distinct from canonical grants.
+test(
+  "native in-flight creation survives unrelated archive but never owner replacement or restart",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t);
+    const before = await f.configure(grant([f.allowed.id]));
+    const client = await f.connect(before.token);
+    const native = (name) =>
+      client.callTool({ name: "apipost_create_project", arguments: { name } });
+    const target = decode(await native("Native archive target"));
+    const targetProject = await f.owner(`/api/projects/${target.project_id}`);
+    const entered = deferred(),
+      release = deferred();
+    const originalCreate = f.app.store.create.bind(f.app.store);
+    const createMock = t.mock.method(f.app.store, "create", async (...args) => {
+      const value = await originalCreate(...args);
+      entered.resolve();
+      await release.promise;
+      return value;
+    });
+    t.after(() => release.resolve());
+    const create = native("Native retained around archive");
+    await entered.promise;
+    const archived = await f.owner(
+      `/api/projects/${target.project_id}`,
+      "PUT",
+      { ...targetProject, archived: true },
+    );
+    release.resolve();
+    const retained = decode(await create);
+    createMock.mock.restore();
+    const read = (c, projectId) =>
+      c.callTool({ name: "localapi_list_apis", arguments: { projectId } });
+    assert.notEqual((await read(client, retained.project_id)).isError, true);
+    assert.equal((await read(client, target.project_id)).isError, true);
+    assert.deepEqual((await f.disk()).projects, [f.allowed.id]);
+    await f.owner(`/api/projects/${target.project_id}`, "PUT", {
+      ...archived,
+      archived: false,
+    });
+    assert.equal((await read(client, target.project_id)).isError, true);
+
+    const enteredOld = deferred(),
+      releaseOld = deferred();
+    let lateId;
+    const oldCreateMock = t.mock.method(
+      f.app.store,
+      "create",
+      async (...args) => {
+        const value = await originalCreate(...args);
+        lateId = value.id;
+        enteredOld.resolve();
+        await releaseOld.promise;
+        return value;
+      },
+    );
+    t.after(() => releaseOld.resolve());
+    const late = native("Native stale owner generation").then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await enteredOld.promise;
+    const changed = await f.configure(grant([f.allowed.id], { rotate: true }));
+    releaseOld.resolve();
+    const outcome = await late;
+    assert.equal(outcome.error?.code, -32000);
+    assert.match(outcome.error.message, /authorization changed/);
+    oldCreateMock.mock.restore();
+    await rejectedBearer(f, before.token);
+    const current = await f.connect(changed.token);
+    for (const id of [
+      target.project_id,
+      retained.project_id,
+      lateId,
+      f.denied.id,
+    ])
+      assert.equal((await read(current, id)).isError, true);
+    assert.deepEqual((await f.disk()).projects, [f.allowed.id]);
+    assert.equal(
+      (await f.app.store.list()).filter(
+        (p) => p.name === "Native stale owner generation",
+      ).length,
+      1,
+    );
+    await f.restart();
+    const restarted = await f.connect((await f.policy()).token);
+    for (const id of [
+      target.project_id,
+      retained.project_id,
+      lateId,
+      f.denied.id,
+    ])
+      assert.equal((await read(restarted, id)).isError, true);
+    assert.deepEqual(
+      decode(
+        await restarted.callTool({
+          name: "localapi_list_projects",
+          arguments: {},
+        }),
+      ).map((p) => p.id),
+      [f.allowed.id],
+    );
   },
 );

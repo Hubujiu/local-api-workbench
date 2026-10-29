@@ -69,3 +69,20 @@ removal preserves the policy projects-array identity for unrelated in-flight
 canonical creates; occupied-port fallback holds the queue while opening its
 replacement listener and saving the disabled policy. Pure helper/filesystem
 checks pass locally; application whole-flow acceptance remains pending CI.
+
+## Root combination obligations
+
+Root preserves its existing HTTP authorization epoch: a successful admitted
+create may be durable but its response after owner policy replacement is an
+explicit `-32000` authorization-changed error, not a replay or a fresh grant.
+Root SDK workflows assert that error and independently inspect the exactly-once
+stored project. Existing temporary database grants and HTTP sessions are
+invalidated inside the serialized owner publication, after persistence.
+
+Native-created projects remain session-only. Root's additional workflow holds
+one native create while another session project is archived, verifies the new
+unrelated grant survives in-memory without becoming remembered, then replaces
+the owner policy during another native create. Stale-generation response is
+rejected; neither old native grant survives replacement/restart. Existing
+PR64 genuine uncertain-archive tests remain unchanged, including the explicit
+boundary that uncertainty does not claim durable remembered-grant cleanup.
