@@ -177,7 +177,7 @@
       "name": "认证",
       "status": "部分实现",
       "original": "截图有认证入口，MCP详情包含鉴权",
-      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM拒绝v1/MIC/EPA/通道绑定/代理/HTTP2，不读取系统凭据；OAuth1新增显式OOB/PIN临时令牌/验证码交换，假服务/真实HTTP签名/界面已验证；非OOB授权及高级变体仍不完整。",
+      "current": "Basic/Bearer/API Key/Digest/OAuth2、OAuth1 HMAC/RSA-SHA1、AWS SigV4、Hawk、EdgeGrid与有限NTLMv2直连已验证。NTLM有界MIC扩展已实现字节路径，完整工作流待CI验收；仍拒绝v1/EPA/通道绑定/SPN/签名封装/密钥交换/代理/HTTP2，不读取系统凭据；OAuth1新增显式OOB/PIN临时令牌/验证码交换，假服务/真实HTTP签名/界面已验证；非OOB授权及高级变体仍不完整。",
       "source": "S7",
       "evidence": "src/ntlm.mjs; tests/ntlm.test.mjs; tests/desktop-smoke.mjs; tests/ui-smoke.mjs; docs/ADR-NTLMV2.md",
       "baselineStatus": "部分实现"

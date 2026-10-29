@@ -1067,7 +1067,7 @@ async function executeRequestWithinDeadline(
       throw Error("NTLM服务器关闭连接，拒绝重放凭据");
     const authenticatedHeaders = {
       ...headers,
-      authorization: ntlmType3(challenge, r.auth),
+      authorization: ntlmType3(challenge, r.auth, headers.authorization),
     };
     try {
       throwIfInactive(controls);

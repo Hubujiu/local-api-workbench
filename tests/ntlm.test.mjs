@@ -57,7 +57,7 @@ test("bounded NTLM messages require v2 and reject malformed or unsupported prote
     "NTLM !!!!",
     "NTLM AA==",
     challenge(0x201),
-    challenge(0xa0888205, Buffer.from("060004000200000000000000", "hex")),
+    challenge(0xa0888205, Buffer.from("060004000400000000000000", "hex")),
     challenge(
       0xa0888205,
       Buffer.from("0a0010000000000000000000000000000000000000000000", "hex"),
