@@ -345,3 +345,26 @@ test("Swagger operation projection removes legacy media and transport fields and
   assert.deepEqual(source, before);
   assert.equal(imported([]).bodyType, "none");
 });
+
+test("Swagger multipart byte preflight fails closed while file and URL-encoded byte retain existing semantics", () => {
+  const parameters = [
+    form("encoded", "string", { format: "byte", default: "AP8=" }),
+  ];
+  const before = structuredClone(parameters);
+  assert.throws(
+    () =>
+      convert(parameters, { document: { consumes: ["multipart/form-data"] } }),
+    /Swagger 2.0.*format:byte/,
+  );
+  assert.deepEqual(parameters, before);
+  const literal = imported(parameters, {
+    document: { consumes: ["application/x-www-form-urlencoded"] },
+  });
+  assert.equal(literal.form[0].type, "text");
+  assert.equal(literal.form[0].value, "AP8=");
+  const file = imported([form("upload", "file")], {
+    document: { consumes: ["multipart/form-data"] },
+  });
+  assert.equal(file.form[0].type, "file");
+  assert.equal(file.form[0].requiresFile, true);
+});

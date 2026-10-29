@@ -69,3 +69,52 @@ export function mixedEncodingDocument(origin, mime, encoding) {
   good.paths["/invalid"].post.operationId = "invalid-after-valid";
   return good;
 }
+
+// Schema transfer declarations are distinct from the Media Type encoding map.
+export const unsupportedMultipartSchemas = [
+  ...[
+    "base64",
+    "base64url",
+    "quoted-printable",
+    "identity",
+    "",
+    null,
+    false,
+    0,
+    [],
+    {},
+  ].map((contentEncoding) => ({
+    openapi: "3.1.0",
+    definition: { type: "string", contentEncoding },
+  })),
+  { openapi: "3.0.3", definition: { type: "string", format: "byte" } },
+  { openapi: "3.0.4", definition: { type: "string", format: "byte" } },
+  {
+    openapi: "3.0.3",
+    definition: { type: "string", contentEncoding: "base64" },
+  },
+];
+export function transferDocument(
+  origin,
+  openapi,
+  definition,
+  mime = "multipart/form-data",
+  mixed = false,
+) {
+  const doc = encodingDocument(origin, mime, undefined, false);
+  doc.openapi = openapi;
+  if (mixed) {
+    doc.paths["/valid-first"] = structuredClone(doc.paths["/upload"]);
+    doc.paths["/valid-first"].post.operationId = "valid-first";
+    doc.paths["/valid-first"].post.requestBody.content[
+      mime
+    ].schema.properties.meta = { type: "string" };
+    doc.paths = {
+      "/valid-first": doc.paths["/valid-first"],
+      "/upload": doc.paths["/upload"],
+    };
+  }
+  doc.components.schemas.Text = definition;
+  doc.paths["/upload"].post.requestBody.content[mime].example.meta = "AP8=";
+  return doc;
+}

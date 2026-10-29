@@ -1383,6 +1383,7 @@ export function importDocument(doc) {
             : null;
           const importedBody = importOpenAPIBody(
             swagger ? swagger.requestBody : op.requestBody,
+            { openapi: swagger ? "3.0.3" : doc.openapi },
           );
           const normalizedResponses = Object.fromEntries(
             Object.entries(op.responses || {}).map(([status, response]) => [

@@ -6,6 +6,7 @@ import { importOpenAPIBody, exportOpenAPIBody } from "../src/openapi-body.mjs";
 import {
   invalidEncodings,
   formMedia,
+  transferDocument,
 } from "./fixtures/openapi-form-encoding.mjs";
 const schema = {
   type: "object",
@@ -96,4 +97,127 @@ test("encoding validation is selected-form-only and never infers MIME serializat
     }).body,
     "raw",
   );
+});
+
+test("multipart transfer declarations fail closed without mutating data; version annotations stay literal", () => {
+  const body = (definition, mime = "multipart/form-data") => ({
+    content: {
+      [mime]: {
+        schema: { type: "object", properties: { meta: definition } },
+        example: { meta: "AP8=" },
+      },
+    },
+  });
+  for (const contentEncoding of [
+    "base64",
+    "base64url",
+    "quoted-printable",
+    "identity",
+    "",
+    null,
+    false,
+    [],
+    {},
+  ]) {
+    for (const openapi of ["3.0.3", "3.1.0", "3.1.1"]) {
+      const input = body({ type: "string", contentEncoding });
+      const before = structuredClone(input);
+      assert.throws(
+        () => importOpenAPIBody(input, { openapi }),
+        /contentEncoding/,
+      );
+      assert.deepEqual(input, before);
+    }
+    for (const type of ["text", "file"]) {
+      const request = {
+        bodyType: "form-data",
+        form: [
+          {
+            key: "meta",
+            value: "AP8=",
+            type,
+            schema: { type: "string", contentEncoding },
+          },
+        ],
+      };
+      const before = structuredClone(request);
+      assert.throws(() => exportOpenAPIBody(request), /contentEncoding/);
+      assert.deepEqual(request, before);
+    }
+  }
+  assert.throws(
+    () => importOpenAPIBody(body({ type: "string", format: "byte" })),
+    /format:byte/,
+  );
+  for (const format of ["byte", "binary", "uuid"]) {
+    const imported = importOpenAPIBody(body({ type: "string", format }), {
+      openapi: "3.1.0",
+    });
+    assert.equal(imported.form[0].type, "text");
+    assert.equal(imported.form[0].value, "AP8=");
+    assert.equal(Object.hasOwn(imported.form[0], "requiresFile"), false);
+    if (format !== "uuid")
+      assert.throws(() => exportOpenAPIBody(imported), /format:/);
+  }
+  const binary = importOpenAPIBody(body({ type: "string", format: "binary" }));
+  assert.equal(binary.form[0].type, "file");
+  assert.equal(binary.form[0].requiresFile, true);
+  assert.deepEqual(
+    importOpenAPIBody(exportOpenAPIBody(binary)).form,
+    binary.form,
+  );
+  // This change does not expand URL-encoded binary support.
+  assert.throws(
+    () =>
+      importOpenAPIBody(
+        body(
+          { type: "string", format: "binary" },
+          "application/x-www-form-urlencoded",
+        ),
+        { openapi: "3.1.0" },
+      ),
+    /文件字段需要/,
+  );
+  const encoded = importOpenAPIBody(
+    body(
+      { type: "string", format: "byte" },
+      "application/x-www-form-urlencoded",
+    ),
+  );
+  assert.equal(encoded.form[0].value, "AP8=");
+  assert.deepEqual(
+    importOpenAPIBody(exportOpenAPIBody(encoded)).form,
+    encoded.form,
+  );
+  for (const mime of ["application/json", "text/plain"]) {
+    const input = {
+      content: {
+        [mime]: {
+          schema: { type: "string", contentEncoding: "base64" },
+          example: "AP8=",
+        },
+      },
+    };
+    assert.equal(
+      importOpenAPIBody(input, { openapi: "3.1.0" }).body,
+      mime === "application/json" ? '"AP8="' : "AP8=",
+    );
+  }
+});
+
+test("mixed transfer fixture begins with a genuinely valid operation", () => {
+  const doc = transferDocument(
+    "http://example.test",
+    "3.1.0",
+    { type: "string", contentEncoding: "base64" },
+    "multipart/form-data",
+    true,
+  );
+  assert.equal(Object.keys(doc.paths)[0], "/valid-first");
+  const imported = importOpenAPIBody(
+    doc.paths["/valid-first"].post.requestBody,
+    { openapi: doc.openapi },
+  );
+  assert.equal(imported.form[0].type, "text");
+  assert.equal(imported.form[0].value, "雪 & +");
 });
