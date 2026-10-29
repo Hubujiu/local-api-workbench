@@ -96,3 +96,29 @@ its successful earlier pre-stage write; backup restore does not execute anything
 Together with the confirmed-save/late-abort case, this distinguishes rejected
 admission, acknowledged persistence and uncertainty without implying rollback.
 This root-only workflow is specified for ordinary CI, not executed locally.
+
+## Active plan edit/archive/result lifecycle acceptance
+
+The existing workflow file now specifies one additional complete lifecycle for
+ordinary CI, without production changes: an owner plan has already sent its first
+HTTP request; owner edits its plan definition and archives the project; archive
+alone leaves that dispatched run active; explicit owner cancellation then stops
+before either version's later request. Confirmed `recordSaved` is checked against
+the actual persisted run, its original snapshot/hash and manual source, while the
+edited configuration and archived flag survive result append and application
+restart. No fake save or forced outcome is used.
+
+Official HTTP and production stdio SDK readers independently verify rejection
+while archived and unaffected access to another project. Remembered HTTP grants
+remain revoked through restart and owner unarchive. The fresh stdio reader is
+explicitly given only the other project; it does not inherit HTTP grants. Reading
+the same saved evidence requires an explicit HTTP regrant and a separately
+started stdio reader granted the target. This does not claim owner archive removes
+an existing stdio process's independent grant, or cancels already-dispatched work.
+Restart, authorization changes and reads must not replay either plan version.
+
+Only the success-path receipt already available on this feature is required;
+root-only typed uncertainty and richer receipt fields are not backported. This is
+closure of a cross-workflow acceptance gap, not a newly identified production
+fix. Syntax/format are checked locally; the real lifecycle remains pending the
+new exact-head ordinary CI. Existing tests and their limits remain unchanged.

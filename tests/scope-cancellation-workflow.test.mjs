@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { createHash } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -589,6 +590,302 @@ test(
       hits,
       1,
       "repair/read/restore reconcile state without repeating the completed network request",
+    );
+  },
+);
+
+test(
+  "edited and archived in-flight plan retains cancelled frozen evidence across restart and explicit MCP reauthorization",
+  { timeout: 30000 },
+  async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "scope-archive-lifecycle-"));
+    let app = await createApp({ root, port: 0 });
+    const clients = new Set(),
+      seen = [];
+    let heldResponse, pending;
+    let settled = false;
+    const peer = http.createServer((req, res) => {
+      seen.push(req.url);
+      if (req.url === "/original-held") heldResponse = res;
+      else res.end("unexpected later dispatch");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    t.after(async () => {
+      // A socket close alone does not await the owner handler's final append.
+      // On an earlier assertion failure, cancel and settle it before removing storage.
+      if (pending) {
+        if (!settled)
+          await owner("/api/cancel", "POST", {
+            id: "archive-lifecycle-running",
+          }).catch(() => {});
+        await pending;
+      }
+      await Promise.all(
+        [...clients].map((client) => client.close().catch(() => {})),
+      );
+      app.server.closeAllConnections();
+      peer.closeAllConnections();
+      await Promise.all(
+        [app.server, peer].map(
+          (server) => new Promise((resolve) => server.close(resolve)),
+        ),
+      );
+      await rm(root, { recursive: true, force: true });
+    });
+    const owner = async (route, method = "GET", body) => {
+      const response = await fetch(app.url + route, {
+        method,
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      const value = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(value));
+      return value;
+    };
+    const base = "http://127.0.0.1:" + peer.address().port;
+    const p = await app.store.create("original project");
+    p.plans = [
+      snapshotPlan({
+        id: "archive-lifecycle-flow",
+        name: "original plan",
+        environmentId: p.environments[0].id,
+        steps: [
+          {
+            id: "held",
+            request: { name: "original held", url: base + "/original-held" },
+          },
+          {
+            id: "later",
+            request: { name: "original later", url: base + "/original-later" },
+          },
+        ],
+      }),
+    ];
+    await app.store.save(p);
+    const before = await app.store.get(p.id),
+      original = structuredClone(before.plans[0]);
+    const other = await app.store.create("untouched peer project");
+    const otherBefore = await app.store.get(other.id);
+    const configure = (projects) =>
+      owner("/api/mcp/config", "POST", {
+        enabled: true,
+        remember: true,
+        projects,
+        write: false,
+        execute: false,
+      });
+    const config = await configure([p.id, other.id]);
+    const connect = async (mode, projects = [other.id]) => {
+      const client = new Client({
+        name: "archive-lifecycle-" + mode,
+        version: "1",
+      });
+      clients.add(client);
+      await client.connect(
+        mode === "http"
+          ? new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+              requestInit: {
+                headers: { Authorization: "Bearer " + config.token },
+              },
+            })
+          : new StdioClientTransport({
+              command: process.execPath,
+              args: [
+                fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+                ...projects.flatMap((id) => ["--project", id]),
+              ],
+              env: { LOCAL_API_DATA: root },
+              stderr: "pipe",
+            }),
+      );
+      const tools = (await client.listTools()).tools;
+      assert(
+        tools.some((tool) => tool.name === "localapi_get_execution_result"),
+      );
+      assert(!tools.some((tool) => tool.name === "localapi_execute_flow"));
+      return client;
+    };
+    const closeClient = async (client) => {
+      await client.close();
+      clients.delete(client);
+    };
+    const list = (client, projectId) =>
+      client.callTool({
+        name: "localapi_list_execution_runs",
+        arguments: { projectId },
+      });
+    const denied = async (client, pattern) => {
+      const value = await list(client, p.id);
+      assert.equal(value.isError, true);
+      assert.match(value.content[0].text, pattern);
+      assert.deepEqual(decode(await list(client, other.id)), []);
+    };
+    let httpReader = await connect("http"),
+      stdioReader = await connect("stdio", [p.id, other.id]);
+    for (const reader of [httpReader, stdioReader])
+      assert.deepEqual(decode(await list(reader, p.id)), []);
+
+    pending = owner(`/api/projects/${p.id}/run`, "POST", {
+      planId: original.id,
+      runId: "archive-lifecycle-running",
+    }).then(
+      (value) => {
+        settled = true;
+        return { value };
+      },
+      (error) => {
+        settled = true;
+        return { error };
+      },
+    );
+    await waitFor(() => heldResponse);
+    assert.deepEqual(seen, ["/original-held"]);
+    const editedInput = structuredClone(original);
+    editedInput.name = "edited plan";
+    editedInput.steps[0].request.url = base + "/edited-held";
+    editedInput.steps[1].request.url = base + "/edited-later";
+    await owner(`/api/projects/${p.id}/plans`, "POST", {
+      ...editedInput,
+      projectConfigRevision: before.configRevision,
+    });
+    const edited = await owner(`/api/projects/${p.id}`);
+    assert.equal(edited.plans[0].name, "edited plan");
+    assert.equal(edited.plans[0].steps[0].request.url, base + "/edited-held");
+    assert.equal(edited.configRevision, before.configRevision + 1);
+    const archived = await owner(`/api/projects/${p.id}`, "PUT", {
+      ...edited,
+      name: "edited archived project",
+      archived: true,
+    });
+    assert.equal(archived.configRevision, before.configRevision + 2);
+    assert.equal(archived.archived, true);
+    assert.deepEqual(archived.runs, []);
+    const archivedBytes = await configurationBytes(app.store.directory(p.id));
+    const remembered = JSON.parse(
+      await readFile(path.join(root, ".mcp-config.json"), "utf8"),
+    );
+    assert.deepEqual(remembered.projects, [other.id]);
+    assert.equal(remembered.token, config.token);
+    await denied(httpReader, /未授权/);
+    await denied(stdioReader, /已归档/);
+    assert.equal(
+      settled,
+      false,
+      "successful archive must not implicitly cancel already-dispatched owner work",
+    );
+    assert.equal(heldResponse.destroyed, false);
+    await owner("/api/cancel", "POST", { id: "archive-lifecycle-running" });
+    const answer = await pending;
+    assert.equal(answer.error, undefined);
+    const run = answer.value;
+    assert.equal(run.status, "cancelled");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.persistenceError, undefined);
+    assert.equal(run.results.length, 1);
+    assert.equal(run.results[0].stepId, "held");
+    assert.equal(run.results[0].request.url, base + "/original-held");
+    assert.equal(run.results[0].response, undefined);
+    assert.equal(typeof run.results[0].error, "string");
+    assert(run.results[0].error.length > 0);
+    const expectedSnapshot = structuredClone(original);
+    for (const step of expectedSnapshot.steps)
+      step.request.serviceSnapshot = true;
+    assert.deepEqual(run.snapshot, expectedSnapshot);
+    assert.equal(
+      run.planHash,
+      createHash("sha256")
+        .update(JSON.stringify(expectedSnapshot))
+        .digest("hex"),
+    );
+    assert.equal(run.planName, "original plan");
+    const saved = await owner(`/api/projects/${p.id}`);
+    assert.equal(saved.name, "edited archived project");
+    assert.equal(saved.archived, true);
+    assert.equal(saved.configRevision, archived.configRevision);
+    assert.deepEqual(saved.plans, archived.plans);
+    assert.deepEqual(
+      await configurationBytes(app.store.directory(p.id)),
+      archivedBytes,
+    );
+    assert.equal(saved.runs.length, 1);
+    const record = saved.runs[0];
+    assert.equal(record.id, run.id);
+    assert.equal(record.source, "manual");
+    assert.equal(record.status, "cancelled");
+    assert.equal(record.planHash, run.planHash);
+    assert.deepEqual(record.snapshot, run.snapshot);
+    assert.deepEqual(record.results, run.results);
+    assert.deepEqual(seen, ["/original-held"]);
+    await denied(httpReader, /未授权/);
+    await denied(stdioReader, /已归档/);
+    assert.deepEqual(await app.store.get(other.id), otherBefore);
+
+    await closeClient(httpReader);
+    await closeClient(stdioReader);
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+    app = await createApp({ root, port: 0 });
+    const restarted = await owner(`/api/projects/${p.id}`);
+    assert.equal(restarted.archived, true);
+    assert.equal(restarted.configRevision, archived.configRevision);
+    assert.deepEqual(restarted.plans, archived.plans);
+    assert.deepEqual(restarted.runs, [record]);
+    const restartedConfig = await owner("/api/mcp/config");
+    assert.equal(restartedConfig.enabled, true);
+    assert.equal(restartedConfig.token, config.token);
+    assert.deepEqual(restartedConfig.projects, [other.id]);
+    httpReader = await connect("http");
+    // Stdio authorization is independent: the restarted reader initially receives
+    // only the unrelated project, never authority inherited from HTTP config.
+    stdioReader = await connect("stdio");
+    await denied(httpReader, /未授权/);
+    await denied(stdioReader, /未授权/);
+    const unarchived = await owner(`/api/projects/${p.id}`, "PUT", {
+      ...restarted,
+      archived: false,
+    });
+    assert.equal(unarchived.archived, false);
+    assert.deepEqual(unarchived.runs, [record]);
+    await denied(httpReader, /未授权/);
+    await denied(stdioReader, /未授权/);
+    assert.deepEqual((await owner("/api/mcp/config")).projects, [other.id]);
+    assert.deepEqual(
+      JSON.parse(await readFile(path.join(root, ".mcp-config.json"), "utf8"))
+        .projects,
+      [other.id],
+    );
+    const reauthorized = await configure([p.id, other.id]);
+    assert.equal(reauthorized.token, config.token);
+    await denied(stdioReader, /未授权/);
+    await closeClient(stdioReader);
+    stdioReader = await connect("stdio", [p.id, other.id]);
+    for (const reader of [httpReader, stdioReader]) {
+      const detail = decode(
+        await reader.callTool({
+          name: "localapi_get_execution_result",
+          arguments: { projectId: p.id, runId: record.id },
+        }),
+      );
+      assert.deepEqual(detail, record);
+      const summaries = decode(await list(reader, p.id));
+      assert.equal(summaries.length, 1);
+      assert.equal(summaries[0].id, record.id);
+      assert.equal(summaries[0].status, "cancelled");
+      assert.equal(summaries[0].planHash, record.planHash);
+      assert.deepEqual(decode(await list(reader, other.id)), []);
+    }
+    const final = await owner(`/api/projects/${p.id}`);
+    assert.deepEqual(final.plans, archived.plans);
+    assert.deepEqual(final.runs, [record]);
+    assert.equal(final.configRevision, archived.configRevision + 1);
+    assert.deepEqual(await app.store.get(other.id), otherBefore);
+    assert.deepEqual(
+      seen,
+      ["/original-held"],
+      "restart, reauthorization and reads must never replay either plan version",
     );
   },
 );
