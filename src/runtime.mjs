@@ -1,3 +1,4 @@
+import { linearPlanStepIds } from "./plan-step-identities.mjs";
 import {
   serializeRequestPath,
   validatePathSerialization,
@@ -505,6 +506,11 @@ export class Store {
     });
   }
   #validateProject(p) {
+    // Preflight the whole definition batch before normalizing any collection.
+    if (!Array.isArray(p.plans) || p.plans.length > 1000)
+      throw Error("计划最多1000个");
+    for (const plan of p.plans)
+      if (!hasRepeatSteps(plan.steps)) linearPlanStepIds(plan.steps);
     for (const request of p.requests || []) validatePathSerialization(request);
     validateNativeInheritanceProject(p);
 
