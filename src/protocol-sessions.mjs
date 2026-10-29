@@ -116,6 +116,8 @@ export class ProtocolSessions {
       throw Error("协议模板会话须由项目入口解析");
     validateProtocolTemplate(input);
     protocolRequestOptions(input);
+    if (input.completion === "delimiter" || input.delimiterHex !== undefined)
+      throw Error("TCP delimiter 完成规则仅支持单次响应，不支持交互会话");
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {

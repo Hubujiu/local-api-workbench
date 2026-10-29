@@ -1,4 +1,5 @@
 import { sseHeaders } from "./protocol-handshake.mjs";
+import { createTCPDelimiterMatcher } from "./tcp-delimiter.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -74,14 +75,31 @@ export async function captureSSE(
 }
 
 export function exchangeTCP(
-  { host, port, message = "", duration = 3000, completion, sendEmptyMessage },
+  {
+    host,
+    port,
+    message = "",
+    duration = 3000,
+    completion,
+    delimiterHex,
+    sendEmptyMessage,
+  },
   signal,
 ) {
   if (!host || !Number.isInteger(Number(port)) || port < 1 || port > 65535)
     throw Error("TCP 地址或端口无效");
   if (signal?.aborted) return Promise.reject(Error("TCP 请求已取消"));
-  protocolRequestOptions({ type: "tcp", completion, sendEmptyMessage });
-  const payload = protocolPayload(message);
+  const options = protocolRequestOptions({
+    type: "tcp",
+    completion,
+    delimiterHex,
+    sendEmptyMessage,
+  });
+  const payload = protocolPayload(message),
+    matcher =
+      options.completion === "delimiter"
+        ? createTCPDelimiterMatcher(options.delimiterHex)
+        : undefined;
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0,
@@ -96,7 +114,8 @@ export function exchangeTCP(
       signal?.removeEventListener("abort", abort);
       if (error) reject(error);
       else {
-        const buffer = Buffer.concat(chunks);
+        const frame = matcher?.snapshot(),
+          buffer = frame ? frame.frame : Buffer.concat(chunks);
         let decoded, decodeError;
         if (payload.decode) {
           try {
@@ -110,9 +129,18 @@ export function exchangeTCP(
           ...(decodeError ? { decodeError } : {}),
           body: buffer.toString("utf8"),
           base64: buffer.toString("base64"),
-          size,
+          size: frame ? buffer.length : size,
           timedOut,
-          partial: timedOut,
+          partial: frame ? !frame.matched : timedOut,
+          ...(frame
+            ? {
+                framing: {
+                  matched: frame.matched,
+                  trailingBase64: frame.trailing.toString("base64"),
+                  trailingSize: frame.trailing.length,
+                },
+              }
+            : {}),
         });
       }
     };
@@ -120,7 +148,7 @@ export function exchangeTCP(
     const timer = setTimeout(
       () => {
         timedOut = true;
-        chunks.length ? finish() : finish(Error("TCP 请求超时"));
+        matcher || chunks.length ? finish() : finish(Error("TCP 请求超时"));
       },
       Math.min(30000, Math.max(100, Number(duration) || 3000)),
     );
@@ -129,6 +157,14 @@ export function exchangeTCP(
     });
     socket.on("data", (chunk) => {
       if (done) return;
+      if (matcher) {
+        try {
+          if (matcher.push(chunk)) finish();
+        } catch (error) {
+          finish(error);
+        }
+        return;
+      }
       size += chunk.length;
       if (size > 1024 * 1024) finish(Error("TCP 响应超过 1 MiB"));
       else {

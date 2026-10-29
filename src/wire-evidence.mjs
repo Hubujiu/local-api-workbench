@@ -4,6 +4,7 @@ import {
   resolveProtocolDefinition,
   validateTemplateProvenance,
 } from "./protocol-text-templates.mjs";
+import { validateTCPDelimiterEvidence } from "./tcp-delimiter.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
 import { decodeISO8583 } from "./iso8583-codec.mjs";
@@ -50,6 +51,7 @@ export function prepareWireExecution(project, input) {
         "completion",
         "templateMode",
         "sendEmptyMessage",
+        "delimiterHex",
       ].some((key) => input[key] !== undefined) ||
       (input.type !== undefined && input.type !== saved.type)
     )
@@ -328,6 +330,7 @@ export function validateWireRecord(record) {
           "partial",
           "decoded",
           "decodeError",
+          ...(definition.completion === "delimiter" ? ["framing"] : []),
         ]) ||
         !text(r.base64, 1400000) ||
         !Number.isInteger(r.size) ||
@@ -340,6 +343,8 @@ export function validateWireRecord(record) {
         (r.decodeError !== undefined && !text(r.decodeError, 4096))
       )
         throw Error("TCP 执行证据无效");
+      if (definition.completion === "delimiter")
+        validateTCPDelimiterEvidence(definition, r);
       if (definition.message?.format === "iso8583") {
         let decoded;
         try {
