@@ -249,3 +249,93 @@ export function rejectCollectionExport(project, format) {
       `${format} 不能保留 Postman collection 变量层；请使用完整项目备份`,
     );
 }
+
+export function collectionScope(project, collectionId) {
+  if (collectionId === undefined) return {};
+  collectionIdentifier(collectionId);
+  const item = project.postmanCollections?.items?.find(
+    (item) => item.id === collectionId,
+  );
+  if (!item) throw Error("Postman collection 引用不存在于当前项目");
+  return {
+    collectionId,
+    collection: collectionJSON(item.variables),
+    collectionTypes: Object.fromEntries(
+      Object.keys(item.variables).map((name) => [
+        name,
+        item.definitions[name].type,
+      ]),
+    ),
+  };
+}
+export function validateCollectionScope(state, expectedId) {
+  if (state?.collectionId !== expectedId)
+    throw Error("脚本不能更改宿主固定的 Postman collection 身份");
+  if (expectedId === undefined) {
+    if (
+      Object.keys(state?.collection || {}).length ||
+      Object.keys(state?.collectionTypes || {}).length
+    )
+      throw Error("未绑定请求不能创建 Postman collection 层");
+    return;
+  }
+  collectionIdentifier(expectedId);
+  const variables = collectionJSON(state.collection),
+    typeMap = collectionJSON(state.collectionTypes);
+  object(variables);
+  object(typeMap);
+  if (
+    Object.keys(variables).length > 10000 ||
+    Object.keys(typeMap).length !== Object.keys(variables).length
+  )
+    throw Error("Postman collection 变量和类型不匹配");
+  for (const [name, value] of Object.entries(variables)) {
+    collectionVariableName(name);
+    if (
+      !Object.hasOwn(typeMap, name) ||
+      JSON.stringify(castCollectionValue(value, typeMap[name])) !==
+        JSON.stringify(value)
+    )
+      throw Error("Postman collection 脚本变量类型无效");
+  }
+}
+export function collectionExecutionScopes(project) {
+  validatePostmanCollections(project);
+  return (project.postmanCollections?.items || []).map((item) =>
+    collectionScope(project, item.id),
+  );
+}
+export function createCollectionSession(states = []) {
+  if (!Array.isArray(states) || states.length > 100)
+    throw Error("Postman collection 运行上下文无效");
+  const values = new Map();
+  for (const state of states) {
+    validateCollectionScope(state, state?.collectionId);
+    collectionIdentifier(state.collectionId);
+    if (values.has(state.collectionId))
+      throw Error("Postman collection 运行身份重复");
+    values.set(state.collectionId, collectionJSON(state));
+  }
+  return {
+    select(id) {
+      if (id === undefined) return {};
+      collectionIdentifier(id);
+      if (!values.has(id)) throw Error("执行入口未提供所属 Postman collection");
+      return collectionJSON(values.get(id));
+    },
+    accept(state) {
+      const id = state.collectionId;
+      if (id === undefined) return;
+      if (!values.has(id)) throw Error("Postman collection 运行身份不存在");
+      validateCollectionScope(state, id);
+      values.set(
+        id,
+        collectionJSON({
+          collectionId: id,
+          collection: state.collection,
+          collectionTypes: state.collectionTypes,
+        }),
+      );
+    },
+  };
+}

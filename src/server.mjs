@@ -50,6 +50,7 @@ import {
   resolveServiceRequest,
   freezeServiceBinding,
   debugEnvironment,
+  debugEnvironmentFingerprint,
   manageEnvironment,
 } from "./environments.mjs";
 import { createMCP } from "./mcp.mjs";
@@ -596,6 +597,9 @@ export async function createApp({
               p,
               data.environmentId || u.searchParams.get("environmentId"),
               debugEnvironments,
+              data.postmanCollectionId ??
+                u.searchParams.get("postmanCollectionId") ??
+                undefined,
             );
             const runtimeFingerprint = createHash("sha256")
               .update(JSON.stringify(context.variables))
@@ -1261,6 +1265,7 @@ export async function createApp({
               p,
               data.environmentId,
               debugEnvironments,
+              data.request?.postmanCollectionId,
             );
             return json(res, 200, {
               curl: toCurl(
@@ -1279,6 +1284,7 @@ export async function createApp({
                   ),
                   context.environment.id,
                 ),
+                { collectionResolved: true },
               ),
             });
           }
@@ -1290,6 +1296,7 @@ export async function createApp({
                 p,
                 b.environmentId,
                 debugEnvironments,
+                b.request?.postmanCollectionId,
               );
               const env = context.variables;
               const request = normalizeRequest(
@@ -1300,6 +1307,7 @@ export async function createApp({
                 p,
                 context.environment.id,
                 env,
+                request.postmanCollectionId,
               );
               const single = await runPlan(
                 snapshotPlan({
@@ -1326,8 +1334,10 @@ export async function createApp({
               const result = single.results[0];
               if (result?.response)
                 publishDebugVariables(debugEnvironments, context.publication, {
-                  fingerprint: JSON.stringify(
-                    environmentVariables(p, context.environment.id),
+                  fingerprint: debugEnvironmentFingerprint(
+                    p,
+                    context.environment.id,
+                    request.postmanCollectionId,
                   ),
                   variables: structuredClone(single.variables),
                 });

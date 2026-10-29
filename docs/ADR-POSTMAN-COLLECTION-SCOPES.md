@@ -124,3 +124,26 @@ scope pipeline lands, rather than accidentally running with the old variable lay
 The registry uses the existing metadata journal and rejects active missing-value,
 external/secret and non-finite inputs; original duplicate/disabled editor rows are
 not promised as an archival representation. No old import mode is migrated.
+
+## Scope pipeline checkpoint (WIP)
+
+Host-private collection execution sessions now select A/B/A layers, with request
+and returned-scope identity checks before stage commits. Collection diffs use the
+same expected-old-value transaction and exact cancellation signal as existing
+scopes. Registry definitions retain initial values for updates of the same type;
+unset/clear deletes a variable definition, so a later set creates a new any-typed
+variable. get/toObject return copies. The small facade is self-contained pure code
+serialized into the existing worker; it is not a host-object bridge or new engine.
+
+Owner/SDK debug requests use collection-aware cache keys and fingerprints including
+the original (even shadowed) collection values and types, while unbound fingerprints
+stay byte-compatible. cURL resolves project context; the context-free formatter
+rejects unresolved bindings. Load requests reject bindings before execution.
+The initial WIP execution refusal is replaced by this wiring, not by fallback to
+old flattened values. Real behavior remains unverified until workflow CI.
+
+Local inspected pure tests: model4 + scope/facade6 + existing cancellation5 + CAS3.
+The newly added shadowed-collection cache assertion initially failed (twice while
+the source replacement had not applied), then passed after the fingerprint included
+the actual collection layer. This is pure regression evidence, not application or
+VM execution. No assertion or execution budget was changed.

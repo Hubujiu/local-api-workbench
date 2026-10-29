@@ -5,6 +5,8 @@ import {
   appendPostmanCollection,
   validatePostmanCollections,
   rejectCollectionExport,
+  createCollectionSession,
+  validateCollectionScope,
 } from "./postman-collection-scopes.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
@@ -448,6 +450,7 @@ export async function runPlan(
     onStep,
     prepareRequest,
     variableScopes,
+    collectionScopes,
     onScopeChanges,
     cookieSession,
     databaseQuery,
@@ -462,12 +465,9 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
-  if (
-    snapshot.steps.some(
-      (step) => step.request?.postmanCollectionId !== undefined,
-    )
-  )
-    throw Error("Postman collection 执行接线尚未完成（WIP），拒绝忽略变量层");
+  const collections = createCollectionSession(collectionScopes);
+  for (const step of snapshot.steps)
+    collections.select(step.request?.postmanCollectionId);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -487,6 +487,12 @@ export async function runPlan(
   for (const step of snapshot.steps) {
     if (signal?.aborted) break;
     if (step.enabled === false) continue;
+    const collectionId = step.request?.postmanCollectionId;
+    delete scopes.collectionId;
+    delete scopes.collection;
+    delete scopes.collectionTypes;
+    Object.assign(scopes, collections.select(collectionId));
+    replaceVariables(vars, effectiveScopes(scopes));
     const record = {
       stepId: step.id,
       name: step.name,
@@ -504,10 +510,15 @@ export async function runPlan(
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes, signal);
+          const accepted = await onScopeChanges(changes, signal, collectionId);
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
+            if (collectionId !== undefined) {
+              validateCollectionScope(accepted, collectionId);
+              scopes.collection = accepted.collection;
+              scopes.collectionTypes = accepted.collectionTypes;
+            }
           }
         } catch (error) {
           throw Error("变量持久化失败：" + error.message);
@@ -517,9 +528,11 @@ export async function runPlan(
         record.logs.push({
           phase: "variables",
           scope: change.scope,
+          ...(change.scope === "collection" ? { collectionId } : {}),
           name: change.name,
           operation: change.after.exists ? "set" : "unset",
         });
+      collections.accept(scopes);
       committedScopes = structuredClone(scopes);
       replaceVariables(vars, effectiveScopes(scopes));
     };
@@ -724,6 +737,9 @@ export async function runPlan(
           );
           if (scripted.tests.some((test) => !test.passed))
             throw Error("前置脚本断言失败");
+          validateCollectionScope(scripted.scopes, collectionId);
+          if (scripted.request?.postmanCollectionId !== collectionId)
+            throw Error("脚本不能更改宿主固定的 Postman collection 身份");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           replaceVariables(localVariables, scripted.localVariables || {});
@@ -826,6 +842,9 @@ export async function runPlan(
           record.visualization = scripted.visualization;
           if (scripted.responseOverride)
             record.scriptResponse = scripted.responseOverride;
+          validateCollectionScope(scripted.scopes, collectionId);
+          if (scripted.request?.postmanCollectionId !== collectionId)
+            throw Error("脚本不能更改宿主固定的 Postman collection 身份");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           record.logs.push(
@@ -862,6 +881,10 @@ export async function runPlan(
         );
       scopes.environment = committedScopes.environment;
       scopes.globals = committedScopes.globals;
+      if (collectionId !== undefined) {
+        scopes.collection = committedScopes.collection;
+        scopes.collectionTypes = committedScopes.collectionTypes;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
@@ -1628,7 +1651,9 @@ export function exportOpenAPI(project) {
     ...(Object.keys(components).length ? { components } : {}),
   });
 }
-export function toCurl(input) {
+export function toCurl(input, { collectionResolved = false } = {}) {
+  if (input.postmanCollectionId !== undefined && !collectionResolved)
+    throw Error("cURL须先通过项目上下文解析Postman collection变量");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),
