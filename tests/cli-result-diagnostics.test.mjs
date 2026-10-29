@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   cliResultMetadata,
   withCLIResultDiagnostics,
+  workflowFailureObservations,
 } from "./helpers/cli-result-diagnostics.mjs";
 
 const secret = "PRIVATE_BODY_TOKEN_PATH_SOURCE";
@@ -240,4 +241,186 @@ test("JSON proto keys cannot inject labels or serialization hooks", () => {
   assert.equal(step.scriptStage, undefined);
   assert.equal(step.scriptDiagnostics, undefined);
   assert.ok(!JSON.stringify(step).includes(secret));
+});
+
+test("workflow observations retain only own fixed booleans and bounded hit counts", () => {
+  const source = {
+    loginRequestCount: 0,
+    laterRequestCount: 16,
+    hasRecordedResponse: false,
+    body: secret,
+    request: secret,
+    phase: secret,
+    script: secret,
+    response: { body: secret },
+  };
+  const metadata = workflowFailureObservations(source);
+  assert.equal(Object.getPrototypeOf(metadata), null);
+  assert.deepEqual(
+    { ...metadata },
+    {
+      loginRequestCount: 0,
+      laterRequestCount: 16,
+      hasRecordedResponse: false,
+    },
+  );
+  assert.equal(
+    workflowFailureObservations({ hasRecordedResponse: true })
+      .hasRecordedResponse,
+    true,
+  );
+  assert.ok(!JSON.stringify(metadata).includes(secret));
+  for (const value of [-1, 17, 1.5, Infinity, NaN, "1", true, null, 1n]) {
+    assert.deepEqual(
+      {
+        ...workflowFailureObservations({
+          loginRequestCount: value,
+          laterRequestCount: value,
+        }),
+      },
+      {},
+    );
+  }
+  for (const value of [0, 1, "true", null, undefined, {}, []])
+    assert.deepEqual(
+      { ...workflowFailureObservations({ hasRecordedResponse: value }) },
+      {},
+    );
+});
+
+test("workflow observations never read accessors, inherited values or proxy traps", () => {
+  let reads = 0;
+  const inherited = Object.create({
+    loginRequestCount: 1,
+    hasRecordedResponse: true,
+  });
+  Object.defineProperty(inherited, "laterRequestCount", {
+    get() {
+      reads++;
+      throw Error("must not read observation getter");
+    },
+  });
+  Object.defineProperty(inherited, "toJSON", {
+    value() {
+      reads++;
+      throw Error("must not serialize observations");
+    },
+  });
+  const proxy = new Proxy(
+    {},
+    {
+      get() {
+        reads++;
+        throw Error("must not read proxy");
+      },
+      getOwnPropertyDescriptor() {
+        reads++;
+        throw Error("must not inspect proxy");
+      },
+    },
+  );
+  for (const source of [inherited, proxy, null, undefined, false, secret])
+    assert.deepEqual({ ...workflowFailureObservations(source) }, {});
+  assert.equal(reads, 0);
+});
+
+test("workflow evidence is appended only after original regex failure with identical assertion error", () => {
+  for (const expectedPattern of [/XML|XPath|pickVars/, /loginRequestCount/]) {
+    const run = fixture();
+    run.results[1].error = "interrupted";
+    const observations = {
+      loginRequestCount: 1,
+      laterRequestCount: 0,
+      hasRecordedResponse: true,
+      body: secret,
+      phase: "XML",
+    };
+    let originalFailure;
+    let originalMessage;
+    let calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            calls++;
+            try {
+              assert.match(run.results[1].error, expectedPattern);
+            } catch (failure) {
+              originalFailure = failure;
+              originalMessage = failure.message;
+              throw failure;
+            }
+          },
+          JSON.stringify(run),
+          observations,
+        ),
+      (failure) => {
+        assert.equal(failure, originalFailure);
+        assert(failure instanceof AssertionError);
+        assert.equal(failure.actual, "interrupted");
+        assert.equal(failure.expected, expectedPattern);
+        assert.equal(
+          failure.message.slice(0, originalMessage.length),
+          originalMessage,
+        );
+        const suffix = failure.message.slice(originalMessage.length);
+        const marker = "\nCLI_RESULT_METADATA ";
+        assert(suffix.startsWith(marker));
+        assert(Buffer.byteLength(suffix) <= 4096);
+        assert.deepEqual(
+          JSON.parse(suffix.slice(marker.length)).workflowObservations,
+          {
+            loginRequestCount: 1,
+            laterRequestCount: 0,
+            hasRecordedResponse: true,
+          },
+        );
+        assert.ok(!suffix.includes(secret));
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+    assert.equal(run.results[1].error, "interrupted");
+    assert.equal(observations.phase, "XML");
+  }
+});
+
+test("successful assertions never inspect optional workflow observations and old calls keep their shape", () => {
+  let reads = 0;
+  const observations = new Proxy(
+    {},
+    {
+      get() {
+        reads++;
+        throw Error("must not read successful observations");
+      },
+      getOwnPropertyDescriptor() {
+        reads++;
+        throw Error("must not inspect successful observations");
+      },
+    },
+  );
+  assert.equal(
+    withCLIResultDiagnostics(() => 42, "not-json", observations),
+    42,
+  );
+  assert.equal(reads, 0);
+  for (const optional of [undefined, {}, { phase: secret }]) {
+    const failure = new AssertionError({ message: "original" });
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            throw failure;
+          },
+          "{}",
+          optional,
+        ),
+      (caught) => caught === failure,
+    );
+    const suffix = failure.message.slice(
+      "original\nCLI_RESULT_METADATA ".length,
+    );
+    assert.deepEqual(JSON.parse(suffix), { input: "invalid-shape" });
+  }
 });
