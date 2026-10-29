@@ -6,6 +6,8 @@ import {
   invalidEncodings,
   encodingDocument,
   mixedEncodingDocument,
+  unsupportedMultipartSchemas,
+  transferDocument,
 } from "./fixtures/openapi-form-encoding.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -658,6 +660,152 @@ for (const transport of ["http", "stdio"])
           );
         }
       }
+      assert.deepEqual(
+        await files(f.app.store.directory(other.id)),
+        otherBefore,
+      );
+    },
+  );
+
+for (const transport of ["http", "stdio"])
+  test(
+    `multipart schema transfer boundary is version-aware and atomic via owner and ${transport}, with legacy backup preservation`,
+    { timeout: 60000 },
+    async (t) => {
+      const f = await fixture(t),
+        p = await f.project("schema transfer"),
+        other = await f.project("isolated transfer");
+      const c = await f.connect(p.id, transport);
+      const invoke = (document) =>
+        c.callTool({
+          name: "localapi_sync_openapi",
+          arguments: { projectId: p.id, document, coverMode: "url_and_folder" },
+        });
+      const before = await files(f.root);
+      for (const { openapi, definition } of unsupportedMultipartSchemas) {
+        const doc = transferDocument(
+          f.origin,
+          openapi,
+          definition,
+          "multipart/form-data",
+          true,
+        );
+        for (const source of [JSON.stringify(doc), yamlStringify(doc)]) {
+          const error = await f.owner(
+            `/api/projects/${p.id}/import`,
+            { document: source },
+            "POST",
+            400,
+          );
+          assert.match(error.error, /contentEncoding|format:byte/);
+          assert.deepEqual(await files(f.root), before);
+          const result = await invoke(source);
+          assert.equal(result.isError, true);
+          assert.match(result.content[0].text, /contentEncoding|format:byte/);
+          assert.deepEqual(await files(f.root), before);
+        }
+      }
+      assert.equal(f.connections, 0);
+      const otherBefore = await files(f.app.store.directory(other.id));
+      const controls = [
+        ["3.0.3", { type: "string", format: "binary" }, "multipart/form-data"],
+        ["3.1.0", { type: "string", format: "binary" }, "multipart/form-data"],
+        ["3.1.0", { type: "string", format: "byte" }, "multipart/form-data"],
+        [
+          "3.0.3",
+          { type: "string", format: "byte" },
+          "application/x-www-form-urlencoded",
+        ],
+        ["3.1.0", { type: "string" }, "multipart/form-data"],
+      ];
+      for (const [version, definition, mime] of controls) {
+        const synced = decode(
+          await invoke(transferDocument(f.origin, version, definition, mime)),
+        );
+        assert.equal(synced.length, 1);
+        const request = synced[0];
+        if (
+          version === "3.1.0" &&
+          ["byte", "binary"].includes(definition.format)
+        ) {
+          const disk = await files(f.root);
+          const error = await f.owner(
+            `/api/projects/${p.id}/export?format=openapi`,
+            undefined,
+            "GET",
+            400,
+          );
+          assert.match(error.error, /format:/);
+          assert.deepEqual(await files(f.root), disk);
+        } else {
+          const exported = await f.owner(
+            `/api/projects/${p.id}/export?format=openapi`,
+            undefined,
+            "GET",
+          );
+          assert.equal(exported.openapi, "3.0.3");
+        }
+        const field = request.form.find((row) => row.key === "meta");
+        if (version === "3.0.3" && definition.format === "binary") {
+          assert.equal(field.type, "file");
+          assert.equal(field.requiresFile, true);
+          // Explicit bytes supplied by the test; never read a source filename.
+          field.value = payload.toString("base64");
+          field.filename = "fixture.bin";
+          delete field.requiresFile;
+        } else {
+          assert.equal(field.type, "text");
+          assert.equal(field.value, "AP8=");
+          assert.equal(Object.hasOwn(field, "requiresFile"), false);
+        }
+        const result = await f.owner(`/api/projects/${p.id}/execute`, {
+          request,
+        });
+        assert.equal(result.outcome, "passed", result.error);
+        if (mime === "multipart/form-data")
+          checkWire(f.seen.at(-1), request.form);
+        else
+          assert.equal(
+            f.seen.at(-1).body.toString(),
+            new URLSearchParams(
+              request.form.map((row) => [row.key, row.value]),
+            ).toString(),
+          );
+      }
+      // A saved legacy request must remain backup-compatible. Only OAS interchange
+      // rejects the unsupported declaration; no runtime/schema repair is invented.
+      const project = await f.get(p.id);
+      project.requests[0].form[0].schema = {
+        type: "string",
+        contentEncoding: "base64",
+      };
+      await f.owner(`/api/projects/${p.id}`, project, "PUT");
+      const saved = await f.get(p.id);
+      const backup = await f.owner(
+        `/api/projects/${p.id}/export`,
+        undefined,
+        "GET",
+      );
+      const restored = await f.owner(
+        "/api/restore",
+        { document: backup },
+        "POST",
+        201,
+      );
+      await f.restart();
+      const persisted = await f.get(restored.id);
+      assert.deepEqual(persisted.requests, saved.requests);
+      const disk = await files(f.root),
+        count = f.seen.length;
+      const error = await f.owner(
+        `/api/projects/${restored.id}/export?format=openapi`,
+        undefined,
+        "GET",
+        400,
+      );
+      assert.match(error.error, /contentEncoding/);
+      assert.deepEqual(await files(f.root), disk);
+      assert.equal(f.seen.length, count);
       assert.deepEqual(
         await files(f.app.store.directory(other.id)),
         otherBefore,

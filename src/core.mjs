@@ -933,7 +933,9 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
-          const importedBody = importOpenAPIBody(op.requestBody);
+          const importedBody = importOpenAPIBody(op.requestBody, {
+            openapi: doc.openapi,
+          });
           const normalizedResponses = Object.fromEntries(
             Object.entries(op.responses || {}).map(([status, response]) => [
               status,

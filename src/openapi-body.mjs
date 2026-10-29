@@ -126,7 +126,22 @@ export function exportOpenAPIHeaders(request) {
   );
 }
 
-export function importOpenAPIBody(requestBody) {
+// This is an interchange boundary, not a runtime/backup schema validator.
+// The internal file value is base64 storage, NOT a wire transfer encoding.
+function assertMultipartSchemaTransfer(
+  definition,
+  { legacyFormat = true } = {},
+) {
+  if (Object.hasOwn(definition, "contentEncoding"))
+    throw Error(
+      "尚不支持 OpenAPI multipart contentEncoding；不能改用原始字节发送",
+    );
+  if (legacyFormat && definition.format === "byte")
+    throw Error("尚不支持 OpenAPI 3.0 multipart format:byte 内容传输编码");
+}
+
+export function importOpenAPIBody(requestBody, { openapi = "3.0.3" } = {}) {
+  const legacyFormat = String(openapi).startsWith("3.0.");
   if (requestBody === undefined)
     return {
       bodyType: "none",
@@ -188,8 +203,13 @@ export function importOpenAPIBody(requestBody) {
       definition.items
     )
       throw Error("尚不支持 OpenAPI 复杂表单字段: " + key);
+    if (mime === "multipart/form-data")
+      assertMultipartSchemaTransfer(definition, { legacyFormat });
     const file =
-      definition.format === "binary" || definition.contentEncoding === "base64";
+      ((mime !== "multipart/form-data" || legacyFormat) &&
+        definition.format === "binary") ||
+      (mime !== "multipart/form-data" &&
+        definition.contentEncoding === "base64");
     if (file && mime !== "multipart/form-data")
       throw Error("文件字段需要 multipart/form-data");
     const value = Object.hasOwn(example, key)
@@ -249,6 +269,13 @@ export function exportOpenAPIBody(request) {
         throw Error("不安全的表单字段");
       if (seen.has(field.key)) throw Error("OpenAPI 导出不支持重复表单键");
       seen.add(field.key);
+      if (type === "form-data") {
+        assertMultipartSchemaTransfer(field.schema ?? {});
+        if (field.type !== "file" && field.schema?.format === "binary")
+          throw Error(
+            "OpenAPI 3.0 导出不能将 multipart 文本 format:binary 改为文件",
+          );
+      }
       let definition =
         field.type === "file" &&
         field.schema?.format !== "binary" &&

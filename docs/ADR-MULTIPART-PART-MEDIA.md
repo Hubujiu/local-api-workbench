@@ -117,3 +117,36 @@ duplicates, incompatible media, no-body media and multipart boundary overrides
 remain explicit errors. Non-Content-Type headers and the Swagger2 compatibility
 flag keep their existing behavior. OAS3 reserved header semantics are specified at
 https://spec.openapis.org/oas/v3.0.3.html#parameter-object.
+
+## OpenAPI schema transfer boundary (2026-10-29)
+
+Selected multipart imports now fail closed for any own `contentEncoding`
+(including identity and malformed values), without pretending these declarations
+are all invalid schemas. No transfer codec or Content-Transfer-Encoding writer
+is implemented. Internal file values being base64 does not mean their wire bytes
+are base64: runtime decodes storage and sends raw bytes.
+
+Import receives the document version explicitly. OAS 3.0 `format:binary`
+remains a raw-file placeholder; multipart `format:byte` is unsupported. In
+OAS 3.1, format is an annotation, not a transfer instruction, so byte/binary
+strings remain text within multipart (the pre-existing URL-encoded binary rejection is unchanged). Fixed 3.0.3 export rejects multipart contentEncoding,
+format:byte, and a text field's format:binary rather than reinterpret these
+saved declarations as legacy wire semantics. Actual file/binary still exports.
+This gate is only interchange: backup/restore and persisted schemas are not
+rewritten or blocked, and no runtime behavior is changed.
+
+URL-encoded byte strings retain literal base64 text and ordinary URL encoding.
+JSON/raw content annotations are untouched. This is not complete OAS 3.1 binary
+support. Schema contentMediaType does not override the Encoding Object's
+explicit or default contentType; no MIME or codec is inferred from it.
+
+Sources:
+- https://spec.openapis.org/oas/v3.1.1.html#working-with-binary-data
+- https://spec.openapis.org/oas/v3.1.1.html#encoding-multipart-media-types
+- https://spec.openapis.org/oas/v3.0.4.html#encoding-multipart-media-types
+- https://json-schema.org/draft/2020-12/json-schema-validation#section-8
+
+Reviewed pure-helper tests cover these guards and controls. Added real owner
+JSON/YAML, mixed-import atomicity, HTTP/stdio SDK sync, exact wire controls,
+project isolation and legacy backup/restart/export-error workflows are ordinary
+CI-only evidence; they have not been run locally.
