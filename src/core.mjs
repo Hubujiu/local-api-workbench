@@ -1,3 +1,4 @@
+import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1218,11 +1219,7 @@ export function importDocument(doc) {
             })),
             beforeScript: events(currentEvents, "prerequest"),
             afterScript: events(currentEvents, "test"),
-            examples: (item.response || []).map((example) => ({
-              name: example.name,
-              status: example.code || 200,
-              body: example.body || "",
-            })),
+            examples: importPostmanResponseExamples(item.response),
           }),
         ];
       });
