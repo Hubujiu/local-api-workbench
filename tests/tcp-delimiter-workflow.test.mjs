@@ -3,7 +3,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import net from "node:net";
 import http from "node:http";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +21,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { protocolEvidenceHash } from "../src/wire-evidence.mjs";
+import { Store } from "../src/runtime.mjs";
+import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
+import { nativeProtocolExportFixture } from "./fixtures/native-protocol-export.mjs";
 
 const runFile = promisify(execFile),
   frame = Buffer.from("aa00ff0d0a", "hex"),
@@ -579,5 +589,327 @@ test(
     assert.deepEqual(recovered.protocolRuns, saved.protocolRuns);
     assert.deepEqual(recovered.runs, saved.runs);
     assert.equal(f.seen.length, sent);
+  },
+);
+
+// Root-only intersections: this fixture is not backported to PR12's narrower base.
+test(
+  "root TCP delimiter source-backed and frozen-only native export rejection is atomic through owner and both SDK transports",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t),
+      p = await f.app.store.create("native delimiter boundary"),
+      other = await f.app.store.create("native export isolation");
+    const otherBytes = await bytes(f.app.store.directory(other.id));
+    await f.owner(`/api/projects/${p.id}/import`, "POST", {
+      document: nativeProtocolExportFixture(
+        `${f.definition.url}:${f.definition.port}`,
+      ),
+      modelNameMode: "preserve",
+    });
+    const readers = [];
+    for (const mode of ["http", "stdio"])
+      readers.push(await f.connect(p.id, mode, false));
+    // First prove the same source graph is supported, not an unowned definition
+    // that would already be refused for an unrelated reason.
+    for (const format of ["apipost", "apipost-directory"]) {
+      const document = await f.owner(
+        `/api/projects/${p.id}/export?format=${format}&modelNameMode=preserve`,
+      );
+      for (const read of readers)
+        assert.deepEqual(
+          decode(
+            await read("export_project", { format, modelNameMode: "preserve" }),
+          ).document,
+          document,
+        );
+    }
+    let current = await f.owner(`/api/projects/${p.id}`);
+    const tcp = current.protocols.find(
+      (definition) => definition.type === "tcp",
+    );
+    assert(tcp);
+    tcp.completion = "delimiter";
+    tcp.delimiterHex = "0d0a";
+    await f.owner(`/api/projects/${p.id}`, "PUT", current);
+    async function rejected(patterns) {
+      const before = await f.owner(`/api/projects/${p.id}`),
+        disk = await bytes(f.app.store.directory(p.id));
+      for (const [format, pattern] of Object.entries(patterns)) {
+        assert.match(
+          JSON.stringify(
+            await f.owner(
+              `/api/projects/${p.id}/export?format=${format}&modelNameMode=preserve`,
+              "GET",
+              undefined,
+              400,
+            ),
+          ),
+          pattern,
+        );
+        for (const read of readers) {
+          const result = await read("export_project", {
+            format,
+            modelNameMode: "preserve",
+          });
+          assert.equal(result.isError, true);
+          assert.match(result.content[0].text, pattern);
+        }
+      }
+      assert.deepEqual(await f.owner(`/api/projects/${p.id}`), before);
+      assert.deepEqual(await bytes(f.app.store.directory(p.id)), disk);
+    }
+    await rejected({
+      apipost: /原生协议导出不能无损保留修改后的定义/,
+      "apipost-directory": /原生协议导出不能无损保留修改后的定义/,
+    });
+    const plan = await f.owner(`/api/projects/${p.id}/plans`, "POST", {
+      name: "frozen delimiter without live source",
+      steps: [
+        { id: "wire", type: "protocol", protocol: { definitionId: tcp.id } },
+      ],
+    });
+    current = await f.owner(`/api/projects/${p.id}`);
+    current.protocols = [];
+    delete current.settings.apipostProtocolSources;
+    await f.owner(`/api/projects/${p.id}`, "PUT", current);
+    await rejected({
+      apipost: /Apipost导出尚不能表达plans/,
+      "apipost-directory": /原生目录计划仅支持HTTP步骤/,
+    });
+    const backup = await f.owner(`/api/projects/${p.id}/export`);
+    assert.equal(
+      backup.plans[0].steps[0].protocol.definition.delimiterHex,
+      "0d0a",
+    );
+    const restored = await f.owner(
+      "/api/restore",
+      "POST",
+      { document: backup },
+      201,
+    );
+    await f.restart();
+    const recovered = await f.owner(`/api/projects/${restored.id}`);
+    assert.deepEqual(recovered.plans, backup.plans);
+    assert.equal(recovered.plans[0].id, plan.id);
+    assert.deepEqual(recovered.protocols, []);
+    assert.deepEqual(await bytes(f.app.store.directory(other.id)), otherBytes);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(f.acceptedConnections, 0);
+    assert.deepEqual(f.seen, []);
+    assert.deepEqual(f.consumed, []);
+  },
+);
+
+test(
+  "root TCP delimiter real journal uncertainty reconciles once and frozen repeat consumers survive backup restart",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t),
+      p = await f.app.store.create("delimiter uncertain receipt"),
+      other = await f.app.store.create("receipt isolation");
+    const otherBytes = await bytes(f.app.store.directory(other.id));
+    p.protocols = [f.definition];
+    await f.owner(`/api/projects/${p.id}`, "PUT", p);
+    const plan = await f.owner(`/api/projects/${p.id}/plans`, "POST", {
+      name: "one frame then two HTTP consumers",
+      steps: [
+        {
+          id: "wire",
+          type: "protocol",
+          protocol: { definitionId: "framed" },
+          extract: [{ name: "tcp_frame", path: "$.base64" }],
+        },
+        {
+          id: "consumers",
+          type: "repeat",
+          count: 2,
+          steps: [{ id: "consume", request: f.consume }],
+        },
+      ],
+    });
+    const edited = await f.owner(`/api/projects/${p.id}`);
+    Object.assign(edited.protocols[0], {
+      completion: "first-data",
+      port: 1,
+      message: "must-not-send\n",
+    });
+    delete edited.protocols[0].delimiterHex;
+    await f.owner(`/api/projects/${p.id}`, "PUT", edited);
+    const store = f.app.store,
+      before = await store.get(p.id),
+      originalSave = store.save,
+      originalRead = store.readUnlocked,
+      directory = store.directory(p.id),
+      plans = path.join(directory, "plans"),
+      kept = path.join(directory, "plans-owned-backup"),
+      journalFile = path.join(directory, ".transaction.json");
+    let attempts = 0,
+      actualError,
+      obstructed = false,
+      result,
+      journal;
+    // Only the owned filesystem obstacle is injected; real Store.save creates
+    // the journal and classifies its failure. Never fabricate a typed outcome.
+    store.save = async function (candidate, options) {
+      if (candidate.id !== p.id || !options?.activity)
+        return originalSave.call(this, candidate, options);
+      attempts++;
+      this.readUnlocked = async function (key, ...args) {
+        const current = await originalRead.call(this, key, ...args);
+        this.readUnlocked = originalRead;
+        await rename(plans, kept);
+        await writeFile(plans, "delimiter-private-obstacle");
+        obstructed = true;
+        return current;
+      };
+      try {
+        return await originalSave.call(this, candidate, options);
+      } catch (error) {
+        actualError = error;
+        throw error;
+      } finally {
+        this.readUnlocked = originalRead;
+      }
+    };
+    try {
+      result = await f.owner(`/api/projects/${p.id}/protocol`, "POST", {
+        ...f.definition,
+        host: f.definition.url,
+        runId: "delimiter-uncertain",
+      });
+      checkFrame(result);
+      assert.equal(attempts, 1);
+      assert(actualError instanceof ProjectCommitUncertain);
+      assert.equal(actualError.projectId, p.id);
+      assert.equal(result.recordSaved, false);
+      assert.equal(result.recordId, null);
+      assert.equal(typeof result.attemptedRecordId, "string");
+      assert(result.attemptedRecordId.length > 0);
+      assert.deepEqual(result.persistenceOutcome, {
+        code: "PROJECT_COMMIT_UNCERTAIN",
+        project_id: p.id,
+        commit_outcome: "unknown",
+        retry_safe: false,
+      });
+      for (const privateText of [
+        f.root,
+        "delimiter-private-obstacle",
+        "ENOTDIR",
+        "EISDIR",
+      ])
+        assert(!JSON.stringify(result).includes(privateText));
+      journal = JSON.parse(await readFile(journalFile, "utf8"));
+      assert.equal(journal.protocolRuns.length, 1);
+      assert.equal(journal.protocolRuns[0].id, result.attemptedRecordId);
+      assert.equal(journal.protocolRuns[0].runId, "delimiter-uncertain");
+      assert.equal(journal.protocolRuns[0].status, "completed");
+      checkFrame(journal.protocolRuns[0].result);
+      assert.equal(journal.configRevision, before.configRevision);
+      assert.deepEqual(journal.plans, before.plans);
+      assert.deepEqual(f.seen, ["split"]);
+      assert.deepEqual(f.consumed, []);
+    } finally {
+      store.save = originalSave;
+      store.readUnlocked = originalRead;
+      if (obstructed) {
+        await rm(plans);
+        await rename(kept, plans);
+      }
+    }
+    const recovered = await new Store(f.root).get(p.id);
+    assert.deepEqual(recovered.protocolRuns, journal.protocolRuns);
+    assert.equal(recovered.configRevision, before.configRevision);
+    await assert.rejects(readFile(journalFile), { code: "ENOENT" });
+    const backup = await f.owner(`/api/projects/${p.id}/export`),
+      restored = await f.owner(
+        "/api/restore",
+        "POST",
+        { document: backup },
+        201,
+      );
+    await f.restart();
+    for (const mode of ["http", "stdio"]) {
+      const read = await f.connect(restored.id, mode, false);
+      assert.deepEqual(
+        decode(
+          await read("get_protocol_run", {
+            recordId: result.attemptedRecordId,
+          }),
+        ),
+        journal.protocolRuns[0],
+      );
+      assert.equal(
+        (
+          await read("get_protocol_run", {
+            projectId: p.id,
+            recordId: result.attemptedRecordId,
+          })
+        ).isError,
+        true,
+      );
+    }
+    assert.deepEqual(
+      f.seen,
+      ["split"],
+      "recovery, reads and backup restart never retry a completed TCP effect",
+    );
+    const execute = await f.connect(restored.id, "http"),
+      run = decode(await execute("execute_flow", { planId: plan.id }));
+    assert.equal(run.status, "passed", JSON.stringify(run.results));
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.recordId, run.id);
+    assert.equal(run.attemptedRecordId, run.id);
+    assert.equal(run.results.length, 3);
+    checkFrame(run.results[0].protocolResult.result);
+    assert.equal(
+      run.snapshot.steps[0].protocol.definition.delimiterHex,
+      "0d0a",
+    );
+    assert.equal(
+      run.snapshot.steps[0].protocol.definition.port,
+      f.definition.port,
+    );
+    assert.equal(
+      new Set(run.results.slice(1).map((item) => item.repeat.occurrenceId))
+        .size,
+      2,
+    );
+    assert.deepEqual(
+      run.results.slice(1).map((item) => item.repeat.iteration),
+      [0, 1],
+    );
+    assert.deepEqual(f.consumed, [
+      frame.toString("base64"),
+      frame.toString("base64"),
+    ]);
+    assert.deepEqual(f.seen, ["split", "split"]);
+    const runBackup = await f.owner(`/api/projects/${restored.id}/export`),
+      second = await f.owner(
+        "/api/restore",
+        "POST",
+        { document: runBackup },
+        201,
+      );
+    await f.restart();
+    const final = await f.owner(`/api/projects/${second.id}`);
+    assert.deepEqual(final.plans, runBackup.plans);
+    assert.deepEqual(final.protocolRuns, journal.protocolRuns);
+    assert.deepEqual(final.runs, runBackup.runs);
+    for (const mode of ["http", "stdio"]) {
+      const read = await f.connect(second.id, mode, false),
+        evidence = decode(
+          await read("get_execution_result", { runId: run.id }),
+        );
+      assert.deepEqual(
+        evidence,
+        runBackup.runs.find((item) => item.id === run.id),
+      );
+      assert.equal(evidence.planHash, run.planHash);
+      assert.deepEqual(evidence.snapshot, run.snapshot);
+    }
+    assert.deepEqual(f.seen, ["split", "split"]);
+    assert.equal(f.consumed.length, 2);
+    assert.deepEqual(await bytes(f.app.store.directory(other.id)), otherBytes);
   },
 );

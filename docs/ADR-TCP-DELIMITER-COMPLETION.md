@@ -102,3 +102,33 @@ These workflow specifications have only passed syntax/format checks locally. No
 application or network fixture was run; ordinary CI is still the acceptance gate.
 Root-only native exporters and typed journal-recovery composition remain separate
 checks because they are absent from the original PR12 dependency base.
+
+## Root composition specification (ordinary CI pending)
+
+Root integration preserves the accumulated handshake/template/callback/session
+receipts, Socket.IO/gRPC, collection scopes, repeat traversal and typed commit
+outcomes. Only the shared TCP options/transport/evidence branches and the existing
+pre-open session check receive the new mode; no core, Store, engine, dependency or
+budget changes are needed. The original PR12 feature tree remains independent.
+
+Two additional root-only whole workflows specify:
+
+- A previously exportable source-backed native TCP graph through owner and both
+  official SDK transports, then a completion-only delimiter edit rejected by both
+  native exporters without project/disk/network effects. A frozen-only delimiter
+  plan still rejects after removal of all live protocol definitions and source
+  archives; full backup and restart retain it. No native `end_func` field is
+  guessed, and no frozen protocol step is flattened into an HTTP native flow.
+- A completed frame whose real activity save encounters an owned filesystem
+  obstacle after its journal is admitted. The actual `ProjectCommitUncertain`
+  yields an unconfirmed receipt with the attempted record identity and unsafe-to-
+  retry outcome, never a second TCP send. Repair and a fresh Store reconcile the
+  same frame/evidence; backup/restart and scoped HTTP/stdio reads do not replay it.
+  Explicitly running the saved frozen TCP step after live endpoint/rule edits then
+  feeds two existing HTTP repeat consumers. A further backup/restart preserves
+  exact occurrence evidence, plan snapshot/hash and the earlier protocol record.
+
+These root cases reuse the ordinary transport fixture and are syntax-reviewed
+only locally. Existing feature cases and root typed-uncertainty tests remain
+unchanged. Their pending first combined CI is not implied by feature CI, and a
+future green run would not explain or repair the earlier script-final-body timeout.
