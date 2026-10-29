@@ -549,3 +549,182 @@ test(
     );
   },
 );
+
+test(
+  "root repeat collection retirement guards enabled and disabled references while historical occurrences survive backup restart and SDK reads",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t),
+      p = await f.app.store.create("Repeat collection retirement"),
+      other = await f.app.store.create("Unrelated repeat project"),
+      source = document(f.base, "retire-repeat");
+    // The retirement lifecycle needs no script execution or variable mutation.
+    source.item[0].event = [];
+    await f.owner(`/api/projects/${p.id}/import`, "POST", {
+      document: source,
+      postmanVariableMode: "collection",
+    });
+    const imported = await f.owner(`/api/projects/${p.id}`),
+      live = imported.requests[0],
+      collectionId = live.postmanCollectionId,
+      otherBytes = await bytes(f.app.store.directory(other.id));
+    const plan = await f.owner(`/api/projects/${p.id}/plans`, "POST", {
+      id: "retire-repeat",
+      name: "Historical repeat collection flow",
+      statusPolicy: "strict200",
+      environmentId: p.environments[0].id,
+      steps: [
+        {
+          type: "repeat",
+          id: "retire-group",
+          count: 2,
+          steps: [
+            { id: "executed-child", request: live },
+            { id: "disabled-child", enabled: false, request: live },
+          ],
+        },
+      ],
+    });
+    const run = await f.owner(`/api/projects/${p.id}/run`, "POST", {
+      planId: plan.id,
+    });
+    assert.equal(run.status, "passed");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.recordId, run.id);
+    assert.equal(run.attemptedRecordId, run.id);
+    assert.deepEqual(
+      run.results.map((result) => result.stepId),
+      ["executed-child", "executed-child"],
+    );
+    assert.deepEqual(
+      run.results.map((result) => result.repeat.iteration),
+      [0, 1],
+    );
+    assert.equal(
+      new Set(run.results.map((result) => result.repeat.occurrenceId)).size,
+      2,
+    );
+    const originalWire = [0, 1].map(() => ({
+      path: "/retire-repeat",
+      query: { scope: "retire-repeat", counter: "0", shadow: "collection" },
+    }));
+    assert.deepEqual(f.seen, originalWire);
+    const all = await f.owner(`/api/projects/${p.id}`),
+      savedRun = structuredClone(all.runs.find((item) => item.id === run.id)),
+      allBytes = await bytes(f.app.store.directory(p.id));
+    assert.equal(savedRun.id, run.id);
+    assert.equal(savedRun.planHash, run.planHash);
+    assert.deepEqual(savedRun.snapshot, run.snapshot);
+    assert.deepEqual(savedRun.results, run.results);
+
+    // Each candidate has just one bound repeat child and no live binding.
+    // Disabled child/group checks must not be masked by an enabled reference.
+    for (const kind of ["enabled-child", "disabled-child", "disabled-group"]) {
+      const candidate = structuredClone(all);
+      delete candidate.requests[0].postmanCollectionId;
+      const group = candidate.plans[0].steps[0];
+      group.steps = [group.steps[kind === "disabled-child" ? 1 : 0]];
+      if (kind === "disabled-group") group.enabled = false;
+      delete candidate.postmanCollections;
+      const rejected = await f.owner(
+        `/api/projects/${p.id}`,
+        "PUT",
+        candidate,
+        400,
+      );
+      assert.match(JSON.stringify(rejected), /Postman collection 引用不存在/);
+      assert.deepEqual(await f.owner(`/api/projects/${p.id}`), all);
+      assert.deepEqual(await bytes(f.app.store.directory(p.id)), allBytes);
+      assert.deepEqual(f.seen, originalWire);
+    }
+
+    // Remove the live and enabled child's bindings. The disabled repeat child
+    // is now the actual last current reference, not only a rejected candidate.
+    let current = await f.owner(`/api/projects/${p.id}`);
+    delete current.requests[0].postmanCollectionId;
+    delete current.plans[0].steps[0].steps[0].request.postmanCollectionId;
+    await f.owner(`/api/projects/${p.id}`, "PUT", current);
+    current = await f.owner(`/api/projects/${p.id}`);
+    assert.equal(
+      current.plans[0].steps[0].steps[1].request.postmanCollectionId,
+      collectionId,
+    );
+    const lastBytes = await bytes(f.app.store.directory(p.id)),
+      premature = structuredClone(current);
+    delete premature.postmanCollections;
+    assert.match(
+      JSON.stringify(
+        await f.owner(`/api/projects/${p.id}`, "PUT", premature, 400),
+      ),
+      /Postman collection 引用不存在/,
+    );
+    assert.deepEqual(await bytes(f.app.store.directory(p.id)), lastBytes);
+    delete current.plans[0].steps[0].steps[1].request.postmanCollectionId;
+    delete current.postmanCollections;
+    await f.owner(`/api/projects/${p.id}`, "PUT", current);
+    const retired = await f.owner(`/api/projects/${p.id}`);
+    assert.equal(Object.hasOwn(retired, "postmanCollections"), false);
+    assert.equal(retired.plans[0].steps[0].count, 2);
+    assert.equal(retired.plans[0].steps[0].steps[1].enabled, false);
+    assert(
+      retired.plans[0].steps[0].steps.every(
+        (child) => !Object.hasOwn(child.request, "postmanCollectionId"),
+      ),
+    );
+    assert.deepEqual(
+      retired.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    const retiredBytes = await bytes(f.app.store.directory(p.id));
+    assert.match(
+      JSON.stringify(
+        await f.owner(`/api/projects/${p.id}/plans`, "POST", run.snapshot, 400),
+      ),
+      /Postman collection 引用不存在/,
+    );
+    assert.deepEqual(await bytes(f.app.store.directory(p.id)), retiredBytes);
+    const backup = await f.owner(`/api/projects/${p.id}/export`),
+      restored = await f.owner(
+        "/api/restore",
+        "POST",
+        { document: backup },
+        201,
+      );
+    assert.notEqual(restored.id, p.id);
+    await f.restart();
+    const recovered = await f.owner(`/api/projects/${restored.id}`);
+    assert.equal(Object.hasOwn(recovered, "postmanCollections"), false);
+    assert.deepEqual(recovered.plans, retired.plans);
+    assert.deepEqual(
+      recovered.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    const restoredBytes = await bytes(f.app.store.directory(restored.id));
+    for (const mode of ["http", "stdio"]) {
+      const call = await f.connect(restored.id, mode);
+      const detail = decode(
+        await call("get_execution_result", { runId: run.id }),
+      );
+      assert.deepEqual(detail, savedRun);
+      assert.equal(detail.planHash, run.planHash);
+      assert.deepEqual(detail.snapshot, run.snapshot);
+      assert.deepEqual(detail.results, run.results);
+      const denied = await call("get_execution_result", {
+        projectId: p.id,
+        runId: run.id,
+      });
+      assert.equal(denied.isError, true);
+    }
+    assert.deepEqual(await bytes(f.app.store.directory(p.id)), retiredBytes);
+    assert.deepEqual(
+      await bytes(f.app.store.directory(restored.id)),
+      restoredBytes,
+    );
+    assert.deepEqual(await bytes(f.app.store.directory(other.id)), otherBytes);
+    assert.deepEqual(
+      f.seen,
+      originalWire,
+      "retirement and historical repeat reads never replay either occurrence",
+    );
+  },
+);

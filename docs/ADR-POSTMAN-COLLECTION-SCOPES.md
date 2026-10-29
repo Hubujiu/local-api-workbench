@@ -197,3 +197,48 @@ The last check is transaction admission, not an atomic abort guarantee through
 physical journal publication. Historical evidence is never rewritten. The existing
 root typed-uncertainty case is unchanged. These application workflows are only
 syntax/format checked locally; actual root acceptance awaits its own ordinary CI.
+
+## Reference-retirement lifecycle specification (CI pending)
+
+A remaining acceptance gap is now specified as one complete workflow, not a new
+production capability: owner PUT must reject registry deletion when the sole
+current reference is respectively a live API, a frozen case or a disabled plan.
+After the final current reference is deliberately removed, the registry can be
+retired while the old run/snapshot/hash remains unchanged and readable. Historical
+evidence alone must not permit re-saving an executable missing-collection plan.
+The specification backs up/restores that retired state, truly restarts the owner,
+and reads the old result through both official SDK transports without replay.
+
+Both SDK clients have write permission and verify the existing sync tool is listed;
+unsupported postmanVariableMode parameters must fail specifically as unknown
+parameters without project/disk changes. This feature base has neither native
+project import/export nor canonical repeat. It does not add those dependencies or
+reinterpret unknown CLI flags. Repeat-reference composition remains root-specific.
+
+No production code, assertion, dependency, application/VM budget or existing test
+has been changed for this addition. It has not been run locally as an application.
+The prior root CI 40867220452 script-final-body timeout and intermediate WIP format
+failure remain retained; this acceptance specification is not a causal repair or
+permission to rerun those failures. A subsequent source run must report any failure
+truthfully rather than substitute a new test count for backend completion.
+
+### Root repeat reference-retirement composition (CI pending)
+
+The root adds one whole lifecycle for a real two-occurrence repeat run. Owner PUT
+independently rejects registry deletion for an enabled child, a disabled child and
+a child of a disabled group, with no live reference masking those checks. After
+unbinding the live API and active child, the actual last disabled-child binding
+still blocks deletion. Removing that final binding permits registry retirement
+while keeping the current unbound repeat definition and the old bound run intact.
+Full backup/restore and a true restart retain the exact old snapshot, hash and
+occurrence results; read-only HTTP/stdio SDK clients read those records without
+replay or cross-project permission. Re-saving the old missing-collection snapshot
+remains rejected. These additions change no production or existing test cases.
+
+The feature retirement run CI 40894289605 exposed a fixture dependency mismatch:
+its base acknowledges `recordSaved` but has no root-only `recordId`. Feature commit
+2026b63 corrects that assertion against the actual persisted run identity. Root
+retains its real typed `recordId` contract and the new repeat case also checks
+`attemptedRecordId`; no production field is added to satisfy a test. Both that
+feature failure and the older root script-final-body timeout remain retained.
+This test-only composition is not a repair or causal explanation of the timeout.
