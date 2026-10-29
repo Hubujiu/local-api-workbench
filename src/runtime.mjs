@@ -565,7 +565,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       throw Error("NTLM服务器关闭连接，拒绝重放凭据");
     const authenticatedHeaders = {
       ...headers,
-      authorization: ntlmType3(challenge, r.auth),
+      authorization: ntlmType3(challenge, r.auth, headers.authorization),
     };
     if (cookieSession && !signal?.aborted) {
       await cookieSession.capture(u.href, first.headers["set-cookie"]);

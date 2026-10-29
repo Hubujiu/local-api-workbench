@@ -92,6 +92,7 @@ export function parseNtlmChallenge(header) {
   const info = read(40);
   const seen = new Set();
   let timestamp,
+    avFlags = 0,
     ended = false;
   for (let at = 0; at < info.length; ) {
     if (at + 4 > info.length) throw Error("NTLM AV字段截断");
@@ -109,8 +110,12 @@ export function parseNtlmChallenge(header) {
       ended = true;
       break;
     }
-    if (id >= 8 || (id === 6 && (length !== 4 || value.readUInt32LE(0) !== 0)))
-      throw Error("服务器要求暂不支持的NTLM MIC/EPA/通道绑定，不能降级");
+    if (
+      id >= 8 ||
+      (id === 6 && (length !== 4 || ![0, 2].includes(value.readUInt32LE(0))))
+    )
+      throw Error("服务器要求暂不支持的NTLM AV标志/EPA/通道绑定，不能降级");
+    if (id === 6) avFlags = value.readUInt32LE(0);
     if (id === 7) {
       if (length !== 8) throw Error("NTLM时间戳无效");
       timestamp = Buffer.from(value);
@@ -120,6 +125,8 @@ export function parseNtlmChallenge(header) {
   if (!ended) throw Error("NTLM AV缺少结束标记");
   return {
     flags,
+    message: Buffer.from(b),
+    provideMic: Boolean(timestamp || avFlags & 2),
     serverChallenge: Buffer.from(b.subarray(24, 32)),
     targetInfo: Buffer.from(info),
     timestamp,
@@ -173,37 +180,120 @@ export function ntlmV2Response(input, serverChallenge, targetInfo, fixed = {}) {
     ]),
   };
 }
-export function ntlmType3(challenge, input) {
+// This is the actual host-sent Type1, not a reconstruction from credentials.
+function negotiateMessage(header) {
+  if (
+    typeof header !== "string" ||
+    header.length > 16389 ||
+    !/^NTLM [A-Za-z0-9+/]+={0,2}$/.test(header)
+  )
+    throw Error("NTLM MIC缺少有效的原始Type1消息");
+  const token = header.slice(5),
+    b = Buffer.from(token, "base64");
+  if (
+    b.toString("base64") !== token ||
+    b.length < 32 ||
+    !b.subarray(0, 8).equals(signature) ||
+    b.readUInt32LE(8) !== 1
+  )
+    throw Error("NTLM MIC原始Type1消息无效");
+  const flags = b.readUInt32LE(12),
+    headerLength = flags & 0x02000000 ? 40 : 32;
+  if (
+    b.length < headerLength ||
+    (flags & 0x00080201) !== 0x00080201 ||
+    flags & 0x40000030
+  )
+    throw Error("NTLM MIC原始Type1能力无效");
+  for (const at of [16, 24]) {
+    const length = b.readUInt16LE(at),
+      maximum = b.readUInt16LE(at + 2),
+      offset = b.readUInt32LE(at + 4);
+    if (
+      maximum < length ||
+      (length && (offset < headerLength || offset + length > b.length))
+    )
+      throw Error("NTLM MIC原始Type1字段无效");
+  }
+  return b;
+}
+function micTargetInfo(info) {
+  const copied = Buffer.from(info);
+  for (let at = 0; at < copied.length; ) {
+    const id = copied.readUInt16LE(at),
+      length = copied.readUInt16LE(at + 2);
+    if (id === 6) {
+      copied.writeUInt32LE(2, at + 4);
+      return copied;
+    }
+    if (id === 0) {
+      if (copied.length + 8 > 8192) throw Error("NTLM MIC目标信息超过上限");
+      return Buffer.concat([
+        copied.subarray(0, at),
+        Buffer.from("0600040002000000", "hex"),
+        copied.subarray(at),
+      ]);
+    }
+    at += 4 + length;
+  }
+  throw Error("NTLM MIC目标信息缺少结束标记");
+}
+export function ntlmType3(challenge, input, sentType1) {
+  // Use the retained, bounded wire message as authoritative. Caller mutation of
+  // convenient parsed fields must not change the authenticated transcript.
+  if (challenge && Object.hasOwn(challenge, "message")) {
+    if (!Buffer.isBuffer(challenge.message) || challenge.message.length > 12288)
+      throw Error("NTLM原始Type2消息无效");
+    challenge = parseNtlmChallenge(
+      "NTLM " + challenge.message.toString("base64"),
+    );
+  }
+  const provideMic = Boolean(challenge.provideMic || challenge.timestamp);
+  if (provideMic && !Buffer.isBuffer(challenge.message))
+    throw Error("NTLM MIC缺少原始Type2消息");
+  const type1 = provideMic ? negotiateMessage(sentType1) : undefined;
   const c = credentials(input),
     r = ntlmV2Response(
       c,
       challenge.serverChallenge,
-      challenge.targetInfo,
+      provideMic ? micTargetInfo(challenge.targetInfo) : challenge.targetInfo,
       challenge.timestamp
         ? { timestamp: challenge.timestamp, serverTimestamp: true }
         : {},
     );
-  const parts = [
-    r.lm,
-    r.nt,
-    Buffer.from(c.domain, "utf16le"),
-    Buffer.from(c.username, "utf16le"),
-    Buffer.from(c.workstation, "utf16le"),
-    Buffer.alloc(0),
-  ];
-  const flags = (challenge.flags & FLAGS) >>> 0,
-    headerLength = flags & 0x02000000 ? 72 : 64;
-  const b = Buffer.alloc(
-    headerLength + parts.reduce((n, x) => n + x.length, 0),
-  );
-  signature.copy(b);
-  b.writeUInt32LE(3, 8);
-  b.writeUInt32LE(flags, 60);
-  if (headerLength === 72) version.copy(b, 64);
-  let offset = headerLength;
-  parts.forEach((part, index) => {
-    offset = field(b, 12 + index * 8, part, offset);
-  });
-  r.key.fill(0);
-  return "NTLM " + b.toString("base64");
+  let sessionKey;
+  try {
+    const parts = [
+      r.lm,
+      r.nt,
+      Buffer.from(c.domain, "utf16le"),
+      Buffer.from(c.username, "utf16le"),
+      Buffer.from(c.workstation, "utf16le"),
+      Buffer.alloc(0),
+    ];
+    const flags = (challenge.flags & FLAGS) >>> 0,
+      headerLength = provideMic ? 88 : flags & 0x02000000 ? 72 : 64;
+    const b = Buffer.alloc(
+      headerLength + parts.reduce((n, x) => n + x.length, 0),
+    );
+    signature.copy(b);
+    b.writeUInt32LE(3, 8);
+    b.writeUInt32LE(flags, 60);
+    if (flags & 0x02000000) version.copy(b, 64);
+    let offset = headerLength;
+    parts.forEach((part, index) => {
+      offset = field(b, 12 + index * 8, part, offset);
+    });
+    if (provideMic) {
+      sessionKey = hmac(r.key, r.nt.subarray(0, 16));
+      hmac(sessionKey, Buffer.concat([type1, challenge.message, b])).copy(
+        b,
+        72,
+      );
+    }
+    return "NTLM " + b.toString("base64");
+  } finally {
+    r.key.fill(0);
+    sessionKey?.fill(0);
+  }
 }
