@@ -1,5 +1,12 @@
 // Real application/HTTP/SDK/CLI workflows: ordinary CI only, not local execution.
 import test from "node:test";
+import { stringify as yamlStringify } from "yaml";
+import {
+  formMedia,
+  invalidEncodings,
+  encodingDocument,
+  mixedEncodingDocument,
+} from "./fixtures/openapi-form-encoding.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -486,3 +493,152 @@ test(
     assert.deepEqual((await f.get(p.id)).requests, seed.requests);
   },
 );
+
+// Selected-form validation belongs to this multipart feature, not a new codec.
+for (const transport of ["http", "stdio"])
+  test(
+    `OpenAPI encoding validation is atomic through owner and ${transport} sync, with default-media roundtrip and restart`,
+    { timeout: 60000 },
+    async (t) => {
+      const f = await fixture(t),
+        p = await f.project("encoding controls"),
+        other = await f.project("encoding isolation");
+      const c = await f.connect(p.id, transport);
+      assert(
+        (await c.listTools()).tools.some(
+          (tool) => tool.name === "localapi_sync_openapi",
+        ),
+      );
+      const invoke = (id, document) =>
+        c.callTool({
+          name: "localapi_sync_openapi",
+          arguments: { projectId: id, document, coverMode: "url_and_folder" },
+        });
+      const allBefore = await files(f.root);
+      for (const mime of formMedia)
+        for (const encoding of invalidEncodings) {
+          const document = mixedEncodingDocument(f.origin, mime, encoding);
+          for (const source of [
+            JSON.stringify(document),
+            yamlStringify(document),
+          ]) {
+            const error = await f.owner(
+              `/api/projects/${p.id}/import`,
+              { document: source },
+              "POST",
+              400,
+            );
+            assert.match(error.error, /encoding/);
+            assert.deepEqual(await files(f.root), allBefore);
+          }
+          const result = await invoke(p.id, document);
+          assert.equal(result.isError, true);
+          assert.match(result.content[0].text, /encoding/);
+          assert.deepEqual(await files(f.root), allBefore);
+          assert.equal(f.seen.length, 0);
+          assert.equal(f.connections, 0);
+        }
+      const denied = await invoke(
+        other.id,
+        encodingDocument(f.origin, formMedia[0], {}),
+      );
+      assert.equal(denied.isError, true);
+      assert.deepEqual(await files(f.root), allBefore);
+      const otherBefore = await files(f.app.store.directory(other.id));
+      for (const mime of formMedia) {
+        const controls = [
+          encodingDocument(f.origin, mime, undefined, false),
+          encodingDocument(f.origin, mime, {}),
+          encodingDocument(f.origin, mime, { meta: {}, "x-field": {} }),
+        ];
+        for (const document of controls) {
+          if (mime !== "multipart/form-data") {
+            document.paths["/urlencoded"] = document.paths["/upload"];
+            document.paths["/urlencoded"].post.operationId =
+              "urlencoded-control";
+            delete document.paths["/upload"];
+          }
+          const synced = decode(await invoke(p.id, JSON.stringify(document)));
+          assert.equal(synced.length, 1);
+          assert(
+            synced[0].form.every((row) => !Object.hasOwn(row, "contentType")),
+          );
+        }
+      }
+      const exported = await f.owner(
+        `/api/projects/${p.id}/export?format=openapi`,
+        undefined,
+        "GET",
+      );
+      const roundtrip = await f.project("encoding roundtrip");
+      const imported = await f.owner(`/api/projects/${roundtrip.id}/import`, {
+        document: exported,
+      });
+      assert.equal(imported.requests.length, 2);
+      for (const request of imported.requests) {
+        assert.deepEqual(
+          request.form.map(({ key, value }) => [key, value]),
+          [
+            ["meta", "雪 & +"],
+            ["x-field", "literal"],
+            ["exampleOnly", "kept"],
+          ],
+        );
+        assert(request.form.every((row) => !Object.hasOwn(row, "contentType")));
+      }
+      const plan = await f.owner(`/api/projects/${roundtrip.id}/plans`, {
+        name: "default encoding frozen",
+        steps: imported.requests.map((request, i) => ({
+          id: "step-" + i,
+          request,
+        })),
+      });
+      const frozen = (await f.get(roundtrip.id)).plans.find(
+        (item) => item.id === plan.id,
+      );
+      const backup = await f.owner(
+        `/api/projects/${roundtrip.id}/export`,
+        undefined,
+        "GET",
+      );
+      const restored = await f.owner(
+        "/api/restore",
+        { document: backup },
+        "POST",
+        201,
+      );
+      assert.equal(f.seen.length, 0);
+      await f.restart();
+      const persisted = await f.get(restored.id);
+      assert.deepEqual(
+        persisted.plans.find((item) => item.id === plan.id),
+        frozen,
+      );
+      const run = await f.owner(`/api/projects/${restored.id}/run`, {
+        planId: plan.id,
+      });
+      assert.equal(run.status, "passed");
+      assert.equal(run.planHash, hash(frozen));
+      assert.equal(f.seen.length, 2);
+      for (const request of imported.requests) {
+        const wire = f.seen.find(
+          (record) => record.url === new URL(request.url).pathname,
+        );
+        assert(wire);
+        if (request.bodyType === "form-data") checkWire(wire, request.form);
+        else {
+          assert.match(wire.type, /^application\/x-www-form-urlencoded/);
+          assert.equal(
+            wire.body.toString(),
+            new URLSearchParams(
+              request.form.map((row) => [row.key, row.value]),
+            ).toString(),
+          );
+        }
+      }
+      assert.deepEqual(
+        await files(f.app.store.directory(other.id)),
+        otherBefore,
+      );
+    },
+  );

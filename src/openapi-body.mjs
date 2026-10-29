@@ -1,3 +1,4 @@
+import { validateOpenAPIFormEncoding } from "./openapi-form-encoding.mjs";
 import { assertMultipartMediaExportable } from "./multipart-part-media.mjs";
 function requestBodyAnnotations(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body))
@@ -79,6 +80,7 @@ export function importOpenAPIBody(requestBody) {
     throw Error("OpenAPI 表单根类型必须是 object");
   if (!example || typeof example !== "object" || Array.isArray(example))
     throw Error("表单示例必须是对象");
+  validateOpenAPIFormEncoding(media, schema);
   const properties = schema.properties || {};
   const keys = [
     ...new Set([...Object.keys(properties), ...Object.keys(example)]),
@@ -86,10 +88,7 @@ export function importOpenAPIBody(requestBody) {
   const form = keys.map((key) => {
     if (["__proto__", "constructor", "prototype"].includes(key))
       throw Error("不安全的表单字段");
-    const definition = properties[key] ?? {},
-      encoding = media.encoding?.[key] || {};
-    if (Object.keys(encoding).length)
-      throw Error("尚不支持 OpenAPI 表单自定义 encoding");
+    const definition = properties[key] ?? {};
     if (
       ["array", "object"].includes(definition.type) ||
       hasComposition(definition) ||
