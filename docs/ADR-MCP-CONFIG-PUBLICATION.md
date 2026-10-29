@@ -63,3 +63,9 @@ the owner transaction and session-project removal inside archive revocation.
 
 Production coordinator and call sites are implemented; syntax only checked.
 Whole-flow and concurrency verification remain pending. Not accepted.
+
+Static review additionally found two ordering edges now addressed: archive
+removal preserves the policy projects-array identity for unrelated in-flight
+canonical creates; occupied-port fallback holds the queue while opening its
+replacement listener and saving the disabled policy. Pure helper/filesystem
+checks pass locally; application whole-flow acceptance remains pending CI.

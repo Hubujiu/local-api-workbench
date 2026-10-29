@@ -579,7 +579,12 @@ export async function createApp({
                 b,
                 () => store.save(b),
                 (projectId) => {
-                  mcp.projects = mcp.projects.filter((id) => id !== projectId);
+                  // Existing canonical dispatchers retain this policy's array.
+                  // Remove in place so unrelated in-flight creates retain their
+                  // grant without reviving the archived project's permission.
+                  for (let i = mcp.projects.length - 1; i >= 0; i--)
+                    if (mcp.projects[i] === projectId)
+                      mcp.projects.splice(i, 1);
                 },
               );
               if (b.archived && mcp.remember)
@@ -1447,15 +1452,17 @@ export async function createApp({
       !persistedMCP?.remember
     )
       throw error;
-    mcp.enabled = false;
-    mcpToken = "";
-    mcpWarning =
-      "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
-    await listen(0);
-    await saveMCPConfig(path.resolve(root), {
-      ...mcp,
-      token: "",
-      port: server.address().port,
+    await mcpPublication.run(async () => {
+      mcp.enabled = false;
+      mcpToken = "";
+      mcpWarning =
+        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
+      await listen(0);
+      await saveMCPConfig(path.resolve(root), {
+        ...mcp,
+        token: "",
+        port: server.address().port,
+      });
     });
   }
 
