@@ -1,4 +1,9 @@
 import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
+import {
+  writeDebugVariables,
+  publishDebugVariables,
+  clearDebugVariables,
+} from "./debug-publication.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -603,7 +608,7 @@ export async function createApp({
               if (!data.variables || Object.keys(data.variables).length > 10000)
                 throw Error("运行时变量最多10000项");
               const variables = scopeMap(data.variables);
-              debugEnvironments.set(context.cacheKey, {
+              writeDebugVariables(debugEnvironments, p.id, context.cacheKey, {
                 fingerprint: context.fingerprint,
                 variables,
               });
@@ -617,8 +622,7 @@ export async function createApp({
             });
           }
           if (action === "clear-session" && req.method === "POST") {
-            for (const key of debugEnvironments.keys())
-              if (key.startsWith(p.id + ":")) debugEnvironments.delete(key);
+            clearDebugVariables(debugEnvironments, p.id);
             return json(res, 200, { ok: true });
           }
           if (action === "location" && req.method === "GET")
@@ -1285,8 +1289,7 @@ export async function createApp({
                 b.environmentId,
                 debugEnvironments,
               );
-              const environmentKey = context.cacheKey,
-                env = context.variables;
+              const env = context.variables;
               const request = normalizeRequest(
                 freezeServiceBinding(p, b.request),
               );
@@ -1320,7 +1323,7 @@ export async function createApp({
               );
               const result = single.results[0];
               if (result?.response)
-                debugEnvironments.set(environmentKey, {
+                publishDebugVariables(debugEnvironments, context.publication, {
                   fingerprint: JSON.stringify(
                     environmentVariables(p, context.environment.id),
                   ),
