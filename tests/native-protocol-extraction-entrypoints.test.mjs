@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,20 @@ import {
 } from "./fixtures/apipost-extended-protocols.mjs";
 import { nativeProtocolFixture } from "./fixtures/apipost-native-protocols.mjs";
 import { runPlanCLI } from "./helpers/run-plan-cli.mjs";
+
+async function projectFileBytes(directory) {
+  const result = {};
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const filename = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      for (const [name, bytes] of Object.entries(
+        await projectFileBytes(filename),
+      ))
+        result[entry.name + "/" + name] = bytes;
+    } else result[entry.name] = (await readFile(filename)).toString("base64");
+  }
+  return result;
+}
 
 for (const transport of ["http", "stdio"])
   test(
@@ -218,7 +232,7 @@ for (const transport of ["http", "stdio"])
           url: url + "/{{runtimeToken}}/{{envToken}}/{{globalToken}}",
         },
       });
-      const plan = await call("create_execution_flow", {
+      const input = {
         projectId: project.id,
         plan: {
           name: "atomic extraction seven steps",
@@ -233,8 +247,43 @@ for (const transport of ["http", "stdio"])
             echo(),
           ],
         },
-      });
+      };
+      // Cloning a frozen step also clones its plan-step identity, distinct from
+      // grpc.definition.id. Reject the duplicate, then give the new step its own
+      // identity without changing the shared template or protocol/scopes checks.
+      assert.equal(initial.id, grpcStep.id);
+      assert.equal(initial.grpc.definition.id, grpcStep.grpc.definition.id);
+      const beforeDuplicate = await app.store.get(project.id);
+      const bytesBeforeDuplicate = await projectFileBytes(
+        app.store.directory(project.id),
+      );
+      const duplicate = await raw("create_execution_flow", input);
+      assert.equal(duplicate.isError, true);
+      assert.match(duplicate.content[0].text, /步骤ID无效或重复/);
+      assert.deepEqual(await app.store.get(project.id), beforeDuplicate);
+      assert.deepEqual(
+        await projectFileBytes(app.store.directory(project.id)),
+        bytesBeforeDuplicate,
+      );
+      assert.deepEqual(
+        seen,
+        [],
+        "duplicate identities cannot start any transport",
+      );
+      delete initial.id;
+      const plan = await call("create_execution_flow", input);
       assert.equal(plan.steps.length, 7);
+      assert.equal(plan.steps[1].id, grpcStep.id);
+      assert.notEqual(plan.steps[0].id, grpcStep.id);
+      assert.equal(
+        plan.steps[0].grpc.definition.id,
+        grpcStep.grpc.definition.id,
+      );
+      assert.equal(
+        plan.steps[1].grpc.definition.id,
+        grpcStep.grpc.definition.id,
+      );
+      assert.equal(new Set(plan.steps.map((step) => step.id)).size, 7);
       assert(
         plan.steps[5].protocol.definition,
         "protocol reference freezes the imported template",
