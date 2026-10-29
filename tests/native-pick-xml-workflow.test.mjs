@@ -377,6 +377,11 @@ test("native responseXml rejects unsafe or ambiguous login XML atomically, prese
             sample.error ?? /XML|XPath|pickVars/,
           ),
         JSON.stringify(run),
+        {
+          loginRequestCount: seen.filter((url) => url === "/login").length,
+          laterRequestCount: seen.filter((url) => url === "/later").length,
+          hasRecordedResponse: Object.hasOwn(run.results[0], "response"),
+        },
       );
       assert.deepEqual(seen, ["/login"]);
       assert.equal(run.variables.token, "stale");

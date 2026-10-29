@@ -43,3 +43,56 @@ ExecutionStatus remains explicit even when the output path later fails. An activ
 The same `requestKey` validation now governs stdio error correlation as session admission: safe integers and strings of at most 256 UTF-8 bytes may be echoed, including numeric zero and the empty string. Invalid IDs are omitted from error responses, never copied into the output and never replaced by `null` (the official SDK's error schema accepts an optional ID, not a nullable one). Legal duplicate IDs and tool/session quota failures still retain their original IDs. Invalid IDs consume no execution lease or session request quota.
 
 Malformed JSON is classified as `-32700`; syntactically valid JSON rejected by the SDK JSON-RPC schema is `-32600`. Both use fixed short messages and omit the uncorrelatable ID. Later valid messages remain usable through the same official SDK stdio transport. This only fixes early error framing: frame/queue/input budgets, admission counts, cancellation, EOF handling, and mutation delivery/rollback semantics are unchanged.
+
+## Scope-save cancellation admission
+
+A script can finish successfully before its environment/global update waits in
+Store's queue or for the project lock. The previous scope adapter checked abort
+before calling `save`, but omitted the signal from that call. Cancellation during
+that wait could therefore be followed by a new variable transaction. The existing
+pure tests covered cancellation after `get` and before conflict retry, not this
+queued-save boundary.
+
+`persistScopeChanges` now forwards the exact execution signal to `Store.save`.
+This feature line necessarily backports only the existing Store signal parameter
+and entry/final-locked admission checks from PR4 (root commits `83cd69f` and
+`11d128e`); it does not import active-source synchronization or integration ancestry.
+The feature dependency remains `fix/script-sequence-budgets`.
+
+The final check is **before entering asynchronous `writeProject`**, not an atomic
+promise to abort until the physical journal file appears. An already admitted
+transaction may finish after cancellation. There is no post-success abort check,
+rollback claim, network replay, or new retry. Existing lock waiting is not made
+promptly abortable. Reading may recover an older journal before the check; clean
+fixtures assert that this cancelled candidate causes no new scope transaction,
+not that all conceivable recovery leaves the disk unchanged. Terminal activity
+and execution-history writes remain unsignalled and can still preserve evidence.
+
+The bounded CI workflow uses a test-only real-file-lock gate around the original
+Store.save, never a mocked save outcome. Owner cancellation and official SDK HTTP
+and actual production stdio cancellation exercise pre/post scripts, completed
+async child HTTP, both variable scopes, cancelled terminal readback, later-step
+suppression, unchanged clean configuration files, prior pre-stage commits,
+backup/restore, restart and an unrelated project. A separate actual Store case
+cancels after confirmed persistence but before the caller continuation and retains
+the committed value/acknowledgment. Pure fixtures pin exact signal identity,
+queued rejection, confirmed late abort and unchanged storage-error identity.
+The older feature line does not acquire root-only typed commit-outcome facilities;
+genuine typed-uncertainty coverage remains an explicit root integration check.
+
+Local verification is restricted to inspected pure helpers plus syntax/format;
+no application, VM, XML or database workload was run locally. Actual owner/SDK/
+Store workflow outcomes remain pending exact-head ordinary CI.
+
+### Root typed-outcome composition
+
+Root keeps its existing signal-aware Store byte-for-byte; only the scope adapter
+production call changes. The combined workflow additionally creates a real
+post-admission journal/apply obstacle after a completed HTTP response, then
+cancels before propagating the genuine `ProjectCommitUncertain`. It requires
+`scopeCommit.outcome: unknown`, the truthful unsaved terminal-record receipt and
+no replay. Repair/read recovers the already admitted scope candidate, including
+its successful earlier pre-stage write; backup restore does not execute anything.
+Together with the confirmed-save/late-abort case, this distinguishes rejected
+admission, acknowledged persistence and uncertainty without implying rollback.
+This root-only workflow is specified for ordinary CI, not executed locally.

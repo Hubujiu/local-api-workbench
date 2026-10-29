@@ -86,9 +86,34 @@ export function cliResultMetadata(stdout) {
   return result;
 }
 
+// Optional test-side facts already observed by a fixture. These are not worker
+// request counters or a claimed before/after phase; no URLs or values are copied.
+// Response presence means an own record property, not success or phase completion.
+// Out-of-range counts are omitted, not clamped or used to change test admission.
+export function workflowFailureObservations(source) {
+  const result = object();
+  if (!source || typeof source !== "object" || isProxy(source)) return result;
+  for (const key of [
+    "loginRequestCount",
+    "laterRequestCount",
+    "hasRecordedResponse",
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) continue;
+    const value = descriptor.value;
+    if (
+      key === "hasRecordedResponse"
+        ? typeof value === "boolean"
+        : Number.isSafeInteger(value) && value >= 0 && value <= 16
+    )
+      result[key] = value;
+  }
+  return result;
+}
+
 // Synchronous by design: retain the caller's exact assertion, one invocation,
 // expected/actual values and AssertionError identity. Parse only on failure.
-export function withCLIResultDiagnostics(assertion, stdout) {
+export function withCLIResultDiagnostics(assertion, stdout, observations) {
   try {
     return assertion();
   } catch (error) {
@@ -96,6 +121,9 @@ export function withCLIResultDiagnostics(assertion, stdout) {
       const descriptor = Object.getOwnPropertyDescriptor(error, "message");
       if (descriptor?.writable && typeof descriptor.value === "string") {
         const metadata = cliResultMetadata(stdout);
+        const workflow = workflowFailureObservations(observations);
+        if (Object.keys(workflow).length)
+          metadata.workflowObservations = workflow;
         let suffix = "\nCLI_RESULT_METADATA " + JSON.stringify(metadata);
         if (Buffer.byteLength(suffix) > 4096)
           suffix = '\nCLI_RESULT_METADATA {"input":"metadata-too-large"}';

@@ -140,7 +140,7 @@ export async function persistScopeChanges(
     }
     try {
       if (signal?.aborted) throw Error("变量提交已取消");
-      await store.save(project);
+      await store.save(project, { signal });
       return { project, scopes: projectScopes(project, environmentId) };
     } catch (error) {
       if (attempt === 4 || !/项目.*已被其他/.test(error.message)) throw error;
