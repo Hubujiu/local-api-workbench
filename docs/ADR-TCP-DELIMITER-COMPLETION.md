@@ -1,8 +1,8 @@
 # Bounded TCP delimiter response completion
 
-Status: staged implementation, not complete or accepted. This first checkpoint
-freezes the contract and adds an isolated pure matcher; no entrypoint is enabled
-until transport, persistence and full workflow specifications are connected.
+Status: backend implementation and full workflow specifications; ordinary CI
+acceptance is pending. The first staged checkpoint froze this contract and added
+only the pure matcher; later checkpoints below connect the runtime and evidence.
 
 ## Source and dependency boundary
 
@@ -78,3 +78,27 @@ Eight inspected pure matcher/options/evidence tests pass; application workflows
 remain unexecuted locally and must be added/validated by normal CI. The independent
 review caught a missing initial interactive guard while wiring; it was added before
 this checkpoint rather than claiming the intended patch had already applied.
+
+## Complete ordinary workflow specifications (CI pending)
+
+Two official HTTP/stdio SDK chains now specify owner persistence, invalid saves
+and saved-rule overrides with unchanged bytes, direct/saved interactive rejection,
+a real split-marker exchange, and frozen TCP extraction into a real HTTP consumer.
+They then edit the live endpoint/rule, execute the old frozen definition, restore
+and truly restart, read exact historical evidence with scoped SDK grants, and run
+the restored saved plan through the actual CLI. A self-consistent rehashed but
+semantically false framing record must still fail restore atomically. An injected
+record-append rejection retains the actual completed TCP result and unsaved receipt
+without a second send. It tests this feature's existing receipt contract, not root's
+typed journal uncertainty. A third whole workflow covers EOF/deadline with partial
+or empty bytes, default-plan failure for an incomplete frame, explicit in-flight
+cancellation before a subsequent HTTP step, legacy completion controls and inert
+backup/restart of the resulting evidence.
+
+The real peer's write boundary is deliberately not equated with a TCP data event:
+observed trailing bytes must match the sent tail prefix, while all arbitrary chunk
+partitions and exact same-chunk tail retention are locked by the pure matcher.
+These workflow specifications have only passed syntax/format checks locally. No
+application or network fixture was run; ordinary CI is still the acceptance gate.
+Root-only native exporters and typed journal-recovery composition remain separate
+checks because they are absent from the original PR12 dependency base.
