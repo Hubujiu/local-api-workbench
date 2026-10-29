@@ -1,0 +1,52 @@
+# MCP remembered policy publication (work in progress)
+
+## Defect and scope
+
+Within one running workbench, an older auxiliary remembered-config write can
+finish after an owner disables, rotates or forgets MCP access. Atomic rename
+alone does not order policy transactions: disk can retain the old bearer and
+grants while memory reflects revocation, then restart restores stale access.
+The existing persistence test only exercises sequential changes.
+
+## Contract
+
+A per-app coordinator serializes complete owner policy transactions: validate
+current active projects, compute policy, persist it, then synchronously publish
+memory and invalidate existing temporary grants/sessions. Queue order is the
+order admitted after parsing input. A failed task rejects its caller but never
+poisons the queue. Failed pre-commit persistence does not publish a new policy.
+
+Auxiliary canonical project-create saves carry policy identity and read current
+state only when admitted. An old dispatch must not persist or promote its old
+project array into a replacement policy. Native-created project grants remain
+session-only. Same-policy successful creates are retained together.
+
+Archive save, its existing commit-aware revocation, and remembered policy save
+share this queue with owner config changes. Other project writes do not. Owner
+validation rejects missing, archived or unreadable projects, so a queued stale
+selection cannot restore an archive-revoked grant. Unarchive never grants access.
+The existing archive uncertainty classification must remain intact in root.
+
+Temporary config files are cleaned after failed writes/rename without hiding
+the primary error. Existing opt-in persistence, token generation, write/execute
+permission requirements and port-conflict behavior remain. No real credentials
+or external account configuration is involved. This is per-app ordering, not a
+claim of cross-process root locking, transactional project+config storage or
+crash-proof atomicity across these separate files.
+
+## Required acceptance (not yet run)
+
+Deterministic coordinator barriers establish both queue orders: an auxiliary
+write held before rename precedes a pending disable/rotate/forget; an old
+auxiliary queued behind owner publication skips after identity changes. Never
+wait for a queued owner to finish before releasing the earlier barrier.
+
+Actual filesystem and owner HTTP/MCP SDK workflows use synthetic managed roots:
+remembered enable, two canonical creates, denied other project, disable/rotate/
+forget, archived project, restart, old bearer rejection and preserved unrelated
+policy. Include pre-rename save failure, recovery by a later explicit owner
+change, and no replay of successful project creation. No token is logged.
+
+Only pure coordinator/helper checks and syntax checks run locally. Application,
+SDK and restart workflows require ordinary exact-commit CI. No VM/DB/provider
+workload, timeout change, manual CI rerun, merge, deployment or frontend work.
