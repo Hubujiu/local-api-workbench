@@ -1,4 +1,5 @@
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
+import { saveProjectArchive } from "./project-archive-grants.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -554,11 +555,15 @@ export async function createApp({
                 b,
               ),
             );
-            if (b.archived)
-              mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
             b.history = p.history;
-            const saved = await store.save(b);
+            const saved = await saveProjectArchive(
+              b,
+              () => store.save(b),
+              (projectId) => {
+                mcp.projects = mcp.projects.filter((id) => id !== projectId);
+              },
+            );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
