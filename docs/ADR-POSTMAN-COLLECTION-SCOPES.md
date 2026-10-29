@@ -166,3 +166,27 @@ queued new scope changes, persists terminal evidence, restores and restarts with
 replay. The preload is the existing main-thread-only fixture. Production transport,
 Store locks, script engine and budgets are not replaced. PR17 typed uncertainty is
 not present on this dependency base and remains an explicit root composition test.
+
+## Reference-retirement lifecycle specification (CI pending)
+
+A remaining acceptance gap is now specified as one complete workflow, not a new
+production capability: owner PUT must reject registry deletion when the sole
+current reference is respectively a live API, a frozen case or a disabled plan.
+After the final current reference is deliberately removed, the registry can be
+retired while the old run/snapshot/hash remains unchanged and readable. Historical
+evidence alone must not permit re-saving an executable missing-collection plan.
+The specification backs up/restores that retired state, truly restarts the owner,
+and reads the old result through both official SDK transports without replay.
+
+Both SDK clients have write permission and verify the existing sync tool is listed;
+unsupported postmanVariableMode parameters must fail specifically as unknown
+parameters without project/disk changes. This feature base has neither native
+project import/export nor canonical repeat. It does not add those dependencies or
+reinterpret unknown CLI flags. Repeat-reference composition remains root-specific.
+
+No production code, assertion, dependency, application/VM budget or existing test
+has been changed for this addition. It has not been run locally as an application.
+The prior root CI 40867220452 script-final-body timeout and intermediate WIP format
+failure remain retained; this acceptance specification is not a causal repair or
+permission to rerun those failures. A subsequent source run must report any failure
+truthfully rather than substitute a new test count for backend completion.

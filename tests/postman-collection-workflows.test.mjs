@@ -609,3 +609,307 @@ test(
     assert.deepEqual(await bytes(app.store.directory(p.id)), beforeInvalid);
   },
 );
+
+test(
+  "collection reference retirement rejects live/case/disabled-plan loss, retains historical evidence through backup restart and rejects unsupported SDK modes",
+  { timeout: 30000 },
+  async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "collection-retirement-")),
+      seen = [],
+      clients = [];
+    const wire = http.createServer((req, res) => {
+      seen.push(req.url);
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ url: req.url }));
+    });
+    await new Promise((resolve) => wire.listen(0, "127.0.0.1", resolve));
+    let app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      await Promise.all(
+        clients.map((client) => client.close().catch(() => {})),
+      );
+      app.server.closeAllConnections();
+      wire.closeAllConnections();
+      await Promise.all(
+        [app.server, wire].map(
+          (server) => new Promise((resolve) => server.close(resolve)),
+        ),
+      );
+      await rm(root, { recursive: true, force: true });
+    });
+    const owner = async (route, method = "GET", body, status = 200) => {
+      const response = await fetch(app.url + route, {
+        method,
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      const value = await response.json();
+      assert.equal(response.status, status, JSON.stringify(value));
+      return value;
+    };
+    const p = await app.store.create("Collection retirement"),
+      other = await app.store.create("Unrelated project");
+    const otherBytes = await bytes(app.store.directory(other.id));
+    const source = {
+      info: { name: "Retire only after references are removed" },
+      variable: [{ key: "value", value: "retained-value" }],
+      item: [
+        {
+          name: "live",
+          request: {
+            method: "GET",
+            url: {
+              raw: `http://127.0.0.1:${wire.address().port}/retire?value={{value}}`,
+            },
+          },
+        },
+      ],
+    };
+    const initialBytes = await bytes(app.store.directory(p.id));
+    for (const mode of [null, "unsupported"])
+      await owner(
+        `/api/projects/${p.id}/import`,
+        "POST",
+        { document: source, postmanVariableMode: mode },
+        400,
+      );
+    assert.deepEqual(await bytes(app.store.directory(p.id)), initialBytes);
+    await owner(`/api/projects/${p.id}/import`, "POST", {
+      document: source,
+      postmanVariableMode: "collection",
+    });
+    const imported = await owner(`/api/projects/${p.id}`),
+      live = imported.requests[0],
+      collectionId = live.postmanCollectionId;
+    assert.equal(imported.postmanCollections.items[0].id, collectionId);
+    const active = await owner(`/api/projects/${p.id}/plans`, "POST", {
+      id: "retire-active",
+      name: "Historical collection flow",
+      environmentId: p.environments[0].id,
+      steps: [{ id: "executed", request: live }],
+    });
+    const run = await owner(`/api/projects/${p.id}/run`, "POST", {
+      planId: active.id,
+    });
+    assert.equal(run.status, "passed");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.recordId, run.id);
+    assert.deepEqual(seen, ["/retire?value=retained-value"]);
+    assert.equal(
+      run.snapshot.steps[0].request.postmanCollectionId,
+      collectionId,
+    );
+    const savedCase = await owner(`/api/projects/${p.id}/cases`, "POST", {
+      id: "retire-case",
+      name: "Frozen case",
+      sourceRequestId: live.id,
+      request: live,
+    });
+    assert.equal(savedCase.item.request.postmanCollectionId, collectionId);
+    const disabled = await owner(`/api/projects/${p.id}/plans`, "POST", {
+      id: "retire-disabled",
+      name: "Disabled but still a current reference",
+      steps: [{ id: "disabled", enabled: false, request: live }],
+    });
+    assert.equal(disabled.steps[0].enabled, false);
+    const all = await owner(`/api/projects/${p.id}`),
+      savedRun = structuredClone(all.runs.find((item) => item.id === run.id)),
+      allBytes = await bytes(app.store.directory(p.id));
+    assert.equal(savedRun.planHash, run.planHash);
+    assert.deepEqual(savedRun.snapshot, run.snapshot);
+
+    // Each rejected candidate has exactly one current reference kind. Other
+    // kinds are removed, so one guard cannot accidentally mask the next guard.
+    for (const kind of ["live", "case", "disabled-plan"]) {
+      const candidate = structuredClone(all);
+      delete candidate.requests[0].postmanCollectionId;
+      candidate.cases = [];
+      candidate.plans = [];
+      if (kind === "live")
+        candidate.requests[0].postmanCollectionId = collectionId;
+      if (kind === "case") candidate.cases = [structuredClone(savedCase.item)];
+      if (kind === "disabled-plan")
+        candidate.plans = [
+          structuredClone(all.plans.find((plan) => plan.id === disabled.id)),
+        ];
+      delete candidate.postmanCollections;
+      const rejected = await owner(
+        `/api/projects/${p.id}`,
+        "PUT",
+        candidate,
+        400,
+      );
+      assert.match(JSON.stringify(rejected), /Postman collection 引用不存在/);
+      assert.deepEqual(await owner(`/api/projects/${p.id}`), all);
+      assert.deepEqual(await bytes(app.store.directory(p.id)), allBytes);
+      assert.deepEqual(seen, ["/retire?value=retained-value"]);
+    }
+
+    // Retire live binding and the already executed plan, then the case. The
+    // disabled plan is the final current reference and must still block removal.
+    let current = await owner(`/api/projects/${p.id}`);
+    delete current.requests[0].postmanCollectionId;
+    current.plans = current.plans.filter((plan) => plan.id === disabled.id);
+    await owner(`/api/projects/${p.id}`, "PUT", current);
+    current = await owner(`/api/projects/${p.id}`);
+    assert.equal(current.requests[0].postmanCollectionId, undefined);
+    assert.equal(current.cases[0].request.postmanCollectionId, collectionId);
+    assert.deepEqual(
+      current.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    current.cases = [];
+    await owner(`/api/projects/${p.id}`, "PUT", current);
+    current = await owner(`/api/projects/${p.id}`);
+    const lastReferenceBytes = await bytes(app.store.directory(p.id)),
+      premature = structuredClone(current);
+    delete premature.postmanCollections;
+    assert.match(
+      JSON.stringify(
+        await owner(`/api/projects/${p.id}`, "PUT", premature, 400),
+      ),
+      /Postman collection 引用不存在/,
+    );
+    assert.deepEqual(
+      await bytes(app.store.directory(p.id)),
+      lastReferenceBytes,
+    );
+    current.plans = [];
+    delete current.postmanCollections;
+    await owner(`/api/projects/${p.id}`, "PUT", current);
+    const retired = await owner(`/api/projects/${p.id}`);
+    assert.equal(Object.hasOwn(retired, "postmanCollections"), false);
+    assert.deepEqual(retired.plans, []);
+    assert.deepEqual(retired.cases, []);
+    assert.deepEqual(
+      retired.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    const retiredBytes = await bytes(app.store.directory(p.id));
+    // Reading old evidence is allowed; it is not an implicit grant to revive an
+    // executable definition with a collection that no longer exists.
+    const revived = await owner(
+      `/api/projects/${p.id}/plans`,
+      "POST",
+      run.snapshot,
+      400,
+    );
+    assert.match(JSON.stringify(revived), /Postman collection 引用不存在/);
+    assert.deepEqual(await bytes(app.store.directory(p.id)), retiredBytes);
+    const backup = await owner(`/api/projects/${p.id}/export`),
+      restored = await owner("/api/restore", "POST", { document: backup }, 201);
+    assert.notEqual(restored.id, p.id);
+    assert.equal(Object.hasOwn(restored, "postmanCollections"), false);
+    assert.deepEqual(
+      restored.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    app.server.closeAllConnections();
+    await new Promise((resolve) => app.server.close(resolve));
+    app = await createApp({ root, port: 0 });
+    const recovered = await owner(`/api/projects/${restored.id}`);
+    assert.equal(Object.hasOwn(recovered, "postmanCollections"), false);
+    assert.deepEqual(
+      recovered.runs.find((item) => item.id === run.id),
+      savedRun,
+    );
+    assert.deepEqual(seen, ["/retire?value=retained-value"]);
+    const restoredBytes = await bytes(app.store.directory(restored.id));
+    for (const mode of ["http", "stdio"]) {
+      const client = new Client(
+        { name: "collection-retirement-" + mode, version: "1" },
+        { capabilities: {} },
+      );
+      clients.push(client);
+      let transport;
+      if (mode === "http") {
+        const config = await owner("/api/mcp/config", "POST", {
+          enabled: true,
+          projects: [restored.id],
+          write: true,
+          execute: false,
+          remember: false,
+        });
+        transport = new StreamableHTTPClientTransport(
+          new URL(app.url + "/mcp"),
+          {
+            requestInit: {
+              headers: { Authorization: "Bearer " + config.token },
+            },
+          },
+        );
+      } else {
+        transport = new StdioClientTransport({
+          command: process.execPath,
+          args: [
+            fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+            "--project",
+            restored.id,
+            "--write",
+          ],
+          env: { LOCAL_API_DATA: root },
+          stderr: "pipe",
+        });
+        transport.stderr.resume();
+      }
+      await client.connect(transport);
+      const tools = (await client.listTools()).tools;
+      assert(tools.some((tool) => tool.name === "localapi_sync_openapi"));
+      assert(
+        tools.some((tool) => tool.name === "localapi_get_execution_result"),
+      );
+      assert(!tools.some((tool) => tool.name === "localapi_execute_flow"));
+      const call = (name, args) =>
+        client.callTool({
+          name,
+          arguments: { projectId: restored.id, ...args },
+        });
+      const detail = decode(
+        await call("localapi_get_execution_result", { runId: run.id }),
+      );
+      assert.deepEqual(detail, savedRun);
+      assert.equal(detail.planHash, run.planHash);
+      assert.deepEqual(detail.snapshot, run.snapshot);
+      for (const unsupportedMode of ["collection", "unsupported"]) {
+        const rejected = await call("localapi_sync_openapi", {
+          document: {
+            openapi: "3.0.3",
+            info: { title: "Would otherwise import", version: "1" },
+            paths: {
+              "/must-not-import": {
+                get: { responses: { 200: { description: "OK" } } },
+              },
+            },
+          },
+          postmanVariableMode: unsupportedMode,
+        });
+        assert.equal(rejected.isError, true);
+        assert.match(rejected.content[0].text, /未知参数 postmanVariableMode/);
+        assert.deepEqual(
+          await bytes(app.store.directory(restored.id)),
+          restoredBytes,
+        );
+      }
+      const denied = await client.callTool({
+        name: "localapi_get_execution_result",
+        arguments: { projectId: p.id, runId: run.id },
+      });
+      assert.equal(denied.isError, true);
+      await client.close();
+    }
+    assert.deepEqual(await bytes(app.store.directory(p.id)), retiredBytes);
+    assert.deepEqual(await bytes(app.store.directory(other.id)), otherBytes);
+    assert.deepEqual(
+      await bytes(app.store.directory(restored.id)),
+      restoredBytes,
+    );
+    assert.deepEqual(
+      seen,
+      ["/retire?value=retained-value"],
+      "retirement, history reads and restart never replay the old request",
+    );
+  },
+);
