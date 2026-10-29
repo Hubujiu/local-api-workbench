@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
@@ -126,7 +127,7 @@ export function snapshotWireStep(step) {
   const { message: savedMessage, ...rawDefinition } =
     step.protocol.definition || {};
   const definition = normalizeProtocol(rawDefinition);
-  const duration = step.protocol.duration ?? 3000;
+  const duration = step.protocol.duration ?? definition.duration ?? 3000;
   if (!Number.isInteger(duration) || duration < 100 || duration > 30000)
     throw Error("协议计划超时须为100至30000毫秒");
   const protocol = { definition, duration };
@@ -252,6 +253,7 @@ export async function executeWireFlow(input, signal) {
   try {
     signal?.throwIfAborted();
     const request = {
+      ...protocolRequestOptions(input.definition),
       ...input,
       ...(type === "tcp"
         ? { host: input.definition.url, port: input.definition.port }

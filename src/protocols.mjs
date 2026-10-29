@@ -1,13 +1,16 @@
+import { createTCPDelimiterMatcher } from "./tcp-delimiter.mjs";
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
 import { boundedSSEParser, validSSEHandshake } from "./sse-parser.mjs";
 import net from "node:net";
 
 export async function captureSSE(
-  { url, headers = {}, duration = 3000, maxEvents = 20 },
+  { url, headers = {}, duration = 3000, maxEvents = 20, method, body },
   signal,
 ) {
   signal?.throwIfAborted();
+  const options = protocolRequestOptions({ type: "sse", method, body });
   const target = new URL(url);
   if (!["http:", "https:"].includes(target.protocol))
     throw Error("SSE 仅支持 HTTP/HTTPS");
@@ -23,6 +26,7 @@ export async function captureSSE(
     timedOut = false;
   try {
     const response = await fetch(target, {
+      ...options,
       headers: { Accept: "text/event-stream", ...headers },
       signal: controller.signal,
       redirect: "manual",
@@ -57,13 +61,22 @@ export async function captureSSE(
 }
 
 export function exchangeTCP(
-  { host, port, message = "", duration = 3000 },
+  { host, port, message = "", duration = 3000, completion, delimiterHex },
   signal,
 ) {
   if (!host || !Number.isInteger(Number(port)) || port < 1 || port > 65535)
     throw Error("TCP 地址或端口无效");
   if (signal?.aborted) return Promise.reject(Error("TCP 请求已取消"));
-  const payload = protocolPayload(message);
+  const options = protocolRequestOptions({
+    type: "tcp",
+    completion,
+    delimiterHex,
+  });
+  const payload = protocolPayload(message),
+    matcher =
+      options.completion === "delimiter"
+        ? createTCPDelimiterMatcher(options.delimiterHex)
+        : undefined;
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0,
@@ -78,7 +91,8 @@ export function exchangeTCP(
       signal?.removeEventListener("abort", abort);
       if (error) reject(error);
       else {
-        const buffer = Buffer.concat(chunks);
+        const frame = matcher?.snapshot(),
+          buffer = frame ? frame.frame : Buffer.concat(chunks);
         let decoded, decodeError;
         if (payload.decode) {
           try {
@@ -92,9 +106,18 @@ export function exchangeTCP(
           ...(decodeError ? { decodeError } : {}),
           body: buffer.toString("utf8"),
           base64: buffer.toString("base64"),
-          size,
+          size: frame ? buffer.length : size,
           timedOut,
-          partial: timedOut,
+          partial: frame ? !frame.matched : timedOut,
+          ...(frame
+            ? {
+                framing: {
+                  matched: frame.matched,
+                  trailingBase64: frame.trailing.toString("base64"),
+                  trailingSize: frame.trailing.length,
+                },
+              }
+            : {}),
         });
       }
     };
@@ -102,7 +125,7 @@ export function exchangeTCP(
     const timer = setTimeout(
       () => {
         timedOut = true;
-        chunks.length ? finish() : finish(Error("TCP 请求超时"));
+        matcher || chunks.length ? finish() : finish(Error("TCP 请求超时"));
       },
       Math.min(30000, Math.max(100, Number(duration) || 3000)),
     );
@@ -110,9 +133,21 @@ export function exchangeTCP(
       if (!done) socket.write(payload.buffer);
     });
     socket.on("data", (chunk) => {
+      if (done) return;
+      if (matcher) {
+        try {
+          if (matcher.push(chunk)) finish();
+        } catch (error) {
+          finish(error);
+        }
+        return;
+      }
       size += chunk.length;
       if (size > 1024 * 1024) finish(Error("TCP 响应超过 1 MiB"));
-      else chunks.push(chunk);
+      else {
+        chunks.push(chunk);
+        if (completion === "first-data") finish();
+      }
     });
     socket.on("end", () => finish());
     socket.on("error", finish);

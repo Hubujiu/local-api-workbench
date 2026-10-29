@@ -1,3 +1,4 @@
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { StringDecoder } from "node:string_decoder";
 import { protocolPayload } from "./protocol-payload.mjs";
 import { openWebSocket } from "./websocket-client.mjs";
@@ -67,6 +68,10 @@ export class ProtocolSessions {
     session.events = session.events.slice(-200);
   }
   start(input) {
+    if (input.completion === "delimiter" || input.delimiterHex !== undefined) {
+      protocolRequestOptions(input);
+      throw Error("TCP delimiter 完成规则仅支持单次响应，不支持交互会话");
+    }
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {
@@ -209,9 +214,11 @@ export class ProtocolSessions {
       } else {
         if (!["http:", "https:"].includes(new URL(input.url).protocol))
           throw Error("SSE 仅支持 HTTP/HTTPS");
+        const options = protocolRequestOptions({ ...input, type: "sse" });
         session.controller = new AbortController();
         (async () => {
           const response = await fetch(input.url, {
+            ...options,
             headers: { Accept: "text/event-stream", ...(input.headers || {}) },
             signal: session.controller.signal,
             redirect: "manual",
