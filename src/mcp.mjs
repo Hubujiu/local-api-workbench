@@ -1,3 +1,4 @@
+import { publishDebugVariables } from "./debug-publication.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -600,41 +601,36 @@ export function createMCP({
                   },
                 ],
               });
-              output = await runPlan(
-                plan,
-                debugEnvironment(p, args.environmentId, debugEnvironments)
-                  .variables,
-                executeRequest,
-                {
-                  cookieSession: projectCookieSession(
-                    store,
-                    p,
-                    args.environmentId,
-                  ),
-                  ...scopedExecution(
-                    store,
-                    p,
-                    args.environmentId,
-                    debugEnvironment(p, args.environmentId, debugEnvironments)
-                      .variables,
-                  ),
-                  onStep: (step) =>
-                    onProgress({
-                      completed: 1,
-                      total: 1,
-                      stepId: step.stepId,
-                      status: step.status,
-                    }),
-                },
-              );
               const context = debugEnvironment(
                 p,
                 args.environmentId,
                 debugEnvironments,
               );
+              output = await runPlan(plan, context.variables, executeRequest, {
+                cookieSession: projectCookieSession(
+                  store,
+                  p,
+                  args.environmentId,
+                ),
+                ...scopedExecution(
+                  store,
+                  p,
+                  args.environmentId,
+                  context.variables,
+                ),
+                onStep: (step) =>
+                  onProgress({
+                    completed: 1,
+                    total: 1,
+                    stepId: step.stepId,
+                    status: step.status,
+                  }),
+              });
               if (output.results[0]?.response)
-                debugEnvironments.set(context.cacheKey, {
-                  fingerprint: context.fingerprint,
+                publishDebugVariables(debugEnvironments, context.publication, {
+                  fingerprint: JSON.stringify(
+                    environmentVariables(p, context.environment.id),
+                  ),
                   variables: output.variables,
                 });
               await store.append(p.id, "history", {
