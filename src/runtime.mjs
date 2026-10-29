@@ -1,4 +1,5 @@
 import { hasRepeatSteps } from "./plan-repeat.mjs";
+import { linearPlanStepIds } from "./plan-step-identities.mjs";
 import {
   ProjectCommitUncertain,
   ProjectRecoveryRequired,
@@ -233,6 +234,11 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    // Preflight the whole definition batch before normalizing any collection.
+    if (!Array.isArray(p.plans) || p.plans.length > 1000)
+      throw Error("计划最多1000个");
+    for (const plan of p.plans)
+      if (!hasRepeatSteps(plan.steps)) linearPlanStepIds(plan.steps);
     validateNativeInheritanceProject(p);
     validateAPIResourceTrash(p);
     validateEnvironmentModel(p);

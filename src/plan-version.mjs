@@ -1,4 +1,8 @@
 import {
+  linearPlanStepIds,
+  ownStepProvenance,
+} from "./plan-step-identities.mjs";
+import {
   validateRepeatGraph,
   mapPlanLeaves,
   planLeaves,
@@ -11,7 +15,9 @@ import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
-  validateRepeatGraph(input.steps);
+  if (!validateRepeatGraph(input.steps)) linearPlanStepIds(input.steps);
+  if (previous && !validateRepeatGraph(previous.steps))
+    linearPlanStepIds(previous.steps);
   const importedNativeFlowSource =
     readImportedNativeFlowSource(input) ??
     (previous ? readImportedNativeFlowSource(previous) : undefined);
@@ -19,7 +25,9 @@ export function versionPlan(previous, input, source = "manual", project) {
     input = {
       ...input,
       steps: mapPlanLeaves(input.steps, (step) => {
-        const old = planLeaves(previous.steps).find((s) => s.id === step.id);
+        const old = step.id
+          ? planLeaves(previous.steps).find((s) => s.id === step.id)
+          : undefined;
         if (
           old?.nativeMCP &&
           isDeepStrictEqual(step.nativeMCP, old.nativeMCP) &&
@@ -115,7 +123,7 @@ export function versionPlan(previous, input, source = "manual", project) {
     provenance.steps[step.id] =
       JSON.stringify(oldStep) !== JSON.stringify(step)
         ? source
-        : old.provenance?.steps?.[step.id] || "manual";
+        : ownStepProvenance(old.provenance?.steps, step.id) || "manual";
   }
   next.provenance = provenance;
   return next;

@@ -112,3 +112,48 @@ output error never means the network did not run, nor grants permission to retry
 
 Exact-head CI and root composition remain pending; local focused acceptance is
 not a claim that all backend modules or native automation formats are complete.
+
+## Ordinary linear step identity correction (pending CI)
+
+This follow-up fixes a pre-existing canonical linear-plan defect also present
+before repeat groups: two ordinary steps could use the same ID, overwrite one
+provenance-map entry, match the wrong prior step during edits, and emit ambiguous
+result step IDs. It is not a repeat regression or native automation mapping.
+
+A separate pure identity helper validates all ordinary steps, including disabled
+ones, before old-step matching, snapshot creation, execution, Store normalization
+or backup restoration. An explicit ID is a well-formed nonempty string of at most
+200 UTF-16 code units, unique within the plan, excluding `__proto__`, `prototype`
+and `constructor`. Other opaque IDs such as `toString` remain legal; old
+provenance lookup uses own keys rather than inherited Object properties. Missing
+or empty-string IDs retain their creation meaning: allocate an identity once,
+check it against all explicit/generated IDs, and never replace a valid existing
+ID. Null, booleans and numbers are not missing IDs.
+
+The direct raw `runPlan` API retains missing/empty-ID compatibility. It validates
+the whole input first and assigns only first identities in its private clone;
+it does not renormalize requests, mutate the input, or renumber saved IDs.
+Duplicate or otherwise invalid explicit IDs fail before any request, script,
+credential lookup or scope commit. Existing repeat validation, IDs, limits and
+native MCP guards are unchanged. Empty plan drafts remain valid definitions but
+still cannot execute.
+
+New/updated/restored configurations and full project saves reject invalid
+ordinary identities rather than silently repairing them. All ordinary plans in
+a Store save are preflighted before collection normalization. Existing on-disk
+bad definitions and their history remain readable; executing or resaving the bad
+definition is refused until an explicit repair. Historical `runs`, their
+`snapshot` and `results` are not rewritten or newly subjected to this definition
+rule; backup/restore retains their old identities and hashes exactly. A historical
+record can therefore remain ambiguous; this change does not invent its identity
+or claim to verify its original hash.
+
+Local evidence is restricted to the new pure helper tests and syntax/format/diff
+checks. The new workflow specifications cover real owner HTTP, official SDK HTTP
+and stdio, CLI, same-target/different-ID execution, frozen live edits, provenance,
+full saves, project isolation, persisted results, backup/restart, whole-batch
+rejection and read-only historical evidence. They have not been run locally and
+require exact-head ordinary CI. No application/VM/XML/database/pressure workload,
+original client, new permissions, runtime budget, dependency or bundle change is
+part of this correction. Prior failures and acceptance evidence above remain
+historical and are not replaced by these pending specifications.

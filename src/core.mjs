@@ -1,4 +1,8 @@
 import {
+  linearPlanStepIds,
+  allocateLinearPlanStepIds,
+} from "./plan-step-identities.mjs";
+import {
   validateRepeatGraph,
   REPEAT_EVIDENCE_BYTES,
   repeatEvidenceExceeded,
@@ -443,6 +447,12 @@ export function evaluateAssertions(response, assertions = []) {
 }
 export function snapshotPlan(plan) {
   const repeated = validateRepeatGraph(plan.steps);
+  const stepIds = repeated
+    ? undefined
+    : allocateLinearPlanStepIds(plan.steps, id);
+  const steps = stepIds
+    ? plan.steps.map((step, index) => ({ ...step, id: stepIds[index] }))
+    : plan.steps;
   for (const step of planLeaves(plan.steps || []))
     if (step.request?.nativeInheritance !== undefined)
       throw Error("冻结计划须先解析原生继承图，不能保留live绑定");
@@ -469,7 +479,7 @@ export function snapshotPlan(plan) {
     provenance: plan.provenance || { fields: {}, steps: {} },
     environmentId: plan.environmentId || "",
     createdAt: plan.createdAt || new Date().toISOString(),
-    steps: mapPlanLeaves(plan.steps, (s) =>
+    steps: mapPlanLeaves(steps, (s) =>
       s.type === "grpc"
         ? {
             ...snapshotGrpcStep(s),
@@ -569,7 +579,14 @@ export async function runPlan(
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  const stepIds = repeated
+    ? undefined
+    : allocateLinearPlanStepIds(plan.steps, id);
   const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
+  if (stepIds)
+    snapshot.steps.forEach((step, index) => {
+      step.id = stepIds[index];
+    });
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -2030,6 +2047,8 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  for (const plan of document.plans || [])
+    if (!validateRepeatGraph(plan.steps)) linearPlanStepIds(plan.steps);
   validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
   for (const environment of document.environments) {
