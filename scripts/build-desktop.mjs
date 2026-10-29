@@ -2,12 +2,14 @@ import { cp, mkdir, rename, writeFile, readdir, chmod } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { desktopLayout } from "../desktop/build-layout.mjs";
+import { inspectPortableTree } from "./portable-integrity.mjs";
 const layout = desktopLayout();
 await mkdir(layout.root, { recursive: true });
 await cp("desktop/node_modules/electron/dist", layout.root, {
   recursive: true,
   verbatimSymlinks: true,
 });
+await inspectPortableTree(layout.root);
 if (process.platform === "darwin") {
   await rename(
     path.join(layout.root, "Electron.app"),
@@ -24,9 +26,13 @@ if (process.platform === "darwin") {
 }
 await mkdir(layout.app, { recursive: true });
 for (const entry of ["src", "public", "scripts", "LICENSE"])
-  await cp(entry, path.join(layout.app, entry), { recursive: true });
+  await cp(entry, path.join(layout.app, entry), {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
 await cp("production/node_modules", path.join(layout.app, "node_modules"), {
   recursive: true,
+  verbatimSymlinks: true,
 });
 await mkdir(path.join(layout.app, "desktop"), { recursive: true });
 for (const file of await readdir("desktop"))
@@ -44,6 +50,8 @@ await writeFile(
     main: "desktop/main.mjs",
   }),
 );
+// Validate the complete graph before chmod, codesign, hashing or any smoke run.
+await inspectPortableTree(layout.root);
 if (process.platform !== "win32") await chmod(layout.executable, 0o755);
 if (process.platform === "darwin") {
   const plist = path.join(layout.root, "LocalAPI.app/Contents/Info.plist");
@@ -69,6 +77,8 @@ if (process.platform === "darwin") {
     { stdio: "inherit" },
   );
 }
+const integrity = await inspectPortableTree(layout.root);
+console.log(`PORTABLE_LINK_INTEGRITY_PASS ${integrity.links.length}`);
 console.log(
   JSON.stringify({
     platform: process.platform,
