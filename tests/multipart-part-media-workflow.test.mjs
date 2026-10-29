@@ -663,7 +663,12 @@ for (const transport of ["http", "stdio"])
         document: exported,
       });
       assert.equal(imported.requests.length, 2);
+      assert.deepEqual(
+        imported.requests.map((request) => request.bodyType).sort(),
+        ["form-data", "urlencoded"],
+      );
       for (const request of imported.requests) {
+        assert.equal(new URL(request.url).origin, f.origin);
         assert.deepEqual(
           request.form.map(({ key, value }) => [key, value]),
           [
@@ -705,7 +710,24 @@ for (const transport of ["http", "stdio"])
       const run = await f.owner(`/api/projects/${restored.id}/run`, {
         planId: plan.id,
       });
-      assert.equal(run.status, "passed");
+      assert.equal(
+        run.status,
+        "passed",
+        JSON.stringify({
+          status: run.status,
+          error: String(run.error || "").slice(0, 500),
+          results: (run.results || []).map((step) => ({
+            status: step.status,
+            error: String(step.error || "").slice(0, 500),
+            responseStatus: step.response?.status,
+            assertions: (step.assertions || []).map((assertion) => ({
+              passed: assertion.passed,
+              target: assertion.target,
+              op: assertion.op,
+            })),
+          })),
+        }),
+      );
       assert.equal(run.planHash, hash(frozen));
       assert.equal(f.seen.length, 2);
       for (const request of imported.requests) {
