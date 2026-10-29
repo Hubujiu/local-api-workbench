@@ -1,3 +1,4 @@
+import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
 import {
   validateInheritancePlans,
   verifyInheritancePlans,
@@ -17,6 +18,8 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
+  // Check the original project before any protocol/sample projection.
+  rejectCollectionExport(project, "Apipost directory");
   const extended = prepareExtendedProtocolExport(project);
   const plans = extended.base.plans ?? [];
   if (project.settings?.nativeInheritance) validateInheritancePlans(plans);

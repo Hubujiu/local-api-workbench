@@ -2387,12 +2387,20 @@ function replaceVariables(target, source) {
 export function importIntoProject(
   project,
   document,
-  { sync = false, modelNameMode, inheritanceMode, postmanVariableMode: mode } = {},
+  {
+    sync = false,
+    modelNameMode,
+    inheritanceMode,
+    postmanVariableMode: mode,
+  } = {},
 ) {
   const variableMode = postmanVariableMode(mode);
   const preserveInheritance =
     resolveInheritanceMode(inheritanceMode) === "preserve";
-  if (variableMode === "collection" && (modelNameMode !== undefined || preserveInheritance))
+  if (
+    variableMode === "collection" &&
+    (modelNameMode !== undefined || preserveInheritance)
+  )
     throw Error("Postman collection 模式不能组合原生模型或继承选项");
   if (project.settings?.nativeInheritance !== undefined)
     throw Error("原生继承图项目暂不支持追加导入；请导入空项目");

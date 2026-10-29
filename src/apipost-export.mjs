@@ -1,3 +1,4 @@
+import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
 import { assertRedirectExportable } from "./http-redirect.mjs";
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import { validateNativeInheritanceProject } from "./native-inheritance.mjs";
@@ -168,6 +169,8 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  // Check the original project before any protocol/sample projection.
+  rejectCollectionExport(project, "Apipost");
   const originalProject = project;
   const extended = prepareExtendedProtocolExport(project);
   project = extended.base;

@@ -943,7 +943,13 @@ export function createMCP({
                       databaseExecutor(p.id, operation, signal)
                   : undefined,
                 cookieSession: projectCookieSession(store, p, environmentId),
-                ...scopedExecution(store, p, environmentId, context.variables, request.postmanCollectionId),
+                ...scopedExecution(
+                  store,
+                  p,
+                  environmentId,
+                  context.variables,
+                  request.postmanCollectionId,
+                ),
                 onStep: (step) =>
                   emitProgress({
                     completed: 1,

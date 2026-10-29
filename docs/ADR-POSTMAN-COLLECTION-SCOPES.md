@@ -166,3 +166,34 @@ queued new scope changes, persists terminal evidence, restores and restarts with
 replay. The preload is the existing main-thread-only fixture. Production transport,
 Store locks, script engine and budgets are not replaced. PR17 typed uncertainty is
 not present on this dependency base and remains an explicit root composition test.
+
+## Root composition: bounded cross-feature acceptance
+
+The feature's first normal CI 40864878554 passed on the dependency base (source
+`ddd106365546574511265d2a9d20035dd7ad2dfc`, tree
+`d801f80da8974b3738966fe852aadc1ba238ff5f`). This is not root acceptance.
+Root integration retains canonical `planLeaves`/`planOccurrences`, existing
+ordinary-step identities, protocol/native guards, Postman response media handling,
+Store typed commit outcomes and all prior cancellation tests. Engine and safety
+budgets are unchanged. Native JSON and directory exporters now reject collection
+registries/bindings at their outer entrypoints, before lossy projection can occur;
+this is an explicit unsupported boundary, not a native collection mapping.
+
+Three additional root-only CI specifications cover:
+
+- Actual owner-created repeat A/B/A twice, SDK execution, unique occurrence
+  identities, current collection values with unchanged frozen request bindings/hash,
+  and backup/restart followed by explicit execution in an isolated restored project.
+- Both native formats through direct, owner, HTTP and stdio SDK export entries,
+  rejecting even unused registry data without project/disk/network side effects;
+  full backup restoration remains available.
+- A real admitted Store journal whose apply fails on an owned filesystem obstacle,
+  then a later execution abort. The completed response and typed unknown/non-retryable
+  receipt remain truthful; the failed result append is not claimed saved. Repair,
+  read recovery, backup restoration and restart do not replay the request and retain
+  the collection's admitted changes and original initial definitions.
+
+The last check is transaction admission, not an atomic abort guarantee through
+physical journal publication. Historical evidence is never rewritten. The existing
+root typed-uncertainty case is unchanged. These application workflows are only
+syntax/format checked locally; actual root acceptance awaits its own ordinary CI.
