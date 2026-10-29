@@ -69,3 +69,34 @@ mixed-import and restored media reject without peer connections. Script item upd
 preserves type while whole-body replacement restores the omitted-media default.
 Only syntax and formatting were checked for these application tests; they remain
 pending ordinary exact-commit CI. No application, VM or network workload ran locally.
+
+## Selected OpenAPI form encoding validation
+
+Validate the entire selected multipart/urlencoded `encoding` map before building
+rows. Previously only schema/example row keys were inspected; orphan entries and
+null/primitive entries could be accepted and silently disappear during export.
+Present maps and entries must be non-null, non-array objects. Every entry must
+refer to an own, safe schema property (example-only names do not declare one).
+Absent maps, empty maps and empty entries on declared properties retain defaults.
+Nonempty entries, including legal Encoding Object `x-*` extensions, remain
+**unsupported**, not purportedly invalid OpenAPI. An `x-*` key in the encoding map
+is a property name and still requires a matching schema property. JSON/raw media
+handling is unchanged; this is not validation of unselected media alternatives.
+
+The OAS Media Type Object requires encoding keys to be schema properties:
+https://spec.openapis.org/oas/v3.0.3.html#media-type-object and
+https://spec.openapis.org/oas/v3.1.1.html#media-type-object.
+An OAS `contentType` can select a serialization strategy, not just a MIME header:
+for example an application/json string requires JSON quoting. Our literal part
+media implementation sends the existing bytes; it is not an OAS JSON codec.
+OAS 3.1 `contentEncoding` also concerns transfer encoding. This change neither
+implements transfer encoding nor fixes/expands existing base64-file import
+interpretation. No custom part headers, object/array codec, reference resolver,
+security budget or dependency change is included.
+
+Data-only cases cover malformed maps/entries, orphan/example-only/prototype keys,
+extensions, own-property membership, accepted defaults and semantic roundtrips.
+CI-only workflows cover mixed-operation JSON/YAML owner rejection, both official
+SDK sync transports, unchanged project/config/history bytes and no peer connection,
+positive sync/export/import, frozen execution, backup/restore and restart. They
+remain unverified until ordinary exact-commit CI completes.
