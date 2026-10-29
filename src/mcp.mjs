@@ -24,6 +24,7 @@ import {
   environmentVariables,
   selectedEnvironment,
   debugEnvironment,
+  debugEnvironmentFingerprint,
   resolveServiceRequest,
 } from "./environments.mjs";
 import {
@@ -608,6 +609,7 @@ export function createMCP({
                 p,
                 args.environmentId,
                 debugEnvironments,
+                request.postmanCollectionId,
               );
               output = await runPlan(plan, context.variables, executeRequest, {
                 signal,
@@ -621,6 +623,7 @@ export function createMCP({
                   p,
                   args.environmentId,
                   context.variables,
+                  request.postmanCollectionId,
                 ),
                 onStep: (step) =>
                   emitProgress({
@@ -632,8 +635,10 @@ export function createMCP({
               });
               if (!signal?.aborted && output.results[0]?.response)
                 publishDebugVariables(debugEnvironments, context.publication, {
-                  fingerprint: JSON.stringify(
-                    environmentVariables(p, context.environment.id),
+                  fingerprint: debugEnvironmentFingerprint(
+                    p,
+                    context.environment.id,
+                    request.postmanCollectionId,
                   ),
                   variables: output.variables,
                 });

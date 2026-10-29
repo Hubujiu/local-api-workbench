@@ -1,3 +1,13 @@
+import {
+  postmanVariableMode,
+  collectionIdentifier,
+  preparePostmanCollection,
+  appendPostmanCollection,
+  validatePostmanCollections,
+  rejectCollectionExport,
+  createCollectionSession,
+  validateCollectionScope,
+} from "./postman-collection-scopes.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -252,6 +262,11 @@ export function normalizeRequest(r = {}) {
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
+    ...(r.postmanCollectionId === undefined
+      ? {}
+      : {
+          postmanCollectionId: collectionIdentifier(r.postmanCollectionId),
+        }),
     serviceId: String(r.serviceId || ""),
     serviceSnapshot: r.serviceSnapshot === true,
     parametersSnapshot: r.parametersSnapshot === true,
@@ -435,6 +450,7 @@ export async function runPlan(
     onStep,
     prepareRequest,
     variableScopes,
+    collectionScopes,
     onScopeChanges,
     cookieSession,
     databaseQuery,
@@ -449,6 +465,9 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
+  const collections = createCollectionSession(collectionScopes);
+  for (const step of snapshot.steps)
+    collections.select(step.request?.postmanCollectionId);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -468,6 +487,12 @@ export async function runPlan(
   for (const step of snapshot.steps) {
     if (signal?.aborted) break;
     if (step.enabled === false) continue;
+    const collectionId = step.request?.postmanCollectionId;
+    delete scopes.collectionId;
+    delete scopes.collection;
+    delete scopes.collectionTypes;
+    Object.assign(scopes, collections.select(collectionId));
+    replaceVariables(vars, effectiveScopes(scopes));
     const record = {
       stepId: step.id,
       name: step.name,
@@ -485,10 +510,15 @@ export async function runPlan(
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes, signal);
+          const accepted = await onScopeChanges(changes, signal, collectionId);
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
+            if (collectionId !== undefined) {
+              validateCollectionScope(accepted, collectionId);
+              scopes.collection = accepted.collection;
+              scopes.collectionTypes = accepted.collectionTypes;
+            }
           }
         } catch (error) {
           throw Error("变量持久化失败：" + error.message);
@@ -498,9 +528,11 @@ export async function runPlan(
         record.logs.push({
           phase: "variables",
           scope: change.scope,
+          ...(change.scope === "collection" ? { collectionId } : {}),
           name: change.name,
           operation: change.after.exists ? "set" : "unset",
         });
+      collections.accept(scopes);
       committedScopes = structuredClone(scopes);
       replaceVariables(vars, effectiveScopes(scopes));
     };
@@ -705,6 +737,9 @@ export async function runPlan(
           );
           if (scripted.tests.some((test) => !test.passed))
             throw Error("前置脚本断言失败");
+          validateCollectionScope(scripted.scopes, collectionId);
+          if (scripted.request?.postmanCollectionId !== collectionId)
+            throw Error("脚本不能更改宿主固定的 Postman collection 身份");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           replaceVariables(localVariables, scripted.localVariables || {});
@@ -807,6 +842,9 @@ export async function runPlan(
           record.visualization = scripted.visualization;
           if (scripted.responseOverride)
             record.scriptResponse = scripted.responseOverride;
+          validateCollectionScope(scripted.scopes, collectionId);
+          if (scripted.request?.postmanCollectionId !== collectionId)
+            throw Error("脚本不能更改宿主固定的 Postman collection 身份");
           scopes = createScopes(scripted.variables, scripted.scopes);
           replaceVariables(vars, effectiveScopes(scopes));
           record.logs.push(
@@ -843,6 +881,10 @@ export async function runPlan(
         );
       scopes.environment = committedScopes.environment;
       scopes.globals = committedScopes.globals;
+      if (collectionId !== undefined) {
+        scopes.collection = committedScopes.collection;
+        scopes.collectionTypes = committedScopes.collectionTypes;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
@@ -1451,6 +1493,7 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  rejectCollectionExport(project, "OpenAPI");
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
@@ -1608,7 +1651,9 @@ export function exportOpenAPI(project) {
     ...(Object.keys(components).length ? { components } : {}),
   });
 }
-export function toCurl(input) {
+export function toCurl(input, { collectionResolved = false } = {}) {
+  if (input.postmanCollectionId !== undefined && !collectionResolved)
+    throw Error("cURL须先通过项目上下文解析Postman collection变量");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),
@@ -1734,6 +1779,7 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
   for (const environment of document.environments) {
     if (
@@ -1897,7 +1943,12 @@ function replaceVariables(target, source) {
 }
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
-export function importIntoProject(project, document, { sync = false } = {}) {
+export function importIntoProject(
+  project,
+  document,
+  { sync = false, postmanVariableMode: mode } = {},
+) {
+  const variableMode = postmanVariableMode(mode);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -1911,6 +1962,25 @@ export function importIntoProject(project, document, { sync = false } = {}) {
         });
       }
     }
+  }
+  if (variableMode === "collection") {
+    if (sync)
+      throw Error("collection 模式不支持隐式同步，请作为独立collection导入");
+    const collection = preparePostmanCollection(original, id);
+    const candidate = structuredClone(project);
+    const imported = importIntoProject(candidate, {
+      ...original,
+      variable: [],
+    });
+    const next = appendPostmanCollection(project, collection, imported);
+    const byId = new Map(next.requests.map((request) => [request.id, request]));
+    candidate.requests = candidate.requests.map(
+      (request) => byId.get(request.id) || request,
+    );
+    candidate.postmanCollections = next.registry;
+    validatePostmanCollections(candidate);
+    Object.assign(project, candidate);
+    return next.requests;
   }
   const fromDirectory = isApipostDirectoryDocument(original);
   if (fromDirectory) original = assembleApipostDirectory(original);

@@ -1,3 +1,4 @@
+import { validatePostmanCollections } from "./postman-collection-scopes.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -196,6 +197,7 @@ export class Store {
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
+    validatePostmanCollections(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

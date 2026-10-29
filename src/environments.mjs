@@ -1,3 +1,4 @@
+import { collectionScope } from "./postman-collection-scopes.mjs";
 import { captureDebugPublication } from "./debug-publication.mjs";
 import {
   variableRows,
@@ -46,9 +47,13 @@ export function selectedEnvironment(project, environmentId) {
   if (!env) throw Error("环境不存在");
   return env;
 }
-export function environmentVariables(project, environmentId) {
+export function environmentVariables(project, environmentId, collectionId) {
   const env = selectedEnvironment(project, environmentId);
-  return { ...(project.globalVariables || {}), ...(env.variables || {}) };
+  return {
+    ...(project.globalVariables || {}),
+    ...collectionScope(project, collectionId).collection,
+    ...(env.variables || {}),
+  };
 }
 export function effectiveServiceId(project, request) {
   if (request.serviceId) return request.serviceId;
@@ -252,14 +257,38 @@ export function manageEnvironment(project, operation, args = {}) {
   }
 }
 
-export function debugEnvironment(project, environmentId, cache) {
+export function debugEnvironmentFingerprint(
+  project,
+  environmentId,
+  collectionId,
+) {
+  const variables = environmentVariables(project, environmentId, collectionId);
+  return JSON.stringify(
+    collectionId === undefined
+      ? variables
+      : {
+          variables,
+          ...collectionScope(project, collectionId),
+        },
+  );
+}
+export function debugEnvironment(project, environmentId, cache, collectionId) {
   const environment = selectedEnvironment(project, environmentId);
-  const persisted = environmentVariables(project, environment.id);
-  const fingerprint = JSON.stringify(persisted);
-  const cacheKey = project.id + ":" + environment.id;
+  const persisted = environmentVariables(project, environment.id, collectionId);
+  const fingerprint = debugEnvironmentFingerprint(
+    project,
+    environment.id,
+    collectionId,
+  );
+  const cacheKey =
+    project.id +
+    ":" +
+    environment.id +
+    (collectionId === undefined ? "" : ":collection:" + collectionId);
   const entry = cache.get(cacheKey);
   return {
     environment,
+    ...(collectionId === undefined ? {} : { collectionId }),
     cacheKey,
     publication: captureDebugPublication(cache, project.id, cacheKey),
     fingerprint,
