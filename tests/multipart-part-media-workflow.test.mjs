@@ -166,7 +166,7 @@ async function fixture(t) {
         const config = await owner("/api/mcp/config", {
           enabled: true,
           projects: [id],
-          write: false,
+          write: true,
           execute: true,
           remember: false,
         });
@@ -184,6 +184,7 @@ async function fixture(t) {
             fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
             "--project",
             id,
+            "--write",
             "--execute",
           ],
           env: { ...process.env, LOCAL_API_DATA: root },
@@ -192,6 +193,12 @@ async function fixture(t) {
         pipe.stderr.resume();
         await c.connect(pipe);
       }
+      assert(
+        (await c.listTools()).tools.some(
+          (tool) => tool.name === "localapi_execute_flow",
+        ),
+        "explicit project/write/execute grant must expose flow execution",
+      );
       return c;
     },
   };
