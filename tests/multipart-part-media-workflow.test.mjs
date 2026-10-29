@@ -1,0 +1,820 @@
+// Real application/HTTP/SDK/CLI workflows: ordinary CI only, not local execution.
+import test from "node:test";
+import { stringify as yamlStringify } from "yaml";
+import {
+  formMedia,
+  invalidEncodings,
+  encodingDocument,
+  mixedEncodingDocument,
+  unsupportedMultipartSchemas,
+  transferDocument,
+} from "./fixtures/openapi-form-encoding.mjs";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createApp } from "../src/server.mjs";
+import { normalizeRequest } from "../src/core.mjs";
+import { executeRequest } from "../src/runtime.mjs";
+const media = 'Application/JSON; charset="utf-8"';
+const payload = Buffer.from([0, 255, 13, 10, 1, 128]);
+const hash = (value) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const decode = (result) => {
+  assert.notEqual(result.isError, true, result.content?.[0]?.text);
+  return JSON.parse(result.content[0].text);
+};
+async function files(root) {
+  const out = {};
+  for (const e of await readdir(root, { withFileTypes: true })) {
+    const p = path.join(root, e.name);
+    if (e.isDirectory()) {
+      for (const [k, v] of Object.entries(await files(p)))
+        out[e.name + "/" + k] = v;
+    } else out[e.name] = (await readFile(p)).toString("base64");
+  }
+  return out;
+}
+function document(origin) {
+  return {
+    info: {
+      name: "multipart source",
+      schema:
+        "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    },
+    item: [
+      {
+        name: "typed upload",
+        request: {
+          method: "POST",
+          url: origin + "/upload",
+          body: {
+            mode: "formdata",
+            formdata: [
+              {
+                key: "meta",
+                type: "text",
+                value: '{"label":"雪"}',
+                contentType: media,
+              },
+              { key: "duplicate", type: "text", value: "one" },
+              {
+                key: "duplicate",
+                type: "text",
+                value: "two",
+                contentType: "text/plain; charset=utf-8",
+              },
+              {
+                key: "file",
+                type: "file",
+                src: "/never-read/source.dat",
+                contentType: "application/x-fixture",
+              },
+              {
+                key: "default-file",
+                type: "file",
+                src: "/never-read/default.dat",
+              },
+              {
+                key: "disabled",
+                type: "text",
+                value: "must-not-send",
+                disabled: true,
+                contentType: "application/json",
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+async function fixture(t) {
+  const root = await mkdtemp(path.join(tmpdir(), "multipart-media-")),
+    seen = [],
+    clients = [],
+    children = new Map();
+  let app,
+    connections = 0;
+  const peer = http.createServer(async (req, res) => {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    seen.push({
+      type: req.headers["content-type"],
+      body: Buffer.concat(chunks),
+      url: req.url,
+    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end('{"accepted":true}');
+  });
+  peer.on("connection", () => connections++);
+  await new Promise((r) => peer.listen(0, "127.0.0.1", r));
+  const origin = "http://127.0.0.1:" + peer.address().port;
+  const owner = async (route, body, method = "POST", status = 200) => {
+    const r = await fetch(app.url + route, {
+      method,
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const value = await r.json();
+    assert.equal(r.status, status, JSON.stringify(value));
+    return value;
+  };
+  const stop = async () => {
+    for (const c of clients.splice(0)) await c.close().catch(() => {});
+    if (app) {
+      app.server.closeAllConnections();
+      await new Promise((r) => app.server.close(r));
+      app = undefined;
+    }
+  };
+  t.after(async () => {
+    for (const c of children.keys()) c.kill();
+    await Promise.allSettled(children.values());
+    await stop();
+    peer.closeAllConnections();
+    await new Promise((r) => peer.close(r));
+    await rm(root, { recursive: true, force: true });
+  });
+  app = await createApp({ root, port: 0 });
+  return {
+    root,
+    origin,
+    seen,
+    owner,
+    children,
+    get connections() {
+      return connections;
+    },
+    get app() {
+      return app;
+    },
+    get: (id) => owner(`/api/projects/${id}`, undefined, "GET"),
+    project: (name) => owner("/api/projects", { name }, "POST", 201),
+    async restart() {
+      await stop();
+      app = await createApp({ root, port: 0 });
+    },
+    async connect(id, transport) {
+      const c = new Client(
+        { name: "multipart-media", version: "1" },
+        { capabilities: {} },
+      );
+      clients.push(c);
+      if (transport === "http") {
+        const config = await owner("/api/mcp/config", {
+          enabled: true,
+          projects: [id],
+          write: true,
+          execute: true,
+          remember: false,
+        });
+        await c.connect(
+          new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+            requestInit: {
+              headers: { authorization: "Bearer " + config.token },
+            },
+          }),
+        );
+      } else {
+        const pipe = new StdioClientTransport({
+          command: process.execPath,
+          args: [
+            fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+            "--project",
+            id,
+            "--write",
+            "--execute",
+          ],
+          env: { ...process.env, LOCAL_API_DATA: root },
+          stderr: "pipe",
+        });
+        pipe.stderr.resume();
+        await c.connect(pipe);
+      }
+      assert(
+        (await c.listTools()).tools.some(
+          (tool) => tool.name === "localapi_execute_flow",
+        ),
+        "explicit project/write/execute grant must expose flow execution",
+      );
+      return c;
+    },
+  };
+}
+async function cli(f, id, plan) {
+  let child;
+  const terminal = new Promise((resolve, reject) => {
+    child = spawn(
+      process.execPath,
+      [
+        fileURLToPath(new URL("../scripts/run-plan.mjs", import.meta.url)),
+        "--project",
+        id,
+        "--plan",
+        plan,
+      ],
+      {
+        env: { ...process.env, LOCAL_API_DATA: f.root },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let stdout = "",
+      stderr = "",
+      failure;
+    const collect = (which, v) => {
+      if (stdout.length + stderr.length + v.length > 1024 * 1024) {
+        failure ||= Error("CLI evidence limit");
+        child.kill();
+        return;
+      }
+      if (which === "out") stdout += v;
+      else stderr += v;
+    };
+    child.stdout.on("data", (v) => collect("out", v));
+    child.stderr.on("data", (v) => collect("err", v));
+    const timer = setTimeout(() => {
+      failure ||= Error("CLI deadline");
+      child.kill();
+    }, 10000);
+    child.once("error", (e) => {
+      failure ||= e;
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      if (failure) reject(failure);
+      else resolve({ code, stdout, stderr });
+    });
+  });
+  f.children.set(child, terminal);
+  try {
+    return await terminal;
+  } finally {
+    f.children.delete(child);
+  }
+}
+function checkWire(record, rows) {
+  assert.match(record.type, /^multipart\/form-data; boundary=/);
+  const boundary = record.type.split("boundary=")[1];
+  const expected = [];
+  for (const row of rows.filter((x) => x.enabled !== false)) {
+    const file = row.type === "file";
+    expected.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${row.key}"${file ? `; filename="${row.filename}"` : ""}\r\n${row.contentType !== undefined || file ? `Content-Type: ${row.contentType ?? "application/octet-stream"}\r\n` : ""}\r\n`,
+      ),
+    );
+    expected.push(
+      file ? Buffer.from(row.value, "base64") : Buffer.from(row.value),
+    );
+    expected.push(Buffer.from("\r\n"));
+  }
+  expected.push(Buffer.from(`--${boundary}--\r\n`));
+  assert.deepEqual(record.body, Buffer.concat(expected));
+  assert.equal(record.url, "/upload");
+}
+for (const transport of ["http", "stdio"])
+  test(
+    `multipart media survives owner import, ${transport} SDK, CLI frozen execution, backup and restart`,
+    { timeout: 60000 },
+    async (t) => {
+      const f = await fixture(t),
+        p = await f.project("typed multipart"),
+        other = await f.project("untouched");
+      const imported = await f.owner(`/api/projects/${p.id}/import`, {
+        document: document(f.origin),
+      });
+      const r = imported.requests[0];
+      assert.equal(r.form[0].contentType, media);
+      assert.equal(r.form[3].requiresFile, true);
+      assert.equal(r.form[3].value, "");
+      assert.equal(r.form[3].filename, "source.dat");
+      assert.equal(Object.hasOwn(r.form[1], "contentType"), false);
+      const missing = await f.owner(`/api/projects/${p.id}/execute`, {
+        request: r,
+      });
+      assert.equal(missing.outcome, "failed");
+      assert.match(missing.error, /重新选择/);
+      assert.equal(f.seen.length, 0);
+      assert.equal(f.connections, 0);
+      for (const row of r.form.filter((x) => x.type === "file")) {
+        row.requiresFile = false;
+        row.value = payload.toString("base64");
+      }
+      await f.owner(`/api/projects/${p.id}`, imported, "PUT");
+      const saved = (await f.get(p.id)).requests[0];
+      const direct = await f.owner(`/api/projects/${p.id}/execute`, {
+        request: saved,
+      });
+      assert.equal(direct.status, 200);
+      assert.equal(direct.outcome, "passed");
+      checkWire(f.seen.at(-1), saved.form);
+      const created = await f.owner(`/api/projects/${p.id}/plans`, {
+        name: "frozen media",
+        steps: [{ id: "upload", request: saved }],
+      });
+      const frozen = (await f.get(p.id)).plans.find((x) => x.id === created.id);
+      const latest = await f.get(p.id);
+      latest.requests[0].form[0].contentType = "text/plain";
+      latest.requests[0].form[0].value = "live changed";
+      await f.owner(`/api/projects/${p.id}`, latest, "PUT");
+      const c = await f.connect(p.id, transport),
+        otherBefore = await files(f.app.store.directory(other.id)),
+        count = f.seen.length;
+      assert.equal(
+        (
+          await c.callTool({
+            name: "localapi_execute_flow",
+            arguments: { projectId: other.id, planId: created.id },
+          })
+        ).isError,
+        true,
+      );
+      assert.equal(f.seen.length, count);
+      const run = decode(
+        await c.callTool({
+          name: "localapi_execute_flow",
+          arguments: { projectId: p.id, planId: created.id },
+        }),
+      );
+      assert.equal(run.status, "passed");
+      assert.equal(run.recordSaved, true);
+      assert.deepEqual(run.snapshot, frozen);
+      assert.equal(run.planHash, hash(frozen));
+      checkWire(f.seen.at(-1), saved.form);
+      const invoked = await cli(f, p.id, created.id);
+      assert.equal(invoked.code, 0, invoked.stderr + invoked.stdout);
+      const cliRun = JSON.parse(invoked.stdout);
+      assert.equal(cliRun.status, "passed");
+      assert.equal(cliRun.planHash, hash(frozen));
+      checkWire(f.seen.at(-1), saved.form);
+      const beforeExport = await files(f.app.store.directory(p.id));
+      const curl = await f.owner(
+        `/api/projects/${p.id}/curl`,
+        { request: saved },
+        "POST",
+        400,
+      );
+      assert.match(curl.error, /分项Content-Type/);
+      const oas = await f.owner(
+        `/api/projects/${p.id}/export?format=openapi`,
+        undefined,
+        "GET",
+        400,
+      );
+      assert.match(oas.error, /分项Content-Type/);
+      assert.deepEqual(await files(f.app.store.directory(p.id)), beforeExport);
+      const backup = await f.owner(
+          `/api/projects/${p.id}/export`,
+          undefined,
+          "GET",
+        ),
+        restored = await f.owner(
+          "/api/restore",
+          { document: backup },
+          "POST",
+          201,
+        );
+      assert.notEqual(restored.id, p.id);
+      assert.deepEqual(
+        restored.plans.find((x) => x.id === created.id),
+        frozen,
+      );
+      assert.deepEqual(restored.runs, backup.runs);
+      const beforeRestart = f.seen.length;
+      await f.restart();
+      const persisted = await f.get(restored.id);
+      assert.equal(f.seen.length, beforeRestart);
+      assert.deepEqual(
+        persisted.plans.find((x) => x.id === created.id),
+        frozen,
+      );
+      assert.equal(persisted.requests[0].form[0].contentType, "text/plain");
+      const rerun = await f.owner(`/api/projects/${restored.id}/run`, {
+        planId: created.id,
+      });
+      assert.equal(rerun.status, "passed");
+      assert.equal(rerun.planHash, hash(frozen));
+      checkWire(f.seen.at(-1), saved.form);
+      assert.deepEqual(
+        await files(f.app.store.directory(other.id)),
+        otherBefore,
+      );
+    },
+  );
+test(
+  "multipart invalid media and mixed imports are atomic before network; script row updates preserve media",
+  { timeout: 60000 },
+  async (t) => {
+    const f = await fixture(t),
+      p = await f.project("negative multipart");
+    const seed = await f.owner(`/api/projects/${p.id}/import`, {
+      document: document(f.origin),
+    });
+    const saved = seed.requests[0];
+    const before = await files(f.app.store.directory(p.id));
+    for (const value of [
+      null,
+      "",
+      42,
+      "text/plain\r\nX-Injected: yes",
+      'text/plain; charset="{{charset}}"',
+      "application/*",
+      "text/plain; x=" + "a".repeat(1024),
+    ]) {
+      const bad = structuredClone(saved);
+      bad.form = [{ key: "meta", value: "{}", contentType: value }];
+      await f.owner(
+        `/api/projects/${p.id}/execute`,
+        { request: bad },
+        "POST",
+        400,
+      );
+      const changed = structuredClone(seed);
+      changed.requests[0] = bad;
+      await f.owner(`/api/projects/${p.id}`, changed, "PUT", 400);
+      const mixed = document(f.origin);
+      mixed.item.push({ ...structuredClone(mixed.item[0]), name: "invalid" });
+      mixed.item[1].request.body.formdata[0].contentType = value;
+      await f.owner(
+        `/api/projects/${p.id}/import`,
+        { document: mixed },
+        "POST",
+        400,
+      );
+      assert.deepEqual(await files(f.app.store.directory(p.id)), before);
+      assert.equal(f.seen.length, 0);
+      assert.equal(f.connections, 0);
+    }
+    const invalidRestore = structuredClone(seed);
+    invalidRestore.requests[0].form[0].contentType = "text/plain\r\nBad: value";
+    const projectsBefore = await f.owner("/api/projects", undefined, "GET");
+    await f.owner("/api/restore", { document: invalidRestore }, "POST", 400);
+    assert.deepEqual(
+      await f.owner("/api/projects", undefined, "GET"),
+      projectsBefore,
+    );
+    assert.deepEqual(await files(f.app.store.directory(p.id)), before);
+    assert.equal(f.connections, 0);
+    const wrong = structuredClone(saved);
+    wrong.bodyType = "urlencoded";
+    assert.throws(() => normalizeRequest(wrong), /分项Content-Type/);
+    await assert.rejects(executeRequest(wrong), /分项Content-Type/);
+    assert.equal(f.seen.length, 0);
+    const r = {
+      ...saved,
+      form: [{ key: "meta", value: "old", contentType: media }],
+      beforeScript:
+        'pm.request.body.formdata.one("meta").update({value:"updated"});',
+    };
+    const result = await f.owner(`/api/projects/${p.id}/execute`, {
+      request: r,
+    });
+    assert.equal(result.outcome, "passed", result.error);
+    checkWire(f.seen.at(-1), [{ ...r.form[0], value: "updated" }]);
+    const replacement = {
+      ...r,
+      beforeScript:
+        'pm.request.body.update({mode:"formdata",formdata:[{key:"meta",value:"replacement"}]});',
+    };
+    const replaced = await f.owner(`/api/projects/${p.id}/execute`, {
+      request: replacement,
+    });
+    assert.equal(replaced.outcome, "passed", replaced.error);
+    checkWire(f.seen.at(-1), [{ key: "meta", value: "replacement" }]);
+    assert.deepEqual((await f.get(p.id)).requests, seed.requests);
+  },
+);
+
+// Selected-form validation belongs to this multipart feature, not a new codec.
+for (const transport of ["http", "stdio"])
+  test(
+    `OpenAPI encoding validation is atomic through owner and ${transport} sync, with default-media roundtrip and restart`,
+    { timeout: 60000 },
+    async (t) => {
+      const f = await fixture(t),
+        p = await f.project("encoding controls"),
+        other = await f.project("encoding isolation");
+      const c = await f.connect(p.id, transport);
+      assert(
+        (await c.listTools()).tools.some(
+          (tool) => tool.name === "localapi_sync_openapi",
+        ),
+      );
+      const invoke = (id, document) =>
+        c.callTool({
+          name: "localapi_sync_openapi",
+          arguments: { projectId: id, document, coverMode: "url_and_folder" },
+        });
+      const allBefore = await files(f.root);
+      for (const mime of formMedia)
+        for (const encoding of invalidEncodings) {
+          const document = mixedEncodingDocument(f.origin, mime, encoding);
+          for (const source of [
+            JSON.stringify(document),
+            yamlStringify(document),
+          ]) {
+            const error = await f.owner(
+              `/api/projects/${p.id}/import`,
+              { document: source },
+              "POST",
+              400,
+            );
+            // Owner importIntoProject/importDocument parse JSON then YAML.
+            assert.match(error.error, /OpenAPI.*encoding/);
+            assert.deepEqual(await files(f.root), allBefore);
+          }
+          const result = await invoke(p.id, document);
+          assert.equal(result.isError, true);
+          assert.match(result.content[0].text, /OpenAPI.*encoding/);
+          assert.deepEqual(await files(f.root), allBefore);
+          assert.equal(f.seen.length, 0);
+          assert.equal(f.connections, 0);
+        }
+      const denied = await invoke(
+        other.id,
+        encodingDocument(f.origin, formMedia[0], {}),
+      );
+      assert.equal(denied.isError, true);
+      assert.deepEqual(await files(f.root), allBefore);
+      const otherBefore = await files(f.app.store.directory(other.id));
+      for (const mime of formMedia) {
+        const controls = [
+          encodingDocument(f.origin, mime, undefined, false),
+          encodingDocument(f.origin, mime, {}),
+          encodingDocument(f.origin, mime, { meta: {}, "x-field": {} }),
+        ];
+        for (const document of controls) {
+          if (mime !== "multipart/form-data") {
+            document.paths["/urlencoded"] = document.paths["/upload"];
+            document.paths["/urlencoded"].post.operationId =
+              "urlencoded-control";
+            delete document.paths["/upload"];
+          }
+          const synced = decode(await invoke(p.id, JSON.stringify(document)));
+          assert.equal(synced.length, 1);
+          assert(
+            synced[0].form.every((row) => !Object.hasOwn(row, "contentType")),
+          );
+        }
+      }
+      const exported = await f.owner(
+        `/api/projects/${p.id}/export?format=openapi`,
+        undefined,
+        "GET",
+      );
+      const roundtrip = await f.project("encoding roundtrip");
+      const imported = await f.owner(`/api/projects/${roundtrip.id}/import`, {
+        document: exported,
+      });
+      assert.equal(imported.requests.length, 2);
+      assert.deepEqual(
+        imported.requests.map((request) => request.bodyType).sort(),
+        ["form-data", "urlencoded"],
+      );
+      for (const request of imported.requests) {
+        assert.equal(new URL(request.url).origin, f.origin);
+        assert.deepEqual(
+          request.form.map(({ key, value }) => [key, value]),
+          [
+            ["meta", "雪 & +"],
+            ["x-field", "literal"],
+            ["exampleOnly", "kept"],
+          ],
+        );
+        assert(request.form.every((row) => !Object.hasOwn(row, "contentType")));
+      }
+      const plan = await f.owner(`/api/projects/${roundtrip.id}/plans`, {
+        name: "default encoding frozen",
+        steps: imported.requests.map((request, i) => ({
+          id: "step-" + i,
+          request,
+        })),
+      });
+      const frozen = (await f.get(roundtrip.id)).plans.find(
+        (item) => item.id === plan.id,
+      );
+      const backup = await f.owner(
+        `/api/projects/${roundtrip.id}/export`,
+        undefined,
+        "GET",
+      );
+      const restored = await f.owner(
+        "/api/restore",
+        { document: backup },
+        "POST",
+        201,
+      );
+      assert.equal(f.seen.length, 0);
+      await f.restart();
+      const persisted = await f.get(restored.id);
+      assert.deepEqual(
+        persisted.plans.find((item) => item.id === plan.id),
+        frozen,
+      );
+      const run = await f.owner(`/api/projects/${restored.id}/run`, {
+        planId: plan.id,
+      });
+      assert.equal(
+        run.status,
+        "passed",
+        JSON.stringify({
+          status: run.status,
+          error: String(run.error || "").slice(0, 500),
+          results: (run.results || []).map((step) => ({
+            status: step.status,
+            error: String(step.error || "").slice(0, 500),
+            responseStatus: step.response?.status,
+            assertions: (step.assertions || []).map((assertion) => ({
+              passed: assertion.passed,
+              target: assertion.target,
+              op: assertion.op,
+            })),
+          })),
+        }),
+      );
+      assert.equal(run.planHash, hash(frozen));
+      assert.equal(f.seen.length, 2);
+      for (const request of imported.requests) {
+        const wire = f.seen.find(
+          (record) => record.url === new URL(request.url).pathname,
+        );
+        assert(wire);
+        if (request.bodyType === "form-data") checkWire(wire, request.form);
+        else {
+          assert.match(wire.type, /^application\/x-www-form-urlencoded/);
+          assert.equal(
+            wire.body.toString(),
+            new URLSearchParams(
+              request.form.map((row) => [row.key, row.value]),
+            ).toString(),
+          );
+        }
+      }
+      assert.deepEqual(
+        await files(f.app.store.directory(other.id)),
+        otherBefore,
+      );
+    },
+  );
+
+for (const transport of ["http", "stdio"])
+  test(
+    `multipart schema transfer boundary is version-aware and atomic via owner and ${transport}, with legacy backup preservation`,
+    { timeout: 60000 },
+    async (t) => {
+      const f = await fixture(t),
+        p = await f.project("schema transfer"),
+        other = await f.project("isolated transfer");
+      const c = await f.connect(p.id, transport);
+      const invoke = (document) =>
+        c.callTool({
+          name: "localapi_sync_openapi",
+          arguments: { projectId: p.id, document, coverMode: "url_and_folder" },
+        });
+      const before = await files(f.root);
+      for (const { openapi, definition } of unsupportedMultipartSchemas) {
+        const doc = transferDocument(
+          f.origin,
+          openapi,
+          definition,
+          "multipart/form-data",
+          true,
+        );
+        for (const source of [JSON.stringify(doc), yamlStringify(doc)]) {
+          const error = await f.owner(
+            `/api/projects/${p.id}/import`,
+            { document: source },
+            "POST",
+            400,
+          );
+          const boundary = /尚不支持 OpenAPI.*(?:contentEncoding|format:byte)/;
+          assert.match(error.error, boundary);
+          assert.deepEqual(await files(f.root), before);
+          const result = await invoke(source);
+          assert.equal(result.isError, true);
+          // MCP sync parses string inputs with JSON.parse only, before import.
+          assert.match(
+            result.content[0].text,
+            source === JSON.stringify(doc) ? boundary : /JSON|Unexpected/,
+          );
+          assert.deepEqual(await files(f.root), before);
+        }
+      }
+      assert.equal(f.connections, 0);
+      const otherBefore = await files(f.app.store.directory(other.id));
+      const controls = [
+        ["3.0.3", { type: "string", format: "binary" }, "multipart/form-data"],
+        ["3.1.0", { type: "string", format: "binary" }, "multipart/form-data"],
+        ["3.1.0", { type: "string", format: "byte" }, "multipart/form-data"],
+        [
+          "3.0.3",
+          { type: "string", format: "byte" },
+          "application/x-www-form-urlencoded",
+        ],
+        ["3.1.0", { type: "string" }, "multipart/form-data"],
+      ];
+      for (const [version, definition, mime] of controls) {
+        const synced = decode(
+          await invoke(transferDocument(f.origin, version, definition, mime)),
+        );
+        assert.equal(synced.length, 1);
+        const request = synced[0];
+        if (
+          version === "3.1.0" &&
+          ["byte", "binary"].includes(definition.format)
+        ) {
+          const disk = await files(f.root);
+          const error = await f.owner(
+            `/api/projects/${p.id}/export?format=openapi`,
+            undefined,
+            "GET",
+            400,
+          );
+          assert.match(error.error, /format:/);
+          assert.deepEqual(await files(f.root), disk);
+        } else {
+          const exported = await f.owner(
+            `/api/projects/${p.id}/export?format=openapi`,
+            undefined,
+            "GET",
+          );
+          assert.equal(exported.openapi, "3.0.3");
+        }
+        const field = request.form.find((row) => row.key === "meta");
+        if (version === "3.0.3" && definition.format === "binary") {
+          assert.equal(field.type, "file");
+          assert.equal(field.requiresFile, true);
+          // Explicit bytes supplied by the test; never read a source filename.
+          field.value = payload.toString("base64");
+          field.filename = "fixture.bin";
+          delete field.requiresFile;
+        } else {
+          assert.equal(field.type, "text");
+          assert.equal(field.value, "AP8=");
+          assert.equal(Object.hasOwn(field, "requiresFile"), false);
+        }
+        const result = await f.owner(`/api/projects/${p.id}/execute`, {
+          request,
+        });
+        assert.equal(result.outcome, "passed", result.error);
+        if (mime === "multipart/form-data")
+          checkWire(f.seen.at(-1), request.form);
+        else
+          assert.equal(
+            f.seen.at(-1).body.toString(),
+            new URLSearchParams(
+              request.form.map((row) => [row.key, row.value]),
+            ).toString(),
+          );
+      }
+      // A saved legacy request must remain backup-compatible. Only OAS interchange
+      // rejects the unsupported declaration; no runtime/schema repair is invented.
+      const project = await f.get(p.id);
+      project.requests[0].form[0].schema = {
+        type: "string",
+        contentEncoding: "base64",
+      };
+      await f.owner(`/api/projects/${p.id}`, project, "PUT");
+      const saved = await f.get(p.id);
+      const backup = await f.owner(
+        `/api/projects/${p.id}/export`,
+        undefined,
+        "GET",
+      );
+      const restored = await f.owner(
+        "/api/restore",
+        { document: backup },
+        "POST",
+        201,
+      );
+      await f.restart();
+      const persisted = await f.get(restored.id);
+      assert.deepEqual(persisted.requests, saved.requests);
+      const disk = await files(f.root),
+        count = f.seen.length;
+      const error = await f.owner(
+        `/api/projects/${restored.id}/export?format=openapi`,
+        undefined,
+        "GET",
+        400,
+      );
+      assert.match(error.error, /contentEncoding/);
+      assert.deepEqual(await files(f.root), disk);
+      assert.equal(f.seen.length, count);
+      assert.deepEqual(
+        await files(f.app.store.directory(other.id)),
+        otherBefore,
+      );
+    },
+  );

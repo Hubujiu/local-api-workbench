@@ -1,3 +1,4 @@
+import { multipartPartMedia } from "./multipart-part-media.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -379,9 +380,10 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         field.type === "file"
           ? String(field.filename || "file").replace(/["\r\n]/g, "")
           : null;
+      const partMedia = multipartPartMedia(field, Boolean(filename));
       chunks.push(
         Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"${filename ? `; filename="${filename}"` : ""}\r\n${filename ? "Content-Type: application/octet-stream\r\n" : ""}\r\n`,
+          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"${filename ? `; filename="${filename}"` : ""}\r\n${partMedia === undefined ? "" : "Content-Type: " + partMedia + "\r\n"}\r\n`,
         ),
       );
       chunks.push(

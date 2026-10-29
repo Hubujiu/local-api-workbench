@@ -1,3 +1,8 @@
+import {
+  validateMultipartPartMedia,
+  assertMultipartMediaExportable,
+  postmanPartMedia,
+} from "./multipart-part-media.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -47,7 +52,12 @@ import {
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
-import { importOpenAPIBody, exportOpenAPIBody } from "./openapi-body.mjs";
+import {
+  importOpenAPIBody,
+  exportOpenAPIBody,
+  importOpenAPIHeaders,
+  exportOpenAPIHeaders,
+} from "./openapi-body.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
@@ -214,6 +224,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
+  validateMultipartPartMedia(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
@@ -922,7 +933,9 @@ export function importDocument(doc) {
           ),
         )
         .map(([method, op]) => {
-          const importedBody = importOpenAPIBody(op.requestBody);
+          const importedBody = importOpenAPIBody(op.requestBody, {
+            openapi: doc.openapi,
+          });
           const normalizedResponses = Object.fromEntries(
             Object.entries(op.responses || {}).map(([status, response]) => [
               status,
@@ -978,27 +991,9 @@ export function importDocument(doc) {
                 value: p.example ?? "",
                 enabled: true,
               })),
-            headers: [
-              ...params
-                .filter((p) => p.in === "header")
-                .map((p) => ({
-                  key: p.name,
-                  schema: p.schema ?? { type: p.type || "string" },
-                  required: p.required === true,
-                  description: p.description || "",
-                  value: p.example ?? "",
-                  enabled: true,
-                })),
-              ...(importedBody.contentType
-                ? [
-                    {
-                      key: "Content-Type",
-                      value: importedBody.contentType,
-                      enabled: true,
-                    },
-                  ]
-                : []),
-            ],
+            headers: importOpenAPIHeaders(params, importedBody.contentType, {
+              ignoreContentType: Boolean(doc.openapi),
+            }),
             cookies: params
               .filter((p) => p.in === "cookie")
               .map((p) => ({
@@ -1204,6 +1199,7 @@ export function importDocument(doc) {
             bodyType: mode,
             body: body.raw || "",
             form: (body.urlencoded || body.formdata || []).map((f) => ({
+              ...postmanPartMedia(f),
               key: f.key,
               value: f.type === "file" ? "" : f.value,
               enabled: !f.disabled,
@@ -1562,7 +1558,7 @@ export function exportOpenAPI(project) {
       parameters: [
         ["query", queryDefinition.query],
         ["path", r.path],
-        ["header", r.headers],
+        ["header", exportOpenAPIHeaders(r)],
         ["cookie", r.cookies],
       ].flatMap(([location, parameters]) =>
         parameters
@@ -1591,6 +1587,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  assertMultipartMediaExportable(input, "cURL");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),
