@@ -124,6 +124,7 @@ support. Schema contentMediaType does not override the Encoding Object's
 explicit or default contentType; no MIME or codec is inferred from it.
 
 Sources:
+
 - https://spec.openapis.org/oas/v3.1.1.html#working-with-binary-data
 - https://spec.openapis.org/oas/v3.1.1.html#encoding-multipart-media-types
 - https://spec.openapis.org/oas/v3.0.4.html#encoding-multipart-media-types
@@ -148,6 +149,7 @@ retained as failed (including the separate pre-existing macOS script-quota timin
 failure); no budget change or manual rerun is used.
 
 The statically verified call chain is:
+
 - owner `server.mjs` import route -> `importIntoProject` -> `importDocument`:
   both helpers have JSON parsing with bounded YAML fallback;
 - `syncMCPOpenAPI`: string documents go through `JSON.parse` before calling
@@ -158,3 +160,16 @@ MCP JSON must match that guard; MCP YAML proves parser rejection only.
 Both error paths retain unchanged state and no network request. No parser was
 added or changed to satisfy these tests. Legacy file fixtures explicitly use
 3.0.3; dedicated 3.1 literal byte/binary and downgrade-rejection controls remain.
+
+## Integration transition: bounded MCP YAML admission (2026-10-29)
+
+The integration branch now includes PR16's explicit bounded YAML synchronization
+capability. Earlier PR69 evidence correctly described its own JSON-only MCP
+parser: YAML refusal there was parser rejection, not multipart validation.
+That historical evidence is not rewritten. In this new combination only, the
+multipart workflow first admits a supported YAML control without executing it,
+then requires JSON and YAML unsupported transfer declarations to hit the same
+version-aware business guard with unchanged persisted files. The independent
+PR69 branch retains its own capability contract until it explicitly acquires this
+dependency. New integration application tests await exact-commit ordinary CI;
+no local VM/application execution is claimed.

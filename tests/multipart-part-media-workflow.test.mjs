@@ -770,6 +770,27 @@ for (const transport of ["http", "stdio"])
           name: "localapi_sync_openapi",
           arguments: { projectId: p.id, document, coverMode: "url_and_folder" },
         });
+      // Positive YAML admission precedes the negative baseline: these refusals
+      // must reach the multipart business guard, not merely the text parser.
+      const yamlControl = decode(
+        await invoke(
+          yamlStringify(
+            transferDocument(
+              f.origin,
+              "3.0.3",
+              { type: "string" },
+              "multipart/form-data",
+            ),
+          ),
+        ),
+      );
+      assert.equal(yamlControl.length, 1);
+      assert.equal(yamlControl[0].bodyType, "form-data");
+      assert.equal(
+        yamlControl[0].form.find((row) => row.key === "meta").value,
+        "AP8=",
+      );
+      assert.equal(f.connections, 0);
       const before = await files(f.root);
       for (const { openapi, definition } of unsupportedMultipartSchemas) {
         const doc = transferDocument(
@@ -791,11 +812,8 @@ for (const transport of ["http", "stdio"])
           assert.deepEqual(await files(f.root), before);
           const result = await invoke(source);
           assert.equal(result.isError, true);
-          // MCP sync parses string inputs with JSON.parse only, before import.
-          assert.match(
-            result.content[0].text,
-            source === JSON.stringify(doc) ? boundary : /JSON|Unexpected/,
-          );
+          // Both JSON and YAML now reach the same version-aware format guard.
+          assert.match(result.content[0].text, boundary);
           assert.deepEqual(await files(f.root), before);
         }
       }
