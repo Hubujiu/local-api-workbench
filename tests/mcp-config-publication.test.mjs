@@ -153,7 +153,7 @@ test("old auxiliary queued behind owner is skipped; current same-policy creates 
   ]);
 });
 
-test("failed real rename leaves prior publication unchanged, cleans temporary file and queue recovers", async (t) => {
+test("failed real rename leaves memory unchanged, cleans temporary file and queue recovers", async (t) => {
   const state = await fixture(t);
   const queue = new MCPConfigPublication({
     identity: () => state.policy,
@@ -184,4 +184,58 @@ test("failed real rename leaves prior publication unchanged, cleans temporary fi
     state.policy = next;
   });
   assert.equal((await loadMCPConfig(state.root)).enabled, false);
+});
+
+test("pre-write failure preserves prior durable bytes and FIFO owner publication recovers", async (t) => {
+  const state = await fixture(t);
+  const queue = new MCPConfigPublication({
+    identity: () => state.policy,
+    snapshot: state.snapshot,
+    write: (value) => saveMCPConfig(state.root, value),
+  });
+  const file = path.join(state.root, ".mcp-config.json"),
+    ignore = path.join(state.root, ".gitignore");
+  const before = await readFile(file),
+    old = state.policy;
+  await rm(ignore);
+  await mkdir(ignore);
+  await assert.rejects(
+    queue.run(async () => {
+      const next = { ...old, enabled: false, token: "" };
+      await saveMCPConfig(state.root, next);
+      state.policy = next;
+    }),
+  );
+  assert.equal(state.policy, old);
+  assert.equal(
+    (await readFile(file)).equals(before),
+    true,
+    "prior durable bytes remain identical",
+  );
+  assert.equal((await loadMCPConfig(state.root)).token === old.token, true);
+  await rm(ignore, { recursive: true });
+  const entered = deferred(),
+    release = deferred(),
+    order = [];
+  const first = queue.run(async () => {
+    entered.resolve();
+    await release.promise;
+    const next = { ...state.policy, write: false, execute: false };
+    await saveMCPConfig(state.root, next);
+    state.policy = next;
+    order.push("first");
+  });
+  await entered.promise;
+  const second = queue.run(async () => {
+    const next = { ...state.policy, token: "b".repeat(64) };
+    await saveMCPConfig(state.root, next);
+    state.policy = next;
+    order.push("second");
+  });
+  release.resolve();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ["first", "second"]);
+  const restored = await loadMCPConfig(state.root);
+  assert.equal(restored.write, false);
+  assert.equal(restored.token === old.token, false);
 });

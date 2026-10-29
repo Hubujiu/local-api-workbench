@@ -352,6 +352,14 @@ test(
     const before = await f.configure(grant([f.allowed.id]));
     const client = await f.connect(before.token);
     const file = path.join(f.root, ".mcp-config.json");
+    const ignore = path.join(f.root, ".gitignore");
+    const beforeBytes = await readFile(file);
+    await rm(ignore);
+    await mkdir(ignore);
+    await f.configure(grant([f.allowed.id], { enabled: false }), 400);
+    assert.equal((await readFile(file)).equals(beforeBytes), true);
+    assert.equal((await f.policy()).token === before.token, true);
+    await rm(ignore, { recursive: true });
     await rm(file);
     await mkdir(file);
     await f.configure(grant([f.allowed.id], { enabled: false }), 400);
