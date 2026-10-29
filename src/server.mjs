@@ -620,6 +620,9 @@ export async function createApp({
             }
             return json(res, 200, {
               environmentId: context.environment.id,
+              ...(context.collectionId === undefined
+                ? {}
+                : { postmanCollectionId: context.collectionId }),
               fingerprint: context.fingerprint,
               runtimeFingerprint,
               variables: context.variables,
@@ -1241,6 +1244,7 @@ export async function createApp({
               p,
               b.environmentId,
               debugEnvironments,
+              b.postmanCollectionId,
             );
             return json(res, 200, {
               value: await resolveDynamicValue(
@@ -1465,6 +1469,10 @@ export async function createApp({
           }
           if (action === "load" && req.method === "POST") {
             const b = await body(req);
+            if (b.request?.postmanCollectionId !== undefined)
+              throw Error(
+                "压测暂不支持Postman collection作用域，请使用普通请求或计划",
+              );
             const context = debugEnvironment(
               p,
               b.environmentId,

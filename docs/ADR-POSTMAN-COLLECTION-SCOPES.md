@@ -147,3 +147,22 @@ The newly added shadowed-collection cache assertion initially failed (twice whil
 the source replacement had not applied), then passed after the fingerprint included
 the actual collection layer. This is pure regression evidence, not application or
 VM execution. No assertion or execution budget was changed.
+
+## Complete workflow specifications (CI pending)
+
+The new ordinary workflow files are syntax/format checked only, not executed
+locally. HTTP and stdio each exercise owner import, effective scope/falsy values,
+seven facade methods, true curl wire, SDK saved A/B/A plans, live rebinding,
+backup/restore/restart and actual CLI execution with unchanged old snapshot hash.
+The same chain checks denied projects, legacy default imports, source/disk rejection
+atomicity, lossless backup and unsupported exports/load. Owner script exceptions,
+identity forgery and concurrent same-field edits retain real completed responses
+while refusing uncommitted variable stages.
+
+Separate owner/HTTP/stdio cases use the existing test-only real Store lock gate
+for both pre- and post-stage cancellation. Pre-stage cancellation sends no main
+request; post-stage retains the admitted pre-commit and actual response, rejects
+queued new scope changes, persists terminal evidence, restores and restarts without
+replay. The preload is the existing main-thread-only fixture. Production transport,
+Store locks, script engine and budgets are not replaced. PR17 typed uncertainty is
+not present on this dependency base and remains an explicit root composition test.
