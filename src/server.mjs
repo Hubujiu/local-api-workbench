@@ -26,6 +26,7 @@ import {
 
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
+import { saveProjectArchive } from "./project-archive-grants.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -924,8 +925,6 @@ export async function createApp({
                 b,
               ),
             );
-            if (b.archived)
-              mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
             b.history = p.history;
             const importSessionActive = autoImports.active === p.id;
@@ -935,13 +934,18 @@ export async function createApp({
                 JSON.stringify(normalizeAutoImports(p.settings?.autoImports));
             if (importSessionActive && importSessionChanged)
               await autoImports.deactivate(p.id);
-            const saved = await store.save(b);
+            const saved = await saveProjectArchive(
+              b,
+              () => store.save(b),
+              (projectId) => {
+                mcp.projects = mcp.projects.filter((id) => id !== projectId);
+                mcpSessionProjects = mcpSessionProjects.filter(
+                  (id) => id !== projectId,
+                );
+              },
+            );
             if (importSessionActive && importSessionChanged && !b.archived)
               await autoImports.reactivate(p.id);
-            if (b.archived)
-              mcpSessionProjects = mcpSessionProjects.filter(
-                (id) => id !== b.id,
-              );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
