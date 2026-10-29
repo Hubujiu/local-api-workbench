@@ -4,7 +4,14 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -12,6 +19,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
+import { Store } from "../src/runtime.mjs";
+import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import {
   av,
   bytes,
@@ -325,6 +334,8 @@ async function cli(f, projectId, planId) {
 function successful(run, frozen) {
   assert.equal(run.status, "passed", JSON.stringify(run.results));
   assert.equal(run.recordSaved, true);
+  assert.equal(run.recordId, run.id);
+  assert.equal(run.attemptedRecordId, run.id);
   assert.deepEqual(run.snapshot, frozen);
   assert.equal(run.planHash, hash(frozen));
   assert.equal(run.results[0].response.status, 200);
@@ -592,7 +603,14 @@ test(
     }
     assert.equal(unsaved.status, "passed");
     assert.equal(unsaved.recordSaved, false);
-    assert.match(unsaved.persistenceError, /fixture result storage failure/);
+    assert.equal(unsaved.recordId, null);
+    assert.equal(unsaved.attemptedRecordId, unsaved.id);
+    assert.deepEqual(unsaved.persistenceOutcome, {
+      code: "RECORD_SAVE_FAILED",
+      retry_safe: false,
+    });
+    assert.match(unsaved.persistenceError, /保存未确认/);
+    assert(!JSON.stringify(unsaved).includes("fixture result storage failure"));
     assert.equal(attempted, 1);
     assert.deepEqual((await f.get(project.id)).runs, before.runs);
     assert.deepEqual(
@@ -605,5 +623,167 @@ test(
     await f.restart();
     assert.deepEqual((await f.get(project.id)).runs, before.runs);
     assert.equal(f.seen.length, count);
+  },
+);
+
+test(
+  "root NTLM MIC real journal uncertainty recovers the same evidence without repeating authentication",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t),
+      project = await f.project("MIC journal uncertainty"),
+      other = await f.project("isolated from MIC journal");
+    const otherBytes = await files(f.app.store.directory(other.id));
+    const plan = await f.plan(project.id, f.request("/journal-version"));
+    const before = await f.get(project.id),
+      frozen = before.plans.find((item) => item.id === plan.id);
+    const store = f.app.store,
+      originalSave = store.save,
+      originalRead = store.readUnlocked;
+    const directory = store.directory(project.id),
+      plans = path.join(directory, "plans"),
+      kept = path.join(directory, "plans-owned-backup"),
+      journalPath = path.join(directory, ".transaction.json");
+    let actualError,
+      journal,
+      run,
+      obstructed = false,
+      attempts = 0;
+    // The real Store writes its journal and determines uncertainty. Only the
+    // owned filesystem obstacle is injected, never a fabricated typed error.
+    store.save = async function (candidate, options) {
+      if (candidate.id !== project.id || !options?.activity)
+        return originalSave.call(this, candidate, options);
+      attempts++;
+      this.readUnlocked = async function (key, ...args) {
+        const current = await originalRead.call(this, key, ...args);
+        this.readUnlocked = originalRead;
+        await rename(plans, kept);
+        obstructed = true;
+        await writeFile(plans, "mic-private-obstacle");
+        return current;
+      };
+      try {
+        return await originalSave.call(this, candidate, options);
+      } catch (error) {
+        actualError = error;
+        throw error;
+      } finally {
+        this.readUnlocked = originalRead;
+      }
+    };
+    try {
+      run = await f.run(project.id, plan.id, "mic-journal-unknown");
+      assert.equal(run.status, "passed", JSON.stringify(run.results));
+      assert.equal(run.results[0].response.status, 200);
+      assert.equal(run.results[0].response.authHandshake.roundTrips, 2);
+      assert.equal(attempts, 1);
+      assert(actualError instanceof ProjectCommitUncertain);
+      assert.equal(actualError.projectId, project.id);
+      assert.equal(run.recordSaved, false);
+      assert.equal(run.recordId, null);
+      assert.equal(run.attemptedRecordId, run.id);
+      assert.deepEqual(run.persistenceOutcome, {
+        code: "PROJECT_COMMIT_UNCERTAIN",
+        project_id: project.id,
+        commit_outcome: "unknown",
+        retry_safe: false,
+      });
+      assert.deepEqual(run.snapshot, frozen);
+      assert.equal(run.planHash, hash(frozen));
+      for (const secret of [
+        f.root,
+        "mic-private-obstacle",
+        "ENOTDIR",
+        "EISDIR",
+      ])
+        assert(!JSON.stringify(run).includes(secret));
+      journal = JSON.parse(await readFile(journalPath, "utf8"));
+      assert.equal(journal.runs.length, 1);
+      assert.equal(journal.runs[0].id, run.attemptedRecordId);
+      assert.equal(journal.runs[0].source, "manual");
+      assert.deepEqual(journal.runs[0].snapshot, frozen);
+      assert.equal(journal.runs[0].planHash, hash(frozen));
+      assert.deepEqual(journal.plans, before.plans);
+      assert.equal(journal.configRevision, before.configRevision);
+      assert.deepEqual(
+        f.seen.map((entry) => entry.type),
+        [1, 3],
+      );
+      assert.equal(f.seen[0].connection, f.seen[1].connection);
+    } finally {
+      store.save = originalSave;
+      store.readUnlocked = originalRead;
+      if (obstructed) {
+        await rm(plans, { force: true });
+        await rename(kept, plans);
+      }
+    }
+    const recovered = await new Store(f.root).get(project.id);
+    assert.deepEqual(recovered.runs, journal.runs);
+    assert.equal(recovered.configRevision, before.configRevision);
+    await assert.rejects(readFile(journalPath), { code: "ENOENT" });
+    assert.deepEqual(await files(store.directory(other.id)), otherBytes);
+    const backup = await f.owner(
+      `/api/projects/${project.id}/export`,
+      undefined,
+      "GET",
+    );
+    const restored = await f.owner(
+      "/api/restore",
+      { document: backup },
+      "POST",
+      201,
+    );
+    await f.restart();
+    assert.deepEqual((await f.get(restored.id)).runs, journal.runs);
+    for (const transport of ["http", "stdio"]) {
+      const reader = await f.connect(restored.id, transport, false);
+      assert.deepEqual(
+        decode(
+          await callTool(reader, "get_run", {
+            projectId: restored.id,
+            runId: run.attemptedRecordId,
+          }),
+        ),
+        journal.runs[0],
+      );
+      assert.equal(
+        (
+          await callTool(reader, "get_run", {
+            projectId: project.id,
+            runId: run.id,
+          })
+        ).isError,
+        true,
+      );
+    }
+    assert.deepEqual(
+      f.seen.map((entry) => entry.type),
+      [1, 3],
+      "reconcile, restore and read never repeat a completed authentication",
+    );
+    const invoked = await cli(f, restored.id, plan.id);
+    assert.equal(invoked.code, 0, invoked.stderr + invoked.stdout);
+    const next = JSON.parse(invoked.stdout);
+    successful(next, frozen);
+    assert.notEqual(next.id, run.id);
+    assert.deepEqual(
+      f.seen.map((entry) => entry.type),
+      [1, 3, 1, 3],
+    );
+    assert.equal(f.seen[2].connection, f.seen[3].connection);
+    assert.notEqual(f.seen[0].connection, f.seen[2].connection);
+    const after = await f.get(restored.id);
+    assert.equal(after.runs.length, 2);
+    assert.deepEqual(
+      after.runs.find((item) => item.id === run.id),
+      journal.runs[0],
+    );
+    assert.equal(after.runs.find((item) => item.id === next.id).source, "cli");
+    await f.restart();
+    assert.deepEqual((await f.get(restored.id)).runs, after.runs);
+    assert.equal(f.seen.length, 4);
+    assert.deepEqual(await files(f.app.store.directory(other.id)), otherBytes);
   },
 );
