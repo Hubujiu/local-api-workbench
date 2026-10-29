@@ -1,5 +1,6 @@
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 
+import { assertMultipartMediaExportable } from "./multipart-part-media.mjs";
 function requestBodyAnnotations(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw Error("OpenAPI requestBody 必须是对象");
@@ -225,6 +226,7 @@ export function importOpenAPIBody(requestBody) {
 }
 
 export function exportOpenAPIBody(request) {
+  assertMultipartMediaExportable(request, "OpenAPI");
   const type = request.bodyType;
   const media = exportBodyMedia(request);
   if (media === undefined) return undefined;

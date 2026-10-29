@@ -76,6 +76,11 @@ import {
 } from "./openapi-query-arrays.mjs";
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
+import {
+  validateMultipartPartMedia,
+  assertMultipartMediaExportable,
+  postmanPartMedia,
+} from "./multipart-part-media.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
@@ -326,6 +331,7 @@ export function normalizeRequest(r = {}) {
       throw Error(key + " 必须是对象数组");
   }
   validateQueryArrayRequest(r);
+  validateMultipartPartMedia(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
@@ -1691,6 +1697,7 @@ export function importDocument(doc) {
                   ? body.formdata || []
                   : []
             ).map((f) => ({
+              ...postmanPartMedia(f),
               key: f.key,
               value: f.type === "file" ? "" : f.value,
               enabled: !f.disabled,
@@ -2066,6 +2073,7 @@ export function toCurl(input, { collectionResolved = false } = {}) {
     throw Error("cURL须先通过项目上下文解析Postman collection变量");
   assertRedirectExportable(input);
   assertQueryArrayCurlDefinition(input);
+  assertMultipartMediaExportable(input, "cURL");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),
