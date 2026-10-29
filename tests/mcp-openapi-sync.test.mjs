@@ -130,3 +130,35 @@ test("append mode never reuses IDs when source operation IDs collide", () => {
   assert.equal(new Set(imported.map((r) => r.id)).size, 2);
   assert.equal(p.requests.length, 2);
 });
+
+test("OpenAPI YAML sync uses the same modes and refuses other formats before mutation", () => {
+  const p = project();
+  const yaml =
+    "openapi: 3.0.3\nservers:\n  - url: https://example.test\npaths:\n  /yaml:\n    get:\n      responses:\n        '200':\n          description: OK\n";
+  const [first] = syncMCPOpenAPI(p, { document: yaml });
+  assert.equal(first.url, "https://example.test/yaml");
+  assert.equal(syncMCPOpenAPI(p, { document: yaml })[0].id, first.id);
+  assert.equal(
+    syncMCPOpenAPI(p, { document: yaml, coverMode: "ignore" }).length,
+    0,
+  );
+  assert.notEqual(
+    syncMCPOpenAPI(p, { document: yaml, coverMode: "both" })[0].id,
+    first.id,
+  );
+  for (const invalid of [
+    "swagger: '2.0'\npaths: {}",
+    "info:\n  schema: postman\nitem: []",
+    "curl https://example.test",
+    "null",
+    "[]",
+    JSON.stringify("openapi: 3.0.3"),
+    "openapi: 3.2.0\npaths: {}",
+    "openapi: 3.0.3\nopenapi: 3.1.0",
+    yaml + "  /bad:\n    trace: {}\n",
+  ]) {
+    const before = structuredClone(p);
+    assert.throws(() => syncMCPOpenAPI(p, { document: invalid }));
+    assert.deepEqual(p, before);
+  }
+});

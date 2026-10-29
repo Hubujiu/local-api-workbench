@@ -65,7 +65,8 @@ import {
   applyLegacyVariables,
   scopeChanges,
 } from "./variable-scopes.mjs";
-import { parse as parseYAML } from "yaml";
+import { parseImportDocumentText } from "./import-document-parser.mjs";
+import { supportedOpenAPIPathItems } from "./openapi-operation-admission.mjs";
 import { runScript, runScriptSequence } from "./scripts.mjs";
 import { randomUUID, createHash } from "node:crypto";
 export const id = () => randomUUID();
@@ -909,12 +910,8 @@ export function applyOperation(op, vars) {
 }
 export function importDocument(doc) {
   if (typeof doc === "string") {
-    try {
-      doc = JSON.parse(doc);
-    } catch {
-      if (doc.trim().startsWith("curl ")) return [importCurl(doc)];
-      doc = parseYAML(doc, { maxAliasCount: 100, uniqueKeys: true });
-    }
+    if (doc.trim().startsWith("curl ")) return [importCurl(doc)];
+    doc = parseImportDocumentText(doc);
   }
   if (!doc || typeof doc !== "object") throw Error("无法识别导入格式");
   if (isApipostDirectoryDocument(doc))
@@ -926,7 +923,7 @@ export function importDocument(doc) {
       (doc.host
         ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
         : "{{baseUrl}}");
-    return Object.entries(doc.paths || {}).flatMap(([path, item]) =>
+    return supportedOpenAPIPathItems(doc).flatMap(([path, item]) =>
       Object.entries(item)
         .filter(([m]) =>
           ["get", "post", "put", "patch", "delete", "head", "options"].includes(
@@ -1896,14 +1893,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
     else {
-      try {
-        original = JSON.parse(original);
-      } catch {
-        original = parseYAML(original, {
-          maxAliasCount: 100,
-          uniqueKeys: true,
-        });
-      }
+      original = parseImportDocumentText(original);
     }
   }
   const fromDirectory = isApipostDirectoryDocument(original);
