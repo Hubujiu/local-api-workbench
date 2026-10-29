@@ -1,3 +1,4 @@
+import { publishDebugVariables } from "./debug-publication.mjs";
 import { activePlanStepCount } from "./plan-repeat.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
@@ -928,41 +929,32 @@ export function createMCP({
                   },
                 ],
               });
-              output = await runPlan(
-                plan,
-                debugEnvironment(p, environmentId, debugEnvironments).variables,
-                executeRequest,
-                {
-                  signal,
-                  databaseQuery: databaseExecutor
-                    ? (operation, signal) =>
-                        databaseExecutor(p.id, operation, signal)
-                    : undefined,
-                  cookieSession: projectCookieSession(store, p, environmentId),
-                  ...scopedExecution(
-                    store,
-                    p,
-                    environmentId,
-                    debugEnvironment(p, environmentId, debugEnvironments)
-                      .variables,
-                  ),
-                  onStep: (step) =>
-                    emitProgress({
-                      completed: 1,
-                      total: 1,
-                      stepId: step.stepId,
-                      status: step.status,
-                    }),
-                },
-              );
               const context = debugEnvironment(
                 p,
                 environmentId,
                 debugEnvironments,
               );
+              output = await runPlan(plan, context.variables, executeRequest, {
+                signal,
+                databaseQuery: databaseExecutor
+                  ? (operation, signal) =>
+                      databaseExecutor(p.id, operation, signal)
+                  : undefined,
+                cookieSession: projectCookieSession(store, p, environmentId),
+                ...scopedExecution(store, p, environmentId, context.variables),
+                onStep: (step) =>
+                  emitProgress({
+                    completed: 1,
+                    total: 1,
+                    stepId: step.stepId,
+                    status: step.status,
+                  }),
+              });
               if (!signal?.aborted && output.results[0]?.response)
-                debugEnvironments.set(context.cacheKey, {
-                  fingerprint: context.fingerprint,
+                publishDebugVariables(debugEnvironments, context.publication, {
+                  fingerprint: JSON.stringify(
+                    environmentVariables(p, context.environment.id),
+                  ),
                   variables: output.variables,
                 });
               output.environmentId = environmentId;
