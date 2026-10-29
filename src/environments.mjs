@@ -1,3 +1,4 @@
+import { captureDebugPublication } from "./debug-publication.mjs";
 import {
   variableRows,
   updateVariable,
@@ -260,6 +261,7 @@ export function debugEnvironment(project, environmentId, cache) {
   return {
     environment,
     cacheKey,
+    publication: captureDebugPublication(cache, project.id, cacheKey),
     fingerprint,
     variables: structuredClone(
       entry?.fingerprint === fingerprint ? entry.variables : persisted,
