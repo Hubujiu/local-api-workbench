@@ -86,3 +86,19 @@ the owner policy during another native create. Stale-generation response is
 rejected; neither old native grant survives replacement/restart. Existing
 PR64 genuine uncertain-archive tests remain unchanged, including the explicit
 boundary that uncertainty does not claim durable remembered-grant cleanup.
+
+## First root regression and fixture repair
+
+Exact remote `4c31a56509029d27130be983542700b0c9d92318`, ordinary CI
+`40953461113`, exposed four HTTP project-roundtrip SDK failures on Linux
+shard 3: its existing fixture pre-archives a project, then includes that ID in
+every owner grant request and expects HTTP 200. The new owner gate correctly
+returns 400 before those roundtrips execute. This is retained failed evidence,
+not a successful root or an unrelated timeout.
+
+The root-only fixture now explicitly verifies that archived-ID grant rejection
+returns 400 and leaves policy fields, token identity and durable bytes unchanged,
+then grants exactly its three active projects. Existing archived/denied/missing
+SDK import/export negatives and no-mutation checks stay. The stdio explicit ID
+list is unchanged. No production permission gate or assertion is weakened;
+this corrected root needs its own ordinary CI result.

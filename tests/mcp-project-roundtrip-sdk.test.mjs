@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -315,20 +315,54 @@ for (const transport of ["http", "stdio"])
               { capabilities: {} },
             );
             if (transport === "http") {
-              const configured = await fetch(app.url + "/api/mcp/config", {
-                method: "POST",
-                headers: {
-                  "x-local-token": app.token,
-                  "content-type": "application/json",
-                },
-                body: JSON.stringify({
-                  enabled: true,
-                  projects,
-                  write,
-                  execute,
-                  remember: false,
-                }),
-              });
+              const headers = {
+                "x-local-token": app.token,
+                "content-type": "application/json",
+              };
+              const policy = async () =>
+                (await fetch(app.url + "/api/mcp/config", { headers })).json();
+              const persisted = () =>
+                readFile(path.join(root, ".mcp-config.json")).catch((error) => {
+                  if (error.code === "ENOENT") return null;
+                  throw error;
+                });
+              const configure = (selectedProjects) =>
+                fetch(app.url + "/api/mcp/config", {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify({
+                    enabled: true,
+                    projects: selectedProjects,
+                    write,
+                    execute,
+                    remember: false,
+                  }),
+                });
+              // The archived fixture must not be reauthorized by the owner.
+              // Prove rejection is atomic before granting the active fixtures;
+              // the archived/denied/missing SDK negatives below remain intact.
+              const before = await policy(),
+                bytes = await persisted();
+              const rejected = await configure(projects);
+              assert.equal(rejected.status, 400);
+              assert.match((await rejected.json()).error, /已归档/);
+              const after = await policy(),
+                afterBytes = await persisted();
+              for (const key of ["enabled", "remember", "write", "execute"])
+                assert.equal(after[key], before[key]);
+              assert.deepEqual(after.projects, before.projects);
+              assert.equal(after.token === before.token, true);
+              assert.equal(
+                bytes === null
+                  ? afterBytes === null
+                  : afterBytes?.equals(bytes),
+                true,
+              );
+              const configured = await configure([
+                source.id,
+                target.id,
+                second.id,
+              ]);
               assert.equal(configured.status, 200);
               const { token } = await configured.json();
               await client.connect(
