@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest, restoreProject } from "../src/core.mjs";
 const decode = (r) => {
@@ -504,3 +506,344 @@ test(
     );
   },
 );
+
+async function projectBytes(directory) {
+  const result = {};
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      for (const [name, value] of Object.entries(await projectBytes(file)))
+        result[entry.name + "/" + name] = value;
+    } else result[entry.name] = (await readFile(file)).toString("base64");
+  }
+  return result;
+}
+
+for (const transport of ["http", "stdio"])
+  test(
+    `${transport} SDK native partial variable updates retain stored null through canonical reads, backup restore and restart`,
+    { timeout: 30000 },
+    async (t) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "native-null-values-"));
+      let app = await createApp({ root, port: 0 }),
+        clients = [];
+      const close = async () => {
+        await Promise.all(
+          clients.map((client) => client.close().catch(() => {})),
+        );
+        clients = [];
+        app.server.closeAllConnections();
+        await new Promise((resolve) => app.server.close(resolve));
+      };
+      t.after(async () => {
+        await close();
+        await rm(root, { recursive: true, force: true });
+      });
+      const owner = async (url, method = "GET", document, status = 200) => {
+        const response = await fetch(app.url + url, {
+          method,
+          headers: {
+            "x-local-token": app.token,
+            "content-type": "application/json",
+          },
+          ...(document === undefined ? {} : { body: JSON.stringify(document) }),
+        });
+        const value = await response.json();
+        assert.equal(response.status, status, JSON.stringify(value));
+        return value;
+      };
+      const source = await owner(
+        "/api/projects",
+        "POST",
+        { name: "Nullable source" },
+        201,
+      );
+      const other = await owner(
+        "/api/projects",
+        "POST",
+        { name: "Never authorized" },
+        201,
+      );
+      const targetEnvironment = "nullable-env";
+      source.environments.push({
+        id: targetEnvironment,
+        name: "Nullable environment",
+        variables: {},
+      });
+      source.globalVariables = { untouched: "global sentinel" };
+      await owner(`/api/projects/${source.id}`, "PUT", source);
+      let originalEnvironment;
+      const connect = async (projectId, write = true) => {
+        const client = new Client(
+          { name: "native-null-lifecycle", version: "1" },
+          { capabilities: {} },
+        );
+        clients.push(client);
+        if (transport === "http") {
+          const config = await owner("/api/mcp/config", "POST", {
+            enabled: true,
+            remember: true,
+            projects: [projectId],
+            write,
+            execute: false,
+          });
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(app.url + "/mcp"), {
+              requestInit: {
+                headers: { authorization: "Bearer " + config.token },
+              },
+            }),
+          );
+        } else {
+          await client.connect(
+            new StdioClientTransport({
+              command: process.execPath,
+              args: [
+                fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+                "--project",
+                projectId,
+                ...(write ? ["--write"] : []),
+              ],
+              env: { LOCAL_API_DATA: root },
+              stderr: "pipe",
+            }),
+          );
+        }
+        const tools = (await client.listTools()).tools;
+        assert.equal(
+          tools.some((tool) => tool.name === "apipost_upsert_global_variable"),
+          write,
+        );
+        assert(!tools.some((tool) => /execute|run_plan/.test(tool.name)));
+        return client;
+      };
+      let client = await connect(source.id);
+      const native = (
+        scope,
+        args,
+        projectId = source.id,
+        currentClient = client,
+      ) =>
+        currentClient.callTool({
+          name: `apipost_upsert_${scope}_variable`,
+          arguments: {
+            project_id: projectId,
+            ...(scope === "environment"
+              ? { environment_id: targetEnvironment }
+              : {}),
+            ...args,
+          },
+        });
+      const rows = [
+        ["bothNull", null, null],
+        ["initialNull", null, "current"],
+        ["currentNull", "initial", null],
+        ["falsy", false, 0],
+        ["empty", "", ""],
+      ];
+      const expected = Object.fromEntries(
+        rows.map(([key, initial, current]) => [
+          key,
+          { initial, current, description: "" },
+        ]),
+      );
+      const scopes = ["global", "environment"];
+      for (const scope of scopes)
+        for (const [key, value, current_value] of rows)
+          decode(await native(scope, { key, value, current_value }));
+      // Successful native writes establish default-service metadata once. The
+      // unrelated environment must stay unchanged by all subsequent updates.
+      originalEnvironment = (await owner(`/api/projects/${source.id}`))
+        .environments[0];
+      const assertState = async (projectId = source.id) => {
+        const persisted = await owner(`/api/projects/${projectId}`);
+        for (const scope of scopes) {
+          const canonical = decode(
+            await client.callTool({
+              name: `localapi_get_${scope}_variables`,
+              arguments: {
+                projectId,
+                ...(scope === "environment"
+                  ? { environmentId: targetEnvironment }
+                  : {}),
+              },
+            }),
+          );
+          const nativeRead = decode(
+            await client.callTool({
+              name: `apipost_get_${scope}_variables`,
+              arguments: {
+                project_id: projectId,
+                ...(scope === "environment"
+                  ? { environment_id: targetEnvironment }
+                  : {}),
+              },
+            }),
+          );
+          const environment = persisted.environments.find(
+            (e) => e.id === targetEnvironment,
+          );
+          const values =
+            scope === "global"
+              ? persisted.globalVariables
+              : environment.variables;
+          const definitions =
+            scope === "global"
+              ? persisted.globalVariableDefinitions
+              : environment.variableDefinitions;
+          for (const [key, value] of Object.entries(expected)) {
+            assert.deepEqual(values[key], value.current);
+            assert.deepEqual(definitions[key], {
+              initialValue: value.initial,
+              description: value.description,
+            });
+            const row = canonical.entries.find((entry) => entry.key === key);
+            assert.equal(row.currentSet, true);
+            assert.deepEqual(row.initialValue, value.initial);
+            assert.deepEqual(row.currentValue, value.current);
+            assert.deepEqual(
+              nativeRead.variables.find((entry) => entry.key === key),
+              {
+                key,
+                value: value.initial ?? "",
+                current_value: value.current ?? "",
+                description: value.description,
+              },
+            );
+          }
+        }
+        assert.equal(persisted.globalVariables.untouched, "global sentinel");
+        assert.deepEqual(persisted.environments[0], originalEnvironment);
+        for (const collection of ["history", "runs", "protocolRuns"])
+          assert.deepEqual(persisted[collection] || [], []);
+        return persisted;
+      };
+      // Native views intentionally render null as blank; canonical and owner
+      // reads independently prove that the persisted JSON is still null.
+      await assertState();
+      for (const scope of scopes)
+        for (const [key] of rows) {
+          decode(await native(scope, { key, description: "metadata only" }));
+          decode(await native(scope, { key }));
+        }
+      for (const value of Object.values(expected))
+        value.description = "metadata only";
+      await assertState();
+      for (const scope of scopes) {
+        decode(
+          await native(scope, { key: "initialNull", current_value: null }),
+        );
+        decode(await native(scope, { key: "currentNull", value: null }));
+      }
+      expected.initialNull.current = null;
+      expected.currentNull.initial = null;
+      await assertState();
+      const rejectUnchanged = async (invoke) => {
+        const ids = [source.id, other.id];
+        const before = await Promise.all(
+          ids.map((id) => projectBytes(app.store.directory(id))),
+        );
+        const result = await invoke();
+        assert.equal(result.isError, true, result.content?.[0]?.text);
+        for (let index = 0; index < ids.length; index++)
+          assert.deepEqual(
+            await projectBytes(app.store.directory(ids[index])),
+            before[index],
+          );
+      };
+      for (const scope of scopes) {
+        await rejectUnchanged(() =>
+          native(scope, {
+            key: "bothNull",
+            value: "must not save",
+            description: 5,
+          }),
+        );
+        await rejectUnchanged(() =>
+          native(scope, { key: " __proto__ ", current_value: "must not save" }),
+        );
+        await rejectUnchanged(() =>
+          native(
+            scope,
+            { key: "bothNull", current_value: "must not save" },
+            other.id,
+          ),
+        );
+      }
+      await rejectUnchanged(() =>
+        native("environment", {
+          environment_id: "missing",
+          key: "bothNull",
+          current_value: "must not save",
+        }),
+      );
+      const readonly = await connect(source.id, false);
+      for (const scope of scopes)
+        await rejectUnchanged(() =>
+          native(
+            scope,
+            { key: "bothNull", current_value: "must not save" },
+            source.id,
+            readonly,
+          ),
+        );
+      client = await connect(source.id);
+      await assertState();
+      const backup = await owner(`/api/projects/${source.id}/export`);
+      const sourceBytes = await projectBytes(app.store.directory(source.id));
+      const otherBytes = await projectBytes(app.store.directory(other.id));
+      const restored = await owner(
+        "/api/restore",
+        "POST",
+        { document: backup },
+        201,
+      );
+      assert.notEqual(restored.id, source.id);
+      assert.deepEqual(
+        restored.globalVariableDefinitions,
+        backup.globalVariableDefinitions,
+      );
+      assert.deepEqual(restored.globalVariables, backup.globalVariables);
+      assert.deepEqual(restored.environments, backup.environments);
+      await close();
+      app = await createApp({ root, port: 0 });
+      client = await connect(source.id);
+      await assertState();
+      const deniedRestore = await native(
+        "global",
+        { key: "bothNull", current_value: "must not save" },
+        restored.id,
+      );
+      assert.equal(deniedRestore.isError, true);
+      client = await connect(restored.id);
+      await assertState(restored.id);
+      for (const scope of scopes)
+        decode(
+          await native(
+            scope,
+            { key: "bothNull", description: "metadata only" },
+            restored.id,
+          ),
+        );
+      await assertState(restored.id);
+      for (const scope of scopes)
+        decode(
+          await native(
+            scope,
+            { key: "bothNull", current_value: "restored only" },
+            restored.id,
+          ),
+        );
+      expected.bothNull.current = "restored only";
+      await assertState(restored.id);
+      assert.deepEqual(
+        await projectBytes(app.store.directory(source.id)),
+        sourceBytes,
+      );
+      assert.deepEqual(
+        await projectBytes(app.store.directory(other.id)),
+        otherBytes,
+      );
+      await client.ping();
+    },
+  );
