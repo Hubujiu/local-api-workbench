@@ -1,4 +1,11 @@
-import { readResponseHeaderEvidence } from "./response-header-evidence.mjs";
+import {
+  compileNativeAssertions,
+  isNativeVariableAssertion,
+} from "./native-response-assertions.mjs";
+import {
+  readResponseHeaderEvidence,
+  readResponseCookieEvidence,
+} from "./response-header-evidence.mjs";
 import { compilePickVarsOperations } from "./native-response-extraction.mjs";
 import {
   normalizeDatabaseOperations,
@@ -69,7 +76,16 @@ export function runScript(code, input, options = {}) {
     databaseQuery,
     databaseOperations: suppliedDatabaseOperations,
     responseExtractions: suppliedResponseExtractions,
+    responseAssertions: suppliedResponseAssertions,
   } = options;
+  const responseAssertions = compileNativeAssertions(
+    suppliedResponseAssertions,
+  );
+  if (
+    responseAssertions.some((op) => !isNativeVariableAssertion(op.type)) &&
+    !input.response
+  )
+    throw Error("原生断言需要后置响应");
   const responseExtractions = compilePickVarsOperations(
     suppliedResponseExtractions,
   );
@@ -89,6 +105,8 @@ export function runScript(code, input, options = {}) {
     jobLimit,
     assertionLimit,
   } = scriptBudgets(options);
+  if (responseAssertions.length > assertionLimit)
+    throw Error("声明的原生断言超过本次共享断言预算");
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -128,8 +146,10 @@ export function runScript(code, input, options = {}) {
         compiledEngine,
         databaseTaskCount: databaseOperations.length,
         responseExtractions,
+        responseAssertions,
         // Never trust serialized fields supplied by a request, response or VM.
         responseHeaderEvidence: readResponseHeaderEvidence(input.response),
+        responseCookieEvidence: readResponseCookieEvidence(input.response),
         code,
         input,
         activityBudgetMs,
