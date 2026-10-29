@@ -133,3 +133,18 @@ Reviewed pure-helper tests cover these guards and controls. Added real owner
 JSON/YAML, mixed-import atomicity, HTTP/stdio SDK sync, exact wire controls,
 project isolation and legacy backup/restart/export-error workflows are ordinary
 CI-only evidence; they have not been run locally.
+
+### First transfer-boundary CI and corrected evidence contract
+
+Ordinary feature run 40960879939 failed on all three core jobs: four older
+fixtures used 3.1 format:binary while asserting 3.0 raw-file semantics, and two
+new transport workflows expected the transfer guard from YAML strings.
+Those failures are retained, not reclassified as passed or rerun.
+
+Owner project import and MCP OpenAPI sync accept JSON strings/objects, not YAML
+strings. Their YAML cases now prove explicit parser rejection and unchanged
+state only. JSON cases require the actual OpenAPI boundary error prefix, avoiding
+false matches against keyword text embedded in a JSON parser error. Direct core
+YAML parsing is not equivalent to these owner/MCP entrypoints and is not claimed
+as such. Existing legacy file fixtures now explicitly declare 3.0.3; dedicated
+3.1 literal byte/binary import and downgrade-rejection controls remain.

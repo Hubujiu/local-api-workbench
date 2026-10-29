@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { importDocument, exportOpenAPI } from "../src/core.mjs";
-const source = (content) => ({
-  openapi: "3.1.0",
+const source = (content, openapi = "3.1.0") => ({
+  openapi,
   paths: {
     "/send": {
       post: {
@@ -55,14 +55,17 @@ test("OpenAPI scalar forms preserve examples and multipart files require selecti
     assert.equal(r.form.find((f) => f.key === "name").required, true);
   }
   const [file] = importDocument(
-    source({
-      "multipart/form-data": {
-        schema: {
-          type: "object",
-          properties: { file: { type: "string", format: "binary" } },
+    source(
+      {
+        "multipart/form-data": {
+          schema: {
+            type: "object",
+            properties: { file: { type: "string", format: "binary" } },
+          },
         },
       },
-    }),
+      "3.0.3",
+    ),
   );
   assert.equal(file.form[0].type, "file");
   assert.equal(file.form[0].requiresFile, true);
@@ -157,6 +160,7 @@ test("text and URL encoded imported bodies arrive at a real server; unselected f
       },
     },
   });
+  doc.openapi = "3.0.3"; // Legacy raw-file placeholder, not a 3.1 format annotation.
   doc.servers = [{ url: `http://127.0.0.1:${server.address().port}` }];
   await assert.rejects(
     () => executeRequest(importDocument(doc)[0]),

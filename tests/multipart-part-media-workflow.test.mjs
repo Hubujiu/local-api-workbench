@@ -618,12 +618,19 @@ for (const transport of ["http", "stdio"])
               "POST",
               400,
             );
-            assert.match(error.error, /encoding/);
+            // Owner project import accepts JSON documents only; YAML parse
+            // rejection is not proof that the encoding boundary was reached.
+            assert.match(
+              error.error,
+              source === JSON.stringify(document)
+                ? /OpenAPI.*encoding/
+                : /JSON|Unexpected/,
+            );
             assert.deepEqual(await files(f.root), allBefore);
           }
           const result = await invoke(p.id, document);
           assert.equal(result.isError, true);
-          assert.match(result.content[0].text, /encoding/);
+          assert.match(result.content[0].text, /OpenAPI.*encoding/);
           assert.deepEqual(await files(f.root), allBefore);
           assert.equal(f.seen.length, 0);
           assert.equal(f.connections, 0);
@@ -785,11 +792,15 @@ for (const transport of ["http", "stdio"])
             "POST",
             400,
           );
-          assert.match(error.error, /contentEncoding|format:byte/);
+          const expected =
+            source === JSON.stringify(doc)
+              ? /尚不支持 OpenAPI.*(?:contentEncoding|format:byte)/
+              : /JSON|Unexpected/;
+          assert.match(error.error, expected);
           assert.deepEqual(await files(f.root), before);
           const result = await invoke(source);
           assert.equal(result.isError, true);
-          assert.match(result.content[0].text, /contentEncoding|format:byte/);
+          assert.match(result.content[0].text, expected);
           assert.deepEqual(await files(f.root), before);
         }
       }

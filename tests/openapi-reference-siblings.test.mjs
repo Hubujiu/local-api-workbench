@@ -173,6 +173,7 @@ test("annotation-only referenced multipart fields retain file classification", (
       },
     },
   };
+  source.openapi = "3.0.3"; // Preserve legacy binary file classification.
   const [request] = importDocument(source);
   assert.equal(request.form[0].type, "file");
   assert.equal(request.form[0].requiresFile, true);

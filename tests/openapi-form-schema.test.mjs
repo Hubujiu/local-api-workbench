@@ -11,8 +11,9 @@ const source = (
   schema,
   example,
   mime = "application/x-www-form-urlencoded",
+  openapi = "3.1.0",
 ) => ({
-  openapi: "3.1.0",
+  openapi,
   paths: {
     "/form": {
       post: {
@@ -127,6 +128,7 @@ test("file schema constraints and extensions survive multipart export", () => {
       },
       {},
       "multipart/form-data",
+      "3.0.3",
     ),
   );
   assert.equal(request.form[0].type, "file");
