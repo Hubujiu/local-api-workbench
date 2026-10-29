@@ -1,3 +1,4 @@
+import { sdkFlowFailureContext } from "./support/sdk-flow-failure.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -359,6 +360,8 @@ test(
       planId: flow.id,
       environmentId: alternate.id,
     });
+    if (overridden.status !== "passed")
+      t.diagnostic(JSON.stringify(sdkFlowFailureContext(overridden)));
     assert.equal(overridden.status, "passed");
     assert.equal(overridden.environmentId, alternate.id);
     assert.equal(
