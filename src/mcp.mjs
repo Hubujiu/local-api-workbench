@@ -1,3 +1,13 @@
+import {
+  listImportedExecutionRuns,
+  getImportedExecutionRun,
+} from "./imported-execution-history.mjs";
+import {
+  importedExecutionChunkArguments,
+  importedExecutionChunkDefaultBytes,
+  importedExecutionChunkMaxBytes,
+  importedExecutionChunkError,
+} from "./imported-execution-chunk.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -246,6 +256,48 @@ export function createMCP({
     },
     ["projectId"],
   );
+  addTool(
+    "list_imported_execution_runs",
+    "只读查询导入的原版历史摘要；不是本工具新执行或验证的结果",
+    {
+      ...projectArg,
+      sourceProjectId: str,
+      offset: { type: "integer", minimum: 0, maximum: 1000, default: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+    },
+    ["projectId"],
+  );
+  addTool(
+    "get_imported_execution_run",
+    "只读查询原版历史来源档案；不执行、不授权、不验证历史结论",
+    {
+      ...projectArg,
+      sourceProjectId: str,
+      runId: str,
+      chunk: {
+        type: "object",
+        description:
+          "可选读取原始JSON文件UTF-8字节；后续块须回传首块artifactSha256，不授予新权限",
+        properties: {
+          offsetBytes: {
+            type: "integer",
+            minimum: 0,
+            maximum: Number.MAX_SAFE_INTEGER,
+          },
+          maxBytes: {
+            type: "integer",
+            minimum: 1,
+            maximum: importedExecutionChunkMaxBytes,
+            default: importedExecutionChunkDefaultBytes,
+          },
+          expectedArtifactSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+        },
+        required: ["offsetBytes"],
+        additionalProperties: false,
+      },
+    },
+    ["projectId", "sourceProjectId", "runId"],
+  );
   addTool("get_execution_result", "读取逐步证据", {
     ...projectArg,
     runId: str,
@@ -333,10 +385,17 @@ export function createMCP({
         id: requestId,
         error: { code: -32601, message: "Method not found" },
       };
+    let importedChunkRequest = false;
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
-      const args = params.arguments === undefined ? {} : params.arguments;
+      let args = params.arguments === undefined ? {} : params.arguments;
+      if (tool.name === "localapi_get_imported_execution_run") {
+        importedChunkRequest = true;
+        const chunkArgs = importedExecutionChunkArguments(args);
+        importedChunkRequest = chunkArgs !== null;
+        if (chunkArgs) args = chunkArgs;
+      }
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
@@ -499,6 +558,18 @@ export function createMCP({
               break;
             case "localapi_get_execution_result":
               output = findExecutionResult(p, args.runId);
+              break;
+            case "localapi_list_imported_execution_runs":
+              output = listImportedExecutionRuns(p, args);
+              break;
+            case "localapi_get_imported_execution_run":
+              output = getImportedExecutionRun(
+                p,
+                args.sourceProjectId,
+                args.runId,
+                importedChunkRequest ? args.chunk : undefined,
+              );
+              if (!output) throw Error("原始执行记录不存在");
               break;
             case "localapi_get_run":
               output = p.runs.find((r) => r.id === args.runId);
@@ -694,7 +765,14 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: importedChunkRequest
+              ? importedExecutionChunkError
+              : e.message,
+          },
+        ],
       });
     }
   };

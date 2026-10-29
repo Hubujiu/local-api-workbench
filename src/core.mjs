@@ -1,3 +1,10 @@
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
+import {
+  normalizeImportedNativeTaskSource,
+  validateRequestTaskSource,
+  cloneRequestWithTaskSource,
+} from "./imported-native-task-source.mjs";
+import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
@@ -180,6 +187,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validateRequestTaskSource(r);
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -304,6 +312,13 @@ export function normalizeRequest(r = {}) {
             : {}),
         }
       : {}),
+    ...(r.importedNativeTaskSource === undefined
+      ? {}
+      : {
+          importedNativeTaskSource: normalizeImportedNativeTaskSource(
+            r.importedNativeTaskSource,
+          ),
+        }),
     ...(r.importedScriptTasks === undefined
       ? {}
       : {
@@ -374,6 +389,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -381,7 +397,10 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
-  return {
+  const snapshot = {
+    ...(importedNativeFlowSource === undefined
+      ? {}
+      : { importedNativeFlowSource }),
     id: plan.id || id(),
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
@@ -419,7 +438,7 @@ export function snapshotPlan(plan) {
                 name: s.name || s.request?.name || "步骤",
                 enabled: s.enabled !== false,
                 request: {
-                  ...normalizeRequest(structuredClone(s.request)),
+                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
@@ -429,6 +448,17 @@ export function snapshotPlan(plan) {
               },
     ),
   };
+  let sourceBytes =
+    importedNativeFlowSource === undefined
+      ? 0
+      : Buffer.byteLength(JSON.stringify(importedNativeFlowSource));
+  for (const step of snapshot.steps) {
+    const source = step.request?.importedNativeTaskSource;
+    if (source !== undefined)
+      sourceBytes += Buffer.byteLength(JSON.stringify(source));
+    if (sourceBytes > 4 * 1024 * 1024) throw Error("计划任务来源合计最多4MiB");
+  }
+  return snapshot;
 }
 export async function runPlan(
   plan,
@@ -452,6 +482,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  readImportedNativeFlowSource(plan);
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
@@ -1769,6 +1800,17 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  // Validate task provenance before cloning can invoke source accessors.
+  for (const request of document.requests) validateRequestTaskSource(request);
+  for (const item of document.cases || [])
+    validateRequestTaskSource(item.request);
+  for (const plan of document.plans || []) {
+    readImportedNativeFlowSource(plan);
+    for (const step of plan.steps || [])
+      validateRequestTaskSource(step.request);
+  }
+  for (const run of document.runs || [])
+    if (run.snapshot) readImportedNativeFlowSource(run.snapshot);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
@@ -1903,6 +1945,16 @@ export function importIntoProject(project, document, { sync = false } = {}) {
   const fromDirectory = isApipostDirectoryDocument(original);
   const directoryDocument = fromDirectory ? original : null;
   if (fromDirectory) original = assembleApipostDirectory(original);
+  const directoryFlows = fromDirectory
+    ? original.nativeExecutionFlows || []
+    : [];
+  if (fromDirectory) delete original.nativeExecutionFlows;
+  const directoryPlans = fromDirectory
+    ? prepareDirectoryPlans(original, directoryFlows, project, {
+        normalizeRequest,
+        snapshotPlan,
+      })
+    : [];
   const directoryArtifacts = fromDirectory
     ? mergeDirectoryArtifacts(
         project.settings?.apipostDirectoryArtifacts,
@@ -1922,7 +1974,7 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     for (const request of requests)
       request.importNotes = [
         ...(request.importNotes || []),
-        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置、历史、回收站或执行报告。内置规则文件仅保留为备份数据，不启用、不执行。",
+        "原版目录JSON子集（实验性）：按已核对文件结构组装；不代表完整原生迁移。未知文件/资源拒绝，不读取关联文件，不迁移安装设置或回收站。内置规则及原执行报告仅保留为来源备份数据，不启用、不执行，不作为本工具新运行。",
       ];
   const components = original.components || original.openapiComponents;
   const mergedComponents = structuredClone(project.openapiComponents || {});
@@ -2021,6 +2073,8 @@ export function importIntoProject(project, document, { sync = false } = {}) {
     output.push(value);
   }
   if (modern) Object.assign(project, modern.metadata);
+  if (directoryPlans.length)
+    project.plans = [...(project.plans || []), ...directoryPlans];
   if (directoryArtifacts?.length) {
     project.settings ??= {};
     project.settings.apipostDirectoryArtifacts = directoryArtifacts;

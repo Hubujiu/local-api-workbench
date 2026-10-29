@@ -17,6 +17,7 @@ export function allowedDirectoryPath(path) {
       "global_vars.json",
       "settings/mock_inner_rules.json",
     ].includes(path) ||
+      /^executions\/(flows|runs)\/[A-Za-z0-9_-]+\.json$/.test(path) ||
       /^(apis|envs|samples|schemas)\/[A-Za-z0-9_-]+\.json$/.test(path) ||
       Object.keys(directorySettings).some(
         (key) => path === "settings/" + key + ".json",
