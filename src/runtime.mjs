@@ -381,7 +381,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
           : null;
       chunks.push(
         Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"${filename ? `; filename="${filename}"` : ""}\r\n${filename ? "Content-Type: application/octet-stream\r\n" : ""}\r\n`,
+          `--${boundary}\r\nContent-Disposition: form-data; name="${name}"${filename ? `; filename="${filename}"` : ""}\r\n${field.contentType !== undefined || filename ? "Content-Type: " + (field.contentType ?? "application/octet-stream") + "\r\n" : ""}\r\n`,
         ),
       );
       chunks.push(

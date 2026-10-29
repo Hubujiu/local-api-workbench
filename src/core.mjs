@@ -1,3 +1,8 @@
+import {
+  validateMultipartPartMedia,
+  assertMultipartMediaExportable,
+  postmanPartMedia,
+} from "./multipart-part-media.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -214,6 +219,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
+  validateMultipartPartMedia(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
@@ -1204,6 +1210,7 @@ export function importDocument(doc) {
             bodyType: mode,
             body: body.raw || "",
             form: (body.urlencoded || body.formdata || []).map((f) => ({
+              ...postmanPartMedia(f),
               key: f.key,
               value: f.type === "file" ? "" : f.value,
               enabled: !f.disabled,
@@ -1591,6 +1598,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  assertMultipartMediaExportable(input, "cURL");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),
