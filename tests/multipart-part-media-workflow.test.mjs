@@ -13,6 +13,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
+import { exportApipost } from "../src/apipost-export.mjs";
+import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { executeRequest } from "../src/runtime.mjs";
 const media = 'Application/JSON; charset="utf-8"';
 const payload = Buffer.from([0, 255, 13, 10, 1, 128]);
@@ -166,7 +168,7 @@ async function fixture(t) {
         const config = await owner("/api/mcp/config", {
           enabled: true,
           projects: [id],
-          write: false,
+          write: true,
           execute: true,
           remember: false,
         });
@@ -184,6 +186,7 @@ async function fixture(t) {
             fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
             "--project",
             id,
+            "--write",
             "--execute",
           ],
           env: { ...process.env, LOCAL_API_DATA: root },
@@ -192,6 +195,12 @@ async function fixture(t) {
         pipe.stderr.resume();
         await c.connect(pipe);
       }
+      assert(
+        (await c.listTools()).tools.some(
+          (tool) => tool.name === "localapi_execute_flow",
+        ),
+        "explicit project/write/execute grant must expose flow execution",
+      );
       return c;
     },
   };
@@ -333,6 +342,8 @@ for (const transport of ["http", "stdio"])
       );
       assert.equal(run.status, "passed");
       assert.equal(run.recordSaved, true);
+      assert.equal(run.recordId, run.id);
+      assert.equal(run.attemptedRecordId, run.id);
       assert.deepEqual(run.snapshot, frozen);
       assert.equal(run.planHash, hash(frozen));
       checkWire(f.seen.at(-1), saved.form);
@@ -340,6 +351,9 @@ for (const transport of ["http", "stdio"])
       assert.equal(invoked.code, 0, invoked.stderr + invoked.stdout);
       const cliRun = JSON.parse(invoked.stdout);
       assert.equal(cliRun.status, "passed");
+      assert.equal(cliRun.recordSaved, true);
+      assert.equal(cliRun.recordId, cliRun.id);
+      assert.equal(cliRun.attemptedRecordId, cliRun.id);
       assert.equal(cliRun.planHash, hash(frozen));
       checkWire(f.seen.at(-1), saved.form);
       const beforeExport = await files(f.app.store.directory(p.id));
@@ -359,16 +373,59 @@ for (const transport of ["http", "stdio"])
       assert.match(oas.error, /分项Content-Type/);
       assert.deepEqual(await files(f.app.store.directory(p.id)), beforeExport);
       const backup = await f.owner(
-          `/api/projects/${p.id}/export`,
+        `/api/projects/${p.id}/export`,
+        undefined,
+        "GET",
+      );
+      for (const receipt of [run, cliRun]) {
+        const records = backup.runs.filter(
+          (entry) => entry.id === receipt.recordId,
+        );
+        assert.equal(records.length, 1);
+        assert.equal(records[0].planHash, receipt.planHash);
+        assert.deepEqual(records[0].snapshot, receipt.snapshot);
+      }
+      const invalidFrozen = structuredClone(backup);
+      invalidFrozen.plans.find(
+        (x) => x.id === created.id,
+      ).steps[0].request.form[0].contentType = "text/plain\r\nInjected: yes";
+      // Rehash any corresponding historical snapshot as well: rejection must
+      // concern media admission, not a deliberately stale evidence checksum.
+      for (const evidence of invalidFrozen.runs) {
+        if (evidence.snapshot?.id !== created.id) continue;
+        evidence.snapshot.steps[0].request.form[0].contentType =
+          "text/plain\r\nInjected: yes";
+        evidence.planHash = hash(evidence.snapshot);
+        assert.equal(evidence.planHash, hash(evidence.snapshot));
+      }
+      const projectsBeforeRestore = await f.owner(
+          "/api/projects",
           undefined,
           "GET",
         ),
-        restored = await f.owner(
-          "/api/restore",
-          { document: backup },
-          "POST",
-          201,
-        );
+        rootBytesBeforeRestore = await files(f.root),
+        connectionsBeforeRestore = f.connections,
+        hitsBeforeRestore = f.seen.length;
+      const invalidResult = await f.owner(
+        "/api/restore",
+        { document: invalidFrozen },
+        "POST",
+        400,
+      );
+      assert.match(invalidResult.error, /分项Content-Type/);
+      assert.deepEqual(
+        await f.owner("/api/projects", undefined, "GET"),
+        projectsBeforeRestore,
+      );
+      assert.deepEqual(await files(f.root), rootBytesBeforeRestore);
+      assert.equal(f.connections, connectionsBeforeRestore);
+      assert.equal(f.seen.length, hitsBeforeRestore);
+      const restored = await f.owner(
+        "/api/restore",
+        { document: backup },
+        "POST",
+        201,
+      );
       assert.notEqual(restored.id, p.id);
       assert.deepEqual(
         restored.plans.find((x) => x.id === created.id),
@@ -388,6 +445,9 @@ for (const transport of ["http", "stdio"])
         planId: created.id,
       });
       assert.equal(rerun.status, "passed");
+      assert.equal(rerun.recordSaved, true);
+      assert.equal(rerun.recordId, rerun.id);
+      assert.equal(rerun.attemptedRecordId, rerun.id);
       assert.equal(rerun.planHash, hash(frozen));
       checkWire(f.seen.at(-1), saved.form);
       assert.deepEqual(
@@ -479,3 +539,39 @@ test(
     assert.deepEqual((await f.get(p.id)).requests, seed.requests);
   },
 );
+
+test("root native JSON and directory exports reject explicit multipart media only after a same-source supported control", async (t) => {
+  const f = await fixture(t),
+    source = await f.project("native multipart boundary");
+  source.requests = [
+    normalizeRequest({
+      id: "native-upload",
+      name: "ordinary multipart",
+      method: "POST",
+      url: f.origin + "/upload",
+      bodyType: "form-data",
+      form: [{ key: "meta", value: '{"ok":true}', enabled: true }],
+    }),
+  ];
+  await f.owner(`/api/projects/${source.id}`, source, "PUT");
+  const persisted = await f.get(source.id),
+    bytesBefore = await files(f.root);
+  for (const exporter of [exportApipost, exportApipostDirectory]) {
+    const supported = structuredClone(persisted),
+      before = structuredClone(supported);
+    assert.ok(
+      exporter(supported),
+      "same-source control is representable without explicit part media",
+    );
+    assert.deepEqual(supported, before);
+    // Add exactly the new semantic; do not strip a policy from the source.
+    const typed = structuredClone(persisted);
+    typed.requests[0].form[0].contentType = media;
+    const typedBefore = structuredClone(typed);
+    assert.throws(() => exporter(typed), /contentType/);
+    assert.deepEqual(typed, typedBefore);
+  }
+  assert.deepEqual(await files(f.root), bytesBefore);
+  assert.equal(f.seen.length, 0);
+  assert.equal(f.connections, 0);
+});
