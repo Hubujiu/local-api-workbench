@@ -37,3 +37,11 @@ export function postmanPartMedia(row) {
     ? { contentType: row.contentType }
     : {};
 }
+
+export function multipartPartMedia(row, isFile) {
+  return Object.hasOwn(row, "contentType")
+    ? row.contentType
+    : isFile
+      ? "application/octet-stream"
+      : undefined;
+}

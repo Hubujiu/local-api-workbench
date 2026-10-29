@@ -49,3 +49,23 @@ Invalid media, mixed imports, unsupported exports and missing selected files mus
 leave state unchanged and send no requests; another project must remain unchanged.
 Safety checks and limits are retained. Until exact-commit CI is inspected this is
 work in progress, not delivery acceptance.
+
+## Implementation checkpoint
+
+The canonical validator, Postman projection and sender now preserve explicit media.
+A small own-property accessor aligns validation and emission: inherited properties
+cannot become new part headers. OpenAPI/cURL refuse even disabled explicit media.
+The existing MIT parser has been promoted in both manifest and lockfile; desktop
+production installation therefore retains it. No VM implementation was changed.
+Existing script item updates keep prior metadata; deliberate whole-body replacement
+creates new rows and does not guess media by key.
+
+Four reviewed pure-helper tests pass locally. Three application specifications
+cover actual owner import/save, exact multipart bytes (including binary payload),
+file reselection refusal, both official SDK transports with denied project isolation,
+CLI frozen execution after live edits, unchanged bytes on unsupported export,
+backup/restore/restart and explicit restored execution. Invalid source/save/execute,
+mixed-import and restored media reject without peer connections. Script item update
+preserves type while whole-body replacement restores the omitted-media default.
+Only syntax and formatting were checked for these application tests; they remain
+pending ordinary exact-commit CI. No application, VM or network workload ran locally.
