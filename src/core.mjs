@@ -1,3 +1,11 @@
+import {
+  postmanVariableMode,
+  collectionIdentifier,
+  preparePostmanCollection,
+  appendPostmanCollection,
+  validatePostmanCollections,
+  rejectCollectionExport,
+} from "./postman-collection-scopes.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -252,6 +260,11 @@ export function normalizeRequest(r = {}) {
     id: r.id || id(),
     name: String(r.name || "未命名接口"),
     sourceOperationId: String(r.sourceOperationId || ""),
+    ...(r.postmanCollectionId === undefined
+      ? {}
+      : {
+          postmanCollectionId: collectionIdentifier(r.postmanCollectionId),
+        }),
     serviceId: String(r.serviceId || ""),
     serviceSnapshot: r.serviceSnapshot === true,
     parametersSnapshot: r.parametersSnapshot === true,
@@ -449,6 +462,12 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
+  if (
+    snapshot.steps.some(
+      (step) => step.request?.postmanCollectionId !== undefined,
+    )
+  )
+    throw Error("Postman collection 执行接线尚未完成（WIP），拒绝忽略变量层");
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -1451,6 +1470,7 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  rejectCollectionExport(project, "OpenAPI");
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
@@ -1734,6 +1754,7 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
   for (const environment of document.environments) {
     if (
@@ -1897,7 +1918,12 @@ function replaceVariables(target, source) {
 }
 
 /** Import metadata atomically; sync mode is idempotent and preserves existing interface IDs. */
-export function importIntoProject(project, document, { sync = false } = {}) {
+export function importIntoProject(
+  project,
+  document,
+  { sync = false, postmanVariableMode: mode } = {},
+) {
+  const variableMode = postmanVariableMode(mode);
   let original = document;
   if (typeof original === "string") {
     if (original.trim().startsWith("curl ")) original = {};
@@ -1911,6 +1937,25 @@ export function importIntoProject(project, document, { sync = false } = {}) {
         });
       }
     }
+  }
+  if (variableMode === "collection") {
+    if (sync)
+      throw Error("collection 模式不支持隐式同步，请作为独立collection导入");
+    const collection = preparePostmanCollection(original, id);
+    const candidate = structuredClone(project);
+    const imported = importIntoProject(candidate, {
+      ...original,
+      variable: [],
+    });
+    const next = appendPostmanCollection(project, collection, imported);
+    const byId = new Map(next.requests.map((request) => [request.id, request]));
+    candidate.requests = candidate.requests.map(
+      (request) => byId.get(request.id) || request,
+    );
+    candidate.postmanCollections = next.registry;
+    validatePostmanCollections(candidate);
+    Object.assign(project, candidate);
+    return next.requests;
   }
   const fromDirectory = isApipostDirectoryDocument(original);
   if (fromDirectory) original = assembleApipostDirectory(original);

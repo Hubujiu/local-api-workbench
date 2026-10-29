@@ -683,7 +683,9 @@ export async function createApp({
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
-            importIntoProject(p, b.document);
+            importIntoProject(p, b.document, {
+              postmanVariableMode: b.postmanVariableMode,
+            });
             await store.save(p);
             return json(res, 200, p);
           }

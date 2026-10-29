@@ -112,3 +112,15 @@ native rejection, PR17 typed uncertainty receipts and PR65 stale cache publicati
 Keep legacy/default import and existing scope/cancellation suites intact. Pure
 helpers may be tested locally after dependency inspection; app/VM/DB/XML workloads
 and stress tests are not locally authorized. No passing claim until exact CI proof.
+
+## Model/import checkpoint (WIP)
+
+The initial model and owner opt-in path now allocate and validate registry/bindings,
+retain them through normalizing/restoring, and reject lossy OpenAPI output. Four
+standalone pure JSON-model tests pass locally; core/server/Store syntax checks pass.
+These tests import no app/VM code. Actual owner import/save/restart remains CI-pending.
+Bound collection execution deliberately rejects with a WIP error until the complete
+scope pipeline lands, rather than accidentally running with the old variable layers.
+The registry uses the existing metadata journal and rejects active missing-value,
+external/secret and non-finite inputs; original duplicate/disabled editor rows are
+not promised as an archival representation. No old import mode is migrated.
