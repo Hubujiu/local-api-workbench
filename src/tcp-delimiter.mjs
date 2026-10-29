@@ -46,3 +46,54 @@ export function createTCPDelimiterMatcher(value) {
     },
   };
 }
+
+// Shared data-only evidence check. It cannot create or repair a historical record.
+export function validateTCPDelimiterEvidence(definition, result) {
+  const fail = () => {
+    throw Error("TCP 结束标记证据无效");
+  };
+  const framing = result?.framing;
+  if (
+    definition?.completion !== "delimiter" ||
+    !framing ||
+    typeof framing !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(framing)) ||
+    Object.keys(framing).sort().join(",") !==
+      "matched,trailingBase64,trailingSize" ||
+    typeof framing.matched !== "boolean" ||
+    typeof result.partial !== "boolean" ||
+    typeof result.timedOut !== "boolean"
+  )
+    fail();
+  const decode = (value, size) => {
+    if (
+      typeof value !== "string" ||
+      value.length > 1400000 ||
+      !Number.isInteger(size) ||
+      size < 0 ||
+      size > 1048576
+    )
+      fail();
+    const bytes = Buffer.from(value, "base64");
+    if (bytes.length !== size || bytes.toString("base64") !== value) fail();
+    return bytes;
+  };
+  const frame = decode(result.base64, result.size),
+    tail = decode(framing.trailingBase64, framing.trailingSize),
+    delimiter = Buffer.from(
+      normalizeTCPDelimiter(definition.delimiterHex),
+      "hex",
+    ),
+    position = frame.indexOf(delimiter);
+  if (frame.length + tail.length > 1048576) fail();
+  if (framing.matched) {
+    if (
+      position < 0 ||
+      position + delimiter.length !== frame.length ||
+      result.partial ||
+      result.timedOut
+    )
+      fail();
+  } else if (position !== -1 || tail.length || !result.partial) fail();
+  return true;
+}

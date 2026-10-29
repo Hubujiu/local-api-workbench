@@ -1,3 +1,4 @@
+import { validateTCPDelimiterEvidence } from "./tcp-delimiter.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
 import { decodeISO8583 } from "./iso8583-codec.mjs";
@@ -35,9 +36,15 @@ export function prepareWireExecution(project, input) {
     saved = (project.protocols || []).find((x) => x.id === input.definitionId);
     if (!saved) throw Error("协议定义不存在或不属于此项目");
     if (
-      ["url", "host", "port", "method", "body", "completion"].some(
-        (key) => input[key] !== undefined,
-      ) ||
+      [
+        "url",
+        "host",
+        "port",
+        "method",
+        "body",
+        "completion",
+        "delimiterHex",
+      ].some((key) => input[key] !== undefined) ||
       (input.type !== undefined && input.type !== saved.type)
     )
       throw Error("已保存协议定义不能在调用时替换端点");
@@ -278,6 +285,7 @@ export function validateWireRecord(record) {
           "partial",
           "decoded",
           "decodeError",
+          ...(definition.completion === "delimiter" ? ["framing"] : []),
         ]) ||
         !text(r.base64, 1400000) ||
         !Number.isInteger(r.size) ||
@@ -290,6 +298,8 @@ export function validateWireRecord(record) {
         (r.decodeError !== undefined && !text(r.decodeError, 4096))
       )
         throw Error("TCP 执行证据无效");
+      if (definition.completion === "delimiter")
+        validateTCPDelimiterEvidence(definition, r);
       if (definition.message?.format === "iso8583") {
         let decoded;
         try {

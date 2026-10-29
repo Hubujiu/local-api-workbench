@@ -65,3 +65,16 @@ override rejection and storage failure/no replay are required. Prior end/first-d
 flows remain regression gates. No local application/VM/XML/database or network
 workflow execution, test skipping, budget change or manual CI rerun is authorized.
 The historical root script-final-body timeout remains unresolved and unrelated.
+
+## Runtime wiring checkpoint (WIP, workflows pending)
+
+The shared options, one-shot TCP transport and persisted-result validation are now
+connected. Saved-rule overrides and direct/saved interactive-session attempts are
+rejected before opening. Only the new mode changes empty deadline/EOF behavior to
+an explicit incomplete result; old branches retain their existing errors/shapes.
+The matcher has one fixed private 1 MiB buffer, not an unbounded list of empty or
+single-byte chunks. All observed tail bytes count toward that same receive budget.
+Eight inspected pure matcher/options/evidence tests pass; application workflows
+remain unexecuted locally and must be added/validated by normal CI. The independent
+review caught a missing initial interactive guard while wiring; it was added before
+this checkpoint rather than claiming the intended patch had already applied.

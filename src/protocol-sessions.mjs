@@ -68,6 +68,10 @@ export class ProtocolSessions {
     session.events = session.events.slice(-200);
   }
   start(input) {
+    if (input.completion === "delimiter" || input.delimiterHex !== undefined) {
+      protocolRequestOptions(input);
+      throw Error("TCP delimiter 完成规则仅支持单次响应，不支持交互会话");
+    }
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {

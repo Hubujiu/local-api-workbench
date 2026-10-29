@@ -1,3 +1,4 @@
+import { normalizeTCPDelimiter } from "./tcp-delimiter.mjs";
 // Shared by saved definitions, one-shot execution, plans and live SSE sessions.
 // No source application code is used here.
 export function protocolRequestOptions(input) {
@@ -22,10 +23,14 @@ export function protocolRequestOptions(input) {
   if (input.completion !== undefined) {
     if (
       input.type !== "tcp" ||
-      !["end", "first-data"].includes(input.completion)
+      !["end", "first-data", "delimiter"].includes(input.completion)
     )
-      throw Error("TCP 完成规则仅支持 end/first-data");
+      throw Error("TCP 完成规则仅支持 end/first-data/delimiter");
     result.completion = input.completion;
   }
+  if (input.completion === "delimiter")
+    result.delimiterHex = normalizeTCPDelimiter(input.delimiterHex);
+  else if (input.delimiterHex !== undefined)
+    throw Error("TCP 结束标记仅用于 delimiter 完成规则");
   return result;
 }
