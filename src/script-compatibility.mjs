@@ -77,6 +77,9 @@ function installScriptCompatibility({
   };
   apt.iterationData = pm.iterationData = Object.freeze(dataAPI);
   pm.globals.replaceIn = (value) => replaceIn(value, pm.globals);
+  if (pm.collectionVariables)
+    pm.collectionVariables.replaceIn = (value) =>
+      replaceIn(value, pm.collectionVariables);
 
   const environmentIdentity = executionContext.environment;
   Object.defineProperties(pm.environment, {

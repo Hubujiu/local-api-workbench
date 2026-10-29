@@ -1,3 +1,4 @@
+import { collectionRuntimeSource } from "./postman-collection-runtime.mjs";
 import { nativeRequestSnapshotSource } from "./native-request-snapshot.mjs";
 import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
 import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
@@ -317,6 +318,7 @@ try {
       throw Error('不允许加载模块: ' + name);
     };
     ${scopeRuntimeSource}
+    ${collectionRuntimeSource}
     const scopeState = createScopes(input.variables || {}, input.scopes);
     const variables = effectiveScopes(scopeState);
     const refreshVariables = () => {
@@ -333,6 +335,7 @@ try {
     });
     const environmentAPI = scopedAPI(scopeState.environment);
     const globalsAPI = scopedAPI(scopeState.globals);
+    const collectionAPI = createCollectionAPI(scopeState, refreshVariables);
     const localVariables = Object.assign(Object.create(null), input.localVariables || {});
     const request = input.request || {};
     const response = input.response || null;
@@ -405,6 +408,7 @@ try {
       },
       environment: environmentAPI,
       globals: globalsAPI,
+      collectionVariables: collectionAPI,
       response: { code: response?.status, json: () => JSON.parse(response?.body || 'null'), text: () => response?.body || '' },
       test: (name, fn) => {
         const record={name,passed:false,error:'异步断言未调用done完成'};

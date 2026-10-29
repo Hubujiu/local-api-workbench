@@ -1,3 +1,4 @@
+import { validatePostmanCollections } from "./postman-collection-scopes.mjs";
 import { linearPlanStepIds } from "./plan-step-identities.mjs";
 import {
   serializeRequestPath,
@@ -506,6 +507,7 @@ export class Store {
     });
   }
   #validateProject(p) {
+    validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");

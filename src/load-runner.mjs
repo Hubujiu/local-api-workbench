@@ -13,6 +13,8 @@ import { projectScopes } from "./variable-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
 
 export async function runLoad(project, request, options = {}) {
+  if (request?.postmanCollectionId !== undefined)
+    throw Error("压测暂不支持Postman collection作用域，请使用普通请求或计划");
   if (normalizeRedirect(request.redirect))
     throw Error("压测暂不支持 HTTP 重定向策略，请使用普通执行");
   const timing = loadTiming(options);

@@ -72,6 +72,7 @@ import {
   selectedEnvironment,
   debugEnvironment,
   createServiceRequestResolver,
+  debugEnvironmentFingerprint,
 } from "./environments.mjs";
 import {
   environmentTools,
@@ -933,6 +934,7 @@ export function createMCP({
                 p,
                 environmentId,
                 debugEnvironments,
+                request.postmanCollectionId,
               );
               output = await runPlan(plan, context.variables, executeRequest, {
                 signal,
@@ -941,7 +943,7 @@ export function createMCP({
                       databaseExecutor(p.id, operation, signal)
                   : undefined,
                 cookieSession: projectCookieSession(store, p, environmentId),
-                ...scopedExecution(store, p, environmentId, context.variables),
+                ...scopedExecution(store, p, environmentId, context.variables, request.postmanCollectionId),
                 onStep: (step) =>
                   emitProgress({
                     completed: 1,
@@ -952,8 +954,10 @@ export function createMCP({
               });
               if (!signal?.aborted && output.results[0]?.response)
                 publishDebugVariables(debugEnvironments, context.publication, {
-                  fingerprint: JSON.stringify(
-                    environmentVariables(p, context.environment.id),
+                  fingerprint: debugEnvironmentFingerprint(
+                    p,
+                    context.environment.id,
+                    request.postmanCollectionId,
                   ),
                   variables: output.variables,
                 });
