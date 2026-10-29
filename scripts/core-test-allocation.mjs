@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 
 export const WEIGHTS_SHA256 =
-  "97f7d3ca142130a8ac8c63c94b3e2945e7736c190da7348ed658783c1e553232";
+  "d72adb2e8e99450681540b74725701969007cfcc68c09c95e1862b8cb39bd813";
 export const MAX_WEIGHT_BYTES = 256 * 1024;
 const policy = "frozen-prior-whole-file-max-lpt-v1";
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -46,7 +46,7 @@ export function parseWeights(bytes, expectedHash = WEIGHTS_SHA256) {
   for (const source of data.sources) {
     if (
       !exactKeys(source, ["runId", "headSha", "file", "sha256"]) ||
-      ![40769853798, 40772663326].includes(source.runId) ||
+      ![40918700552, 40926521644].includes(source.runId) ||
       !/^[a-f0-9]{40}$/.test(source.headSha) ||
       !/^[a-f0-9]{64}$/.test(source.sha256) ||
       !/^core-(ubuntu|macos|windows)-latest-shard-[1-4]-of-4\.progress\.jsonl$/.test(
