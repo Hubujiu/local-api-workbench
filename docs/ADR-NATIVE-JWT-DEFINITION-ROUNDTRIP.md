@@ -13,10 +13,11 @@ configuration fields: `algorithm`, `secret`, `isSecretBase64Encoded`, `payload`,
 presence, omitted defaults, empty strings, boolean versus boolean-string values,
 PEM line endings, and original JSON text. Do not fill defaults, parse keys, sign,
 resolve templates, contact an endpoint, or acquire credentials during export.
-Unknown fields, accessors, symbols, hidden properties and malformed field types
-must reject rather than silently disappear; error messages must not echo field
-values or arbitrary unknown property names. Existing import limits and runtime
-validation remain authoritative and unchanged.
+At the direct JWT adapter boundary, unknown fields, accessors, symbols, hidden
+properties and malformed field types must reject rather than silently disappear; error messages must not echo field
+values or arbitrary unknown property names. Existing import limits and runtime validation remain authoritative and unchanged.
+Owner JSON input cannot contain accessors; this is not a new promise to sanitize
+arbitrary JavaScript objects before the project exporter normalizes them.
 
 All twelve existing algorithms remain representable: HS256/384/512,
 RS256/384/512, PS256/384/512 and ES256/384/512. Representation is not proof that a
@@ -47,8 +48,7 @@ No original/dependency execution or new license acceptance is involved.
 
 - Renderer `work-index-0d1d8198fa5a.js`, SHA256
   `20bb6e21fd678ead16bd91807dc9623b8cd3e7019d44ac874a167c31a37f39fb`:
-  character offsets 2302535 and 2732870 (UTF-8 byte offsets 2305315 and
-  2796921) identify the eight-field defaults. Other renderer projections use the
+  character offsets 2302535 and 2732870 (UTF-8 byte offsets 2305315 and 2796921) identify the eight-field defaults. Other renderer projections use the
   same field names.
 - Sender `send-index.js`, SHA256
   `5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`:
