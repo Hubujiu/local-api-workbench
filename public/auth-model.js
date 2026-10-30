@@ -1,3 +1,4 @@
+import { oauth1ParameterPolicy } from "./oauth1-policy-model.js";
 import { digestChallengePolicy } from "./digest-policy-model.js";
 export const authTypes = [
   "none",
@@ -17,6 +18,7 @@ export const authTypes = [
 export function validateAuth(auth = {}) {
   if (!auth || typeof auth !== "object" || Array.isArray(auth))
     throw Error("认证配置必须为对象");
+  oauth1ParameterPolicy(auth);
   if (
     auth.queryEncoding !== undefined &&
     (auth.type !== "apiKey" ||

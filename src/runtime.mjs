@@ -31,7 +31,7 @@ import { edgegridAuthorization } from "./edgegrid-auth.mjs";
 import { hawkAuthorization } from "./hawk-auth.mjs";
 import { awsSignatureRequest, validateAWSQueryURL } from "./aws-signature.mjs";
 import { validateAuth } from "../public/auth-model.js";
-import { oauth1Authorization } from "./oauth1.mjs";
+import { oauth1Request, oauth1ParameterPolicy } from "./oauth1.mjs";
 import { validateAttributeValues } from "../public/attribute-model.js";
 import { validateMockFieldSettings } from "./mock-fields.mjs";
 import { normalizeParameterEntry } from "./parameter-dictionary.mjs";
@@ -357,6 +357,9 @@ export async function executeRequest(input, signal, options = {}) {
   const digestPolicy =
     r.auth.type === "digest" ? digestChallengePolicy(r.auth) : undefined;
   if (digestPolicy) r.auth.challengePolicy = digestPolicy;
+  const oauthPolicy =
+    r.auth.type === "oauth1" ? oauth1ParameterPolicy(r.auth) : undefined;
+  if (oauthPolicy) r.auth.parameterPolicy = oauthPolicy;
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -448,14 +451,15 @@ export async function executeRequest(input, signal, options = {}) {
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
   if (body) headers["content-length"] = Buffer.byteLength(body);
-  if (r.auth.type === "oauth1")
-    headers.authorization = oauth1Authorization(
-      u.href,
-      r.method,
-      headers,
-      body,
-      r.auth,
-    ).header;
+  if (r.auth.type === "oauth1") {
+    const signed = oauth1Request(u.href, r.method, headers, body, r.auth, {
+      bodyType: r.bodyType,
+    });
+    u.href = signed.url;
+    body = signed.body;
+    delete headers.authorization;
+    Object.assign(headers, signed.headers);
+  }
   if (r.auth.type === "aws") {
     const signed = await awsSignatureRequest(
       u.href,

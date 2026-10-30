@@ -423,6 +423,11 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  for (const step of plan.steps) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+      validateAuth(auth);
+  }
   const snapshot = {
     ...(importedNativeFlowSource === undefined
       ? {}
@@ -523,7 +528,11 @@ export async function runPlan(
   // interpolation/before scripts. Other authentication behavior stays unchanged.
   for (const step of Array.isArray(plan?.steps) ? plan.steps : []) {
     const auth = step?.request?.auth;
-    if (auth && typeof auth === "object" && "challengePolicy" in auth)
+    if (
+      auth &&
+      typeof auth === "object" &&
+      ("challengePolicy" in auth || "parameterPolicy" in auth)
+    )
       validateAuth(auth);
   }
   const snapshot = structuredClone(plan);
