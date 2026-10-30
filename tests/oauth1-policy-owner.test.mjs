@@ -326,7 +326,7 @@ function verifier(specs, errors, nonces) {
   };
 }
 test(
-  "OAuth1 policy real owner shared/own signing, frozen live edits, backup/restart, two SDK aliases and CLI keep exact wire intent",
+  "OAuth1 policy real owner shared/own signing, frozen live edits, backup/restart, canonical SDK and CLI keep exact wire intent",
   { timeout: 60000 },
   async (t) => {
     const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }),
@@ -419,6 +419,9 @@ test(
         requestInit: { headers: { Authorization: "Bearer " + config.token } },
       }),
     );
+    const tools = new Set(
+      (await client.listTools()).tools.map((tool) => tool.name),
+    );
     for (const [name, args] of [
       [
         "localapi_execute_api",
@@ -429,14 +432,15 @@ test(
         },
       ],
       [
-        "apipost_execute_api",
+        "localapi_execute_api",
         {
-          project_id: disk.id,
-          target_id: disk.requests[1].id,
-          environment_id: credentialEnvironment(disk),
+          projectId: disk.id,
+          apiId: disk.requests[1].id,
+          environmentId: credentialEnvironment(disk),
         },
       ],
     ]) {
+      assert(tools.has(name), name);
       const result = await client.callTool({ name, arguments: args });
       assert.notEqual(result.isError, true, JSON.stringify(result));
       assert.equal(JSON.parse(result.content[0].text).status, "passed");

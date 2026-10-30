@@ -47,7 +47,10 @@ on other auth types reject before cloning/interpolation/scripts/network. The
 browser-safe validator validates exact own-data descriptors and returns a fresh
 immutable policy. Shared scopes permit this sole typed nested exception only
 after the normal auth validator; other nested data and existing limits stay closed.
-Snapshots/save/import/restore and direct/raw-plan entrypoints retain the model.
+JSON save/import/restore and direct request/raw-plan entrypoints retain the model.
+Descriptor guarantees cover the auth model and request/plan admission helpers,
+not arbitrary JavaScript accessors throughout a whole-project object graph.
+Project interchange remains JSON.
 
 Policy execution uses existing HMAC-SHA1, HMAC-SHA256 and RSA-SHA1 only. No
 PLAINTEXT, SHA512, accessor aliases or new key/algorithm modes are enabled.
@@ -109,10 +112,10 @@ application/test/job budget change is introduced.
 - Independent HMAC/RSA verification of actual header/query/form output and body
   hash, all supported methods, empty/raw/JSON/binary/form bodies, repeated pairs,
   include/omit-empty settings, raw-header safety, key limits and collision refusal.
-- Whole owner save/freeze/live-edit/restore/restart, two official SDK aliases,
+- Whole owner save/freeze/live-edit/restore/restart, official SDK canonical requests,
   CLI, foreign grant isolation, cancellation/no later step and zero-I/O invalid
   routes. No direct signer-as-oracle proof.
-- Root-only shared/native inheritance, nested plans and redirect interactions
+- Root-only native SDK aliases, shared/native inheritance, nested plans and redirect interactions
   receive separate actual integration gates; source guards stay strict.
 - Ordinary feature/root exact-head full CI and fresh three-platform portable
   bytes establish acceptance. Static review or prior green runs do not.
