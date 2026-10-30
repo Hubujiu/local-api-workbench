@@ -143,6 +143,11 @@ export function verifyOAuth1Policy({
   ]
     .map(encode)
     .join("&");
+  assert.equal(
+    Buffer.from(protocol.oauth_signature, "base64").toString("base64"),
+    protocol.oauth_signature,
+    "signature uses canonical base64",
+  );
   if (signatureMethod === "RSA-SHA1")
     assert(
       verify(
