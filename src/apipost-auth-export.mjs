@@ -1,3 +1,4 @@
+import { exportApipostNtlm } from "./apipost-ntlm-auth.mjs";
 import { exportApipostDigest } from "./apipost-digest-auth.mjs";
 import { exportApipostAsap } from "./apipost-asap-auth.mjs";
 import { isDeepStrictEqual } from "node:util";
@@ -57,6 +58,7 @@ export function exportExtendedApipostAuth(value) {
     if (type?.value === "jwt") return exportJwtDefinition(value);
     if (type?.value === "asap") return exportApipostAsap(value);
     if (type?.value === "digest") return exportApipostDigest(value);
+    if (type?.value === "ntlm") return exportApipostNtlm(value);
   }
   if (!["aws", "hawk", "edgegrid"].includes(value?.type)) return undefined;
   const fail = () => {

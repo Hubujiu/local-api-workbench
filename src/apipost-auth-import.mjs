@@ -1,3 +1,4 @@
+import { importApipostNtlm } from "./apipost-ntlm-auth.mjs";
 import { importApipostDigest } from "./apipost-digest-auth.mjs";
 import { importApipostAsap } from "./apipost-asap-auth.mjs";
 import { validateHeaderName } from "node:http";
@@ -26,6 +27,12 @@ export function importExtendedApipostAuth(auth) {
     const type = Object.getOwnPropertyDescriptor(auth, "type");
     if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
       throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "ntlm") {
+      const section = Object.getOwnPropertyDescriptor(auth, "ntlm");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生NTLM认证 definition 无效");
+      return importApipostNtlm(section.value);
+    }
     if (type?.value === "digest") {
       const section = Object.getOwnPropertyDescriptor(auth, "digest");
       if (!section?.enumerable || !Object.hasOwn(section, "value"))
