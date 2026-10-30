@@ -35,7 +35,7 @@ import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
 import { prepareConnection } from "./connection.mjs";
-import { digestAuthorization } from "./digest.mjs";
+import { digestAuthorization, digestChallengePolicy } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { performance } from "node:perf_hooks";
 import {
@@ -313,8 +313,17 @@ export class Store {
     }
   }
 }
-export async function executeRequest(input, signal, { cookieSession } = {}) {
+// Private retry state cannot be supplied through serialized request definitions.
+const digestEntityReplay = Symbol("digest-entity-replay");
+export async function executeRequest(input, signal, options = {}) {
+  const { cookieSession } = options;
+  const replay = options[digestEntityReplay];
   const r = normalizeRequest(input);
+  // Validate before any connection/cookie operation and detach mutable caller
+  // policy objects. Awaiting the challenge cannot change this invocation policy.
+  const digestPolicy =
+    r.auth.type === "digest" ? digestChallengePolicy(r.auth) : undefined;
+  if (digestPolicy) r.auth.challengePolicy = digestPolicy;
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -355,7 +364,11 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     }
   }
   let body;
-  if (r.bodyType === "msgpack") {
+  if (replay) {
+    body = replay.body;
+    if (replay.contentType !== undefined)
+      headers["content-type"] = replay.contentType;
+  } else if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");
     body = Buffer.from(encode(JSON.parse(r.body || "{}"), { maxDepth: 64 }));
     headers["content-type"] ??= "application/msgpack";
@@ -434,10 +447,18 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
     headers.connection = "keep-alive";
   }
   const start = performance.now();
-  const connection = await prepareConnection(u, r, headers, signal);
+  const deadline = replay?.deadline ?? start + r.timeout;
+  const connectionBudget = deadline - performance.now();
+  if (connectionBudget <= 0) throw Error("请求超时");
+  const connection = await prepareConnection(
+    u,
+    { ...r, timeout: Math.min(r.timeout, connectionBudget) },
+    headers,
+    signal,
+  );
   let authSocket;
   const requestOnce = async (headers, expectedSocket) => {
-    const remainingTimeout = r.timeout - (performance.now() - start);
+    const remainingTimeout = deadline - performance.now();
     if (remainingTimeout <= 0) {
       connection.cleanup();
       throw Error("请求超时");
@@ -594,10 +615,8 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (
     r.auth.type === "digest" &&
     response.status === 401 &&
-    /^Digest\s/i.test(response.headers["www-authenticate"] || "")
+    digestPolicy?.retry !== false
   ) {
-    const remaining = r.timeout - (performance.now() - start);
-    if (remaining <= 0) throw Error("Digest 认证超时");
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
       r.auth,
@@ -605,6 +624,9 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       u.pathname + u.search,
       body || "",
     );
+    if (authorization === null) return response;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw Error("Digest 认证超时");
     const authenticated = await executeRequest(
       {
         ...r,
@@ -618,7 +640,14 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
         ],
       },
       signal,
-      { cookieSession },
+      {
+        cookieSession,
+        [digestEntityReplay]: {
+          body,
+          contentType: headers["content-type"],
+          deadline,
+        },
+      },
     );
     authenticated.authHandshake = {
       status: response.status,
