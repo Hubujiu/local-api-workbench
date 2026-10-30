@@ -75,12 +75,13 @@ test("disabled definitions remain validated and budgeted without active leaves",
   oversized[0].steps[0].protocol.message = "x".repeat(3 * 1024 * 1024);
   assert.throws(() => validateRepeatGraph(oversized), /4MiB/);
 });
-test("unsupported nested protocols, identities and structure still reject", () => {
+test("unsupported wire transports, malformed leaf wrappers, identities and structure still reject", () => {
   for (const type of ["grpc", "socketio", "unknown"]) {
     const child = tcp();
     child.protocol.definition.type = type;
     assert.throws(() => validateRepeatGraph(graph(child)), /仅支持TCP/);
   }
+  // A grpc leaf retaining the TCP protocol wrapper is malformed, not unsupported.
   for (const type of ["grpc", "socketio", "repeat", "unknown"]) {
     const child = tcp();
     child.type = type;

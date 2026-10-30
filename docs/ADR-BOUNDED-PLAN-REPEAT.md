@@ -248,3 +248,33 @@ live-definition edits, backup/restore/restart, and renewed credential preflight.
 It preserves the root wire snapshot option guard and TCP delimiter workflows;
 these existing root options are not added to PR44's older feature dependency base.
 This is a test specification pending exact-root CI, not an executed acceptance.
+
+## 2026-10-30: bounded gRPC repeat contract (work in progress)
+
+Extend the existing single-level repeat group to gRPC leaves, using the existing
+unary, server-streaming, client-streaming and bidirectional-streaming executor.
+No new executor, dependency, reflection fetch, protocol capability, retries, or
+runtime budget is introduced. Socket.IO and nested repeat groups remain rejected.
+
+Frozen gRPC definitions retain the selected service/method and existing inline
+proto, bounded file bundle or descriptor source. Definition references resolve at
+save time; later live definition edits/deletion do not change the plan snapshot.
+Temporary metadata and TLS material bind to the stable leaf ID, never an
+occurrence ID. Validate all supplied bindings against all leaves and preflight
+required metadata/TLS for every active leaf before any HTTP or RPC side effect.
+Disabled groups do not require credentials but still obey graph/identity budgets.
+
+Every occurrence gets the existing fresh gRPC client, response buffers and status;
+variables intentionally carry forward under the ordinary plan rules. Preserve
+atomic extraction, cancellation/deadline handling, client cleanup, bounded
+request/response/metadata/protobuf limits, and existing unknown-commit receipts
+without replay. Never save temporary credentials or response metadata/trailers in
+plan results. This is not arbitrary business-response secret redaction.
+
+Acceptance requires real CI-only four-call-type repeat to HTTP consumers,
+owner/HTTP MCP/stdio/CLI execution, frozen source formats and live edits,
+whole-plan missing/invalid credential zero-side-effect checks, concurrent-token
+isolation, trusted CA and mTLS/error paths, second-occurrence cancellation and
+deadline, nonzero status and existing caps, backup/restore/restart, and genuine
+journal uncertainty with no resend. Syntax/pure helper checks are not end-to-end
+acceptance. All work remains draft until exact-commit CI evidence is inspected.
