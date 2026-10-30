@@ -72,6 +72,7 @@ test("gRPC references resolve before frozen admission and no wrapper extras are 
     bad[0].steps[0][field] = {};
     assert.throws(() => validateRepeatGraph(bad), /未知/);
   }
+  // Changing only type leaves a malformed grpc wrapper, not a Socket.IO ban.
   for (const type of ["socketio", "repeat", "unknown"]) {
     const bad = graph();
     bad[0].steps[0].type = type;
@@ -139,7 +140,7 @@ test("gRPC nested credentials preserve target, metadata, TLS and map admission l
     /同时/,
   );
 });
-test("well-shaped Socket.IO leaf remains outside the repeat contract", () => {
+test("well-shaped Socket.IO leaf composes with the extended repeat contract", () => {
   const steps = graph();
   steps[0].steps[0] = {
     id: "socket-step",
@@ -156,5 +157,5 @@ test("well-shaped Socket.IO leaf remains outside the repeat contract", () => {
     extract: [],
     assertions: [],
   };
-  assert.throws(() => validateRepeatGraph(steps));
+  assert.equal(validateRepeatGraph(steps), true);
 });

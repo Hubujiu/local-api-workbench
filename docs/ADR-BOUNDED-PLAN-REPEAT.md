@@ -278,3 +278,42 @@ isolation, trusted CA and mTLS/error paths, second-occurrence cancellation and
 deadline, nonzero status and existing caps, backup/restore/restart, and genuine
 journal uncertainty with no resend. Syntax/pure helper checks are not end-to-end
 acceptance. All work remains draft until exact-commit CI evidence is inspected.
+
+## 2026-10-30: bounded Socket.IO repeat contract (work in progress)
+
+Admit Socket.IO leaves in the existing single-level repeat graph, reusing the
+current v2/v4 executor, default parser and already-supported websocket/polling/auto
+transports. Do not introduce new protocol modes, custom parsers, executors,
+dependencies or resource budgets. Nested repeat remains rejected.
+
+Resolve definition references before freezing. Bind temporary auth/query/headers/
+TLS to stable leaf IDs, validate every supplied binding, and preflight all active
+leaves before any earlier HTTP side effect. Disabled groups do not require
+credentials; graph identity and expansion budgets still apply. v2 continues to
+reject v4 auth and requires its existing query/header credential mechanisms.
+
+Each occurrence starts a fresh connection/manager, with independent event cursor,
+parser/ACK state and bounded result buffers; finally closes its session. Existing
+shared-session limits (5 active, 50 retained), polling HTTP limits and all payload,
+metadata/credential, event, command and time budgets remain unchanged. Runtime
+variables intentionally carry across steps; failed extraction remains atomic.
+
+CI acceptance must cover bidirectional ACK, binary/default parser, independent
+iterations and concurrent credentials, owner and canonical SDK HTTP/stdio/CLI,
+frozen live edits/deletion, backup/restore/restart, whole-plan missing-credential
+zero-side-effect rejection, cancellation/deadline/error cleanup and genuine
+journal uncertainty without replay. Shared sessions and CLI-owned sessions are
+separate validation paths. Do not claim arbitrary peer error/application payload
+secret redaction; temporary credential fields themselves must not be persisted.
+Syntax/pure helper checks are not end-to-end acceptance. This remains draft until
+exact-commit ordinary CI evidence is inspected.
+
+Socket.IO credential admission distinguishes declared `handshake.requiredHeaders`
+from peer-defined auth/query requirements: only the former can prove a missing
+credential rejection before an earlier HTTP step; the latter may fail at the
+server handshake. Event-ring truncation alone retains existing result semantics
+and is not reclassified as wire-protocol `partial`. The existing 2MiB command-result
+cap still fails the flow. Release explicitly calls `offAny()` after disconnect
+settles its ordinary ACK listeners, before removing ordinary listeners; actual
+v2/v4 ACK cancellation and cross-session isolation need CI proof, not fake-call
+ordering assertions. Auto-mode admission does not alone prove completed upgrade.

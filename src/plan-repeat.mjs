@@ -118,13 +118,13 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       step,
       "叶子步骤",
       nested
-        ? ["protocol", "grpc"].includes(step.type)
+        ? ["protocol", "grpc", "socketio"].includes(step.type)
           ? [
               "id",
               "name",
               "enabled",
               "type",
-              step.type === "grpc" ? "grpc" : "protocol",
+              step.type,
               "extract",
               "assertions",
               "expectedStatus",
@@ -133,6 +133,20 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         : undefined,
     );
     metadata(step);
+    if (nested && step.type === "socketio") {
+      object(step.socketio, "Socket.IO定义");
+      const reference = step.socketio.definitionId;
+      if (reference !== undefined) {
+        if (
+          requireIds ||
+          typeof reference !== "string" ||
+          !reference.trim() ||
+          step.socketio.definition !== undefined
+        )
+          throw Error("循环Socket.IO引用须在冻结前解析且不能混合定义");
+      } else object(step.socketio.definition, "Socket.IO定义");
+      return;
+    }
     if (nested && step.type === "grpc") {
       object(step.grpc, "gRPC定义");
       const reference = step.grpc.definitionId;
@@ -171,7 +185,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       if (!nested && ["grpc", "socketio", "protocol"].includes(step.type))
         return;
       throw Error(
-        "循环组仅支持HTTP、gRPC或TCP/WebSocket/SSE叶子，不支持嵌套或其他步骤类型",
+        "循环组仅支持HTTP、gRPC、Socket.IO或TCP/WebSocket/SSE叶子，不支持嵌套或其他步骤类型",
       );
     }
     object(step.request, "请求");

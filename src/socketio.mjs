@@ -350,6 +350,7 @@ export class SocketIOSessions {
     if (!socket) return;
     s.transport = socket.io.engine?.transport?.name || s.transport;
     socket.disconnect();
+    socket.offAny();
     socket.removeAllListeners();
     s.socket = null;
   }
