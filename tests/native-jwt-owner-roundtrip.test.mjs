@@ -268,8 +268,20 @@ test(
       );
       assert.deepEqual(authByName(again), expected);
       assert.equal(f.seen.length, count);
+      // The native wire fixtures intentionally retain duplicate query keys for
+      // collision replacement. OpenAPI correctly rejects those independently
+      // of authentication; use the same signing definitions in a separate,
+      // representable public-projection fixture without weakening that guard.
+      const publicProject = await f.app.store.create("JWT public projection");
+      publicProject.requests = imported.requests.map((request) => ({
+        ...request,
+        url: request.url.split("?")[0],
+        query: [],
+      }));
+      assert.deepEqual(authByName(publicProject), authByName(imported));
+      await f.call("/api/projects/" + publicProject.id, "PUT", publicProject);
       const openapi = await f.call(
-        "/api/projects/" + target.id + "/export?format=openapi",
+        "/api/projects/" + publicProject.id + "/export?format=openapi",
       );
       const publicMechanisms = JSON.stringify(
         openapi.components.securitySchemes,
