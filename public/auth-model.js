@@ -1,3 +1,4 @@
+import { oauth1ParameterPolicy } from "./oauth1-policy-model.js";
 export const authTypes = [
   "none",
   "bearer",
@@ -16,6 +17,7 @@ export const authTypes = [
 export function validateAuth(auth = {}) {
   if (!auth || typeof auth !== "object" || Array.isArray(auth))
     throw Error("认证配置必须为对象");
+  oauth1ParameterPolicy(auth);
   if (auth.type !== undefined && !authTypes.includes(auth.type))
     throw Error("不支持的认证类型: " + String(auth.type));
 }
