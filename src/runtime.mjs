@@ -35,7 +35,7 @@ import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
 import { acquireFileLock } from "./file-lock.mjs";
 import { prepareConnection } from "./connection.mjs";
-import { digestAuthorization } from "./digest.mjs";
+import { digestAuthorization, digestChallengePolicy } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { performance } from "node:perf_hooks";
 import {
@@ -319,6 +319,11 @@ export async function executeRequest(input, signal, options = {}) {
   const { cookieSession } = options;
   const replay = options[digestEntityReplay];
   const r = normalizeRequest(input);
+  // Validate before any connection/cookie operation and detach mutable caller
+  // policy objects. Awaiting the challenge cannot change this invocation policy.
+  const digestPolicy =
+    r.auth.type === "digest" ? digestChallengePolicy(r.auth) : undefined;
+  if (digestPolicy) r.auth.challengePolicy = digestPolicy;
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -607,7 +612,11 @@ export async function executeRequest(input, signal, options = {}) {
       response.cookieError = "Cookie保存失败：" + error.message;
     }
   }
-  if (r.auth.type === "digest" && response.status === 401) {
+  if (
+    r.auth.type === "digest" &&
+    response.status === 401 &&
+    digestPolicy?.retry !== false
+  ) {
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],
       r.auth,

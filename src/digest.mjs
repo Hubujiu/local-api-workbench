@@ -1,5 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { digestChallengePolicy } from "../public/digest-policy-model.js";
+export { digestChallengePolicy } from "../public/digest-policy-model.js";
+
 // RFC 9110 §§5.6, 11: commas separate both challenges and auth-params.
 // Split only outside quoted strings, then distinguish a parameter by its '='.
 // Bounds also apply to direct callers, independent of Node's HTTP header limit.
@@ -125,10 +128,15 @@ export function digestAuthorization(
   method,
   uri,
   body = "",
-  cnonce = randomBytes(12).toString("hex"),
+  cnonce,
 ) {
+  const policy = digestChallengePolicy(credentials);
+  if (policy?.retry === false) return null;
   const selected = selectChallenge(challenge);
   if (!selected) return null;
+  if (policy && selected.algorithm !== policy.algorithm.toUpperCase())
+    throw Error("Digest challenge 不符合显式算法策略");
+  if (cnonce === undefined) cnonce = randomBytes(12).toString("hex");
   const { fields, algorithm, algorithmName, qop } = selected;
   const hash = (value) => createHash(algorithmName).update(value).digest("hex");
   const username = credentials.username || "",

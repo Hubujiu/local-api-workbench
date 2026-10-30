@@ -20,19 +20,27 @@ enumerable data fields:
 
 - `algorithm`: one of `MD5`, `MD5-sess`, `SHA-256`, `SHA-256-sess`,
   `SHA-512-256`, `SHA-512-256-sess`. These are case-sensitive canonical user
-  literals. Server challenge algorithm parsing remains case-insensitive and is
+  literals; policy templates are not accepted even when available variables would
+  resolve them. Ordinary username/password interpolation remains supported. Server
+  challenge algorithm parsing remains case-insensitive and is
   compared in normalized uppercase form.
 - `retry`: a strict boolean. No truthiness, numeric/string boolean, or default
   inside a present policy object.
 
 The field is valid only for Digest auth; another auth type carrying it fails
 explicitly rather than silently ignoring a requested constraint. This is a
-shared model validation rule, not a frontend change.
+shared model validation rule, not a frontend change. The shared browser-safe
+model validates the entire policy before normalization
+can spread/drop the selector. Invalid or unfinished policies are rejected on
+save/import/restore/admission, not stored for later interpolation into validity.
+A raw runPlan gate also checks this new field before cloning, interpolation or
+before scripts; it does not change other authentication template behavior or
+promise every unrelated script effect has global rollback semantics.
 
 Omitting the entire policy retains existing auto negotiation and the existing
 maximum of one supported 401 challenge retry. A present undefined/null/array,
 missing/extra fields, unsupported algorithm or malformed value is invalid.
-Direct validation accepts plain/null-prototype own data objects only; rejects
+The policy object accepts plain/null-prototype own data objects only; rejects
 symbols, hidden fields, accessors and custom prototypes without invoking getters
 or toJSON. This helper contract does not promise arbitrary JavaScript project
 normalization is side-effect free; owner requests are JSON data.
