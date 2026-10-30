@@ -98,10 +98,10 @@ test("frozen weights preserve exact provenance, worst-known fallback and bounded
   assert.equal(data.sources.length, 24);
   assert.deepEqual(
     [...new Set(data.sources.map((source) => source.runId))],
-    [40918700552, 40926521644],
+    [41017678554, 41030008398],
   );
-  assert.equal(Object.keys(data.weights).length, 492);
-  assert.equal(data.fallbackUs, 34845034);
+  assert.equal(Object.keys(data.weights).length, 520);
+  assert.equal(data.fallbackUs, 36754549);
   const attributes = await readFile(path.join(root, ".gitattributes"), "utf8");
   assert.match(attributes, /^\/scripts\/core-test-weights\.json text eol=lf$/m);
   const bytes = await readFile(
@@ -173,31 +173,37 @@ test("frozen weights preserve exact provenance, worst-known fallback and bounded
   );
 });
 
-test("refreshed historical 493-file selection remains exhaustive with one conservative unknown", async () => {
+test("refreshed 523-file root selection remains exhaustive with three conservative unknowns", async () => {
   const data = await loadWeights();
-  const unknown = "tests/openapi-form-encoding-pure.test.mjs";
-  assert.equal(Object.hasOwn(data.weights, unknown), false);
-  const files = [...Object.keys(data.weights), unknown].sort();
-  assert.equal(files.length, 493);
+  const unknown = [
+    "tests/native-jwt-definition-export.test.mjs",
+    "tests/native-jwt-inheritance-roundtrip.test.mjs",
+    "tests/native-jwt-owner-roundtrip.test.mjs",
+  ];
+  for (const file of unknown)
+    assert.equal(Object.hasOwn(data.weights, file), false);
+  const files = [...Object.keys(data.weights), ...unknown].sort();
+  assert.equal(files.length, 523);
   const result = allocateWeighted(files, 4, data);
   assert.deepEqual(result.shards.flat().sort(), files);
-  assert.equal(new Set(result.shards.flat()).size, 493);
-  assert.deepEqual(result.allocation.fallbackFiles, [unknown]);
-  assert.equal(
-    result.allocation.weights[unknown],
-    Math.max(...Object.values(data.weights)),
-  );
+  assert.equal(new Set(result.shards.flat()).size, 523);
+  assert.deepEqual(result.allocation.fallbackFiles, unknown);
+  for (const file of unknown)
+    assert.equal(
+      result.allocation.weights[file],
+      Math.max(...Object.values(data.weights)),
+    );
   assert.deepEqual(
     allocateWeighted([...files].reverse(), 4, data).shards,
     result.shards,
   );
   assert.deepEqual(
     result.allocation.estimatedUs,
-    [499496495, 499496517, 499498219, 499569735],
+    [553782237, 553779988, 553709754, 553783326],
   );
   const heads = new Map([
-    [40918700552, "bb0b7de270ea879a87003a27332254f2ba7c6ed5"],
-    [40926521644, "8fe917ead122ad3ab44e5d4b76900bae4157ad76"],
+    [41017678554, "106984276c4db3f757f2b44f4f9e490f024b2bf8"],
+    [41030008398, "faa36606ca5d5c8487720e738f8f54e6a40f7c27"],
   ]);
   for (const source of data.sources)
     assert.equal(source.headSha, heads.get(source.runId));
