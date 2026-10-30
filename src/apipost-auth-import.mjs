@@ -1,3 +1,4 @@
+import { importApipostAsap } from "./apipost-asap-auth.mjs";
 import { validateHeaderName } from "node:http";
 const object = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -20,6 +21,17 @@ function strings(value, names) {
 }
 /** Pure format conversion only. Never obtains tokens or makes network requests. */
 export function importExtendedApipostAuth(auth) {
+  if (auth && typeof auth === "object") {
+    const type = Object.getOwnPropertyDescriptor(auth, "type");
+    if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
+      throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "asap") {
+      const section = Object.getOwnPropertyDescriptor(auth, "asap");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生ASAP认证 definition 无效");
+      return importApipostAsap(section.value);
+    }
+  }
   if (auth?.type === "kv") {
     const value = section(auth, "kv", ["in", "key", "value"]);
     const result = strings(value, ["in", "key", "value"]);
