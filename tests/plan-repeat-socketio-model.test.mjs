@@ -148,14 +148,14 @@ test("Socket.IO repeat retains v2 auth boundary and controlled transport/TLS fie
   );
 });
 
-test("Socket.IO release settles disconnect before removing catch-all and ordinary listeners", () => {
+test("Socket.IO release calls disconnect before removing catch-all and ordinary listeners", () => {
   const sessions = new SocketIOSessions(),
     events = [];
   const state = {
     socket: {
       io: { engine: { transport: { name: "polling" } } },
       disconnect() {
-        events.push("disconnect/ack-settle");
+        events.push("disconnect");
       },
       offAny() {
         events.push("offAny");
@@ -166,11 +166,7 @@ test("Socket.IO release settles disconnect before removing catch-all and ordinar
     },
   };
   sessions.release(state);
-  assert.deepEqual(events, [
-    "disconnect/ack-settle",
-    "offAny",
-    "removeAllListeners",
-  ]);
+  assert.deepEqual(events, ["disconnect", "offAny", "removeAllListeners"]);
   assert.equal(state.socket, null);
   assert.equal(state.transport, "polling");
   sessions.release(state);

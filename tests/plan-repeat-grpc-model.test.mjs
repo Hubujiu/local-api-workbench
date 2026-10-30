@@ -72,6 +72,7 @@ test("gRPC references resolve before frozen admission and no wrapper extras are 
     bad[0].steps[0][field] = {};
     assert.throws(() => validateRepeatGraph(bad), /未知/);
   }
+  // Changing only type leaves a malformed grpc wrapper, not a Socket.IO ban.
   for (const type of ["socketio", "repeat", "unknown"]) {
     const bad = graph();
     bad[0].steps[0].type = type;

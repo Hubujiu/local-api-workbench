@@ -293,3 +293,13 @@ separate validation paths. Do not claim arbitrary peer error/application payload
 secret redaction; temporary credential fields themselves must not be persisted.
 Syntax/pure helper checks are not end-to-end acceptance. This remains draft until
 exact-commit ordinary CI evidence is inspected.
+
+Socket.IO credential admission distinguishes declared `handshake.requiredHeaders`
+from peer-defined auth/query requirements: only the former can prove a missing
+credential rejection before an earlier HTTP step; the latter may fail at the
+server handshake. Event-ring truncation alone retains existing result semantics
+and is not reclassified as wire-protocol `partial`. The existing 2MiB command-result
+cap still fails the flow. Release explicitly calls `offAny()` after disconnect
+settles its ordinary ACK listeners, before removing ordinary listeners; actual
+v2/v4 ACK cancellation and cross-session isolation need CI proof, not fake-call
+ordering assertions. Auto-mode admission does not alone prove completed upgrade.
