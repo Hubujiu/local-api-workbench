@@ -324,7 +324,10 @@ async function executeRedis(input, command, writing, signal) {
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
       socket.destroy();
-      if (!writing) await closed;
+      // Acknowledgement fixes the outcome, but destroy() only requests cleanup.
+      // Writes, like reads, retain ownership until the local transport closes;
+      // peer FIN, remote rollback and disk durability are not implied.
+      await closed;
       if (signal?.aborted) error = databaseCancelled();
       if (error && writeSent) {
         error = Error(
