@@ -86,6 +86,7 @@ async function fixture(t, secure = false) {
       id: socket.id,
       token: `reply-${received.length + 1}`,
       auth: socket.handshake.headers["x-private"],
+      authToken: socket.handshake.auth.token,
       query: socket.handshake.query.token,
       version: socket.conn.protocol,
       transport: socket.conn.transport.name,
@@ -508,34 +509,45 @@ test(
       assert.equal(f.received.length, 0);
       assert.equal(f.consumed.length, 0);
     }
-    const clean = await f.post(
-      `projects/${f.project.id}/plans`,
-      f.definition(),
-    );
-    const tokens = ["private-socketio-B", "private-socketio-C"];
-    const runs = await Promise.all(
-      tokens.map((token) =>
-        f.post(`projects/${f.project.id}/run`, {
-          planId: clean.value.id,
-          socketioCredentials: f.credentials([defaultMode], token),
-        }),
-      ),
-    );
-    for (const r of runs) checkRun(r.value);
-    for (const token of tokens)
-      assert.equal(f.received.filter((r) => r.auth === token).length, 2);
-    for (const [index, r] of runs.entries()) {
-      const replies = r.value.results
-        .filter((x) => x.type === "socketio")
-        .map((x) => x.socketioResult.results[1].args[0].token);
-      const auth = f.received
-        .filter((x) => replies.includes(x.token))
-        .map((x) => x.auth);
-      assert.equal(replies.length, 2);
-      assert.deepEqual(auth, [tokens[index], tokens[index]]);
+    for (const selected of [defaultMode, "v2-websocket"]) {
+      const clean = await f.post(
+        `projects/${f.project.id}/plans`,
+        f.definition([selected]),
+      );
+      const tokens = [
+        `private-socketio-${selected}-B`,
+        `private-socketio-${selected}-C`,
+      ];
+      const runs = await Promise.all(
+        tokens.map((token) =>
+          f.post(`projects/${f.project.id}/run`, {
+            planId: clean.value.id,
+            socketioCredentials: f.credentials([selected], token),
+          }),
+        ),
+      );
+      for (const r of runs) checkRun(r.value, [selected]);
+      for (const token of tokens)
+        assert.equal(f.received.filter((r) => r.auth === token).length, 2);
+      for (const [index, r] of runs.entries()) {
+        const replies = r.value.results
+          .filter((x) => x.type === "socketio")
+          .map((x) => x.socketioResult.results[1].args[0].token);
+        const rows = f.received.filter((x) => replies.includes(x.token));
+        assert.equal(replies.length, 2);
+        assert.equal(rows.length, 2);
+        for (const row of rows) {
+          assert.equal(row.auth, tokens[index]);
+          assert.equal(
+            row.authToken,
+            selected.startsWith("v4") ? tokens[index] : undefined,
+          );
+          assert.equal(row.query, tokens[index]);
+        }
+      }
+      const disk = JSON.stringify(await new Store(f.root).get(f.project.id));
+      for (const token of tokens) assert.ok(!disk.includes(token));
     }
-    const disk = JSON.stringify(await new Store(f.root).get(f.project.id));
-    for (const token of tokens) assert.ok(!disk.includes(token));
   },
 );
 test(
