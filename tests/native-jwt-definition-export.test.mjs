@@ -45,8 +45,16 @@ const config = (algorithm = "HS256", addTokenTo = "header") => ({
   header,
   addTokenTo,
 });
+// Descriptor bags can themselves acquire Symbol.toStringTag branding. Compare
+// ordered key/descriptor records so every symbol and getter identity stays
+// asserted without changing the comparison object's intrinsic tag.
+const descriptorRecords = (value) =>
+  Reflect.ownKeys(value).map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(value, key),
+  ]);
 function roundtrip(auth) {
-  const before = Object.getOwnPropertyDescriptors(auth),
+  const before = descriptorRecords(auth),
     keys = Reflect.ownKeys(auth);
   const expected = Object.fromEntries(
     Object.entries(auth).filter(([key]) => key !== "type"),
@@ -58,13 +66,13 @@ function roundtrip(auth) {
     ...expected,
     type: "jwt",
   });
-  assert.deepEqual(Object.getOwnPropertyDescriptors(auth), before);
+  assert.deepEqual(descriptorRecords(auth), before);
   assert.deepEqual(Reflect.ownKeys(auth), keys);
   assert.notEqual(native.jwt, auth);
   return native;
 }
 function rejected(auth, forbidden = [secret, unknownKey]) {
-  const descriptors = Object.getOwnPropertyDescriptors(auth),
+  const descriptors = descriptorRecords(auth),
     keys = Reflect.ownKeys(auth);
   let thrown;
   assert.throws(
@@ -86,7 +94,7 @@ function rejected(auth, forbidden = [secret, unknownKey]) {
     },
   );
   assert.ok(thrown);
-  assert.deepEqual(Object.getOwnPropertyDescriptors(auth), descriptors);
+  assert.deepEqual(descriptorRecords(auth), descriptors);
   assert.deepEqual(Reflect.ownKeys(auth), keys);
 }
 
@@ -484,4 +492,16 @@ test("existing AWS Hawk and EdgeGrid native definition inverses remain unchanged
     { type: "apiKey", key: "x-key", value: "value" },
   ])
     assert.equal(exportExtendedApipostAuth(auth), undefined);
+});
+
+test("inherited JWT type getter is rejected before dispatch without being invoked", () => {
+  let reads = 0;
+  const auth = Object.create({
+    get type() {
+      reads++;
+      throw Error(secret);
+    },
+  });
+  rejected(auth);
+  assert.equal(reads, 0);
 });
