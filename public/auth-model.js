@@ -1,3 +1,4 @@
+import { digestChallengePolicy } from "./digest-policy-model.js";
 export const authTypes = [
   "none",
   "bearer",
@@ -23,6 +24,9 @@ export function validateAuth(auth = {}) {
       auth.queryEncoding !== "apipost")
   )
     throw Error("不支持的API Key查询编码配置");
+  const policy = digestChallengePolicy(auth);
+  if (policy && auth.type !== "digest")
+    throw Error("challengePolicy 仅支持 Digest 认证");
   if (auth.type !== undefined && !authTypes.includes(auth.type))
     throw Error("不支持的认证类型: " + String(auth.type));
   if (

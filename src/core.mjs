@@ -518,6 +518,13 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
+  // New static policy must not be erased by cloning or laundered through
+  // interpolation/before scripts. Other authentication behavior stays unchanged.
+  for (const step of Array.isArray(plan?.steps) ? plan.steps : []) {
+    const auth = step?.request?.auth;
+    if (auth && typeof auth === "object" && "challengePolicy" in auth)
+      validateAuth(auth);
+  }
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
