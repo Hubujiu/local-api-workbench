@@ -83,7 +83,7 @@ function source(base, privateKey) {
     node.target_id = id;
     node.name = id;
     node.parent_id = parent;
-    node.url = "/" + id + "?jwt=old&jwt=older";
+    node.url = "/" + id + "?jwt=old&untouched=yes";
     node.request.query.parameter = [];
     node.request.header.parameter = [];
     if (auth === undefined) delete node.request.auth;
@@ -107,6 +107,7 @@ function inspect(req, expected, publicKey) {
   const url = new URL(req.url, "http://fixture"),
     name = url.pathname.slice(1);
   assert(expected.has(name));
+  assert.equal(url.searchParams.get("untouched"), "yes");
   const auth = expected.get(name);
   if (!auth) {
     assert.equal(
@@ -114,7 +115,7 @@ function inspect(req, expected, publicKey) {
       undefined,
       "no-auth boundary must not inherit target or ancestor credentials",
     );
-    assert.deepEqual(url.searchParams.getAll("jwt"), ["old", "older"]);
+    assert.deepEqual(url.searchParams.getAll("jwt"), ["old"]);
     return;
   }
   let token;
@@ -254,6 +255,37 @@ for (const format of ["apipost", "apipost-directory"]) {
       assert.equal(graph.requests.absent.mode, "absent");
       assert.equal(graph.requests.noauth.mode, "none");
       assert.equal(graph.requests["disabled-parent"].mode, "inherit");
+      // Preserve-graph parameter layers require unique names. Keep duplicate
+      // query syntax as an atomic rejection control, not a positive graph that
+      // would bypass the existing guard. The feature owner workflow separately
+      // exercises duplicate replacement for ordinary non-graph requests.
+      const duplicateSource = structuredClone(fixture.document);
+      for (const node of duplicateSource.apis)
+        if (node.target_type === "api")
+          node.url = node.url.replace("jwt=old&", "jwt=old&jwt=older&");
+      const duplicateTarget = await app.store.create("Duplicate JWT graph");
+      await call("/api/projects/" + duplicateTarget.id + "/import", {
+        document:
+          format === "apipost"
+            ? duplicateSource
+            : nativeDirectoryFixture(duplicateSource),
+        inheritanceMode: "preserve",
+      });
+      const duplicateBefore = await app.store.get(duplicateTarget.id);
+      const rejected = await call(
+        "/api/projects/" + duplicateTarget.id + "/export?format=" + format,
+        undefined,
+        "GET",
+        400,
+      );
+      assert.equal(Object.hasOwn(rejected, "apis"), false);
+      assert.equal(Object.hasOwn(rejected, "files"), false);
+      assert.deepEqual(
+        await app.store.get(duplicateTarget.id),
+        duplicateBefore,
+      );
+      assert.equal(seen.length, 0);
+      assert.deepEqual(errors, []);
       const exported = await call(
         "/api/projects/" + first.id + "/export?format=" + format,
         undefined,
