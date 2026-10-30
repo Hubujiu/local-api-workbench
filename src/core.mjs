@@ -520,6 +520,13 @@ export function evaluateAssertions(response, assertions = []) {
 }
 export function snapshotPlan(plan) {
   const repeated = validateRepeatGraph(plan.steps);
+  // All leaves are cloned, including disabled ones: admit the static model first.
+  for (const step of planLeaves(plan.steps || [])) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+      validateAuth(auth);
+  }
+
   const stepIds = repeated
     ? undefined
     : allocateLinearPlanStepIds(plan.steps, id);
@@ -656,6 +663,13 @@ export async function runPlan(
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  // All leaves are cloned, including disabled ones: admit the static model first.
+  for (const step of planLeaves(plan.steps || [])) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+      validateAuth(auth);
+  }
+
   // Validate new static constraints on active leaves before cloning, interpolation
   // or before scripts; disabled repeat ancestors do not activate child work.
   for (const step of activePlanLeaves(plan.steps)) {
