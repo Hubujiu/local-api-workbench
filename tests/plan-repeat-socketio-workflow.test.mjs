@@ -491,6 +491,12 @@ test(
       id: "sentinel",
       request: structuredClone(input.steps[0].steps[1].request),
     });
+    input.steps[1] = {
+      type: "repeat",
+      id: "outer-preflight",
+      count: 1,
+      steps: [input.steps[1]],
+    };
     const made = await f.post(`projects/${f.project.id}/plans`, input);
     assert.equal(made.status, 200);
     for (const socketioCredentials of [
@@ -1020,5 +1026,46 @@ test(
         assert.equal(response.value.variables.token, "initial");
         await until(() => f.engineClients === 0);
       });
+  },
+);
+
+test(
+  "two-by-two nested Socket.IO repeats retain fresh sessions and complete occurrence paths",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t),
+      input = f.definition();
+    input.steps = [
+      { type: "repeat", id: "outer", count: 2, steps: input.steps },
+    ];
+    const made = await f.post(`projects/${f.project.id}/plans`, input);
+    assert.equal(made.status, 200);
+    const response = await f.post(`projects/${f.project.id}/run`, {
+      planId: made.value.id,
+      socketioCredentials: f.credentials(),
+    });
+    assert.equal(response.status, 200);
+    const run = response.value;
+    assert.equal(run.status, "passed");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.results.length, 8);
+    assert.equal(f.received.length, 4);
+    assert.equal(f.consumed.length, 4);
+    assert.equal(
+      new Set(run.results.map((r) => r.repeat.occurrenceId)).size,
+      8,
+    );
+    const protocol = run.results.filter((r) => r.type === "socketio");
+    assert.equal(
+      new Set(protocol.map((r) => r.socketioResult.sessionId)).size,
+      4,
+    );
+    for (let i = 0; i < 4; i++) {
+      assert.deepEqual(protocol[i].repeat.path, [
+        { groupId: "outer", iteration: Math.floor(i / 2) },
+        { groupId: "group", iteration: i % 2 },
+      ]);
+      assert.equal(protocol[i].socketioResult.state, "closed");
+    }
   },
 );

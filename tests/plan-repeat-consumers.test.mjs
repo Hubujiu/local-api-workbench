@@ -144,6 +144,14 @@ test("native strict extraction stops all later iterations and native adapters re
       leaf("after", f.url + "/after"),
     ],
   });
+  plan.steps[0] = {
+    type: "repeat",
+    id: "outer-strict",
+    name: "outer",
+    enabled: true,
+    count: 2,
+    steps: [plan.steps[0]],
+  };
   p.plans.push(plan);
   await f.store.save(p);
   const run = await runPlan(
@@ -162,6 +170,10 @@ test("native strict extraction stops all later iterations and native adapters re
       ["login", 1],
     ],
   );
+  assert.deepEqual(run.results[2].repeat.path, [
+    { groupId: "outer-strict", iteration: 0 },
+    { groupId: "group", iteration: 1 },
+  ]);
   assert.equal(run.results[2].response.status, 200);
   assert.match(run.results[2].error, /路径|提取/);
   assert.equal(run.variables.token, "fresh-one");
@@ -215,7 +227,7 @@ test("native strict extraction stops all later iterations and native adapters re
   await f.store.save(restored);
   assert.equal(restored.plans[0].steps[0].type, "repeat");
   const bad = structuredClone(restored);
-  bad.plans[0].steps[0].steps[0].request.importedNativeTaskSource = {
+  bad.plans[0].steps[0].steps[0].steps[0].request.importedNativeTaskSource = {
     version: 2,
     before: [],
     after: [],
@@ -223,7 +235,7 @@ test("native strict extraction stops all later iterations and native adapters re
   await assert.rejects(f.store.save(bad), /来源/);
   assert.throws(() => restoreProject(bad), /来源/);
   assert.equal(
-    (await f.store.get(restored.id)).plans[0].steps[0].steps[0].request
+    (await f.store.get(restored.id)).plans[0].steps[0].steps[0].steps[0].request
       .importedNativeTaskSource,
     undefined,
   );

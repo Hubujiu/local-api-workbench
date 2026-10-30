@@ -514,6 +514,12 @@ test("WS/SSE repeat required-auth and malformed temporary bindings preflight the
     id: "earlier",
     request: { url: f.definition().steps[0].steps[2].request.url },
   });
+  input.steps[1] = {
+    type: "repeat",
+    id: "outer-preflight",
+    count: 1,
+    steps: [input.steps[1]],
+  };
   const made = await f.post(`projects/${f.project.id}/plans`, input);
   assert.equal(made.status, 200);
   const invalid = [
@@ -1040,3 +1046,39 @@ test("root repeated explicit empty WS frames stay frozen through live edits and 
   );
   await until(() => f.wss.clients.size === 0 && f.streams.size === 0);
 });
+
+test(
+  "two-by-two nested WS/SSE repeats retain fresh exchanges and complete occurrence paths",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t),
+      input = f.definition();
+    input.steps = [
+      { type: "repeat", id: "outer", count: 2, steps: input.steps },
+    ];
+    const made = await f.post(`projects/${f.project.id}/plans`, input);
+    assert.equal(made.status, 200);
+    const response = await f.post(`projects/${f.project.id}/run`, {
+      planId: made.value.id,
+      protocolCredentials: credentials(),
+    });
+    assert.equal(response.status, 200);
+    const run = response.value;
+    assert.equal(run.status, "passed");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.results.length, 12);
+    assert.deepEqual(f.counts(), [4, 8]);
+    assert.equal(
+      new Set(run.results.map((r) => r.repeat.occurrenceId)).size,
+      12,
+    );
+    for (let i = 0; i < 4; i++) {
+      assert.deepEqual(run.results[i * 3].repeat.path, [
+        { groupId: "outer", iteration: Math.floor(i / 2) },
+        { groupId: "group", iteration: i % 2 },
+      ]);
+      assert.equal(run.results[i * 3].protocolResult.status, "completed");
+      assert.equal(run.results[i * 3 + 1].protocolResult.status, "completed");
+    }
+  },
+);

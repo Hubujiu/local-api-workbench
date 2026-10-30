@@ -231,3 +231,68 @@ test("MCP activity metadata is bounded and cancellation save failures remain rea
   assert.equal(outputFailed.recordSaved, true);
   assert.equal(outputFailed.persistenceError, undefined);
 });
+
+test("nested activity preserves complete identities or omits unsafe/oversized paths without invoking accessors", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "nested-activity-"));
+  const activity = await new MCPActivity(root, {
+    tool: "localapi_run_plan",
+    projectId: "p",
+    planId: "plan",
+  }).start();
+  t.after(async () => {
+    await activity.finish();
+    await rm(root, { recursive: true, force: true });
+  });
+  const repeatPath = [
+    { groupId: "outer", iteration: 1 },
+    { groupId: "inner", iteration: 0 },
+  ];
+  const repeat = {
+    groupId: "inner",
+    childId: "leaf",
+    iteration: 0,
+    occurrenceId: '[[["outer",1],["inner",0]],"leaf"]',
+    path: repeatPath,
+  };
+  await activity.update({ repeat });
+  assert.deepEqual((await readMCPActivities(root))[0].repeat, repeat);
+  let accessed = false;
+  const getter = { groupId: "outer" };
+  Object.defineProperty(getter, "iteration", {
+    enumerable: true,
+    get() {
+      accessed = true;
+      throw Error("must not invoke");
+    },
+  });
+  const hidden = { ...repeat };
+  Object.defineProperty(hidden, "path", {
+    value: repeatPath,
+    enumerable: false,
+  });
+  const pathGetter = { ...repeat };
+  Object.defineProperty(pathGetter, "path", {
+    enumerable: true,
+    get() {
+      accessed = true;
+      throw Error("must not invoke");
+    },
+  });
+  for (const invalid of [
+    { ...repeat, path: new Array(2) },
+    { ...repeat, path: [getter, repeatPath[1]] },
+    hidden,
+    pathGetter,
+    { ...repeat, occurrenceId: "x".repeat(1501) },
+    { ...repeat, path: [{ ...repeatPath[0], extra: true }, repeatPath[1]] },
+  ]) {
+    await activity.update({ repeat: invalid });
+    const [row] = await readMCPActivities(root);
+    assert.equal(row.repeat, undefined);
+    assert.equal(row.repeatOmitted, true);
+    assert.ok(Buffer.byteLength(JSON.stringify(row)) <= 4096);
+  }
+  assert.equal(accessed, false);
+  await activity.update({ stepId: "ordinary" });
+  assert.equal((await readMCPActivities(root))[0].repeatOmitted, undefined);
+});

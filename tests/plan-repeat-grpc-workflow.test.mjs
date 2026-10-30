@@ -453,6 +453,12 @@ test(
       id: "sentinel",
       request: structuredClone(input.steps[0].steps[1].request),
     });
+    input.steps[1] = {
+      type: "repeat",
+      id: "outer-preflight",
+      count: 1,
+      steps: [input.steps[1]],
+    };
     const made = await f.post(`projects/${f.project.id}/plans`, input);
     assert.equal(made.status, 200);
     for (const grpcCredentials of [
@@ -911,5 +917,41 @@ test(
     }
     assert.equal(f.received.length, 0);
     assert.equal(f.consumed.length, 0);
+  },
+);
+
+test(
+  "two-by-two nested gRPC repeats retain ordered path identities and independent calls",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t),
+      input = f.definition();
+    input.steps = [
+      { type: "repeat", id: "outer", count: 2, steps: input.steps },
+    ];
+    const made = await f.post(`projects/${f.project.id}/plans`, input);
+    assert.equal(made.status, 200);
+    const response = await f.post(`projects/${f.project.id}/run`, {
+      planId: made.value.id,
+      grpcCredentials: f.credentials(),
+    });
+    assert.equal(response.status, 200);
+    const run = response.value;
+    assert.equal(run.status, "passed");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.results.length, 8);
+    assert.equal(f.received.length, 4);
+    assert.equal(f.consumed.length, 4);
+    assert.equal(
+      new Set(run.results.map((r) => r.repeat.occurrenceId)).size,
+      8,
+    );
+    for (let i = 0; i < 4; i++) {
+      assert.deepEqual(run.results[i * 2].repeat.path, [
+        { groupId: "outer", iteration: Math.floor(i / 2) },
+        { groupId: "group", iteration: i % 2 },
+      ]);
+      assert.equal(run.results[i * 2].grpcResult.status.code, 0);
+    }
   },
 );

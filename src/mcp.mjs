@@ -182,7 +182,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存独立快照计划；支持单层HTTP repeat组，count为1至100整数，潜在展开最多200步",
+            "保存独立快照计划；支持最多4层HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE repeat组，count为1至100整数，含禁用节点的潜在展开最多200步",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
