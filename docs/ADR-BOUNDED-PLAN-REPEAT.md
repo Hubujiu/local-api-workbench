@@ -317,3 +317,14 @@ cap still fails the flow. Release explicitly calls `offAny()` after disconnect
 settles its ordinary ACK listeners, before removing ordinary listeners; actual
 v2/v4 ACK cancellation and cross-session isolation need CI proof, not fake-call
 ordering assertions. Auto-mode admission does not alone prove completed upgrade.
+
+CI 40998600458 exposed a test-only deadline attribution error: the wait's timeout
+is clipped to the remaining whole-flow budget, so its timer can legally report
+`Socket.IO等待超时` before the outer timer reports `Socket.IO计划整体超时`.
+Acceptance checks failed termination, observed bounded elapsed time (not a hard
+real-time scheduling promise), no extracted batch, no subsequent commands within
+the failed flow, connection closure and no replay. Ordinary failed-protocol plans
+retain their established later-HTTP continuation with unchanged variables;
+external cancellation separately stops later HTTP/occurrences. The independent
+ACK timeout and external-abort cases remain. No production timeout or budget is
+changed. The unrelated macOS script quota timeout in that run remains unexplained.
