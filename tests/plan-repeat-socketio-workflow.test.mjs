@@ -92,11 +92,16 @@ async function fixture(t, secure = false) {
       transport: socket.conn.transport.name,
       inputs: [],
       serverAcks: [],
+      afterDeadline: 0,
     };
     received.push(row);
     active.add(socket);
     socket.on("disconnect", () => active.delete(socket));
     socket.emit("welcome", { ready: true });
+    socket.on("after-deadline", (ack) => {
+      row.afterDeadline++;
+      ack();
+    });
     socket.on("echo", (value, ack) => {
       row.inputs.push(value);
       if (received.length === 2 && disconnectSecond) {
@@ -776,6 +781,12 @@ test(
           } else {
             f.holdWait();
             input.steps[0].steps[0].socketio.timeoutMs = 500;
+            input.steps[0].steps[0].socketio.commands.push({
+              type: "emit",
+              event: "after-deadline",
+              args: [],
+              ackTimeoutMs: 1000,
+            });
           }
         }
         const made = await f.post(`projects/${f.project.id}/plans`, input);
@@ -813,11 +824,30 @@ test(
             assert.equal(failed.results[1].status, "ack-timeout");
             assert.equal(failed.results[1].remoteOutcome, "unknown");
           }
-          if (mode === "flow-deadline") assert.match(failed.error, /整体超时/);
+          if (mode === "flow-deadline") {
+            const flow = input.steps[0].steps[0].socketio;
+            assert.ok(flow.commands[6].timeoutMs > flow.timeoutMs);
+            // Both timers enforce the same remaining flow budget. The clipped
+            // wait timer may win; neither message is a distinct API outcome.
+            assert.match(failed.error, /Socket.IO(?:整体|计划整体|等待)超时/);
+            assert.ok(
+              failed.durationMs >= 450 && failed.durationMs < 4000,
+              `observed bounded deadline duration: ${failed.durationMs}`,
+            );
+            assert.equal(failed.results.length, 6);
+            assert.deepEqual(response.value.results[2].extracted, {});
+            assert.deepEqual(
+              f.received.map((row) => row.afterDeadline),
+              [1, 0],
+            );
+          }
         }
         await until(() => f.active.size === 0);
+        const terminalEvidence = JSON.stringify(response.value);
         f.lateAck();
+        assert.equal(JSON.stringify(response.value), terminalEvidence);
         assert.equal(f.received.length, 2);
+        assert.equal(f.consumed.length, 2); // Existing ordinary protocol-failure continuation.
       });
   },
 );
