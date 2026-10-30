@@ -14,7 +14,7 @@ const tcp = () => ({
     definition: { type: "tcp", url: "127.0.0.1", port: 1234 },
     message: "hello",
   },
-  extract: [{ name: "token", path: "$.data" }],
+  extract: [{ name: "token", path: "$.body" }],
   assertions: [],
   expectedStatus: "completed",
 });

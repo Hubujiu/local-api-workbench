@@ -191,3 +191,13 @@ Protocol definition fields retain the existing `normalizeProtocol` semantics;
 this change does not introduce a second definition-field schema or claim that
 all unknown definition keys reject. Pure graph-helper tests pass locally; network
 workflows and exact-head CI remain pending, so this is not acceptance.
+
+`tests/plan-repeat-tcp-workflow.test.mjs` now specifies the TCP extension's real
+owner/canonical HTTP/stdio/CLI, frozen edit/deletion, actual owner backup/restore,
+restart, malformed/unauthorized zero-connection paths, atomic extraction with
+continuation, owner cancellation and direct run signal deadline, and genuine
+post-journal recovery workflows. The deadline case tests the run signal, not a
+claim about an owner HTTP transport deadline. Static review, syntax and format
+checks pass; these application workflows have deliberately not run locally and
+remain pending ordinary exact-head CI. Existing HTTP repeat evidence and any
+later root composition evidence must not be substituted for these new flows.
