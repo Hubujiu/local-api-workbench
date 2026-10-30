@@ -1,3 +1,11 @@
+import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
+import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
+import {
+  appendExecutionRecord,
+  recordSaveFailure,
+  recordSaveSuccess,
+} from "./execution-evidence.mjs";
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -93,6 +101,7 @@ export async function createApp({
   });
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
+  const mcpHTTPSessions = new MCPHTTPSessions();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpToken = "",
     mcpLastActivity = null;
@@ -222,52 +231,148 @@ export async function createApp({
       if (u.pathname === "/mcp") {
         if (!mcp.enabled || req.headers.authorization !== "Bearer " + mcpToken)
           return json(res, 403, { error: "MCP disabled or unauthorized" });
-        if (req.method !== "POST") {
-          res.setHeader("Allow", "POST");
-          return json(res, 405, { error: "Only POST is supported" });
+        const sessionHeader = req.headers["mcp-session-id"];
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
+        if (req.method === "DELETE" && sessionHeader !== undefined) {
+          mcpHTTPSessions.delete(sessionHeader);
+          res.writeHead(204);
+          return res.end();
         }
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST, DELETE");
+          return json(res, 405, {
+            error: "Only POST and session DELETE are supported",
+          });
+        }
+        const requestEpoch = mcpHTTPSessions.capture();
+        const incomingToken = mcpToken;
         const message = await body(req);
+        if (
+          requestEpoch !== mcpHTTPSessions.capture() ||
+          incomingToken !== mcpToken
+        )
+          return json(res, 403, { error: "MCP authorization changed" });
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
         if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
           return json(res, 400, { error: "Invalid JSON-RPC request" });
+        let sessionId = sessionHeader;
+        if (message.method === "initialize" && message.id !== undefined) {
+          if (sessionId !== undefined)
+            return json(res, 400, { error: "Session already initialized" });
+          sessionId = mcpHTTPSessions.create(message.id);
+          res.setHeader("Mcp-Session-Id", sessionId);
+        }
+        if (
+          message.method === "notifications/cancelled" &&
+          message.id === undefined
+        ) {
+          if (sessionId !== undefined)
+            mcpHTTPSessions.cancel(sessionId, message.params?.requestId);
+          res.writeHead(202);
+          return res.end();
+        }
+        const cancellable =
+          message.method === "tools/call" &&
+          [
+            "localapi_execute_api",
+            "localapi_execute_flow",
+            "localapi_run_plan",
+            "apipost_execute_api",
+            "apipost_execute_flow",
+          ].includes(message.params?.name);
+        const execution =
+          sessionId !== undefined && message.id !== undefined
+            ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
+            : { signal: undefined, finish() {} };
         const activityId = id();
         if (message.method === "tools/call") {
           const active = [...mcpActivities.values()].filter(
             (a) => a.status === "running",
           );
-          if (active.length >= 10)
+          if (active.length >= 10) {
+            execution.finish();
             return json(res, 429, { error: "MCP并发任务达到上限" });
+          }
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
           });
         }
-        const dispatch = createMCP({
-          store,
-          ...mcp,
-          debugEnvironments,
-          grpcExecutor: executePlanGrpc,
-          protocolExecutor: executePlanWire,
-          socketioExecutor: (projectId, input, signal) =>
-            executeSocketIOFlow(input, signal, {
-              projectId,
-              sessions: socketioSessions,
-            }),
-          onProgress: (progress) => {
-            const activity = mcpActivities.get(activityId);
-            if (activity)
-              Object.assign(activity, { ...progress, status: "running" });
-          },
-        });
-        const result = await dispatch(message);
+        let result;
+        try {
+          const dispatch = createMCP({
+            store,
+            ...mcp,
+            debugEnvironments,
+            grpcExecutor: executePlanGrpc,
+            protocolExecutor: executePlanWire,
+            socketioExecutor: (projectId, input, signal) =>
+              executeSocketIOFlow(input, signal, {
+                projectId,
+                sessions: socketioSessions,
+              }),
+            onProgress: (progress) => {
+              const activity = mcpActivities.get(activityId);
+              if (activity)
+                Object.assign(activity, { ...progress, status: "running" });
+            },
+          });
+          result = await dispatch(message, { signal: execution.signal });
+        } catch {
+          result = {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "MCP执行异常；请检查活动与历史，不要自动重放",
+                },
+              ],
+            },
+          };
+        } finally {
+          execution.finish();
+        }
         if (message.method === "tools/call") {
           const activity = mcpActivities.get(activityId);
+          let output;
+          try {
+            output = JSON.parse(result?.result?.content?.[0]?.text);
+          } catch {}
+          const outcome = cancellable ? output?.status : undefined;
+          const recordSaved = cancellable
+            ? (output?.recordSaved ?? output?.record_saved)
+            : undefined;
           Object.assign(activity, {
-            status: result?.result?.isError ? "failed" : "completed",
+            status:
+              recordSaved === false
+                ? "failed"
+                : outcome === "cancelled"
+                  ? "cancelled"
+                  : result?.result?.isError || outcome === "failed"
+                    ? "failed"
+                    : "completed",
+            ...(typeof recordSaved === "boolean" ? { recordSaved } : {}),
+            ...(recordSaved === false
+              ? {
+                  executionStatus: outcome,
+                  persistenceError:
+                    "执行记录保存失败，请检查项目存储；不会重新执行请求",
+                }
+              : {}),
             finishedAt: new Date().toISOString(),
           });
           mcpLastActivity = activity;
@@ -290,10 +395,20 @@ export async function createApp({
           ))
             mcpActivities.delete(old.id);
         }
-        if (result === null) {
+        if (result === null || execution.cancelledByNotification) {
           res.writeHead(202);
           return res.end();
         }
+        if (requestEpoch !== mcpHTTPSessions.capture())
+          return json(res, 200, {
+            jsonrpc: "2.0",
+            id: message.id,
+            error: {
+              code: -32000,
+              message:
+                "MCP authorization changed; inspect authorized history for operation outcome",
+            },
+          });
         return json(res, 200, result);
       }
       if (parts[0] === "mock") {
@@ -415,6 +530,9 @@ export async function createApp({
               ...next,
               token: nextToken,
               port: server.address().port,
+            });
+            mcpHTTPSessions.advance({
+              dropSessions: !next.enabled || nextToken !== mcpToken,
             });
             mcp = next;
             mcpToken = nextToken;
@@ -717,51 +835,36 @@ export async function createApp({
               if (operation === "stop") {
                 if (Object.keys(data).length)
                   throw Error("Socket.IO停止不接受额外字段");
-                const session = socketioSessions.get(p.id, sessionId),
-                  result = socketioSessions.stop(p.id, sessionId);
+                const session = socketioSessions.get(p.id, sessionId);
+                socketioSessions.stop(p.id, sessionId);
+                session.finalSnapshot ??= socketioSessions.snapshot(
+                  p.id,
+                  sessionId,
+                );
+                const result = session.finalSnapshot;
                 if (session.recordSaved)
                   return json(res, 200, {
                     ...result,
-                    recordSaved: true,
-                    recordId: sessionId,
+                    ...recordSaveSuccess(sessionId),
                   });
-                session.recordPromise ||= (async () => {
-                  const record = {
-                    id: sessionId,
-                    type: "socketio",
-                    createdAt: result.createdAt,
-                    definition: result.definition,
-                    result,
-                    source: "manual",
-                    status:
-                      result.state === "error" ||
-                      result.events.some((x) =>
-                        ["ack-timeout", "disconnected"].includes(x.direction),
-                      )
-                        ? "failed"
-                        : result.connected
-                          ? "passed"
-                          : "cancelled",
-                  };
+                const pending = (session.recordPromise ??= (async () => {
                   try {
-                    await store.append(p.id, "protocolRuns", record);
+                    await finalizeSocketIOSession(store, p.id, session, result);
                     session.recordSaved = true;
                     return {
                       ...result,
-                      recordSaved: true,
-                      recordId: sessionId,
+                      ...recordSaveSuccess(sessionId),
                     };
                   } catch (error) {
                     return {
                       ...result,
-                      recordSaved: false,
-                      recordId: null,
-                      persistenceError: error.message,
+                      ...recordSaveFailure(p.id, sessionId, error),
                     };
                   }
-                })();
-                const recorded = await session.recordPromise;
-                if (!session.recordSaved) session.recordPromise = null;
+                })());
+                const recorded = await pending;
+                if (!session.recordSaved && session.recordPromise === pending)
+                  session.recordPromise = null;
                 return json(res, 200, recorded);
               }
             }
@@ -846,22 +949,16 @@ export async function createApp({
                       ? "cancelled"
                       : "failed",
               };
-              try {
-                await store.append(p.id, "protocolRuns", record);
-              } catch (error) {
-                return json(res, 200, {
-                  ...result,
-                  runId,
-                  recordId: null,
-                  recordSaved: false,
-                  persistenceError: String(error.message).slice(0, 500),
-                });
-              }
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "protocolRuns",
+                record,
+              );
               return json(res, 200, {
                 ...result,
                 runId,
-                recordId: record.id,
-                recordSaved: true,
+                ...receipt,
               });
             });
           }
@@ -924,8 +1021,7 @@ export async function createApp({
                 return json(res, 200, {
                   ...session.finalSnapshot,
                   projectId: p.id,
-                  recordSaved: true,
-                  recordId: sessionId,
+                  ...recordSaveSuccess(sessionId),
                 });
               const pending = (session.recordPromise ??= (async () => {
                 try {
@@ -939,16 +1035,17 @@ export async function createApp({
                   return {
                     ...session.finalSnapshot,
                     projectId: p.id,
-                    recordSaved: true,
-                    recordId,
+                    ...recordSaveSuccess(recordId),
                   };
                 } catch (error) {
                   return {
                     ...session.finalSnapshot,
                     projectId: p.id,
-                    recordSaved: false,
-                    recordId: null,
-                    persistenceError: String(error.message).slice(0, 500),
+                    ...recordSaveFailure(
+                      p.id,
+                      session.finalRecord?.id ?? null,
+                      error,
+                    ),
                   };
                 }
               })());
@@ -993,10 +1090,9 @@ export async function createApp({
               } catch (failure) {
                 error = failure;
               }
-              let recordId = null,
-                persistenceError;
+              let record, receipt;
               try {
-                const record = makeWireRecord(
+                record = makeWireRecord(
                   prepared,
                   runId,
                   startedAt,
@@ -1005,17 +1101,15 @@ export async function createApp({
                   controller.signal.aborted,
                 );
                 await store.append(p.id, "protocolRuns", record);
-                recordId = record.id;
+                receipt = recordSaveSuccess(record.id);
               } catch (failure) {
-                persistenceError = String(failure.message).slice(0, 500);
+                receipt = recordSaveFailure(p.id, record?.id ?? null, failure);
               }
               return json(res, error ? 400 : 200, {
                 ...(result || {}),
                 ...(error ? { error: error.message } : {}),
                 runId,
-                recordId,
-                recordSaved: Boolean(recordId),
-                ...(persistenceError ? { persistenceError } : {}),
+                ...receipt,
               });
             } finally {
               controllers.delete(runId);
@@ -1065,17 +1159,29 @@ export async function createApp({
               );
             }
 
-            return json(
-              res,
-              200,
-              b.type && b.type !== "sqlite"
-                ? await queryRemoteDatabase(b)
-                : await querySQLiteBounded(
-                    b.filename,
-                    b.sql,
-                    b.parameters || [],
-                  ),
-            );
+            // Only the read branch is disconnect-cancellable. Explicit writes
+            // retain their acknowledged/uncertain outcome contract.
+            const controller = new AbortController();
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            res.once("close", disconnected);
+            if (res.destroyed) disconnected();
+            try {
+              const result =
+                b.type && b.type !== "sqlite"
+                  ? await queryRemoteDatabase(b, { signal: controller.signal })
+                  : await querySQLiteBounded(
+                      b.filename,
+                      b.sql,
+                      b.parameters || [],
+                      { signal: controller.signal },
+                    );
+              if (!res.destroyed) return json(res, 200, result);
+              return;
+            } finally {
+              res.removeListener("close", disconnected);
+            }
           }
           if (action === "dictionary-preview" && req.method === "POST") {
             const data = await body(req);
@@ -1225,16 +1331,24 @@ export async function createApp({
                   variables: structuredClone(single.variables),
                 });
               if (!result) throw Error("请求已取消");
-              await store.append(p.id, "history", {
-                id: id(),
-                createdAt: new Date().toISOString(),
-                name: request.name,
-                ...result,
-                source: "manual",
-                durationMs: single.durationMs,
-              });
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  id: id(),
+                  runId,
+                  createdAt: new Date().toISOString(),
+                  name: request.name,
+                  ...result,
+                  source: "manual",
+                  durationMs: single.durationMs,
+                },
+              );
               return json(res, 200, {
                 ...result.response,
+                runId,
+                ...receipt,
                 outcome: result.status,
                 variableWrites: scoped.receipt(),
                 assertions: result.assertions,
@@ -1317,7 +1431,10 @@ export async function createApp({
             const controller = new AbortController();
             controllers.set(runId, controller);
             try {
-              const environmentId = b.environmentId || plan.environmentId;
+              const environmentId = selectedEnvironment(
+                p,
+                b.environmentId || plan.environmentId,
+              ).id;
               const env = environmentVariables(p, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
@@ -1338,6 +1455,7 @@ export async function createApp({
                 prepareRequest: (request) =>
                   resolveServiceRequest(p, request, environmentId),
               });
+              run.environmentId = environmentId;
               return json(
                 res,
                 200,
@@ -1402,10 +1520,14 @@ export async function createApp({
       );
       res.end(data);
     } catch (e) {
-      json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
+      json(res, e.code === "ENOENT" ? 404 : 400, {
+        error: e.message,
+        ...publicProjectCommitOutcome(e),
+      });
     }
   });
   server.on("close", () => {
+    mcpHTTPSessions.advance({ dropSessions: true });
     protocolSessions.close();
     socketioSessions.close();
     oauth.close();

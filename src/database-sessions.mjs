@@ -170,6 +170,7 @@ export class DatabaseSessions {
             config.filename,
             operation.sql,
             operation.parameters,
+            { signal },
           )
         : await queryRemoteDatabase(
             {

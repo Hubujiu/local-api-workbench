@@ -1,3 +1,7 @@
+import {
+  checkDatabaseSignal,
+  databaseCancelled,
+} from "./database-read-cancellation.mjs";
 import net from "node:net";
 import tls from "node:tls";
 const MAX_REPLY = 2 * 1024 * 1024,
@@ -255,10 +259,12 @@ function table(command, value) {
     ...(cursor === undefined ? {} : { cursor }),
   };
 }
-export async function queryRedis(input) {
-  return executeRedis(input, redisCommand(input), false);
+export async function queryRedis(input, { signal } = {}) {
+  checkDatabaseSignal(signal);
+  return executeRedis(input, redisCommand(input), false, signal);
 }
-async function executeRedis(input, command, writing) {
+async function executeRedis(input, command, writing, signal) {
+  checkDatabaseSignal(signal);
   const host = input.host || "127.0.0.1",
     port = Number(input.port) || 6379,
     database = Number(input.database || 0);
@@ -310,11 +316,19 @@ async function executeRedis(input, command, writing) {
             ...(input.ca ? { ca: input.ca } : {}),
           })
         : net.connect(options);
-    const finish = (error, result) => {
+    const closed = new Promise((resolve) => socket.once("close", resolve));
+    const cancel = () => finish(databaseCancelled());
+    const finish = async (error, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
       socket.destroy();
+      // Acknowledgement fixes the outcome, but destroy() only requests cleanup.
+      // Writes, like reads, retain ownership until the local transport closes;
+      // peer FIN, remote rollback and disk durability are not implied.
+      await closed;
+      if (signal?.aborted) error = databaseCancelled();
       if (error && writeSent) {
         error = Error(
           error.message +
@@ -333,6 +347,8 @@ async function executeRedis(input, command, writing) {
       timeout,
     );
     const send = () => {
+      if (settled) return;
+      checkDatabaseSignal(signal);
       const packet = encodeRESP(commands[index]);
       if (writing && index === commands.length - 1) writeSent = true;
       socket.write(packet);
@@ -347,7 +363,9 @@ async function executeRedis(input, command, writing) {
     socket.on("error", (error) => finish(error));
     socket.on("close", () => finish(Error("Redis连接提前关闭")));
     socket.on("data", (chunk) => {
+      if (settled) return;
       try {
+        checkDatabaseSignal(signal);
         received += chunk.length;
         if (received > MAX_REPLY) throw Error("Redis响应超过2MiB");
         buffer = Buffer.concat([buffer, chunk]);
@@ -387,5 +405,7 @@ async function executeRedis(input, command, writing) {
         finish(error);
       }
     });
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
   });
 }

@@ -469,6 +469,7 @@ export async function runPlan(
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
+  let progressFailure;
   if (!snapshot.steps.some((step) => step.enabled !== false)) {
     throw Error("计划没有可执行步骤");
   }
@@ -488,10 +489,11 @@ export async function runPlan(
     let scriptPhase;
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
+      if (signal?.aborted) throw Error("执行已取消，未开始新的变量提交");
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes);
+          const accepted = await onScopeChanges(changes, signal);
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
@@ -901,7 +903,20 @@ export async function runPlan(
     }
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
-    await onStep?.(record);
+    try {
+      await onStep?.(record);
+    } catch {
+      // The completed response is evidence, even when its progress observer fails.
+      // Stop before another request; do not recast this as a transport failure.
+      progressFailure = {
+        code: "EXECUTION_PROGRESS_FAILED",
+        message:
+          "Execution stopped because progress reporting failed; inspect saved results, do not replay.",
+        retry_safe: false,
+      };
+      record.progressFailure = progressFailure;
+      break;
+    }
   }
   return {
     id: id(),
@@ -915,9 +930,12 @@ export async function runPlan(
     createdAt: new Date().toISOString(),
     status: signal?.aborted
       ? "cancelled"
-      : results.every((r) => r.status === "passed")
+      : !progressFailure && results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
+    ...(progressFailure
+      ? { stopReason: "progress-failure", progressFailure }
+      : {}),
     results,
     initialVariables: structuredClone(variables),
     variables: vars,
@@ -1804,6 +1822,16 @@ export function restoreProject(document) {
     throw Error("执行记录备份格式无效");
   if ((document.history || []).some((item) => typeof item.id !== "string"))
     throw Error("请求历史备份格式无效");
+  // Both collections share the execution-result lookup namespace. Validate
+  // the entire input before retention truncation, without rewriting evidence
+  // identities or imposing a new migration rule on already persisted projects.
+  const executionIds = new Set();
+  for (const field of ["history", "runs"])
+    for (const record of document[field] || []) {
+      if (!record.id || executionIds.has(record.id))
+        throw Error("备份执行记录ID不能为空或重复");
+      executionIds.add(record.id);
+    }
   if (
     (document.documents || []).some(
       (item) =>

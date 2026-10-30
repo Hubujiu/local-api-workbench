@@ -105,9 +105,12 @@ export async function persistScopeChanges(
   projectId,
   environmentId,
   changes,
+  { signal } = {},
 ) {
   for (let attempt = 0; attempt < 5; attempt++) {
+    if (signal?.aborted) throw Error("变量提交已取消");
     const project = await store.get(projectId);
+    if (signal?.aborted) throw Error("变量提交已取消");
     const environment = selectedEnvironment(project, environmentId);
     project.globalVariables ??= {};
     for (const change of changes) {
@@ -136,7 +139,8 @@ export async function persistScopeChanges(
       else delete map[change.name];
     }
     try {
-      await store.save(project);
+      if (signal?.aborted) throw Error("变量提交已取消");
+      await store.save(project, { signal });
       return { project, scopes: projectScopes(project, environmentId) };
     } catch (error) {
       if (attempt === 4 || !/项目.*已被其他/.test(error.message)) throw error;
@@ -168,12 +172,13 @@ export function scopedExecution(store, project, environmentId, debugValues) {
       },
     },
     variableScopes: projectScopes(project, selectedId, debugValues),
-    onScopeChanges: async (changes) => {
+    onScopeChanges: async (changes, signal) => {
       const saved = await persistScopeChanges(
         store,
         project.id,
         selectedId,
         changes,
+        { signal },
       );
       Object.assign(project, saved.project);
       commits++;
