@@ -515,7 +515,7 @@ test(
       grpcCredentials: f.credentials(),
     });
     checkRun(valid.value);
-    for (const tls of [{}, { ca: cert }]) {
+    for (const tls of [{ key, cert }, { ca: cert }]) {
       const credentials = f.credentials();
       credentials.Unary.tls = tls;
       const response = await f.post(`projects/${f.project.id}/run`, {
