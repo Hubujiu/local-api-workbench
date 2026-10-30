@@ -377,6 +377,11 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  for (const step of plan.steps) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+      validateAuth(auth);
+  }
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
@@ -448,6 +453,11 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  for (const step of plan.steps || []) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+      validateAuth(auth);
+  }
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);

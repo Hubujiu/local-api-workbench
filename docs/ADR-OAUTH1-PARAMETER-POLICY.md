@@ -51,6 +51,9 @@ Snapshots/save/import/restore and direct/raw-plan entrypoints retain the model.
 
 Policy execution uses existing HMAC-SHA1, HMAC-SHA256 and RSA-SHA1 only. No
 PLAINTEXT, SHA512, accessor aliases or new key/algorithm modes are enabled.
+Explicit-policy credential fields are owned, bounded text (64 KiB total selected
+JSON); legacy coercions are not changed. Body mode and Content-Type disagreement
+rejects instead of signing two conflicting interpretations.
 Existing timestamp/version/consumer-key requirements and 10,000 ordinary-pair
 limit remain. Old policy-absent requests keep their wire behavior and validation.
 Lifecycle/token-exchange manager options remain unchanged and do not implicitly

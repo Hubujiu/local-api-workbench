@@ -42,5 +42,45 @@ export function oauth1ParameterPolicy(auth) {
     !["percent", "raw"].includes(result.headerEncoding)
   )
     throw invalid();
+  // Admit explicit-policy credentials before any caller can clone/spread them.
+  // These checks apply only when the new policy is present; legacy shapes stay.
+  if (![Object.prototype, null].includes(Object.getPrototypeOf(auth)))
+    throw invalid();
+  const fields = [
+    "consumerKey",
+    "consumerSecret",
+    "accessToken",
+    "tokenSecret",
+    "signatureMethod",
+    "privateKey",
+    "privateKeyPassphrase",
+    "nonce",
+    "timestamp",
+    "realm",
+    "version",
+    "callback",
+    "verifier",
+  ];
+  const selectedAuth = { type: "oauth1", parameterPolicy: result };
+  for (const key of Reflect.ownKeys(auth)) {
+    const descriptor = Object.getOwnPropertyDescriptor(auth, key);
+    if (
+      typeof key !== "string" ||
+      !["type", "parameterPolicy", ...fields].includes(key) ||
+      !descriptor.enumerable ||
+      !Object.hasOwn(descriptor, "value")
+    )
+      throw invalid();
+    if (key === "type" || key === "parameterPolicy") continue;
+    if (
+      typeof descriptor.value !== "string" ||
+      !descriptor.value.isWellFormed() ||
+      new TextEncoder().encode(descriptor.value).length > 65536
+    )
+      throw invalid();
+    selectedAuth[key] = descriptor.value;
+  }
+  if (new TextEncoder().encode(JSON.stringify(selectedAuth)).length > 65536)
+    throw invalid();
   return Object.freeze(result);
 }

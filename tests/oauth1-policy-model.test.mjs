@@ -151,7 +151,7 @@ test("shared scopes admit only validated OAuth1 policy and keep existing nested 
       validateSharedAuthSettings({
         globalAuth: { ...auth(), consumerSecret: "x".repeat(65536) },
       }),
-    /64KiB/,
+    /64KiB|parameterPolicy/,
   );
   assert.throws(
     () =>
@@ -163,6 +163,49 @@ test("shared scopes admit only validated OAuth1 policy and keep existing nested 
           ]),
         ),
       }),
-    /256KiB/,
+    /256KiB|parameterPolicy/,
   );
+});
+
+test("OAuth1 explicit-policy credentials reject hidden/inherited/accessor data before normalization", () => {
+  let reads = 0;
+  for (const key of ["consumerKey", "consumerSecret", "privateKey", "nonce"]) {
+    const a = auth();
+    Object.defineProperty(a, key, {
+      enumerable: true,
+      get() {
+        reads++;
+        return "must-not-run";
+      },
+    });
+    reject(a);
+    const hidden = auth();
+    Object.defineProperty(hidden, key, { enumerable: false, value: "hidden" });
+    reject(hidden);
+    const inherited = Object.assign(
+      Object.create({ [key]: "inherited" }),
+      auth(),
+    );
+    delete inherited[key];
+    reject(inherited);
+  }
+  reject({ ...auth(), nonce: 123 });
+  reject({ ...auth(), unknown: "private" });
+  reject({ ...auth(), consumerSecret: "x".repeat(65536) });
+  assert.equal(reads, 0);
+  const settings = { globalAuth: auth() };
+  Object.defineProperty(settings.globalAuth, "consumerKey", {
+    enumerable: true,
+    get() {
+      reads++;
+      return "must-not-run";
+    },
+  });
+  assert.throws(() => validateSharedAuthSettings(settings));
+  assert.throws(() =>
+    validateSharedAuthSettings({
+      folderAuth: { Private: settings.globalAuth },
+    }),
+  );
+  assert.equal(reads, 0);
 });
