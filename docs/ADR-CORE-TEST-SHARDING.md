@@ -401,3 +401,36 @@ Only offline artifact parsing and syntax/format checks are done locally. Ordinar
 exact-head feature CI and then integrated root CI remain required; historical
 failed/cancelled runs are retained. A later green run would verify that revision,
 not prove the historical cancellation's sole cause or guarantee future capacity.
+
+
+## Six-shard capacity revision, 2026-10-30
+
+Root run 41058923393 at 7a2fb03b completed 18 jobs successfully but the final
+Windows shard was cancelled. Its job interval was 12:54:35–13:04:41 UTC; the
+core step ran 12:55:03–13:04:36 UTC. The log says only "The operation was
+canceled." Of 133 selected files, 131 completed; tcp-delimiter-workflow was
+partially executed and worker-rejection-diagnostics had not dequeued. This is
+incomplete coverage, not a passing suite. Timing is consistent with the existing
+ten-minute job boundary but does not establish a unique cancellation cause.
+
+The frozen, already accepted weighting model assigns the current 533-file root
+approximately 645.7 seconds per four-way shard, before setup. Five-way allocation
+estimates 516.6 seconds; six-way estimates 430.5 seconds. These are conservative
+prior-weight estimates, including 13 unknown-file fallbacks, not measured new-run
+durations or guarantees. Six shards give more margin for setup and runner
+variation without changing the observations, allocator or fallback weights.
+
+Only the core workflow matrix and corresponding command/artifact denominator
+move from four to six per OS: 18 core jobs plus the seven existing non-core jobs.
+The tradeoff is six more runner setups/jobs per run. Every job still has its
+existing ten-minute deadline, one file at a time, identical test discovery,
+weighted LPT assignment, all original inside-file concurrency and security/test
+budgets. No retries, filters, skips or continue-on-error are introduced. The
+fixed weights and runtime runner/reporter are byte-identical. npm test is
+unchanged. A separate ordinary CI run must establish full exact-head coverage.
+
+Regression contracts retain the old four-way real synthetic execution and add
+six-way execution, checking all files and nested concurrent tests exactly once,
+complete TAP and failure propagation. Coverage-only enumeration now exercises
+one through six shards. Historical cancelled/failed runs remain unaccepted;
+this capacity change does not claim to fix historical VM/XML/script timeouts.

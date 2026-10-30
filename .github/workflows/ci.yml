@@ -16,12 +16,12 @@ env:
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "5000"
 jobs:
   core:
-    name: core (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
+    name: core (${{ matrix.os }}, shard ${{ matrix.shard }}/6)
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     steps:
@@ -31,16 +31,16 @@ jobs:
           node-version: "24"
       - run: npm ci --ignore-scripts
       - run: npm run check
-      - run: node scripts/run-core-tests.mjs --shard=${{ matrix.shard }}/4 --label=${{ matrix.os }}
+      - run: node scripts/run-core-tests.mjs --shard=${{ matrix.shard }}/6 --label=${{ matrix.os }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           retention-days: 7
-          name: core-test-diagnostics-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4
+          name: core-test-diagnostics-${{ matrix.os }}-shard-${{ matrix.shard }}-of-6
           path: |
-            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.json
-            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.tap
-            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-4.progress.jsonl
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-6.json
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-6.tap
+            test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-6.progress.jsonl
   browser:
     timeout-minutes: 10
     runs-on: ubuntu-latest

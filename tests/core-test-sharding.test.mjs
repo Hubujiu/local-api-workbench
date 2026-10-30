@@ -68,7 +68,7 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
   const baseline = globSync("tests/*.test.mjs", { cwd: root })
     .map((file) => file.split(path.sep).join("/"))
     .sort();
-  for (const total of [1, 2, 3, 4]) {
+  for (const total of [1, 2, 3, 4, 5, 6]) {
     const plans = await Promise.all(
       Array.from({ length: total }, (_, i) =>
         createPlan(root, { index: i + 1, total }),
@@ -372,18 +372,24 @@ test("glob-like filenames cannot be silently ignored by Node", async (t) => {
   assert.equal(result.status, 1);
 });
 
-test("real shards execute every file and nested concurrent test exactly once with separate TAP evidence", async (t) => {
-  const cwd = await fixture(t);
-  await mkdir(path.join(cwd, "seen"));
-  const names = [
-    "mcp-imported-archive-chunk-workflow",
-    "active-project-import",
-    "中",
-    "A",
-    "é",
-  ];
-  for (const name of names) {
-    const source = `import test from 'node:test';
+for (const total of [4, 6])
+  test(
+    total === 4
+      ? "real shards execute every file and nested concurrent test exactly once with separate TAP evidence"
+      : "six CI shards execute every file and nested concurrent test exactly once with separate TAP evidence",
+    async (t) => {
+      const cwd = await fixture(t);
+      await mkdir(path.join(cwd, "seen"));
+      const names = [
+        "mcp-imported-archive-chunk-workflow",
+        "active-project-import",
+        "中",
+        "A",
+        "é",
+      ];
+      if (total === 6) names.push("sixth-capacity-fixture");
+      for (const name of names) {
+        const source = `import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile, unlink } from 'node:fs/promises';
 assert.equal(globalThis.sharderFixtureFile, undefined, 'file process isolation');
@@ -399,36 +405,43 @@ test(${JSON.stringify(name)}, { concurrency: true, timeout: 5000 }, async (t) =>
   })));
   await unlink('file-active');
 });\n`;
-    await writeFile(path.join(cwd, "tests", `${name}.test.mjs`), source);
-  }
-  const observed = [];
-  for (const shard of [1, 2, 3, 4]) {
-    const result = invoke(cwd, [`--shard=${shard}/4`, "--label=fixture"]);
-    successful(result);
-    const prefix = path.join(
-      cwd,
-      `test-results/core-fixture-shard-${shard}-of-4`,
-    );
-    const manifest = JSON.parse(await readFile(`${prefix}.json`, "utf8"));
-    assert.equal(
-      manifest.allocation.policy,
-      "frozen-prior-whole-file-max-lpt-v1",
-    );
-    observed.push(...manifest.selected);
-    const tap = await readFile(`${prefix}.tap`, "utf8");
-    assert.match(tap, new RegExp(`# tests ${manifest.selected.length * 3}\\b`));
-    assert.match(tap, /# fail 0\b/);
-    assert.match(tap, /# skipped 0\b/);
-  }
-  assert.deepEqual(
-    observed.sort(),
-    names.map((name) => `tests/${name}.test.mjs`).sort(),
+        await writeFile(path.join(cwd, "tests", `${name}.test.mjs`), source);
+      }
+      const observed = [];
+      for (const shard of Array.from({ length: total }, (_, i) => i + 1)) {
+        const result = invoke(cwd, [
+          `--shard=${shard}/${total}`,
+          "--label=fixture",
+        ]);
+        successful(result);
+        const prefix = path.join(
+          cwd,
+          `test-results/core-fixture-shard-${shard}-of-${total}`,
+        );
+        const manifest = JSON.parse(await readFile(`${prefix}.json`, "utf8"));
+        assert.equal(
+          manifest.allocation.policy,
+          "frozen-prior-whole-file-max-lpt-v1",
+        );
+        observed.push(...manifest.selected);
+        const tap = await readFile(`${prefix}.tap`, "utf8");
+        assert.match(
+          tap,
+          new RegExp(`# tests ${manifest.selected.length * 3}\\b`),
+        );
+        assert.match(tap, /# fail 0\b/);
+        assert.match(tap, /# skipped 0\b/);
+      }
+      assert.deepEqual(
+        observed.sort(),
+        names.map((name) => `tests/${name}.test.mjs`).sort(),
+      );
+      assert.equal(
+        (await readdir(path.join(cwd, "seen"))).length,
+        names.length * 2,
+      );
+    },
   );
-  assert.equal(
-    (await readdir(path.join(cwd, "seen"))).length,
-    names.length * 2,
-  );
-});
 
 test("real assertion failures remain failed and keep the shard manifest/TAP", async (t) => {
   const cwd = await fixture(t);
@@ -490,16 +503,16 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
     "utf8",
   );
   const core = workflow.split("  core:")[1].split("  browser:")[0];
-  assert.match(core, /shard: \[1, 2, 3, 4\]/);
+  assert.match(core, /shard: \[1, 2, 3, 4, 5, 6\]/);
   assert.match(core, /timeout-minutes: 10/);
   assert.match(core, /if: always\(\)/);
-  assert.match(core, /of-4\.progress\.jsonl/);
+  assert.match(core, /of-6\.progress\.jsonl/);
   assert.match(core, /fail-fast: false/);
   assert.match(core, /node-version: "24"/);
   assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
   assert.match(
     core,
-    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/4 --label=\$\{\{ matrix\.os \}\}/,
+    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/6 --label=\$\{\{ matrix\.os \}\}/,
   );
   assert.doesNotMatch(
     core,
