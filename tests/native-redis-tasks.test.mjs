@@ -127,3 +127,45 @@ test("native Redis scalar extraction never indexes a string through retained pat
       ]);
   }
 });
+
+test("native SET imports inert intent and every ordinary runPlan entrypoint denies before effects", async () => {
+  const p = project();
+  importIntoProject(
+    p,
+    nativeRedisFixture("http://127.0.0.1:1/", {
+      method: "set",
+      query: '{"key":"k","value":"v"}',
+    }),
+  );
+  const operation = p.requests[0].nativeTasks.before.find(
+    (task) => task.type === "database",
+  ).data;
+  assert.equal(operation.writeIntent, "redis-set");
+  assert.equal(operation.query, '["SET","k","v"]');
+  assert.deepEqual(
+    normalizeRequest(p.requests[0]).nativeTasks,
+    p.requests[0].nativeTasks,
+  );
+  let effects = 0;
+  await assert.rejects(
+    runPlan(
+      snapshotPlan({ steps: [{ request: p.requests[0] }] }),
+      {},
+      async () => {
+        effects++;
+      },
+      {
+        databaseQuery: async () => {
+          effects++;
+        },
+      },
+    ),
+    { code: "NATIVE_WRITE_AUTHORITY_REQUIRED" },
+  );
+  assert.equal(effects, 0);
+  const forged = nativeRedisFixture("http://127.0.0.1:1/");
+  forged.apis[1].request.pre_tasks.find(
+    (task) => task.type === "database",
+  ).data.writeIntent = "redis-set";
+  assert.throws(() => importIntoProject(project(), forged));
+});

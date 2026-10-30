@@ -1,3 +1,4 @@
+import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { runNativeTaskPhase } from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
@@ -466,6 +467,12 @@ export async function runPlan(
   for (const step of snapshot.steps)
     if (step.request?.nativeTasks !== undefined)
       step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
+  // All entrypoints remain fail-closed until the owner capability is wired.
+  denyNativeWrites(
+    snapshot.steps
+      .filter((step) => step.enabled !== false)
+      .map((step) => step.request || {}),
+  );
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
