@@ -15,7 +15,8 @@ reverting PR43 engine/budget fixes or importing newer XML feature work.
 
 A top-level step may be `{type:"repeat", id, name, enabled, count, steps}`.
 `count` is a literal integer 1..100. `steps` is a nonempty array of ordinary HTTP
-steps; nested groups and protocol leaves are unsupported. Unknown group fields,
+steps or TCP protocol leaves (TCP extension acceptance pending below); nested
+groups and other protocol leaves are unsupported. Unknown group fields,
 accessors, invalid identifiers/counts, duplicate node IDs and malformed leaves
 reject before execution. IDs are stable definition identities. Missing IDs are
 assigned on initial normalization, not during an execution of a saved plan.
@@ -157,3 +158,46 @@ require exact-head ordinary CI. No application/VM/XML/database/pressure workload
 original client, new permissions, runtime budget, dependency or bundle change is
 part of this correction. Prior failures and acceptance evidence above remain
 historical and are not replaced by these pending specifications.
+
+## TCP repeat extension — contract stage (not accepted)
+
+The next bounded slice admits TCP `protocol` leaves alongside HTTP inside one
+repeat group. WS, SSE, gRPC, Socket.IO and nested groups remain rejected there.
+This is canonical Workbench control flow, not original automation compatibility.
+Project definition references are resolved before the final TCP-only snapshot
+check. Saved definitions and occurrence identities remain immutable across live
+protocol edits/deletion. Each occurrence uses the existing one-shot wire executor;
+there is no shared socket, new retry, executor, resource budget or credential kind.
+Temporary credentials bind to unique leaf definition IDs, never occurrence IDs;
+TCP continues to reject nonempty authentication configuration. Disabled groups
+remain structurally validated and counted against all existing potential-work
+limits, but do not trigger active handshake preflight or network calls.
+
+The feature branch's existing EOF/first-data completion is sufficient for this
+slice. Delimiter behavior belongs to the later root composition, not a partial
+PR12 backport. Protocol extraction keeps its ordinary atomic-batch and failure
+continuation semantics, not native-task strict-extraction stop semantics.
+
+Acceptance must cover real TCP-to-HTTP values per iteration, frozen references,
+live edit/deletion, unique occurrence identities, project isolation, atomic
+extraction failure, second-iteration cancellation/deadline, typed uncertain save
+receipts without resend, owner HTTP, canonical MCP HTTP/stdio, CLI, and
+backup/restore/restart. Native adapters must still reject lossy repeat projection.
+No application/network/VM/database workflow is run locally; ordinary exact-head CI
+is required. This contract stage is not implementation or acceptance evidence.
+
+TCP implementation stage: repeat/group and leaf-wrapper unknown fields reject.
+Protocol definition fields retain the existing `normalizeProtocol` semantics;
+this change does not introduce a second definition-field schema or claim that
+all unknown definition keys reject. Pure graph-helper tests pass locally; network
+workflows and exact-head CI remain pending, so this is not acceptance.
+
+`tests/plan-repeat-tcp-workflow.test.mjs` now specifies the TCP extension's real
+owner/canonical HTTP/stdio/CLI, frozen edit/deletion, actual owner backup/restore,
+restart, malformed/unauthorized zero-connection paths, atomic extraction with
+continuation, owner cancellation and direct run signal deadline, and genuine
+post-journal recovery workflows. The deadline case tests the run signal, not a
+claim about an owner HTTP transport deadline. Static review, syntax and format
+checks pass; these application workflows have deliberately not run locally and
+remain pending ordinary exact-head CI. Existing HTTP repeat evidence and any
+later root composition evidence must not be substituted for these new flows.
