@@ -62,6 +62,7 @@ read-only/cancellation behavior. Full independent driver and real SQL Server
 end-to-end verification remains pending; fake-driver tests cannot replace it.
 
 Official references checked read-only:
+
 - https://github.com/tediousjs/tedious/blob/master/LICENSE (MIT)
 - https://tediousjs.github.io/tedious/api-connection.html
 - https://tediousjs.github.io/tedious/api-request.html
@@ -88,7 +89,6 @@ server validation still remain. SQL Server EULA remains pending.
 License correction: the baseline node-sql-parser 5.4.0 package reports Apache-2.0
 and contains that LICENSE; the first PR stage incorrectly called this parser MIT.
 Tedious itself is MIT. No parser code was copied and no dependency was added.
-
 
 ## Real Tedious port implementation — unverified WIP
 
@@ -139,19 +139,30 @@ One test constructs/closes the installed real driver without calling connect.
 Together with seven existing compiler/port tests: 15 passed, no skips. These are
 NOT real TDS, TLS/certificate, SQL read-only, server timeout or cancellation tests.
 
-### Known dependency audit blocker (not waived)
+### Dependency audit blocker resolved; real-server validation still pending
 
-The initial official dependency resolution installs @azure/identity 4.14.0 and
-@azure/msal-node 6.0.1. `npm run audit:ci` currently FAILS with 2 HIGH entries
-(identity and its msal-node dependency), GHSA-xcx6-jx8p-x3h5. The upstream advisory
-lists a fix in msal-node >=7.1.0, outside identity's current ^6.0.0 range. No audit
-suppression, forced major override or claimed compatibility is introduced. SQL
-only authentication does not invoke that flow, but that is not an audit pass.
-The branch stays WIP/disabled pending a compatible verified dependency solution
-AND real SQL Server authorization/validation. Full CI for this new tree is pending.
+On 2026-10-30, a targeted official-registry, package-lock-only update with
+ignore-scripts resolved @azure/identity 4.14.1 within Tedious 20.3.8's existing
+^4.13.1 range. Identity now requests @azure/msal-node ^7.1.0; the lock resolves
+7.1.2, which uses the already locked @azure/msal-common 16.15.0. This removes the
+vulnerable 6.0.1 resolution for GHSA-xcx6-jx8p-x3h5 without changing package.json,
+adding overrides, omitting dependencies or suppressing the audit.
+
+`npm run audit:ci` passed against this lock with zero vulnerabilities at every
+severity. Syntax checks, package-lock formatting and three pure audit-wrapper
+tests passed. No packages were installed or dependency lifecycle scripts run.
+This is dependency resolution/audit evidence, not driver runtime compatibility
+or real SQL Server evidence. Full CI for this new tree is pending.
+
+The branch remains WIP/disabled, outside root dispatch. SQL Server EULA approval
+and real-server authorization/validation remain pending; no SQL Server image was
+pulled, started or license accepted for this dependency repair.
 
 Additional official references/source used:
+
 - https://github.com/tediousjs/tedious/blob/v20.3.8/src/connection.ts
 - https://github.com/tediousjs/tedious/blob/v20.3.8/src/value-parser.ts
 - https://github.com/tediousjs/tedious/blob/v20.3.8/src/token/handler.ts
 - https://github.com/AzureAD/microsoft-authentication-library-for-js/security/advisories/GHSA-xcx6-jx8p-x3h5
+- https://registry.npmjs.org/@azure/identity
+- https://registry.npmjs.org/tedious
