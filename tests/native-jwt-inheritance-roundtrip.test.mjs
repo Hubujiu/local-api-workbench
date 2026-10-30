@@ -416,6 +416,7 @@ for (const format of ["apipost", "apipost-directory"]) {
       );
       const plan = await call("/api/projects/" + second.id + "/plans", {
         name: "Frozen inherited JWT",
+        statusPolicy: "assertions",
         environmentId:
           preserved.environments.find(
             (environment) => environment.name === "Imported",
@@ -423,7 +424,7 @@ for (const format of ["apipost", "apipost-directory"]) {
         steps: preserved.requests.map((request) => ({ request })),
       });
       // Directory graph flows have a pre-existing strict200 subset. This
-      // default-assertions plan intentionally stays outside that subset.
+      // explicitly selected assertions plan stays outside that subset.
       assert.equal(plan.statusPolicy, "assertions");
       for (const step of plan.steps) {
         assert.equal(step.request.nativeInheritance, undefined);
