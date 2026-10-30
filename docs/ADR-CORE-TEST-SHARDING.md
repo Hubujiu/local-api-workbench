@@ -306,13 +306,13 @@ known weight (34,845,034 microseconds), never zero or a guessed average.
 
 Frozen replay, summing historical whole-file durations after reassignment:
 
-| Observation | Old min–max seconds | Refreshed min–max seconds |
-| --- | --- | --- |
-| 40934761053 Linux | 233.468–385.920 | 303.829–344.536 |
-| 40934761053 macOS | 383.064–467.087 | 390.819–439.050 |
-| 40934761053 Windows | 437.673–512.214 | 472.664–494.997 |
-| 40936245088 Linux | 266.337–347.043 | 302.780–343.118 |
-| 40936245088 macOS | 275.847–448.574 | 331.614–388.574 |
+| Observation         | Old min–max seconds | Refreshed min–max seconds |
+| ------------------- | ------------------- | ------------------------- |
+| 40934761053 Linux   | 233.468–385.920     | 303.829–344.536           |
+| 40934761053 macOS   | 383.064–467.087     | 390.819–439.050           |
+| 40934761053 Windows | 437.673–512.214     | 472.664–494.997           |
+| 40936245088 Linux   | 266.337–347.043     | 302.780–343.118           |
+| 40936245088 macOS   | 275.847–448.574     | 331.614–388.574           |
 
 These are held-out complete-file timing observations, **not green-run claims**:
 40934761053 failed an unrelated macOS test and 40936245088 was cancelled.
@@ -329,3 +329,75 @@ deterministic assignment, estimates, provenance and maximum fallback.
 Pure scheduler fixtures do not run application/VM/XML/database workloads.
 Historical replay is not a guarantee: exact new feature/root CI must pass before
 calling the deadline issue resolved. Prior failed/cancelled evidence is retained.
+
+## 2026-10-30 frozen timing refresh (PR #35, acceptance pending)
+
+Root `a73273d9bd6ce74a55d483cae7b15727bebb2f11`, run **41038787866**,
+finished **cancelled**, with 17 successful and two cancelled jobs. Windows shard
+2 completed 127/131 files before stopping during the next workflow; macOS shard
+1 completed all 131 files and 628 tests successfully, but its overall job was
+cancelled. Raw job lifetimes were about 607 and 602 seconds. Windows setup took
+about 31 seconds before core execution; the existing whole-job limit is ten
+minutes. This is consistent with exhausted job headroom, but there is no verified
+specific timeout annotation or proof of a single hanging test. All three OS JWT
+graph cases passed; that does not make the cancelled workflow accepted.
+
+The added JWT owner file took only 4.107/7.299/6.538 seconds on Linux/macOS/Windows;
+Windows shard 2 contained no JWT files. Existing paths also show host/run timing
+variation. The old 492-entry table assigns its maximum to 31 unknown paths in the
+523-file root and estimates roughly 760.9 seconds per shard. This refresh corrects
+stale scheduling observations, not JWT signing behavior or an established hang.
+
+### Frozen training input (no cancelled data)
+
+Only these two completely successful ordinary CI runs supply the **24** streams:
+
+- **41017678554**, `106984276c4db3f757f2b44f4f9e490f024b2bf8`: 510 files per OS.
+- **41030008398**, `faa36606ca5d5c8487720e738f8f54e6a40f7c27`: 520 files per OS.
+
+Artifact digest/seal and ZIP CRC are checked before reconstruction. Each raw
+JSONL is SHA-256 pinned in the table, alongside its exact run/head. For each run,
+require the complete manifest-selected union exactly once on each OS. Select
+whole-file `test:complete` events only when slash-normalized `name` equals `file`
+and status is passed; nested tests and summaries are not timing observations.
+Require finite positive durations, convert with `ceil(durationMs * 1000)`, and
+retain the maximum over all OS/history for each path. There are **3,090** finished
+whole-file observations, **520** path weights and a **36,754,549 microsecond**
+maximum/fallback. The three new JWT paths remain unknown and receive that full
+fallback, not guessed short timings. No incomplete/cancelled observation, current
+held-out measurement or manually chosen duration enters the training table.
+
+The JSON remains version 1 and global-max LPT remains unchanged. Its 33,355 raw LF
+bytes hash to `82c06deba0d73e1c58813ee66d1fc57902c37acfb999152e742968ba19125e10`.
+For the 523-file root, frozen shard estimates in microseconds are
+`553782237, 553779988, 553709754, 553783326`. These are conservative scheduling
+estimates, not measurements or a guarantee that setup/cleanup fit the deadline.
+
+### Held-out replay, not completed execution
+
+Reassigning existing whole-file durations from cancelled run 41038787866 gives:
+
+| OS                                       | Current allocation maximum | Refreshed allocation maximum |
+| ---------------------------------------- | -------------------------: | ---------------------------: |
+| Linux (all durations available)          |                  386.195 s |                    348.751 s |
+| macOS (all durations available)          |                  576.827 s |                    429.867 s |
+| Windows (**four missing files imputed**) |                  580.155 s |                    524.877 s |
+
+Windows missing durations use the earlier complete 41030008398 observations for
+those same paths solely to make this counterfactual comparison. They are not
+passed/current measurements and do not enter training from the cancelled run.
+Even replay on the earlier green root, charging full fallback for all three new
+paths, has a Windows maximum of 542.494 seconds before setup. Host variability,
+startup and artifact cleanup still consume headroom. A per-OS-weight alternative
+was evaluated but is not implemented; the simpler existing global policy suffices
+for this bounded refresh and avoids a new selection/schema contract.
+
+Four shards, file concurrency one, the ten-minute job deadline, complete test
+selection, test/process isolation, application/VM budgets, workflow triggers and
+failure semantics are unchanged. This is not a rerun, retry, skipped test or empty
+commit. Tests pin the full 523-path synthetic root selection, exactly-once union,
+three conservative fallbacks, deterministic allocation, estimates and provenance.
+Only offline artifact parsing and syntax/format checks are done locally. Ordinary
+exact-head feature CI and then integrated root CI remain required; historical
+failed/cancelled runs are retained. A later green run would verify that revision,
+not prove the historical cancellation's sole cause or guarantee future capacity.
