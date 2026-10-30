@@ -141,6 +141,14 @@ test("native strict extraction stops all later iterations and native adapters re
       leaf("after", f.url + "/after"),
     ],
   });
+  plan.steps[0] = {
+    type: "repeat",
+    id: "outer-strict",
+    name: "outer",
+    enabled: true,
+    count: 2,
+    steps: [plan.steps[0]],
+  };
   p.plans.push(plan);
   await f.store.save(p);
   const run = await runPlan(
@@ -159,6 +167,10 @@ test("native strict extraction stops all later iterations and native adapters re
       ["login", 1],
     ],
   );
+  assert.deepEqual(run.results[2].repeat.path, [
+    { groupId: "outer-strict", iteration: 0 },
+    { groupId: "group", iteration: 1 },
+  ]);
   assert.equal(run.results[2].response.status, 200);
   assert.match(run.results[2].error, /路径|提取/);
   assert.equal(run.variables.token, "fresh-one");

@@ -57,6 +57,14 @@ test("real repeated HTTP evidence stops before the next occurrence, preserves te
       },
     ],
   });
+  plan.steps[0] = {
+    type: "repeat",
+    id: "outer-evidence",
+    name: "outer",
+    enabled: true,
+    count: 1,
+    steps: [plan.steps[0]],
+  };
   p.plans.push(plan);
   await app.store.save(p);
   const response = await fetch(app.url + `/api/projects/${p.id}/run`, {
@@ -88,6 +96,14 @@ test("real repeated HTTP evidence stops before the next occurrence, preserves te
   assert.equal(run.evidenceBudget.remaining, 2);
   assert.equal(run.evidenceBudget.next.repeat.iteration, 3);
   assert.equal(run.evidenceBudget.last.repeat.iteration, 2);
+  assert.deepEqual(run.evidenceBudget.next.repeat.path, [
+    { groupId: "outer-evidence", iteration: 0 },
+    { groupId: "group", iteration: 3 },
+  ]);
+  assert.deepEqual(run.evidenceBudget.last.repeat.path, [
+    { groupId: "outer-evidence", iteration: 0 },
+    { groupId: "group", iteration: 2 },
+  ]);
   assert.ok(run.evidenceBudget.recordedBytes > REPEAT_EVIDENCE_BYTES);
   assert.equal((await new Store(root).get(p.id)).runs[0].results.length, 3);
   client = new Client({ name: "repeat-bounded-output", version: "1.0" });
