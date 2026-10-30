@@ -22,6 +22,11 @@ import { nativeMockResponse } from "./native-mock-runtime.mjs";
 
 import { sqliteProcessFailureDetails } from "./sqlite-process-diagnostics.mjs";
 import { installNodeShutdown } from "./host-shutdown.mjs";
+import { createNativeWriteOwner } from "./native-write-owner.mjs";
+import {
+  createNativeWriteExecution,
+  finishNativeWrite,
+} from "./native-write-execution.mjs";
 import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
 import {
   appendExecutionRecord,
@@ -164,6 +169,73 @@ export async function createApp({
     () => mcp,
     (id) => store.get(id),
   );
+  const nativeWriteOwner = createNativeWriteOwner({
+    store,
+    databaseSessions,
+    async runPrepared(handle, target, { signal }) {
+      const capability = createNativeWriteExecution(handle, target, { signal });
+      let single, scoped, failure;
+      try {
+        const frozen = handle.snapshot;
+        const project = structuredClone(frozen.projectSnapshot);
+        scoped = scopedExecution(
+          store,
+          project,
+          frozen.environmentId,
+          frozen.variables,
+        );
+        single = await runPlan(frozen.plan, frozen.variables, executeRequest, {
+          ...scoped,
+          nativeWrite: capability,
+          signal,
+          databaseQuery: (operation, querySignal) =>
+            databaseSessions.query(handle.projectId, operation, querySignal),
+          cookieSession: projectCookieSession(
+            store,
+            project,
+            frozen.environmentId,
+          ),
+          prepareRequest: (request) =>
+            resolveServiceRequest(project, request, frozen.environmentId),
+        });
+      } catch {
+        failure = "原生写入执行已停止；请核对写入凭据，不要自动重放";
+      }
+      // Independent of worker response, cancellation and persistence. Only this
+      // already-owned mutation may drain; no additional execution occurs here.
+      const writeReceipts = await finishNativeWrite(capability);
+      const status = signal.aborted ? "cancelled" : single?.status || "failed";
+      const result = single?.results?.[0];
+      const saved = await appendExecutionRecord(
+        store,
+        handle.projectId,
+        "history",
+        {
+          id: handle.runId,
+          runId: handle.runId,
+          createdAt: new Date().toISOString(),
+          name: handle.snapshot.plan.name,
+          ...(result || {}),
+          status,
+          source: "manual-native-write",
+          writeReceipts,
+          durationMs: single?.durationMs || 0,
+          ...(failure ? { error: failure } : {}),
+        },
+      );
+      return {
+        ...(result?.response || {}),
+        status,
+        ...saved,
+        writeReceipts,
+        ...(failure ? { error: failure } : {}),
+        variableWrites: scoped?.receipt() || [],
+        assertions: result?.assertions || [],
+        logs: result?.logs || [],
+        databaseQueries: result?.databaseQueries || [],
+      };
+    },
+  });
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   const mcpHTTPSessions = new MCPHTTPSessions();
@@ -791,6 +863,52 @@ export async function createApp({
           const b = await body(req);
           controllers.get(b.id)?.abort();
           return json(res, 200, { ok: true });
+        }
+        if (
+          parts[1] === "projects" &&
+          parts[2] &&
+          parts[3] === "native-write"
+        ) {
+          // This dispatch deliberately precedes store.get: owned terminal
+          // receipts remain readable after archive or a storage failure.
+          if (req.method !== "POST" || parts.length !== 5 || u.search)
+            return json(res, 405, {
+              error: "Native write owner route requires POST body",
+            });
+          const action = parts[4],
+            data = await body(req);
+          if (
+            !["prepare", "authorize", "execute", "revoke", "status"].includes(
+              action,
+            )
+          )
+            return json(res, 404, {
+              error: "Native write operation not found",
+            });
+          if (action !== "execute")
+            return json(
+              res,
+              200,
+              await nativeWriteOwner[action](parts[2], data),
+            );
+          const { controller, runId } = claimRun();
+          const disconnected = () => {
+            if (!res.writableEnded) controller.abort();
+          };
+          res.once("close", disconnected);
+          if (res.destroyed || req.aborted) disconnected();
+          try {
+            return json(
+              res,
+              200,
+              await nativeWriteOwner.execute(parts[2], data, {
+                signal: controller.signal,
+              }),
+            );
+          } finally {
+            res.removeListener("close", disconnected);
+            controllers.delete(runId);
+          }
         }
         if (parts[1] === "projects" && parts[2]) {
           const action = parts[3];
@@ -1924,6 +2042,7 @@ export async function createApp({
     socketioSessions.close();
     oauth.close();
     oauth1.close();
+    nativeWriteOwner.close();
     databaseSessions.close();
     mcpDatabaseGrants.invalidate();
   });
@@ -1931,6 +2050,7 @@ export async function createApp({
   // graceful transport finalization and the one automatic persistence attempt.
   const closeServer = server.close.bind(server);
   server.close = (callback) => {
+    nativeWriteOwner.close();
     // Abort held provider requests before waiting for HTTP close.
     oauth.close();
     oauth1.close();

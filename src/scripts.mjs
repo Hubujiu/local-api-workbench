@@ -13,6 +13,10 @@ import {
   isNativeRequestPick,
 } from "./native-response-extraction.mjs";
 import {
+  executeNativeWrite,
+  drainNativeWrite,
+} from "./native-write-execution.mjs";
+import {
   normalizeDatabaseOperations,
   databaseAssignments,
   databaseResultRows,
@@ -75,7 +79,14 @@ function scriptBudgets({
 
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
-  const { signal, cookieSession, databaseQuery } = options;
+  const {
+    signal,
+    cookieSession,
+    databaseQuery,
+    nativeWrite,
+    nativePhase,
+    databaseOrdinals,
+  } = options;
   const nativeWaits = compileNativeWaits(options.nativeWaits);
   const responseAssertions = compileNativeAssertions(
     options.responseAssertions,
@@ -105,6 +116,11 @@ export function runScript(code, input, options = {}) {
   const databaseOperations = normalizeDatabaseOperations(
     options.databaseOperations,
   );
+  if (
+    databaseOperations.some((operation) => operation.writeIntent) &&
+    !nativeWrite
+  )
+    throw Error("此执行入口未授权原生写入");
   if (databaseOperations.length && typeof databaseQuery !== "function")
     throw Error("此执行入口未授权数据库任务");
   const {
@@ -184,48 +200,59 @@ export function runScript(code, input, options = {}) {
       settled = false,
       total = 0,
       active = 0;
-    const finish = async (error, result, terminate = true) => {
-      if (settled) return;
+    let finishing;
+    const finish = (error, result, terminate = true) => {
+      if (finishing) return finishing;
       settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", cancel);
-      controller.abort();
-      for (const record of databaseQueries)
-        if (record.status === "running") record.status = "interrupted";
-      if (terminate) await worker.terminate();
-      if (error) {
-        error.elapsedMs ??= Math.round(performance.now() - startedAt);
-        error.lastWorkerStage ??= lastWorkerStage;
-        for (const record of networkRequests)
-          if (record.status === "running") {
-            record.status = "interrupted";
-            record.error = error.message;
+      finishing = Promise.resolve()
+        .then(async () => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", cancel);
+          controller.abort();
+          for (const record of databaseQueries)
+            if (record.status === "running") record.status = "interrupted";
+          if (terminate) await worker.terminate();
+          if (nativeWrite) await drainNativeWrite(nativeWrite);
+          if (error) {
+            error.elapsedMs ??= Math.round(performance.now() - startedAt);
+            error.lastWorkerStage ??= lastWorkerStage;
+            for (const record of networkRequests)
+              if (record.status === "running") {
+                record.status = "interrupted";
+                record.error = error.message;
+              }
+            error.databaseQueries = structuredClone(databaseQueries);
+            error.networkRequests = structuredClone(networkRequests);
+            reject(error);
+          } else {
+            try {
+              resolve({
+                ...result,
+                responseOverride: validateResponseMutation(
+                  result.responseOverride,
+                  Boolean(input.response),
+                ),
+                responseOriginals: validateResponseMutation(
+                  result.responseOriginals,
+                  Boolean(input.response),
+                  true,
+                ),
+                databaseQueries,
+                networkRequests,
+              });
+            } catch (error) {
+              error.scriptStage = "response-override";
+              error.networkRequests = structuredClone(networkRequests);
+              reject(error);
+            }
           }
-        error.databaseQueries = structuredClone(databaseQueries);
-        error.networkRequests = structuredClone(networkRequests);
-        reject(error);
-      } else {
-        try {
-          resolve({
-            ...result,
-            responseOverride: validateResponseMutation(
-              result.responseOverride,
-              Boolean(input.response),
-            ),
-            responseOriginals: validateResponseMutation(
-              result.responseOriginals,
-              Boolean(input.response),
-              true,
-            ),
-            databaseQueries,
-            networkRequests,
-          });
-        } catch (error) {
-          error.scriptStage = "response-override";
-          error.networkRequests = structuredClone(networkRequests);
-          reject(error);
-        }
-      }
+        })
+        .catch((failure) => {
+          // Cleanup failures must not strand the outer script promise. The owner
+          // still finalizes its independent write receipt before returning.
+          reject(failure);
+        });
+      return finishing;
     };
     const startedAt = performance.now();
     let lastWorkerStage = "starting";
@@ -270,14 +297,23 @@ export function runScript(code, input, options = {}) {
         databaseQueries.push(evidence);
         let response, error;
         try {
-          const result = await databaseQuery(
-            {
-              connectionId: operation.connectionId,
-              sql: operation.query,
-              parameters: [],
-            },
-            controller.signal,
-          );
+          const result =
+            operation.writeIntent === "redis-set"
+              ? await executeNativeWrite(
+                  nativeWrite,
+                  operation,
+                  nativePhase,
+                  databaseOrdinals?.[message.index],
+                  controller.signal,
+                )
+              : await databaseQuery(
+                  {
+                    connectionId: operation.connectionId,
+                    sql: operation.query,
+                    parameters: [],
+                  },
+                  controller.signal,
+                );
           if (settled || controller.signal.aborted) return;
           response = {
             assignments: databaseAssignments(operation, result),

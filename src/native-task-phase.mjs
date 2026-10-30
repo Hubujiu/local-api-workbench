@@ -26,13 +26,14 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
     responseExtractions = [],
     responseAssertions = [],
     nativeWaits = [],
+    databaseOrdinals = [],
     code = [],
     prefix = "__db_" + randomBytes(16).toString("hex");
   const waitPrefix = "__wait_" + randomBytes(16).toString("hex");
   const assertPrefix = "__assert_" + randomBytes(16).toString("hex");
   const pickPrefix = "__pick_" + randomBytes(16).toString("hex");
   let bytes = 0;
-  for (const task of tasks) {
+  for (const [ordinal, task] of tasks.entries()) {
     nativeDataObject(task, ["type", "enabled", "data", "id", "name", "origin"]);
     if (
       !task ||
@@ -93,6 +94,7 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       const operation = normalizeDatabaseOperations([task.data])[0];
       if (task.enabled === 1) {
         const index = operations.push(operation) - 1;
+        databaseOrdinals.push(ordinal);
         code.push(`\nawait ${prefix}(${index});\n`);
       }
     }
@@ -119,6 +121,7 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
   return runScript(source, input, {
     ...options,
     databaseOperations: operations,
+    databaseOrdinals,
     responseExtractions,
     responseAssertions,
     nativeWaits,

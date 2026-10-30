@@ -124,6 +124,8 @@ export class DatabaseSessions {
       name: input.name.trim(),
       config,
       bindingId,
+      generation: randomUUID(),
+      controller: new AbortController(),
     });
     return {
       id,
@@ -145,7 +147,80 @@ export class DatabaseSessions {
   revoke(projectId, id) {
     if (this.#connections.get(id)?.projectId !== projectId)
       throw Error("数据库会话连接不存在或不属于此项目");
+    this.#connections.get(id).controller.abort();
     this.#connections.delete(id);
+  }
+  // Host-only frozen target capture. This does not confer write authority:
+  // the owner ledger still admits and consumes the exact prepared SET slot.
+  async captureNativeRedisTarget(projectId, connectionId) {
+    const resolvedId = this.#connections.has(connectionId)
+      ? connectionId
+      : [...this.#connections].find(
+          ([, item]) =>
+            item.projectId === projectId && item.bindingId === connectionId,
+        )?.[0];
+    const item = this.#connections.get(resolvedId);
+    const invalid = () =>
+      Object.assign(Error("原生 Redis 写入目标须显式绑定当前项目来源"), {
+        code: "NATIVE_WRITE_TARGET_INVALID",
+      });
+    if (
+      !item ||
+      item.projectId !== projectId ||
+      !item.bindingId ||
+      !this.#resolveProject ||
+      item.config.type !== "redis" ||
+      item.config.ssh !== undefined
+    )
+      throw invalid();
+    const config = structuredClone(item.config);
+    if (
+      typeof config.host !== "string" ||
+      !config.host ||
+      config.host.trim() !== config.host ||
+      config.host.length > 253 ||
+      !["string", "number"].includes(typeof config.port) ||
+      !Number.isInteger(Number(config.port)) ||
+      Number(config.port) < 1 ||
+      Number(config.port) > 65535 ||
+      !["string", "number"].includes(typeof config.database) ||
+      !/^(0|[1-9]\d*)$/.test(String(config.database)) ||
+      Number(config.database) > 1023 ||
+      ["user", "password"].some(
+        (key) =>
+          config[key] !== undefined &&
+          (typeof config[key] !== "string" ||
+            Buffer.byteLength(config[key]) > 8192),
+      ) ||
+      (config.ca !== undefined &&
+        (typeof config.ca !== "string" || Buffer.byteLength(config.ca) > 65536))
+    )
+      throw invalid();
+    const assertLive = () => {
+      if (
+        this.#connections.get(resolvedId) !== item ||
+        item.controller.signal.aborted
+      )
+        throw Object.assign(Error("原生 Redis 写入目标已撤销"), {
+          code: "NATIVE_WRITE_REVOKED",
+        });
+    };
+    const revalidate = async () => {
+      assertLive();
+      await this.#checkSource(projectId, item);
+      // A queued revoke/reissue cannot resurrect the captured object or alias.
+      assertLive();
+    };
+    await revalidate();
+    assertLive();
+    return Object.freeze({
+      config: Object.freeze(config),
+      sessionGeneration: item.generation,
+      bindingId: item.bindingId,
+      signal: item.controller.signal,
+      assertLive,
+      revalidate,
+    });
   }
   async query(projectId, operation, signal) {
     if (signal?.aborted) throw Error("数据库操作已取消");
@@ -189,6 +264,7 @@ export class DatabaseSessions {
     return result;
   }
   close() {
+    for (const item of this.#connections.values()) item.controller.abort();
     this.#connections.clear();
   }
 }

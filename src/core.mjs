@@ -24,6 +24,7 @@ import {
   repeatEvidenceExceeded,
   mapPlanLeaves,
   planLeaves,
+  activePlanLeaves,
   planOccurrences,
 } from "./plan-repeat.mjs";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
@@ -39,6 +40,12 @@ import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
+import { validateProjectDatabaseWriteEvidence } from "./database-write-receipts.mjs";
+import {
+  assertNativeWritePlan,
+  finishNativeWrite,
+} from "./native-write-execution.mjs";
+import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import {
   runNativeTaskPhase,
@@ -636,6 +643,7 @@ export async function runPlan(
     onScopeChanges,
     cookieSession,
     databaseQuery,
+    nativeWrite,
     executionContext,
     executeGrpc,
     grpcCredentials,
@@ -671,6 +679,11 @@ export async function runPlan(
   for (const step of planLeaves(snapshot.steps))
     if (step.request?.nativeTasks !== undefined)
       step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
+  if (nativeWrite) assertNativeWritePlan(nativeWrite, snapshot);
+  else
+    denyNativeWrites(
+      activePlanLeaves(snapshot.steps).map((step) => step.request || {}),
+    );
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -1001,7 +1014,13 @@ export async function runPlan(
               functions: snapshot.functions || [],
               request: configuredRequest,
             },
-            { signal, cookieSession, databaseQuery },
+            {
+              signal,
+              cookieSession,
+              databaseQuery,
+              nativeWrite,
+              nativePhase: "before",
+            },
           );
           if (scripted.databaseQueries?.length)
             (record.databaseQueries ||= []).push(
@@ -1162,7 +1181,13 @@ export async function runPlan(
               request: record.request,
               response: record.response,
             },
-            { signal, cookieSession, databaseQuery },
+            {
+              signal,
+              cookieSession,
+              databaseQuery,
+              nativeWrite,
+              nativePhase: "after",
+            },
           );
           if (scripted.databaseQueries?.length)
             (record.databaseQueries ||= []).push(
@@ -1286,7 +1311,12 @@ export async function runPlan(
     if (stopAfterExtractionFailure) break;
     if (record.failure || record.redirectFailure) break;
   }
+  const writeReceipts = nativeWrite
+    ? await finishNativeWrite(nativeWrite)
+    : undefined;
+  if (writeReceipts && results[0]) results[0].writeReceipts = writeReceipts;
   return {
+    ...(writeReceipts ? { writeReceipts } : {}),
     id: id(),
     planId: plan.id,
     planName: plan.name,
@@ -2274,6 +2304,7 @@ export function restoreProject(document) {
       for (const step of planLeaves(run.snapshot.steps || []))
         validateRequestTaskSource(step.request);
     }
+  validateProjectDatabaseWriteEvidence(document);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

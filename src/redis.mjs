@@ -201,8 +201,7 @@ export function redisWriteCommand(input) {
   encodeRESP(args);
   return args;
 }
-export async function mutateRedis(input) {
-  const command = redisWriteCommand(input);
+function validateRedisWriteTarget(input) {
   if (
     input.type !== "redis" ||
     typeof input.host !== "string" ||
@@ -217,7 +216,49 @@ export async function mutateRedis(input) {
     Number(input.database) > 1023
   )
     throw Error("Redis写入必须明确指定主机、端口和数据库索引0至1023");
+}
+export async function mutateRedis(input) {
+  const command = redisWriteCommand(input);
+  validateRedisWriteTarget(input);
   return executeRedis(input, command, true);
+}
+
+// Internal host broker boundary. The guard can only refuse/consume the frozen
+// slot; it cannot substitute a command or invent an acknowledgement. Caller
+// cancellation before dispatch prohibits SET; afterwards this observer owns the
+// existing total deadline and local transport close, independent of the worker.
+export async function observeNativeRedisSet(
+  input,
+  { signal, beforeDispatch } = {},
+) {
+  let dispatched = false;
+  try {
+    if (typeof beforeDispatch !== "function" || input.ssh !== undefined)
+      throw Error("原生写入派发边界无效");
+    const command = redisWriteCommand({ ...input, allowWrite: true });
+    if (command.length !== 3 || command.some((part) => part.includes("{{")))
+      throw Error("原生写入仅支持无选项静态 SET");
+    validateRedisWriteTarget(input);
+    const result = await executeRedis(input, command, true, signal, {
+      beforeDispatch,
+      dispatched() {
+        dispatched = true;
+      },
+    });
+    return { outcome: "acknowledged-applied", reason: "acknowledged", result };
+  } catch (error) {
+    return {
+      outcome: dispatched ? "unknown" : "not-sent",
+      reason:
+        error?.code === "NATIVE_WRITE_REVOKED"
+          ? "revoked"
+          : error?.code === "REDIS_OPERATION_DEADLINE"
+            ? "deadline"
+            : signal?.aborted
+              ? "cancelled"
+              : "transport",
+    };
+  }
 }
 function output(value) {
   if (Buffer.isBuffer(value)) {
@@ -263,7 +304,7 @@ export async function queryRedis(input, { signal } = {}) {
   checkDatabaseSignal(signal);
   return executeRedis(input, redisCommand(input), false, signal);
 }
-async function executeRedis(input, command, writing, signal) {
+async function executeRedis(input, command, writing, signal, ownership) {
   checkDatabaseSignal(signal);
   const host = input.host || "127.0.0.1",
     port = Number(input.port) || 6379,
@@ -317,7 +358,9 @@ async function executeRedis(input, command, writing, signal) {
           })
         : net.connect(options);
     const closed = new Promise((resolve) => socket.once("close", resolve));
-    const cancel = () => finish(databaseCancelled());
+    const cancel = () => {
+      if (!ownership || !writeSent) finish(databaseCancelled());
+    };
     const finish = async (error, result) => {
       if (settled) return;
       settled = true;
@@ -328,13 +371,14 @@ async function executeRedis(input, command, writing, signal) {
       // Writes, like reads, retain ownership until the local transport closes;
       // peer FIN, remote rollback and disk durability are not implied.
       await closed;
-      if (signal?.aborted) error = databaseCancelled();
+      if (signal?.aborted && !ownership) error = databaseCancelled();
       if (error && writeSent) {
+        const cause = error;
         error = Error(
           error.message +
             "；Redis写入结果可能不确定，不能盲目重试，请先核查目标键（不能回滚）",
         );
-        error.code = "REDIS_WRITE_UNCERTAIN";
+        error.code = ownership ? cause.code : "REDIS_WRITE_UNCERTAIN";
       }
       error ? reject(error) : resolve(result);
     };
@@ -343,14 +387,33 @@ async function executeRedis(input, command, writing, signal) {
       Math.max(100, Number(input.timeoutMs) || 3000),
     );
     const timer = setTimeout(
-      () => finish(Error("Redis查询超时（总时限已到），已断开")),
+      () =>
+        finish(
+          Object.assign(Error("Redis查询超时（总时限已到），已断开"), {
+            code: "REDIS_OPERATION_DEADLINE",
+          }),
+        ),
       timeout,
     );
     const send = () => {
       if (settled) return;
       checkDatabaseSignal(signal);
       const packet = encodeRESP(commands[index]);
-      if (writing && index === commands.length - 1) writeSent = true;
+      if (writing && index === commands.length - 1) {
+        if (ownership) {
+          const checked = ownership.beforeDispatch();
+          if (checked !== undefined) {
+            // A mistakenly async host guard must neither dispatch nor leave an
+            // unhandled rejection after we reject this boundary.
+            if (checked instanceof Promise) checked.catch(() => {});
+            throw Error("原生写入派发检查必须同步完成");
+          }
+          checkDatabaseSignal(signal);
+          if (settled) return;
+        }
+        writeSent = true;
+        ownership?.dispatched();
+      }
       socket.write(packet);
     };
     socket.once(input.ssl ? "secureConnect" : "connect", () => {
@@ -365,7 +428,7 @@ async function executeRedis(input, command, writing, signal) {
     socket.on("data", (chunk) => {
       if (settled) return;
       try {
-        checkDatabaseSignal(signal);
+        if (!ownership || !writeSent) checkDatabaseSignal(signal);
         received += chunk.length;
         if (received > MAX_REPLY) throw Error("Redis响应超过2MiB");
         buffer = Buffer.concat([buffer, chunk]);

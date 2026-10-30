@@ -247,3 +247,13 @@ await verifyNativeRedisCLIFlow({
   port: 6379,
   database: "0",
 });
+
+const { verifyNativeRedisOwnerFlow } = await import(
+  "./native-redis-owner-integration.mjs"
+);
+await verifyNativeRedisOwnerFlow({
+  type: "redis",
+  host: "127.0.0.1",
+  port: 6379,
+  database: "0",
+});

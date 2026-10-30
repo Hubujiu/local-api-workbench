@@ -21,6 +21,7 @@ import {
   captureResponseHeaderEvidence,
   HTTP1_HEADER_PAIR_LIMIT,
 } from "./response-header-evidence.mjs";
+import { validateProjectDatabaseWriteEvidence } from "./database-write-receipts.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 
 import { normalizeNativeMock } from "./native-mock.mjs";
@@ -522,6 +523,7 @@ export class Store {
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
     for (const request of p.requests || []) normalizeRedirect(request.redirect);
     for (const request of p.requests || []) validateQueryArrayRequest(request);
+    validateProjectDatabaseWriteEvidence(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

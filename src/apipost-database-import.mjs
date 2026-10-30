@@ -5,6 +5,7 @@ import {
   nativeDataObject,
   normalizePickVarsData,
 } from "./native-response-extraction.mjs";
+import { importedRedisSet } from "./native-redis-write-intent.mjs";
 import { mongoQuery } from "./mongodb.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 const object = (value) =>
@@ -157,7 +158,9 @@ export function nativeDatabaseTasks(
     if (task.type === "database") {
       if (
         !object(task.data) ||
-        (!translated && Object.hasOwn(task.data, "resultShape")) ||
+        (!translated &&
+          (Object.hasOwn(task.data, "resultShape") ||
+            Object.hasOwn(task.data, "writeIntent"))) ||
         !(translated
           ? [...map.values()].includes(task.data.connectionId)
           : map.has(task.data.connectionId))
@@ -222,7 +225,7 @@ export function nativeDatabaseTasks(
         if (!translated) {
           const method = task.data.method;
           if (
-            !["get", "hget", "exists"].includes(method) ||
+            !["get", "hget", "exists", "set"].includes(method) ||
             typeof task.data.query !== "string" ||
             task.data.query.length > 50000
           )
@@ -233,7 +236,12 @@ export function nativeDatabaseTasks(
           } catch {
             throw Error("原版Redis参数必须是JSON对象文本");
           }
-          const keys = method === "hget" ? ["key", "field"] : ["key"];
+          const keys =
+            method === "hget"
+              ? ["key", "field"]
+              : method === "set"
+                ? ["key", "value"]
+                : ["key"];
           if (
             !object(args) ||
             Object.keys(args).length !== keys.length ||
@@ -250,6 +258,10 @@ export function nativeDatabaseTasks(
             method.toUpperCase(),
             ...keys.map((key) => args[key]),
           ]);
+          if (method === "set") {
+            next.data.query = importedRedisSet(args);
+            next.data.writeIntent = "redis-set";
+          }
           delete next.data.method;
         }
         next.data.resultShape = "redis-value";
