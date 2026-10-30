@@ -44,17 +44,15 @@ export async function verifyNativeRedisOwnerFlow(config) {
     );
     return { status: response.status, data: await response.json() };
   };
-  const grant = async (p) =>
-    assert.equal(
-      (
-        await post(p.id, "database-connections", {
-          ...config,
-          name: "Explicit owner target",
-          bindingId: p.settings.apipostDatabases[0].id,
-        })
-      ).status,
-      200,
-    );
+  const grant = async (p) => {
+    const result = await post(p.id, "database-connections", {
+      ...config,
+      name: "Explicit owner target",
+      bindingId: p.settings.apipostDatabases[0].id,
+    });
+    assert.equal(result.status, 200, JSON.stringify(result));
+    return result.data;
+  };
   const prepare = async (p) => {
     const result = await post(p.id, "native-write/prepare", {
       requestId: p.requests[0].id,
@@ -83,7 +81,7 @@ export async function verifyNativeRedisOwnerFlow(config) {
       }),
     );
     await app.store.save(p);
-    await grant(p);
+    const originalSession = await grant(p);
     assert.equal(
       (await post(p.id, "execute", { request: p.requests[0] })).status,
       400,
@@ -152,6 +150,96 @@ export async function verifyNativeRedisOwnerFlow(config) {
       400,
     );
     assert.equal(effects, 1);
+    // Restored intent/evidence is inert: neither old project session nor old
+    // one-use token is authority in the restored project.
+    assert.equal(
+      (
+        await post(restored.id, "native-write/prepare", {
+          requestId: restored.requests[0].id,
+        })
+      ).status,
+      400,
+    );
+    const foreignSessionRequest = structuredClone(restored.requests[0]);
+    for (const phase of ["before", "after"])
+      for (const task of foreignSessionRequest.nativeTasks[phase])
+        if (task.type === "database")
+          task.data.connectionId = originalSession.id;
+    assert.equal(
+      (
+        await post(restored.id, "native-write/prepare", {
+          request: foreignSessionRequest,
+        })
+      ).status,
+      400,
+    );
+    await mutateRedis({
+      ...config,
+      allowWrite: true,
+      command: ["SET", key, "restored-before-explicit-grant", "EX", "60"],
+    });
+    const restoredSession = await grant(restored);
+    assert.notEqual(restoredSession.id, originalSession.id);
+    assert.equal(
+      (
+        await post(restored.id, "native-write/prepare", {
+          request: foreignSessionRequest,
+        })
+      ).status,
+      400,
+    );
+    const restoredPreparation = await prepare(restored),
+      restoredAuthorization = await authorize(restored, restoredPreparation);
+    assert.equal(
+      (await queryRedis({ ...config, command: ["GET", key] })).rows[0].value,
+      "restored-before-explicit-grant",
+    );
+    const restoredExecution = await post(restored.id, "native-write/execute", {
+      preparationId: restoredAuthorization.preparationId,
+      token: restoredAuthorization.token,
+    });
+    assert.equal(
+      restoredExecution.status,
+      200,
+      JSON.stringify(restoredExecution),
+    );
+    assert.equal(restoredExecution.data.status, "passed");
+    assert.equal(
+      restoredExecution.data.writeReceipts[0].outcome,
+      "acknowledged-applied",
+    );
+    assert.equal(
+      restoredExecution.data.writeReceipts[0].projectId,
+      restored.id,
+    );
+    assert.equal(restoredExecution.data.recordSaved, true);
+    assert.equal(
+      (await queryRedis({ ...config, command: ["GET", key] })).rows[0].value,
+      "new",
+    );
+    assert.equal(effects, 2);
+    assert.equal(
+      (
+        await post(restored.id, "native-write/execute", {
+          preparationId: authorization.preparationId,
+          token: authorization.token,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post(restored.id, "native-write/execute", {
+          preparationId: restoredAuthorization.preparationId,
+          token: restoredAuthorization.token,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(effects, 2);
+    console.log(
+      "REAL_REDIS_NATIVE_OWNER_RESTORE_FRESH_TARGET_AND_AUTHORIZATION_REQUIRED_PASS",
+    );
     await new Promise((resolve) => {
       app.server.closeAllConnections();
       app.server.close(resolve);
@@ -166,7 +254,7 @@ export async function verifyNativeRedisOwnerFlow(config) {
       ).status,
       400,
     );
-    assert.equal(effects, 1);
+    assert.equal(effects, 2);
     console.log(
       "REAL_REDIS_NATIVE_OWNER_SET_ACK_TTL_HISTORY_RESTORE_RESTART_NO_REPLAY_PASS",
     );

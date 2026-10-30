@@ -41,14 +41,23 @@ export function createNativeWriteExecution(handle, target, { signal } = {}) {
     receipt: null,
     started: false,
     finalized: false,
+    admitted: false,
   });
   return capability;
 }
 export function assertNativeWritePlan(capability, plan) {
   const owned = executions.get(capability);
-  if (!owned || nativeWriteDigest(plan) !== owned.planDigest) throw denied();
+  if (
+    !owned ||
+    owned.admitted ||
+    owned.finalized ||
+    nativeWriteDigest(plan) !== owned.planDigest
+  )
+    throw denied();
   owned.handle.assertLive();
   owned.target.assertLive();
+  if (owned.signal?.aborted) throw denied();
+  owned.admitted = true;
 }
 export function executeNativeWrite(
   capability,
@@ -60,6 +69,7 @@ export function executeNativeWrite(
   const owned = executions.get(capability);
   if (
     !owned ||
+    !owned.admitted ||
     owned.started ||
     owned.finalized ||
     phase !== owned.intent.phase ||
@@ -71,7 +81,9 @@ export function executeNativeWrite(
     throw denied();
   owned.started = true;
   const effectiveSignal = AbortSignal.any(
-    [signal, owned.handle.signal, owned.target.signal].filter(Boolean),
+    [signal, owned.signal, owned.handle.signal, owned.target.signal].filter(
+      Boolean,
+    ),
   );
   owned.pending = (async () => {
     const outcome = await observeNativeRedisSet(

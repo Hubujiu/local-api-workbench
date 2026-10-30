@@ -352,8 +352,15 @@ export class NativeWriteAuthorizations {
     } catch (error) {
       // A correct-token execute attempt burns an admission failure. Do not
       // revoke another concurrent caller which already reserved this entry.
-      if (this.#entries.get(id) === entry && entry.state === "authorized")
+      if (this.#entries.get(id) === entry && entry.state === "authorized") {
         this.revoke(projectId, id);
+        throw Object.assign(
+          Error(
+            "写入执行入场核验已拒绝，旧令牌已永久失效；未启动执行，请重新准备并明确授权",
+          ),
+          { code: "NATIVE_WRITE_ADMISSION_REVOKED" },
+        );
+      }
       throw error;
     }
     entry.state = "reserved";

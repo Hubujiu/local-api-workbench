@@ -241,7 +241,16 @@ test("session revoke after async lookup blocks reserve and final consume", async
   const p = await ledger.prepare(project, input({ checkLive: () => live }));
   const grant = await ledger.authorize(project, p.preparationId, auth(p));
   live = false;
-  await assert.rejects(ledger.reserve(project, p.preparationId, grant.token));
+  await assert.rejects(ledger.reserve(project, p.preparationId, grant.token), {
+    code: "NATIVE_WRITE_ADMISSION_REVOKED",
+  });
+  const refused = ledger.status(project, p.preparationId);
+  assert.equal(refused.state, "revoked");
+  assert.equal(
+    refused.writeReceipts,
+    undefined,
+    "unadmitted refusal does not fabricate execution evidence",
+  );
   live = true;
   await assert.rejects(ledger.reserve(project, p.preparationId, grant.token));
   const { handle: h } = await reserved(ledger, { checkLive: () => live });

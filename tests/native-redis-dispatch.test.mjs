@@ -371,7 +371,7 @@ test(
   },
 );
 
-for (const mode of ["abort-return", "async-return"]) {
+for (const mode of ["abort-return", "async-return", "async-reject-return"]) {
   test(
     `native SET rejects ${mode} final guard without sending a command`,
     { timeout: 10000 },
@@ -385,7 +385,8 @@ for (const mode of ["abort-return", "async-return"]) {
         beforeDispatch() {
           calls++;
           if (mode === "abort-return") controller.abort();
-          else return Promise.resolve();
+          else if (mode === "async-return") return Promise.resolve();
+          else return Promise.reject(Error("rejected guard must be observed"));
         },
       });
       assertClosed(clients);

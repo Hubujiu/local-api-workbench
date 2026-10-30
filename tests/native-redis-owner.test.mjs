@@ -17,12 +17,15 @@ import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
 async function fixture(
   t,
-  { phase = "before", hold = false, reply = "+OK\r\n" } = {},
+  { phase = "before", hold = false, holdStage, reply = "+OK\r\n" } = {},
 ) {
   const commands = [],
     sockets = [],
     requests = [];
-  let reached, release;
+  let reached, blocked, release;
+  const stageReached = new Promise((resolve) => {
+    blocked = resolve;
+  });
   const setReached = new Promise((resolve) => {
     reached = resolve;
   });
@@ -38,10 +41,12 @@ async function fixture(
       bytes = Buffer.alloc(0);
       const command = frame.value.map((part) => part.toString());
       commands.push(command);
-      if (command[0] !== "SET") return socket.write("+OK\r\n");
-      release = () => (reply === null ? socket.end() : socket.write(reply));
-      reached();
-      if (!hold) release();
+      const response = command[0] === "SET" ? reply : "+OK\r\n";
+      release = () =>
+        response === null ? socket.end() : socket.write(response);
+      if (command[0] === "SET") reached();
+      if (command[0] === holdStage) blocked();
+      else if (!(hold && command[0] === "SET")) release();
     });
   });
   await new Promise((resolve) => redis.listen(0, "127.0.0.1", resolve));
@@ -151,6 +156,7 @@ async function fixture(
     requests,
     sockets,
     setReached,
+    stageReached,
     release: () => release(),
   };
 }
@@ -552,6 +558,16 @@ test(
       arguments: { projectId: f.saved.id, planId: "write-plan" },
     });
     assert.equal(result.isError, true, JSON.stringify(result));
+    assert(
+      (await client.listTools()).tools.some(
+        (tool) => tool.name === "localapi_execute_api",
+      ),
+    );
+    const single = await client.callTool({
+      name: "localapi_execute_api",
+      arguments: { projectId: f.saved.id, apiId: f.saved.requests[0].id },
+    });
+    assert.equal(single.isError, true, JSON.stringify(single));
     assert.equal(f.commands.length, 0);
     assert.equal(
       f.requests.length,
@@ -563,5 +579,290 @@ test(
         .owner_script_started,
       undefined,
     );
+  },
+);
+
+for (const position of ["before-set", "after-ack"]) {
+  test(
+    `native owner ${position} script exception preserves truthful receipt and rejects partial phase scopes`,
+    { timeout: 20000 },
+    async (t) => {
+      const f = await fixture(t);
+      const project = await f.app.store.get(f.saved.id);
+      const tasks = project.requests[0].nativeTasks.before;
+      tasks[position === "before-set" ? 0 : 2].data =
+        'pm.environment.set("uncommitted_scope","must-not-save");throw Error("fictional script failure");';
+      await f.app.store.save(project);
+      const prepared = await f.prepare(),
+        grant = await f.authorize(prepared);
+      const result = await f.owner("execute", grant);
+      assert.equal(result.status, 200, JSON.stringify(result));
+      assert.equal(result.data.status, "failed");
+      receipt(
+        result.data,
+        position === "before-set" ? "not-sent" : "acknowledged-applied",
+      );
+      assert.equal(
+        f.commands.filter((command) => command[0] === "SET").length,
+        position === "before-set" ? 0 : 1,
+      );
+      if (position === "before-set") assert.equal(f.commands.length, 0);
+      assert.equal(f.requests.length, 0);
+      const current = await f.app.store.get(f.saved.id);
+      assert.equal(
+        current.environments[0].variables.uncommitted_scope,
+        undefined,
+      );
+      assert.equal(
+        current.environments[0].variables.owner_script_started,
+        undefined,
+      );
+      assert.equal(current.environments[0].variables.native_value, undefined);
+      assert.deepEqual(
+        (await terminal(f, prepared.preparationId)).writeReceipts,
+        result.data.writeReceipts,
+      );
+      assert.equal((await f.owner("execute", grant)).status, 400);
+    },
+  );
+}
+
+for (const phase of ["before", "after"]) {
+  test(
+    `native owner ${phase} assertion failure after ACK keeps mutation facts and existing phase semantics`,
+    { timeout: 20000 },
+    async (t) => {
+      const f = await fixture(t, { phase });
+      const project = await f.app.store.get(f.saved.id);
+      project.requests[0].nativeTasks[phase][2].data =
+        'pm.environment.set("assertion_scope","value");pm.test("fictional failed assertion",()=>pm.expect(1).to.equal(2));';
+      await f.app.store.save(project);
+      const prepared = await f.prepare(),
+        grant = await f.authorize(prepared);
+      const result = await f.owner("execute", grant);
+      assert.equal(result.status, 200, JSON.stringify(result));
+      assert.equal(result.data.status, "failed");
+      receipt(result.data, "acknowledged-applied");
+      assert.equal(
+        result.data.assertions.some((assertion) => !assertion.passed),
+        true,
+      );
+      // Existing before assertions stop HTTP and reject the phase scope, whereas
+      // after assertions run after HTTP and retain the completed after scope.
+      assert.equal(f.requests.length, phase === "before" ? 0 : 1);
+      const current = await f.app.store.get(f.saved.id);
+      assert.equal(
+        current.environments[0].variables.assertion_scope,
+        phase === "before" ? undefined : "value",
+      );
+      assert.equal(
+        current.environments[0].variables.native_value,
+        phase === "before" ? undefined : "OK",
+      );
+      assert.deepEqual(
+        (await terminal(f, prepared.preparationId)).writeReceipts,
+        result.data.writeReceipts,
+      );
+      assert.equal(
+        f.commands.filter((command) => command[0] === "SET").length,
+        1,
+      );
+    },
+  );
+}
+
+test(
+  "native owner deleting its database session after SET retains late ACK and stops subsequent effects",
+  { timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, { hold: true }),
+      prepared = await f.prepare(),
+      grant = await f.authorize(prepared);
+    const pending = f.owner("execute", grant);
+    await f.setReached;
+    const revoked = await f.api(
+      f.base + "/database-connections",
+      { id: f.grant.id },
+      { method: "DELETE" },
+    );
+    assert.equal(revoked.status, 200);
+    f.release();
+    const result = await pending;
+    assert.equal(result.status, 200, JSON.stringify(result));
+    assert.equal(result.data.status, "cancelled");
+    receipt(result.data, "acknowledged-applied");
+    assert.equal(f.requests.length, 0);
+    assert.equal(
+      (await f.app.store.get(f.saved.id)).environments[0].variables
+        .owner_script_finished,
+      undefined,
+    );
+    assert.deepEqual(
+      (await terminal(f, prepared.preparationId)).writeReceipts,
+      result.data.writeReceipts,
+    );
+    assert.equal((await f.owner("execute", grant)).status, 400);
+    assert.equal(
+      f.commands.filter((command) => command[0] === "SET").length,
+      1,
+    );
+  },
+);
+
+test(
+  "native owner caller disconnect during real source admission before first step retains not-sent cache receipt",
+  { timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t),
+      prepared = await f.prepare(),
+      grant = await f.authorize(prepared);
+    const originalGet = f.app.store.get;
+    let unblock,
+      admissionStarted,
+      armed = true;
+    const barrier = new Promise((resolve) => {
+      unblock = resolve;
+    });
+    const admittedRead = new Promise((resolve) => {
+      admissionStarted = resolve;
+    });
+    // Scheduling gate around the real disk-backed read, not a fake project,
+    // database driver or successful execution. No plan step may begin yet.
+    f.app.store.get = async function (...args) {
+      const result = await originalGet.apply(this, args);
+      if (armed && args[0] === f.saved.id) {
+        armed = false;
+        admissionStarted();
+        await barrier;
+      }
+      return result;
+    };
+    const serverDisconnected = new Promise((resolve) => {
+      const observer = (req, res) => {
+        if (req.url !== f.base + "/native-write/execute") return;
+        f.app.server.removeListener("request", observer);
+        res.once("close", resolve);
+      };
+      f.app.server.on("request", observer);
+      t.after(() => f.app.server.removeListener("request", observer));
+    });
+    const request = http.request(f.app.url + f.base + "/native-write/execute", {
+      method: "POST",
+      headers: {
+        "x-local-token": f.app.token,
+        "content-type": "application/json",
+      },
+    });
+    request.on("error", () => {});
+    t.after(() => request.destroy());
+    try {
+      request.end(JSON.stringify(grant));
+      await admittedRead;
+      request.destroy();
+      await serverDisconnected;
+      assert.equal(f.commands.length, 0);
+      assert.equal(f.requests.length, 0);
+      unblock();
+      const result = await terminal(f, prepared.preparationId);
+      receipt(result, "not-sent");
+      assert.equal(result.status, "cancelled");
+      assert.equal(result.writeReceipts[0].reason, "cancelled");
+      assert.equal(f.commands.length, 0);
+      assert.equal(f.requests.length, 0);
+      const current = await originalGet.call(f.app.store, f.saved.id);
+      assert.equal(
+        current.environments[0].variables.owner_script_started,
+        undefined,
+      );
+      assert.equal((await f.owner("execute", grant)).status, 400);
+    } finally {
+      unblock();
+      f.app.store.get = originalGet;
+    }
+  },
+);
+
+for (const stage of ["AUTH", "SELECT"]) {
+  test(
+    `native owner revoke during blocked ${stage} prohibits SET and retains not-sent receipt`,
+    { timeout: 20000 },
+    async (t) => {
+      const f = await fixture(t, { holdStage: stage }),
+        prepared = await f.prepare(),
+        grant = await f.authorize(prepared);
+      const pending = f.owner("execute", grant);
+      await f.stageReached;
+      assert.equal(
+        (await f.owner("revoke", { preparationId: prepared.preparationId }))
+          .status,
+        200,
+      );
+      const result = await pending;
+      assert.equal(result.status, 200, JSON.stringify(result));
+      assert.equal(result.data.status, "cancelled");
+      receipt(result.data, "not-sent");
+      assert.deepEqual(
+        f.commands.map((command) => command[0]),
+        stage === "AUTH" ? ["AUTH"] : ["AUTH", "SELECT"],
+      );
+      assert.equal(f.requests.length, 0);
+      assert.deepEqual(
+        (await terminal(f, prepared.preparationId)).writeReceipts,
+        result.data.writeReceipts,
+      );
+      assert.equal((await f.owner("execute", grant)).status, 400);
+    },
+  );
+}
+
+test(
+  "native owner host close drains already dispatched SET ACK and saves evidence without claiming a live status endpoint",
+  { timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, { hold: true }),
+      prepared = await f.prepare(),
+      grant = await f.authorize(prepared);
+    const pending = f.owner("execute", grant);
+    await f.setReached;
+    let closed = false;
+    const closing = new Promise((resolve) =>
+      f.app.server.close(() => {
+        closed = true;
+        resolve();
+      }),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      closed,
+      false,
+      "server shutdown still owns the pending response and mutation",
+    );
+    assert.equal(f.requests.length, 0);
+    f.release();
+    const result = await pending;
+    assert.equal(result.status, 200, JSON.stringify(result));
+    assert.equal(result.data.status, "cancelled");
+    receipt(result.data, "acknowledged-applied");
+    assert.equal(result.data.recordSaved, true);
+    await closing;
+    assert.equal(closed, true);
+    assert.equal(f.app.server.listening, false);
+    const stored = await f.app.store.get(f.saved.id);
+    const history = stored.history.find(
+      (entry) => entry.id === result.data.attemptedRecordId,
+    );
+    assert.deepEqual(history.writeReceipts, result.data.writeReceipts);
+    assert.equal(history.status, "cancelled");
+    assert.equal(
+      stored.environments[0].variables.owner_script_finished,
+      undefined,
+    );
+    assert.equal(f.requests.length, 0);
+    assert.equal(
+      f.commands.filter((command) => command[0] === "SET").length,
+      1,
+    );
+    // No status request is made after shutdown: only confirmed disk history is
+    // evidence here, not a promise that in-memory cache survives process exit.
   },
 );
