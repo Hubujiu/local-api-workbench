@@ -129,7 +129,13 @@ async function fixture(t) {
     nativeTasks: { version: 1, before: [task(false)], after: [] },
   };
   p.settings.apipostDatabases = [
-    { id: binding, name: "Read-only grant source", type: "redis" },
+    {
+      id: binding,
+      name: "Read-only grant source",
+      type: "redis",
+      sourceProjectId: "fictional-source",
+      sourceId: "database",
+    },
   ];
   p.requests = [first, write, read];
   p.plans = [
