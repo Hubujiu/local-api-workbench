@@ -1,3 +1,5 @@
+import { activePlanLeaves, hasRepeatSteps } from "./plan-repeat.mjs";
+import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { DatabaseSessions } from "./database-sessions.mjs";
 const plain = (value) =>
   value !== null &&
@@ -56,7 +58,9 @@ export function prepareCLIDatabaseGrants(
   if (!plain(connections) || Object.keys(connections).length > 20)
     throw Error("CLI 数据库连接映射无效或超过20项");
   const required = new Set();
-  for (const step of plan.steps) {
+  const leaves = activePlanLeaves(plan.steps);
+  const repeated = hasRepeatSteps(plan.steps);
+  for (const step of leaves) {
     if (step.enabled === false || !step.request) continue;
     for (const phase of ["before", "after"])
       for (const operation of step.request[phase] || []) {
@@ -70,10 +74,12 @@ export function prepareCLIDatabaseGrants(
         required.add(operation.connectionId);
       }
   }
-  for (const step of plan.steps) {
+  for (const step of leaves) {
     if (step.enabled === false || step.request?.nativeTasks === undefined)
       continue;
-    const tasks = step.request.nativeTasks;
+    const tasks = repeated
+      ? normalizeNativeTaskRequest(step.request)
+      : step.request.nativeTasks;
     if (
       !plain(tasks) ||
       tasks.version !== 1 ||
@@ -89,7 +95,11 @@ export function prepareCLIDatabaseGrants(
         if (
           !plain(task) ||
           ![1, 0, -1].includes(task.enabled) ||
-          !["customScript", "database"].includes(task.type)
+          !(
+            repeated
+              ? ["customScript", "database", "pickVars", "assert", "wait"]
+              : ["customScript", "database"]
+          ).includes(task.type)
         )
           throw Error("CLI 原版任务启停或类型无效");
         if (task.type !== "database" || task.enabled !== 1) continue;

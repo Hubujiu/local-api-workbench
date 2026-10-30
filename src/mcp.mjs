@@ -1,3 +1,4 @@
+import { activePlanStepCount } from "./plan-repeat.mjs";
 import { appendExecutionRecord } from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
@@ -16,10 +17,12 @@ import {
   nativeAPIList,
   nativeAPIDetail,
   nativeRunResult,
+  assertNativeLinearResult,
   nativeExecutionHistory,
 } from "./native-mcp-tools.mjs";
 import {
   buildNativeMCPPlan,
+  assertNativeLinearPlan,
   nativeFlowView,
   inputAuth,
 } from "./native-mcp-plan.mjs";
@@ -158,7 +161,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存可观察的独立快照计划",
+            "保存独立快照计划；支持最多4层HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE repeat组，count为1至100整数，含禁用节点的潜在展开最多200步",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
@@ -703,6 +706,8 @@ export function createMCP({
               await store.save(p);
               break;
             case "localapi_list_execution_flows":
+              if (nativeName)
+                for (const plan of p.plans) assertNativeLinearPlan(plan);
               output = p.plans.map(
                 ({
                   id,
@@ -827,6 +832,8 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              if (nativeName) assertNativeLinearPlan(plan);
+              const totalSteps = activePlanStepCount(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -850,8 +857,8 @@ export function createMCP({
                   onStep: (step) =>
                     emitProgress({
                       completed: ++completed,
-                      total: plan.steps.filter((s) => s.enabled !== false)
-                        .length,
+                      total: totalSteps,
+                      ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,
                     }),
@@ -920,7 +927,8 @@ export function createMCP({
             output,
             kind === "execute_api" ? "api" : "flow",
           );
-        else if (kind === "get_execution_result")
+        else if (kind === "get_execution_result") {
+          assertNativeLinearResult(output);
           output = {
             run: {
               ...output,
@@ -929,6 +937,7 @@ export function createMCP({
               workbench_evidence_format: 1,
             },
           };
+        }
       }
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],

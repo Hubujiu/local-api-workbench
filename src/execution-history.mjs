@@ -52,6 +52,12 @@ export function listExecutionHistory(project, options = {}) {
         planName: scope === "flow" ? record.planName : undefined,
         planHash: scope === "flow" ? record.planHash : undefined,
         status: record.status,
+        ...(record.stopReason === "evidence-limit"
+          ? {
+              stopReason: record.stopReason,
+              evidenceBudget: structuredClone(record.evidenceBudget),
+            }
+          : {}),
         createdAt: record.createdAt,
         durationMs:
           Number.isFinite(record.durationMs) && record.durationMs >= 0
@@ -60,6 +66,7 @@ export function listExecutionHistory(project, options = {}) {
         failedStepCount: failures.length,
         failedSteps: failures.slice(0, 5).map((step) => ({
           stepId: step.stepId,
+          ...(step.repeat ? { repeat: structuredClone(step.repeat) } : {}),
           name: step.name,
           status: step.status,
         })),

@@ -1,3 +1,4 @@
+import { planLeaves, activePlanLeaves } from "./plan-repeat.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import { grpcTransport, normalizeGrpcDefinition } from "./grpc.mjs";
 import { grpcSource } from "./grpc-schema.mjs";
@@ -133,7 +134,7 @@ export function grpcPlanCredentials(plan, input = {}) {
     throw Error("gRPC临时凭据映射无效或超限");
   const bindings = new Map();
   for (const [stepId, value] of Object.entries(input)) {
-    const steps = plan.steps.filter((step) => step.id === stepId);
+    const steps = planLeaves(plan.steps).filter((step) => step.id === stepId);
     if (
       steps.length !== 1 ||
       steps[0]?.type !== "grpc" ||
@@ -151,8 +152,8 @@ export function grpcPlanCredentials(plan, input = {}) {
     });
     bindings.set(stepId, structuredClone(value));
   }
-  for (const step of plan.steps)
-    if (step.enabled !== false && step.type === "grpc")
+  for (const step of activePlanLeaves(plan.steps))
+    if (step.type === "grpc")
       grpcTransport(step.grpc.definition.target, {
         ...bindings.get(step.id),
         requiredMetadata: step.grpc.definition.requiredMetadata,

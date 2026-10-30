@@ -1,3 +1,4 @@
+import { planLeaves, validateRepeatGraph } from "./plan-repeat.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { importApipostAuth, importApipostRows } from "./apipost-import.mjs";
@@ -542,9 +543,10 @@ export function validateNativeInheritanceProject(project) {
       item.request?.id !== item.sourceRequestId
     )
       fail("冻结用例来源接口与请求身份不一致");
+  for (const plan of project.plans || []) validateRepeatGraph(plan.steps);
   for (const frozen of [
     ...(project.plans || []).flatMap((p) =>
-      (p.steps || []).map((s) => s.request),
+      planLeaves(p.steps || []).map((s) => s.request),
     ),
     ...(project.cases || []).map((c) => c.request),
   ])
@@ -575,7 +577,7 @@ export function resolveNativeInheritance(
           .filter((item) => item.sourceRequestId === request.id)
           .map((item) => item.request),
         ...(project.plans || []).flatMap((plan) =>
-          (plan.steps || []).map((step) => step.request),
+          planLeaves(plan.steps || []).map((step) => step.request),
         ),
       ].some(
         (saved) =>
