@@ -209,3 +209,35 @@ post-journal uncertainty case retains delimiter frames and occurrence evidence
 through recovery without another connection. This combines existing PR12 and
 PR44 behavior only in integration; no delimiter implementation was backported to
 PR44. These root workflows are syntax/static checked, awaiting exact-head CI.
+## WS/SSE repeat contract (work in progress)
+
+The next bounded slice admits `websocket` and `sse` protocol leaves beside TCP
+and HTTP in the same single-level canonical repeat. It reuses the existing wire
+executor, not a new transport. Nested repeat, gRPC and Socket.IO remain excluded;
+all existing expansion, configuration, evidence and transport limits remain.
+Definition references resolve before frozen validation; disabled definitions are
+still validated and budgeted. Native export continues to reject repeat.
+
+Temporary credentials bind to stable leaf IDs, never occurrence IDs. All active
+wire leaves require their declared handshake headers before any plan network
+side effect, including an earlier HTTP step. Disabled leaves need no required
+header, but supplied credential maps remain validated. WS supports existing WSS
+CA and paired client certificate/key with certificate verification mandatory.
+SSE only accepts temporary headers: custom TLS is unsupported, not silently
+ignored. Credentials are not part of the saved plan, run configuration or backup.
+This is not a promise to redact arbitrary secrets echoed by a remote server.
+
+Each occurrence opens a fresh WS socket or SSE stream/parser; event IDs, retry
+metadata, response buffers and limits do not leak across occurrences. There is
+no implicit SSE reconnect. Canonical variables intentionally carry forward;
+extraction is atomic per batch, not an implicit variable reset per iteration.
+Ordinary protocol extraction failure retains its existing continuation policy.
+Message/event limits and timeouts produce partial outcomes, not completed ones.
+Abort must close the active transport and prevent the next leaf/iteration.
+
+Acceptance requires real WS/SSE-to-HTTP values, frozen references despite live
+edits/deletion, owner HTTP/official SDK HTTP+stdio/CLI, credential preflight and
+concurrent isolation, bounded outcomes, cancellation/deadline, backup/restore/
+restart, and unknown journal outcome recovery without replay. Local static and
+pure graph checks alone are not acceptance; whole workflows await ordinary CI.
+Root-only send-empty options and TCP delimiter support are not backported here.
