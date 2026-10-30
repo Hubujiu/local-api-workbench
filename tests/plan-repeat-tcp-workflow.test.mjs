@@ -392,7 +392,7 @@ test(
   },
 );
 
-test("TCP repeat malformed wrappers, disabled non-TCP references and invalid credential identities fail before network", async (t) => {
+test("TCP repeat malformed wrappers, disabled invalid wire options and invalid credential identities fail before network", async (t) => {
   const f = await fixture(t),
     p = f.project;
   p.protocols.push(
@@ -412,6 +412,10 @@ test("TCP repeat malformed wrappers, disabled non-TCP references and invalid cre
     const input = f.definition();
     input.steps[0].enabled = false;
     input.steps[0].steps[0].protocol.definitionId = reference;
+    // A valid reference is allowed now, but disabled leaves still validate
+    // protocol-specific options: WS rejects maxEvents, SSE rejects message.
+    if (reference === "saved-ws")
+      input.steps[0].steps[0].protocol.maxEvents = 1;
     assert.notEqual(
       (await f.post(`projects/${p.id}/plans`, input)).status,
       200,

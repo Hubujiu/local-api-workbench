@@ -143,18 +143,22 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
           !reference.trim() ||
           step.protocol.definition !== undefined
         )
-          throw Error("循环TCP引用须在冻结前解析且不能混合定义");
+          throw Error("循环协议引用须在冻结前解析且不能混合定义");
       } else {
-        object(step.protocol.definition, "TCP定义");
-        if (step.protocol.definition.type !== "tcp")
-          throw Error("循环组协议叶子仅支持TCP");
+        object(step.protocol.definition, "协议定义");
+        if (
+          !["tcp", "websocket", "sse"].includes(step.protocol.definition.type)
+        )
+          throw Error("循环组协议叶子仅支持TCP、WebSocket或SSE");
       }
       return;
     }
     if (step.type !== undefined && step.type !== "http") {
       if (!nested && ["grpc", "socketio", "protocol"].includes(step.type))
         return;
-      throw Error("循环组仅支持HTTP或TCP叶子，不支持嵌套或其他步骤类型");
+      throw Error(
+        "循环组仅支持HTTP或TCP/WebSocket/SSE叶子，不支持嵌套或其他步骤类型",
+      );
     }
     object(step.request, "请求");
     if (typeof step.request.url !== "string" || !step.request.url.trim())
