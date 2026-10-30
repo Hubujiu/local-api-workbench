@@ -519,3 +519,105 @@ test(
     }
   },
 );
+
+test(
+  "shared Digest owner policies freeze, reject malformed saves atomically and survive backup/restart/CLI",
+  { timeout: 45000 },
+  async (t) => {
+    const inspect = destination();
+    const f = await owner(t, (req, res) => {
+      if (req.url === "/plain") {
+        assert.equal(req.headers.authorization, undefined);
+        return false;
+      }
+      return inspect(req, res);
+    });
+    const project = await f.app.store.create("Shared Digest policy");
+    const auth = (algorithm) => ({
+      type: "digest",
+      ...credentials,
+      challengePolicy: { algorithm, retry: true },
+    });
+    project.settings.globalAuth = auth("SHA-256");
+    project.settings.folderAuth = {
+      Private: auth("MD5-sess"),
+      Public: { type: "none" },
+    };
+    project.requests = [
+      normalizeRequest({ name: "global", url: f.url + "/SHA-256" }),
+      normalizeRequest({
+        name: "folder",
+        folder: "Private",
+        url: f.url + "/MD5-sess",
+      }),
+      normalizeRequest({
+        name: "public",
+        folder: "Public",
+        url: f.url + "/plain",
+      }),
+    ];
+    await f.call("/api/projects/" + project.id, "PUT", project);
+    const before = await f.app.store.get(project.id);
+    const invalid = structuredClone(before);
+    invalid.settings.folderAuth.Private.challengePolicy.retry = "false";
+    await f.call("/api/projects/" + project.id, "PUT", invalid, 400);
+    assert.deepEqual(await f.app.store.get(project.id), before);
+    assert.equal(f.seen.length, 0);
+    const plan = await f.call(
+      "/api/projects/" + project.id + "/plans",
+      "POST",
+      {
+        name: "Shared frozen Digest",
+        statusPolicy: "strict200",
+        steps: project.requests.map((request) => ({ request })),
+      },
+    );
+    assert.deepEqual(
+      plan.steps.map((s) => s.request.auth),
+      [
+        project.settings.globalAuth,
+        project.settings.folderAuth.Private,
+        { type: "none" },
+      ],
+    );
+    const live = await f.app.store.get(project.id);
+    live.settings.globalAuth.challengePolicy.retry = false;
+    live.settings.folderAuth.Private.challengePolicy.algorithm = "MD5";
+    await f.call("/api/projects/" + project.id, "PUT", live);
+    const run = await f.call("/api/projects/" + project.id + "/run", "POST", {
+      planId: plan.id,
+    });
+    assert.equal(
+      run.status,
+      "passed",
+      JSON.stringify({ run, errors: f.errors }),
+    );
+    assert.equal(f.seen.length, 5);
+    const backup = await f.call("/api/projects/" + project.id + "/export");
+    const restored = await f.call(
+      "/api/restore",
+      "POST",
+      { document: backup },
+      201,
+    );
+    await f.restart();
+    const disk = await f.app.store.get(restored.id);
+    assert.deepEqual(disk.settings, backup.settings);
+    assert.deepEqual(
+      disk.plans[0].steps.map((s) => s.request.auth),
+      plan.steps.map((s) => s.request.auth),
+    );
+    const replay = await f.call("/api/projects/" + disk.id + "/run", "POST", {
+      planId: disk.plans[0].id,
+    });
+    assert.equal(
+      replay.status,
+      "passed",
+      JSON.stringify({ replay, errors: f.errors }),
+    );
+    assert.equal(f.seen.length, 10);
+    await cliRun(f, disk.id, disk.plans[0].id);
+    assert.equal(f.seen.length, 15);
+    assert.deepEqual(f.errors, []);
+  },
+);
