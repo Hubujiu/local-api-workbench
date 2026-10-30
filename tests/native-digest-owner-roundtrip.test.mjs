@@ -79,7 +79,19 @@ const authByName = (project) =>
     project.requests.map((request) => [request.name, request.auth]),
   );
 
-async function cliRun(f, projectId, planId) {
+function credentialEnvironment(project) {
+  const environment = project.environments.find(
+    (env) =>
+      env.variables?.digestUser === credentials.username &&
+      env.variables?.digestPassword === credentials.password,
+  );
+  assert(
+    environment,
+    "native import must retain the exact credential environment",
+  );
+  return environment.id;
+}
+async function cliRun(f, projectId, planId, environmentId) {
   const child = spawn(
     process.execPath,
     [
@@ -88,6 +100,8 @@ async function cliRun(f, projectId, planId) {
       projectId,
       "--plan",
       planId,
+      "--environment",
+      environmentId,
     ],
     {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
@@ -364,6 +378,7 @@ test(
         "POST",
         {
           name: "Frozen imported Digest",
+          environmentId: credentialEnvironment(second),
           statusPolicy: "strict200",
           steps: second.requests.map((request) => ({ request })),
         },
@@ -396,6 +411,7 @@ test(
       );
       const rerun = await f.call("/api/projects/" + disk.id + "/run", "POST", {
         planId: disk.plans[0].id,
+        environmentId: credentialEnvironment(disk),
       });
       assert.equal(
         rerun.status,
@@ -431,11 +447,19 @@ test(
     for (const [name, args] of [
       [
         "localapi_execute_api",
-        { projectId: last.id, apiId: last.requests[0].id },
+        {
+          projectId: last.id,
+          apiId: last.requests[0].id,
+          environmentId: credentialEnvironment(last),
+        },
       ],
       [
         "apipost_execute_api",
-        { project_id: last.id, target_id: last.requests[0].id },
+        {
+          project_id: last.id,
+          target_id: last.requests[0].id,
+          environment_id: credentialEnvironment(last),
+        },
       ],
     ]) {
       assert(tools.has(name));
@@ -451,7 +475,7 @@ test(
     assert.match(denied.content[0].text, /项目未授权/);
     assert.equal(f.seen.length, 52);
     await client.close();
-    await cliRun(f, last.id, last.plans[0].id);
+    await cliRun(f, last.id, last.plans[0].id, credentialEnvironment(last));
     assert.equal(f.seen.length, 64);
     assert.deepEqual(
       authByName(await f.app.store.get(last.id)),
@@ -510,7 +534,7 @@ test(
         const result = await f.call(
           "/api/projects/" + p.id + "/execute",
           "POST",
-          { request },
+          { request, environmentId: credentialEnvironment(p) },
         );
         assert.equal(f.seen.length, before + increment);
         if (name === "MD5") assert.equal(result.outcome, "passed");
