@@ -1,3 +1,4 @@
+import { exportApipostOAuth1 } from "./apipost-oauth1-auth.mjs";
 import { exportApipostNtlm } from "./apipost-ntlm-auth.mjs";
 import { exportApipostDigest } from "./apipost-digest-auth.mjs";
 import { exportApipostAsap } from "./apipost-asap-auth.mjs";
@@ -59,6 +60,7 @@ export function exportExtendedApipostAuth(value) {
     if (type?.value === "asap") return exportApipostAsap(value);
     if (type?.value === "digest") return exportApipostDigest(value);
     if (type?.value === "ntlm") return exportApipostNtlm(value);
+    if (type?.value === "oauth1") return exportApipostOAuth1(value);
   }
   if (!["aws", "hawk", "edgegrid"].includes(value?.type)) return undefined;
   const fail = () => {
