@@ -1,3 +1,9 @@
+import { validateProjectDatabaseWriteEvidence } from "./database-write-receipts.mjs";
+import {
+  assertNativeWritePlan,
+  finishNativeWrite,
+} from "./native-write-execution.mjs";
+import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { runNativeTaskPhase } from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
@@ -443,6 +449,7 @@ export async function runPlan(
     onScopeChanges,
     cookieSession,
     databaseQuery,
+    nativeWrite,
     executionContext,
     executeGrpc,
     grpcCredentials,
@@ -466,6 +473,13 @@ export async function runPlan(
   for (const step of snapshot.steps)
     if (step.request?.nativeTasks !== undefined)
       step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
+  if (nativeWrite) assertNativeWritePlan(nativeWrite, snapshot);
+  else
+    denyNativeWrites(
+      snapshot.steps
+        .filter((step) => step.enabled !== false)
+        .map((step) => step.request || {}),
+    );
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -704,7 +718,13 @@ export async function runPlan(
               functions: snapshot.functions || [],
               request: configuredRequest,
             },
-            { signal, cookieSession, databaseQuery },
+            {
+              signal,
+              cookieSession,
+              databaseQuery,
+              nativeWrite,
+              nativePhase: "before",
+            },
           );
           if (scripted.databaseQueries?.length)
             (record.databaseQueries ||= []).push(
@@ -830,7 +850,13 @@ export async function runPlan(
               request: record.request,
               response: record.response,
             },
-            { signal, cookieSession, databaseQuery },
+            {
+              signal,
+              cookieSession,
+              databaseQuery,
+              nativeWrite,
+              nativePhase: "after",
+            },
           );
           if (scripted.databaseQueries?.length)
             (record.databaseQueries ||= []).push(
@@ -918,7 +944,12 @@ export async function runPlan(
       break;
     }
   }
+  const writeReceipts = nativeWrite
+    ? await finishNativeWrite(nativeWrite)
+    : undefined;
+  if (writeReceipts && results[0]) results[0].writeReceipts = writeReceipts;
   return {
+    ...(writeReceipts ? { writeReceipts } : {}),
     id: id(),
     planId: plan.id,
     planName: plan.name,
@@ -1839,6 +1870,7 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  validateProjectDatabaseWriteEvidence(document);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

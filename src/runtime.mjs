@@ -1,3 +1,4 @@
+import { validateProjectDatabaseWriteEvidence } from "./database-write-receipts.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import {
   ProjectCommitUncertain,
@@ -425,6 +426,7 @@ export class Store {
     }
   }
   #validateProject(p) {
+    validateProjectDatabaseWriteEvidence(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

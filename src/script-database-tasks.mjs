@@ -1,3 +1,4 @@
+import { normalizeNativeRedisSetQuery } from "./native-redis-write-intent.mjs";
 import { mongoQuery } from "./mongodb.mjs";
 import { redisCommand } from "./redis.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
@@ -23,12 +24,16 @@ export function normalizeDatabaseOperations(value = []) {
             "variables",
             "isConsoleOutput",
             "resultShape",
+            "writeIntent",
           ].includes(key),
       ) ||
       (entry.resultShape !== undefined &&
         !["mysql-resultsets", "redis-value", "mongodb-document"].includes(
           entry.resultShape,
         )) ||
+      (entry.writeIntent !== undefined &&
+        (entry.writeIntent !== "redis-set" ||
+          entry.resultShape !== "redis-value")) ||
       !name(entry.connectionId) ||
       typeof entry.query !== "string" ||
       !entry.query.trim() ||
@@ -42,7 +47,9 @@ export function normalizeDatabaseOperations(value = []) {
     )
       throw Error("数据库任务仅支持显式连接、静态只读SQL和有界提取；不插值SQL");
     let query = entry.query;
-    if (entry.resultShape === "redis-value") {
+    if (entry.writeIntent === "redis-set") {
+      query = normalizeNativeRedisSetQuery(query);
+    } else if (entry.resultShape === "redis-value") {
       const command = redisCommand({ sql: query });
       if (
         !["GET", "HGET", "EXISTS"].includes(command[0]) ||
@@ -58,6 +65,7 @@ export function normalizeDatabaseOperations(value = []) {
       query = JSON.stringify(normalized);
     }
     return {
+      ...(entry.writeIntent ? { writeIntent: entry.writeIntent } : {}),
       ...(entry.resultShape !== undefined
         ? { resultShape: entry.resultShape }
         : {}),
