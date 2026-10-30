@@ -797,6 +797,41 @@ test(
           disk.plans[0].steps[0].steps[0].grpc.definition,
           frozen,
         );
+        const exported = await fetch(
+          `${f.app.url}/api/projects/${live.id}/export`,
+          { headers: { "x-local-token": f.app.token } },
+        );
+        assert.equal(exported.status, 200);
+        const restored = await f.post("restore", {
+          document: await exported.json(),
+        });
+        assert.equal(restored.status, 201);
+        assert.deepEqual(
+          restored.value.plans[0].steps[0].steps[0].grpc.definition,
+          frozen,
+        );
+        await f.restart();
+        const missing = await f.post(`projects/${restored.value.id}/run`, {
+          planId: made.value.id,
+        });
+        assert.equal(missing.status, 400);
+        assert.equal(f.received.length, 2);
+        const resumed = await f.post(`projects/${restored.value.id}/run`, {
+          planId: made.value.id,
+          grpcCredentials: f.credentials(),
+        });
+        assert.equal(resumed.status, 200);
+        checkRun(resumed.value);
+        assert.equal(resumed.value.planHash, response.value.planHash);
+        assert.deepEqual(
+          resumed.value.snapshot.steps[0].steps[0].grpc.definition,
+          frozen,
+        );
+        assert.equal(f.received.length, 4);
+        assert.deepEqual(
+          f.consumed.map((row) => row.token),
+          f.received.map((row) => row.token),
+        );
       });
   },
 );
