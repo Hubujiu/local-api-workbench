@@ -1,3 +1,4 @@
+import { importApipostDigest } from "./apipost-digest-auth.mjs";
 import { importApipostAsap } from "./apipost-asap-auth.mjs";
 import { validateHeaderName } from "node:http";
 const object = (value) =>
@@ -25,6 +26,12 @@ export function importExtendedApipostAuth(auth) {
     const type = Object.getOwnPropertyDescriptor(auth, "type");
     if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
       throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "digest") {
+      const section = Object.getOwnPropertyDescriptor(auth, "digest");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生Digest认证 definition 无效");
+      return importApipostDigest(section.value);
+    }
     if (type?.value === "asap") {
       const section = Object.getOwnPropertyDescriptor(auth, "asap");
       if (!section?.enumerable || !Object.hasOwn(section, "value"))

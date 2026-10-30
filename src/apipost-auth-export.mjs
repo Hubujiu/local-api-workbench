@@ -1,3 +1,4 @@
+import { exportApipostDigest } from "./apipost-digest-auth.mjs";
 import { exportApipostAsap } from "./apipost-asap-auth.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
@@ -55,6 +56,7 @@ export function exportExtendedApipostAuth(value) {
       throw Error("原生认证导出不接受访问器定义；请使用项目备份");
     if (type?.value === "jwt") return exportJwtDefinition(value);
     if (type?.value === "asap") return exportApipostAsap(value);
+    if (type?.value === "digest") return exportApipostDigest(value);
   }
   if (!["aws", "hawk", "edgegrid"].includes(value?.type)) return undefined;
   const fail = () => {
