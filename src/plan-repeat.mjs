@@ -116,16 +116,45 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
   const leaf = (step, nested) => {
     object(
       step,
-      "HTTP步骤",
+      "叶子步骤",
       nested
-        ? ["id", "name", "enabled", "type", "request", "expectedStatus"]
+        ? step.type === "protocol"
+          ? [
+              "id",
+              "name",
+              "enabled",
+              "type",
+              "protocol",
+              "extract",
+              "assertions",
+              "expectedStatus",
+            ]
+          : ["id", "name", "enabled", "type", "request", "expectedStatus"]
         : undefined,
     );
     metadata(step);
+    if (nested && step.type === "protocol") {
+      object(step.protocol, "协议定义");
+      const reference = step.protocol.definitionId;
+      if (reference !== undefined) {
+        if (
+          requireIds ||
+          typeof reference !== "string" ||
+          !reference.trim() ||
+          step.protocol.definition !== undefined
+        )
+          throw Error("循环TCP引用须在冻结前解析且不能混合定义");
+      } else {
+        object(step.protocol.definition, "TCP定义");
+        if (step.protocol.definition.type !== "tcp")
+          throw Error("循环组协议叶子仅支持TCP");
+      }
+      return;
+    }
     if (step.type !== undefined && step.type !== "http") {
       if (!nested && ["grpc", "socketio", "protocol"].includes(step.type))
         return;
-      throw Error("循环组仅支持HTTP叶子，不支持嵌套或其他步骤类型");
+      throw Error("循环组仅支持HTTP或TCP叶子，不支持嵌套或其他步骤类型");
     }
     object(step.request, "请求");
     if (typeof step.request.url !== "string" || !step.request.url.trim())

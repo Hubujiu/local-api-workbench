@@ -15,7 +15,8 @@ reverting PR43 engine/budget fixes or importing newer XML feature work.
 
 A top-level step may be `{type:"repeat", id, name, enabled, count, steps}`.
 `count` is a literal integer 1..100. `steps` is a nonempty array of ordinary HTTP
-steps; nested groups and protocol leaves are unsupported. Unknown group fields,
+steps or TCP protocol leaves (TCP extension acceptance pending below); nested
+groups and other protocol leaves are unsupported. Unknown group fields,
 accessors, invalid identifiers/counts, duplicate node IDs and malformed leaves
 reject before execution. IDs are stable definition identities. Missing IDs are
 assigned on initial normalization, not during an execution of a saved plan.
@@ -184,3 +185,9 @@ receipts without resend, owner HTTP, canonical MCP HTTP/stdio, CLI, and
 backup/restore/restart. Native adapters must still reject lossy repeat projection.
 No application/network/VM/database workflow is run locally; ordinary exact-head CI
 is required. This contract stage is not implementation or acceptance evidence.
+
+TCP implementation stage: repeat/group and leaf-wrapper unknown fields reject.
+Protocol definition fields retain the existing `normalizeProtocol` semantics;
+this change does not introduce a second definition-field schema or claim that
+all unknown definition keys reject. Pure graph-helper tests pass locally; network
+workflows and exact-head CI remain pending, so this is not acceptance.

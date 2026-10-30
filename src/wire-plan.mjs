@@ -1,3 +1,4 @@
+import { planLeaves, activePlanLeaves } from "./plan-repeat.mjs";
 import { resolveHandshake } from "./protocol-handshake.mjs";
 import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
@@ -224,11 +225,12 @@ export function wirePlanCredentials(plan, input = {}) {
     Buffer.byteLength(JSON.stringify(input)) > 1024 * 1024
   )
     throw Error("协议临时凭据映射无效");
-  for (const step of plan.steps)
+  const leaves = planLeaves(plan.steps);
+  for (const step of leaves)
     if (step.type === "protocol") snapshotWireStep(step);
   const bindings = new Map();
   for (const [stepId, value] of Object.entries(input)) {
-    const matches = plan.steps.filter((step) => step.id === stepId);
+    const matches = leaves.filter((step) => step.id === stepId);
     if (
       matches.length !== 1 ||
       matches[0].type !== "protocol" ||
@@ -251,12 +253,8 @@ export function wirePlanCredentials(plan, input = {}) {
       websocketConfiguration({ url: definition.url, ...value });
     bindings.set(stepId, structuredClone(value));
   }
-  for (const step of plan.steps)
-    if (
-      step.enabled !== false &&
-      step.type === "protocol" &&
-      step.protocol.definition.type !== "tcp"
-    )
+  for (const step of activePlanLeaves(plan.steps))
+    if (step.type === "protocol" && step.protocol.definition.type !== "tcp")
       resolveHandshake(
         step.protocol.definition,
         bindings.get(step.id)?.headers,
