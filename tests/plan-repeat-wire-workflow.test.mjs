@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,7 @@ async function fixture(t) {
     consumed = [],
     clients = [],
     streams = new Set();
+  let sseMode = "normal";
   let upgradeCount = 0,
     httpCount = 0,
     hanging,
@@ -53,6 +55,7 @@ async function fixture(t) {
       const n = sseRows.length + 1;
       sseRows.push({
         authorization: req.headers.authorization,
+        lastEventId: req.headers["last-event-id"],
         body,
         token: `event-${n}`,
       });
@@ -63,7 +66,12 @@ async function fixture(t) {
         res.end();
         return;
       }
-      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.writeHead(200, {
+        "content-type":
+          sseMode === "bad-handshake"
+            ? "application/json"
+            : "text/event-stream",
+      });
       streams.add(res);
       res.on("close", () => streams.delete(res));
       if (hanging?.type === "sse" && hanging.n === n) {
@@ -72,7 +80,7 @@ async function fixture(t) {
       }
       // The second explicit connection must not inherit the first ID/retry state.
       res.end(
-        `${n % 2 ? "id: first-id\nretry: 37\n" : ""}data: event-${n}\n\n`,
+        `${n % 2 ? "id: first-id\nretry: 37\n" : ""}data: event-${n}\n\n${sseMode === "oversize" ? "data: " + "x".repeat(1024 * 1024) + "\n\n" : "data: incomplete-tail"}`,
       );
       return;
     }
@@ -215,6 +223,9 @@ async function fixture(t) {
     get app() {
       return app;
     },
+    setSSEMode(mode) {
+      sseMode = mode;
+    },
     hang(type, n) {
       hanging = { type, n };
     },
@@ -260,6 +271,18 @@ function checkRun(run, { saved = true, partial = false } = {}) {
       partial ? "partial" : "completed",
     );
   assert.equal(run.results[0].protocolResult.result.protocol, "repeat-v1");
+  assert.equal(run.results[1].protocolResult.result.events.length, 1);
+  assert.equal(run.results[4].protocolResult.result.events.length, 1);
+  assert.equal(run.results[1].protocolResult.result.events[0].id, "first-id");
+  assert.equal(run.results[1].protocolResult.result.events[0].retry, 37);
+  assert.notEqual(
+    run.results[1].protocolResult.result.events[0].data,
+    run.results[4].protocolResult.result.events[0].data,
+  );
+  assert.notEqual(
+    run.results[0].protocolResult.result.messages[0].data,
+    run.results[3].protocolResult.result.messages[0].data,
+  );
   assert.equal(run.results[4].protocolResult.result.events[0].id, "");
   assert.equal(run.results[4].protocolResult.result.events[0].retry, undefined);
   assert.doesNotMatch(JSON.stringify(run), /Bearer repeat-fixture-private-/);
@@ -269,6 +292,7 @@ function checkExchange(f, offset) {
     sse = f.sseRows.slice(offset, offset + 2);
   assert.equal(ws.length, 2);
   assert.equal(sse.length, 2);
+  for (const row of sse) assert.equal(row.lastEventId, undefined);
   assert.deepEqual(
     ws.map((x) => x.message),
     ["initial", ws[0].token],
@@ -771,5 +795,168 @@ test(
         assert.equal(f.consumed.length, 2);
         await until(() => f.wss.clients.size === 0 && f.streams.size === 0);
       });
+  },
+);
+
+test(
+  "WS/SSE repeated remote failures, assertion failures and byte limits retain failed outcomes without partial extraction",
+  { timeout: 15000 },
+  async (t) => {
+    for (const mode of ["ws-auth", "bad-handshake", "assertion", "oversize"])
+      await t.test(mode, async (t) => {
+        const f = await fixture(t),
+          input = f.definition(),
+          auth = credentials();
+        if (mode === "ws-auth")
+          auth.ws.headers.Authorization = "Bearer rejected-fixture";
+        if (["bad-handshake", "oversize"].includes(mode)) f.setSSEMode(mode);
+        if (mode === "assertion")
+          input.steps[0].steps[0].assertions = [
+            { target: "$.messages[0].data", op: "eq", value: "must-not-match" },
+          ];
+        const made = await f.post(`projects/${f.project.id}/plans`, input);
+        assert.equal(made.status, 200);
+        const response = await f.post(`projects/${f.project.id}/run`, {
+          planId: made.value.id,
+          protocolCredentials: auth,
+        });
+        assert.equal(response.status, 200);
+        assert.equal(response.value.status, "failed");
+        assert.equal(response.value.results.length, 6);
+        const failed =
+          mode === "ws-auth" || mode === "assertion" ? [0, 3] : [1, 4];
+        for (const index of failed) {
+          const result = response.value.results[index];
+          assert.equal(result.status, "failed");
+          assert.deepEqual(result.extracted, {});
+          if (mode !== "assertion")
+            assert.equal(result.protocolResult.status, "failed");
+        }
+        if (mode === "oversize")
+          for (const index of failed)
+            assert.match(
+              response.value.results[index].protocolResult.result.error,
+              /字节上限|1 MiB/,
+            );
+        if (mode === "ws-auth") {
+          assert.equal(f.wsRows.length, 0);
+          assert.equal(response.value.variables.wire, "initial");
+        }
+        if (failed[0] === 1)
+          assert.equal(response.value.variables.event, "initial-event");
+        assert.equal(f.consumed.length, 2);
+        assert.doesNotMatch(
+          JSON.stringify(response.value),
+          /Bearer repeat-fixture-private-/,
+        );
+        await until(() => f.wss.clients.size === 0 && f.streams.size === 0);
+      });
+  },
+);
+
+test(
+  "repeated WSS uses temporary trusted CA and client certificate without weakening TLS or saving materials",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t),
+      key = await readFile(
+        new URL("./fixtures/localhost.key", import.meta.url),
+        "utf8",
+      ),
+      ca = await readFile(
+        new URL("./fixtures/localhost.crt", import.meta.url),
+        "utf8",
+      );
+    const server = https.createServer({
+      key,
+      cert: ca,
+      ca,
+      requestCert: true,
+      rejectUnauthorized: true,
+    });
+    const wss = new WebSocketServer({ server, perMessageDeflate: false });
+    const received = [];
+    let acceptedUpgrades = 0;
+    wss.on("connection", (socket, req) => {
+      acceptedUpgrades++;
+      assert.equal(req.socket.authorized, true);
+      assert.equal(req.headers.authorization, secret);
+      socket.on("error", () => {});
+      socket.once("message", (bytes) => {
+        received.push(bytes.toString());
+        socket.send(`secure-${received.length}`);
+        socket.close(1000);
+      });
+    });
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    t.after(async () => {
+      for (const socket of wss.clients) socket.terminate();
+      await new Promise((r) => wss.close(r));
+      server.closeAllConnections();
+      await new Promise((r) => server.close(r));
+    });
+    const project = await f.app.store.get(f.project.id);
+    project.protocols[0].url = `wss://127.0.0.1:${server.address().port}/ws`;
+    await f.app.store.save(project);
+    const made = await f.post(`projects/${project.id}/plans`, f.definition());
+    assert.equal(made.status, 200);
+    const auth = credentials();
+    auth.ws.tls = { ca, cert: ca, key };
+    const success = await f.post(`projects/${project.id}/run`, {
+      planId: made.value.id,
+      protocolCredentials: auth,
+    });
+    assert.equal(success.status, 200);
+    checkRun(success.value);
+    assert.deepEqual(received, ["initial", "secure-1"]);
+    assert.equal(acceptedUpgrades, 2);
+    assert.deepEqual(
+      f.consumed.map((x) => x.ws),
+      ["secure-1", "secure-2"],
+    );
+    for (const tls of [undefined, { ca }]) {
+      const rejected = credentials();
+      if (tls) rejected.ws.tls = tls;
+      const result = await f.post(`projects/${project.id}/run`, {
+        planId: made.value.id,
+        protocolCredentials: rejected,
+      });
+      assert.equal(result.status, 200);
+      assert.equal(result.value.status, "failed");
+      for (const i of [0, 3]) {
+        assert.equal(result.value.results[i].protocolResult.status, "failed");
+        assert.deepEqual(result.value.results[i].extracted, {});
+      }
+      assert.equal(received.length, 2);
+      assert.equal(acceptedUpgrades, 2); // Neither rejected run reaches a successful WS upgrade.
+    }
+    const insecure = credentials();
+    insecure.ws.tls = { rejectUnauthorized: false };
+    const before = f.counts();
+    assert.notEqual(
+      (
+        await f.post(`projects/${project.id}/run`, {
+          planId: made.value.id,
+          protocolCredentials: insecure,
+        })
+      ).status,
+      200,
+    );
+    assert.deepEqual(f.counts(), before);
+    const disk = await new Store(f.root).get(project.id),
+      exported = await fetch(`${f.app.url}/api/projects/${project.id}/export`, {
+        headers: { "x-local-token": f.app.token },
+      });
+    assert.equal(exported.status, 200);
+    for (const value of [success.value, disk, await exported.json()]) {
+      const text = JSON.stringify(value);
+      assert.ok(!text.includes(key.trim()));
+      assert.ok(!text.includes(ca.trim()));
+      assert.doesNotMatch(
+        text,
+        /BEGIN (?:CERTIFICATE|(?:RSA )?PRIVATE KEY)|Bearer repeat-fixture-private-/,
+      );
+    }
+    await until(() => wss.clients.size === 0 && f.streams.size === 0);
   },
 );
