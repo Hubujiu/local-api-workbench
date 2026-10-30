@@ -136,6 +136,7 @@ test("repeat graph identity, shape and potential-work caps reject atomically whi
       p.steps[1].id = "child";
     },
     (p) => {
+      // Retaining request without grpc is a malformed wrapper, not a gRPC ban.
       p.steps[1].steps[0].type = "grpc";
     },
     (p) => {
