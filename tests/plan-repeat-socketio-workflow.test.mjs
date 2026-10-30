@@ -758,10 +758,13 @@ test(
           });
         else if (mode === "disconnect") f.disconnect();
         else {
-          f.stall();
-          if (mode === "ack-timeout")
+          if (mode === "ack-timeout") {
+            f.stall();
             input.steps[0].steps[0].socketio.commands[1].ackTimeoutMs = 100;
-          else input.steps[0].steps[0].socketio.timeoutMs = 500;
+          } else {
+            f.holdWait();
+            input.steps[0].steps[0].socketio.timeoutMs = 500;
+          }
         }
         const made = await f.post(`projects/${f.project.id}/plans`, input);
         assert.equal(made.status, 200);
