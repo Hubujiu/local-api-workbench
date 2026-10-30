@@ -1,3 +1,4 @@
+import { digestChallengePolicy } from "./digest-policy-model.js";
 export const authTypes = [
   "none",
   "bearer",
@@ -16,6 +17,9 @@ export const authTypes = [
 export function validateAuth(auth = {}) {
   if (!auth || typeof auth !== "object" || Array.isArray(auth))
     throw Error("认证配置必须为对象");
+  const policy = digestChallengePolicy(auth);
+  if (policy && auth.type !== "digest")
+    throw Error("challengePolicy 仅支持 Digest 认证");
   if (
     auth.queryEncoding !== undefined &&
     (auth.type !== "apiKey" ||

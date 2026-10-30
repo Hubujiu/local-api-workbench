@@ -90,7 +90,7 @@ import {
   readHttpFinalizationFailure,
 } from "./http-finalization.mjs";
 import { prepareConnection } from "./connection.mjs";
-import { digestAuthorization } from "./digest.mjs";
+import { digestAuthorization, digestChallengePolicy } from "./digest.mjs";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { performance } from "node:perf_hooks";
 import {
@@ -771,6 +771,10 @@ async function executeRequestWithinDeadline(
 ) {
   const controls = { signal, deadline };
   throwIfInactive(controls);
+  // Detach the admitted policy before any connection/cookie await.
+  const digestPolicy =
+    r.auth.type === "digest" ? digestChallengePolicy(r.auth) : undefined;
+  if (digestPolicy) r.auth.challengePolicy = digestPolicy;
   const raw = serializeRequestPath(r);
   if (r.auth.type === "aws" && r.auth.addAuthDataToQuery === true)
     validateAWSQueryURL(raw);
@@ -1127,7 +1131,11 @@ async function executeRequestWithinDeadline(
     }
     response.cookieError = "Cookie保存失败：" + error.message;
   }
-  if (r.auth.type === "digest" && response.status === 401) {
+  if (
+    r.auth.type === "digest" &&
+    response.status === 401 &&
+    digestPolicy?.retry !== false
+  ) {
     throwIfInactive(controls);
     const authorization = digestAuthorization(
       response.headers["www-authenticate"],

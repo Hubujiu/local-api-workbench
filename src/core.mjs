@@ -656,6 +656,13 @@ export async function runPlan(
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  // Validate new static constraints on active leaves before cloning, interpolation
+  // or before scripts; disabled repeat ancestors do not activate child work.
+  for (const step of activePlanLeaves(plan.steps)) {
+    const auth = step.request?.auth;
+    if (auth && typeof auth === "object" && "challengePolicy" in auth)
+      validateAuth(auth);
+  }
   const stepIds = repeated
     ? undefined
     : allocateLinearPlanStepIds(plan.steps, id);
