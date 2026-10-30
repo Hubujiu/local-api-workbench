@@ -139,7 +139,7 @@ test("gRPC nested credentials preserve target, metadata, TLS and map admission l
     /同时/,
   );
 });
-test("well-shaped Socket.IO leaf remains outside the repeat contract", () => {
+test("well-shaped Socket.IO leaf composes with the extended repeat contract", () => {
   const steps = graph();
   steps[0].steps[0] = {
     id: "socket-step",
@@ -156,5 +156,5 @@ test("well-shaped Socket.IO leaf remains outside the repeat contract", () => {
     extract: [],
     assertions: [],
   };
-  assert.throws(() => validateRepeatGraph(steps));
+  assert.equal(validateRepeatGraph(steps), true);
 });

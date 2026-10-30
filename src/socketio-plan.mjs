@@ -1,3 +1,4 @@
+import { planLeaves, activePlanLeaves } from "./plan-repeat.mjs";
 import { randomUUID } from "node:crypto";
 import {
   SocketIOSessions,
@@ -155,7 +156,7 @@ export function socketioPlanCredentials(plan, input = {}) {
     throw Error("Socket.IO临时凭据映射无效或超限");
   const result = new Map();
   for (const [id, value] of Object.entries(input)) {
-    const steps = plan.steps.filter((s) => s.id === id);
+    const steps = planLeaves(plan.steps).filter((s) => s.id === id);
     if (
       steps.length !== 1 ||
       steps[0].type !== "socketio" ||
@@ -168,8 +169,8 @@ export function socketioPlanCredentials(plan, input = {}) {
     validateSocketIOConnection({ ...steps[0].socketio.definition, ...value });
     result.set(id, structuredClone(value));
   }
-  for (const step of plan.steps)
-    if (step.type === "socketio" && step.enabled !== false)
+  for (const step of activePlanLeaves(plan.steps))
+    if (step.type === "socketio")
       validateSocketIOConnection({
         ...step.socketio.definition,
         ...result.get(step.id),
