@@ -224,7 +224,7 @@ test("native strict extraction stops all later iterations and native adapters re
   await f.store.save(restored);
   assert.equal(restored.plans[0].steps[0].type, "repeat");
   const bad = structuredClone(restored);
-  bad.plans[0].steps[0].steps[0].request.importedNativeTaskSource = {
+  bad.plans[0].steps[0].steps[0].steps[0].request.importedNativeTaskSource = {
     version: 2,
     before: [],
     after: [],
@@ -232,7 +232,7 @@ test("native strict extraction stops all later iterations and native adapters re
   await assert.rejects(f.store.save(bad), /来源/);
   assert.throws(() => restoreProject(bad), /来源/);
   assert.equal(
-    (await f.store.get(restored.id)).plans[0].steps[0].steps[0].request
+    (await f.store.get(restored.id)).plans[0].steps[0].steps[0].steps[0].request
       .importedNativeTaskSource,
     undefined,
   );

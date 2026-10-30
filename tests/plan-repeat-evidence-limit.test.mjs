@@ -149,7 +149,7 @@ test("real repeated HTTP evidence stops before the next occurrence, preserves te
     "output limit and read-only history do not replay any network",
   );
   const finalOnly = structuredClone(plan);
-  finalOnly.steps[0].count = 3;
+  finalOnly.steps[0].steps[0].count = 3;
   const finalRun = await runPlan(finalOnly, {}, executeRequest);
   assert.equal(finalRun.status, "passed");
   assert.equal(
