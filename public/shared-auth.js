@@ -5,6 +5,7 @@ function validateSharedAuth(auth) {
   if (new TextEncoder().encode(JSON.stringify(auth)).length > 65536)
     throw Error("共享认证最多64KiB");
   for (const [key, value] of Object.entries(auth)) {
+    if (key === "parameterPolicy" && auth.type === "oauth1") continue;
     // validateAuth already strictly validates this sole nested model, including
     // type, own data descriptors, exact keys, algorithm and boolean retry.
     if (key === "challengePolicy" && auth.type === "digest") continue;
@@ -25,9 +26,10 @@ export function validateSharedAuthSettings(settings = {}) {
     validateFolderParameters(
       Object.fromEntries(Object.keys(folders).map((name) => [name, {}])),
     );
+    // Validate selected credential descriptors before aggregate serialization.
+    for (const auth of Object.values(folders)) validateSharedAuth(auth);
     if (new TextEncoder().encode(JSON.stringify(folders)).length > 262144)
       throw Error("目录认证总计最多256KiB");
-    for (const auth of Object.values(folders)) validateSharedAuth(auth);
   }
 }
 export function renameSharedAuthScopes(settings, previous, next) {
