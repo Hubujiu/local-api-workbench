@@ -28,7 +28,8 @@ async function until(predicate) {
     await new Promise((r) => setTimeout(r, 5));
   }
 }
-async function fixture(t) {
+// Delimiter is a root-only composition with PR12; feature PR44 uses EOF.
+async function fixture(t, { delimiter = false } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "repeat-tcp-workflow-"));
   let app = await createApp({ root, port: 0 });
   const sockets = new Set(),
@@ -44,10 +45,14 @@ async function fixture(t) {
     socket.on("error", () => {});
     socket.on("close", () => sockets.delete(socket));
     socket.once("data", async (bytes) => {
-      const token = `tcp-token-${received.length + 1}`;
+      const token = `tcp-token-${received.length + 1}${delimiter ? "|" : ""}`;
       received.push({ message: bytes.toString(), token });
       await onTCP(socket, received.length);
-      if (!socket.destroyed) socket.end(token); // EOF, not a root-only delimiter.
+      if (!socket.destroyed) {
+        if (delimiter)
+          socket.write(token); // Never send EOF: client must find marker.
+        else socket.end(token);
+      }
     });
   });
   const peer = http.createServer(async (req, res) => {
@@ -92,7 +97,8 @@ async function fixture(t) {
       type: "tcp",
       url: "127.0.0.1",
       port: tcp.address().port,
-      completion: "end",
+      completion: delimiter ? "delimiter" : "end",
+      ...(delimiter ? { delimiterHex: "7c" } : {}),
       duration: 5000,
     }),
   ];
@@ -565,9 +571,9 @@ test(
   "completed TCP repeat evidence is never replayed after generic append failure or genuine post-journal uncertainty",
   { timeout: 15000 },
   async (t) => {
-    for (const mode of ["generic", "unknown"])
+    for (const mode of ["generic", "unknown", "delimiter-unknown"])
       await t.test(mode, async (t) => {
-        const f = await fixture(t),
+        const f = await fixture(t, { delimiter: mode === "delimiter-unknown" }),
           p = f.project;
         const made = await f.post(`projects/${p.id}/plans`, f.definition());
         assert.equal(made.status, 200);
@@ -646,11 +652,67 @@ test(
         const recovered = await new Store(f.root).get(p.id);
         assert.equal(
           recovered.runs.some((r) => r.id === run.id),
-          mode === "unknown",
+          mode !== "generic",
         );
+        if (mode === "delimiter-unknown") {
+          const retained = recovered.runs.find((r) => r.id === run.id);
+          for (const index of [0, 2]) {
+            assert.equal(
+              retained.results[index].protocol.definition.delimiterHex,
+              "7c",
+            );
+            assert.equal(
+              retained.results[index].protocolResult.result.framing.matched,
+              true,
+            );
+            assert.equal(
+              retained.results[index].protocolResult.result.body,
+              f.received[index / 2].token,
+            );
+          }
+        }
         assert.equal(f.received.length, 2);
         assert.equal(f.consumed.length, 2);
         await until(() => f.sockets.size === 0);
       });
   },
 );
+
+test("root delimiter repeat composes frozen framing, per-iteration extraction and HTTP consumers", async (t) => {
+  const f = await fixture(t, { delimiter: true }),
+    p = f.project;
+  const made = await f.post(`projects/${p.id}/plans`, f.definition());
+  assert.equal(made.status, 200);
+  const live = await f.app.store.get(p.id);
+  live.protocols[0].port = 1;
+  live.protocols[0].delimiterHex = "00";
+  await f.app.store.save(live);
+  const response = await f.post(`projects/${p.id}/run`, {
+    planId: made.value.id,
+  });
+  assert.equal(response.status, 200);
+  checkRun(response.value);
+  checkExchange(f, 0);
+  for (const index of [0, 2]) {
+    const result = response.value.results[index];
+    assert.equal(result.protocol.definition.completion, "delimiter");
+    assert.equal(result.protocol.definition.delimiterHex, "7c");
+    assert.equal(result.protocolResult.result.framing.matched, true);
+    assert.equal(result.protocolResult.result.partial, false);
+    assert.equal(result.protocolResult.result.timedOut, false);
+    assert.equal(
+      result.protocolResult.result.body,
+      f.received[index / 2].token,
+    );
+    assert.equal(result.protocolResult.result.framing.trailingSize, 0);
+  }
+  assert.equal(f.received.length, 2);
+  assert.equal(f.consumed.length, 2);
+  await until(() => f.sockets.size === 0);
+  const disk = await new Store(f.root).get(p.id);
+  assert.deepEqual(
+    disk.runs.find((r) => r.id === response.value.id).snapshot.steps,
+    made.value.steps,
+  );
+  assert.throws(() => exportApipostDirectory(disk));
+});

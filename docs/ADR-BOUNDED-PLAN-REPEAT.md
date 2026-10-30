@@ -201,3 +201,11 @@ claim about an owner HTTP transport deadline. Static review, syntax and format
 checks pass; these application workflows have deliberately not run locally and
 remain pending ordinary exact-head CI. Existing HTTP repeat evidence and any
 later root composition evidence must not be substituted for these new flows.
+
+Root-only composition additionally specifies two delimiter-completed TCP leaves
+inside the group, each extracting its full frame into the following HTTP leaf.
+The peer does not send EOF; saved delimiter/endpoint survive live edits. A real
+post-journal uncertainty case retains delimiter frames and occurrence evidence
+through recovery without another connection. This combines existing PR12 and
+PR44 behavior only in integration; no delimiter implementation was backported to
+PR44. These root workflows are syntax/static checked, awaiting exact-head CI.
