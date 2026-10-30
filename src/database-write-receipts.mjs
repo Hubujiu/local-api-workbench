@@ -60,3 +60,17 @@ export function validateDatabaseWriteReceipts(value) {
     return projected;
   });
 }
+
+// Persistence validation is deliberately inert: no ledger entry, session or
+// execution capability is constructed from imported evidence. Historical
+// project/run identities remain provenance when restoring into a new project.
+export function validateProjectDatabaseWriteEvidence(project) {
+  for (const field of ["history", "runs"])
+    for (const record of project[field] || []) {
+      if (record.writeReceipts !== undefined)
+        validateDatabaseWriteReceipts(record.writeReceipts);
+      for (const result of record.results || [])
+        if (result.writeReceipts !== undefined)
+          validateDatabaseWriteReceipts(result.writeReceipts);
+    }
+}

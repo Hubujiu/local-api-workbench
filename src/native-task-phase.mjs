@@ -7,10 +7,11 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
   if (!Array.isArray(tasks) || tasks.length > 16)
     throw Error("原版任务阶段最多16项");
   const operations = [],
+    databaseOrdinals = [],
     code = [],
     prefix = "__db_" + randomBytes(16).toString("hex");
   let bytes = 0;
-  for (const task of tasks) {
+  for (const [ordinal, task] of tasks.entries()) {
     if (
       !task ||
       typeof task !== "object" ||
@@ -30,6 +31,7 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
       const operation = normalizeDatabaseOperations([task.data])[0];
       if (task.enabled === 1) {
         const index = operations.push(operation) - 1;
+        databaseOrdinals.push(ordinal);
         code.push(`\nawait ${prefix}(${index});\n`);
       }
     }
@@ -46,5 +48,6 @@ export function runNativeTaskPhase(tasks, input, options = {}) {
   return runScript(source, input, {
     ...options,
     databaseOperations: operations,
+    databaseOrdinals,
   });
 }

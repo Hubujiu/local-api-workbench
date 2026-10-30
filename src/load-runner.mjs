@@ -1,3 +1,4 @@
+import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { loadTiming } from "../public/load-timing.js";
 import { parseLoadCSV } from "../public/load-data.js";
 import { memoryCookieSession } from "./cookie-jar.mjs";
@@ -32,6 +33,11 @@ export async function runLoad(project, request, options = {}) {
     functions: project.settings?.functions || [],
     steps: [{ request: freezeServiceBinding(project, request) }],
   });
+  denyNativeWrites(
+    plan.steps
+      .filter((step) => step.enabled !== false)
+      .map((step) => step.request || {}),
+  );
   const results = [];
   let cursor = 0,
     mainRequests = 0;
