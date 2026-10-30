@@ -157,3 +157,30 @@ require exact-head ordinary CI. No application/VM/XML/database/pressure workload
 original client, new permissions, runtime budget, dependency or bundle change is
 part of this correction. Prior failures and acceptance evidence above remain
 historical and are not replaced by these pending specifications.
+
+## TCP repeat extension — contract stage (not accepted)
+
+The next bounded slice admits TCP `protocol` leaves alongside HTTP inside one
+repeat group. WS, SSE, gRPC, Socket.IO and nested groups remain rejected there.
+This is canonical Workbench control flow, not original automation compatibility.
+Project definition references are resolved before the final TCP-only snapshot
+check. Saved definitions and occurrence identities remain immutable across live
+protocol edits/deletion. Each occurrence uses the existing one-shot wire executor;
+there is no shared socket, new retry, executor, resource budget or credential kind.
+Temporary credentials bind to unique leaf definition IDs, never occurrence IDs;
+TCP continues to reject nonempty authentication configuration. Disabled groups
+remain structurally validated and counted against all existing potential-work
+limits, but do not trigger active handshake preflight or network calls.
+
+The feature branch's existing EOF/first-data completion is sufficient for this
+slice. Delimiter behavior belongs to the later root composition, not a partial
+PR12 backport. Protocol extraction keeps its ordinary atomic-batch and failure
+continuation semantics, not native-task strict-extraction stop semantics.
+
+Acceptance must cover real TCP-to-HTTP values per iteration, frozen references,
+live edit/deletion, unique occurrence identities, project isolation, atomic
+extraction failure, second-iteration cancellation/deadline, typed uncertain save
+receipts without resend, owner HTTP, canonical MCP HTTP/stdio, CLI, and
+backup/restore/restart. Native adapters must still reject lossy repeat projection.
+No application/network/VM/database workflow is run locally; ordinary exact-head CI
+is required. This contract stage is not implementation or acceptance evidence.
