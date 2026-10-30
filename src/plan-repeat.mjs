@@ -185,7 +185,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       if (!nested && ["grpc", "socketio", "protocol"].includes(step.type))
         return;
       throw Error(
-        "循环组仅支持HTTP、gRPC、Socket.IO或TCP/WebSocket/SSE叶子，不支持嵌套或其他步骤类型",
+        "循环组仅支持HTTP、gRPC、Socket.IO或TCP/WebSocket/SSE叶子，不支持其他步骤类型",
       );
     }
     object(step.request, "请求");
@@ -199,9 +199,10 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
     )
       throw Error("循环计划HTTP预期状态无效");
   };
-  for (const step of steps) {
+  const visit = (step, depth, multiplier) => {
     object(step, "步骤");
     if (step.type === "repeat") {
+      if (depth >= 4) throw Error("循环组嵌套最多4层");
       object(step, "循环组", [
         "type",
         "id",
@@ -214,37 +215,38 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       if (!Number.isInteger(step.count) || step.count < 1 || step.count > 100)
         throw Error("循环次数须为1至100的整数");
       array(step.steps, "循环子步骤");
-      for (const child of step.steps) leaf(child, true);
-      expanded += step.count * step.steps.length;
       for (const child of step.steps)
-        bytes += Buffer.byteLength(JSON.stringify(child)) * step.count;
+        visit(child, depth + 1, multiplier * step.count);
     } else {
-      leaf(step, false);
-      expanded++;
-      bytes += Buffer.byteLength(JSON.stringify(step));
+      leaf(step, depth > 0);
+      expanded += multiplier;
+      bytes += Buffer.byteLength(JSON.stringify(step)) * multiplier;
     }
     // Disabled definitions are deliberately included, so toggling enabled cannot
     // bypass the same potential-work budget.
     if (expanded > 200) throw Error("循环计划展开最多200个请求步骤");
     if (bytes > 4 * 1024 * 1024) throw Error("循环计划逻辑展开配置最多4MiB");
-  }
+  };
+  for (const step of steps) visit(step, 0, 1);
   return true;
 }
 export function planLeaves(steps) {
   return steps.flatMap((step) =>
-    step.type === "repeat" ? step.steps : [step],
+    step.type === "repeat" ? planLeaves(step.steps) : [step],
   );
 }
 // Active definitions, once each: grants are not duplicated per iteration.
 export function activePlanLeaves(steps) {
   validateRepeatGraph(steps, { requireIds: true });
-  return steps
-    .filter((step) => step.enabled !== false)
-    .flatMap((step) =>
-      step.type === "repeat"
-        ? step.steps.filter((child) => child.enabled !== false)
-        : [step],
+  const visit = (nodes) =>
+    nodes.flatMap((step) =>
+      step.enabled === false
+        ? []
+        : step.type === "repeat"
+          ? visit(step.steps)
+          : [step],
     );
+  return visit(steps);
 }
 export const REPEAT_EVIDENCE_BYTES = 8 * 1024 * 1024;
 export function repeatEvidenceExceeded(bytes) {
@@ -253,33 +255,49 @@ export function repeatEvidenceExceeded(bytes) {
 export function mapPlanLeaves(steps, map) {
   return steps.map((step) =>
     step.type === "repeat"
-      ? { ...step, steps: step.steps.map(map) }
+      ? { ...step, steps: mapPlanLeaves(step.steps, map) }
       : map(step),
   );
 }
 export function planOccurrences(steps) {
   const occurrences = [];
-  for (const step of steps) {
-    if (step.enabled === false) continue;
-    if (step.type !== "repeat") {
-      occurrences.push({ step });
-      continue;
-    }
-    for (let iteration = 0; iteration < step.count; iteration++)
-      for (const child of step.steps) {
-        if (child.enabled === false) continue;
-        occurrences.push({
-          step: child,
-          repeat: {
-            groupId: step.id,
-            childId: child.id,
-            iteration,
-            // JSON tuple is injective even when IDs contain separators.
-            occurrenceId: JSON.stringify([step.id, child.id, iteration]),
-          },
-        });
+  const visit = (nodes, path) => {
+    for (const step of nodes) {
+      if (step.enabled === false) continue;
+      if (step.type === "repeat") {
+        for (let iteration = 0; iteration < step.count; iteration++)
+          visit(step.steps, [...path, { groupId: step.id, iteration }]);
+        continue;
       }
-  }
+      if (!path.length) {
+        occurrences.push({ step });
+        continue;
+      }
+      const { groupId, iteration } = path.at(-1);
+      occurrences.push({
+        step,
+        repeat: {
+          groupId,
+          childId: step.id,
+          iteration,
+          // Preserve the legacy tuple byte-for-byte; nested tuples start with
+          // an array, so the two identity domains cannot collide.
+          occurrenceId: JSON.stringify(
+            path.length === 1
+              ? [groupId, step.id, iteration]
+              : [
+                  path.map(({ groupId, iteration }) => [groupId, iteration]),
+                  step.id,
+                ],
+          ),
+          ...(path.length > 1
+            ? { path: path.map((entry) => ({ ...entry })) }
+            : {}),
+        },
+      });
+    }
+  };
+  visit(steps, []);
   return occurrences;
 }
 export function activePlanStepCount(plan) {

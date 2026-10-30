@@ -314,3 +314,51 @@ retain their established later-HTTP continuation with unchanged variables;
 external cancellation separately stops later HTTP/occurrences. The independent
 ACK timeout and external-abort cases remain. No production timeout or budget is
 changed. The unrelated macOS script quota timeout in that run remains unexplained.
+
+## 2026-10-30: bounded recursive repeat contract (work in progress)
+
+Canonical repeat groups may contain groups, to a maximum of four group layers.
+This supersedes earlier single-level restrictions only; it does not infer the
+pending proprietary native automation format. Every group retains count 1..100.
+All definitions, including disabled descendants, share one global node-ID space
+and are validated before effects. Potential work is the sum of leaf multiplicities
+(the product of ancestor counts), at most 200. Logical configuration bytes use the
+same multiplicities and unchanged 4MiB limit; frozen snapshots remain at most
+4MiB, ordinary data depth/node guards remain, and evidence retains its existing
+8MiB stop-before-next-occurrence behavior. No runtime budget increases.
+
+Traversal is depth-first serial, with each enclosing iteration completing its
+children before the next. An inactive ancestor suppresses every descendant's
+execution and required-credential preflight, not definition validation or potential
+work accounting. Definition freezing, explicit credential-map validation and
+provenance checks still visit every leaf exactly once. Active credential/grant
+checks visit active definitions once, not per occurrence, before any earlier
+HTTP/network effect. Credentials remain invocation-only, bound to globally unique
+leaf IDs rather than group or occurrence IDs.
+
+Single-level snapshots retain the exact old serialization, defaults and hash;
+single-level result metadata retains its exact four fields and old JSON tuple
+`[groupId, childId, iteration]`. Nested metadata keeps those scalar fields referring
+to the innermost group and leaf, adds `path` with outer-to-inner `{groupId,iteration}`
+entries, and identifies the occurrence as JSON `[pathPairs,leafId]`, where each
+path pair is `[groupId,iteration]`. The array-first nested domain cannot collide
+with the legacy string-first domain. No path components are truncated. MCP activity
+retains the existing 1500-byte occurrence-ID, 2048-byte repeat metadata and 4KiB
+record limits: an unsafe/oversized complete identity is omitted with
+`repeatOmitted`, not partially projected. Canonical persisted results retain it.
+
+Scope/cookie carry-forward, before/after script ordering, native strict extraction
+stop, ordinary failure continuation, cancellation and already-committed effects
+are unchanged. No group-local scope, implicit retry, rollback or resume is added.
+Evidence-limit summaries retain full last/next occurrence identities. Typed
+journal uncertainty and output-frame errors still never authorize replay.
+Native export/projections continue rejecting repeat graphs rather than flattening.
+
+This stage changes shared graph helpers, recursive group snapshot normalization
+and bounded MCP activity projection. Pure graph tests and syntax/static checks are
+not runtime acceptance. CI-only specifications must establish old golden snapshot
+and hash stability; nested owner/official SDK HTTP/stdio/CLI execution; frozen live
+edits and backup/restart; all-active-leaf credential preflight; shared scopes and
+script ordering; cancellation, extraction failure and evidence limit; and genuine
+journal uncertainty/recovery without replay. Existing single-layer CI evidence
+must not substitute for exact-head nested workflow evidence.

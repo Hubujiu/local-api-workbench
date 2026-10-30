@@ -83,7 +83,7 @@ test("wire references resolve only before freeze; disabled groups keep identity 
   steps[0].steps[1].id = "websocket";
   assert.throws(() => validateRepeatGraph(steps), /重复/);
 });
-test("unsupported transports and nested repeats remain rejected even when disabled", () => {
+test("unsupported transports and duplicate nested identities remain rejected even when disabled", () => {
   for (const type of ["grpc", "socketio", "unknown"]) {
     const steps = graph();
     steps[0].enabled = false;

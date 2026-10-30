@@ -143,8 +143,61 @@ export class MCPActivity {
         this.record.stepIdOmitted = true;
       }
     }
+    const pathDescriptor =
+      progress.repeat &&
+      Object.getOwnPropertyDescriptor(progress.repeat, "path");
+    let repeatPath;
+    let validRepeatPath = !pathDescriptor;
+    if (pathDescriptor?.enumerable && Object.hasOwn(pathDescriptor, "value")) {
+      const rawPath = pathDescriptor.value;
+      if (
+        Array.isArray(rawPath) &&
+        Object.getPrototypeOf(rawPath) === Array.prototype &&
+        rawPath.length >= 2 &&
+        rawPath.length <= 4 &&
+        Reflect.ownKeys(rawPath).length === rawPath.length + 1
+      ) {
+        repeatPath = [];
+        for (let i = 0; i < rawPath.length; i++) {
+          const item = Object.getOwnPropertyDescriptor(rawPath, String(i));
+          if (!item?.enumerable || !Object.hasOwn(item, "value")) break;
+          const entry = item.value;
+          if (
+            !entry ||
+            typeof entry !== "object" ||
+            ![Object.prototype, null].includes(Object.getPrototypeOf(entry)) ||
+            Reflect.ownKeys(entry).length !== 2
+          )
+            break;
+          const group = Object.getOwnPropertyDescriptor(entry, "groupId");
+          const index = Object.getOwnPropertyDescriptor(entry, "iteration");
+          if (
+            !group?.enumerable ||
+            !index?.enumerable ||
+            !Object.hasOwn(group, "value") ||
+            !Object.hasOwn(index, "value") ||
+            !validMetadata(group.value) ||
+            !Number.isInteger(index.value) ||
+            index.value < 0 ||
+            index.value >= 100
+          )
+            break;
+          repeatPath.push({ groupId: group.value, iteration: index.value });
+        }
+        validRepeatPath =
+          repeatPath.length === rawPath.length &&
+          repeatPath.at(-1).groupId === progress.repeat.groupId &&
+          repeatPath.at(-1).iteration === progress.repeat.iteration &&
+          progress.repeat.occurrenceId ===
+            JSON.stringify([
+              repeatPath.map(({ groupId, iteration }) => [groupId, iteration]),
+              progress.repeat.childId,
+            ]);
+      }
+    }
     if (
       progress.repeat &&
+      validRepeatPath &&
       ["groupId", "childId"].every((key) =>
         validMetadata(progress.repeat[key]),
       ) &&
@@ -160,6 +213,14 @@ export class MCPActivity {
         childId: progress.repeat.childId,
         iteration: progress.repeat.iteration,
         occurrenceId: progress.repeat.occurrenceId,
+        ...(repeatPath === undefined
+          ? {}
+          : {
+              path: repeatPath.map(({ groupId, iteration }) => ({
+                groupId,
+                iteration,
+              })),
+            }),
       };
     else delete this.record.repeat;
     if (progress.repeat && !this.record.repeat)

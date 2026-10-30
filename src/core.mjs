@@ -527,18 +527,20 @@ export function snapshotPlan(plan) {
     ),
   };
   if (repeated) {
-    snapshot.steps = snapshot.steps.map((step) =>
-      step.type === "repeat"
-        ? {
-            type: "repeat",
-            id: step.id || id(),
-            name: step.name ?? "循环组",
-            enabled: step.enabled !== false,
-            count: step.count,
-            steps: step.steps,
-          }
-        : step,
-    );
+    const normalizeGroups = (nodes) =>
+      nodes.map((step) =>
+        step.type === "repeat"
+          ? {
+              type: "repeat",
+              id: step.id || id(),
+              name: step.name ?? "循环组",
+              enabled: step.enabled !== false,
+              count: step.count,
+              steps: normalizeGroups(step.steps),
+            }
+          : step,
+      );
+    snapshot.steps = normalizeGroups(snapshot.steps);
     validateRepeatGraph(snapshot.steps, { requireIds: true });
     if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
       throw Error("循环计划冻结定义最多4MiB");

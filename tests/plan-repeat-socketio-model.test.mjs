@@ -83,7 +83,7 @@ test("Socket.IO repeat references require freezing and preserve strict wrappers 
     count: 1,
     steps: [leaf()],
   };
-  assert.throws(() => validateRepeatGraph(nested));
+  assert.equal(validateRepeatGraph(nested), true);
   const duplicate = graph();
   duplicate[0].steps[0].id = "group";
   assert.throws(() => validateRepeatGraph(duplicate), /重复/);
