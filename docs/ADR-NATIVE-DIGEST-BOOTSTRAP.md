@@ -115,3 +115,13 @@ same credential values used in the private native roundtrip fixtures.
 - All runtime evidence comes from ordinary CI; local checks are static/syntax/
   formatting. Feature and root green results require complete job/artifact
   evidence and actual portable-package byte verification at root integration.
+
+## Integrated OpenAPI boundary
+
+The integration's existing OpenAPI definition projector deliberately rejects
+Digest with HTTP 400 rather than silently exporting an unauthenticated operation.
+Its root-only owner workflow therefore requires the exact redacted rejection,
+no partial document, unchanged persisted project and zero peer requests for that
+export. The feature baseline's older public exporter is a different contract.
+Both retain all native-format roundtrip, frozen/restart and SDK/CLI assertions;
+no production OpenAPI behavior is changed to satisfy this test.

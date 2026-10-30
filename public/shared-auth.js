@@ -5,6 +5,9 @@ function validateSharedAuth(auth) {
   if (new TextEncoder().encode(JSON.stringify(auth)).length > 65536)
     throw Error("共享认证最多64KiB");
   for (const [key, value] of Object.entries(auth)) {
+    // validateAuth already strictly validates this sole nested model, including
+    // type, own data descriptors, exact keys, algorithm and boolean retry.
+    if (key === "challengePolicy" && auth.type === "digest") continue;
     if (
       ["__proto__", "prototype", "constructor"].includes(key) ||
       !["string", "number", "boolean"].includes(typeof value)

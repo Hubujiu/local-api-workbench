@@ -362,11 +362,22 @@ test(
       assert.equal(f.seen.length, count);
       await f.restart();
       assert.deepEqual(authByName(await f.app.store.get(second.id)), expected);
+      const beforePublicExport = await f.app.store.get(second.id);
       const oas = await f.call(
         "/api/projects/" + second.id + "/export?format=openapi",
+        "GET",
+        undefined,
+        400,
       );
-      // Existing OpenAPI exporter has no Digest mechanism projection. Assert
-      // same-auth public document secrecy without inventing a security scheme.
+      // The integrated OpenAPI definition projector rejects Digest rather than
+      // silently exporting an unauthenticated operation. Preserve that guard.
+      assert.deepEqual(oas, {
+        error: "OpenAPI 不支持此认证机制的定义投影，请使用项目备份",
+      });
+      assert.deepEqual(await f.app.store.get(second.id), beforePublicExport);
+      assert.equal(f.seen.length, count);
+      // Check the same real credential definitions against the public error;
+      // the exact object above also excludes a partial exported document.
       const publicAuth = JSON.stringify(oas);
       for (const auth of Object.values(expected)) {
         assert(!publicAuth.includes(auth.username));
