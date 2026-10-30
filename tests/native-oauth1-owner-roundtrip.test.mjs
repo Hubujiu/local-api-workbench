@@ -644,7 +644,8 @@ test(
       request = structuredClone(
         project.requests.find((r) => r.name === "json-query"),
       );
-    request.url = f.url + "/bad?dup=1&dup=2&empty=";
+    // Imported query rows already hold the original pairs; change only path.
+    request.url = f.url + "/bad";
     request.auth.consumerSecret = "wrong-secret";
     const result = await f.call(
       "/api/projects/" + project.id + "/execute",
