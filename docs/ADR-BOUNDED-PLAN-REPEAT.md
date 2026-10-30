@@ -241,3 +241,10 @@ concurrent isolation, bounded outcomes, cancellation/deadline, backup/restore/
 restart, and unknown journal outcome recovery without replay. Local static and
 pure graph checks alone are not acceptance; whole workflows await ordinary CI.
 Root-only send-empty options and TCP delimiter support are not backported here.
+
+Root WS/SSE composition additionally specifies the existing `sendEmptyMessage`
+option through two actual empty WS frames per run, downstream extraction,
+live-definition edits, backup/restore/restart, and renewed credential preflight.
+It preserves the root wire snapshot option guard and TCP delimiter workflows;
+these existing root options are not added to PR44's older feature dependency base.
+This is a test specification pending exact-root CI, not an executed acceptance.

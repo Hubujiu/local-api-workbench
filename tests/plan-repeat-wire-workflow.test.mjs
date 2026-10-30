@@ -960,3 +960,83 @@ test(
     await until(() => wss.clients.size === 0 && f.streams.size === 0);
   },
 );
+
+// Root composition only: PR44's feature base predates sendEmptyMessage.
+test("root repeated explicit empty WS frames stay frozen through live edits and backup/restart", async (t) => {
+  const f = await fixture(t),
+    project = await f.app.store.get(f.project.id);
+  project.protocols[0].sendEmptyMessage = true;
+  await f.app.store.save(project);
+  const input = f.definition();
+  input.steps[0].steps[0].protocol.message = "";
+  const made = await f.post(`projects/${project.id}/plans`, input);
+  assert.equal(made.status, 200);
+  assert.equal(
+    made.value.steps[0].steps[0].protocol.definition.sendEmptyMessage,
+    true,
+  );
+  const live = await f.app.store.get(project.id);
+  live.protocols[0].sendEmptyMessage = false;
+  live.protocols[0].url = "ws://127.0.0.1:1/live-only";
+  await f.app.store.save(live);
+  const invoke = (projectId) =>
+    f.post(`projects/${projectId}/run`, {
+      planId: made.value.id,
+      protocolCredentials: credentials(),
+    });
+  const owner = await invoke(project.id);
+  assert.equal(owner.status, 200);
+  checkRun(owner.value);
+  assert.deepEqual(
+    f.wsRows.map((x) => x.message),
+    ["", ""],
+  );
+  assert.deepEqual(
+    f.consumed.map((x) => x.ws),
+    ["wire-1", "wire-2"],
+  );
+  for (const index of [0, 3]) {
+    assert.equal(owner.value.results[index].protocol.message, "");
+    assert.equal(
+      owner.value.results[index].protocol.definition.sendEmptyMessage,
+      true,
+    );
+  }
+  const exported = await fetch(
+    `${f.app.url}/api/projects/${project.id}/export`,
+    {
+      headers: { "x-local-token": f.app.token },
+    },
+  );
+  assert.equal(exported.status, 200);
+  const restored = await f.post("restore", { document: await exported.json() });
+  assert.equal(restored.status, 201);
+  await f.restart();
+  const before = f.counts();
+  assert.notEqual(
+    (
+      await f.post(`projects/${restored.value.id}/run`, {
+        planId: made.value.id,
+      })
+    ).status,
+    200,
+  );
+  assert.deepEqual(f.counts(), before);
+  const replay = await invoke(restored.value.id);
+  assert.equal(replay.status, 200);
+  checkRun(replay.value);
+  assert.equal(replay.value.planHash, owner.value.planHash);
+  assert.deepEqual(
+    f.wsRows.map((x) => x.message),
+    ["", "", "", ""],
+  );
+  assert.deepEqual(
+    f.consumed.map((x) => x.ws),
+    ["wire-1", "wire-2", "wire-3", "wire-4"],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(await new Store(f.root).get(restored.value.id)),
+    /Bearer repeat-fixture-private-/,
+  );
+  await until(() => f.wss.clients.size === 0 && f.streams.size === 0);
+});
