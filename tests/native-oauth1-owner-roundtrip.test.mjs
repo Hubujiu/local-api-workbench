@@ -251,6 +251,7 @@ function specifications(callback) {
         signatureMethod: "HMAC-SHA256",
         addParamsToHeader: true,
         disableHeaderEncoding: true,
+        includeBodyHash: false,
         addEmptyParamsToSign: false,
         verifier: "raw+%20",
       }),
@@ -524,6 +525,7 @@ test(
     const tools = new Set(
       (await client.listTools()).tools.map((tool) => tool.name),
     );
+    const mcpRecords = [];
     for (const [name, args] of [
       [
         "localapi_execute_api",
@@ -545,7 +547,11 @@ test(
       assert(tools.has(name), name);
       const result = await client.callTool({ name, arguments: args });
       assert.notEqual(result.isError, true, JSON.stringify(result));
-      assert.equal(JSON.parse(result.content[0].text).status, "passed");
+      const output = JSON.parse(result.content[0].text);
+      assert.equal(output.status, "passed");
+      const native = name === "apipost_execute_api";
+      assert.equal(native ? output.record_saved : output.recordSaved, true);
+      mcpRecords.push(native ? output.run_id : output.id);
     }
     const denied = await client.callTool({
       name: "localapi_execute_api",
@@ -559,6 +565,12 @@ test(
     assert.equal(f.seen.length, 32);
     await f.restart();
     const final = await f.app.store.get(last.id);
+    for (const id of mcpRecords) {
+      const saved = final.history.find((entry) => entry.id === id);
+      assert(saved);
+      assert.equal(saved.source, "mcp");
+      assert.equal(saved.status, "passed");
+    }
     assert.equal(final.runs.length, 3);
     assert(final.runs.every((run) => run.status === "passed"));
     assert.deepEqual(authByName(final), expected);
@@ -686,11 +698,14 @@ test(
     assert.equal(run.status, "cancelled");
     assert.equal(run.recordSaved, true);
     assert.equal(f.seen.length, 1);
-    assert(
-      (await f.app.store.get(project.id)).runs.some(
-        (item) => item.id === run.id,
-      ),
+    assert.equal(run.results.length, 1);
+    await f.restart();
+    const saved = (await f.app.store.get(project.id)).runs.find(
+      (item) => item.id === run.id,
     );
+    assert(saved);
+    assert.equal(saved.status, "cancelled");
+    assert.equal(saved.results.length, 1);
     assert.deepEqual(f.errors, []);
   },
 );
