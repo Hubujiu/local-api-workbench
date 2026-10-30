@@ -1,3 +1,4 @@
+import { exportApipostAsap } from "./apipost-asap-auth.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
 import { importJwtConfig } from "../public/jwt-auth-model.js";
@@ -53,6 +54,7 @@ export function exportExtendedApipostAuth(value) {
     if ((!type && "type" in value) || (type && !Object.hasOwn(type, "value")))
       throw Error("原生认证导出不接受访问器定义；请使用项目备份");
     if (type?.value === "jwt") return exportJwtDefinition(value);
+    if (type?.value === "asap") return exportApipostAsap(value);
   }
   if (!["aws", "hawk", "edgegrid"].includes(value?.type)) return undefined;
   const fail = () => {

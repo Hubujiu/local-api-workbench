@@ -33,7 +33,11 @@ also lacks Workbench's injected JWT typ header; no wire-equivalence claim follow
 Native own fields are exactly `alg`, `iss`, `aud`, `kid`, `privateKey`, `sub`,
 `claims`, `exp`. Workbench own fields are exactly `type: "asap"` and the same
 fields with `ttlSeconds` replacing `exp`. Unknown fields fail closed, even empty;
-no fields are silently dropped. Direct adapter inputs accept only plain or
+no fields are silently dropped from the selected definition. These strict rules
+apply to the ASAP section and Workbench definition, not the enclosing native auth
+envelope: inactive other sections may coexist and are neither read nor executed.
+The adapter reads the type/asap selectors via data descriptors. Direct selected
+definition inputs accept only plain or
 null-prototype objects with own enumerable data properties; reject symbols,
 nonenumerable properties, accessors and custom prototypes without invoking
 getters or toJSON. This is a helper boundary, not an arbitrary-JavaScript
