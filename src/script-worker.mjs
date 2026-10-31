@@ -1,6 +1,10 @@
 import { performance } from "node:perf_hooks";
 import { observeBootstrap } from "./script-bootstrap-diagnostics.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
+import {
+  grpcScriptContextSource,
+  normalizeGrpcScriptContext,
+} from "./grpc-script-context.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
@@ -98,6 +102,17 @@ const receive = (message) => {
 };
 parentPort.on("message", receive);
 try {
+  const grpcContext =
+    workerData.grpcContext === undefined
+      ? undefined
+      : normalizeGrpcScriptContext(workerData.grpcContext);
+  if (
+    grpcContext !== undefined &&
+    (workerData.input.allowNetwork ||
+      workerData.requestLimit !== 0 ||
+      workerData.input.response !== undefined)
+  )
+    throw Error("gRPC脚本不能绑定HTTP能力");
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
   const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
   const facadeBundle = useURLFacade
@@ -562,6 +577,14 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (grpcContext !== undefined)
+      install(
+        "(" +
+          grpcScriptContextSource +
+          ")({context:JSON.parse(" +
+          JSON.stringify(JSON.stringify(grpcContext)) +
+          "),pm,apt,request});",
+      );
     run(compatibilitySources.join(";\n"));
   });
   let remaining = deadline - monotonicNow();
@@ -581,7 +604,10 @@ try {
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   for (const [index, code] of [
     library,
-    "(async()=>{\n" + workerData.code + "\n})()",
+    "(async()=>{\n" +
+      (grpcContext !== undefined ? '"use strict";\n' : "") +
+      workerData.code +
+      "\n})()",
   ].entries()) {
     const result = measuredBounded(
       index === 0 ? "function-library" : "user-script",

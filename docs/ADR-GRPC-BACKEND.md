@@ -4,7 +4,7 @@
 
 Use the maintained Apache-2.0 `@grpc/grpc-js@1.14.6` and `@grpc/proto-loader@0.8.1`, with BSD-3-Clause `protobufjs@7.6.6`, rather than reimplement HTTP/2 framing, Protobuf encoding, TLS or streaming. Original-application static inspection identified schema discovery, reflection and request/stream entrypoints; that is feature evidence, not proof of runtime equivalence. The older public Apipost wrapper remains a reference, not an unreviewed dependency replacement.
 
-This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. It does not yet implement native Apipost gRPC project migration, interactive long-lived streaming, a frontend, or gRPC-plan scripts. Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
+This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. It does not yet implement native Apipost gRPC project migration, interactive long-lived streaming, a frontend. Canonical versioned gRPC-plan scripts are specified in [ADR-GRPC-PLAN-SCRIPTS.md](ADR-GRPC-PLAN-SCRIPTS.md). Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
 
 ## API and persistence
 
@@ -42,7 +42,7 @@ Acceptance includes real service reflection, explicit v1alpha negotiation, denia
 
 ## Frozen plan execution and MCP
 
-A plan can contain a discriminated `type: "grpc"` step alongside HTTP steps. Its `grpc` field contains a frozen complete `definition` and bounded `messages`; saving through the HTTP/MCP plan API also accepts a project-local `definitionId`, resolved immediately into that snapshot. Later deletion or changes to the source definition do not change saved execution. The target and schema are not interpolated; only message values use existing scoped variables. Unknown fields, scripts and saved TLS/metadata credentials are rejected instead of silently dropped.
+A plan can contain a discriminated `type: "grpc"` step alongside HTTP steps. Its `grpc` field contains a frozen complete `definition` and bounded `messages`; saving through the HTTP/MCP plan API also accepts a project-local `definitionId`, resolved immediately into that snapshot. Later deletion or changes to the source definition do not change saved execution. The target and schema are not interpolated; only message values use existing scoped variables. Unknown fields, generic HTTP scripts and saved TLS/metadata credentials are rejected instead of silently dropped. Opt-in `grpcScripts` uses the separate versioned native contract described in [ADR-GRPC-PLAN-SCRIPTS.md](ADR-GRPC-PLAN-SCRIPTS.md).
 
 HTTP plan execution, authorized MCP flow execution and the explicit CLI runner supply the gRPC executor. A bare `runPlan` caller without that capability gets a failed step before any connection. MCP adds read-only definition summary/detail tools; existing project allowlists and write-plus-execute gates remain in force. HTTP executions and HTTP-hosted MCP share the existing five-call gRPC coordinator; standalone MCP also bounds its own dispatcher's calls to five. HTTP plan run IDs cannot overwrite an active controller. Cancellation propagates to the transport and frees the slot.
 
@@ -50,7 +50,7 @@ Records retain native `grpcResult.status.code` and messages, not fabricated HTTP
 
 The ordinary plan history stores the complete snapshot and per-step evidence. HTTP/MCP/CLI report `recordSaved:false` and the storage error if persistence fails after execution, without replaying network effects; CLI also exits nonzero. A successful RPC is not mislabeled as a transport failure solely because storage failed.
 
-Acceptance exercises real gRPC → extraction → real HTTP, MCP save/execute/reload/backup and project isolation, concurrent variable isolation, remote refusal and expected native status, cancellation and run-ID collision, a real CLI child process, malformed input rejection and injected storage failure with exactly one observed remote invocation. Per-step gRPC scripts and CLI credential injection remain explicit unsupported capabilities, not implicit fallbacks to HTTP.
+Acceptance exercises real gRPC → extraction → real HTTP, MCP save/execute/reload/backup and project isolation, concurrent variable isolation, remote refusal and expected native status, cancellation and run-ID collision, a real CLI child process, malformed input rejection and injected storage failure with exactly one observed remote invocation. Canonical per-step gRPC scripts now use the versioned native contract; native-script migration and CLI credential injection remain explicit unsupported capabilities in this milestone, not implicit fallbacks to HTTP.
 
 ## Request-scoped plan credentials
 

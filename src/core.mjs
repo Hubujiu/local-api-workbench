@@ -1,6 +1,10 @@
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
+  runScriptedGrpcStep,
+  validatePlanGrpcScripts,
+} from "./grpc-plan-scripts.mjs";
+import {
   snapshotSocketIOStep,
   socketioPlanCredentials,
 } from "./socketio-plan.mjs";
@@ -378,6 +382,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  validatePlanGrpcScripts(plan.steps);
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
@@ -450,6 +455,7 @@ export async function runPlan(
 ) {
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
+  validatePlanGrpcScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -504,7 +510,31 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
-      if (["grpc", "socketio", "protocol"].includes(step.type)) {
+      if (
+        step.type === "grpc" &&
+        step.grpcScripts &&
+        (step.grpcScripts.before?.trim() || step.grpcScripts.after?.trim())
+      ) {
+        await runScriptedGrpcStep({
+          step,
+          record,
+          scopes,
+          functions: snapshot.functions || [],
+          executionContext,
+          credentials: credentials.get(step.id),
+          signal,
+          executeGrpc,
+          interpolate,
+          evaluateAssertions,
+          extractResponseValue,
+          onScopeChanges,
+          publishScopes: (accepted) => {
+            scopes = accepted;
+            committedScopes = structuredClone(scopes);
+            replaceVariables(vars, effectiveScopes(scopes));
+          },
+        });
+      } else if (["grpc", "socketio", "protocol"].includes(step.type)) {
         const isGrpc = step.type === "grpc";
         const validated = isGrpc
           ? snapshotGrpcStep(step)

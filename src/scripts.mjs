@@ -10,6 +10,8 @@ import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
+import { normalizeGrpcScriptContext } from "./grpc-script-context.mjs";
+import { isDeepStrictEqual } from "node:util";
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
@@ -56,7 +58,7 @@ function scriptBudgets({
 
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
-  const { signal, cookieSession } = options;
+  const { signal, cookieSession, grpcContext } = options;
   const {
     activityBudgetMs,
     wallBudgetMs,
@@ -66,6 +68,23 @@ export function runScript(code, input, options = {}) {
     jobLimit,
     assertionLimit,
   } = scriptBudgets(options);
+  if (input.grpcContext !== undefined)
+    throw Error("协议上下文只能由执行入口提供");
+  if (grpcContext !== undefined) {
+    if (
+      input.allowNetwork ||
+      requestLimit !== 0 ||
+      input.response !== undefined ||
+      input.finalBody !== undefined ||
+      input.responseOriginals != null ||
+      input.responseWire !== undefined ||
+      Object.keys(input.request || {}).some(
+        (key) => !["id", "name"].includes(key),
+      )
+    )
+      throw Error("gRPC脚本不能绑定HTTP网络或响应能力");
+    normalizeGrpcScriptContext(grpcContext);
+  }
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -103,6 +122,10 @@ export function runScript(code, input, options = {}) {
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
+        grpcContext:
+          grpcContext === undefined
+            ? undefined
+            : normalizeGrpcScriptContext(grpcContext),
         code,
         input,
         activityBudgetMs,
@@ -139,6 +162,16 @@ export function runScript(code, input, options = {}) {
         reject(error);
       } else {
         try {
+          if (
+            grpcContext !== undefined &&
+            (!isDeepStrictEqual(result.request, input.request || {}) ||
+              result.finalBody !== undefined ||
+              result.responseOverride != null ||
+              result.responseOriginals != null ||
+              result.visualization != null ||
+              networkRequests.length)
+          )
+            throw Error("gRPC脚本不能输出HTTP请求/响应修改");
           resolve({
             ...result,
             responseOverride: validateResponseMutation(
