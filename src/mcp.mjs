@@ -1,4 +1,8 @@
 import {
+  assertNativeHTTPPlan,
+  assertNativeHTTPResult,
+} from "./native-mcp-http-shape.mjs";
+import {
   executeNativeEnvironmentTool,
   resolveNativeEnvironment,
 } from "./native-mcp-environments.mjs";
@@ -28,6 +32,13 @@ import {
   listExecutionHistory,
   findExecutionResult,
 } from "./execution-history.mjs";
+import {
+  executionResultChunk,
+  executionResultChunkArguments,
+  executionResultChunkError,
+  EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+  EXECUTION_RESULT_CHUNK_MAX_BYTES,
+} from "./execution-result-chunk.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
@@ -270,6 +281,31 @@ export function createMCP({
     ...projectArg,
     runId: str,
   });
+  addTool(
+    "get_execution_result_chunk",
+    "分块读取已保存的完整 JSON 执行证据；后续分块必须携带首次返回的 SHA-256，不重放执行",
+    {
+      projectId: { type: "string", minLength: 1, maxLength: 4096 },
+      runId: { type: "string", minLength: 1, maxLength: 4096 },
+      offsetBytes: {
+        type: "integer",
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+      maxBytes: {
+        type: "integer",
+        minimum: 1,
+        maximum: EXECUTION_RESULT_CHUNK_MAX_BYTES,
+        default: EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+      },
+      expectedSha256: {
+        type: "string",
+        pattern: "^[a-f0-9]{64}$",
+        description: "首次响应的 SHA-256；offsetBytes 大于 0 时必填",
+      },
+    },
+    ["projectId", "runId", "offsetBytes"],
+  );
   if (write) {
     addTool("create_project", "创建并授权新本地项目", { name: str });
     addTool("create_execution_flow", "创建新计划", {
@@ -364,6 +400,8 @@ export function createMCP({
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
+      if (params.name === "localapi_get_execution_result_chunk")
+        args = executionResultChunkArguments(args);
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
@@ -602,6 +640,12 @@ export function createMCP({
                 ),
               };
               break;
+            case "localapi_get_execution_result_chunk":
+              output = executionResultChunk(
+                findExecutionResult(p, args.runId),
+                args,
+              );
+              break;
             case "localapi_get_execution_result":
               output = findExecutionResult(p, args.runId);
               break;
@@ -658,6 +702,8 @@ export function createMCP({
               await store.save(p);
               break;
             case "localapi_list_execution_flows":
+              if (nativeName)
+                for (const plan of p.plans) assertNativeHTTPPlan(plan);
               output = p.plans.map(
                 ({
                   id,
@@ -721,6 +767,7 @@ export function createMCP({
                   },
                 ],
               });
+              if (nativeName) assertNativeHTTPPlan(plan);
               output = await runPlan(
                 plan,
                 debugEnvironment(p, environmentId, debugEnvironments).variables,
@@ -776,6 +823,7 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              if (nativeName) assertNativeHTTPPlan(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -868,7 +916,8 @@ export function createMCP({
             output,
             kind === "execute_api" ? "api" : "flow",
           );
-        else if (kind === "get_execution_result")
+        else if (kind === "get_execution_result") {
+          assertNativeHTTPResult(output);
           output = {
             run: {
               ...output,
@@ -877,6 +926,7 @@ export function createMCP({
               workbench_evidence_format: 1,
             },
           };
+        }
       }
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -884,7 +934,15 @@ export function createMCP({
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text:
+              params.name === "localapi_get_execution_result_chunk"
+                ? executionResultChunkError(e)
+                : e.message,
+          },
+        ],
       });
     } finally {
       unlockPlan?.();

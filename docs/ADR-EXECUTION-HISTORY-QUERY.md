@@ -28,6 +28,8 @@ arguments remain Local API Workbench contracts, not a claim of wire compatibilit
 - `localapi_get_execution_result` can retrieve either persisted record kind.
   Duplicate IDs across collections fail explicitly rather than selecting the
   wrong artifact. Legacy `localapi_get_run` remains flow-only.
+- Canonical `localapi_get_execution_result_chunk` supplies bounded, digest-pinned
+  persisted-record readback; see [chunk contract and limits](ADR-MCP-EXECUTION-RESULT-CHUNKS.md).
 - Existing project grants, read/write/execute capabilities and transport checks
   are unchanged. Storage retention bounds still apply; this is not a new archive
   or pagination system.

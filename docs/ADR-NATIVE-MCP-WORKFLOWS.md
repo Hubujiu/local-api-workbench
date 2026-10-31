@@ -78,6 +78,31 @@ is stored but native views return "" for null; false/0 remain intact. Deletion
 requires confirm:true and an existing key, and removes both maps. Dangerous keys
 are rejected and native keys are trimmed.
 
+### Omitted variable fields preserve stored null
+
+A later description-only or one-field native upsert previously applied nullish
+fallback to the omitted field: a stored current `null` could become its initial
+value, and an initial `null` could become `""`. This was a saved-data mutation,
+not just the documented native display conversion. Selection now distinguishes
+an existing own current value and an existing initial row from missing data.
+Explicit JSON null survives omitted updates in both environment and global maps.
+Native output still renders null as `""`; canonical typed reads and backup data
+remain the independent persistence oracle. No dynamic variable evaluation changes.
+
+The existing genuinely missing-value rules stay unchanged: a new native key with
+only `value` has empty current value; a runtime-only legacy key does not infer its
+current value as an initial definition; a definition-only legacy key without an
+own current value retains the prior `old.initialValue ?? ""` fallback.
+
+Pure helper fixtures cover those boundaries, null/false/zero/empty values, partial
+updates and rejected saves without importing the application or script runtime.
+The added official SDK HTTP and stdio lifecycle specifications cover global and
+environment fields, canonical/owner/native reads, unchanged rejected writes,
+read-only/project isolation, owner backup/restore, process restart and separately
+authorized restored-project updates. They enable writes but not execution and
+leave histories empty. Only pure tests and static checks are run locally for
+this fix; exact-head ordinary CI must establish the real workflow outcomes.
+
 Environment base_url is the actual default service address, not a baseUrl
 variable. Shared services can be created or renamed without an environment;
 setting an address requires one. Names are shared and URLs are per environment,

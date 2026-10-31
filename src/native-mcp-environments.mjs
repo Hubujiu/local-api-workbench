@@ -301,12 +301,14 @@ export async function executeNativeEnvironmentTool(store, p, kind, args) {
         key,
         initialValue: own(args, "value")
           ? args.value
-          : (old?.initialValue ?? ""),
+          : old
+            ? old.initialValue
+            : "",
         currentValue: own(args, "current_value")
           ? args.current_value
-          : ((own(values, key) ? values[key] : undefined) ??
-            old?.initialValue ??
-            ""),
+          : own(values, key)
+            ? values[key]
+            : (old?.initialValue ?? ""),
         description: own(args, "description")
           ? args.description
           : old?.description || "",

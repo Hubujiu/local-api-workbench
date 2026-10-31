@@ -1,3 +1,4 @@
+import { assertNativeHTTPResult } from "./native-mcp-http-shape.mjs";
 import { filteredExecutionHistory } from "./execution-history.mjs";
 import {
   activeAPIFolders,
@@ -352,6 +353,7 @@ export function nativeAPIDetail(project, apiId) {
   };
 }
 export function nativeRunResult(projectId, run, scope = "flow") {
+  assertNativeHTTPResult(run);
   const results = run.results || [],
     failed = results
       .filter((r) => r.status !== "passed")
@@ -386,6 +388,7 @@ export function nativeExecutionHistory(project, args) {
   if (args.status !== undefined && !["passed", "failed"].includes(args.status))
     throw Error("原版记录状态无效");
   const rows = filteredExecutionHistory(project, args);
+  for (const { record } of rows) assertNativeHTTPResult(record);
   return {
     total: rows.length,
     records: rows.slice(0, args.limit ?? 20).map(({ record, scope }) => {

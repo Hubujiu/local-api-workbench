@@ -1,10 +1,12 @@
+import { parseImportDocumentText } from "./import-document-parser.mjs";
+import { supportedOpenAPIPathItems } from "./openapi-operation-admission.mjs";
 import { ensureNativeDefaults } from "./native-mcp-environments.mjs";
 import { importIntoProject, resolveLocalReferences } from "./core.mjs";
 const methods = ["get", "post", "put", "patch", "delete", "head", "options"];
 export function syncMCPOpenAPI(project, args, { native = false } = {}) {
   const document =
     typeof args.document === "string"
-      ? JSON.parse(args.document)
+      ? parseImportDocumentText(args.document)
       : structuredClone(args.document);
   if (
     !document ||
@@ -12,7 +14,7 @@ export function syncMCPOpenAPI(project, args, { native = false } = {}) {
     Array.isArray(document) ||
     !/^3\.(0|1)(\.|$)/.test(document.openapi || "")
   )
-    throw Error("仅支持 OpenAPI 3.0 或 3.1 JSON");
+    throw Error("仅支持 OpenAPI 3.0 或 3.1 JSON/YAML");
   const mode = args.coverMode ?? "url_and_folder";
   if (!["url_and_folder", "url", "ignore", "both"].includes(mode))
     throw Error("不支持该同步覆盖方式；clear 尚未提供");
@@ -34,7 +36,7 @@ export function syncMCPOpenAPI(project, args, { native = false } = {}) {
   )
     throw Error("目标目录不存在");
   const resolved = resolveLocalReferences(document);
-  const operations = Object.entries(resolved.paths || {}).flatMap(
+  const operations = supportedOpenAPIPathItems(resolved).flatMap(
     ([url, item]) =>
       Object.keys(item)
         .filter((method) => methods.includes(method))
