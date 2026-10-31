@@ -1,4 +1,8 @@
 import {
+  assertNativeHTTPPlan,
+  assertNativeHTTPResult,
+} from "./native-mcp-http-shape.mjs";
+import {
   executeNativeEnvironmentTool,
   resolveNativeEnvironment,
 } from "./native-mcp-environments.mjs";
@@ -706,6 +710,8 @@ export function createMCP({
               await store.save(p);
               break;
             case "localapi_list_execution_flows":
+              if (nativeName)
+                for (const plan of p.plans) assertNativeHTTPPlan(plan);
               output = p.plans.map(
                 ({
                   id,
@@ -769,6 +775,7 @@ export function createMCP({
                   },
                 ],
               });
+              if (nativeName) assertNativeHTTPPlan(plan);
               output = await runPlan(
                 plan,
                 debugEnvironment(p, environmentId, debugEnvironments).variables,
@@ -824,6 +831,7 @@ export function createMCP({
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              if (nativeName) assertNativeHTTPPlan(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -916,7 +924,8 @@ export function createMCP({
             output,
             kind === "execute_api" ? "api" : "flow",
           );
-        else if (kind === "get_execution_result")
+        else if (kind === "get_execution_result") {
+          assertNativeHTTPResult(output);
           output = {
             run: {
               ...output,
@@ -925,6 +934,7 @@ export function createMCP({
               workbench_evidence_format: 1,
             },
           };
+        }
       }
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],

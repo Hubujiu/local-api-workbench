@@ -1,3 +1,4 @@
+import { assertNativeHTTPPlan } from "./native-mcp-http-shape.mjs";
 import { resolveNativeEnvironment } from "./native-mcp-environments.mjs";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -138,6 +139,7 @@ export function normalizeNativeMCPState(
   return state;
 }
 export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
+  if (previous !== undefined) assertNativeHTTPPlan(previous);
   const update = Boolean(previous);
   const name = own(args, "name") ? args.name : previous?.name;
   if (typeof name !== "string" || !name.trim() || name.length > 200)
@@ -243,6 +245,7 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
   };
 }
 export function nativeFlowView(projectId, plan) {
+  assertNativeHTTPPlan(plan);
   return {
     flow_id: plan.id,
     project_id: projectId,
