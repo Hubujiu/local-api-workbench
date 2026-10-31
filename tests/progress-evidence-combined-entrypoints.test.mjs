@@ -1,4 +1,5 @@
-// Root-only acceptance: PR19 progress stops intersect native aliases, repeat and PR30.
+// Root-only acceptance: native HTTP aliases and canonical mixed/repeat plans
+// retain PR19 progress fail-stop and PR30 persistence receipts.
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -25,6 +26,7 @@ for (const native of [false, true])
         const root = await mkdtemp(path.join(tmpdir(), "combined-progress-"));
         const journal = path.join(root, ".mcp-activities");
         let hits = 0,
+          warmHits = 0,
           tcpHits = 0,
           client,
           activity,
@@ -34,7 +36,14 @@ for (const native of [false, true])
           socket.on("data", (data) => socket.end(data));
         });
         await new Promise((r) => tcp.listen(0, "127.0.0.1", r));
-        const peer = http.createServer(async (_req, res) => {
+        const peer = http.createServer(async (req, res) => {
+          if (req.url === "/warm") {
+            warmHits++;
+            req.resume();
+            res.setHeader("content-type", "application/json");
+            res.end('{"warm":true}');
+            return;
+          }
           hits++;
           try {
             await rename(journal, journal + "-kept");
@@ -77,14 +86,25 @@ for (const native of [false, true])
             message: "real-wire",
           },
         };
-        const steps = [wire, { id: "http", request }];
+        const nativePrefix = {
+          id: "warm",
+          request: {
+            id: "warm-request",
+            name: "native HTTP prefix",
+            url: request.url + "/warm",
+          },
+        };
         project.requests = [request];
         project.plans = [
           snapshotPlan({
             id: "flow",
-            name: "mixed stop",
+            name: native ? "HTTP stop" : "mixed stop",
             steps: native
-              ? [...steps, { id: "later", request }]
+              ? [
+                  nativePrefix,
+                  { id: "http", request },
+                  { id: "later", request },
+                ]
               : [
                   wire,
                   {
@@ -228,7 +248,8 @@ for (const native of [false, true])
         }
         assert.equal(broken, true);
         assert.equal(hits, 1);
-        assert.equal(tcpHits, kind === "flow" ? 1 : 0);
+        assert.equal(tcpHits, kind === "flow" && !native ? 1 : 0);
+        assert.equal(warmHits, kind === "flow" && native ? 1 : 0);
         await rm(journal);
         await rename(journal + "-kept", journal);
         const recovered = await new Store(root).get(project.id);
@@ -250,11 +271,19 @@ for (const native of [false, true])
         if (kind === "flow") {
           assert.equal(record.results.length, 2);
           assert(record.results.every((r) => r.status === "passed"));
-          assert.equal(record.results[0].protocolResult.status, "completed");
-          assert.equal(
-            record.results[0].protocolResult.result.body,
-            "real-wire",
-          );
+          if (native) {
+            assert.equal(record.results[0].response.status, 200);
+            assert.deepEqual(JSON.parse(record.results[0].response.body), {
+              warm: true,
+            });
+            assert.equal(record.results[0].protocolResult, undefined);
+          } else {
+            assert.equal(record.results[0].protocolResult.status, "completed");
+            assert.equal(
+              record.results[0].protocolResult.result.body,
+              "real-wire",
+            );
+          }
           assert.equal(record.stopReason, "progress-failure");
           assert.deepEqual(record.snapshot, project.plans[0]);
           if (!native) {
@@ -307,5 +336,6 @@ for (const native of [false, true])
         assert.equal(denied.isError, true);
         assert.match(denied.content[0].text, /未授权/);
         assert.equal(hits, 1);
-        assert.equal(tcpHits, kind === "flow" ? 1 : 0);
+        assert.equal(tcpHits, kind === "flow" && !native ? 1 : 0);
+        assert.equal(warmHits, kind === "flow" && native ? 1 : 0);
       });
