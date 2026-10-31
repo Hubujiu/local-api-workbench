@@ -15,6 +15,7 @@ import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { mergeImportedDocuments } from "./apipost-documents.mjs";
 import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
+import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -415,6 +416,10 @@ export function evaluateAssertions(response, assertions = []) {
 export function snapshotPlan(plan) {
   const importedNativeFlowSource = readImportedNativeFlowSource(plan);
   const nativeMCPBudget = { bytes: 0 };
+  for (const step of plan.steps || []) {
+    if (step.request?.auth && "nativeOAuth2" in step.request.auth)
+      validateAuth(step.request.auth);
+  }
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -521,6 +526,11 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  // Admit even disabled native definitions before cloning or interpolation.
+  for (const step of plan.steps || []) {
+    if (step.request?.auth && "nativeOAuth2" in step.request.auth)
+      validateAuth(step.request.auth);
+  }
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   // New static policy must not be erased by cloning or laundered through
@@ -1559,6 +1569,15 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  // OpenAPI cannot retain this opt-in native token policy or its grant metadata.
+  for (const auth of [
+    project.settings?.globalAuth,
+    ...Object.values(project.settings?.folderAuth || {}),
+    ...(project.requests || []).filter((r) => !r.deletedAt).map((r) => r.auth),
+  ]) {
+    if (auth && typeof auth === "object" && "nativeOAuth2" in auth)
+      throw Error("OpenAPI不能保留原生 OAuth2 定义，请使用项目备份");
+  }
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
@@ -1795,7 +1814,10 @@ export function toCurl(input) {
       quote((r.auth.username || "") + ":" + (r.auth.password || "")),
     );
   }
-  if (["bearer", "oauth2"].includes(r.auth.type))
+  if (
+    !applyNativeOAuth2(url, headers, r.auth) &&
+    ["bearer", "oauth2"].includes(r.auth.type)
+  )
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);

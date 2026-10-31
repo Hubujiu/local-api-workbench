@@ -1,7 +1,9 @@
+import { nativeOAuth2Definition } from "../public/native-oauth2-model.js";
 import { folderScopePaths } from "../public/folder-scopes.js";
 import { validateSharedAuthSettings } from "../public/shared-auth.js";
 export { validateSharedAuthSettings } from "../public/shared-auth.js";
 export function applySharedAuth(project, request) {
+  nativeOAuth2Definition(request.auth);
   const result = structuredClone(request);
   if (
     request.authSnapshot === true ||
