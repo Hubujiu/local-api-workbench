@@ -79,10 +79,21 @@ const profiles = [
     query,
   },
 ];
+function inertMetadata(origin) {
+  return {
+    callBackUrl: "not a URL {{unusedCallback}}",
+    authUrl: origin + "/must-not-acquire",
+    accessTokenUrl: origin + "/must-not-acquire-token",
+    clientId: "{{unusedClient}}",
+    clientSecret: "{{unusedSecret}}",
+    scope: "{{$randomUUID}}",
+    requestAccessTokenLocally: "1.0",
+  };
+}
 function collection(origin) {
   return {
     info: { name: "Postman OAuth2 saved-token subset" },
-    auth: oauth(profiles[0].fields),
+    auth: oauth({ ...inertMetadata(origin), ...profiles[0].fields }),
     item: [
       {
         name: "outer",
@@ -95,7 +106,14 @@ function collection(origin) {
                 method: "GET",
                 url: origin + "/" + profile.name + "?" + query,
                 header: [{ key: "Authorization", value: "Caller unchanged" }],
-                ...(index ? { auth: oauth(profile.fields) } : {}),
+                ...(index
+                  ? {
+                      auth: oauth({
+                        ...inertMetadata(origin),
+                        ...profile.fields,
+                      }),
+                    }
+                  : {}),
               },
             })),
           },
@@ -197,6 +215,8 @@ for (const version of ["1.1", "2"])
       for (const request of source.requests) {
         request.httpVersion = version;
         assert.equal(request.folder, "outer/inner");
+        for (const [key, value] of Object.entries(inertMetadata(f.origin)))
+          assert.equal(request.auth.postmanOAuth2[key], value);
       }
       await f.call("/api/projects/" + p.id, "PUT", source);
       source = await f.app.store.get(p.id);
@@ -243,6 +263,12 @@ for (const version of ["1.1", "2"])
       await f.restart();
       const disk = await f.app.store.get(restored.id);
       assert.deepEqual(disk.plans[0].steps, plan.steps);
+      for (const request of [
+        ...disk.requests,
+        ...disk.plans[0].steps.map((s) => s.request),
+      ])
+        for (const [key, value] of Object.entries(inertMetadata(f.origin)))
+          assert.equal(request.auth.postmanOAuth2[key], value);
       const replay = await f.call("/api/projects/" + disk.id + "/run", "POST", {
         planId: disk.plans[0].id,
         environmentId: disk.environments[0].id,
@@ -263,12 +289,12 @@ for (const version of ["1.1", "2"])
       assert.deepEqual(f.errors, []);
     },
   );
-test("Postman import rejects ambiguity/acquisition metadata atomically and exporters never erase policy", () => {
+test("Postman import rejects ambiguity/unsupported acquisition selectors atomically and exporters never erase policy", () => {
   const donor = collection("http://127.0.0.1:1"),
     p = { requests: [], settings: {}, environments: [] },
     before = structuredClone(p);
   for (const invalid of [
-    oauth({ accessToken: "ok", clientSecret: "private-sentinel" }),
+    oauth({ accessToken: "ok", grant_type: "private-sentinel" }),
     oauth({ accessToken: "ok", tokenType: "MAC" }),
     oauth({ accessToken: "ok", addTokenTo: "body" }),
     {
@@ -344,7 +370,7 @@ test(
             name: profile.name,
             request: {
               url: f.origin + "/" + profile.name + "?" + query,
-              auth: oauth(fields),
+              auth: oauth({ ...inertMetadata(f.origin), ...fields }),
               header: [{ key: "Authorization", value: "Caller unchanged" }],
             },
           },
@@ -359,7 +385,7 @@ test(
     }
     for (const fields of [
       { accessToken: "a", tokenType: "MAC" },
-      { accessToken: "a", clientId: "secret" },
+      { accessToken: "a", id: "secret" },
       { accessToken: "bad\r\n" },
     ]) {
       const donor = collection(f.origin);

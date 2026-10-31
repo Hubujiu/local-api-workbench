@@ -93,7 +93,7 @@ test("strict model rejects malformed markers, ambiguous rows, unsafe data, and u
   assert.equal(getterCalls, 0);
   for (const input of [
     [...rows({ accessToken: "a" }), ...rows({ accessToken: "b" })],
-    rows({ clientSecret: "secret" }),
+    rows({ grant_type: "secret" }),
     [{ key: "accessToken", value: "a", disabled: true }],
     [{ key: "accessToken", value: "a", type: "number" }],
     [getter],
@@ -331,4 +331,212 @@ test("baseline plan and MCP clone helpers preflight Postman policies without lau
     /Postman OAuth2/,
   );
   assert.deepEqual(safe, before);
+});
+
+const metadataFields = [
+  "callBackUrl",
+  "authUrl",
+  "accessTokenUrl",
+  "clientId",
+  "clientSecret",
+  "scope",
+  "requestAccessTokenLocally",
+];
+test("seven fixture-backed metadata strings roundtrip inert, without coercion or acquisition interpretation", () => {
+  const metadata = Object.fromEntries(
+    metadataFields.map((key) => [key, "{{missing_" + key + "}}"]),
+  );
+  const original = {
+    ...metadata,
+    accessToken: "{{token}}",
+    headerPrefix: "{{prefix}}",
+    addTokenTo: "header",
+    tokenType: "Bearer",
+  };
+  const input = Object.entries(original).map(([key, value]) => ({
+      key,
+      value,
+    })),
+    before = structuredClone(input);
+  const imported = importPostmanOAuth2(input);
+  assert.deepEqual(imported, auth(original));
+  assert.deepEqual(input, before);
+  const calls = [];
+  const resolved = resolvePostmanOAuth2(
+    imported,
+    (value) => {
+      calls.push(value);
+      if (value === "{{token}}") return "live";
+      if (value === "{{prefix}}") return "Custom";
+      throw Error("inert metadata was interpreted");
+    },
+    {},
+  );
+  assert.deepEqual(calls, ["{{token}}", "{{prefix}}"]);
+  for (const key of metadataFields) assert.equal(resolved[key], metadata[key]);
+  assert.deepEqual(JSON.parse(JSON.stringify(imported)), auth(original));
+  for (const key of metadataFields) {
+    for (const value of [
+      null,
+      undefined,
+      true,
+      1,
+      {},
+      [],
+      "x".repeat(8193),
+      "\ud800",
+      "bad\n",
+    ])
+      assert.throws(
+        () => postmanOAuth2Definition(auth({ [key]: value })),
+        /Postman OAuth2/,
+      );
+    let getterCalls = 0;
+    const definition = Object.defineProperty({ version: 1 }, key, {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        return "secret";
+      },
+    });
+    assert.throws(
+      () =>
+        postmanOAuth2Definition({ type: "oauth2", postmanOAuth2: definition }),
+      /Postman OAuth2/,
+    );
+    assert.equal(getterCalls, 0);
+  }
+  for (const unknown of ["id", "grant_type", "refreshOAuth2Token", "unknown"])
+    assert.throws(
+      () => importPostmanOAuth2([{ key: unknown, value: "no" }]),
+      /Postman OAuth2/,
+    );
+  assert.throws(
+    () => importPostmanOAuth2([...input, { key: "scope", value: "duplicate" }]),
+    /Postman OAuth2/,
+  );
+  assert.throws(
+    () =>
+      importPostmanOAuth2([{ key: "clientId", value: "a", disabled: true }]),
+    /Postman OAuth2/,
+  );
+});
+test("combined active and opaque values are bounded at 32768 UTF-8 bytes, including after active resolution", () => {
+  const exact = {
+    accessToken: "t".repeat(8192),
+    headerPrefix: "p".repeat(8192),
+    clientSecret: "s".repeat(8192),
+    scope: "雪".repeat(2730) + "aa",
+  };
+  assert.equal(
+    Object.values(exact).reduce(
+      (n, s) => n + new TextEncoder().encode(s).length,
+      0,
+    ),
+    32768,
+  );
+  assert.deepEqual(postmanOAuth2Definition(auth(exact)), {
+    version: 1,
+    ...exact,
+  });
+  assert.throws(
+    () => postmanOAuth2Definition(auth({ ...exact, clientId: "x" })),
+    /Postman OAuth2/,
+  );
+  assert.throws(
+    () => postmanOAuth2Definition(auth({ scope: "雪".repeat(2731) })),
+    /Postman OAuth2/,
+  );
+  const templated = { ...exact, accessToken: "{{token}}", clientId: "x" };
+  assert.doesNotThrow(() => postmanOAuth2Definition(auth(templated)));
+  assert.throws(
+    () =>
+      resolvePostmanOAuth2(
+        auth(templated),
+        (value) => (value === "{{token}}" ? "t".repeat(8192) : value),
+        {},
+      ),
+    /Postman OAuth2/,
+  );
+  assert.equal(templated.accessToken, "{{token}}");
+});
+
+test("MCP partial marked overrides reject accessors before JSON serialization and preserve ordinary inputs", async () => {
+  const { applyMCPInput } = await import("../src/mcp-request-input.mjs");
+  const request = {
+      auth: auth({ accessToken: "original", clientSecret: "opaque" }),
+    },
+    before = structuredClone(request);
+  let calls = 0;
+  const accessor = () => ({
+    enumerable: true,
+    get() {
+      calls++;
+      return "laundered";
+    },
+  });
+  const top = Object.defineProperty({}, "auth", accessor());
+  const policy = {
+    auth: Object.defineProperty({}, "postmanOAuth2", accessor()),
+  };
+  const token = {
+    auth: {
+      postmanOAuth2: Object.defineProperty({}, "accessToken", accessor()),
+    },
+  };
+  const secret = {
+    auth: {
+      postmanOAuth2: Object.defineProperty({}, "clientSecret", accessor()),
+    },
+  };
+  for (const patch of [
+    top,
+    policy,
+    token,
+    secret,
+    Object.create({ auth: { postmanOAuth2: { accessToken: "inherited" } } }),
+    { auth: Object.create({ postmanOAuth2: { accessToken: "inherited" } }) },
+    { auth: { postmanOAuth2: Object.create({ accessToken: "inherited" }) } },
+    { auth: { postmanOAuth2: { unknown: "no" } } },
+    { auth: { postmanOAuth2: { version: 2 } } },
+    { auth: { postmanOAuth2: { version: undefined } } },
+  ])
+    assert.throws(() => applyMCPInput(request, patch), /Postman OAuth2/);
+  assert.equal(calls, 0);
+  const partial = {
+      auth: {
+        postmanOAuth2: {
+          accessToken: "temporary",
+          clientSecret: "{{stillInert}}",
+        },
+      },
+    },
+    partialBefore = structuredClone(partial);
+  assert.deepEqual(
+    applyMCPInput(request, partial).auth,
+    auth({ accessToken: "temporary", clientSecret: "{{stillInert}}" }),
+  );
+  assert.deepEqual(request, before);
+  assert.deepEqual(partial, partialBefore);
+  assert.throws(
+    () =>
+      applyMCPInput(
+        { auth: auth({ accessToken: "original" }) },
+        { auth: { postmanOAuth2: { clientId: "new" } } },
+      ),
+    /未定义/,
+  );
+  const ordinary = { auth: { type: "bearer", token: "ordinary" } };
+  assert.deepEqual(
+    applyMCPInput(ordinary, { auth: { token: "temporary" } }).auth,
+    { type: "bearer", token: "temporary" },
+  );
+  for (const patch of [
+    policy,
+    token,
+    { auth: { postmanOAuth2: { accessToken: "no" } } },
+  ])
+    assert.throws(() => applyMCPInput(ordinary, patch), /Postman OAuth2/);
+  assert.equal(calls, 0);
+  assert.equal(ordinary.auth.token, "ordinary");
 });
