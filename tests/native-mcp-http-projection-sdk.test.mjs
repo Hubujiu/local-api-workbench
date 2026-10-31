@@ -30,14 +30,32 @@ async function fixture(t, transport) {
     errors = [],
     sockets = new Set(),
     clients = [];
-  const peer = http.createServer((req, res) => {
+  let peer, tcp, rpc, io, root, app;
+  // Own listeners even if a later fixture setup step rejects.
+  t.after(async () => {
+    for (const client of clients) await client.close().catch(() => {});
+    if (app?.server.listening) {
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+    }
+    rpc?.forceShutdown();
+    for (const socket of sockets) socket.destroy();
+    if (tcp?.listening) await new Promise((resolve) => tcp.close(resolve));
+    if (io) await new Promise((resolve) => io.close(resolve));
+    if (peer?.listening) {
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+    }
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+  peer = http.createServer((req, res) => {
     counts.http++;
     req.resume();
     res.setHeader("content-type", "application/json");
     res.end('{"ok":true}');
   });
   await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
-  const tcp = net.createServer((socket) => {
+  tcp = net.createServer((socket) => {
     counts.tcpConnections++;
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -49,8 +67,8 @@ async function fixture(t, transport) {
   });
   await new Promise((resolve) => tcp.listen(0, "127.0.0.1", resolve));
   const protoFile = new URL("./fixtures/grpc.proto", import.meta.url),
-    proto = await readFile(protoFile, "utf8"),
-    rpc = new grpc.Server();
+    proto = await readFile(protoFile, "utf8");
+  rpc = new grpc.Server();
   const pkg = grpc.loadPackageDefinition(
     loader.loadSync(fileURLToPath(protoFile), {
       longs: String,
@@ -71,8 +89,8 @@ async function fixture(t, transport) {
       (error, port) => (error ? reject(error) : resolve(port)),
     ),
   );
-  const socketHttp = http.createServer(),
-    io = new SocketServer(socketHttp);
+  const socketHttp = http.createServer();
+  io = new SocketServer(socketHttp);
   io.on("connection", (socket) => {
     counts.socketConnections++;
     socket.on("echo", (value, ack) => {
@@ -81,23 +99,12 @@ async function fixture(t, transport) {
     });
   });
   await new Promise((resolve) => socketHttp.listen(0, "127.0.0.1", resolve));
-  const root = await mkdtemp(join(tmpdir(), "native-http-projection-"));
-  let app = await createApp({ root, port: 0 });
+  root = await mkdtemp(join(tmpdir(), "native-http-projection-"));
+  app = await createApp({ root, port: 0 });
   const stop = async () => {
     app.server.closeAllConnections();
     await new Promise((resolve) => app.server.close(resolve));
   };
-  t.after(async () => {
-    for (const client of clients) await client.close().catch(() => {});
-    await stop();
-    rpc.forceShutdown();
-    for (const socket of sockets) socket.destroy();
-    await new Promise((resolve) => tcp.close(resolve));
-    await new Promise((resolve) => io.close(resolve));
-    peer.closeAllConnections();
-    await new Promise((resolve) => peer.close(resolve));
-    await rm(root, { recursive: true, force: true });
-  });
   async function owner(route, method = "GET", data, status = 200) {
     const response = await fetch(app.url + route, {
       method,
@@ -352,7 +359,10 @@ for (const transport of ["http", "stdio"])
           flow_id: plans[name].id,
         });
       }
-      assert.equal(runs.protocol.results[0].protocolResult.body, "wire-echo");
+      assert.equal(
+        runs.protocol.results[0].protocolResult.result.body,
+        "wire-echo",
+      );
       assert.equal(
         runs.grpc.results[0].grpcResult.messages[0].text,
         "grpc-echo",
@@ -370,6 +380,7 @@ for (const transport of ["http", "stdio"])
       legacy.id = "legacy-without-snapshot";
       delete legacy.snapshot;
       delete legacy.results[0].type;
+      delete legacy.results[0].protocol;
       // Synthetic old-format copy of actual protocol evidence; configuration PUT
       // correctly preserves history. Use the activity path, then real restore.
       await f.app.store.append(project.id, "runs", legacy);
@@ -383,7 +394,7 @@ for (const transport of ["http", "stdio"])
             projectId: project.id,
             runId: legacy.id,
           }),
-        ).results[0].protocolResult.body,
+        ).results[0].protocolResult.result.body,
         "wire-echo",
       );
       const created = decode(
