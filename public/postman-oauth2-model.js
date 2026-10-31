@@ -38,6 +38,7 @@ export function postmanOAuth2Definition(auth) {
     } else if (
       !fields.includes(key) ||
       typeof value !== "string" ||
+      value.length > 8192 ||
       !value.isWellFormed() ||
       new TextEncoder().encode(value).length > 8192 ||
       /[\x00-\x1f\x7f]/.test(value)
@@ -100,4 +101,18 @@ export function resolvePostmanOAuth2(auth, interpolate, variables) {
   }
   postmanOAuth2Definition({ type: "oauth2", postmanOAuth2: definition });
   return definition;
+}
+
+// Preflight before callers clone/serialize definitions, including frozen copies.
+export function validatePostmanOAuth2Project(project) {
+  for (const request of project.requests || [])
+    postmanOAuth2Definition(request.auth);
+  for (const plan of project.plans || [])
+    for (const step of plan.steps || [])
+      postmanOAuth2Definition(step.request?.auth);
+  for (const item of project.cases || [])
+    postmanOAuth2Definition(item.request?.auth);
+  postmanOAuth2Definition(project.settings?.globalAuth);
+  for (const auth of Object.values(project.settings?.folderAuth || {}))
+    postmanOAuth2Definition(auth);
 }

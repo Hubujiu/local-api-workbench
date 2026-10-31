@@ -1,3 +1,4 @@
+import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
 import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -132,9 +133,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validatePostmanOAuth2Project(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validatePostmanOAuth2Project(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -193,6 +198,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validatePostmanOAuth2Project(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

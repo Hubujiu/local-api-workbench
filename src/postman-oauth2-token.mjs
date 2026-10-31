@@ -47,7 +47,8 @@ export function applyPostmanOAuth2(url, headers, auth) {
     return (at < 0 ? row : row.slice(0, at)) !== "access_token";
   });
   if (pair !== undefined) kept.push(pair);
-  url.search = kept.join("&");
+  if (pair !== undefined || kept.length !== rows.length)
+    url.search = kept.join("&");
   delete headers.authorization;
   if (authorization !== undefined) headers.authorization = authorization;
   return true;

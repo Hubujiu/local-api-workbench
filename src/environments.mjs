@@ -1,3 +1,4 @@
+import { postmanOAuth2Definition } from "../public/postman-oauth2-model.js";
 import {
   variableRows,
   updateVariable,
@@ -65,6 +66,7 @@ export function freezeServiceBinding(
 ) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
+  postmanOAuth2Definition(request.auth);
   return {
     ...applySharedAuth(
       project,

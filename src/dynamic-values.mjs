@@ -208,6 +208,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  postmanOAuth2Definition(request.auth);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&
