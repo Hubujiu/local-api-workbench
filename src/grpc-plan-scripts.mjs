@@ -15,7 +15,10 @@ export function validatePlanGrpcScripts(steps) {
   for (const step of steps) {
     if (!Object.hasOwn(step, "grpcScripts")) continue;
     if (step.type !== "grpc") throw Error("grpcScripts仅可用于gRPC计划步骤");
-    normalizeGrpcScripts(step.grpcScripts);
+    const descriptor = Object.getOwnPropertyDescriptor(step, "grpcScripts");
+    if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+      throw Error("grpcScripts必须是普通JSON数据字段");
+    normalizeGrpcScripts(descriptor.value);
   }
 }
 
@@ -47,6 +50,7 @@ export async function runScriptedGrpcStep({
   };
   const commit = async (nextScopes, extracted, phase) => {
     cancelled();
+    record.scriptPhase = phase;
     const changes = scopeChanges(scopes, nextScopes);
     if (changes.length && onScopeChanges) {
       try {
@@ -56,7 +60,10 @@ export async function runScriptedGrpcStep({
           nextScopes.environment = accepted.environment;
         }
       } catch (error) {
-        if (error instanceof ProjectCommitUncertain) {
+        if (
+          error instanceof ProjectCommitUncertain ||
+          error?.code === "PROJECT_COMMIT_UNCERTAIN"
+        ) {
           record.scopeCommit = { outcome: "unknown", retrySafe: false, phase };
           throw Error(
             "gRPC脚本变量持久化提交未确认；请重新读取项目，勿自动重试",
@@ -71,6 +78,7 @@ export async function runScriptedGrpcStep({
     scopes = nextScopes;
     publishScopes(scopes);
     if (extracted) record.extracted = extracted;
+    delete record.scriptPhase;
     for (const change of changes)
       record.logs.push({
         phase: "variables",
@@ -111,6 +119,7 @@ export async function runScriptedGrpcStep({
       throw Error(
         phase === "before" ? "gRPC前置脚本断言失败" : "gRPC后置脚本断言失败",
       );
+    delete record.scriptPhase;
     localVariables = structuredClone(scripted.localVariables || {});
     return createScopes(scripted.variables, scripted.scopes);
   };

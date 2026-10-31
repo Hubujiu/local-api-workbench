@@ -4,6 +4,7 @@ import { finalBodySource } from "./script-final-body.mjs";
 import {
   grpcScriptContextSource,
   normalizeGrpcScriptContext,
+  validateGrpcScriptBinding,
 } from "./grpc-script-context.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -106,13 +107,8 @@ try {
     workerData.grpcContext === undefined
       ? undefined
       : normalizeGrpcScriptContext(workerData.grpcContext);
-  if (
-    grpcContext !== undefined &&
-    (workerData.input.allowNetwork ||
-      workerData.requestLimit !== 0 ||
-      workerData.input.response !== undefined)
-  )
-    throw Error("gRPC脚本不能绑定HTTP能力");
+  if (grpcContext !== undefined)
+    validateGrpcScriptBinding(workerData.input, workerData.requestLimit);
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
   const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
   const facadeBundle = useURLFacade

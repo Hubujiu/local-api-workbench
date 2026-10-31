@@ -454,6 +454,7 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  validatePlanGrpcScripts(plan.steps);
   const snapshot = structuredClone(plan);
   validatePlanGrpcScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
@@ -924,6 +925,12 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
+    if (
+      step.type === "grpc" &&
+      step.grpcScripts &&
+      record.scopeCommit?.outcome === "unknown"
+    )
+      break;
   }
   return {
     id: id(),

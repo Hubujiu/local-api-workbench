@@ -10,7 +10,10 @@ import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
-import { normalizeGrpcScriptContext } from "./grpc-script-context.mjs";
+import {
+  normalizeGrpcScriptContext,
+  validateGrpcScriptBinding,
+} from "./grpc-script-context.mjs";
 import { isDeepStrictEqual } from "node:util";
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
@@ -68,21 +71,10 @@ export function runScript(code, input, options = {}) {
     jobLimit,
     assertionLimit,
   } = scriptBudgets(options);
-  if (input.grpcContext !== undefined)
+  if (Object.hasOwn(input, "grpcContext"))
     throw Error("协议上下文只能由执行入口提供");
   if (grpcContext !== undefined) {
-    if (
-      input.allowNetwork ||
-      requestLimit !== 0 ||
-      input.response !== undefined ||
-      input.finalBody !== undefined ||
-      input.responseOriginals != null ||
-      input.responseWire !== undefined ||
-      Object.keys(input.request || {}).some(
-        (key) => !["id", "name"].includes(key),
-      )
-    )
-      throw Error("gRPC脚本不能绑定HTTP网络或响应能力");
+    validateGrpcScriptBinding(input, requestLimit);
     normalizeGrpcScriptContext(grpcContext);
   }
   if (input.finalBody !== undefined)

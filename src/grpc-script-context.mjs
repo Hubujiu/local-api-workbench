@@ -4,10 +4,22 @@ const plain = (value) =>
   !Array.isArray(value) &&
   [Object.prototype, null].includes(Object.getPrototypeOf(value));
 
+const dataKeys = (value, allowed) =>
+  plain(value) &&
+  Reflect.ownKeys(value).every((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      typeof key === "string" &&
+      allowed.includes(key) &&
+      descriptor.enumerable &&
+      Object.hasOwn(descriptor, "value")
+    );
+  });
+
 export function normalizeGrpcScripts(value) {
   if (value === undefined) return undefined;
   if (
-    !plain(value) ||
+    !dataKeys(value, ["version", "before", "after"]) ||
     value.version !== 1 ||
     Object.keys(value).some(
       (key) => !["version", "before", "after"].includes(key),
@@ -51,14 +63,29 @@ export function grpcScriptContext(step, phase, messages, result) {
 }
 
 export function normalizeGrpcScriptContext(value) {
-  const keys = (object, allowed) =>
-    plain(object) && Object.keys(object).every((key) => allowed.includes(key));
+  const keys = dataKeys;
   const safeJSON = (value, depth = 0, budget = { nodes: 0 }) => {
     if (depth > 64 || ++budget.nodes > 20000) return false;
     if (value === null || typeof value === "boolean") return true;
     if (typeof value === "number") return Number.isFinite(value);
     if (typeof value === "string") return !/[\uD800-\uDFFF]/u.test(value);
-    if (!Array.isArray(value) && !plain(value)) return false;
+    if (Array.isArray(value)) {
+      if (Reflect.ownKeys(value).length !== value.length + 1) return false;
+      for (let index = 0; index < value.length; index++) {
+        const descriptor = Object.getOwnPropertyDescriptor(
+          value,
+          String(index),
+        );
+        if (
+          !descriptor?.enumerable ||
+          !Object.hasOwn(descriptor, "value") ||
+          !safeJSON(descriptor.value, depth + 1, budget)
+        )
+          return false;
+      }
+      return true;
+    }
+    if (!plain(value) || !dataKeys(value, Object.keys(value))) return false;
     return Object.entries(value).every(
       ([key, item]) =>
         !["__proto__", "prototype", "constructor"].includes(key) &&
@@ -68,7 +95,8 @@ export function normalizeGrpcScriptContext(value) {
   const messages = (items) =>
     Array.isArray(items) &&
     items.length <= 100 &&
-    items.every((item) => plain(item) && safeJSON(item)) &&
+    safeJSON(items) &&
+    items.every(plain) &&
     Buffer.byteLength(JSON.stringify(items)) <= 1024 * 1024;
   if (
     !keys(value, ["protocol", "phase", "request", "result"]) ||
@@ -149,3 +177,18 @@ function installGrpcScriptContext({ context, pm, apt, request }) {
   Object.defineProperty(globalThis, "grpc", { value: view, enumerable: true });
 }
 export const grpcScriptContextSource = installGrpcScriptContext.toString();
+
+// Shared host/worker admission guard. An input JSON field never selects a mode.
+export function validateGrpcScriptBinding(input, requestLimit) {
+  if (
+    Object.hasOwn(input, "grpcContext") ||
+    input.allowNetwork ||
+    requestLimit !== 0 ||
+    input.response !== undefined ||
+    input.finalBody !== undefined ||
+    input.responseOriginals != null ||
+    input.responseWire !== undefined ||
+    !dataKeys(input.request || {}, ["id", "name"])
+  )
+    throw Error("gRPC脚本不能绑定HTTP网络或响应能力");
+}
