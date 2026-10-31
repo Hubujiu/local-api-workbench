@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { collectionRuntimeSource } from "./postman-collection-runtime.mjs";
 import { nativeRequestSnapshotSource } from "./native-request-snapshot.mjs";
 import { nativeWaitInstallerSource } from "./native-wait-tasks.mjs";
@@ -27,6 +28,9 @@ import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { trackedQuickJS } from "./tracked-quickjs.mjs";
+// Host elapsed time must not replenish budgets when the civil clock changes.
+// Guest Date.now() below intentionally retains timestamp semantics.
+const monotonicNow = performance.now.bind(performance);
 let scriptStage = "bootstrap",
   outcome,
   runtime,
@@ -54,15 +58,23 @@ const threadCPU = () => {
     return null;
   }
 };
+// Round observation totals only; admission and charged activity stay fractional.
+const readActivityMetrics = () =>
+  Object.fromEntries(
+    Object.entries(activityMetrics).map(([key, value]) => [
+      key,
+      Math.round(value),
+    ]),
+  );
 const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
-  const started = Date.now(),
+  const started = monotonicNow(),
     cpuStarted = threadCPU();
   try {
     return fn();
   } finally {
-    activityMetrics[metric] += Math.max(0, Date.now() - started);
+    activityMetrics[metric] += Math.max(0, monotonicNow() - started);
     const cpuFinished = threadCPU();
     if (cpuStarted && cpuFinished)
       activityCPUTimeUs[metric.replace(/Ms$/, "Us")] =
@@ -130,9 +142,9 @@ try {
   runtime = engine.newRuntime();
   runtime.setMemoryLimit(16 * 1024 * 1024);
   runtime.setMaxStackSize(512 * 1024);
-  let deadline = Date.now() + 1000;
-  runtime.setInterruptHandler(() => Date.now() > deadline);
-  bootstrapObservation = observeBootstrap(Date.now, threadCPU);
+  let deadline = monotonicNow() + 1000;
+  runtime.setInterruptHandler(() => monotonicNow() > deadline);
+  bootstrapObservation = observeBootstrap(monotonicNow, threadCPU);
   context = runtime.newContext();
   const randomFunction = context.newFunction("__randomBytes", (countHandle) => {
     const count = context.getNumber(countHandle);
@@ -208,7 +220,7 @@ try {
       const id = ++timerCount;
       timers.set(id, {
         callback: callback.dup(),
-        due: Date.now() + milliseconds,
+        due: monotonicNow() + milliseconds,
       });
       return context.newNumber(id);
     },
@@ -519,7 +531,7 @@ try {
   );
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
-  deadline = Date.now() + workerData.activityBudgetMs;
+  deadline = monotonicNow() + workerData.activityBudgetMs;
   measureActivity("compatibility", "compatibilityMs", () => {
     const compatibilitySources = [];
     const install = (code) => compatibilitySources.push(code);
@@ -655,15 +667,15 @@ try {
   })))(globalThis.__nativeDatabaseBridge,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),console.log.bind(console));delete globalThis.__nativeDatabaseBridge;`);
     run(compatibilitySources.join(";\n"));
   });
-  let remaining = deadline - Date.now();
+  let remaining = deadline - monotonicNow();
   const bounded = (fn) => {
     if (remaining <= 0) throw Error("脚本执行超时");
-    const start = Date.now();
+    const start = monotonicNow();
     deadline = start + remaining;
     try {
       return fn();
     } finally {
-      remaining -= Date.now() - start;
+      remaining -= monotonicNow() - start;
     }
   };
   const measuredBounded = (operation, metric, fn) =>
@@ -719,7 +731,7 @@ try {
     const earliest = Math.min(
       ...[...timers.values()].map((timer) => timer.due),
     );
-    if (!replies.length && earliest > Date.now())
+    if (!replies.length && earliest > monotonicNow())
       await new Promise((resolve) => {
         let timeout;
         wake = () => {
@@ -732,7 +744,7 @@ try {
               wake = null;
               resolve();
             },
-            Math.max(0, earliest - Date.now()),
+            Math.max(0, earliest - monotonicNow()),
           );
       });
     for (const message of replies.splice(0)) {
@@ -760,7 +772,7 @@ try {
         response.dispose();
       }
     }
-    const now = Date.now();
+    const now = monotonicNow();
     for (const [id, timer] of [...timers].sort(
       (a, b) => a[1].due - b[1].due || a[0] - b[0],
     )) {
@@ -823,7 +835,7 @@ try {
     measuredBounded("native-wait-completion", "promiseStateMs", () =>
       run("__readNativeWaitCompletion();"),
     );
-  const serializationStart = Date.now();
+  const serializationStart = monotonicNow();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
@@ -872,13 +884,13 @@ try {
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
       activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {
-        ...activityMetrics,
+        ...readActivityMetrics(),
         fakerLoadMs: fakerProviderLoadMs(),
       },
       activityMs:
         workerData.activityBudgetMs -
         remaining +
-        Date.now() -
+        monotonicNow() -
         serializationStart,
     },
   };
@@ -893,7 +905,10 @@ try {
     scriptStage,
     activityOperation,
     activityCPUTimeUs: { ...activityCPUTimeUs },
-    activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
+    activityMetrics: {
+      ...readActivityMetrics(),
+      fakerLoadMs: fakerProviderLoadMs(),
+    },
     scriptDiagnostics: {
       ...(scriptStage === "bootstrap" ? bootstrapObservation?.failure() : {}),
       activityBudgetMs: workerData.activityBudgetMs,

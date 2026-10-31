@@ -51,8 +51,10 @@ export function observeBootstrap(now, cpu) {
         cpuFinished = cpu();
       return bootstrapFailureDetails({
         bootstrapOperation: operation,
-        bootstrapElapsedMs: Math.max(0, finished - started),
-        bootstrapOperationMs: Math.max(0, finished - operationStarted),
+        bootstrapElapsedMs: Math.round(Math.max(0, finished - started)),
+        bootstrapOperationMs: Math.round(
+          Math.max(0, finished - operationStarted),
+        ),
         bootstrapCPUUs: cpuDelta(cpuStarted, cpuFinished),
         bootstrapOperationCPUUs: cpuDelta(operationCPUStarted, cpuFinished),
       });

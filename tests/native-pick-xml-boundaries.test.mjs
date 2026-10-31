@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import vm from "node:vm";
+import { withWorkerRejectionDiagnostics } from "./helpers/worker-rejection-diagnostics.mjs";
 import { fileURLToPath } from "node:url";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
 import {
@@ -28,6 +29,12 @@ const input = (body = "<login><token>real</token></login>") => ({
 });
 const phase = (body, tasks = [pick()]) =>
   runNativeTaskPhase(tasks, input(body));
+// Preserve the original matcher and rejection; add only bounded metadata on
+// assertion failure. Labels below are fixed test identifiers, never body/code.
+const rejectsWithDiagnostics = (promise, expected, caseId) =>
+  withWorkerRejectionDiagnostics((capture) =>
+    assert.rejects(promise.catch(capture), expected, caseId),
+  );
 
 test("native XML compiles only bounded string(P) and never compiles disabled retained declarations", () => {
   assert.equal(
@@ -155,7 +162,7 @@ test("native XML reads only own body data, does not expose DOM/require, and pres
   assert.equal(result.scopes.environment.attr, "a&b");
   assert.equal(result.scopes.environment.empty, "");
   assert(result.tests.every((entry) => entry.passed));
-  await assert.rejects(
+  await rejectsWithDiagnostics(
     phase(undefined, [
       script(
         "Object.defineProperty(response,'body',{get(){throw Error('body getter invoked');}});",
@@ -163,6 +170,7 @@ test("native XML reads only own body data, does not expose DOM/require, and pres
       pick(),
     ]),
     /自有字符串/,
+    "xml-body-accessor",
   );
 });
 
@@ -185,9 +193,21 @@ test("native XML keeps exact UTF8, depth and combined node/attribute bounds with
     (await phase(utf8)).scopes.environment.token.length,
     utf8.length - prefix.length - suffix.length,
   );
-  await assert.rejects(phase(exact + " "), /64KiB/);
-  await assert.rejects(phase(prefix + "雪".repeat(21846) + suffix), /64KiB/);
-  await assert.rejects(phase(prefix + "\ud800" + suffix), /Unicode/);
+  await rejectsWithDiagnostics(
+    phase(exact + " "),
+    /64KiB/,
+    "xml-ascii-byte-limit",
+  );
+  await rejectsWithDiagnostics(
+    phase(prefix + "雪".repeat(21846) + suffix),
+    /64KiB/,
+    "xml-utf8-byte-limit",
+  );
+  await rejectsWithDiagnostics(
+    phase(prefix + "\ud800" + suffix),
+    /Unicode/,
+    "xml-unpaired-surrogate",
+  );
   const nested = "<a>".repeat(32) + "leaf" + "</a>".repeat(32);
   assert.equal(
     (
@@ -197,36 +217,51 @@ test("native XML keeps exact UTF8, depth and combined node/attribute bounds with
     ).scopes.environment.token,
     "leaf",
   );
-  await assert.rejects(
+  await rejectsWithDiagnostics(
     phase("<a>".repeat(33) + "leaf" + "</a>".repeat(33)),
     /深度/,
+    "xml-depth-limit",
   );
   // Document + login + token + text + 1996 empty sibling elements = 2,000.
   const many = "<login><token>ok</token>" + "<x/>".repeat(1996) + "</login>";
   assert.equal((await phase(many)).scopes.environment.token, "ok");
-  await assert.rejects(phase(many.replace("</login>", "<x/></login>")), /节点/);
+  await rejectsWithDiagnostics(
+    phase(many.replace("</login>", "<x/></login>")),
+    /节点/,
+    "xml-node-limit",
+  );
   const attrs =
     "<login><token>ok</token>" + '<x a=""/>'.repeat(999) + "</login>";
-  await assert.rejects(phase(attrs), /节点|属性/);
+  await rejectsWithDiagnostics(
+    phase(attrs),
+    /节点|属性/,
+    "xml-attribute-limit",
+  );
 });
 
 test("native XML rejects malformed, XML control characters and namespace-bearing documents", async () => {
-  for (const body of [
-    "",
-    "<login><token></login>",
-    "<login><token>&unknown;</token></login>",
-    "<login><token>\u0000</token></login>",
-    "<login><token>&#0;</token></login>",
-    "<login><token>&#xD800;</token></login>",
-    "<login><token>&#xFFFF;</token></login>",
-    "<login><token>&#x110000;</token></login>",
-    '<login xmlns="urn:x"><token>value</token></login>',
-    '<login xmlns=""><token>value</token></login>',
-    '<login xml:lang="en"><token>value</token></login>',
-    "<!DOCTYPE login><login><token>value</token></login>",
-    "<login><token><![CDATA[<!DOCTYPE x>]]></token></login>",
+  for (const [caseId, body] of [
+    ["xml-empty-document", ""],
+    ["xml-mismatched-close", "<login><token></login>"],
+    ["xml-unknown-entity", "<login><token>&unknown;</token></login>"],
+    ["xml-literal-null", "<login><token>\u0000</token></login>"],
+    ["xml-numeric-null", "<login><token>&#0;</token></login>"],
+    ["xml-numeric-surrogate", "<login><token>&#xD800;</token></login>"],
+    ["xml-numeric-noncharacter", "<login><token>&#xFFFF;</token></login>"],
+    ["xml-numeric-out-of-range", "<login><token>&#x110000;</token></login>"],
+    [
+      "xml-default-namespace",
+      '<login xmlns="urn:x"><token>value</token></login>',
+    ],
+    ["xml-empty-namespace", '<login xmlns=""><token>value</token></login>'],
+    ["xml-xml-lang", '<login xml:lang="en"><token>value</token></login>'],
+    ["xml-doctype", "<!DOCTYPE login><login><token>value</token></login>"],
+    [
+      "xml-doctype-in-cdata",
+      "<login><token><![CDATA[<!DOCTYPE x>]]></token></login>",
+    ],
   ])
-    await assert.rejects(phase(body), /XML/);
+    await rejectsWithDiagnostics(phase(body), /XML/, caseId);
 });
 
 test("native XML checks the complete intrinsic graph before each task without invoking injected getters", async () => {
@@ -247,18 +282,20 @@ test("native XML checks the complete intrinsic graph before each task without in
     "Object.setPrototypeOf(String.prototype,{});",
     "Object.defineProperty(globalThis,'String',{get(){throw Error('global getter invoked')}});",
   ];
-  for (const mutation of mutations)
-    await assert.rejects(
+  for (const [index, mutation] of mutations.entries())
+    await rejectsWithDiagnostics(
       phase(undefined, [script(mutation), pick()]),
       /XML内建对象/,
+      `xml-intrinsic-mutation-${index + 1}`,
     );
-  await assert.rejects(
+  await rejectsWithDiagnostics(
     phase(undefined, [
       pick(),
       script("Number.parseInt.call=()=>0;"),
       pick([row("again")]),
     ]),
     /XML内建对象/,
+    "xml-between-task-intrinsic-mutation",
   );
   const context = vm.createContext({
     response: { body: "<login><token>ok</token></login>" },
@@ -293,7 +330,7 @@ test("disabled XML is inert and unrelated JSON/header tasks do not load the stri
 
 test("native XML repeated tasks share the original phase activity budget without a per-parser reset", async () => {
   const body = "<login><token>ok</token>" + "<x/>".repeat(1996) + "</login>";
-  await assert.rejects(
+  await rejectsWithDiagnostics(
     phase(
       body,
       Array.from({ length: 16 }, () => pick()),
@@ -304,6 +341,7 @@ test("native XML repeated tasks share the original phase activity budget without
       assert.equal(error.networkRequests.length, 0);
       return true;
     },
+    "xml-shared-activity-budget",
   );
 });
 
@@ -315,12 +353,16 @@ test("native XML preserves literal numeric-reference text in CDATA comments and 
     result.scopes.environment.token,
     "&#0; &#xD800; &#xFFFF; &#x110000;",
   );
-  for (const bad of [
+  for (const [index, bad] of [
     "<login><token>&#0;</token></login>",
     '<login bad="&#xD800;"><token>ok</token></login>',
     "<login><!-- benign &#0; --><token>&#x110000;</token></login>",
-  ])
-    await assert.rejects(phase(bad), /XML.*字符/);
+  ].entries())
+    await rejectsWithDiagnostics(
+      phase(bad),
+      /XML.*字符/,
+      `xml-numeric-reference-${index + 1}`,
+    );
 });
 
 test("native XML seven current-body tasks retain concurrent phase budget headroom", async () => {

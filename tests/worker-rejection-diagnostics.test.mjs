@@ -747,3 +747,40 @@ test("invalid diagnostic labels and observer exceptions cannot replace the workl
   assert.equal(caught, original);
   assert.equal(caught.message, "interrupted");
 });
+
+test("XML rejection mismatch retains a fixed case label and worker metadata without accepting timeout", async () => {
+  const timeout = Object.assign(Error("脚本执行超时"), {
+    scriptStage: "script",
+    activityOperation: "promise-state",
+    activityMetrics: { compatibilityMs: 8, userScriptMs: 252 },
+    scriptDiagnostics: { activityBudgetMs: 250 },
+  });
+  const matcher = /XML/;
+  const caseId = "xml-empty-document";
+  await assert.rejects(
+    withWorkerRejectionDiagnostics((capture) =>
+      assert.rejects(Promise.reject(timeout).catch(capture), matcher, caseId),
+    ),
+    (failure) => {
+      assert(failure instanceof AssertionError);
+      assert.equal(failure.actual, timeout);
+      assert.equal(failure.expected, matcher);
+      assert.equal(failure.operator, "rejects");
+      assert(failure.message.includes(caseId));
+      assert.deepEqual(JSON.parse(failure.message.split(prefix)[1]), {
+        scriptStage: "script",
+        activityOperation: "promise-state",
+        scriptDiagnostics: { activityBudgetMs: 250 },
+        activityMetrics: { compatibilityMs: 8, userScriptMs: 252 },
+      });
+      return true;
+    },
+  );
+  await withWorkerRejectionDiagnostics((capture) =>
+    assert.rejects(
+      Promise.reject(Error("XML无效")).catch(capture),
+      matcher,
+      caseId,
+    ),
+  );
+});
