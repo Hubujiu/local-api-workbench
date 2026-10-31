@@ -193,7 +193,8 @@ export function validateAPIResourceTrash(project) {
   )
     fail("版本或容量（最多100批）");
   const batchIds = new Set(),
-    documentIds = new Set();
+    documentIds = new Set(),
+    pendingDocumentIds = new Set();
   let total = 0;
   for (const batch of trash.batches) {
     keys(
@@ -201,6 +202,7 @@ export function validateAPIResourceTrash(project) {
       [
         "id",
         "deletedAt",
+        "restoredAt",
         "selectedTargetIds",
         "folderPaths",
         "explicitFolders",
@@ -219,6 +221,13 @@ export function validateAPIResourceTrash(project) {
       new Date(batch.deletedAt).toISOString() !== batch.deletedAt
     )
       fail("删除时间");
+    if (
+      batch.restoredAt !== undefined &&
+      (typeof batch.restoredAt !== "string" ||
+        !Number.isFinite(Date.parse(batch.restoredAt)) ||
+        new Date(batch.restoredAt).toISOString() !== batch.restoredAt)
+    )
+      fail("恢复时间");
     uniqueStrings(batch.selectedTargetIds, "选中ID", 1000);
     if (!batch.selectedTargetIds.length) fail("空批次");
     uniqueStrings(batch.folderPaths, "目录");
@@ -250,12 +259,17 @@ export function validateAPIResourceTrash(project) {
     }
     if (!Array.isArray(batch.documents) || batch.documents.length > 5000)
       fail("文档数量");
+    const batchDocumentIds = new Set();
     for (const document of batch.documents) {
       validateResourceDocument(document);
       if (
-        documentIds.has(document.id) ||
+        batchDocumentIds.has(document.id) ||
+        (batch.restoredAt === undefined &&
+          (pendingDocumentIds.has(document.id) ||
+            (project.documents || []).some(
+              (item) => item.id === document.id,
+            ))) ||
         [
-          ...(project.documents || []),
           ...(project.requests || []),
           ...(project.protocols || []),
           ...(project.settings?.socketioDefinitions || []),
@@ -263,7 +277,9 @@ export function validateAPIResourceTrash(project) {
         ].some((item) => item.id === document.id)
       )
         fail("文档墓碑ID冲突");
+      batchDocumentIds.add(document.id);
       documentIds.add(document.id);
+      if (batch.restoredAt === undefined) pendingDocumentIds.add(document.id);
     }
     const targets = new Set([
       ...batch.requestIds,
@@ -341,20 +357,8 @@ export function apiResourceTargets(project) {
     if (!document.deletedAt) add(document.id, { type: "doc", value: document });
   return targets;
 }
-export function deleteAPIResources(project, selectedTargetIds) {
-  validateAPIResourceTrash(project);
-  uniqueStrings(selectedTargetIds, "选中ID", 1000);
-  if (!selectedTargetIds.length) fail("请选择资源");
-  if ((project.apiResourceTrash?.batches.length || 0) >= 100)
-    fail("回收容量已满；请先备份，不会自动淘汰");
-  const targets = apiResourceTargets(project);
-  for (const id of selectedTargetIds)
-    if (id === "0" || !targets.has(id)) fail("资源不存在或不属于当前项目");
-  const roots = selectedTargetIds
-    .map((id) => targets.get(id))
-    .filter((item) => item.type === "folder")
-    .map((item) => item.path);
-  for (const root of roots) validateResourceFolder(root);
+// Shared fail-closed protocol/source guards for folder lifecycle operations.
+export function assertAPIFolderIsolation(project, roots) {
   const affected = (path) =>
     typeof path === "string" && roots.some((root) => within(path, root));
   if (roots.length) {
@@ -382,6 +386,24 @@ export function deleteAPIResources(project, selectedTargetIds) {
       )
         fail("尚未支持的目录设置：" + key);
   }
+}
+export function deleteAPIResources(project, selectedTargetIds) {
+  validateAPIResourceTrash(project);
+  uniqueStrings(selectedTargetIds, "选中ID", 1000);
+  if (!selectedTargetIds.length) fail("请选择资源");
+  if ((project.apiResourceTrash?.batches.length || 0) >= 100)
+    fail("回收容量已满；请先备份，不会自动淘汰");
+  const targets = apiResourceTargets(project);
+  for (const id of selectedTargetIds)
+    if (id === "0" || !targets.has(id)) fail("资源不存在或不属于当前项目");
+  const roots = selectedTargetIds
+    .map((id) => targets.get(id))
+    .filter((item) => item.type === "folder")
+    .map((item) => item.path);
+  for (const root of roots) validateResourceFolder(root);
+  const affected = (path) =>
+    typeof path === "string" && roots.some((root) => within(path, root));
+  assertAPIFolderIsolation(project, roots);
   const chosen = new Set(selectedTargetIds);
   const requests = (project.requests || []).filter(
     (item) => !item.deletedAt && (chosen.has(item.id) || affected(item.folder)),
