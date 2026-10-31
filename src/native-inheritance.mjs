@@ -1,3 +1,9 @@
+import {
+  readNativeFolderLifecycle,
+  editNativeFolderLifecycle,
+  assertNativeFolderLifecycleUnchanged,
+  assertNativeFolderMove,
+} from "./native-folder-lifecycle.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { moveFolderTree } from "../public/folder-tree.js";
 import {
@@ -498,7 +504,14 @@ export function validateNativeInheritanceProject(project) {
   validateResourceJSON(graph, 262144);
   fields(
     graph,
-    ["version", "sourceProjectId", "projectLayer", "folders", "bindings"],
+    [
+      "version",
+      "sourceProjectId",
+      "projectLayer",
+      "folders",
+      "bindings",
+      "folderLifecycle",
+    ],
     "项目图",
   );
   if (graph.version !== 1) fail("图版本不支持");
@@ -563,10 +576,6 @@ export function validateNativeInheritanceProject(project) {
       fail("目录路径变化或重复；本片不支持移动关系");
     paths.add(f.path);
   }
-  if (
-    !isDeepStrictEqual([...(project.folders || [])].sort(), [...paths].sort())
-  )
-    fail("目录图不完整；不支持部分移动或删除");
   const requests = new Map((project.requests || []).map((r) => [r.id, r])),
     bound = new Map(),
     sourceIds = new Set(folders.keys());
@@ -630,7 +639,16 @@ export function validateNativeInheritanceProject(project) {
   ])
     if (frozen?.nativeInheritance !== undefined)
       fail("冻结定义不能保留live绑定");
-  return { graph, folders, bound, ancestry };
+  const state = { graph, folders, bound, ancestry };
+  Object.assign(state, readNativeFolderLifecycle(project, state));
+  const activePaths = graph.folders
+    .filter((folder) => !state.inactiveFolders.has(folder.sourceId))
+    .map((folder) => folder.path);
+  if (
+    !isDeepStrictEqual([...(project.folders || [])].sort(), activePaths.sort())
+  )
+    fail("目录图不完整；不支持部分移动或删除");
+  return state;
 }
 export function resolveNativeInheritance(
   project,
@@ -726,6 +744,18 @@ export function editNativeInheritance(project, operation, context = {}) {
   validateResourceJSON(operation, 4096);
   const state = validateNativeInheritanceProject(project);
   if (!state) fail("当前项目没有可编辑的继承图");
+  if (["recycle-folder", "restore-folder"].includes(operation?.type)) {
+    fields(
+      operation,
+      operation.type === "recycle-folder"
+        ? ["type", "sourceId"]
+        : ["type", "batchId"],
+      "目录生命周期操作",
+    );
+    const next = editNativeFolderLifecycle(project, state, operation, context);
+    validateNativeInheritanceProject(next);
+    return next;
+  }
   const lifecycle = ["recycle-requests", "restore-requests"].includes(
     operation?.type,
   );
@@ -750,6 +780,8 @@ export function editNativeInheritance(project, operation, context = {}) {
       fail("回收/恢复接口必须为当前项目唯一HTTP绑定ID");
     const recycle = operation.type === "recycle-requests";
     for (const id of ids) {
+      if (state.inactiveFolders.has(state.bound.get(id).parentId))
+        fail("回收目录内接口必须整批恢复");
       const request = project.requests.find((r) => r.id === id);
       if (Boolean(request.deletedAt) === recycle)
         fail(recycle ? "接口已回收" : "接口尚未回收");
@@ -785,6 +817,7 @@ export function editNativeInheritance(project, operation, context = {}) {
   identifier(operation.parentId);
   if (operation.parentId !== "0" && !state.folders.has(operation.parentId))
     fail("目标父目录不属于当前项目");
+  assertNativeFolderMove(state, operation);
   const parentPath =
     operation.parentId === "0"
       ? ""
@@ -874,6 +907,8 @@ export function assertNativeInheritanceIdentity(
         fail("结构操作不能夹带其他配置或冻结证据修改");
   }
   if (!edited) {
+    if (!current) fail("不能移除继承图");
+    assertNativeFolderLifecycleUnchanged(previous, next, prior);
     const statuses = (p) =>
       p.requests
         .map((r) => [r.id, Object.hasOwn(r, "deletedAt"), r.deletedAt])

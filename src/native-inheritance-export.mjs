@@ -13,6 +13,8 @@ export function applyNativeInheritanceExport(
 ) {
   const state = validateNativeInheritanceProject(project);
   if (!state) return;
+  if (state.graph.folderLifecycle !== undefined)
+    throw Error("原生继承图含目录生命周期历史；请使用完整项目备份");
   if (
     (project.plans || []).length ||
     (project.cases || []).length ||

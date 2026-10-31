@@ -229,13 +229,16 @@ export class Store {
     const current = await this.get(projectId);
     if (input.configRevision !== current.configRevision)
       throw Error("项目已有其他修改，请重新加载");
-    const context =
-      input.operation?.type === "recycle-requests"
-        ? {
-            deletedAt: new Date().toISOString(),
-            ...(nativeTrash ? { nativeTrash: true, batchId: id() } : {}),
-          }
-        : {};
+    const context = ["recycle-requests", "recycle-folder"].includes(
+      input.operation?.type,
+    )
+      ? {
+          deletedAt: new Date().toISOString(),
+          ...(nativeTrash || input.operation.type === "recycle-folder"
+            ? { nativeTrash: true, batchId: id() }
+            : {}),
+        }
+      : {};
     const next = editNativeInheritance(current, input.operation, context);
     const operation = structuredClone(input.operation);
     return this.save(next, {

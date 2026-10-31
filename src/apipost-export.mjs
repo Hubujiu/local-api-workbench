@@ -155,6 +155,8 @@ function tasks(request, phase) {
 }
 export function exportApipost(project, options = {}) {
   validateNativeInheritanceProject(project);
+  if (project.settings?.nativeInheritance?.folderLifecycle !== undefined)
+    throw Error("原生继承图含目录生命周期历史；请使用完整项目备份");
   if (
     !project ||
     !Array.isArray(project.requests) ||

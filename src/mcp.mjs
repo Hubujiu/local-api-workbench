@@ -684,14 +684,30 @@ export function createMCP({
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
               if (p.settings?.nativeInheritance) {
+                let operation = {
+                  type: "recycle-requests",
+                  requestIds: args.apiIds,
+                };
+                if (
+                  nativeName &&
+                  args.apiIds.length === 1 &&
+                  typeof args.apiIds[0] === "string" &&
+                  args.apiIds[0].startsWith("folder:")
+                ) {
+                  const folder = p.settings.nativeInheritance.folders.find(
+                    (item) => item.path === args.apiIds[0].slice(7),
+                  );
+                  if (!folder) throw Error("目录不属于当前继承图");
+                  operation = {
+                    type: "recycle-folder",
+                    sourceId: folder.sourceId,
+                  };
+                }
                 await store.editNativeInheritance(
                   p.id,
                   {
                     configRevision: p.configRevision,
-                    operation: {
-                      type: "recycle-requests",
-                      requestIds: args.apiIds,
-                    },
+                    operation,
                   },
                   { nativeTrash: Boolean(nativeName) },
                 );
