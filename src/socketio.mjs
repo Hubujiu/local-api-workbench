@@ -1,9 +1,12 @@
+import { performance } from "node:perf_hooks";
 import { legacySocket } from "./socketio-legacy.mjs";
 import { BoundedPolling, BoundedWebSocket } from "./socketio-polling.mjs";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { io } from "socket.io-client";
 import { randomUUID } from "node:crypto";
 import { createSecureContext } from "node:tls";
+// Internal elapsed deadlines are independent of civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
 const MAX = 1024 * 1024;
 const reserved = new Set([
   "connect",
@@ -416,13 +419,13 @@ export class SocketIOSessions {
         const extra = {};
         if (callback) {
           for (const [id, p] of s.pending)
-            if (p.deadline <= Date.now()) s.pending.delete(id);
+            if (p.deadline <= monotonicNow()) s.pending.delete(id);
           if (s.pending.size >= 100)
             throw Error("Socket.IO待确认事件超过100项");
           extra.ackId = randomUUID();
           s.pending.set(extra.ackId, {
             callback,
-            deadline: Date.now() + 30000,
+            deadline: monotonicNow() + 30000,
           });
         }
         this.record(s, "received", event, args, extra);
@@ -511,7 +514,7 @@ export class SocketIOSessions {
     )
       throw Error("Socket.IO确认参数无效");
     const pending = s.pending.get(input.ackId);
-    if (!pending || pending.deadline <= Date.now())
+    if (!pending || pending.deadline <= monotonicNow())
       throw Error("Socket.IO确认标识不存在或已过期");
     const args = jsonData(input.args, true);
     this.record(s, "ack-sent", "ack", input.args, { ackId: input.ackId });
