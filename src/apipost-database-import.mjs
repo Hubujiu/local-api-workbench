@@ -27,10 +27,17 @@ export function prepareApipostDatabases(value, projectId, resource) {
       !object(entry) ||
       Object.keys(entry).some(
         (key) =>
-          !["config", "db_id", "intro", "name", "project_id", "type"].includes(
-            key,
-          ),
+          ![
+            "config",
+            "db_id",
+            "intro",
+            "name",
+            "project_id",
+            "type",
+            "sort",
+          ].includes(key),
       ) ||
+      (entry.sort !== undefined && !Number.isSafeInteger(entry.sort)) ||
       entry.project_id !== projectId ||
       !["pg", "mysql", "redis", "mongodb"].includes(entry.type) ||
       !safe(entry.db_id) ||
@@ -122,6 +129,7 @@ export function prepareApipostDatabases(value, projectId, resource) {
       type: entry.type === "pg" ? "postgres" : entry.type,
       sourceProjectId: projectId,
       sourceId: entry.db_id,
+      ...(entry.sort !== undefined ? { sort: entry.sort } : {}),
       ...(entry.config.default.ssh.enable === 1 ? { requiresSSH: true } : {}),
     };
     map.set(entry.db_id, connection.id);
@@ -282,6 +290,7 @@ export function validateApipostDatabaseResources(value = []) {
             "sourceProjectId",
             "sourceId",
             "requiresSSH",
+            "sort",
           ].includes(key),
       ) ||
       !/^apipost-[a-f0-9]{20}-db-[a-f0-9]{20}$/.test(entry.id) ||
@@ -290,6 +299,7 @@ export function validateApipostDatabaseResources(value = []) {
       !["postgres", "mysql", "redis", "mongodb"].includes(entry.type) ||
       !safe(entry.sourceProjectId) ||
       !safe(entry.sourceId) ||
+      (entry.sort !== undefined && !Number.isSafeInteger(entry.sort)) ||
       (entry.requiresSSH !== undefined &&
         (entry.requiresSSH !== true ||
           !["postgres", "mysql"].includes(entry.type)))

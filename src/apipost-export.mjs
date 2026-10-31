@@ -1,3 +1,7 @@
+import {
+  prepareApipostDatabaseExport,
+  readDatabaseExportMode,
+} from "./apipost-database-export.mjs";
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
@@ -135,7 +139,7 @@ function tasks(request, phase) {
       ]
     : [];
 }
-export function exportApipost(project) {
+export function exportApipost(project, options = {}) {
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -167,7 +171,9 @@ export function exportApipost(project) {
       unsupported(value, "模型组件 " + key);
   }
   for (const [key, value] of Object.entries(project.settings || {}))
-    if (!["statuses", "recursiveFolderScopes"].includes(key))
+    if (
+      !["statuses", "recursiveFolderScopes", "apipostDatabases"].includes(key)
+    )
       unsupported(value, `设置 ${key}`);
   if (
     typeof project.id !== "string" ||
@@ -215,6 +221,12 @@ export function exportApipost(project) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const databaseExport = prepareApipostDatabaseExport(
+    project,
+    readDatabaseExportMode(options),
+    projectId,
+    apipostExportId,
+  );
   if ((project.servers || []).length > 1)
     throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");
   const servers = (project.servers || []).map((s, index) => ({
@@ -271,7 +283,7 @@ export function exportApipost(project) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
-    const pipeline = exportApipostTaskPipeline(input);
+    const pipeline = exportApipostTaskPipeline(input, databaseExport);
     const r = normalizeRequest(input);
     for (const key of [
       "importedNativeTaskSource",
@@ -431,7 +443,7 @@ export function exportApipost(project) {
       marks,
       attributes: [],
       mock_custom_rules: [],
-      db_link: [],
+      db_link: databaseExport.records,
       describe_library: [],
       custom_func: [],
     },
