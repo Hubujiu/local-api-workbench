@@ -306,3 +306,14 @@ await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });
 
 await verifyNativeImportHTTPFlow({ ...common, type: "mysql", port: 3306 });
 await verifyNativeDatabaseScopes({ ...common, type: "mysql", port: 3306 });
+
+// Explicit redacted native definitions rebind against the real SQL services.
+const { verifyNativeDatabaseExportFlow } = await import(
+  "./native-database-export-integration.mjs"
+);
+await verifyNativeDatabaseExportFlow({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyNativeDatabaseExportFlow({ ...common, type: "mysql", port: 3306 });

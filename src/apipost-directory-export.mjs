@@ -4,12 +4,12 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
-export function exportApipostDirectory(project) {
+export function exportApipostDirectory(project, options = {}) {
   const plans = project.plans || [];
   if (!Array.isArray(plans) || plans.length > 50)
     throw Error("原生目录导出最多50个计划");
   const base = { ...project, plans: [] };
-  const document = exportApipost(base);
+  const document = exportApipost(base, options);
   const projectId = document.project_id;
   const scoped = (kind, value) =>
     apipostExportId(kind, projectId + "\0" + value);
@@ -76,6 +76,10 @@ export function exportApipostDirectory(project) {
         throw Error("原生目录步骤标识重复或缺失");
       stepIds.add(step.id);
       const request = step.request;
+      // Native flow snapshots do not execute API task lists. Exporting a live
+      // pipeline here would either erase it below or turn it into inert source.
+      if (request.nativeTasks !== undefined)
+        throw Error("原生目录尚不支持冻结步骤nativeTasks；请使用项目备份");
       if (step.name !== request.name)
         throw Error("原生目录不能分别保留步骤名与快照接口名；请使用项目备份");
       if (
@@ -90,7 +94,10 @@ export function exportApipostDirectory(project) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
-      const frozen = exportApipost({ ...base, requests: [snapshotRequest] });
+      const frozen = exportApipost(
+        { ...base, requests: [snapshotRequest] },
+        options,
+      );
       for (const folder of frozen.apis.filter(
         (n) => n.target_type === "folder",
       )) {

@@ -1,3 +1,8 @@
+import {
+  prepareApipostDatabaseExport,
+  readDatabaseExportMode,
+} from "./apipost-database-export.mjs";
+import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
@@ -134,7 +139,7 @@ function tasks(request, phase) {
       ]
     : [];
 }
-export function exportApipost(project) {
+export function exportApipost(project, options = {}) {
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -165,9 +170,11 @@ export function exportApipost(project) {
     for (const [key, value] of Object.entries(project.openapiComponents))
       unsupported(value, "模型组件 " + key);
   }
-  for (const [key, value] of Object.entries(project.settings || {}))
-    if (!["statuses", "recursiveFolderScopes"].includes(key))
-      unsupported(value, `设置 ${key}`);
+  for (const key of Object.keys(project.settings || {}))
+    if (
+      !["statuses", "recursiveFolderScopes", "apipostDatabases"].includes(key)
+    )
+      unsupported(project.settings[key], `设置 ${key}`);
   if (
     typeof project.id !== "string" ||
     !project.id ||
@@ -214,6 +221,12 @@ export function exportApipost(project) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const databaseExport = prepareApipostDatabaseExport(
+    project,
+    readDatabaseExportMode(options),
+    projectId,
+    apipostExportId,
+  );
   if ((project.servers || []).length > 1)
     throw Error("Apipost导出暂仅支持一个默认服务；多服务绑定请使用项目备份");
   const servers = (project.servers || []).map((s, index) => ({
@@ -270,9 +283,9 @@ export function exportApipost(project) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
+    const pipeline = exportApipostTaskPipeline(input, databaseExport);
     const r = normalizeRequest(input);
     for (const key of [
-      "nativeTasks",
       "importedNativeTaskSource",
       "bodyDynamic",
       "before",
@@ -384,8 +397,8 @@ export function exportApipost(project) {
           raw_schema: structuredClone(r.schema || {}),
           binary: null,
         },
-        pre_tasks: tasks(r, "before"),
-        post_tasks: tasks(r, "after"),
+        pre_tasks: pipeline?.before ?? tasks(r, "before"),
+        post_tasks: pipeline?.after ?? tasks(r, "after"),
       },
       response: exportApipostResponses(r),
     });
@@ -430,7 +443,7 @@ export function exportApipost(project) {
       marks,
       attributes: [],
       mock_custom_rules: [],
-      db_link: [],
+      db_link: databaseExport.records,
       describe_library: [],
       custom_func: [],
     },

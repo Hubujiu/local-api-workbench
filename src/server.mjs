@@ -616,9 +616,15 @@ export async function createApp({
               res,
               200,
               u.searchParams.get("format") === "apipost-directory"
-                ? exportApipostDirectory(p)
+                ? exportApipostDirectory(p, {
+                    databaseMode:
+                      u.searchParams.get("databaseMode") ?? undefined,
+                  })
                 : u.searchParams.get("format") === "apipost"
-                  ? exportApipost(p)
+                  ? exportApipost(p, {
+                      databaseMode:
+                        u.searchParams.get("databaseMode") ?? undefined,
+                    })
                   : u.searchParams.get("format") === "openapi"
                     ? exportOpenAPI(p)
                     : p,
