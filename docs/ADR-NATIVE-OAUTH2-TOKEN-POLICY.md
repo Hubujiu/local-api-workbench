@@ -40,6 +40,8 @@ markers or more than 8 KiB. Existing transport, TLS, cancellation and size guard
 remain. Header validation errors are redacted. The selected mode alone mutates
 its destination; empty/no-placement leaves caller headers/query unchanged.
 cURL uses the same injection implementation; unresolved active templates reject.
+OpenAPI rejects projects with native policy in active requests or shared auth
+settings rather than emitting an unauthenticated definition; use full backup.
 Full root integration must reject native policy with redirect until separately
 validated; ordinary OAuth2 redirect support is unchanged.
 

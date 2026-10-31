@@ -6,6 +6,7 @@ import {
   runPlan,
   interpolate,
   toCurl,
+  exportOpenAPI,
 } from "../src/core.mjs";
 import { resolveDynamicRequest } from "../src/dynamic-values.mjs";
 import {
@@ -155,4 +156,39 @@ test("native OAuth2 cURL projection shares exact encoding and rejects unresolved
   assert(toCurl(header).includes("authorization: Custom ok"));
   header.auth.nativeOAuth2.access_token = "{{token}}";
   assert.throws(() => toCurl(header), /原生 OAuth2/);
+});
+
+test("native OAuth2 OpenAPI refuses lossy own/shared definitions before mutating source", () => {
+  const native = {
+    type: "oauth2",
+    nativeOAuth2: {
+      addTokenTo: "header",
+      access_token: "private-token",
+      clientSecret: "{{metadata}}",
+    },
+  };
+  for (const mode of ["own", "global", "folder"]) {
+    const project = {
+      name: "Fixture",
+      requests: [
+        normalizeRequest({
+          url: "https://example.invalid",
+          auth: mode === "own" ? native : { type: "none" },
+        }),
+      ],
+      settings:
+        mode === "global"
+          ? { globalAuth: native }
+          : mode === "folder"
+            ? { folderAuth: { A: native } }
+            : {},
+    };
+    const before = structuredClone(project);
+    assert.throws(
+      () => exportOpenAPI(project),
+      (error) =>
+        error.message === "OpenAPI不能保留原生 OAuth2 定义，请使用项目备份",
+    );
+    assert.deepEqual(project, before);
+  }
 });

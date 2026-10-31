@@ -434,6 +434,14 @@ test(
     const f = await fixture(t),
       source = await seed(f),
       before = await f.app.store.get(source.id);
+    const exportFailure = await f.call(
+      "/api/projects/" + source.id + "/export?format=openapi",
+      "GET",
+      undefined,
+      400,
+    );
+    assert(!Object.hasOwn(exportFailure, "paths"));
+    assert.deepEqual(await f.app.store.get(source.id), before);
     for (const mutate of [
       (d) => (d.addTokenTo = "{{mode}}"),
       (d) => (d.authRequestParams = {}),

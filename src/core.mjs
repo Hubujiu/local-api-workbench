@@ -1443,6 +1443,15 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  // OpenAPI cannot retain this opt-in native token policy or its grant metadata.
+  for (const auth of [
+    project.settings?.globalAuth,
+    ...Object.values(project.settings?.folderAuth || {}),
+    ...(project.requests || []).filter((r) => !r.deletedAt).map((r) => r.auth),
+  ]) {
+    if (auth && typeof auth === "object" && "nativeOAuth2" in auth)
+      throw Error("OpenAPI不能保留原生 OAuth2 定义，请使用项目备份");
+  }
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
