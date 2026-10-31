@@ -369,9 +369,14 @@ test(
     );
     const f = await owner(t);
     const patches = [
-      ...["password", "client_credentials", "implicit", "unknown", ""].map(
-        (grant_type) => ({ grant_type }),
-      ),
+      ...[
+        "password",
+        "password_credentials",
+        "client_credentials",
+        "implicit",
+        "unknown",
+        "",
+      ].map((grant_type) => ({ grant_type })),
       ...["basic", "none", "", "unknown"].map((client_authentication) => ({
         client_authentication,
       })),
@@ -481,6 +486,18 @@ test(
       body: JSON.stringify({ auth: native(p.base) }),
     });
     assert.equal(unauthorized.status, 403);
+    const unauthorizedRefresh = await fetch(
+      f.app.url + "/api/oauth/native/refresh",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          auth: native(p.base),
+          refreshToken: "explicit",
+        }),
+      },
+    );
+    assert.equal(unauthorizedRefresh.status, 403);
     assert.equal(p.seen.length, 0);
   },
 );
@@ -687,3 +704,75 @@ test(
     assert.equal(p.seen.length, 1);
   },
 );
+
+for (const cancellation of ["caller disconnect", "owner close"])
+  test(
+    `native refresh ${cancellation} aborts the actual provider exchange without caching credentials`,
+    { timeout: 30000 },
+    async (t) => {
+      const arrived = Promise.withResolvers(),
+        disconnected = Promise.withResolvers();
+      let attempts = 0;
+      const p = await peer(t, ({ req, res, fields }) => {
+        attempts++;
+        assert.equal(req.url, "/refresh");
+        assert.equal(req.method, "POST");
+        credentials(req, fields, "header");
+        assert.equal(fields.get("grant_type"), "refresh_token");
+        assert.equal(
+          fields.get("refresh_token"),
+          attempts === 1 ? "cancelled-refresh" : "fresh-explicit-refresh",
+        );
+        if (attempts === 1) {
+          res.once("close", () => disconnected.resolve());
+          arrived.resolve();
+        } else
+          res.end(
+            JSON.stringify({
+              access_token: "fresh-after-cancellation",
+              token_type: "Bearer",
+            }),
+          );
+      });
+      const f = await owner(t),
+        project = await f.app.store.create("refresh cancellation isolation");
+      const before = await f.app.store.get(project.id);
+      const auth = native(p.base),
+        controller = new AbortController();
+      const pending = fetch(f.app.url + "/api/oauth/native/refresh", {
+        method: "POST",
+        headers: {
+          "x-local-token": f.app.token,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ auth, refreshToken: "cancelled-refresh" }),
+        signal: controller.signal,
+      }).then(
+        async (response) => {
+          await response.text();
+          return response.status;
+        },
+        () => "disconnected",
+      );
+      await arrived.promise;
+      if (cancellation === "caller disconnect") controller.abort();
+      else await f.restart();
+      assert.notEqual(await pending, 200);
+      await disconnected.promise;
+      assert.equal(p.seen.length, 1);
+      assert.deepEqual(await f.app.store.get(project.id), before);
+      // Neither the cancelled input nor the stored native access_token supplies a
+      // hidden refresh credential to a later explicit acquisition request.
+      await f.call("/api/oauth/native/refresh", { auth }, "POST", 400);
+      assert.equal(p.seen.length, 1);
+      const result = await f.call("/api/oauth/native/refresh", {
+        auth,
+        refreshToken: "fresh-explicit-refresh",
+      });
+      assert.equal(result.accessToken, "fresh-after-cancellation");
+      assert.equal(p.seen.length, 2);
+      assert.deepEqual(await f.app.store.get(project.id), before);
+      await f.restart();
+      assert.deepEqual(await f.app.store.get(project.id), before);
+    },
+  );
