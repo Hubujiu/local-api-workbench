@@ -341,7 +341,11 @@ export function apiResourceTargets(project) {
     if (!document.deletedAt) add(document.id, { type: "doc", value: document });
   return targets;
 }
-export function deleteAPIResources(project, selectedTargetIds) {
+export function deleteAPIResources(
+  project,
+  selectedTargetIds,
+  { deletedAt = new Date().toISOString(), batchId = randomUUID() } = {},
+) {
   validateAPIResourceTrash(project);
   uniqueStrings(selectedTargetIds, "选中ID", 1000);
   if (!selectedTargetIds.length) fail("请选择资源");
@@ -403,8 +407,8 @@ export function deleteAPIResources(project, selectedTargetIds) {
       ]),
   );
   const batch = {
-    id: randomUUID(),
-    deletedAt: new Date().toISOString(),
+    id: batchId,
+    deletedAt,
     selectedTargetIds: [...selectedTargetIds],
     folderPaths,
     explicitFolders: (project.folders || []).filter(affected),

@@ -1,3 +1,8 @@
+import {
+  resolveNativeInheritance,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
+import { isDeepStrictEqual } from "node:util";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { exportApipostDirectory } from "./apipost-directory-export.mjs";
 import { exportApipost } from "./apipost-export.mjs";
@@ -500,6 +505,18 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (
+            action === "native-inheritance-edit" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("继承图操作不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.editNativeInheritance(p.id, await body(req)),
+            );
+          }
           if (action === "imported-execution-runs") {
             if (req.method !== "GET")
               return json(res, 405, { error: "原始记录查询仅支持GET" });
@@ -623,7 +640,24 @@ export async function createApp({
               )
             )
               throw Error("文档格式无效");
-            b.requests = b.requests.map(normalizeRequest);
+            const nativeState = validateNativeInheritanceProject(p);
+            const archivedRequests = new Map(
+              (nativeState?.recycled || []).flatMap(({ requestIds }) =>
+                requestIds.map((requestId) => [
+                  requestId,
+                  p.requests.find((request) => request.id === requestId),
+                ]),
+              ),
+            );
+            b.requests = b.requests.map((request) => {
+              const archived = archivedRequests.get(request?.id);
+              if (!archived) return normalizeRequest(request);
+              // Compare before normalization: do not silently drop unknown input
+              // fields or fill defaults into an immutable archived definition.
+              if (!isDeepStrictEqual(request, archived))
+                throw Error("回收目录内接口定义不可修改，请先整批恢复");
+              return request;
+            });
             b.plans = b.plans.map((plan) =>
               versionPlan(
                 p.plans.find((old) => old.id === plan.id),
@@ -653,6 +687,7 @@ export async function createApp({
             const b = await body(req);
             importIntoProject(p, b.document, {
               modelNameMode: b.modelNameMode,
+              inheritanceMode: b.inheritanceMode,
             });
             await store.save(p);
             return json(res, 200, p);
@@ -1239,10 +1274,11 @@ export async function createApp({
           }
           if (action === "curl" && req.method === "POST") {
             const data = await body(req);
+            const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
-              data.request?.scriptURLMode === "sdk"
-                ? applySharedScripts(p, data.request)
-                : data.request;
+              inheritedRequest?.scriptURLMode === "sdk"
+                ? applySharedScripts(p, inheritedRequest)
+                : inheritedRequest;
             assertSDKCurlDefinition(exportRequest);
             const context = debugEnvironment(
               p,
@@ -1358,7 +1394,11 @@ export async function createApp({
               throw Error("来源接口不存在");
             const item = snapshotCase({
               ...data,
-              request: freezeServiceBinding(p, data.request),
+              request: freezeServiceBinding(p, data.request, {
+                allowNativeSnapshot: Boolean(
+                  p.cases?.some((item) => item.id === data.id),
+                ),
+              }),
               functions: data.functions || p.settings?.functions || [],
             });
             p.cases ??= [];

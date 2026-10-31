@@ -29,7 +29,7 @@ function schema(value, depth = 0) {
     ]),
   );
 }
-function rows(value = []) {
+export function importApipostRows(value = []) {
   if (!Array.isArray(value) || value.length > 5000)
     throw Error("Apipost参数须为至多5000项的数组");
   return value.map((row) => {
@@ -67,7 +67,7 @@ function rows(value = []) {
     };
   });
 }
-function auth(value = { type: "noauth" }) {
+export function importApipostAuth(value = { type: "noauth" }) {
   if (!value || value.type === "noauth" || value.type === "none")
     return { type: "none" };
   if (value.type === "jwt") return importJwtConfig(value.jwt);
@@ -88,6 +88,8 @@ function auth(value = { type: "noauth" }) {
     "Apipost认证格式尚未支持，请先转换为OpenAPI/Postman: " + value.type,
   );
 }
+const rows = importApipostRows;
+const auth = importApipostAuth;
 function inheritedParameters(request) {
   return (
     request &&

@@ -1,3 +1,4 @@
+import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import { resolveNativeEnvironment } from "./native-mcp-environments.mjs";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -215,6 +216,12 @@ export function buildNativeMCPPlan(project, args, previous, normalizeRequest) {
               ? script(item.post_script)
               : old?.nativeMCP.postScript || "",
           };
+          assertNativeInheritanceMCPInput(
+            project,
+            api,
+            baseRequest,
+            inputAuth(baseRequest, state.input),
+          );
           const request = normalizeRequest(materialize(state));
           return {
             id: stepId,

@@ -1,3 +1,8 @@
+import { validateNativeInheritanceProject } from "./native-inheritance.mjs";
+import {
+  applyNativeInheritanceExport,
+  verifyNativeInheritanceExport,
+} from "./native-inheritance-export.mjs";
 import {
   prepareSampleExport,
   verifySampleDefinitions,
@@ -149,6 +154,9 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  validateNativeInheritanceProject(project);
+  if (project.settings?.nativeInheritance?.folderLifecycle !== undefined)
+    throw Error("原生继承图含目录生命周期历史；请使用完整项目备份");
   if (
     !project ||
     !Array.isArray(project.requests) ||
@@ -157,6 +165,11 @@ export function exportApipost(project, options = {}) {
     project.environments.length > 100
   )
     throw Error("Apipost导出项目结构无效或超过限制");
+  if (
+    project.settings?.nativeInheritance &&
+    project.requests.some((r) => r.deletedAt)
+  )
+    throw Error("原生继承图含已回收接口；请恢复后导出或使用完整项目备份");
   // This is a definition interchange, not a backup, execution archive or grant.
   for (const key of [
     "plans",
@@ -171,9 +184,12 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (
-      !["statuses", "recursiveFolderScopes", "apipostProtocolSources"].includes(
-        key,
-      )
+      ![
+        "statuses",
+        "recursiveFolderScopes",
+        "apipostProtocolSources",
+        "nativeInheritance",
+      ].includes(key)
     )
       unsupported(value, `设置 ${key}`);
   if (
@@ -483,6 +499,17 @@ export function exportApipost(project, options = {}) {
     models: modelExport.models,
     automated_testings: [],
   };
+  applyNativeInheritanceExport(project, document, {
+    id: apipostExportId,
+    auth,
+    rows,
+  });
+  verifyNativeInheritanceExport(
+    project,
+    document,
+    (id) => apipostExportId("a", id),
+    options,
+  );
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);

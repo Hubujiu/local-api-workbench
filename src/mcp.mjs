@@ -1,3 +1,4 @@
+import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
   listImportedExecutionRuns,
   getImportedExecutionRun,
@@ -670,7 +671,10 @@ export function createMCP({
                   functions: args.plan.functions || p.settings?.functions || [],
                 },
                 "ai",
-                p,
+                // Native args were just materialized by buildNativeMCPPlan from
+                // this authorized project. Re-freezing its unbound snapshots
+                // would reconnect fresh native steps to live definitions.
+                nativePlanArgs ? undefined : p,
               );
               const index = p.plans.findIndex((r) => r.id === output.id);
               if (index < 0) p.plans.push(output);
@@ -679,6 +683,37 @@ export function createMCP({
               break;
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
+              if (p.settings?.nativeInheritance) {
+                let operation = {
+                  type: "recycle-requests",
+                  requestIds: args.apiIds,
+                };
+                if (
+                  nativeName &&
+                  args.apiIds.length === 1 &&
+                  typeof args.apiIds[0] === "string" &&
+                  args.apiIds[0].startsWith("folder:")
+                ) {
+                  const folder = p.settings.nativeInheritance.folders.find(
+                    (item) => item.path === args.apiIds[0].slice(7),
+                  );
+                  if (!folder) throw Error("目录不属于当前继承图");
+                  operation = {
+                    type: "recycle-folder",
+                    sourceId: folder.sourceId,
+                  };
+                }
+                await store.editNativeInheritance(
+                  p.id,
+                  {
+                    configRevision: p.configRevision,
+                    operation,
+                  },
+                  { nativeTrash: Boolean(nativeName) },
+                );
+                output = [...args.apiIds];
+                break;
+              }
               if (nativeName) {
                 const deletion = deleteAPIResources(p, args.apiIds);
                 await store.save(deletion.project);
@@ -742,18 +777,22 @@ export function createMCP({
                 freezeServiceBinding(p, request),
                 environmentId,
               );
+              const temporaryInput = nativeName
+                ? inputAuth(effectiveRequest, args.input)
+                : args.input;
+              assertNativeInheritanceMCPInput(
+                p,
+                request,
+                effectiveRequest,
+                temporaryInput,
+              );
               const plan = snapshotPlan({
                 name: request.name,
                 ...(nativeName ? { statusPolicy: "strict200" } : {}),
                 functions: p.settings?.functions || [],
                 steps: [
                   {
-                    request: applyMCPInput(
-                      effectiveRequest,
-                      nativeName
-                        ? inputAuth(effectiveRequest, args.input)
-                        : args.input,
-                    ),
+                    request: applyMCPInput(effectiveRequest, temporaryInput),
                   },
                 ],
               });

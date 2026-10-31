@@ -1,3 +1,8 @@
+import {
+  validateNativeInheritanceProject,
+  assertNativeInheritanceIdentity,
+  editNativeInheritance,
+} from "./native-inheritance.mjs";
 import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import {
   normalizeImportedNativeTaskSource,
@@ -144,9 +149,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateNativeInheritanceProject(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validateNativeInheritanceProject(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -205,7 +214,47 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async save(p, { activity = false } = {}) {
+  async editNativeInheritance(projectId, input, { nativeTrash = false } = {}) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (k) => !["configRevision", "operation"].includes(k),
+      ) ||
+      !Number.isSafeInteger(input.configRevision) ||
+      input.configRevision < 0
+    )
+      throw Error("继承图操作必须提供有效configRevision和operation");
+    const current = await this.get(projectId);
+    if (input.configRevision !== current.configRevision)
+      throw Error("项目已有其他修改，请重新加载");
+    const context = ["recycle-requests", "recycle-folder"].includes(
+      input.operation?.type,
+    )
+      ? {
+          deletedAt: new Date().toISOString(),
+          ...(nativeTrash || input.operation.type === "recycle-folder"
+            ? { nativeTrash: true, batchId: id() }
+            : {}),
+        }
+      : {};
+    const next = editNativeInheritance(current, input.operation, context);
+    const operation = structuredClone(input.operation);
+    return this.save(next, {
+      nativeInheritanceEdit: operation,
+      nativeInheritanceEditContext: context,
+    });
+  }
+  async save(
+    p,
+    {
+      activity = false,
+      nativeInheritanceEdit,
+      nativeInheritanceEditContext,
+    } = {},
+  ) {
+    validateNativeInheritanceProject(p);
     validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
@@ -297,6 +346,22 @@ export class Store {
           } catch (e) {
             if (e.code !== "ENOENT") throw e;
           }
+          // Disk JSON omits optional undefined fields. Compare both sides after
+          // the same existing snapshot normalization, not raw disk vs JS shape.
+          const identityPrevious =
+            nativeInheritanceEdit && previous
+              ? {
+                  ...previous,
+                  plans: previous.plans.map(snapshotPlan),
+                  cases: previous.cases?.map(snapshotCase),
+                }
+              : previous;
+          assertNativeInheritanceIdentity(
+            identityPrevious,
+            p,
+            nativeInheritanceEdit,
+            nativeInheritanceEditContext,
+          );
           if (
             previous &&
             p._diskFingerprint &&
@@ -347,6 +412,8 @@ export class Store {
   }
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
+  if (input?.nativeInheritance !== undefined)
+    throw Error("请求须先按当前项目解析原生继承图");
   const r = normalizeRequest(input);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
