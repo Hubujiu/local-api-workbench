@@ -371,7 +371,10 @@ test("directory rebind keeps active database APIs alongside an independent plain
     const step = plan.steps[0];
     assert.equal(step.name, expectedPlan.steps[0].name);
     assert.equal(step.enabled, true);
-    assert.equal(step.expectedStatus, 200);
+    // Native flow steps carry no status override; the imported plan's
+    // strict200 policy is authoritative (core checks it before step overrides).
+    assert.equal(step.expectedStatus, undefined);
+    assert.equal(plan.statusPolicy, "strict200");
     for (const key of [
       "name",
       "method",
