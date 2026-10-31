@@ -94,3 +94,30 @@ and completed-scope assertions remain mandatory; an earlier timeout is not
 accepted as quota validation. No diagnostic success can retroactively fix or
 reclassify the old failed commit. Ordinary CI on a later commit can provide
 useful evidence if the failure recurs; this change itself is not a root-cause fix.
+
+## Monotonic elapsed-wall accounting (2026-10-31)
+
+Static review found an independent clock defect: host `Date.now()` differences
+could become negative after a civil-clock adjustment, replenishing the remaining
+active budget. A forward adjustment could instead cause an early timeout. Worker
+bootstrap/activity interrupts, debits, serialization charges and timer scheduling
+now share captured `performance.now()` elapsed time. Guest `Date.now()` and built-in
+variable timestamps retain civil-clock semantics. Parent sequence accounting
+already uses monotonic time.
+
+The 250 ms active elapsed-wall / 2 s outer caps, lower requested limits, fresh
+workers, memory/stack limits, operation quotas, cancellation and all pending-task,
+Promise-rejection and terminal-serialization checks remain unchanged. Scheduling
+pauses inside measured operations still consume activity; async idle waits still
+do not. CPU remains diagnostic only. Budget admission, debits and final activity
+are fractional and never rounded; only emitted phase/bootstrap diagnostic totals
+are rounded to integer milliseconds for the existing public-field whitelists.
+
+Pure fake-clock observation tests cover fractional diagnostic totals and unchanged
+public validation; static wiring checks cover host/guest clock separation and
+unrounded charging. These do not execute a VM or prove runtime interruption.
+Existing real CI budget, timer, callback, sequence, serialization and XML rejection
+assertions remain required on the exact new commit. No local application, VM or
+XML workload was run for this change. There is no evidence that clock adjustment
+caused the previously observed CI timeout, and this hardening does not establish
+that timeout's root cause or accept timeout as content-validation success.

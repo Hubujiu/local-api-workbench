@@ -140,15 +140,15 @@ test("source wiring keeps bootstrap deadline and resource limits, with failure-o
   for (const literal of [
     "runtime.setMemoryLimit(16 * 1024 * 1024);",
     "runtime.setMaxStackSize(512 * 1024);",
-    "let deadline = Date.now() + 1000;",
-    "runtime.setInterruptHandler(() => Date.now() > deadline);",
-    "deadline = Date.now() + workerData.activityBudgetMs;",
+    "let deadline = monotonicNow() + 1000;",
+    "runtime.setInterruptHandler(() => monotonicNow() > deadline);",
+    "deadline = monotonicNow() + workerData.activityBudgetMs;",
   ])
     assert(worker.includes(literal));
   assert(scripts.includes("activityBudgetMs = 250"));
   assert(scripts.includes("wallBudgetMs = 2000"));
   const start = worker.indexOf("bootstrapObservation = observeBootstrap");
-  assert(start > worker.indexOf("let deadline = Date.now() + 1000;"));
+  assert(start > worker.indexOf("let deadline = monotonicNow() + 1000;"));
   assert(start < worker.indexOf("context = runtime.newContext();"));
   assert(
     worker.indexOf('bootstrapObservation.enter("setup")') <
@@ -168,4 +168,84 @@ test("source wiring keeps bootstrap deadline and resource limits, with failure-o
     1,
   );
   assert(worker.slice(failureStart).includes('scriptStage === "bootstrap"'));
+});
+
+test("fractional monotonic observations round only diagnostic totals", () => {
+  let elapsed = 100.125;
+  const observation = observeBootstrap(
+    () => elapsed,
+    () => null,
+  );
+  elapsed = 100.375;
+  observation.enter("setup");
+  elapsed = 100.875;
+  const fields = observation.failure();
+  assert.deepEqual(fields, {
+    bootstrapOperation: "setup",
+    bootstrapElapsedMs: 1,
+    bootstrapOperationMs: 1,
+  });
+  assert.deepEqual(
+    scriptFailureDetails({
+      scriptStage: "bootstrap",
+      scriptDiagnostics: fields,
+    }),
+    { scriptStage: "bootstrap", scriptDiagnostics: fields },
+  );
+  // The observer's starting points remain fractional after an emitted snapshot.
+  elapsed = 101.5;
+  assert.deepEqual(observation.failure(), {
+    bootstrapOperation: "setup",
+    bootstrapElapsedMs: 1,
+    bootstrapOperationMs: 1,
+  });
+});
+
+test("host monotonic wiring preserves guest timestamps and unrounded activity enforcement", async () => {
+  const worker = await readFile(
+    new URL("../src/script-worker.mjs", import.meta.url),
+    "utf8",
+  );
+  for (const literal of [
+    'import { performance } from "node:perf_hooks";',
+    "const monotonicNow = performance.now.bind(performance);",
+    "bootstrapObservation = observeBootstrap(monotonicNow, threadCPU);",
+    "due: monotonicNow() + milliseconds,",
+    "earliest > monotonicNow()",
+    "Math.max(0, earliest - monotonicNow())",
+    "const now = monotonicNow();",
+    "let remaining = deadline - monotonicNow();",
+    'if (remaining <= 0) throw Error("脚本执行超时");',
+    "const start = monotonicNow();",
+    "deadline = start + remaining;",
+    "remaining -= monotonicNow() - start;",
+    "const serializationStart = monotonicNow();",
+    "deadline = serializationStart + Math.max(0, remaining);",
+    "if (outcome.result.activityMs > workerData.activityBudgetMs)",
+    "activityMetrics[metric] += Math.max(0, monotonicNow() - started);",
+    "Object.entries(activityMetrics).map",
+    "Math.round(value)",
+    "()=>Date.now(),__fakerVariable",
+  ])
+    assert(worker.includes(literal), literal);
+  // Only generated guest code reads civil time; comments are not executable.
+  const civilReads = worker
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .filter((line) => line.includes("Date.now"));
+  assert.equal(civilReads.length, 1);
+  assert(civilReads[0].includes("const builtinVariable="));
+  assert.equal(
+    (worker.match(/\.\.\.readActivityMetrics\(\)/g) || []).length,
+    2,
+  );
+  const charge = worker.slice(
+    worker.indexOf("activityMs:\n"),
+    worker.indexOf("// Native JSON/string conversion"),
+  );
+  assert.match(
+    charge,
+    /workerData\.activityBudgetMs\s*-\s*remaining\s*\+\s*monotonicNow\(\)\s*-\s*serializationStart/,
+  );
+  assert(!charge.includes("Math.round"));
 });
