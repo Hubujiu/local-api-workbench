@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { normalizeRedirect } from "./http-redirect.mjs";
 import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { loadTiming } from "../public/load-timing.js";
@@ -12,6 +13,9 @@ import {
 } from "./environments.mjs";
 import { projectScopes } from "./variable-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
+
+// Elapsed execution budgets must not follow civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
 
 export async function runLoad(project, request, options = {}) {
   if (request?.postmanCollectionId !== undefined)
@@ -46,7 +50,7 @@ export async function runLoad(project, request, options = {}) {
   const results = [];
   let cursor = 0,
     mainRequests = 0;
-  const started = Date.now();
+  const started = monotonicNow();
   const controller = new AbortController();
   let stopReason, timer;
   const stop = (reason) => {
@@ -64,18 +68,18 @@ export async function runLoad(project, request, options = {}) {
   if (timing.mode === "duration" && !stopReason)
     timer = setTimeout(
       () => stop("duration"),
-      Math.max(0, deadline - Date.now()),
+      Math.max(0, deadline - monotonicNow()),
     );
   try {
     await Promise.all(
       Array.from({ length: concurrency }, async () => {
         while (cursor < count && !controller.signal.aborted) {
-          if (Date.now() >= deadline) {
+          if (monotonicNow() >= deadline) {
             stop("duration");
             break;
           }
           const index = cursor++,
-            iterationStart = Date.now();
+            iterationStart = monotonicNow();
           try {
             const run = await runPlan(
               plan,
@@ -139,7 +143,7 @@ export async function runLoad(project, request, options = {}) {
               interrupted: run.status === "cancelled",
               status: record.response?.status,
               duration: record.response?.duration,
-              elapsed: Date.now() - iterationStart,
+              elapsed: Math.max(0, Math.round(monotonicNow() - iterationStart)),
               passed:
                 run.status !== "cancelled" &&
                 record.status === "passed" &&
@@ -194,7 +198,7 @@ export async function runLoad(project, request, options = {}) {
     count: results.length,
     requested: count,
     concurrency,
-    elapsed: Date.now() - started,
+    elapsed: Math.max(0, Math.round(monotonicNow() - started)),
     passed: results.filter((r) => r.passed).length,
     timingSamples: timings.length,
     p50: timings[Math.floor(timings.length * 0.5)] || 0,
