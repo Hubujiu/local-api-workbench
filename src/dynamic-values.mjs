@@ -1,3 +1,4 @@
+import { nativeOAuth2Definition } from "../public/native-oauth2-model.js";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -96,6 +97,7 @@ async function resolveDynamicRequestBase(
   literalBody,
 ) {
   validateApipostTemplateRequest(request);
+  const nativeOAuth2 = nativeOAuth2Definition(request.auth);
   const clone = structuredClone(request),
     specs = [];
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
@@ -154,7 +156,28 @@ async function resolveDynamicRequestBase(
       scriptSources[key] = clone[key];
       delete clone[key];
     }
+  // Native grant metadata is stored, never interpolated or executed here.
+  if (nativeOAuth2 !== undefined) delete clone.auth.nativeOAuth2;
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
+  if (nativeOAuth2 !== undefined) {
+    const selected = nativeOAuth2.addTokenTo;
+    if (selected && nativeOAuth2.access_token) {
+      nativeOAuth2.access_token = interpolate(
+        nativeOAuth2.access_token,
+        variables,
+      );
+      if (
+        selected === "header" &&
+        nativeOAuth2.access_token &&
+        nativeOAuth2.headerPrefix
+      )
+        nativeOAuth2.headerPrefix = interpolate(
+          nativeOAuth2.headerPrefix,
+          variables,
+        );
+    }
+    resolved.auth.nativeOAuth2 = nativeOAuth2;
+  }
   for (const { group, index, spec } of specs) {
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);

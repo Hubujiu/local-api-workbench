@@ -1,3 +1,4 @@
+import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -370,6 +371,10 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  for (const step of plan.steps || []) {
+    if (step.request?.auth && "nativeOAuth2" in step.request.auth)
+      validateAuth(step.request.auth);
+  }
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -447,6 +452,11 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  // Admit even disabled native definitions before cloning or interpolation.
+  for (const step of plan.steps || []) {
+    if (step.request?.auth && "nativeOAuth2" in step.request.auth)
+      validateAuth(step.request.auth);
+  }
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
@@ -1669,7 +1679,10 @@ export function toCurl(input) {
       quote((r.auth.username || "") + ":" + (r.auth.password || "")),
     );
   }
-  if (["bearer", "oauth2"].includes(r.auth.type))
+  if (
+    !applyNativeOAuth2(url, headers, r.auth) &&
+    ["bearer", "oauth2"].includes(r.auth.type)
+  )
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);

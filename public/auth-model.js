@@ -1,3 +1,4 @@
+import { nativeOAuth2Definition } from "./native-oauth2-model.js";
 export const authTypes = [
   "none",
   "bearer",
@@ -14,6 +15,7 @@ export const authTypes = [
   "asap",
 ];
 export function validateAuth(auth = {}) {
+  nativeOAuth2Definition(auth);
   if (!auth || typeof auth !== "object" || Array.isArray(auth))
     throw Error("认证配置必须为对象");
   if (auth.type !== undefined && !authTypes.includes(auth.type))
