@@ -1,3 +1,7 @@
+import {
+  prepareApipostDatabaseExport,
+  readDatabaseExportMode,
+} from "./apipost-database-export.mjs";
 import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
 import { assertRedirectExportable } from "./http-redirect.mjs";
 import { exportApipostTaskPipeline } from "./apipost-task-export.mjs";
@@ -202,16 +206,17 @@ export function exportApipost(project, options = {}) {
   // have no verified project-wide equivalent, so never silently reopen it.
   if (project.settings?.mockEnabled === false)
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
-  for (const [key, value] of Object.entries(project.settings || {}))
+  for (const key of Object.keys(project.settings || {}))
     if (
       ![
         "statuses",
         "recursiveFolderScopes",
         "apipostProtocolSources",
         "nativeInheritance",
+        "apipostDatabases",
       ].includes(key)
     )
-      unsupported(value, `设置 ${key}`);
+      unsupported(project.settings[key], `设置 ${key}`);
   if (
     typeof project.id !== "string" ||
     !project.id ||
@@ -258,6 +263,12 @@ export function exportApipost(project, options = {}) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const databaseExport = prepareApipostDatabaseExport(
+    project,
+    readDatabaseExportMode(options),
+    projectId,
+    apipostExportId,
+  );
   const modelExport = prepareApipostModelExport(
     project,
     (kind, value) => apipostExportId(kind, projectId + "\0" + value),
@@ -324,7 +335,7 @@ export function exportApipost(project, options = {}) {
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");
     requestIds.add(input.id);
-    const pipeline = exportApipostTaskPipeline(input);
+    const pipeline = exportApipostTaskPipeline(input, databaseExport);
     if (typeof input.schema === "boolean")
       throw Error(
         "原生导出不支持API直接布尔schema；请引用明确模型或使用项目备份",
@@ -514,7 +525,7 @@ export function exportApipost(project, options = {}) {
       marks,
       attributes: [],
       mock_custom_rules: [],
-      db_link: [],
+      db_link: databaseExport.records,
       describe_library: [],
       custom_func: [],
     },

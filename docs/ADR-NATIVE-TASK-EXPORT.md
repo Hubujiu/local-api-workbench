@@ -57,3 +57,71 @@ verification was performed. PR #14's historical Basic/form GUI verification does
 not establish native-task GUI compatibility. Original execution policies for
 wait scheduling, extraction failures or assertion errors are not encoded by the
 native file and are not promised equivalent.
+
+## Explicit PostgreSQL/MySQL rebind profile (2026-10-31, WIP)
+
+The default export still refuses a database directory or database pipeline.
+Owner JSON/directory exports opt in with `databaseMode=rebind`; the direct
+serializers accept `{databaseMode: "rebind"}`. This is a credential-free
+connection-definition migration, not a backup of original connection settings.
+No database session, grant or provider is inspected, refreshed or exported.
+
+Only API-local PostgreSQL/MySQL tasks and their safe imported connection directory
+are supported. Existing script/pickVars/assert/wait ordering remains intact.
+Inherited task origins, frozen native-task steps, inert source mirrors, SSH
+requirements, other database providers and write intentions remain unsupported.
+The original task normalizer and driver read-only transactions remain in force;
+SELECT/WITH prefix admission is not a new SQL semantic-purity proof. No runtime
+budget, driver scope, grant or query policy is widened by serialization.
+
+Output database IDs are stable hashes of current safe identities; task references
+are remapped to them. MySQL result-set shape must match its provider before the
+internal field is removed. Variable scopes map back to native names. Variable
+row IDs are freshly generated deterministic UI identities; discarded original
+param_id values are not claimed preserved. Optional finite safe-integer sort is
+now accepted and retained by import; other sort shapes still fail before commit.
+
+Every output connection has a documented empty host/user/password/database/
+auth_source shell and disabled SSH with empty credentials. Port 5432 (PostgreSQL),
+3306 (MySQL), and SSH 22 are profile-generated defaults, not recovered settings.
+The intro explicitly warns that connection settings were omitted and reauthorization
+is necessary. Workbench import keeps only safe identity/sort and requires a fresh
+project-scoped ephemeral grant before execution. No claim is made that an original
+Apipost runtime would safely reject an empty-host shell; do not run such a shell
+there without deliberate configuration and authorization. Full Workbench backup
+retains supported project state, not ephemeral grants or discarded credentials.
+
+### Newly restored static evidence
+
+Official Offline2 2.0.0 DEB re-downloaded 2026-10-31: 92,918,672 bytes, SHA256
+`7c66b8963960dd22a384072ecb714c9d8ba1164bb2ecd8f2d90d325fa3d83942`.
+Only archive data and plaintext were read; no installation, original execution,
+compiled-code analysis, license acceptance or paid-check bypass occurred.
+Renderer `index-0d1d8198fa5a.js`, SHA256
+`20bb6e21fd678ead16bd91807dc9623b8cd3e7019d44ac874a167c31a37f39fb`:
+
+- Module 258928, UTF-8 byte range [2778912,2780623): project exporter retains
+  stored database links; it is not a credential-redaction facility.
+- Module 526737, [3725436,3725746): database import maps identity and retains
+  config/intro/sort, with absent sort defaulting to 0. This established that the
+  old Workbench import whitelist incorrectly rejected the native sort field.
+- Module 30695, [3521469,3521970): database-editor default configuration field
+  shape and disabled-SSH empty credential fields. PostgreSQL 5432 is separately
+  a UI port hint, not proof of automatic saved-config initialization.
+- The variable UI rowKey uses param_id; sender extraction uses name/type/pattern.
+  No proprietary implementation or native binary is included in this repository.
+
+Acceptance requires two-format/two-generation semantic definition roundtrips,
+source immutability and rejection atomicity, plus actual PostgreSQL/MySQL CI
+services: import without grant refuses before HTTP, rebind then execute ordered
+script/database/script/HTTP, no credential leakage, frozen backup/restart and
+fresh authorization. Static syntax/model definitions alone are not acceptance.
+
+The recovered database converter range was additionally parsed with the reviewed
+REA registry 6.7.0 parser-only module (Babel import closure), not the full CLI or
+worker: 310 input bytes, zero parse errors, 155 AST nodes, only field-name facts
+retained. Hard process deadline 10 s, Node old-space 128 MiB, input cap 4096 bytes
+and traversal cap 10,000 nodes were applied. The registry release is not claimed
+identical to current Hubujiu/rea HEAD. Full REA CLI/worker remains unused because
+its audited Zod/glob dependency paths require repair; this narrow parse does not
+clear those findings or claim complete semantic analysis.

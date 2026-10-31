@@ -1,10 +1,14 @@
+import { exportApipostDatabaseTask } from "./apipost-database-export.mjs";
 import { parseApipostScriptTasks } from "./apipost-modern.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
-import { nativeDataObject } from "./native-response-extraction.mjs";
+import {
+  nativeDataObject,
+  nativeDataArray,
+} from "./native-response-extraction.mjs";
 
 // Independently written format adapter. Never compile source or activate inert
 // provenance. The executable pipeline, not an old script-source mirror, wins.
-export function exportApipostTaskPipeline(request) {
+export function exportApipostTaskPipeline(request, databaseExport) {
   const native = Object.getOwnPropertyDescriptor(request, "nativeTasks");
   if (!native && !("nativeTasks" in request)) return undefined;
   // Unlike HTTP JSON, direct callers may supply accessors or hidden fields.
@@ -31,6 +35,34 @@ export function exportApipostTaskPipeline(request) {
   }
   if (native.value === undefined) return undefined;
   nativeDataObject(request.nativeTasks, ["version", "before", "after"]);
+  // Database normalization historically accepts plain JSON from HTTP. Direct
+  // serializer callers must not execute accessors or discard hidden fields.
+  for (const phase of ["before", "after"]) {
+    nativeDataArray(request.nativeTasks[phase], 16);
+    for (const task of request.nativeTasks[phase]) {
+      nativeDataObject(task, [
+        "type",
+        "enabled",
+        "data",
+        "id",
+        "name",
+        "origin",
+      ]);
+      if (task.origin !== undefined)
+        throw Error("Apipost导出nativeTasks不支持任务来源；请使用项目备份");
+      if (task.type !== "database") continue;
+      nativeDataObject(task.data, [
+        "connectionId",
+        "query",
+        "variables",
+        "isConsoleOutput",
+        "resultShape",
+      ]);
+      nativeDataArray(task.data.variables, 100);
+      for (const variable of task.data.variables)
+        nativeDataObject(variable, ["name", "param_id", "pattern", "type"]);
+    }
+  }
   const pipeline = normalizeNativeTaskRequest(request);
   if (request.scriptDialect !== "apipost8")
     throw Error("Apipost导出nativeTasks须使用Apipost脚本方言；请使用项目备份");
@@ -44,11 +76,13 @@ export function exportApipostTaskPipeline(request) {
   const all = [...pipeline.before, ...pipeline.after];
   for (const task of all) {
     if (
-      !["customScript", "pickVars", "assert", "wait"].includes(task.type) ||
+      !["customScript", "pickVars", "assert", "wait", "database"].includes(
+        task.type,
+      ) ||
       task.origin !== undefined
     )
       throw Error(
-        "Apipost导出nativeTasks仅支持接口本地非数据库任务；请使用项目备份",
+        "Apipost导出nativeTasks仅支持接口本地有界任务；请使用项目备份",
       );
     if (!task.id || !task.name)
       throw Error(
@@ -66,5 +100,23 @@ export function exportApipostTaskPipeline(request) {
       // Import classifies phases separately, even within a mixed request. Reuse
       // its metadata/merged-text limits; never alter the original task data.
       parseApipostScriptTasks(pipeline[phase], phase);
-  return pipeline;
+  return {
+    ...pipeline,
+    ...Object.fromEntries(
+      ["before", "after"].map((phase) => [
+        phase,
+        pipeline[phase].map((task, index) =>
+          task.type === "database"
+            ? exportApipostDatabaseTask(
+                task,
+                databaseExport,
+                request.id,
+                phase,
+                index,
+              )
+            : task,
+        ),
+      ]),
+    ),
+  };
 }

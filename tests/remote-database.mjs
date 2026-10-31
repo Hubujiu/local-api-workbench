@@ -409,3 +409,29 @@ await verifyMCPStdioNativeDatabaseFlow({
   type: "mysql",
   port: 3306,
 });
+
+// Explicit redacted native definitions rebind against the real SQL services.
+const { verifyNativeDatabaseExportFlow } = await import(
+  "./native-database-export-integration.mjs"
+);
+await verifyNativeDatabaseExportFlow({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyNativeDatabaseExportFlow({ ...common, type: "mysql", port: 3306 });
+
+// Exported definitions never carry HTTP/stdio/CLI connection authority.
+const { verifyNativeDatabaseExportTransports } = await import(
+  "./native-database-export-transports-integration.mjs"
+);
+await verifyNativeDatabaseExportTransports({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyNativeDatabaseExportTransports({
+  ...common,
+  type: "mysql",
+  port: 3306,
+});
