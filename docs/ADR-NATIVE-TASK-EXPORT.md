@@ -116,3 +116,12 @@ source immutability and rejection atomicity, plus actual PostgreSQL/MySQL CI
 services: import without grant refuses before HTTP, rebind then execute ordered
 script/database/script/HTTP, no credential leakage, frozen backup/restart and
 fresh authorization. Static syntax/model definitions alone are not acceptance.
+
+The recovered database converter range was additionally parsed with the reviewed
+REA registry 6.7.0 parser-only module (Babel import closure), not the full CLI or
+worker: 310 input bytes, zero parse errors, 155 AST nodes, only field-name facts
+retained. Hard process deadline 10 s, Node old-space 128 MiB, input cap 4096 bytes
+and traversal cap 10,000 nodes were applied. The registry release is not claimed
+identical to current Hubujiu/rea HEAD. Full REA CLI/worker remains unused because
+its audited Zod/glob dependency paths require repair; this narrow parse does not
+clear those findings or claim complete semantic analysis.

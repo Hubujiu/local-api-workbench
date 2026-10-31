@@ -170,11 +170,11 @@ export function exportApipost(project, options = {}) {
     for (const [key, value] of Object.entries(project.openapiComponents))
       unsupported(value, "模型组件 " + key);
   }
-  for (const [key, value] of Object.entries(project.settings || {}))
+  for (const key of Object.keys(project.settings || {}))
     if (
       !["statuses", "recursiveFolderScopes", "apipostDatabases"].includes(key)
     )
-      unsupported(value, `设置 ${key}`);
+      unsupported(project.settings[key], `设置 ${key}`);
   if (
     typeof project.id !== "string" ||
     !project.id ||

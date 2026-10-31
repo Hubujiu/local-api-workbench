@@ -335,6 +335,21 @@ export async function verifyNativeDatabaseExportFlow(config) {
     assertNoSecrets(recovered, config);
     assert.deepEqual(await app.store.get(foreign.id), foreignBefore);
     assert.deepEqual(source, originalSource);
+    assert.equal(
+      observed.length,
+      7,
+      "five live migrations plus two frozen runs use the real peer",
+    );
+    console.log(
+      "NATIVE_DATABASE_REBIND_EXPORT_PASSED",
+      JSON.stringify({
+        provider: config.type,
+        formats: 2,
+        generationsPerFormat: 2,
+        realHTTPRequests: observed.length,
+        backupRestartRegrant: true,
+      }),
+    );
   } finally {
     await close(app?.server);
     await close(peer);

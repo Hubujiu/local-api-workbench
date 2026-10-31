@@ -94,7 +94,10 @@ export function exportApipostDirectory(project, options = {}) {
       delete snapshotRequest.importedScriptTasks;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
-      const frozen = exportApipost({ ...base, requests: [snapshotRequest] });
+      const frozen = exportApipost(
+        { ...base, requests: [snapshotRequest] },
+        options,
+      );
       for (const folder of frozen.apis.filter(
         (n) => n.target_type === "folder",
       )) {

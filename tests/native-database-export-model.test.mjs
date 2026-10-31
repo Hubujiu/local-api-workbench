@@ -280,6 +280,125 @@ for (const [name, encode] of formats)
     assert.deepEqual(source, beforeSource);
   });
 
+test("directory rebind keeps active database APIs alongside an independent plain HTTP frozen plan through two generations", () => {
+  const { p } = fixture();
+  databaseTasks(p)[1].enabled = 1;
+  p.environments = [
+    {
+      id: "plan-env",
+      name: "Frozen environment",
+      variables: { token: "fixture-value" },
+    },
+  ];
+  p.plans = [
+    snapshotPlan({
+      id: "plain-plan",
+      name: "Plain frozen HTTP",
+      description: "Independent of API-local database pipelines",
+      statusPolicy: "strict200",
+      source: "ai",
+      environmentId: "plan-env",
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+      steps: [
+        {
+          id: "plain-step",
+          expectedStatus: 200,
+          request: {
+            id: "plain-snapshot",
+            name: "Frozen plain request",
+            method: "POST",
+            url: "http://127.0.0.1:1/plain-frozen",
+            bodyType: "json",
+            body: '{"token":"{{token}}"}',
+            inheritSharedScripts: false,
+            scriptDialect: "apipost8",
+          },
+        },
+      ],
+    }),
+  ];
+  const original = structuredClone(p);
+  const expectedTasks = semantics(p);
+  const expectedPlan = p.plans[0];
+  const expectedRequest = expectedPlan.steps[0].request;
+  let current = p;
+  for (let generation = 0; generation < 2; generation++) {
+    const before = structuredClone(current);
+    const document = exportApipostDirectory(current, rebind);
+    const documentBefore = structuredClone(document);
+    checkRedactedDocument(document);
+    const next = empty("plain-plan-generation-" + generation);
+    importIntoProject(next, document);
+    assert.deepEqual(
+      current,
+      before,
+      "directory export must not mutate its input",
+    );
+    assert.deepEqual(
+      document,
+      documentBefore,
+      "reimport must not mutate the directory",
+    );
+    checkSafeResources(next);
+    assert.deepEqual(semantics(next), expectedTasks);
+    assert(databaseTasks(next).every((entry) => entry.enabled === 1));
+    assert.equal(next.plans.length, 1);
+    const plan = next.plans[0];
+    for (const key of [
+      "name",
+      "description",
+      "statusPolicy",
+      "source",
+      "createdAt",
+      "updatedAt",
+    ])
+      assert.deepEqual(
+        plan[key],
+        expectedPlan[key],
+        "frozen plan retains " + key,
+      );
+    const environment = next.environments.find(
+      (entry) => entry.id === plan.environmentId,
+    );
+    assert(
+      environment,
+      "plan environment reference must resolve after identity remapping",
+    );
+    assert.equal(environment.name, "Frozen environment");
+    assert.deepEqual(environment.variables, { token: "fixture-value" });
+    assert.equal(plan.steps.length, 1);
+    const step = plan.steps[0];
+    assert.equal(step.name, expectedPlan.steps[0].name);
+    assert.equal(step.enabled, true);
+    assert.equal(step.expectedStatus, 200);
+    for (const key of [
+      "name",
+      "method",
+      "url",
+      "bodyType",
+      "body",
+      "beforeScript",
+      "afterScript",
+    ])
+      assert.deepEqual(
+        step.request[key],
+        expectedRequest[key],
+        "plain snapshot retains " + key,
+      );
+    assert.equal(step.request.nativeTasks, undefined);
+    assert.equal(step.request.importedNativeTaskSource, undefined);
+    current = next;
+  }
+  current.plans[0].steps[0].request.body = "edited-copy";
+  current.environments[0].variables.token = "edited-copy";
+  assert.deepEqual(
+    p,
+    original,
+    "roundtrip plans and environments must not alias original state",
+  );
+});
+
 test("database sort is optional for old definitions and bounded metadata for new imports", () => {
   const legacy = nativeDatabaseFixture(),
     p = empty();
@@ -466,5 +585,120 @@ test("database profile rejects unsupported option values and keeps frozen pipeli
       (value) => encode(value, rebind),
       "frozen database steps are not API-local tasks",
     );
+  }
+});
+
+test("direct database rebind exporters reject accessors, hidden fields and symbols without reading or changing descriptors", () => {
+  // Traverse data descriptors only: neither structuredClone nor JSON.stringify
+  // is safe for checking an adversarial direct-call input with accessors.
+  const captureDescriptors = (root) => {
+    const graph = new Map();
+    const visit = (value) => {
+      if (!value || typeof value !== "object" || graph.has(value)) return;
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      graph.set(value, descriptors);
+      for (const key of Reflect.ownKeys(descriptors)) {
+        const descriptor = descriptors[key];
+        if (Object.hasOwn(descriptor, "value")) visit(descriptor.value);
+      }
+    };
+    visit(root);
+    return graph;
+  };
+  const assertDescriptorsUnchanged = (graph, label) => {
+    for (const [object, before] of graph) {
+      const after = Object.getOwnPropertyDescriptors(object);
+      assert.deepEqual(Reflect.ownKeys(after), Reflect.ownKeys(before), label);
+      for (const key of Reflect.ownKeys(before)) {
+        assert.deepEqual(
+          Object.keys(after[key]),
+          Object.keys(before[key]),
+          label,
+        );
+        for (const field of Object.keys(before[key]))
+          assert.strictEqual(after[key][field], before[key][field], label);
+      }
+    }
+  };
+  const cases = [
+    ["data query getter", ({ data, getter }) => getter(data, "query")],
+    ["data variables getter", ({ data, getter }) => getter(data, "variables")],
+    [
+      "variables index getter",
+      ({ variables, getter }) => getter(variables, "0"),
+    ],
+    ...["name", "type", "pattern"].map((key) => [
+      "variable " + key + " getter",
+      ({ row, getter }) => getter(row, key),
+    ]),
+    [
+      "hidden data field",
+      ({ data }) =>
+        Object.defineProperty(data, "hidden", {
+          value: "do-not-drop",
+          enumerable: false,
+        }),
+    ],
+    [
+      "hidden row field",
+      ({ row }) =>
+        Object.defineProperty(row, "hidden", {
+          value: "do-not-drop",
+          enumerable: false,
+        }),
+    ],
+    [
+      "symbol data field",
+      ({ data }) => {
+        data[Symbol("do-not-drop")] = "metadata";
+      },
+    ],
+    [
+      "symbol row field",
+      ({ row }) => {
+        row[Symbol("do-not-drop")] = "metadata";
+      },
+    ],
+  ];
+  for (const [format, encode] of formats) {
+    for (const [label, mutate] of cases) {
+      const { p } = fixture();
+      const data = databaseTasks(p)[0].data;
+      const variables = data.variables;
+      const row = variables[0];
+      let getterCalls = 0;
+      const getter = (object, key) => {
+        const originalValue = Object.getOwnPropertyDescriptor(
+          object,
+          key,
+        ).value;
+        Object.defineProperty(object, key, {
+          configurable: true,
+          enumerable: true,
+          get() {
+            getterCalls++;
+            return originalValue;
+          },
+        });
+      };
+      mutate({ data, variables, row, getter });
+      const descriptors = captureDescriptors(p);
+      const context = format + ": " + label;
+      assert.throws(() => encode(p, rebind), undefined, context);
+      assert.equal(
+        getterCalls,
+        0,
+        context + " must reject before reading accessor",
+      );
+      assertDescriptorsUnchanged(
+        descriptors,
+        context + " must preserve input descriptors",
+      );
+      assert.equal(
+        getterCalls,
+        0,
+        context + " descriptor comparison must not read accessor",
+      );
+    }
   }
 });
