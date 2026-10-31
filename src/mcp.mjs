@@ -930,6 +930,7 @@ export function createMCP({
                   },
                 ],
               });
+              if (nativeName) assertNativeLinearPlan(plan);
               const context = debugEnvironment(
                 p,
                 environmentId,

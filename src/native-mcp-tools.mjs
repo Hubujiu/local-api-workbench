@@ -1,3 +1,4 @@
+import { assertNativeHTTPResult } from "./native-mcp-http-shape.mjs";
 import { hasRepeatSteps } from "./plan-repeat.mjs";
 import { filteredExecutionHistory } from "./execution-history.mjs";
 import {
@@ -358,6 +359,7 @@ export function assertNativeLinearResult(run) {
     run.results?.some((result) => result.repeat)
   )
     throw Error("原版兼容结果不支持canonical循环组；请使用canonical结果工具");
+  assertNativeHTTPResult(run);
 }
 export function nativeRunResult(projectId, run, scope = "flow") {
   assertNativeLinearResult(run);
