@@ -1,3 +1,4 @@
+import { nativeOAuth2GrantInput } from "./native-oauth2-grant.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -395,6 +396,26 @@ export async function createApp({
           return json(res, 200, await oauth1.start(await body(req)));
         if (u.pathname === "/api/oauth1/complete" && req.method === "POST")
           return json(res, 200, await oauth1.complete(await body(req)));
+        if (u.pathname === "/api/oauth/native/start" && req.method === "POST") {
+          const { config } = nativeOAuth2GrantInput(await body(req), "start");
+          return json(res, 200, oauth.start(config, base));
+        }
+        if (
+          u.pathname === "/api/oauth/native/refresh" &&
+          req.method === "POST"
+        ) {
+          const { config, grant } = nativeOAuth2GrantInput(
+            await body(req),
+            "refresh",
+          );
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, (signal) =>
+              oauth.exchange(config, grant, signal),
+            ),
+          );
+        }
         if (u.pathname === "/api/oauth/start" && req.method === "POST")
           return json(res, 200, oauth.start(await body(req), base));
         if (
