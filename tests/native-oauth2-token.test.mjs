@@ -95,3 +95,31 @@ test("native OAuth2 unsafe active inputs reject without partial URL/header mutat
   );
   assert.equal(headers.authorization, "Caller");
 });
+
+test("native OAuth2 encoder is locked in production scope, not only vendoring development dependencies", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  const lock = JSON.parse(
+    await readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+  );
+  assert.equal(manifest.dependencies["postman-url-encoder"], "3.0.8");
+  assert.equal(manifest.devDependencies["postman-url-encoder"], undefined);
+  assert.equal(lock.packages[""].dependencies["postman-url-encoder"], "3.0.8");
+  assert.equal(
+    lock.packages[""].devDependencies["postman-url-encoder"],
+    undefined,
+  );
+  const encoder = lock.packages["node_modules/postman-url-encoder"];
+  assert.equal(encoder.version, "3.0.8");
+  assert.notEqual(encoder.dev, true);
+  assert.equal(encoder.license, "Apache-2.0");
+  assert.equal(
+    encoder.integrity,
+    "sha512-EOgUMBazo7JNP4TDrd64TsooCiWzzo4143Ws8E8WYGEpn2PKpq+S4XRTDhuRTYHm3VKOpUZs7ZYZq7zSDuesqA==",
+  );
+  assert.deepEqual(encoder.dependencies, { punycode: "^2.3.1" });
+  assert.equal(lock.packages["node_modules/punycode"].version, "2.3.1");
+  assert.notEqual(lock.packages["node_modules/punycode"].dev, true);
+});
