@@ -17,7 +17,9 @@ access_token fields. It does not replace them via URLSearchParams.set.
 
 Reuse the existing reviewed postman-collection URL-only subset and installed
 postman-url-encoder 3.0.8 on one synthetic query pair. Never reparse the actual
-URL through a legacy parser. No new dependency or original implementation copy.
+URL through a legacy parser. Promote the existing pinned encoder from development-only to production scope;
+its already-production punycode dependency and all versions/integrities remain
+unchanged. No new package/version or original implementation copy.
 
 ## Model and boundaries
 
