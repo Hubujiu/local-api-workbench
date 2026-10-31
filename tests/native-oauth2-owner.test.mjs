@@ -397,7 +397,8 @@ test(
       assert.notEqual(result.isError, true, JSON.stringify(result));
       const output = JSON.parse(result.content[0].text);
       assert.equal(output.status, "passed");
-      assert.equal(output.recordSaved, true);
+      // This develop API awaits append but has no recordSaved field.
+      // Persisted history is checked by id after an actual reopen below.
       history.push(output.id);
     }
     const denied = await client.callTool({
