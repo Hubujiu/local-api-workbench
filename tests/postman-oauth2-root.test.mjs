@@ -452,20 +452,35 @@ test(
         JSON.stringify(f.errors),
       );
     assert.equal(f.seen.length, 6);
-    // Export the Postman subset independently: native OAuth2 has its own
-    // earlier OpenAPI guard and must not mask the new marker rejection.
-    project.requests = project.requests.slice(0, 3);
+    // Keep all six collision-heavy wire probes above unchanged. Export and
+    // redirect admission use independent plain URLs so existing URL-query
+    // fidelity guards cannot mask rejection of the Postman marker itself.
+    project.requests = project.requests.slice(0, 3).map((request) =>
+      normalizeRequest({
+        id: request.id,
+        name: request.name,
+        method: "GET",
+        url: f.base + "/export-" + request.name,
+        headers: [],
+        auth: structuredClone(request.auth),
+      }),
+    );
     await f.store.save(project);
     // No collection marker: these export failures must be about OAuth2 policy,
     // not accidentally masked by the independent collection-scope export guard.
     assert.equal(project.postmanCollections, undefined);
     const before = structuredClone(project),
-      diskBefore = await bytes(f.store.directory(project.id));
+      diskBefore = await bytes(f.store.directory(project.id)),
+      control = structuredClone(project);
+    for (const request of control.requests) request.auth = { type: "none" };
+    const controlBefore = structuredClone(control);
     for (const exporter of [
       exportApipost,
       exportApipostDirectory,
       exportOpenAPI,
     ]) {
+      assert.doesNotThrow(() => exporter(control));
+      assert.deepEqual(control, controlBefore);
       assert.throws(() => exporter(project), /Postman OAuth2/);
       assert.deepEqual(project, before);
     }
