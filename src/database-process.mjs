@@ -1,8 +1,15 @@
+import {
+  checkDatabaseSignal,
+  databaseCancelled,
+} from "./database-read-cancellation.mjs";
 import { fork } from "node:child_process";
 
 // A native SQLite call does not yield to Worker.terminate(). An owned process
 // supplies a real termination boundary, without changing the two-second budget.
-export function runSQLiteProcess(input) {
+export function runSQLiteProcess(input, { signal } = {}) {
+  // Mutations retain their separate uncertain-outcome contract.
+  if (input.mode !== "read") signal = undefined;
+  checkDatabaseSignal(signal);
   return new Promise((resolve, reject) => {
     const child = fork(
       new URL("./database-process-entry.mjs", import.meta.url),
@@ -20,8 +27,17 @@ export function runSQLiteProcess(input) {
     );
     let message,
       failure,
-      timedOut = false;
+      timedOut = false,
+      cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGKILL");
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
     const timer = setTimeout(() => {
+      if (cancelled) return;
       timedOut = true;
       child.kill("SIGKILL");
     }, 2000);
@@ -35,6 +51,11 @@ export function runSQLiteProcess(input) {
     });
     child.once("close", (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", cancel);
+      if (cancelled) {
+        reject(databaseCancelled());
+        return;
+      }
       if (!timedOut && !failure && code === 0 && message) {
         if (message.error) reject(Error(message.error));
         else resolve(message.result);
@@ -65,7 +86,7 @@ export function runSQLiteProcess(input) {
         child.kill("SIGKILL");
     };
     try {
-      child.send(input, sendFailed);
+      if (!cancelled) child.send(input, sendFailed);
     } catch (error) {
       sendFailed(error);
     }

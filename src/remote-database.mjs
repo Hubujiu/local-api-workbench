@@ -1,3 +1,9 @@
+import { Socket } from "node:net";
+import {
+  databaseCancelled,
+  checkDatabaseSignal,
+  observeDatabaseStream,
+} from "./database-read-cancellation.mjs";
 import {
   explicitPostgresOptions,
   createExplicitPostgresClient,
@@ -14,10 +20,12 @@ import { queryMongo } from "./mongodb.mjs";
 import { queryRedis } from "./redis.mjs";
 /** Read-only DB connections; credentials are request-scoped and never persisted here. */
 export async function queryRemoteDatabase(input, dependencies = {}) {
+  const signal = dependencies.signal;
+  checkDatabaseSignal(signal);
   if (input.ssh !== undefined && !["postgres", "mysql"].includes(input.type))
     throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
-  if (input.type === "clickhouse") return queryClickHouse(input);
-  if (input.type === "redis") return queryRedis(input);
+  if (input.type === "clickhouse") return queryClickHouse(input, { signal });
+  if (input.type === "redis") return queryRedis(input, { signal });
   if (input.type === "mongodb") return queryMongo(input);
   const { type, sql } = input;
   const parameters = databaseParameters(
@@ -37,33 +45,69 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
     type === "postgres"
       ? explicitPostgresOptions(input)
       : remoteConnectionConfig(input);
-  const tunnel = await openDatabaseSSH(input);
-  if (tunnel) config.stream = tunnel.stream;
-  let rows, columns;
+  const controller = new AbortController();
+  let owner, tunnel, phaseTimer, failure, result;
+  const stop = (error) => {
+    failure ??= error;
+    controller.abort();
+    owner?.close();
+  };
+  const cancel = () => stop(databaseCancelled());
+  const check = () => {
+    if (failure) throw failure;
+    checkDatabaseSignal(signal);
+  };
+  const phase = (milliseconds, label) => {
+    clearTimeout(phaseTimer);
+    check();
+    phaseTimer = setTimeout(
+      () => stop(Error(label + "超时，连接已关闭；不会重放请求")),
+      milliseconds,
+    );
+  };
+  const totalTimer = setTimeout(
+    () => stop(Error("数据库只读操作超过8秒，连接已关闭；不会重放请求")),
+    8000,
+  );
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
   try {
+    check();
+    tunnel = await openDatabaseSSH(input, { signal: controller.signal });
+    check();
+    owner = tunnel || observeDatabaseStream(new Socket());
+    config.stream = owner.stream;
+    let rows, columns;
     if (type === "postgres") {
+      phase(3000, "PostgreSQL连接");
       const client = await createExplicitPostgresClient(config, {
         Client: dependencies.Client,
         types: postgresValueTypes,
       });
-      client.on?.("error", () => {}); // Active query promises report connection failures.
-      try {
-        await client.connect();
-        await client.query("BEGIN READ ONLY");
-        const result = await client.query({
-          rowMode: "array",
-          text: boundedSQL,
-          values: parameters,
-          queryMode: "extended",
-        });
-        rows = result.rows;
-        columns = result.fields.map((field) => field.name);
-      } finally {
-        await client.end();
-      }
+      client.on?.("error", () => {});
+      // A destroyed Socket can be reconnected: never call connect after abort.
+      check();
+      await client.connect();
+      check();
+      phase(2000, "PostgreSQL只读事务初始化");
+      await client.query("BEGIN READ ONLY");
+      check();
+      phase(2000, "PostgreSQL只读查询");
+      const value = await client.query({
+        rowMode: "array",
+        text: boundedSQL,
+        values: parameters,
+        queryMode: "extended",
+      });
+      check();
+      rows = value.rows;
+      columns = value.fields.map((field) => field.name);
     } else {
-      const mysql = await import("mysql2/promise");
-      const connection = await mysql.createConnection({
+      const mysql = (await import("mysql2")).default;
+      check();
+      phase(3000, "MySQL连接");
+      if (!tunnel) owner.stream.connect(config.port, config.host);
+      const driver = mysql.createConnection({
         ...config,
         connectTimeout: 3000,
         multipleStatements: false,
@@ -73,25 +117,42 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
         dateStrings: true,
         rowsAsArray: true,
       });
-      try {
-        await connection.query("SET TRANSACTION READ ONLY");
-        await connection.query("START TRANSACTION");
-        const [result, fields] = await connection.execute(
-          { sql: boundedSQL, timeout: 2000 },
-          parameters,
-        );
-        rows = result;
-        columns = fields.map((field) => field.name);
-      } catch (error) {
-        throw databaseQueryError(error);
-      } finally {
-        connection.destroy();
-      }
+      driver.on("error", () => {});
+      const connection = driver.promise();
+      await connection.connect();
+      check();
+      phase(2000, "MySQL只读事务初始化");
+      await connection.query("SET TRANSACTION READ ONLY");
+      check();
+      phase(2000, "MySQL事务初始化");
+      await connection.query("START TRANSACTION");
+      check();
+      // One owned deadline includes PREPARE. mysql2's per-command timeout
+      // otherwise survives forced closure and can keep a cancelled process alive.
+      phase(2000, "MySQL只读查询");
+      const [value, fields] = await connection.execute(
+        { sql: boundedSQL },
+        parameters,
+      );
+      check();
+      rows = value;
+      columns = fields.map((field) => field.name);
     }
-    return databaseRows(columns, rows);
+    result = databaseRows(columns, rows);
+  } catch (error) {
+    failure ??= databaseQueryError(error);
   } finally {
-    tunnel?.close();
+    clearTimeout(phaseTimer);
+    clearTimeout(totalTimer);
+    // Do not use mysql.destroy() (graceful end / suppressed pending errors),
+    // nor wait on pg.end() after forced closure. The caller owns this stream.
+    owner?.close();
+    if (tunnel) tunnel.close();
+    await (owner?.closed || tunnel?.closed);
+    signal?.removeEventListener("abort", cancel);
   }
+  check();
+  return result;
 }
 
 export function remoteConnectionConfig(input) {

@@ -38,9 +38,17 @@ export function querySQLite(filename, sql, parameters = []) {
     db.close();
   }
 }
-export async function querySQLiteBounded(filename, sql, parameters = []) {
+export async function querySQLiteBounded(
+  filename,
+  sql,
+  parameters = [],
+  { signal } = {},
+) {
   const { runSQLiteProcess } = await import("./database-process.mjs");
-  return runSQLiteProcess({ filename, sql, parameters, mode: "read" });
+  return runSQLiteProcess(
+    { filename, sql, parameters, mode: "read" },
+    { signal },
+  );
 }
 
 // Opt-in DML path; existing query functions remain read-only.
