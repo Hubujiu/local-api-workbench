@@ -1,3 +1,7 @@
+import {
+  postmanOAuth2Definition,
+  preflightPostmanOAuth2Input,
+} from "../public/postman-oauth2-model.js";
 const own = (o, k) => Object.hasOwn(o, k);
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function dictionary(value, label) {
@@ -49,6 +53,8 @@ function authOverride(target, patch) {
   }
 }
 export function applyMCPInput(request, input) {
+  postmanOAuth2Definition(request?.auth);
+  input = preflightPostmanOAuth2Input(request?.auth, input);
   const result = structuredClone(request);
   if (input === undefined) return result;
   dictionary(input, "input");
@@ -84,5 +90,6 @@ export function applyMCPInput(request, input) {
     else throw Error("此请求体不支持该临时输入");
   }
   if (own(input, "auth")) authOverride(result.auth, input.auth);
+  postmanOAuth2Definition(result.auth);
   return result;
 }

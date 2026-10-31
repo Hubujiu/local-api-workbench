@@ -1,3 +1,9 @@
+import {
+  importPostmanOAuth2,
+  validatePostmanOAuth2Project,
+  postmanOAuth2Definition,
+} from "../public/postman-oauth2-model.js";
+import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -278,7 +284,10 @@ export function normalizeRequest(r = {}) {
     path: r.path || [],
     cookies: r.cookies || [],
     cookieEncoding: normalizeCookieEncoding(r.cookieEncoding),
-    auth: { ...(r.auth || {}), type: r.auth?.type ?? "none" },
+    auth:
+      postmanOAuth2Definition(r.auth) !== undefined
+        ? { type: "oauth2", postmanOAuth2: postmanOAuth2Definition(r.auth) }
+        : { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
     body:
       typeof r.body === "string"
@@ -377,6 +386,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  for (const step of plan.steps) postmanOAuth2Definition(step.request?.auth);
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
@@ -448,6 +458,8 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  // Reject malformed marked policies before cloning can invoke/flatten accessors.
+  validatePostmanOAuth2Project({ plans: [plan] });
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
@@ -653,6 +665,7 @@ export async function runPlan(
         }
         applyLegacyVariables(scopes, beforeOperations, vars);
         const localVariables = {};
+        postmanOAuth2Definition(step.request.auth);
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
         const beforeStages = scriptStages(configuredRequest, "before");
@@ -1044,6 +1057,7 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (config.type === "oauth2") return importPostmanOAuth2(config.oauth2);
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1125,8 +1139,6 @@ export function importDocument(doc) {
               .map((key) => [key, values[key]]),
           ),
         };
-      if (config.type === "oauth2")
-        return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
         return {
           type: "basic",
@@ -1433,10 +1445,23 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  validatePostmanOAuth2Project(project);
+  for (const auth of [
+    project.settings?.globalAuth,
+    ...Object.values(project.settings?.folderAuth || {}),
+  ])
+    if (postmanOAuth2Definition(auth) !== undefined)
+      throw Error(
+        "OpenAPI不能无损表达共享Postman OAuth2令牌策略，请使用项目备份",
+      );
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     const r = sdkOpenAPIDefinition(project, source);
+    if (postmanOAuth2Definition(r.auth) !== undefined)
+      throw Error(
+        "OpenAPI不能无损表达Postman OAuth2令牌策略，请使用项目备份或cURL",
+      );
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),
@@ -1669,7 +1694,10 @@ export function toCurl(input) {
       quote((r.auth.username || "") + ":" + (r.auth.password || "")),
     );
   }
-  if (["bearer", "oauth2"].includes(r.auth.type))
+  if (
+    !applyPostmanOAuth2(url, headers, r.auth) &&
+    ["bearer", "oauth2"].includes(r.auth.type)
+  )
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") setURLQuery(url, r.auth.key, r.auth.value);
@@ -1763,6 +1791,7 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  validatePostmanOAuth2Project(document);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

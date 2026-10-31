@@ -1,7 +1,9 @@
+import { postmanOAuth2Definition } from "../public/postman-oauth2-model.js";
 import { folderScopePaths } from "../public/folder-scopes.js";
 import { validateSharedAuthSettings } from "../public/shared-auth.js";
 export { validateSharedAuthSettings } from "../public/shared-auth.js";
 export function applySharedAuth(project, request) {
+  postmanOAuth2Definition(request.auth);
   const result = structuredClone(request);
   if (
     request.authSnapshot === true ||

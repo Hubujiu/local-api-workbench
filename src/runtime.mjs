@@ -1,3 +1,5 @@
+import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
+import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -131,9 +133,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validatePostmanOAuth2Project(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validatePostmanOAuth2Project(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -192,6 +198,7 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    validatePostmanOAuth2Project(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -324,7 +331,10 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
   appendRequestQuery(u, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
-  if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
+  if (
+    !applyPostmanOAuth2(u, headers, r.auth) &&
+    (r.auth.type === "bearer" || r.auth.type === "oauth2")
+  ) {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
   }
