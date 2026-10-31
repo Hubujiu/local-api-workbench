@@ -987,6 +987,18 @@ export async function createApp({
             return json(res, 404, { error: "原始记录查询路径无效" });
           }
 
+          if (
+            action === "api-resource-restore" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("资源恢复不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.restoreAPIResources(p.id, await body(req)),
+            );
+          }
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
             const jar = projectCookieSession(

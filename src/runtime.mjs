@@ -1,3 +1,7 @@
+import {
+  restoreAPIResources,
+  assertAPIResourceTrashIdentity,
+} from "./api-resource-restore.mjs";
 import { validatePostmanCollections } from "./postman-collection-scopes.mjs";
 import { linearPlanStepIds } from "./plan-step-identities.mjs";
 import {
@@ -40,7 +44,10 @@ import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { multipartPartMedia } from "./multipart-part-media.mjs";
 import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
-import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
+import {
+  validateAPIResourceTrash,
+  validateResourceJSON,
+} from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
@@ -309,12 +316,14 @@ export class Store {
     ) {
       const project = await readProject(directory, key);
       validateNativeInheritanceProject(project);
+      validateAPIResourceTrash(project);
       return project;
     }
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
     );
     validateNativeInheritanceProject(project);
+    validateAPIResourceTrash(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -512,6 +521,38 @@ export class Store {
       nativeInheritanceEditContext: context,
     });
   }
+  async restoreAPIResources(projectId, input) {
+    validateResourceJSON(input, 4096);
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (key) => !["configRevision", "batchId"].includes(key),
+      ) ||
+      !Number.isSafeInteger(input.configRevision) ||
+      input.configRevision < 0 ||
+      typeof input.batchId !== "string" ||
+      !input.batchId.trim() ||
+      input.batchId.length > 200
+    )
+      throw Error("资源恢复须提供有效configRevision和batchId");
+    const current = await this.get(projectId);
+    if (
+      input.configRevision !== (current.configRevision ?? current.revision ?? 0)
+    )
+      throw Error("项目已有其他修改，请重新加载");
+    const apiResourceRestore = {
+      batchId: input.batchId,
+      restoredAt: new Date().toISOString(),
+    };
+    const next = restoreAPIResources(
+      current,
+      input.batchId,
+      apiResourceRestore,
+    ).project;
+    return this.save(next, { apiResourceRestore });
+  }
   #validateProject(p) {
     validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
@@ -618,8 +659,11 @@ export class Store {
       signal,
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
+      apiResourceRestore,
     } = {},
   ) {
+    if (apiResourceRestore !== undefined && activity)
+      throw Error("资源恢复不能伪装为活动记录更新");
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
@@ -645,6 +689,7 @@ export class Store {
               signal,
               nativeInheritanceEdit,
               nativeInheritanceEditContext,
+              apiResourceRestore,
             },
             base,
           );
@@ -674,6 +719,7 @@ export class Store {
       signal,
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
+      apiResourceRestore,
     },
     base,
     creating = false,
@@ -717,6 +763,16 @@ export class Store {
         : expectedConfiguration !== previousConfiguration)
     )
       throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
+    // Preserve the existing stale-activity retry gate before checking history.
+    const resourcePrevious =
+      apiResourceRestore && previous
+        ? {
+            ...previous,
+            plans: previous.plans.map(snapshotPlan),
+            cases: previous.cases?.map(snapshotCase),
+          }
+        : previous;
+    assertAPIResourceTrashIdentity(resourcePrevious, p, apiResourceRestore);
     const next = structuredClone(p);
     next.revision = (previous?.revision || 0) + 1;
     next.configRevision = activity
@@ -734,7 +790,9 @@ export class Store {
       });
     await writeProject(path.join(base, p.id), next);
     try {
-      Object.assign(p, await readProject(path.join(base, p.id), p.id));
+      const saved = await readProject(path.join(base, p.id), p.id);
+      validateAPIResourceTrash(saved);
+      Object.assign(p, saved);
     } catch (error) {
       throw new ProjectCommitUncertain(p.id, error);
     }
