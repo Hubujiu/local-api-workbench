@@ -1,6 +1,11 @@
 import { assertNativeHTTPResult } from "./native-mcp-http-shape.mjs";
 import { filteredExecutionHistory } from "./execution-history.mjs";
 import {
+  activeAPIFolders,
+  apiResourceTargets,
+  folderSettingKeys,
+} from "./api-resource-lifecycle.mjs";
+import {
   nativeEnvironmentTools,
   isNativeEnvironmentTool,
 } from "./native-mcp-environments.mjs";
@@ -244,12 +249,8 @@ export function translateNativeCall(name, args) {
 }
 const parent = (folder) => (folder ? "folder:" + folder : "0");
 export function nativeAPIList(project, args) {
-  const folders = new Set(project.folders || []);
-  for (const r of [...project.requests, ...(project.documents || [])])
-    if (r.folder) {
-      const parts = r.folder.split("/");
-      parts.forEach((_, i) => folders.add(parts.slice(0, i + 1).join("/")));
-    }
+  apiResourceTargets(project);
+  const folders = activeAPIFolders(project);
   let rows = [
     ...[...folders].map((folder) => ({
       target_id: parent(folder),
@@ -293,12 +294,38 @@ export function nativeAPIList(project, args) {
   return { apis: rows };
 }
 export function nativeAPIDetail(project, apiId) {
+  const target = apiResourceTargets(project).get(apiId);
+  if (!target) throw Error("接口、目录或文档不存在");
+  if (target.type === "folder")
+    return {
+      api: {
+        target_id: apiId,
+        project_id: project.id,
+        parent_id: parent(target.path.split("/").slice(0, -1).join("/")),
+        target_type: "folder",
+        name: target.path.split("/").at(-1),
+        builtin_pre_scripts: [],
+        builtin_post_scripts: [],
+        workbench_definition_format: 1,
+        workbench_folder_settings: Object.fromEntries(
+          folderSettingKeys
+            .filter((key) =>
+              Object.hasOwn(project.settings?.[key] || {}, target.path),
+            )
+            .map((key) => [
+              key,
+              structuredClone(project.settings[key][target.path]),
+            ]),
+        ),
+      },
+    };
   const d = (project.documents || []).find(
     (d) => d.id === apiId && !d.deletedAt,
   );
   if (d)
     return {
       api: {
+        ...structuredClone(d),
         target_id: d.id,
         project_id: project.id,
         parent_id: parent(d.folder),
@@ -307,6 +334,7 @@ export function nativeAPIDetail(project, apiId) {
         description: d.content,
         builtin_pre_scripts: [],
         builtin_post_scripts: [],
+        workbench_definition_format: 1,
       },
     };
   const r = project.requests.find((r) => r.id === apiId && !r.deletedAt);

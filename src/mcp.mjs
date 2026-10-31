@@ -6,6 +6,7 @@ import {
   executeNativeEnvironmentTool,
   resolveNativeEnvironment,
 } from "./native-mcp-environments.mjs";
+import { deleteAPIResources } from "./api-resource-lifecycle.mjs";
 import {
   nativeMCPTools,
   translateNativeCall,
@@ -686,21 +687,12 @@ export function createMCP({
               break;
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
-              if (
-                nativeName &&
-                (!args.apiIds.length ||
-                  args.apiIds.length > 1000 ||
-                  new Set(args.apiIds).size !== args.apiIds.length ||
-                  args.apiIds.some(
-                    (id) =>
-                      typeof id !== "string" ||
-                      !id.trim() ||
-                      !p.requests.some((r) => r.id === id && !r.deletedAt),
-                  ))
-              )
-                throw Error(
-                  "仅支持现有HTTP接口的非重复ID；目录和文档删除尚未支持",
-                );
+              if (nativeName) {
+                const deletion = deleteAPIResources(p, args.apiIds);
+                await store.save(deletion.project);
+                output = deletion.selectedTargetIds;
+                break;
+              }
               output = [];
               for (const r of p.requests)
                 if (args.apiIds.includes(r.id)) {

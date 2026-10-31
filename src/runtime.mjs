@@ -1,4 +1,12 @@
+import {
+  restoreAPIResources,
+  assertAPIResourceTrashIdentity,
+} from "./api-resource-restore.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
+import {
+  validateAPIResourceTrash,
+  validateResourceJSON,
+} from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
 import { validateCaseFolders } from "../public/case-folders.js";
@@ -131,9 +139,13 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateAPIResourceTrash(project);
+      return project;
+    }
     const project = JSON.parse(await readFile(this.legacyFile(key), "utf8"));
+    validateAPIResourceTrash(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -192,7 +204,42 @@ export class Store {
     await this.save(p);
     return p;
   }
-  async save(p, { activity = false } = {}) {
+  async restoreAPIResources(projectId, input) {
+    validateResourceJSON(input, 4096);
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).some(
+        (key) => !["configRevision", "batchId"].includes(key),
+      ) ||
+      !Number.isSafeInteger(input.configRevision) ||
+      input.configRevision < 0 ||
+      typeof input.batchId !== "string" ||
+      !input.batchId.trim() ||
+      input.batchId.length > 200
+    )
+      throw Error("资源恢复须提供有效configRevision和batchId");
+    const current = await this.get(projectId);
+    if (
+      input.configRevision !== (current.configRevision ?? current.revision ?? 0)
+    )
+      throw Error("项目已有其他修改，请重新加载");
+    const apiResourceRestore = {
+      batchId: input.batchId,
+      restoredAt: new Date().toISOString(),
+    };
+    const next = restoreAPIResources(
+      current,
+      input.batchId,
+      apiResourceRestore,
+    ).project;
+    return this.save(next, { apiResourceRestore });
+  }
+  async save(p, { activity = false, apiResourceRestore } = {}) {
+    if (apiResourceRestore !== undefined && activity)
+      throw Error("资源恢复不能伪装为活动记录更新");
+    validateAPIResourceTrash(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -281,6 +328,21 @@ export class Store {
               : expectedConfiguration !== previousConfiguration)
           )
             throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
+          // Check revision/fingerprint first so stale activity appends keep their
+          // existing conflict retry path; history transitions still check under lock.
+          const identityPrevious =
+            apiResourceRestore && previous
+              ? {
+                  ...previous,
+                  plans: previous.plans.map(snapshotPlan),
+                  cases: previous.cases?.map(snapshotCase),
+                }
+              : previous;
+          assertAPIResourceTrashIdentity(
+            identityPrevious,
+            p,
+            apiResourceRestore,
+          );
           const next = structuredClone(p);
           next.revision = (previous?.revision || 0) + 1;
           next.configRevision = activity
@@ -293,7 +355,9 @@ export class Store {
           }
           next.updatedAt = new Date().toISOString();
           await writeProject(this.directory(p.id), next);
-          Object.assign(p, await readProject(this.directory(p.id), p.id));
+          const saved = await readProject(this.directory(p.id), p.id);
+          validateAPIResourceTrash(saved);
+          Object.assign(p, saved);
           return p;
         } finally {
           await release();

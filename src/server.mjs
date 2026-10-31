@@ -456,6 +456,18 @@ export async function createApp({
         if (parts[1] === "projects" && parts[2]) {
           const p = await store.get(parts[2]);
           const action = parts[3];
+          if (
+            action === "api-resource-restore" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("资源恢复不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.restoreAPIResources(p.id, await body(req)),
+            );
+          }
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
             const jar = projectCookieSession(
