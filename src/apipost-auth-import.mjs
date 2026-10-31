@@ -1,3 +1,4 @@
+import { importApipostOAuth2 } from "./apipost-oauth2-auth.mjs";
 import { importApipostOAuth1 } from "./apipost-oauth1-auth.mjs";
 import { importApipostNtlm } from "./apipost-ntlm-auth.mjs";
 import { importApipostDigest } from "./apipost-digest-auth.mjs";
@@ -28,6 +29,12 @@ export function importExtendedApipostAuth(auth) {
     const type = Object.getOwnPropertyDescriptor(auth, "type");
     if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
       throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "oauth2") {
+      const section = Object.getOwnPropertyDescriptor(auth, "oauth2");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生 OAuth2 定义无法保真映射，请使用项目备份");
+      return importApipostOAuth2(section.value);
+    }
     if (type?.value === "oauth1") {
       const section = Object.getOwnPropertyDescriptor(auth, "oauth1");
       if (!section?.enumerable || !Object.hasOwn(section, "value"))
