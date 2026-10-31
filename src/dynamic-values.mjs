@@ -219,6 +219,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  nativeOAuth2Definition(request.auth);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&
