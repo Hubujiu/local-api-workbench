@@ -1,3 +1,4 @@
+import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -570,24 +571,63 @@ export async function runPlan(
           record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
-        if (record.status === "passed")
+        if (signal?.aborted) throw Error("执行已取消，未开始新的协议变量提交");
+        if (record.status === "passed") {
+          // Resolve the entire ordinary protocol extraction batch without
+          // publishing any scope or receipt. A later missing path must not
+          // expose earlier values to the next (still permitted) HTTP step.
+          const nextScopes = structuredClone(scopes),
+            extracted = {};
           for (const extraction of validated.extract) {
             const value = extractResponseValue(evidence, extraction);
             const destination = extraction.scope || "runtime";
             if (destination === "runtime") {
-              scopes.runtime[extraction.name] = value;
-              scopes.hidden = scopes.hidden.filter(
+              nextScopes.runtime[extraction.name] = value;
+              nextScopes.hidden = nextScopes.hidden.filter(
                 (name) => name !== extraction.name,
               );
             } else if (destination === "environment")
-              scopes.environment[extraction.name] = value;
+              nextScopes.environment[extraction.name] = value;
             else if (destination === "global")
-              scopes.globals[extraction.name] = value;
+              nextScopes.globals[extraction.name] = value;
             else
               throw Error("协议计划提取仅支持runtime/environment/global作用域");
-            record.extracted[extraction.name] = value;
+            extracted[extraction.name] = value;
           }
-        await commitScopes();
+          const changes = scopeChanges(scopes, nextScopes);
+          if (changes.length && onScopeChanges) {
+            try {
+              const accepted = await onScopeChanges(changes, signal);
+              if (accepted?.globals && accepted?.environment) {
+                nextScopes.globals = accepted.globals;
+                nextScopes.environment = accepted.environment;
+              }
+            } catch (error) {
+              if (error instanceof ProjectCommitUncertain) {
+                record.scopeCommit = { outcome: "unknown", retrySafe: false };
+                throw Error(
+                  "协议变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
+                );
+              }
+              throw Error(
+                "协议变量持久化失败；当前执行未采纳本批提取，勿重放已完成请求",
+              );
+            }
+          }
+          // A confirmed storage write is not undone if cancellation arrives
+          // during its acknowledgement. Publish the same complete local batch.
+          scopes = nextScopes;
+          committedScopes = structuredClone(scopes);
+          record.extracted = extracted;
+          for (const change of changes)
+            record.logs.push({
+              phase: "variables",
+              scope: change.scope,
+              name: change.name,
+              operation: change.after.exists ? "set" : "unset",
+            });
+          replaceVariables(vars, effectiveScopes(scopes));
+        }
       } else {
         validateApipostTemplateRequest(step.request);
         const executeOperation = async (operation, budget) => {

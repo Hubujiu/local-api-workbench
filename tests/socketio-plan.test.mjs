@@ -428,7 +428,8 @@ test("HTTP and MCP Socket.IO plans share live limits, cancel, restore new copies
   });
   assert.equal(unsaved.status, "passed");
   assert.equal(unsaved.recordSaved, false);
-  assert.match(unsaved.persistenceError, /fixture disk failure/);
+  assert.equal(unsaved.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(unsaved.persistenceError, /fixture disk failure/);
   assert.equal(f.seen.length, count + 1);
   app.store.append = append;
   const reloaded = await new Store(root).get(p.id);

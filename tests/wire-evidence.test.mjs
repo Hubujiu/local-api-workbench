@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import http from "node:http";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { WebSocketServer } from "ws";
@@ -284,7 +284,8 @@ test("protocol failure/cancellation persists honestly and disk failure never rep
   assert.equal(result.base64, "AP8=");
   assert.equal(result.recordSaved, false);
   assert.equal(result.recordId, null);
-  assert.match(result.persistenceError, /disk unavailable/);
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(result.persistenceError, /disk unavailable/);
   assert.equal(f.calls(), 2);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, before);
 });
@@ -351,7 +352,80 @@ test("oversized serialized SSE evidence is reported unsaved without replay or fa
   assert.equal(response.status, 200);
   assert.equal(result.events[0].data.length, 600000);
   assert.equal(result.recordSaved, false);
-  assert.match(result.persistenceError, /3MiB/);
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(result.persistenceError, /3MiB/);
   assert.equal(requests, 1);
   assert.equal((await f.app.store.get(f.p.id)).protocolRuns.length, 0);
+});
+
+test("real TCP result keeps a typed unknown history receipt and recovers the same record without another connection", async (t) => {
+  const f = await fixture(t);
+  const store = f.app.store;
+  const save = store.save;
+  const read = store.readUnlocked;
+  const directory = store.directory(f.p.id);
+  const history = path.join(directory, "history");
+  const kept = path.join(directory, "history-owned-backup");
+  let saves = 0;
+  store.save = async function (project, options) {
+    if (project.id !== f.p.id || !options?.activity)
+      return save.call(this, project, options);
+    saves++;
+    this.readUnlocked = async function (id) {
+      const value = await read.call(this, id);
+      this.readUnlocked = read;
+      await rename(history, kept);
+      await writeFile(history, "owned fixture with private-marker");
+      return value;
+    };
+    try {
+      return await save.call(this, project, options);
+    } finally {
+      this.readUnlocked = read;
+    }
+  };
+  t.after(() => {
+    store.save = save;
+    store.readUnlocked = read;
+  });
+  const response = await f.post({ definitionId: "tcp", runId: "tcp-once" });
+  const value = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(value.base64, "AP8=");
+  assert.equal(value.runId, "tcp-once");
+  assert.equal(value.recordSaved, false);
+  assert.equal(value.recordId, null);
+  assert.equal(typeof value.attemptedRecordId, "string");
+  assert.deepEqual(value.persistenceOutcome, {
+    code: "PROJECT_COMMIT_UNCERTAIN",
+    project_id: f.p.id,
+    commit_outcome: "unknown",
+    retry_safe: false,
+  });
+  assert.equal(saves, 1);
+  assert.equal(f.calls(), 1);
+  assert.equal(JSON.stringify(value).includes(f.root), false);
+  assert.equal(JSON.stringify(value).includes("private-marker"), false);
+  const journal = JSON.parse(
+    await readFile(path.join(directory, ".transaction.json"), "utf8"),
+  );
+  assert.equal(journal.protocolRuns[0].id, value.attemptedRecordId);
+  assert.equal(journal.protocolRuns[0].result.base64, value.base64);
+  await assert.rejects(new Store(f.root).get(f.p.id), {
+    code: "PROJECT_COMMIT_UNCERTAIN",
+  });
+  store.save = save;
+  await rm(history);
+  await rename(kept, history);
+  const restarted = new Store(f.root);
+  const recovered = await restarted.get(f.p.id);
+  assert.equal(recovered.protocolRuns.length, 1);
+  assert.equal(recovered.protocolRuns[0].id, value.attemptedRecordId);
+  assert.equal(recovered.protocolRuns[0].result.base64, value.base64);
+  validateWireRecord(recovered.protocolRuns[0]);
+  assert.deepEqual(
+    (await restarted.get(f.p.id)).protocolRuns,
+    recovered.protocolRuns,
+  );
+  assert.equal(f.calls(), 1);
 });

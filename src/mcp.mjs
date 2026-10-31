@@ -1,3 +1,5 @@
+import { appendExecutionRecord } from "./execution-evidence.mjs";
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -637,14 +639,21 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              await store.append(p.id, "history", {
-                id: output.id,
-                createdAt: output.createdAt,
-                name: request.name,
-                ...output.results[0],
-                source: "mcp",
-                durationMs: output.durationMs,
-              });
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  id: output.id,
+                  runId: output.id,
+                  createdAt: output.createdAt,
+                  name: request.name,
+                  ...output.results[0],
+                  source: "mcp",
+                  durationMs: output.durationMs,
+                },
+              );
+              output = { ...output, ...receipt };
               break;
             }
             case "localapi_execute_flow":
@@ -692,9 +701,24 @@ export function createMCP({
         content: [{ type: "text", text: JSON.stringify(output) }],
       });
     } catch (e) {
+      const outcome = publicProjectCommitOutcome(e);
+      if (outcome.project_ids)
+        outcome.project_ids = outcome.project_ids.filter((id) =>
+          allowed.has(id),
+        );
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text: Object.keys(outcome).length
+              ? JSON.stringify({
+                  error: e.message,
+                  ...outcome,
+                })
+              : e.message,
+          },
+        ],
       });
     }
   };
