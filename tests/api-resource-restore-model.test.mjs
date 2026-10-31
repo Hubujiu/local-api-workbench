@@ -522,3 +522,149 @@ test("explicit restore preserves safe own JSON Schema keyword properties without
   );
   unchangedFailure(invalidTrash, () => restore(invalidTrash), /不安全字段/);
 });
+
+function implicitFixture(kind = "mixed") {
+  return {
+    id: "implicit",
+    folders: [],
+    settings: {},
+    requests:
+      kind === "doc"
+        ? []
+        : [
+            {
+              id: "only-http",
+              method: "GET",
+              url: "https://example.invalid",
+              folder: "A/B",
+            },
+          ],
+    documents:
+      kind === "http"
+        ? []
+        : [
+            {
+              id: "only-doc",
+              title: "only",
+              content: "retained",
+              folder: "A/B",
+            },
+          ],
+  };
+}
+
+test("last implicit members and nested folder restore without manufacturing explicit declarations", () => {
+  for (const kind of ["doc", "http", "mixed"]) {
+    const original = implicitFixture(kind),
+      snapshot = clone(original);
+    const ids = [...original.requests, ...original.documents].map((x) => x.id);
+    const removed = deleteAPIResources(original, ids).project;
+    assert.deepEqual(original, snapshot);
+    assert.deepEqual(removed.apiResourceTrash.batches[0].implicitParents, [
+      "A",
+      "A/B",
+    ]);
+    const removedSnapshot = clone(removed),
+      restored = restore(removed).project;
+    assert.deepEqual(removed, removedSnapshot);
+    assert.deepEqual(restored.requests, original.requests);
+    assert.deepEqual(restored.documents, original.documents);
+    assert.deepEqual(restored.folders, []);
+    assert.deepEqual(restored.settings, {});
+    const legacy = clone(removed);
+    delete legacy.apiResourceTrash.batches[0].implicitParents;
+    unchangedFailure(legacy, () => restore(legacy), /原父目录已不存在/);
+    const missingAncestor = clone(removed);
+    missingAncestor.apiResourceTrash.batches[0].implicitParents = ["A/B"];
+    unchangedFailure(
+      missingAncestor,
+      () => restore(missingAncestor),
+      /原父目录已不存在：A/,
+    );
+  }
+  const original = implicitFixture();
+  original.folders = ["A/B"];
+  const removed = deleteAPIResources(original, ["folder:A/B"]).project;
+  assert.deepEqual(removed.apiResourceTrash.batches[0].implicitParents, ["A"]);
+  assert.deepEqual(removed.apiResourceTrash.batches[0].folderPaths, ["A/B"]);
+  const restored = restore(removed).project;
+  assert.deepEqual(
+    restored.folders,
+    ["A/B"],
+    "implicit A must not become explicit",
+  );
+  assert.deepEqual(restored.settings, {});
+  assert.deepEqual(restored.requests, original.requests);
+  assert.deepEqual(restored.documents, original.documents);
+});
+
+test("later real parent deletion invalidates old implicit evidence until that batch is restored", () => {
+  const original = implicitFixture("doc");
+  const first = deleteAPIResources(original, ["only-doc"]).project;
+  const firstId = first.apiResourceTrash.batches[0].id;
+  first.folders.push("A");
+  const later = deleteAPIResources(first, ["folder:A"]).project;
+  const laterId = later.apiResourceTrash.batches[1].id;
+  unchangedFailure(later, () => restore(later, firstId), /原父目录已不存在/);
+  const parentRestored = restore(later, laterId).project;
+  const resourceRestored = restore(parentRestored, firstId).project;
+  assert.deepEqual(resourceRestored.documents, original.documents);
+  assert.deepEqual(
+    resourceRestored.folders,
+    ["A"],
+    "only the later explicit A is reintroduced",
+  );
+  assert.deepEqual(resourceRestored.settings, {});
+  assert.equal(resourceRestored.apiResourceTrash.batches.length, 2);
+  assert.equal(
+    resourceRestored.apiResourceTrash.batches.every(
+      (x) => x.restoredAt === restoredAt,
+    ),
+    true,
+  );
+});
+
+test("implicit witness codec rejects malformed/duplicate/overlapping paths and consumes original budgets", () => {
+  for (const paths of [
+    ["A", "A"],
+    ["A/../B"],
+    [""],
+    ["A/__proto__"],
+    "A",
+    [7],
+  ]) {
+    const invalid = projectWith([docBatch("witness")]);
+    invalid.apiResourceTrash.batches[0].implicitParents = paths;
+    unchangedFailure(invalid, () => validateAPIResourceTrash(invalid));
+  }
+  const overlap = projectWith([docBatch("witness")]);
+  overlap.apiResourceTrash.batches[0].folderPaths = ["A"];
+  overlap.apiResourceTrash.batches[0].implicitParents = ["A"];
+  unchangedFailure(overlap, () => validateAPIResourceTrash(overlap), /重叠/);
+  const make = (id, count) => ({
+    ...docBatch(id),
+    documents: [],
+    selectedTargetIds: [id + "0"],
+    requestIds: Array.from({ length: count }, (_, i) => id + i),
+  });
+  const exact = projectWith([make("a", 5000), make("b", 4999)]);
+  exact.apiResourceTrash.batches[0].implicitParents = ["A"];
+  assert.doesNotThrow(() => validateAPIResourceTrash(exact));
+  const overflow = clone(exact);
+  overflow.apiResourceTrash.batches[0].implicitParents.push("B");
+  unchangedFailure(overflow, () => validateAPIResourceTrash(overflow), /10000/);
+  const bytes = projectWith(
+    Array.from({ length: 5 }, (_, i) => docBatch("bytes-w" + i, "doc-w" + i)),
+  );
+  for (let i = 0; i < 4; i++)
+    bytes.apiResourceTrash.batches[i].documents[0].content = "x".repeat(
+      1024 * 1024 - 1024,
+    );
+  bytes.apiResourceTrash.batches[4].documents[0].content = "";
+  bytes.apiResourceTrash.batches[4].documents[0].content = "x".repeat(
+    4 * 1024 * 1024 - Buffer.byteLength(JSON.stringify(bytes.apiResourceTrash)),
+  );
+  assert.doesNotThrow(() => validateAPIResourceTrash(bytes));
+  bytes.apiResourceTrash.batches[0].implicitParents = ["A"];
+  unchangedFailure(bytes, () => validateAPIResourceTrash(bytes), /字节限制/);
+});

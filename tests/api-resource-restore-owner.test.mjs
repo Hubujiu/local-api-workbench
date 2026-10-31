@@ -10,6 +10,7 @@ import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { normalizeRequest, snapshotPlan } from "../src/core.mjs";
 import { snapshotCase } from "../src/cases.mjs";
+import { restoreAPIResources as restoreResourceCandidate } from "../src/api-resource-restore.mjs";
 
 const decode = (result) => {
   assert.notEqual(result.isError, true, result.content?.[0]?.text);
@@ -385,6 +386,18 @@ test(
     let deleted = await recycle(h, mcp, p.id);
     const foreignDeleted = await recycle(h, mcp, foreign.id);
     const valid = restoreBody(deleted);
+    const originBefore = await disk(h, deleted.id);
+    const evilOrigin = await fetch(h.app.url + restorePath(deleted), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-local-token": h.app.token,
+        Origin: "https://evil.example",
+      },
+      body: JSON.stringify(valid),
+    });
+    assert.equal(evilOrigin.status, 403);
+    assert.deepEqual(await disk(h, deleted.id), originBefore);
     for (const body of [
       null,
       {},
@@ -489,8 +502,68 @@ test(
     const deleted = await recycle(h, mcp, p.id);
     const input = restoreBody(deleted);
     const stores = [new Store(h.root), new Store(h.root)];
+    const rejectedBefore = await disk(h, p.id);
+    const context = {
+      batchId: input.batchId,
+      restoredAt: new Date().toISOString(),
+    };
+    const candidate = restoreResourceCandidate(
+      deleted,
+      input.batchId,
+      context,
+    ).project;
+    await assert.rejects(
+      stores[0].save(structuredClone(candidate), {
+        activity: true,
+        apiResourceRestore: context,
+      }),
+      /资源恢复不能伪装为活动记录更新/,
+    );
+    assert.deepEqual(await disk(h, p.id), rejectedBefore);
+    const smuggled = structuredClone(candidate);
+    smuggled.name = "Unrelated name mutation";
+    await assert.rejects(
+      stores[1].save(smuggled, { apiResourceRestore: context }),
+      /恢复结果与锁内完整重算不一致/,
+    );
+    assert.deepEqual(await disk(h, p.id), rejectedBefore);
+    // Synchronize only admission: both Stores still perform their real disk
+    // read and later use the real save/lock/identity checks. A one-shot barrier
+    // proves contention after both observed the same revision, not a later
+    // caller merely rejecting at the initial stale-revision check.
+    let releaseAdmissions;
+    const admissionsReady = new Promise((resolve) => {
+      releaseAdmissions = resolve;
+    });
+    const admissionRevisions = [];
+    let targetReads = 0;
+    for (const store of stores) {
+      const realGet = store.get.bind(store);
+      let armed = true;
+      store.get = async (id) => {
+        if (id === p.id) targetReads++;
+        const synchronize = id === p.id && armed;
+        if (synchronize) armed = false;
+        const current = await realGet(id);
+        if (synchronize) {
+          admissionRevisions.push(current.configRevision);
+          if (admissionRevisions.length === 2) releaseAdmissions();
+          await admissionsReady;
+        }
+        return current;
+      };
+    }
     const outcomes = await Promise.allSettled(
       stores.map((store) => store.restoreAPIResources(p.id, input)),
+    );
+    assert.deepEqual(admissionRevisions, [
+      deleted.configRevision,
+      deleted.configRevision,
+    ]);
+    assert.equal(
+      targetReads,
+      2,
+      "both admissions read once without automatic replay",
     );
     assert.equal(
       outcomes.filter((item) => item.status === "fulfilled").length,
@@ -513,6 +586,16 @@ test(
       stores[0].restoreAPIResources(p.id, restoreBody(restored)),
     );
     assert.deepEqual(await disk(h, p.id), before);
+    assert.equal(
+      admissionRevisions.length,
+      2,
+      "barriers are disarmed for later restore attempts",
+    );
+    assert.equal(
+      targetReads,
+      4,
+      "later rejected attempts also use real Store reads",
+    );
     const filename = path.join(h.app.store.directory(p.id), "project.json");
     const invalid = JSON.parse(await readFile(filename, "utf8"));
     invalid.apiResourceTrash.batches[0].restoredAt = "not-an-ISO-time";
@@ -521,5 +604,158 @@ test(
     const restarted = new Store(h.root);
     await assert.rejects(restarted.get(p.id));
     assert.equal((await restarted.get(healthy.id)).name, "Healthy");
+  },
+);
+
+test(
+  "implicit parent witnesses survive restart and restore only after a later deleted parent batch",
+  { timeout: 30000 },
+  async (t) => {
+    let hits = 0;
+    const upstream = http.createServer((_req, res) => {
+      hits++;
+      res.setHeader("content-type", "application/json");
+      res.end('{"implicit":true}');
+    });
+    await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    t.after(() => closeServer(upstream));
+    const h = await harness(t);
+    const p = await h.app.store.create("Implicit parents");
+    p.folders = [];
+    p.requests = [
+      normalizeRequest({
+        id: "virtual-http",
+        name: "Virtual HTTP",
+        method: "GET",
+        url: `http://127.0.0.1:${upstream.address().port}/implicit`,
+        folder: "Virtual/Nested",
+      }),
+    ];
+    p.documents = [
+      {
+        id: "virtual-doc",
+        title: "Virtual guide",
+        content: "# 隐式父目录🌏",
+        folder: "Virtual/Nested",
+      },
+    ];
+    await h.api(`/api/projects/${p.id}`, "PUT", p);
+    const configured = await h.app.store.get(p.id);
+    let mcp = await h.connect([p.id]);
+    const targets = ["virtual-http", "virtual-doc"];
+    const deleted = await recycle(h, mcp, p.id, targets);
+    const firstBatch = structuredClone(deleted.apiResourceTrash.batches[0]);
+    assert.deepEqual([...firstBatch.implicitParents].sort(), [
+      "Virtual",
+      "Virtual/Nested",
+    ]);
+    assert.deepEqual(deleted.folders, []);
+    assert.deepEqual(
+      decode(await mcp.call("list_apis", { project_id: p.id })).apis,
+      [],
+    );
+    await h.restart();
+    const persistedDeleted = await new Store(h.root).get(p.id);
+    assert.deepEqual(persistedDeleted.apiResourceTrash.batches[0], firstBatch);
+    const restored = await h.api(
+      restorePath(persistedDeleted),
+      "POST",
+      restoreBody(persistedDeleted),
+    );
+    assert.deepEqual(restored.folders, []);
+    assert.deepEqual(restored.settings, configured.settings);
+    assert.deepEqual(restored.documents, configured.documents);
+    mcp = await h.connect([p.id]);
+    assert.equal(
+      decode(
+        await mcp.call("get_api_detail", {
+          project_id: p.id,
+          target_id: "virtual-doc",
+        }),
+      ).api.description,
+      configured.documents[0].content,
+    );
+    assert.equal(
+      decode(
+        await mcp.call("get_api_detail", {
+          project_id: p.id,
+          target_id: "folder:Virtual/Nested",
+        }),
+      ).api.target_type,
+      "folder",
+    );
+    const run = decode(
+      await mcp.client.callTool({
+        name: "localapi_execute_api",
+        arguments: { projectId: p.id, apiId: "virtual-http" },
+      }),
+    );
+    assert.equal(run.status, "passed");
+    assert.equal(hits, 1);
+    const secondDeleted = await recycle(h, mcp, p.id, targets);
+    const oldBatch = structuredClone(
+      secondDeleted.apiResourceTrash.batches.at(-1),
+    );
+    assert.deepEqual([...oldBatch.implicitParents].sort(), [
+      "Virtual",
+      "Virtual/Nested",
+    ]);
+    secondDeleted.folders = ["Virtual"];
+    await h.api(`/api/projects/${p.id}`, "PUT", secondDeleted);
+    const parentDeleted = await recycle(h, mcp, p.id, ["folder:Virtual"]);
+    const parentBatch = structuredClone(
+      parentDeleted.apiResourceTrash.batches.at(-1),
+    );
+    assert.deepEqual(parentBatch.explicitFolders, ["Virtual"]);
+    await rejectedWithoutWrite(
+      h,
+      parentDeleted,
+      restoreBody(parentDeleted, oldBatch),
+    );
+    // Complete the newer explicit parent action first; restoring the earlier
+    // resources must preserve that declaration rather than rewind its history.
+    const parentRestored = await h.api(
+      restorePath(parentDeleted),
+      "POST",
+      restoreBody(parentDeleted, parentBatch),
+    );
+    assert.deepEqual(parentRestored.folders, ["Virtual"]);
+    assert.deepEqual(parentRestored.apiResourceTrash.batches[1], oldBatch);
+    const parentEvidence = structuredClone(
+      parentRestored.apiResourceTrash.batches[2],
+    );
+    const resourcesRestored = await h.api(
+      restorePath(parentRestored),
+      "POST",
+      restoreBody(parentRestored, oldBatch),
+    );
+    assert.deepEqual(resourcesRestored.folders, ["Virtual"]);
+    assert.deepEqual(resourcesRestored.documents, configured.documents);
+    assert.deepEqual(resourcesRestored.settings, configured.settings);
+    assert.deepEqual(
+      resourcesRestored.apiResourceTrash.batches[0],
+      restored.apiResourceTrash.batches[0],
+    );
+    assert.deepEqual(
+      resourcesRestored.apiResourceTrash.batches[2],
+      parentEvidence,
+    );
+    assert(resourcesRestored.apiResourceTrash.batches[1].restoredAt);
+    const secondRun = decode(
+      await mcp.client.callTool({
+        name: "localapi_execute_api",
+        arguments: { projectId: p.id, apiId: "virtual-http" },
+      }),
+    );
+    assert.equal(secondRun.status, "passed");
+    assert.equal(hits, 2);
+    await h.restart();
+    const persisted = await new Store(h.root).get(p.id);
+    assert.deepEqual(persisted.folders, ["Virtual"]);
+    assert.deepEqual(
+      persisted.apiResourceTrash,
+      resourcesRestored.apiResourceTrash,
+    );
+    assert.deepEqual(persisted.documents, configured.documents);
   },
 );

@@ -69,6 +69,23 @@ changes. Normal saves compare only trash rather than imposing new restrictions o
 unrelated activity payloads. Generic trash validation now also runs on current and
 legacy reads, including after reopening; malformed target history fails closed.
 
+## Implicit-directory evidence
+
+Deleting the last explicit HTTP/document member can naturally remove a virtual
+folder from the active tree without anyone deleting a folder declaration. New
+deletions record optional `implicitParents`: the before/after active-folder
+difference, excluding selected batch folderPaths and all originally explicit
+folders. The field is written only when nonempty and consumes the unchanged
+resource/JSON budgets. It is evidence captured at deletion, never backfilled into
+old batches or treated as a request to create explicit folders/settings.
+
+Restore checks every ancestor of each member/path. It may use current active
+paths, batch paths and recorded implicit parents. A later still-pending explicit
+folder deletion masks covered witnesses; restoring that parent batch first can
+make the earlier resource restorable again. This avoids resurrecting later
+intentionally deleted scopes. Old batches without evidence still refuse a truly
+missing parent; an owner must deliberately restore the parent before retrying.
+
 ## Acceptance still required
 
 Pure model coverage is not owner or persistence acceptance. The complete batch

@@ -206,6 +206,7 @@ export function validateAPIResourceTrash(project) {
         "selectedTargetIds",
         "folderPaths",
         "explicitFolders",
+        "implicitParents",
         "requestIds",
         "documents",
         "folderSettings",
@@ -234,6 +235,13 @@ export function validateAPIResourceTrash(project) {
     uniqueStrings(batch.explicitFolders, "显式目录");
     const paths = new Set(batch.folderPaths);
     for (const path of paths) validateResourceFolder(path);
+    if (batch.implicitParents !== undefined) {
+      uniqueStrings(batch.implicitParents, "隐式父目录见证");
+      for (const path of batch.implicitParents) {
+        validateResourceFolder(path);
+        if (paths.has(path)) fail("隐式父目录见证与批次目录重叠");
+      }
+    }
     if (batch.explicitFolders.some((path) => !paths.has(path)))
       fail("显式目录不属于批次");
     uniqueStrings(batch.requestIds, "HTTP接口ID", 5000, 200);
@@ -292,7 +300,8 @@ export function validateAPIResourceTrash(project) {
     total +=
       batch.requestIds.length +
       batch.documents.length +
-      batch.folderPaths.length;
+      batch.folderPaths.length +
+      (batch.implicitParents?.length || 0);
   }
   const historicalHTTPIds = new Set(
     trash.batches.flatMap((batch) => batch.requestIds),
@@ -411,7 +420,8 @@ export function deleteAPIResources(project, selectedTargetIds) {
   const documents = (project.documents || []).filter(
     (item) => !item.deletedAt && (chosen.has(item.id) || affected(item.folder)),
   );
-  const folderPaths = activeAPIFolders(project).filter(affected);
+  const beforeFolders = activeAPIFolders(project);
+  const folderPaths = beforeFolders.filter(affected);
   const folderSettings = Object.fromEntries(
     folderSettingKeys
       .filter((key) => project.settings?.[key] !== undefined)
@@ -447,6 +457,20 @@ export function deleteAPIResources(project, selectedTargetIds) {
       draft.settings[key] = Object.fromEntries(
         Object.entries(draft.settings[key]).filter(([path]) => !affected(path)),
       );
+  // Record only paths whose virtual existence this deletion actually removed.
+  // Never infer these for old batches or turn them into explicit declarations.
+  const remainingFolders = new Set(activeAPIFolders(draft));
+  const declaredFolders = new Set(project.folders || []);
+  const removedFolders = new Set(folderPaths);
+  const implicitParents = beforeFolders
+    .filter(
+      (path) =>
+        !remainingFolders.has(path) &&
+        !removedFolders.has(path) &&
+        !declaredFolders.has(path),
+    )
+    .sort();
+  if (implicitParents.length) batch.implicitParents = implicitParents;
   draft.apiResourceTrash = {
     version: 1,
     batches: [

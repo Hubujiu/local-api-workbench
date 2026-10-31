@@ -126,15 +126,35 @@ export function restoreAPIResources(project, batchId, { restoredAt } = {}) {
     fail("批次成员已移出选中目录");
   const active = activeAPIFolders(project);
   if (active.some(affected)) fail("待恢复目录范围已被占用");
-  const available = new Set([...active, ...batch.folderPaths]);
+  // A later pending folder deletion invalidates old virtual-parent evidence
+  // under its selected roots. A completed whole-batch restore no longer blocks
+  // it. Current active folders remain authoritative independently of witnesses.
+  const laterDeletedRoots = batches
+    .slice(index + 1)
+    .filter((item) => item.restoredAt === undefined)
+    .flatMap((item) =>
+      item.selectedTargetIds
+        .filter((id) => id.startsWith("folder:"))
+        .map((id) => id.slice(7)),
+    );
+  const witnessedParents = (batch.implicitParents || []).filter(
+    (path) => !laterDeletedRoots.some((root) => within(path, root)),
+  );
+  const available = new Set([
+    ...active,
+    ...batch.folderPaths,
+    ...witnessedParents,
+  ]);
   const requireFolder = (path) => {
-    if (path && !available.has(path)) fail("原父目录已不存在：" + path);
+    if (!path) return;
+    const parts = path.split("/");
+    for (let length = 1; length <= parts.length; length++) {
+      const ancestor = parts.slice(0, length).join("/");
+      if (!available.has(ancestor)) fail("原父目录已不存在：" + ancestor);
+    }
   };
   for (const item of members) requireFolder(item.folder);
-  for (const path of batch.folderPaths) {
-    const slash = path.lastIndexOf("/");
-    requireFolder(slash < 0 ? "" : path.slice(0, slash));
-  }
+  for (const path of batch.folderPaths) requireFolder(path);
   for (const [kind, map] of Object.entries(batch.folderSettings))
     for (const path of Object.keys(map))
       if (Object.hasOwn(project.settings?.[kind] || {}, path))
