@@ -89,6 +89,7 @@ export async function createApp({
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpSessionProjects = [],
     mcpToken = "",
     mcpLastActivity = null;
   const persistedMCP = await loadMCPConfig(path.resolve(root));
@@ -234,8 +235,12 @@ export async function createApp({
           mcpActivities.set(activityId, {
             id: activityId,
             tool: message.params?.name,
-            projectId: message.params?.arguments?.projectId,
-            planId: message.params?.arguments?.planId,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
             status: "running",
             startedAt: new Date().toISOString(),
             completed: 0,
@@ -244,6 +249,7 @@ export async function createApp({
         const dispatch = createMCP({
           store,
           ...mcp,
+          sessionProjects: mcpSessionProjects,
           debugEnvironments,
           grpcExecutor: executePlanGrpc,
           protocolExecutor: executePlanWire,
@@ -412,6 +418,7 @@ export async function createApp({
               port: server.address().port,
             });
             mcp = next;
+            mcpSessionProjects = [];
             mcpToken = nextToken;
             mcpWarning = "";
           } else if (req.method !== "GET")
@@ -558,6 +565,10 @@ export async function createApp({
             b.runs = p.runs;
             b.history = p.history;
             const saved = await store.save(b);
+            if (b.archived)
+              mcpSessionProjects = mcpSessionProjects.filter(
+                (id) => id !== b.id,
+              );
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,

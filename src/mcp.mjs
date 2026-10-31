@@ -1,3 +1,25 @@
+import {
+  assertNativeHTTPPlan,
+  assertNativeHTTPResult,
+} from "./native-mcp-http-shape.mjs";
+import {
+  executeNativeEnvironmentTool,
+  resolveNativeEnvironment,
+} from "./native-mcp-environments.mjs";
+import {
+  nativeMCPTools,
+  translateNativeCall,
+  nativeAPIList,
+  nativeAPIDetail,
+  nativeRunResult,
+  nativeExecutionHistory,
+} from "./native-mcp-tools.mjs";
+import {
+  buildNativeMCPPlan,
+  nativeFlowView,
+  inputAuth,
+} from "./native-mcp-plan.mjs";
+import { lockMCPPlan } from "./mcp-plan-locks.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
@@ -9,6 +31,13 @@ import {
   listExecutionHistory,
   findExecutionResult,
 } from "./execution-history.mjs";
+import {
+  executionResultChunk,
+  executionResultChunkArguments,
+  executionResultChunkError,
+  EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+  EXECUTION_RESULT_CHUNK_MAX_BYTES,
+} from "./execution-result-chunk.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { projectCookieSession } from "./cookie-jar.mjs";
 import { MCPActivity } from "./mcp-activity.mjs";
@@ -18,7 +47,7 @@ import readline from "node:readline";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store, executeRequest } from "./runtime.mjs";
-import { snapshotPlan, runPlan } from "./core.mjs";
+import { snapshotPlan, runPlan, normalizeRequest } from "./core.mjs";
 import {
   environmentVariables,
   selectedEnvironment,
@@ -33,6 +62,7 @@ import {
 export function createMCP({
   store,
   projects = [],
+  sessionProjects = [],
   write = false,
   execute = false,
   debugEnvironments = new Map(),
@@ -41,7 +71,7 @@ export function createMCP({
   protocolExecutor = executeWireFlow,
   socketioExecutor,
 }) {
-  const allowed = new Set(projects);
+  const allowed = new Set([...projects, ...sessionProjects]);
   const socketioSessions = new SocketIOSessions();
   const executePlanSocketIO = (projectId, input, signal) => {
     if (!write || !execute) throw Error("Socket.IO执行未授权");
@@ -250,6 +280,31 @@ export function createMCP({
     ...projectArg,
     runId: str,
   });
+  addTool(
+    "get_execution_result_chunk",
+    "分块读取已保存的完整 JSON 执行证据；后续分块必须携带首次返回的 SHA-256，不重放执行",
+    {
+      projectId: { type: "string", minLength: 1, maxLength: 4096 },
+      runId: { type: "string", minLength: 1, maxLength: 4096 },
+      offsetBytes: {
+        type: "integer",
+        minimum: 0,
+        maximum: Number.MAX_SAFE_INTEGER,
+      },
+      maxBytes: {
+        type: "integer",
+        minimum: 1,
+        maximum: EXECUTION_RESULT_CHUNK_MAX_BYTES,
+        default: EXECUTION_RESULT_CHUNK_DEFAULT_BYTES,
+      },
+      expectedSha256: {
+        type: "string",
+        pattern: "^[a-f0-9]{64}$",
+        description: "首次响应的 SHA-256；offsetBytes 大于 0 时必填",
+      },
+    },
+    ["projectId", "runId", "offsetBytes"],
+  );
   if (write) {
     addTool("create_project", "创建并授权新本地项目", { name: str });
     addTool("create_execution_flow", "创建新计划", {
@@ -311,8 +366,15 @@ export function createMCP({
     tool.inputSchema.required = [...tool.inputSchema.required, "confirm"];
     tool.description += "；必须显式传入 confirm: true";
   }
+  tools.push(...nativeMCPTools(write, execute));
   return async function dispatch(message) {
-    const { id: requestId, method, params = {} } = message;
+    const { id: requestId, method, params: incomingParams = {} } = message;
+    let params = incomingParams;
+    const nativeName =
+      typeof params.name === "string" && params.name.startsWith("apipost_")
+        ? params.name
+        : null;
+    let nativePlanArgs, nativeEnvironmentArgs, unlockPlan;
     if (requestId === undefined) return null;
     const result = (value) => ({
       jsonrpc: "2.0",
@@ -336,7 +398,9 @@ export function createMCP({
     try {
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
-      const args = params.arguments === undefined ? {} : params.arguments;
+      let args = params.arguments === undefined ? {} : params.arguments;
+      if (params.name === "localapi_get_execution_result_chunk")
+        args = executionResultChunkArguments(args);
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       for (const key of tool.inputSchema.required)
@@ -355,8 +419,19 @@ export function createMCP({
         if (schema.type === "array" && !Array.isArray(value))
           throw Error("参数必须为数组 " + key);
       }
-      if (tool.name.startsWith("localapi_delete_") && args.confirm !== true)
+      if (
+        (tool.name.startsWith("localapi_delete_") ||
+          tool.name.startsWith("apipost_delete_")) &&
+        args.confirm !== true
+      )
         throw Error("删除操作必须显式传入 confirm: true");
+      if (nativeName) {
+        const translated = translateNativeCall(nativeName, args);
+        params = { ...params, name: translated.name };
+        args = translated.args;
+        nativePlanArgs = translated.planArgs;
+        nativeEnvironmentArgs = translated.environmentArgs;
+      }
       let output;
       if (params.name === "localapi_list_projects")
         output = (await store.list()).filter(
@@ -364,14 +439,71 @@ export function createMCP({
         );
       else if (params.name === "localapi_create_project") {
         if (!args.name.trim()) throw Error("项目名称不能为空");
-        output = await store.create(args.name);
+        if (nativeName) {
+          if (args.name.trim().length > 64) throw Error("项目名称最多64字符");
+          if (
+            args.description !== undefined &&
+            args.description.trim().length > 1024
+          )
+            throw Error("项目描述最多1024字符");
+          if (args.storage_path?.trim())
+            throw Error("MCP仅允许托管存储根目录；不接受自定义storage_path");
+        }
+        output = await store.create(
+          nativeName ? args.name.trim() : args.name,
+          undefined,
+          nativeName
+            ? { description: args.description?.trim() || "" }
+            : undefined,
+        );
         allowed.add(output.id);
-        projects.push(output.id);
+        (nativeName ? sessionProjects : projects).push(output.id);
       } else {
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
+        const lockedOperations = [
+          "localapi_save_plan",
+          "localapi_create_execution_flow",
+          "localapi_update_execution_flow",
+          "localapi_delete_execution_flow",
+          "localapi_execute_flow",
+          "localapi_run_plan",
+        ];
+        const lockId = nativePlanArgs?.flow_id || args.planId || args.plan?.id;
+        if (lockId && lockedOperations.includes(params.name))
+          unlockPlan = lockMCPPlan(store, args.projectId, lockId);
         const p = await store.get(args.projectId);
         if (p.archived) throw Error("项目已归档");
-        if (isEnvironmentTool(params.name)) {
+        if (nativeName && Object.hasOwn(args, "environmentId"))
+          args = {
+            ...args,
+            environmentId: resolveNativeEnvironment(p, args.environmentId).id,
+          };
+
+        if (nativePlanArgs) {
+          const previous = nativePlanArgs.flow_id
+            ? p.plans.find((x) => x.id === nativePlanArgs.flow_id)
+            : undefined;
+          if (params.name === "localapi_update_execution_flow" && !previous)
+            throw Error("计划不存在");
+          args = {
+            projectId: p.id,
+            plan: buildNativeMCPPlan(
+              p,
+              nativePlanArgs,
+              previous,
+              normalizeRequest,
+            ),
+          };
+        }
+
+        if (nativeEnvironmentArgs)
+          output = await executeNativeEnvironmentTool(
+            store,
+            p,
+            nativeName.slice(8),
+            nativeEnvironmentArgs,
+          );
+        else if (isEnvironmentTool(params.name)) {
           output = await executeEnvironmentTool(store, p, params.name, args);
           if (params.name === "localapi_get_environment_variables")
             output.runtimeVariables = debugEnvironment(
@@ -429,6 +561,10 @@ export function createMCP({
               if (!output) throw Error("gRPC定义不存在");
               break;
             case "localapi_list_apis": {
+              if (nativeName) {
+                output = nativeAPIList(p, args);
+                break;
+              }
               const folders = [
                 ...new Set([
                   ...(p.folders || []),
@@ -478,9 +614,15 @@ export function createMCP({
               break;
             }
             case "localapi_get_api_detail":
-              output = [...p.requests, ...(p.protocols || [])].find(
-                (r) => r.id === args.apiId && !r.deletedAt,
-              );
+              if (nativeName) {
+                output = nativeAPIDetail(p, args.apiId);
+                break;
+              }
+              output = [
+                ...p.requests,
+                ...(p.protocols || []),
+                ...(p.documents || []),
+              ].find((r) => r.id === args.apiId && !r.deletedAt);
               if (!output) throw Error("接口不存在");
               break;
             case "localapi_list_plans":
@@ -497,6 +639,12 @@ export function createMCP({
                 ),
               };
               break;
+            case "localapi_get_execution_result_chunk":
+              output = executionResultChunk(
+                findExecutionResult(p, args.runId),
+                args,
+              );
+              break;
             case "localapi_get_execution_result":
               output = findExecutionResult(p, args.runId);
               break;
@@ -505,7 +653,7 @@ export function createMCP({
               if (!output) throw Error("记录不存在");
               break;
             case "localapi_sync_openapi":
-              output = syncMCPOpenAPI(p, args);
+              output = syncMCPOpenAPI(p, args, { native: !!nativeName });
               await store.save(p);
               break;
             case "localapi_create_execution_flow":
@@ -538,6 +686,21 @@ export function createMCP({
               break;
             case "localapi_delete_apis":
               if (!Array.isArray(args.apiIds)) throw Error("apiIds 必须为数组");
+              if (
+                nativeName &&
+                (!args.apiIds.length ||
+                  args.apiIds.length > 1000 ||
+                  new Set(args.apiIds).size !== args.apiIds.length ||
+                  args.apiIds.some(
+                    (id) =>
+                      typeof id !== "string" ||
+                      !id.trim() ||
+                      !p.requests.some((r) => r.id === id && !r.deletedAt),
+                  ))
+              )
+                throw Error(
+                  "仅支持现有HTTP接口的非重复ID；目录和文档删除尚未支持",
+                );
               output = [];
               for (const r of p.requests)
                 if (args.apiIds.includes(r.id)) {
@@ -547,6 +710,8 @@ export function createMCP({
               await store.save(p);
               break;
             case "localapi_list_execution_flows":
+              if (nativeName)
+                for (const plan of p.plans) assertNativeHTTPPlan(plan);
               output = p.plans.map(
                 ({
                   id,
@@ -577,45 +742,51 @@ export function createMCP({
               output = { deletedId: args.planId };
               break;
             case "localapi_list_execution_runs":
-              output = listExecutionHistory(p, args);
+              output = nativeName
+                ? nativeExecutionHistory(p, args)
+                : listExecutionHistory(p, args);
               break;
             case "localapi_execute_api": {
               const request = p.requests.find(
                 (item) => item.id === args.apiId && !item.deletedAt,
               );
               if (!request) throw Error("接口不存在");
+              const environmentId = selectedEnvironment(
+                p,
+                args.environmentId,
+              ).id;
+              const effectiveRequest = resolveServiceRequest(
+                p,
+                freezeServiceBinding(p, request),
+                environmentId,
+              );
               const plan = snapshotPlan({
                 name: request.name,
+                ...(nativeName ? { statusPolicy: "strict200" } : {}),
                 functions: p.settings?.functions || [],
                 steps: [
                   {
                     request: applyMCPInput(
-                      resolveServiceRequest(
-                        p,
-                        freezeServiceBinding(p, request),
-                        args.environmentId,
-                      ),
-                      args.input,
+                      effectiveRequest,
+                      nativeName
+                        ? inputAuth(effectiveRequest, args.input)
+                        : args.input,
                     ),
                   },
                 ],
               });
+              if (nativeName) assertNativeHTTPPlan(plan);
               output = await runPlan(
                 plan,
-                debugEnvironment(p, args.environmentId, debugEnvironments)
-                  .variables,
+                debugEnvironment(p, environmentId, debugEnvironments).variables,
                 executeRequest,
                 {
-                  cookieSession: projectCookieSession(
-                    store,
-                    p,
-                    args.environmentId,
-                  ),
+                  cookieSession: projectCookieSession(store, p, environmentId),
                   ...scopedExecution(
                     store,
                     p,
-                    args.environmentId,
-                    debugEnvironment(p, args.environmentId, debugEnvironments)
+                    environmentId,
+                    debugEnvironment(p, environmentId, debugEnvironments)
                       .variables,
                   ),
                   onStep: (step) =>
@@ -629,7 +800,7 @@ export function createMCP({
               );
               const context = debugEnvironment(
                 p,
-                args.environmentId,
+                environmentId,
                 debugEnvironments,
               );
               if (output.results[0]?.response)
@@ -637,20 +808,30 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              await store.append(p.id, "history", {
-                id: output.id,
-                createdAt: output.createdAt,
-                name: request.name,
-                ...output.results[0],
-                source: "mcp",
-                durationMs: output.durationMs,
-              });
+              output.environmentId = environmentId;
+              try {
+                await store.append(p.id, "history", {
+                  id: output.id,
+                  createdAt: output.createdAt,
+                  name: request.name,
+                  ...output.results[0],
+                  source: "mcp",
+                  durationMs: output.durationMs,
+                  environmentId: output.environmentId,
+                });
+                output.recordSaved = true;
+              } catch {
+                output.recordSaved = false;
+                output.persistenceError =
+                  "执行已完成，但历史记录保存失败；请勿自动重放请求";
+              }
               break;
             }
             case "localapi_execute_flow":
             case "localapi_run_plan": {
               const plan = p.plans.find((r) => r.id === args.planId);
               if (!plan) throw Error("计划不存在");
+              if (nativeName) assertNativeHTTPPlan(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -688,14 +869,91 @@ export function createMCP({
             }
           }
       }
+      if (nativeName) {
+        const kind = nativeName.slice(8);
+        if (kind === "create_project")
+          output = {
+            project_id: output.id,
+            name: output.name,
+            description: output.description,
+            storage_path: store.directory(output.id),
+            authorized: true,
+          };
+        else if (kind === "delete_apis")
+          output = {
+            project_id: args.projectId,
+            deleted: output.length,
+            target_ids: output,
+          };
+        else if (kind === "list_projects")
+          output = {
+            projects: output.map((p) => ({
+              project_id: p.id,
+              name: p.name,
+              intro: p.description || "",
+            })),
+          };
+        else if (
+          kind === "create_execution_flow" ||
+          kind === "update_execution_flow"
+        )
+          output = {
+            flow_id: output.id,
+            name: output.name,
+            message: "计划已保存",
+          };
+        else if (kind === "list_execution_flows")
+          output = {
+            flows: output.map((p) => ({
+              flow_id: p.id,
+              project_id: args.projectId,
+              name: p.name,
+              description: p.description,
+              environment_id: p.environmentId,
+              step_count: p.stepCount,
+              updated_at: p.updatedAt,
+            })),
+          };
+        else if (kind === "get_execution_flow")
+          output = { flow: nativeFlowView(args.projectId, output) };
+        else if (kind === "delete_execution_flow")
+          output = { deleted: true, flow_id: args.planId };
+        else if (kind === "execute_flow" || kind === "execute_api")
+          output = nativeRunResult(
+            args.projectId,
+            output,
+            kind === "execute_api" ? "api" : "flow",
+          );
+        else if (kind === "get_execution_result") {
+          assertNativeHTTPResult(output);
+          output = {
+            run: {
+              ...output,
+              run_id: output.id,
+              project_id: args.projectId,
+              workbench_evidence_format: 1,
+            },
+          };
+        }
+      }
       return result({
         content: [{ type: "text", text: JSON.stringify(output) }],
       });
     } catch (e) {
       return result({
         isError: true,
-        content: [{ type: "text", text: e.message }],
+        content: [
+          {
+            type: "text",
+            text:
+              params.name === "localapi_get_execution_result_chunk"
+                ? executionResultChunkError(e)
+                : e.message,
+          },
+        ],
       });
+    } finally {
+      unlockPlan?.();
     }
   };
 }
@@ -703,11 +961,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2),
     projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
     store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));
+  const sessionProjects = [];
   await store.init();
   let activity;
   const dispatch = createMCP({
     store,
     projects,
+    sessionProjects,
     write: argv.includes("--write"),
     execute: argv.includes("--execute"),
     onProgress: (progress) => activity?.update(progress),
@@ -726,17 +986,24 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         message.method === "tools/call" &&
         argv.includes("--execute") &&
         argv.includes("--write") &&
-        projects.includes(message.params?.arguments?.projectId) &&
+        [...projects, ...sessionProjects].includes(
+          message.params?.arguments?.projectId ??
+            message.params?.arguments?.project_id,
+        ) &&
         [
           "localapi_run_plan",
           "localapi_execute_flow",
           "localapi_execute_api",
+          "apipost_execute_flow",
         ].includes(message.params?.name)
       ) {
         activity = await new MCPActivity(store.root, {
           tool: message.params.name,
-          projectId: message.params.arguments.projectId,
-          planId: message.params.arguments.planId,
+          projectId:
+            message.params.arguments.projectId ??
+            message.params.arguments.project_id,
+          planId:
+            message.params.arguments.planId ?? message.params.arguments.flow_id,
         }).start();
       }
       const answer = await dispatch(message);

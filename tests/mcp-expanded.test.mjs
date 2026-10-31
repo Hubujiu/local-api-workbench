@@ -23,9 +23,18 @@ test("MCP covers project/environment/service/global lifecycle and plan CRUD with
     return JSON.parse(r.result.content[0].text);
   };
   const list = await d({ id: 1, method: "tools/list" });
-  assert.equal(list.result.tools.length, 40);
+  assert.equal(
+    list.result.tools.filter((t) => t.name.startsWith("localapi_")).length,
+    41,
+  );
+  assert.equal(
+    list.result.tools.filter((t) => t.name.startsWith("apipost_")).length,
+    30,
+  );
   const toolNames = new Set(list.result.tools.map((tool) => tool.name));
-  assert.equal(toolNames.size, 40);
+  assert.equal(toolNames.size, 71);
+  assert(toolNames.has("localapi_get_execution_result_chunk"));
+  assert(!toolNames.has("apipost_get_execution_result_chunk"));
   assert(toolNames.has("localapi_list_protocol_runs"));
   assert(toolNames.has("localapi_get_protocol_run"));
   const detail = list.result.tools.find(
