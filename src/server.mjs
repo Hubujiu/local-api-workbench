@@ -3,7 +3,11 @@ import {
   publishDebugVariables,
   clearDebugVariables,
 } from "./debug-publication.mjs";
-import { resolveNativeInheritance } from "./native-inheritance.mjs";
+import {
+  resolveNativeInheritance,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
+import { isDeepStrictEqual } from "node:util";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
 import { exportApipostDirectory } from "./apipost-directory-export.mjs";
 import { exportApipost } from "./apipost-export.mjs";
@@ -1062,7 +1066,24 @@ export async function createApp({
               )
             )
               throw Error("文档格式无效");
-            b.requests = b.requests.map(normalizeRequest);
+            const nativeState = validateNativeInheritanceProject(p);
+            const archivedRequests = new Map(
+              (nativeState?.recycled || []).flatMap(({ requestIds }) =>
+                requestIds.map((requestId) => [
+                  requestId,
+                  p.requests.find((request) => request.id === requestId),
+                ]),
+              ),
+            );
+            b.requests = b.requests.map((request) => {
+              const archived = archivedRequests.get(request?.id);
+              if (!archived) return normalizeRequest(request);
+              // Compare before normalization: do not silently drop unknown input
+              // fields or fill defaults into an immutable archived definition.
+              if (!isDeepStrictEqual(request, archived))
+                throw Error("回收目录内接口定义不可修改，请先整批恢复");
+              return request;
+            });
             b.plans = b.plans.map((plan) =>
               versionPlan(
                 p.plans.find((old) => old.id === plan.id),

@@ -171,6 +171,8 @@ function tasks(request, phase) {
 export function exportApipost(project, options = {}) {
   // Check the original project before any protocol/sample projection.
   rejectCollectionExport(project, "Apipost");
+  if (project.settings?.nativeInheritance?.folderLifecycle !== undefined)
+    throw Error("原生继承图含目录生命周期历史；请使用完整项目备份");
   const originalProject = project;
   const extended = prepareExtendedProtocolExport(project);
   project = extended.base;
