@@ -1,4 +1,7 @@
-import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
+import {
+  validatePostmanOAuth2Project,
+  preflightPostmanOAuth2Input,
+} from "../public/postman-oauth2-model.js";
 import { assertPathValue } from "./path-serialization.mjs";
 import {
   validateQueryRuntime,
@@ -66,6 +69,7 @@ function authOverride(target, patch) {
 }
 export function applyMCPInput(request, input) {
   validatePostmanOAuth2Project({ requests: [request] });
+  input = preflightPostmanOAuth2Input(request?.auth, input);
   const result = structuredClone(request);
   if (input === undefined) return result;
   dictionary(input, "input");

@@ -59,11 +59,22 @@ async function bytes(directory) {
   await visit(directory);
   return result;
 }
+function inertMetadata(base) {
+  return {
+    callBackUrl: "not a URL {{unusedCallback}}",
+    authUrl: base + "/must-not-acquire",
+    accessTokenUrl: base + "/must-not-acquire-token",
+    clientId: "{{unusedClient}}",
+    clientSecret: "{{unusedSecret}}",
+    scope: "{{$randomUUID}}",
+    requestAccessTokenLocally: "1.0",
+  };
+}
 function document(base) {
   return {
     info: { name: "Scoped saved OAuth2" },
     variable: [{ key: "savedToken", value: token }],
-    auth: oauth({ accessToken: "{{savedToken}}" }),
+    auth: oauth({ ...inertMetadata(base), accessToken: "{{savedToken}}" }),
     item: [
       {
         name: "outer",
@@ -83,6 +94,7 @@ function document(base) {
           {
             name: "query-folder",
             auth: oauth({
+              ...inertMetadata(base),
               accessToken: "{{savedToken}}",
               addTokenTo: "queryParams",
               headerPrefix: "{{unusedPrefix}}",
@@ -371,6 +383,12 @@ test(
     const recovered = await new Store(f.root).get(restored.id);
     assert.deepEqual(recovered.runs, backup.runs);
     assert.deepEqual(recovered.plans, backup.plans);
+    for (const request of [
+      ...recovered.requests,
+      ...recovered.plans[0].steps.map((step) => step.request),
+    ])
+      for (const [key, value] of Object.entries(inertMetadata(f.base)))
+        assert.equal(request.auth.postmanOAuth2[key], value);
     assert.equal(
       f.seen.length,
       6,

@@ -1,5 +1,18 @@
 // Bounded Postman saved-token policy; deliberately distinct from native OAuth2.
-const fields = ["accessToken", "addTokenTo", "tokenType", "headerPrefix"];
+const fields = [
+  "accessToken",
+  "addTokenTo",
+  "tokenType",
+  "headerPrefix",
+  // Fixture-backed opaque strings, never interpreted as acquisition settings.
+  "callBackUrl",
+  "authUrl",
+  "accessTokenUrl",
+  "clientId",
+  "clientSecret",
+  "scope",
+  "requestAccessTokenLocally",
+];
 const fail = () => {
   throw Error("Postman OAuth2 令牌策略无效或不受支持");
 };
@@ -30,20 +43,25 @@ export function postmanOAuth2Definition(auth) {
   )
     fail();
   const result = {};
+  let totalValueBytes = 0;
   for (const [key, value] of entries(
     outer.find(([k]) => k === "postmanOAuth2")[1],
   )) {
     if (key === "version") {
       if (value !== 1) fail();
-    } else if (
-      !fields.includes(key) ||
-      typeof value !== "string" ||
-      value.length > 8192 ||
-      !value.isWellFormed() ||
-      new TextEncoder().encode(value).length > 8192 ||
-      /[\x00-\x1f\x7f]/.test(value)
-    )
-      fail();
+    } else {
+      if (
+        !fields.includes(key) ||
+        typeof value !== "string" ||
+        value.length > 8192 ||
+        !value.isWellFormed() ||
+        /[\x00-\x1f\x7f]/.test(value)
+      )
+        fail();
+      const valueBytes = new TextEncoder().encode(value).length;
+      totalValueBytes += valueBytes;
+      if (valueBytes > 8192 || totalValueBytes > 32768) fail();
+    }
     result[key] = value;
   }
   if (
@@ -60,7 +78,7 @@ export function importPostmanOAuth2(rows = []) {
   if (
     !Array.isArray(rows) ||
     Object.getPrototypeOf(rows) !== Array.prototype ||
-    rows.length > 4
+    rows.length > fields.length
   )
     fail();
   const descriptors = Object.getOwnPropertyDescriptors(rows);
@@ -141,4 +159,49 @@ export function validatePostmanOAuth2Project(project) {
   const folders = read(settings, "folderAuth");
   for (const key of Reflect.ownKeys(folders || {}))
     postmanOAuth2Definition(read(folders, key));
+}
+
+// MCP partial overrides need descriptor inspection before JSON serialization.
+// Leave ordinary unmarked inputs on their existing path.
+export function preflightPostmanOAuth2Input(auth, input) {
+  const definition = postmanOAuth2Definition(auth);
+  if (!input || typeof input !== "object") return input;
+  const descriptor = Object.getOwnPropertyDescriptor(input, "auth");
+  if (!descriptor) {
+    if (definition !== undefined && "auth" in input) fail();
+    return input;
+  }
+  if (!Object.hasOwn(descriptor, "value")) {
+    if (definition !== undefined) fail();
+    return input;
+  }
+  const patch = descriptor.value;
+  const visibleMarker =
+    patch && typeof patch === "object" && "postmanOAuth2" in patch;
+  if (definition === undefined) {
+    if (visibleMarker) fail();
+    return input;
+  }
+  if (!descriptor.enumerable) fail();
+  const safePatch = Object.fromEntries(entries(patch));
+  if (
+    Object.keys(safePatch).some(
+      (key) => !["type", "postmanOAuth2"].includes(key),
+    )
+  )
+    fail();
+  const candidate = { type: "oauth2", postmanOAuth2: definition };
+  if (Object.hasOwn(safePatch, "type")) candidate.type = safePatch.type;
+  if (Object.hasOwn(safePatch, "postmanOAuth2")) {
+    safePatch.postmanOAuth2 = Object.fromEntries(
+      entries(safePatch.postmanOAuth2),
+    );
+    candidate.postmanOAuth2 = { ...definition, ...safePatch.postmanOAuth2 };
+  }
+  postmanOAuth2Definition(candidate);
+  // Preserve existing non-auth input descriptors/semantics, but do not reread
+  // caller-owned auth records after their descriptor-safe validation.
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  descriptors.auth = { ...descriptor, value: safePatch };
+  return Object.create(Object.getPrototypeOf(input), descriptors);
 }
