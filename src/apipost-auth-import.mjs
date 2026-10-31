@@ -1,3 +1,8 @@
+import { importApipostOAuth2 } from "./apipost-oauth2-auth.mjs";
+import { importApipostOAuth1 } from "./apipost-oauth1-auth.mjs";
+import { importApipostNtlm } from "./apipost-ntlm-auth.mjs";
+import { importApipostDigest } from "./apipost-digest-auth.mjs";
+import { importApipostAsap } from "./apipost-asap-auth.mjs";
 import { validateHeaderName } from "node:http";
 const object = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -20,6 +25,43 @@ function strings(value, names) {
 }
 /** Pure format conversion only. Never obtains tokens or makes network requests. */
 export function importExtendedApipostAuth(auth) {
+  if (auth && typeof auth === "object") {
+    const type = Object.getOwnPropertyDescriptor(auth, "type");
+    if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
+      throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "oauth2") {
+      const section = Object.getOwnPropertyDescriptor(auth, "oauth2");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生 OAuth2 定义无法保真映射，请使用项目备份");
+      return importApipostOAuth2(section.value);
+    }
+    if (type?.value === "oauth1") {
+      const section = Object.getOwnPropertyDescriptor(auth, "oauth1");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error(
+          "原生OAuth1认证 definition 无法安全规范映射；请使用项目备份",
+        );
+      return importApipostOAuth1(section.value);
+    }
+    if (type?.value === "ntlm") {
+      const section = Object.getOwnPropertyDescriptor(auth, "ntlm");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生NTLM认证 definition 无效");
+      return importApipostNtlm(section.value);
+    }
+    if (type?.value === "digest") {
+      const section = Object.getOwnPropertyDescriptor(auth, "digest");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生Digest认证 definition 无效");
+      return importApipostDigest(section.value);
+    }
+    if (type?.value === "asap") {
+      const section = Object.getOwnPropertyDescriptor(auth, "asap");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生ASAP认证 definition 无效");
+      return importApipostAsap(section.value);
+    }
+  }
   if (auth?.type === "kv") {
     const value = section(auth, "kv", ["in", "key", "value"]);
     const result = strings(value, ["in", "key", "value"]);

@@ -212,7 +212,14 @@ test("extended native auth refuses lossy or malformed conversion before changing
     assert.throws(() => importIntoProject(project, doc));
     assert.deepEqual(project, before);
   }
-  assert.equal(importExtendedApipostAuth({ type: "oauth2" }), undefined);
+  assert.equal(
+    importExtendedApipostAuth({ type: "unsupported-auth" }),
+    undefined,
+  );
+  assert.throws(
+    () => importExtendedApipostAuth({ type: "oauth2" }),
+    /原生 OAuth2 定义无法保真映射/,
+  );
   assert.equal(
     importExtendedApipostAuth({
       type: "hawk",
