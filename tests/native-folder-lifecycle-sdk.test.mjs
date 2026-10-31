@@ -450,3 +450,111 @@ test("native SDK folder selection requires confirm/write/scope and empty folders
   );
   assert.deepEqual(await f.app.store.get(f.foreign.id), foreignBefore);
 });
+
+test("owner PUT preserves sparse inactive HTTP exactly and rejects raw changes before normalization", async (t) => {
+  const f = await fixture(t),
+    { call, id, wire } = f;
+  let p = await f.app.store.get(id);
+  // Store.save accepts these omitted ordinary defaults in an otherwise valid
+  // bound HTTP definition. This represents persisted legacy sparse state, not
+  // an invalid graph or a request constructed outside the native importer.
+  for (const key of ["schema", "proxy", "timeout"]) delete api(p)[key];
+  await f.app.store.save(p);
+  p = await new Store(f.root).get(id);
+  for (const key of ["schema", "proxy", "timeout"])
+    assert.equal(Object.hasOwn(api(p), key), false);
+  const sparse = structuredClone(api(p));
+  p = await call(`projects/${id}/native-inheritance-edit`, {
+    configRevision: p.configRevision,
+    operation: { type: "recycle-folder", sourceId: "folder" },
+  });
+  assert.deepEqual(api(p), { ...sparse, deletedAt: api(p).deletedAt });
+  const inactive = structuredClone(api(p));
+  const ancestorEdit = structuredClone(p);
+  graph(ancestorEdit)
+    .folders.find((node) => node.sourceId === "ancestor")
+    .layer.headers.push({
+      key: "X-Active-Ancestor",
+      value: "editable-during-recycle",
+      enabled: true,
+    });
+  p = await call(`projects/${id}`, ancestorEdit, 200, "PUT");
+  assert.deepEqual(
+    api(p),
+    inactive,
+    "ordinary PUT must not inject defaults into an unchanged pending HTTP",
+  );
+  const disk = await new Store(f.root).get(id);
+  assert.deepEqual(
+    api(disk),
+    inactive,
+    "persisted inactive definition remains byte-shape equivalent",
+  );
+  assert(
+    graph(disk)
+      .folders.find((node) => node.sourceId === "ancestor")
+      .layer.headers.some(
+        (row) =>
+          row.key === "X-Active-Ancestor" &&
+          row.value === "editable-during-recycle",
+      ),
+  );
+  for (const [label, mutate] of [
+    [
+      "unknown property normally dropped by normalization",
+      (request) => {
+        request.pendingUnknownField =
+          "must-not-disappear-before-identity-check";
+      },
+    ],
+    [
+      "missing schema default added",
+      (request) => {
+        request.schema = {};
+      },
+    ],
+    [
+      "missing proxy default added",
+      (request) => {
+        request.proxy = "";
+      },
+    ],
+    [
+      "missing timeout default added",
+      (request) => {
+        request.timeout = 15000;
+      },
+    ],
+    [
+      "existing real URL changed",
+      (request) => {
+        request.url = "/tampered-pending";
+      },
+    ],
+    [
+      "existing own header changed",
+      (request) => {
+        request.headers[0].value = "tampered-pending";
+      },
+    ],
+  ]) {
+    const changed = structuredClone(disk);
+    mutate(api(changed));
+    await call(`projects/${id}`, changed, 400, "PUT");
+    assert.deepEqual(
+      await f.app.store.get(id),
+      disk,
+      label + ": cache unchanged",
+    );
+    assert.deepEqual(
+      await new Store(f.root).get(id),
+      disk,
+      label + ": disk and revision unchanged",
+    );
+  }
+  assert.equal(
+    wire.length,
+    0,
+    "sparse lifecycle and PUT checks do not execute the peer",
+  );
+});
