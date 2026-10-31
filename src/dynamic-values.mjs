@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -12,6 +13,9 @@ import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { randomInt } from "node:crypto";
 import { sampleProjectSchema } from "./mock-fields.mjs";
 import { previewFunction } from "./custom-functions.mjs";
+// Elapsed execution budgets must not follow civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
+
 export async function resolveDynamicValue(spec, variables, functions = []) {
   if (
     !spec ||
@@ -141,7 +145,7 @@ async function resolveDynamicRequestBase(
     0,
   );
   if (transforms > 20) throw Error("每个请求最多20次动态函数处理");
-  const deadline = Date.now() + 5000;
+  const deadline = monotonicNow() + 5000;
   // Scripts resolve templates explicitly at execution time, including post-extraction scopes.
   const scriptSources = {};
   for (const key of [
@@ -156,9 +160,9 @@ async function resolveDynamicRequestBase(
     }
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
   for (const { group, index, spec } of specs) {
-    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
-    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     if (
       spec.source === "apipost-function" &&
       value === "" &&
@@ -175,9 +179,9 @@ async function resolveDynamicRequestBase(
         literalBody === undefined ? interpolate(part, variables) : part;
       continue;
     }
-    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(dynamic.spec, variables, functions);
-    if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     parts[index] =
       dynamic.spec.format === "json" || typeof value !== "string"
         ? JSON.stringify(value)
