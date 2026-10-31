@@ -1,3 +1,4 @@
+import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -324,7 +325,8 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
   appendRequestQuery(u, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
-  if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
+  const nativeOAuth2 = applyNativeOAuth2(u, headers, r.auth);
+  if (!nativeOAuth2 && (r.auth.type === "bearer" || r.auth.type === "oauth2")) {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
   }

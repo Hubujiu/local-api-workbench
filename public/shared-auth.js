@@ -5,6 +5,7 @@ function validateSharedAuth(auth) {
   if (new TextEncoder().encode(JSON.stringify(auth)).length > 65536)
     throw Error("共享认证最多64KiB");
   for (const [key, value] of Object.entries(auth)) {
+    if (key === "nativeOAuth2" && auth.type === "oauth2") continue;
     if (
       ["__proto__", "prototype", "constructor"].includes(key) ||
       !["string", "number", "boolean"].includes(typeof value)
@@ -22,9 +23,9 @@ export function validateSharedAuthSettings(settings = {}) {
     validateFolderParameters(
       Object.fromEntries(Object.keys(folders).map((name) => [name, {}])),
     );
+    for (const auth of Object.values(folders)) validateSharedAuth(auth);
     if (new TextEncoder().encode(JSON.stringify(folders)).length > 262144)
       throw Error("目录认证总计最多256KiB");
-    for (const auth of Object.values(folders)) validateSharedAuth(auth);
   }
 }
 export function renameSharedAuthScopes(settings, previous, next) {
