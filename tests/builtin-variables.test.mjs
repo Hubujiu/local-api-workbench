@@ -217,3 +217,22 @@ test("Apipost dynamic aliases arrive as numeric JSON in a real HTTP request", as
   assert.equal(typeof received.fraction, "number");
   assert(received.fraction >= 0 && received.fraction < 1000);
 });
+
+test("replaceIn ASCII fast path preserves mixed Unicode UTF-8 boundaries", async () => {
+  const result = await runScript(
+    'apt.setVar("n",pm.variables.replaceIn("{{x}}").length);',
+    { variables: { x: "a".repeat(65532) + "😀" } },
+  );
+  assert.equal(result.variables.n, 65534);
+  for (const x of ["a".repeat(65533) + "😀", "a".repeat(65534) + "中"])
+    await assert.rejects(
+      runScript('pm.variables.replaceIn("{{x}}");', { variables: { x } }),
+      /64KiB/,
+    );
+  await assert.rejects(
+    runScript('pm.variables.replaceIn("a".repeat(65534)+"中");', {
+      variables: {},
+    }),
+    /64KiB/,
+  );
+});
