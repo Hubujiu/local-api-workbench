@@ -1,3 +1,5 @@
+import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
+import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import {
   restoreAPIResources,
   assertAPIResourceTrashIdentity,
@@ -317,6 +319,7 @@ export class Store {
       const project = await readProject(directory, key);
       validateNativeInheritanceProject(project);
       validateAPIResourceTrash(project);
+      validatePostmanOAuth2Project(project);
       return project;
     }
     const project = JSON.parse(
@@ -324,6 +327,7 @@ export class Store {
     );
     validateNativeInheritanceProject(project);
     validateAPIResourceTrash(project);
+    validatePostmanOAuth2Project(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -554,6 +558,7 @@ export class Store {
     return this.save(next, { apiResourceRestore });
   }
   #validateProject(p) {
+    validatePostmanOAuth2Project(p);
     validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
@@ -852,8 +857,10 @@ async function executeRequestWithinDeadline(
   validateRedirectAdmission(r, headers);
   if (r.redirect && Buffer.byteLength(u.href) > 8192)
     throw Error("redirect URL 超过 8 KiB");
-  const nativeOAuth2 = applyNativeOAuth2(u, headers, r.auth);
-  if (!nativeOAuth2 && (r.auth.type === "bearer" || r.auth.type === "oauth2")) {
+  const tokenPolicy =
+    applyPostmanOAuth2(u, headers, r.auth) ||
+    applyNativeOAuth2(u, headers, r.auth);
+  if (!tokenPolicy && (r.auth.type === "bearer" || r.auth.type === "oauth2")) {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
   }

@@ -89,6 +89,12 @@ import {
   postmanPartMedia,
 } from "./multipart-part-media.mjs";
 import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
+import {
+  importPostmanOAuth2,
+  validatePostmanOAuth2Project,
+  postmanOAuth2Definition,
+} from "../public/postman-oauth2-model.js";
+import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
@@ -287,6 +293,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  validatePostmanOAuth2Project({ requests: [r] });
   validatePathSerialization(r);
   const nativeInheritance = normalizeNativeInheritanceBinding(
     r.nativeInheritance,
@@ -412,7 +419,10 @@ export function normalizeRequest(r = {}) {
     path: r.path || [],
     cookies: r.cookies || [],
     cookieEncoding: normalizeCookieEncoding(r.cookieEncoding),
-    auth: { ...(r.auth || {}), type: r.auth?.type ?? "none" },
+    auth:
+      postmanOAuth2Definition(r.auth) !== undefined
+        ? { type: "oauth2", postmanOAuth2: postmanOAuth2Definition(r.auth) }
+        : { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
     body:
       typeof r.body === "string"
@@ -520,6 +530,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  validatePostmanOAuth2Project({ plans: [plan] });
   const repeated = validateRepeatGraph(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
@@ -527,7 +538,9 @@ export function snapshotPlan(plan) {
     if (
       auth &&
       typeof auth === "object" &&
-      ("parameterPolicy" in auth || "nativeOAuth2" in auth)
+      ("parameterPolicy" in auth ||
+        "nativeOAuth2" in auth ||
+        "postmanOAuth2" in auth)
     )
       validateAuth(auth);
   }
@@ -665,6 +678,7 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  validatePostmanOAuth2Project({ plans: [plan] });
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
@@ -674,7 +688,9 @@ export async function runPlan(
     if (
       auth &&
       typeof auth === "object" &&
-      ("parameterPolicy" in auth || "nativeOAuth2" in auth)
+      ("parameterPolicy" in auth ||
+        "nativeOAuth2" in auth ||
+        "postmanOAuth2" in auth)
     )
       validateAuth(auth);
   }
@@ -1003,6 +1019,7 @@ export async function runPlan(
         }
         applyLegacyVariables(scopes, beforeOperations, vars);
         const localVariables = {};
+        postmanOAuth2Definition(step.request.auth);
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
         const beforeStages = scriptStages(configuredRequest, "before");
@@ -1559,6 +1576,7 @@ export function importDocument(doc) {
           .length > 1
       )
         throw Error("Postman AWS Query认证开关重复");
+      if (config.type === "oauth2") return importPostmanOAuth2(config.oauth2);
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1647,8 +1665,6 @@ export function importDocument(doc) {
               .map((key) => [key, values[key]]),
           ),
         };
-      if (config.type === "oauth2")
-        return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
         return {
           type: "basic",
@@ -1986,6 +2002,7 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  validatePostmanOAuth2Project(project);
   // OpenAPI cannot retain this opt-in native token policy or its grant metadata.
   for (const auth of [
     project.settings?.globalAuth,
@@ -1996,12 +2013,24 @@ export function exportOpenAPI(project) {
       throw Error("OpenAPI不能保留原生 OAuth2 定义，请使用项目备份");
   }
   rejectCollectionExport(project, "OpenAPI");
+  for (const auth of [
+    project.settings?.globalAuth,
+    ...Object.values(project.settings?.folderAuth || {}),
+  ])
+    if (postmanOAuth2Definition(auth) !== undefined)
+      throw Error(
+        "OpenAPI不能无损表达共享Postman OAuth2令牌策略，请使用项目备份",
+      );
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     assertRedirectExportable(source);
     validatePathSerialization(source);
     const r = sdkOpenAPIDefinition(project, source);
+    if (postmanOAuth2Definition(r.auth) !== undefined)
+      throw Error(
+        "OpenAPI不能无损表达Postman OAuth2令牌策略，请使用项目备份或cURL",
+      );
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),
@@ -2137,6 +2166,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input, { collectionResolved = false } = {}) {
+  validatePostmanOAuth2Project({ requests: [input] });
   if (input.postmanCollectionId !== undefined && !collectionResolved)
     throw Error("cURL须先通过项目上下文解析Postman collection变量");
   assertRedirectExportable(input);
@@ -2216,6 +2246,7 @@ export function toCurl(input, { collectionResolved = false } = {}) {
     );
   }
   if (
+    !applyPostmanOAuth2(url, headers, r.auth) &&
     !applyNativeOAuth2(url, headers, r.auth) &&
     ["bearer", "oauth2"].includes(r.auth.type)
   )
@@ -2265,6 +2296,7 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  validatePostmanOAuth2Project(document);
   validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
   for (const plan of document.plans || [])
@@ -2474,6 +2506,7 @@ export function importIntoProject(
     postmanVariableMode: mode,
   } = {},
 ) {
+  validatePostmanOAuth2Project(project);
   const variableMode = postmanVariableMode(mode);
   const preserveInheritance =
     resolveInheritanceMode(inheritanceMode) === "preserve";

@@ -1,7 +1,9 @@
 import { cloneRequestWithTaskSource } from "./imported-native-task-source.mjs";
+import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
 import { randomUUID } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
 export function snapshotCase(input) {
+  validatePostmanOAuth2Project({ cases: [input] });
   if (input?.request?.nativeInheritance !== undefined)
     throw Error("冻结用例须先解析原生继承图，不能保留live绑定");
   if (!input || typeof input.name !== "string" || !input.name.trim())

@@ -55,6 +55,7 @@ export function validateRedirectAdmission(r, headers) {
   if (!r.redirect) return;
   if (
     r.auth.nativeOAuth2 !== undefined ||
+    "postmanOAuth2" in r.auth ||
     !["none", "basic", "bearer", "oauth2", "apiKey"].includes(r.auth.type) ||
     (r.auth.type === "apiKey" && r.auth.in === "query")
   )

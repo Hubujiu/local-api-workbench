@@ -54,6 +54,8 @@ function exportJwtDefinition(value) {
 // Definition conversion only: never signs, obtains credentials, or sends traffic.
 export function exportExtendedApipostAuth(value) {
   if (value && typeof value === "object") {
+    if ("postmanOAuth2" in value)
+      throw Error("原生认证导出不能保留 Postman OAuth2 策略；请使用项目备份");
     const type = Object.getOwnPropertyDescriptor(value, "type");
     if ((!type && "type" in value) || (type && !Object.hasOwn(type, "value")))
       throw Error("原生认证导出不接受访问器定义；请使用项目备份");

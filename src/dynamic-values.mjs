@@ -10,6 +10,10 @@ import {
   validateQueryArrayRequest,
 } from "./openapi-query-arrays.mjs";
 import { nativeOAuth2Definition } from "../public/native-oauth2-model.js";
+import {
+  postmanOAuth2Definition,
+  resolvePostmanOAuth2,
+} from "../public/postman-oauth2-model.js";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -111,6 +115,7 @@ async function resolveDynamicRequestBase(
   literalBody,
 ) {
   validateApipostTemplateRequest(request);
+  const postmanOAuth2 = postmanOAuth2Definition(request.auth);
   const nativeOAuth2 = nativeOAuth2Definition(request.auth);
   const clone = bindPathTemplates(structuredClone(request), variables),
     specs = [];
@@ -182,6 +187,7 @@ async function resolveDynamicRequestBase(
       scriptSources[key] = clone[key];
       delete clone[key];
     }
+  if (postmanOAuth2 !== undefined) delete clone.auth.postmanOAuth2;
   // Native grant metadata is stored, never interpolated or executed here.
   if (nativeOAuth2 !== undefined) delete clone.auth.nativeOAuth2;
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
@@ -206,6 +212,12 @@ async function resolveDynamicRequestBase(
     }
     resolved.auth.nativeOAuth2 = nativeOAuth2;
   }
+  if (postmanOAuth2 !== undefined)
+    resolved.auth.postmanOAuth2 = resolvePostmanOAuth2(
+      request.auth,
+      interpolate,
+      variables,
+    );
   for (const { group, index, spec } of specs) {
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
@@ -256,6 +268,7 @@ export async function resolveDynamicRequest(
   validateQueryArrayRequest(request);
   validatePathSerialization(request);
   nativeOAuth2Definition(request.auth);
+  postmanOAuth2Definition(request.auth);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&

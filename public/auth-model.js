@@ -1,6 +1,7 @@
 import { oauth1ParameterPolicy } from "./oauth1-policy-model.js";
 import { digestChallengePolicy } from "./digest-policy-model.js";
 import { nativeOAuth2Definition } from "./native-oauth2-model.js";
+import { postmanOAuth2Definition } from "./postman-oauth2-model.js";
 export const authTypes = [
   "none",
   "bearer",
@@ -17,6 +18,7 @@ export const authTypes = [
   "asap",
 ];
 export function validateAuth(auth = {}) {
+  postmanOAuth2Definition(auth);
   nativeOAuth2Definition(auth);
   if (!auth || typeof auth !== "object" || Array.isArray(auth))
     throw Error("认证配置必须为对象");

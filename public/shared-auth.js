@@ -1,9 +1,11 @@
+import { postmanOAuth2Definition } from "./postman-oauth2-model.js";
 import { validateAuth } from "./auth-model.js";
 import { validateFolderParameters } from "./global-parameters.js";
 function validateSharedAuth(auth) {
   validateAuth(auth);
   if (new TextEncoder().encode(JSON.stringify(auth)).length > 65536)
     throw Error("共享认证最多64KiB");
+  if (postmanOAuth2Definition(auth) !== undefined) return;
   for (const [key, value] of Object.entries(auth)) {
     if (key === "parameterPolicy" && auth.type === "oauth1") continue;
     // validateAuth already strictly validates this sole nested model, including

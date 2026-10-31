@@ -1,3 +1,4 @@
+import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
 import { collectionScope } from "./postman-collection-scopes.mjs";
 import { captureDebugPublication } from "./debug-publication.mjs";
 import {
@@ -72,6 +73,10 @@ export function freezeServiceBinding(
 ) {
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw Error("接口定义必须是对象");
+  validatePostmanOAuth2Project({
+    requests: [request],
+    settings: project.settings,
+  });
   request = resolveNativeInheritance(project, request, {
     allowFrozen: allowNativeSnapshot,
   });
