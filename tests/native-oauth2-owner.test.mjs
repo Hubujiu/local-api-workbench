@@ -461,9 +461,17 @@ test(
         "/api/projects/" + source.id + "/execute",
         "POST",
         { request, environmentId: credentialEnvironment(source) },
-        400,
       );
-      assert(!JSON.stringify(result).includes("invalid\r\nsecret"));
+      assert.equal(result.outcome, "failed");
+      assert.equal(result.status, undefined);
+      assert.equal(result.body, undefined);
+      assert.equal(
+        result.error,
+        token === "{{missing}}"
+          ? "未定义变量: missing"
+          : "原生 OAuth2 令牌注入字段无效",
+      );
+      assert(!result.error.includes(token));
     }
     assert.equal(f.seen.length, 0);
     const request = structuredClone(source.requests[0]);
