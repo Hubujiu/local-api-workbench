@@ -104,7 +104,8 @@ export function exportApipostDatabaseTask(
 ) {
   const connection =
     context?.enabled && context.connections.get(task.data.connectionId);
-  if (!connection) throw Error("数据库任务出口缺少显式重绑目录或连接引用");
+  if (!connection)
+    throw Error("数据库任务出口缺少显式重绑目录或连接引用；请使用项目备份");
   const shape = task.data.resultShape;
   if (
     (connection.type === "mysql" && shape !== "mysql-resultsets") ||
