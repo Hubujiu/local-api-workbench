@@ -88,6 +88,7 @@ import {
   assertMultipartMediaExportable,
   postmanPartMedia,
 } from "./multipart-part-media.mjs";
+import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
@@ -523,7 +524,11 @@ export function snapshotPlan(plan) {
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
     const auth = step.request?.auth;
-    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+    if (
+      auth &&
+      typeof auth === "object" &&
+      ("parameterPolicy" in auth || "nativeOAuth2" in auth)
+    )
       validateAuth(auth);
   }
 
@@ -666,7 +671,11 @@ export async function runPlan(
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
     const auth = step.request?.auth;
-    if (auth && typeof auth === "object" && "parameterPolicy" in auth)
+    if (
+      auth &&
+      typeof auth === "object" &&
+      ("parameterPolicy" in auth || "nativeOAuth2" in auth)
+    )
       validateAuth(auth);
   }
 
@@ -1977,6 +1986,15 @@ export function importCurl(source) {
   return normalizeRequest(r);
 }
 export function exportOpenAPI(project) {
+  // OpenAPI cannot retain this opt-in native token policy or its grant metadata.
+  for (const auth of [
+    project.settings?.globalAuth,
+    ...Object.values(project.settings?.folderAuth || {}),
+    ...(project.requests || []).filter((r) => !r.deletedAt).map((r) => r.auth),
+  ]) {
+    if (auth && typeof auth === "object" && "nativeOAuth2" in auth)
+      throw Error("OpenAPI不能保留原生 OAuth2 定义，请使用项目备份");
+  }
   rejectCollectionExport(project, "OpenAPI");
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
@@ -2197,7 +2215,10 @@ export function toCurl(input, { collectionResolved = false } = {}) {
       quote((r.auth.username || "") + ":" + (r.auth.password || "")),
     );
   }
-  if (["bearer", "oauth2"].includes(r.auth.type))
+  if (
+    !applyNativeOAuth2(url, headers, r.auth) &&
+    ["bearer", "oauth2"].includes(r.auth.type)
+  )
     headers.authorization = "Bearer " + (r.auth.token || "");
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);

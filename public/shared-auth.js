@@ -9,6 +9,7 @@ function validateSharedAuth(auth) {
     // validateAuth already strictly validates this sole nested model, including
     // type, own data descriptors, exact keys, algorithm and boolean retry.
     if (key === "challengePolicy" && auth.type === "digest") continue;
+    if (key === "nativeOAuth2" && auth.type === "oauth2") continue;
     if (
       ["__proto__", "prototype", "constructor"].includes(key) ||
       !["string", "number", "boolean"].includes(typeof value)

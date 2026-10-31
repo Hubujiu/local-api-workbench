@@ -8,6 +8,7 @@ import {
   parseQueryArray,
   validateQueryArrayRequest,
 } from "./openapi-query-arrays.mjs";
+import { nativeOAuth2Definition } from "../public/native-oauth2-model.js";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -106,6 +107,7 @@ async function resolveDynamicRequestBase(
   literalBody,
 ) {
   validateApipostTemplateRequest(request);
+  const nativeOAuth2 = nativeOAuth2Definition(request.auth);
   const clone = bindPathTemplates(structuredClone(request), variables),
     specs = [];
   const arrayValues = [];
@@ -176,9 +178,30 @@ async function resolveDynamicRequestBase(
       scriptSources[key] = clone[key];
       delete clone[key];
     }
+  // Native grant metadata is stored, never interpolated or executed here.
+  if (nativeOAuth2 !== undefined) delete clone.auth.nativeOAuth2;
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
   for (const { index, value } of arrayValues)
     resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+  if (nativeOAuth2 !== undefined) {
+    const selected = nativeOAuth2.addTokenTo;
+    if (selected && nativeOAuth2.access_token) {
+      nativeOAuth2.access_token = interpolate(
+        nativeOAuth2.access_token,
+        variables,
+      );
+      if (
+        selected === "header" &&
+        nativeOAuth2.access_token &&
+        nativeOAuth2.headerPrefix
+      )
+        nativeOAuth2.headerPrefix = interpolate(
+          nativeOAuth2.headerPrefix,
+          variables,
+        );
+    }
+    resolved.auth.nativeOAuth2 = nativeOAuth2;
+  }
   for (const { group, index, spec } of specs) {
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
@@ -228,6 +251,7 @@ export async function resolveDynamicRequest(
 ) {
   validateQueryArrayRequest(request);
   validatePathSerialization(request);
+  nativeOAuth2Definition(request.auth);
   validateApipostTemplateRequest(request);
   if (
     finalBody !== undefined &&

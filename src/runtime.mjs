@@ -38,6 +38,7 @@ import {
 import { executePreparedRedirect } from "./http-redirect-transport.mjs";
 import { validateQueryArrayRequest } from "./openapi-query-arrays.mjs";
 import { multipartPartMedia } from "./multipart-part-media.mjs";
+import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -790,7 +791,8 @@ async function executeRequestWithinDeadline(
   validateRedirectAdmission(r, headers);
   if (r.redirect && Buffer.byteLength(u.href) > 8192)
     throw Error("redirect URL 超过 8 KiB");
-  if (r.auth.type === "bearer" || r.auth.type === "oauth2") {
+  const nativeOAuth2 = applyNativeOAuth2(u, headers, r.auth);
+  if (!nativeOAuth2 && (r.auth.type === "bearer" || r.auth.type === "oauth2")) {
     if (!r.auth.token) throw Error("请填写或获取 Bearer Token");
     headers.authorization = "Bearer " + r.auth.token;
   }

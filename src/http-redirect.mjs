@@ -54,6 +54,7 @@ export function assertRedirectExportable(request) {
 export function validateRedirectAdmission(r, headers) {
   if (!r.redirect) return;
   if (
+    r.auth.nativeOAuth2 !== undefined ||
     !["none", "basic", "bearer", "oauth2", "apiKey"].includes(r.auth.type) ||
     (r.auth.type === "apiKey" && r.auth.in === "query")
   )
