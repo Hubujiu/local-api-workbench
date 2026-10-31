@@ -1,3 +1,8 @@
+import {
+  nativeDataArray,
+  nativeDataObject,
+  normalizePickVarsData,
+} from "./native-response-extraction.mjs";
 import { mongoQuery } from "./mongodb.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 const object = (value) =>
@@ -125,11 +130,14 @@ export function prepareApipostDatabases(value, projectId, resource) {
 export function nativeDatabaseTasks(
   tasks,
   map,
-  { translated = false, connections = [] } = {},
+  { translated = false, connections = [], phase = "before" } = {},
 ) {
+  nativeDataArray(tasks, 16);
   if (!Array.isArray(tasks) || tasks.length > 16)
     throw Error("Apipost任务阶段最多16项");
+  if (!["before", "after"].includes(phase)) throw Error("原版任务阶段无效");
   const output = tasks.map((task) => {
+    nativeDataObject(task, ["type", "enabled", "data", "id", "name", "origin"]);
     if (
       !object(task) ||
       !safe(task.id) ||
@@ -137,6 +145,8 @@ export function nativeDatabaseTasks(
       (!translated && task.origin !== undefined)
     )
       throw Error("Apipost任务无效");
+    if (task.type === "pickVars")
+      normalizePickVarsData(task.data, { enabled: task.enabled === 1 });
     const next = structuredClone(task);
     if (task.type === "database") {
       if (
@@ -243,8 +253,12 @@ export function nativeDatabaseTasks(
   });
   return normalizeNativeTaskRequest({
     inheritSharedScripts: false,
-    nativeTasks: { version: 1, before: output, after: [] },
-  }).before;
+    nativeTasks: {
+      version: 1,
+      before: phase === "before" ? output : [],
+      after: phase === "after" ? output : [],
+    },
+  })[phase];
 }
 export function validateApipostDatabaseResources(value = []) {
   if (!Array.isArray(value) || value.length > 100)

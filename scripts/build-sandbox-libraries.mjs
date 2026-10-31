@@ -99,3 +99,6 @@ await import("./build-url-sdk.mjs");
 
 // Rebuild the separately isolated, licensed original Mock core.
 await import("./build-native-mock.mjs");
+
+// Build the private native scalar XML adapter in the same audited toolchain.
+await import("./build-native-xml.mjs");

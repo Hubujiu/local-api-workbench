@@ -1,5 +1,8 @@
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
-import { runNativeTaskPhase } from "./native-task-phase.mjs";
+import {
+  runNativeTaskPhase,
+  isNativeExtractionPhaseFailure,
+} from "./native-task-phase.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -485,7 +488,19 @@ export async function runPlan(
       subrequests: [],
       extracted: {},
     };
-    let scriptPhase;
+    let scriptPhase,
+      stopAfterExtractionFailure = false,
+      extractionPostStarted = false;
+    // Policy is derived from the host-normalized frozen tasks, never VM output.
+    // Any failure of a step which promises new extracted values stops later
+    // steps. After a response arrives its whole processing stage must succeed
+    // before scopes may commit. Completed network effects cannot be rolled back.
+    const extractionPostPolicy = step.request?.nativeTasks?.after.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
+    const extractionRequestPolicy = step.request?.nativeTasks?.before.some(
+      (task) => task.type === "pickVars" && task.enabled === 1,
+    );
     let committedScopes = structuredClone(scopes);
     const commitScopes = async () => {
       const changes = scopeChanges(committedScopes, scopes);
@@ -497,6 +512,12 @@ export async function runPlan(
             scopes.environment = accepted.environment;
           }
         } catch (error) {
+          if (error?.code === "PROJECT_COMMIT_UNCERTAIN") {
+            record.scopeCommit = { outcome: "unknown", retrySafe: false };
+            throw Error(
+              "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
+            );
+          }
           throw Error("变量持久化失败：" + error.message);
         }
       }
@@ -762,6 +783,8 @@ export async function runPlan(
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
+        extractionPostStarted =
+          extractionPostPolicy === true || extractionRequestPolicy === true;
         if (record.response.cookieError)
           record.logs.push({
             phase: "cookies",
@@ -855,7 +878,8 @@ export async function runPlan(
             ...scripted.tests.map((test) => ({ ...test, phase: "after" })),
           );
         }
-        await commitScopes();
+        if (!extractionPostPolicy && !extractionRequestPolicy)
+          await commitScopes();
         const hasStatusAssertion = record.assertions.some(
           (a) => a.target === "status",
         );
@@ -870,8 +894,20 @@ export async function runPlan(
           statusOK && record.assertions.every((a) => a.passed)
             ? "passed"
             : "failed";
+        if (extractionPostStarted && record.status !== "passed")
+          throw Error(
+            extractionRequestPolicy
+              ? "原生提取请求响应阶段失败；仅后置变量变更未提交，成功前置变量已提交"
+              : "原生响应提取阶段断言或原始响应状态失败，变量未提交",
+          );
+        if (extractionPostPolicy || extractionRequestPolicy)
+          await commitScopes();
       }
     } catch (error) {
+      stopAfterExtractionFailure =
+        extractionPostPolicy ||
+        extractionRequestPolicy ||
+        isNativeExtractionPhaseFailure(error);
       record.status = "failed";
       if (error.databaseQueries?.length)
         (record.databaseQueries ||= []).push(
@@ -887,8 +923,11 @@ export async function runPlan(
             phase: scriptPhase,
           })),
         );
-      scopes.environment = committedScopes.environment;
-      scopes.globals = committedScopes.globals;
+      if (extractionPostStarted) scopes = structuredClone(committedScopes);
+      else {
+        scopes.environment = committedScopes.environment;
+        scopes.globals = committedScopes.globals;
+      }
       record.error = error.message;
       Object.assign(record, scriptFailureDetails(error));
       if (["grpc", "socketio", "protocol"].includes(step.type)) {
@@ -902,6 +941,7 @@ export async function runPlan(
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
     await onStep?.(record);
+    if (stopAfterExtractionFailure) break;
   }
   return {
     id: id(),

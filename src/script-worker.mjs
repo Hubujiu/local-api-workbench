@@ -1,3 +1,6 @@
+import { nativeRequestSnapshotSource } from "./native-request-snapshot.mjs";
+import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
+import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -105,6 +108,14 @@ try {
     new URL("./vendor/schema-library.js", import.meta.url),
     "utf8",
   );
+  const nativeXMLLibrary = workerData.responseExtractions?.some(
+    (operation) => operation.source === "responseXml",
+  )
+    ? await readFile(
+        new URL("./vendor/native-xml-library.js", import.meta.url),
+        "utf8",
+      )
+    : "";
   const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
@@ -565,6 +576,41 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
+    if (workerData.responseExtractions?.length) {
+      const data = context.newString(
+        JSON.stringify({
+          operations: workerData.responseExtractions,
+          requestSnapshot: workerData.requestSnapshot,
+          evidence: workerData.responseHeaderEvidence,
+          cookieEvidence: workerData.responseCookieEvidence,
+        }),
+      );
+      context.setProp(context.global, "__nativePickVarsDataJSON", data);
+      data.dispose();
+      install(
+        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const readXML=" +
+          (nativeXMLLibrary
+            ? "(()=>{" +
+              nativeXMLLibrary +
+              ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
+            : "null") +
+          ";const readText=" +
+          (workerData.responseExtractions.some(
+            (operation) => operation.source === "responseText",
+          )
+            ? "(" + nativeResponseTextReaderSource + ")(response)"
+            : "null") +
+          ";const readRequest=" +
+          (workerData.requestSnapshot
+            ? "(" +
+              nativeRequestSnapshotSource +
+              ')(data.requestSnapshot,data.operations.filter(op=>op.source==="requestHeader"||op.source==="requestBody").map(op=>op.source),()=>JSON5.parse)'
+            : "null") +
+          ";const state=(" +
+          pickVarsInstallerSource +
+          ")(JSON.stringify(data.operations),()=>response.body,response?.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText,pm.response,readRequest,response?.cookies,JSON.stringify(data.cookieEvidence));globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+      );
+    }
     if (workerData.databaseTaskCount)
       install(`globalThis.__nativeDatabaseTask=((bridge,environment,global,temporary,log)=>(index)=>new Promise((resolve,reject)=>bridge(index,(errorJSON,responseJSON)=>{
     if(errorJSON){reject(Error(errorJSON));return;}
@@ -714,6 +760,10 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
+  if (workerData.responseExtractions?.length)
+    measuredBounded("pick-vars-completion", "promiseStateMs", () =>
+      run("__readNativePickVarsCompletion();"),
+    );
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
