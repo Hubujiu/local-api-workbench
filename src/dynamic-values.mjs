@@ -1,3 +1,7 @@
+import {
+  postmanOAuth2Definition,
+  resolvePostmanOAuth2,
+} from "../public/postman-oauth2-model.js";
 import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
 import {
   validateApipostTemplateRequest,
@@ -96,6 +100,7 @@ async function resolveDynamicRequestBase(
   literalBody,
 ) {
   validateApipostTemplateRequest(request);
+  const postmanOAuth2 = postmanOAuth2Definition(request.auth);
   const clone = structuredClone(request),
     specs = [];
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
@@ -154,7 +159,14 @@ async function resolveDynamicRequestBase(
       scriptSources[key] = clone[key];
       delete clone[key];
     }
+  if (postmanOAuth2 !== undefined) delete clone.auth.postmanOAuth2;
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
+  if (postmanOAuth2 !== undefined)
+    resolved.auth.postmanOAuth2 = resolvePostmanOAuth2(
+      request.auth,
+      interpolate,
+      variables,
+    );
   for (const { group, index, spec } of specs) {
     if (Date.now() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(spec, variables, functions);
