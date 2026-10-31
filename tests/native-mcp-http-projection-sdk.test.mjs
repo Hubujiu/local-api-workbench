@@ -60,9 +60,22 @@ async function fixture(t, transport) {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
     socket.on("error", (error) => errors.push(error.message));
+    const chunks = [];
+    let total = 0,
+      replied = false;
     socket.on("data", (bytes) => {
-      counts.tcp++;
-      socket.end(bytes);
+      chunks.push(bytes);
+      total += bytes.length;
+      if (replied || total > Buffer.byteLength("wire-echo")) {
+        errors.push("unexpected TCP fixture payload");
+        socket.destroy();
+        return;
+      }
+      if (total === Buffer.byteLength("wire-echo")) {
+        replied = true;
+        counts.tcp++;
+        socket.end(Buffer.concat(chunks));
+      }
     });
   });
   await new Promise((resolve) => tcp.listen(0, "127.0.0.1", resolve));
@@ -372,6 +385,36 @@ for (const transport of ["http", "stdio"])
         http: 0,
         tcpConnections: 1,
         tcp: 1,
+        grpc: 1,
+        socketConnections: 1,
+        socket: 1,
+      });
+      for (const name of ["disabled", "mixed"]) {
+        const run = decode(
+          await call(client, "localapi_execute_flow", {
+            projectId: project.id,
+            planId: plans[name].id,
+          }),
+        );
+        assert.equal(run.status, "passed", JSON.stringify(run));
+        assert.equal(run.recordSaved, true);
+        assert.equal(run.results.length, name === "disabled" ? 1 : 2);
+        assert.equal(run.results[0].response.status, 200);
+        if (name === "mixed")
+          assert.equal(run.results[1].protocolResult.result.body, "wire-echo");
+        await denied(client, "apipost_get_execution_result", {
+          project_id: project.id,
+          run_id: run.id,
+        });
+        await denied(client, "apipost_list_execution_runs", {
+          project_id: project.id,
+          flow_id: plans[name].id,
+        });
+      }
+      assert.deepEqual(f.counts, {
+        http: 2,
+        tcpConnections: 2,
+        tcp: 2,
         grpc: 1,
         socketConnections: 1,
         socket: 1,
