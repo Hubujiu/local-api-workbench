@@ -1,9 +1,12 @@
+import { performance } from "node:perf_hooks";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import protobuf from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor/index.js";
 import { executeGrpc } from "./grpc.mjs";
 import { inspectGrpcSchema, normalizeGrpcSource } from "./grpc-schema.mjs";
+// Internal elapsed deadlines are independent of civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
 const protocols = Object.fromEntries(
   await Promise.all(
     ["v1", "v1alpha"].map(async (version) => [
@@ -82,7 +85,7 @@ export async function reflectGrpc(input, signal) {
   const timeout = input.timeoutMs ?? 5000;
   if (!Number.isInteger(timeout) || timeout < 50 || timeout > 30000)
     throw Error("gRPC反射超时须为50至30000毫秒");
-  const started = Date.now(),
+  const started = monotonicNow(),
     end = started + timeout,
     files = new Map();
   let version = "v1",
@@ -96,14 +99,15 @@ export async function reflectGrpc(input, signal) {
     queries,
     lastCallStatus,
     failureStage: code === 0 ? null : "exchange",
-    durationMs: Date.now() - started,
+    durationMs: Math.max(0, Math.round(monotonicNow() - started)),
     complete: code === 0,
     files: [...files.keys()],
     ...extra,
   });
   const exchange = async (request) => {
     if (signal?.aborted) return { status: { code: 1, details: "已取消" } };
-    const remaining = end - Date.now();
+    // Never round a transport allowance above the aggregate remainder.
+    const remaining = Math.floor(end - monotonicNow());
     if (remaining < 50)
       return { status: { code: 4, details: "gRPC反射总时限已到" } };
     if (queries >= 32)
@@ -219,7 +223,7 @@ export async function reflectGrpc(input, signal) {
       return result(5, "反射描述符中不存在指定服务", {
         failureStage: "response-validation",
       });
-    if (Date.now() > end)
+    if (monotonicNow() > end)
       return result(4, "gRPC反射总时限已到", { failureStage: "budget" });
     return result(0, "", {
       schema,
