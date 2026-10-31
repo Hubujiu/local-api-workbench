@@ -11,3 +11,41 @@ Do not install the complete legacy wrapper stack into production as a shortcut. 
 Verification covers seeded replay, all admitted families, invalid/oversized arguments, call quotas and disposal, unchanged Local API semantics, imported-directory source preservation, atomic refusal, actual HTTP Mock and sample endpoints, followed by a persisted two-step execution plan that extracts generated values, runs pre/post scripts, sends a second real HTTP request and persists success/failure evidence. No frontend change is required for this backend milestone. Generated values are fixture data, not verified real identities, routable destinations or cryptographically secure identifiers. Full original-application GUI and real-project roundtrip acceptance remain separate.
 
 Cross-platform checkout must preserve the generated bundle's exact bytes. These assets are marked `-text` in `.gitattributes`; a real Git filter regression with `core.autocrlf=true` verifies the checked-out SHA-256 against the manifest. The runtime integrity check remains exact and still rejects changed bytes. This addresses the observed Windows checkout mismatch instead of weakening verification or rerunning a known-bad artifact.
+
+## Monotonic and terminal activity enforcement (2026-10-31)
+
+Static review identified two independent budget defects in the adapter. Interrupt
+deadlines used the adjustable civil clock while evaluation debits already used
+monotonic elapsed time. Also, a successful evaluation returned before the final
+charge was checked; a last call could finish host string/JSON conversion after
+250 ms and still publish a value. These are source-backed defects, not an
+explanation of the separate XML/script CI timeout.
+
+Bootstrap interrupts and evaluation deadlines/debits now use one captured host
+`performance.now()` clock. Evaluation disposes its output handle before charging
+the complete operation, debits even when cleanup throws, then rejects a negative
+remaining budget before returning a successful value. Exactly zero remaining is
+not treated as an overrun, but still refuses the next evaluation. Existing errors
+continue through the cleanup path. The shared runtime remains available across
+successful calls and is still disposed by its owner; guest timestamps and seeded
+random values are unchanged.
+
+The existing 1 s bootstrap, 250 ms cumulative activity, 1000 calls, 16 MiB heap,
+512 KiB stack, 64 KiB output and argument limits remain unchanged. No clock or
+budget injection is exposed in production, no quota is replenished and no host
+operation is claimed to be preemptible. The completion guard rejects late values
+rather than claiming it can interrupt host JSON parsing.
+
+New CI runtime regressions synchronously wrap and restore host `JSON.parse` to
+wait only on quoted-string output parsing, after VM execution has returned. A
+single bounded 300 ms tail must be rejected; two 160 ms tails must share the same
+250 ms allowance. Exact output-tail counts prevent an unrelated early timeout
+from passing these tests. The first cumulative call must succeed, so a heavily
+paused runner may legitimately fail that assertion rather than being accepted
+as evidence of cumulative enforcement. No retries or increased budgets are used.
+Existing real Mock, quota, seeded replay and owner workflow tests remain intact.
+
+Local verification is limited to syntax, formatting and a source-only wiring
+regression which never imports the runtime. The new VM regressions are authored
+for ordinary exact-commit CI, not executed locally. Their runtime result remains
+pending; static checks alone do not prove interruption or complete acceptance.

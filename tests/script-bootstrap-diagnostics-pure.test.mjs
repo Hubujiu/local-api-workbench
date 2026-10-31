@@ -239,13 +239,16 @@ test("host monotonic wiring preserves guest timestamps and unrounded activity en
     (worker.match(/\.\.\.readActivityMetrics\(\)/g) || []).length,
     2,
   );
-  const charge = worker.slice(
-    worker.indexOf("activityMs:\n"),
-    worker.indexOf("// Native JSON/string conversion"),
-  );
-  assert.match(
-    charge,
-    /workerData\.activityBudgetMs\s*-\s*remaining\s*\+\s*monotonicNow\(\)\s*-\s*serializationStart/,
-  );
-  assert(!charge.includes("Math.round"));
+  for (const newline of ["\n", "\r\n"]) {
+    const source = worker.replace(/\r?\n/g, newline);
+    const start = source.indexOf("activityMs:");
+    const end = source.indexOf("// Native JSON/string conversion", start);
+    assert(start >= 0 && end > start);
+    const charge = source.slice(start, end);
+    assert.match(
+      charge,
+      /workerData\.activityBudgetMs\s*-\s*remaining\s*\+\s*monotonicNow\(\)\s*-\s*serializationStart/,
+    );
+    assert(!charge.includes("Math.round"));
+  }
 });
