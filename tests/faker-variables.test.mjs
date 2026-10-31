@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { interpolate } from "../src/core.mjs";
-import { runScript } from "../src/scripts.mjs";
+import { runScript, runScriptSequence } from "../src/scripts.mjs";
 test("locale-backed names addresses commerce and dates resolve as bounded test data", () => {
   for (const name of [
     "$randomFirstName",
@@ -113,4 +113,43 @@ test("Faker bridge preserves primitive types for the fixed catalogue and reports
       return true;
     },
   );
+});
+
+test("real replaceIn and direct Faker calls share the same remaining stage quota", async () => {
+  const direct = 'builtinVariable("$randomCountryCode")',
+    interpolation = 'pm.variables.replaceIn("{{$randomCountryCode}}")';
+  // Fixed independent orderings, not retries. Both use the actual locale-backed
+  // provider: the smaller authorized limit isolates counter wiring from speed.
+  for (const [first, second] of [
+    [direct, interpolation],
+    [interpolation, direct],
+  ]) {
+    const accepted = await runScriptSequence(
+      [
+        { name: "a", code: `${first};${first};` },
+        { name: "b", code: `apt.setVar("country",${second});` },
+      ],
+      { variables: {} },
+      { fakerLimit: 3 },
+    );
+    assert.match(accepted.variables.country, /^[A-Z]{2}$/);
+    await assert.rejects(
+      runScriptSequence(
+        [
+          { name: "a", code: `${first};${first};` },
+          { name: "b", code: `${second};${second};` },
+        ],
+        { variables: {} },
+        { fakerLimit: 3 },
+      ),
+      (error) => {
+        assert.match(error.message, /Faker变量最多1000次/);
+        assert.equal(error.scriptScope, "b");
+        assert.equal(error.sequenceActivity.length, 1);
+        assert.equal(error.sequenceActivity[0].fakerCalls, 2);
+        assert.equal(error.scriptDiagnostics.fakerCalls, 2);
+        return true;
+      },
+    );
+  }
 });
