@@ -22,6 +22,9 @@ function installScriptCompatibility({
     own(localVariables, name) || own(variables, name);
   pm.variables.toObject = () => copy({ ...variables, ...localVariables });
   const utf8Size = (text) => {
+    // Common ASCII templates/results have identical UTF-16 and UTF-8 lengths.
+    // Keep generation and quota accounting per call; cache no user/random data.
+    if (!/[^\x00-\x7f]/.test(text)) return text.length;
     let size = 0;
     for (const char of text) {
       const cp = char.codePointAt(0);
