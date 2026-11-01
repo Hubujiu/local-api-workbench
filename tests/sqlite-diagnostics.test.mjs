@@ -275,6 +275,65 @@ test("SQLite real execution worker preserves invalid-mode error envelope", async
     });
 });
 
+test("SQLite execution worker diagnostic IPC failure preserves fake database result and error", async (t) => {
+  const h = await harness(t, null);
+  await copyFile(
+    new URL("../src/database-execution-worker.mjs", import.meta.url),
+    path.join(h.root, "database-execution-worker.mjs"),
+  );
+  // Use the real worker and tracker, but no SQLite. Only diagnostic postMessage
+  // throws; ordinary ready/result/error IPC retains the original channel.
+  await writeFile(
+    path.join(h.root, "database.mjs"),
+    `
+    import {parentPort,workerData} from 'node:worker_threads';
+    const send=parentPort.postMessage.bind(parentPort);
+    parentPort.postMessage=value=>{
+      if(value?.kind==='sqlite-operation-stage')throw Error('PRIVATE_SQL_SENTINEL');
+      return send(value);
+    };
+    export function querySQLite(){return {fake:true};}
+    export function mutateSQLite(filename,sql,parameters,observe){
+      observe('validate');observe('commit-complete');
+      if(workerData.fail)throw Error('original fake database failure');
+      return {fake:true};
+    }
+  `,
+  );
+  assert.deepEqual(await h.runSQLiteProcess({ mode: "write" }), { fake: true });
+  await assert.rejects(
+    h.runSQLiteProcess({ mode: "write", fail: true }),
+    (error) => {
+      assert.equal(error.message, "original fake database failure");
+      assert.equal(error.code, undefined);
+      assert.equal(error.diagnostics, undefined);
+      return true;
+    },
+  );
+});
+
+for (const boundary of ["supervisor", "host"])
+  test(`SQLite ${boundary} diagnostic exhaustion cannot suppress a later real result envelope`, async (t) => {
+    const traffic = `
+      send({kind:'sqlite-operation-stage',stage:'begin',elapsedMs:1});
+      for(let i=0;i<20;i++)send({kind:'sqlite-operation-stage',stage:'commit-complete',elapsedMs:2,result:{fake:true},payload:{result:{fake:true}}});
+    `;
+    const h =
+      boundary === "supervisor"
+        ? await harness(
+            t,
+            null,
+            `import {parentPort} from 'node:worker_threads';const send=v=>parentPort.postMessage(v);${traffic}send({result:{actual:true}});`,
+          )
+        : await harness(
+            t,
+            `process.once('message',()=>{const send=v=>process.send(v);${traffic}send({kind:'sqlite-result',payload:{result:{actual:true}}});process.disconnect();});`,
+          );
+    assert.deepEqual(await h.runSQLiteProcess({ mode: "write" }), {
+      actual: true,
+    });
+  });
+
 test(
   "authenticated HTTP preserves unknown-write protection and exposes only redacted stage evidence",
   { timeout: 10000 },
