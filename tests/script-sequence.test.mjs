@@ -145,7 +145,10 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
       /最多100次/,
     ],
     [
-      'for(let i=0;i<600;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
+      // Exercise the real Faker provider and the SAME host-owned quota bridge
+      // used by replaceIn, without parsing the identical template 1001 times.
+      // Separate mixed-entrypoint tests retain real interpolation coverage.
+      'for(let i=0;i<600;i++)builtinVariable("$randomCountryCode");',
       /最多1000次/,
     ],
     ['for(let i=0;i<600;i++)pm.test("pass",()=>{});', /最多1000条/],
@@ -179,6 +182,20 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
             );
             if (
               pattern.source === "最多1000次" &&
+              pattern.test(error.message)
+            ) {
+              assert.equal(error.scriptScope, "b");
+              assert.equal(error.sequenceActivity.length, 1);
+              assert.equal(error.sequenceActivity[0].fakerCalls, 600);
+              assert.equal(error.scriptDiagnostics.fakerCalls, 401);
+              assert.equal(error.sequenceActivity[0].activityBudgetMs, 250);
+              assert.equal(
+                error.scriptDiagnostics.activityBudgetMs,
+                250 - error.sequenceActivity[0].activityMs,
+              );
+            }
+            if (
+              pattern.source === "最多1000次" &&
               !pattern.test(error.message)
             ) {
               // Fixed, no-network probes diagnose the failure; they never replace
@@ -192,6 +209,10 @@ test("stage boundaries cannot reset network, timer, Faker, assertion or log quot
                 [
                   "faker-600",
                   'for(let i=0;i<600;i++)pm.variables.replaceIn("{{$randomCountryCode}}");',
+                ],
+                [
+                  "faker-600-direct",
+                  'for(let i=0;i<600;i++)builtinVariable("$randomCountryCode");',
                 ],
               ]) {
                 const probeStarted = performance.now();

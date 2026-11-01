@@ -105,8 +105,14 @@ test("recursive scopes reach HTTP in order while snapshots remain frozen", async
     {},
     executeRequest,
   );
+  // Preserve the execution error before inspecting a response that may not exist.
+  assert.equal(
+    result.status,
+    "passed",
+    JSON.stringify({ result, requestReached: received !== undefined }),
+  );
+  assert(received, "a passed plan must have reached the HTTP peer");
   assert.equal(received["x-chain"], "project-parent-child");
   assert.equal(received["x-test"], "parent");
   assert.equal(received["x-mute"], undefined);
-  assert.equal(result.status, "passed", JSON.stringify(result));
 });

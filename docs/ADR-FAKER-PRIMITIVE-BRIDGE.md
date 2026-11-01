@@ -26,3 +26,11 @@ not a replacement for exact-head cross-platform CI.
 Fixed tests compare primitive types for every advertised catalogue name, retain
 unknown-module/name rejection, check bounded failure counters, and exercise the
 original two-stage quota test unchanged. No production dependency is changed.
+
+## 2026-10-26 bounded ASCII template optimization
+
+Combined Windows CI 40280440086 at dc817970 failed the unchanged default-quota sixth sample: the first stage spent 225/250 ms of activity, and second-stage compatibility initialization exhausted the remainder before its first Faker call. This is not evidence that the quota reset or that credentials/TLS failed. The exact failure and all six samples remain required.
+
+ASCII templates and primitive outputs now use a regex ASCII check and string length instead of a JavaScript code-point loop for UTF-8 size. Non-ASCII retains the original byte counter; mixed ASCII/emoji/CJK boundary tests cover accepted 64 KiB and rejected overflow. No result caching, random-call batching, moved provider initialization, enlarged budgets or relaxed rejection assertions.
+
+One local six-sample before/after observation passed both versions. First-stage user time was 40–65 ms before and 29–33 ms after; second-stage 31–66 ms before and 26–31 ms after. This supports reducing avoidable work, not a statistical performance guarantee or proof that Windows scheduler/initialization variability is solved. Exact new-head CI and continued original stress assertions remain necessary.

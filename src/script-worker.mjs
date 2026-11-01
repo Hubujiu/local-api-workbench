@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+import { observeBootstrap } from "./script-bootstrap-diagnostics.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
@@ -20,6 +22,9 @@ import { randomBytes } from "node:crypto";
 import { scopeRuntimeSource } from "./variable-scopes.mjs";
 import { parentPort, workerData } from "node:worker_threads";
 import { trackedQuickJS } from "./tracked-quickjs.mjs";
+// Host elapsed time must not replenish budgets when the civil clock changes.
+// Guest Date.now() below intentionally retains timestamp semantics.
+const monotonicNow = performance.now.bind(performance);
 let scriptStage = "bootstrap",
   outcome,
   runtime,
@@ -27,6 +32,7 @@ let scriptStage = "bootstrap",
   rootPromise,
   finalizing = false;
 let activityOperation = "bootstrap";
+let bootstrapObservation;
 const activityMetrics = {
   compatibilityMs: 0,
   functionLibraryMs: 0,
@@ -36,13 +42,44 @@ const activityMetrics = {
   promiseStateMs: 0,
   serializationMs: 0,
 };
+// Diagnostics only: all admission/interruption budgets still use wall time.
+const threadCPU = () => {
+  try {
+    return typeof process.threadCpuUsage === "function"
+      ? process.threadCpuUsage()
+      : null;
+  } catch {
+    return null;
+  }
+};
+// Round observation totals only; admission and charged activity stay fractional.
+const readActivityMetrics = () =>
+  Object.fromEntries(
+    Object.entries(activityMetrics).map(([key, value]) => [
+      key,
+      Math.round(value),
+    ]),
+  );
+const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
-  const started = Date.now();
+  const started = monotonicNow(),
+    cpuStarted = threadCPU();
   try {
     return fn();
   } finally {
-    activityMetrics[metric] += Math.max(0, Date.now() - started);
+    activityMetrics[metric] += Math.max(0, monotonicNow() - started);
+    const cpuFinished = threadCPU();
+    if (cpuStarted && cpuFinished)
+      activityCPUTimeUs[metric.replace(/Ms$/, "Us")] =
+        (activityCPUTimeUs[metric.replace(/Ms$/, "Us")] || 0) +
+        Math.max(
+          0,
+          cpuFinished.user +
+            cpuFinished.system -
+            cpuStarted.user -
+            cpuStarted.system,
+        );
   }
 };
 const callbacks = new Map(),
@@ -87,8 +124,9 @@ try {
   runtime = engine.newRuntime();
   runtime.setMemoryLimit(16 * 1024 * 1024);
   runtime.setMaxStackSize(512 * 1024);
-  let deadline = Date.now() + 1000;
-  runtime.setInterruptHandler(() => Date.now() > deadline);
+  let deadline = monotonicNow() + 1000;
+  runtime.setInterruptHandler(() => monotonicNow() > deadline);
+  bootstrapObservation = observeBootstrap(monotonicNow, threadCPU);
   context = runtime.newContext();
   const randomFunction = context.newFunction("__randomBytes", (countHandle) => {
     const count = context.getNumber(countHandle);
@@ -140,7 +178,7 @@ try {
       const id = ++timerCount;
       timers.set(id, {
         callback: callback.dup(),
-        due: Date.now() + milliseconds,
+        due: monotonicNow() + milliseconds,
       });
       return context.newNumber(id);
     },
@@ -406,21 +444,27 @@ try {
     result.value.dispose();
   };
   parentPort.postMessage({ kind: "stage", stage: "bootstrap" });
+  bootstrapObservation.enter("input-transfer");
   const inputJSON = context.newString(JSON.stringify(workerData.input));
   try {
     context.setProp(context.global, "__localapiInputJSON", inputJSON);
   } finally {
     inputJSON.dispose();
   }
+  bootstrapObservation.enter("setup");
   run(setup);
+  bootstrapObservation.enter("url-tools");
   run("const __urlQueryTools = (" + urlQueryToolsSource + ")();");
+  bootstrapObservation.enter("trusted-libraries");
   run(trustedLibraries);
+  bootstrapObservation.enter("optional-facade");
   if (useURLFacade)
     run(
       "const __urlFacadeFactory=(()=>{" +
         facadeBundle +
         ";return URLFacadeLibrary.installURLFacade;})();",
     );
+  bootstrapObservation.enter("lazy-installers");
   const json5Source = context.newString(json5Library);
   context.setProp(context.global, "__json5Source", json5Source);
   json5Source.dispose();
@@ -435,7 +479,7 @@ try {
   );
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
-  deadline = Date.now() + workerData.activityBudgetMs;
+  deadline = monotonicNow() + workerData.activityBudgetMs;
   measureActivity("compatibility", "compatibilityMs", () => {
     const compatibilitySources = [];
     const install = (code) => compatibilitySources.push(code);
@@ -520,15 +564,15 @@ try {
     );
     run(compatibilitySources.join(";\n"));
   });
-  let remaining = deadline - Date.now();
+  let remaining = deadline - monotonicNow();
   const bounded = (fn) => {
     if (remaining <= 0) throw Error("脚本执行超时");
-    const start = Date.now();
+    const start = monotonicNow();
     deadline = start + remaining;
     try {
       return fn();
     } finally {
-      remaining -= Date.now() - start;
+      remaining -= monotonicNow() - start;
     }
   };
   const measuredBounded = (operation, metric, fn) =>
@@ -584,7 +628,7 @@ try {
     const earliest = Math.min(
       ...[...timers.values()].map((timer) => timer.due),
     );
-    if (!replies.length && earliest > Date.now())
+    if (!replies.length && earliest > monotonicNow())
       await new Promise((resolve) => {
         let timeout;
         wake = () => {
@@ -597,7 +641,7 @@ try {
               wake = null;
               resolve();
             },
-            Math.max(0, earliest - Date.now()),
+            Math.max(0, earliest - monotonicNow()),
           );
       });
     for (const message of replies.splice(0)) {
@@ -625,7 +669,7 @@ try {
         response.dispose();
       }
     }
-    const now = Date.now();
+    const now = monotonicNow();
     for (const [id, timer] of [...timers].sort(
       (a, b) => a[1].due - b[1].due || a[0] - b[0],
     )) {
@@ -662,7 +706,7 @@ try {
     rootState.error.dispose();
     throw Error("脚本Promise被拒绝");
   }
-  const serializationStart = Date.now();
+  const serializationStart = monotonicNow();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
@@ -686,24 +730,35 @@ try {
     result: {
       ...JSON.parse(json),
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {
-        ...activityMetrics,
+        ...readActivityMetrics(),
         fakerLoadMs: fakerProviderLoadMs(),
       },
       activityMs:
         workerData.activityBudgetMs -
         remaining +
-        Date.now() -
+        monotonicNow() -
         serializationStart,
     },
   };
+  // Native JSON/string conversion can finish between QuickJS interrupt checks.
+  // The already charged serialization and host parsing tail must not publish
+  // a successful result after consuming more than the requested active budget.
+  if (outcome.result.activityMs > workerData.activityBudgetMs)
+    throw Error("脚本执行超时");
 } catch (error) {
   outcome = {
     error: error.message,
     scriptStage,
     activityOperation,
-    activityMetrics: { ...activityMetrics, fakerLoadMs: fakerProviderLoadMs() },
+    activityCPUTimeUs: { ...activityCPUTimeUs },
+    activityMetrics: {
+      ...readActivityMetrics(),
+      fakerLoadMs: fakerProviderLoadMs(),
+    },
     scriptDiagnostics: {
+      ...(scriptStage === "bootstrap" ? bootstrapObservation?.failure() : {}),
       activityBudgetMs: workerData.activityBudgetMs,
       fakerCalls,
       timerCount,
