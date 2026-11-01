@@ -7,11 +7,20 @@ const protocolFields = [
   "grpcResult",
   "socketioResult",
   "protocolResult",
+  // Session evidence cannot be downgraded to a sparse legacy HTTP result.
+  "lifecycle",
+  "requestState",
+  "receiptState",
+  "remoteStatus",
+  "terminationReason",
+  "responseEnded",
+  "requestWireBytes",
 ];
 const object = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const nonHTTP = (value) =>
   (value.type !== undefined && value.type !== "http") ||
+  value.mode === "session" ||
   protocolFields.some((key) => Object.hasOwn(value, key)) ||
   (value.repeat !== undefined && value.repeat !== null);
 const planError = () => {
@@ -34,6 +43,8 @@ export function assertNativeHTTPPlan(plan) {
 }
 export function assertNativeHTTPResult(run) {
   if (!object(run) || nonHTTP(run)) resultError();
+  // This is the canonical result envelope, not response.body or application JSON.
+  if (object(run.result) && nonHTTP(run.result)) resultError();
   if (run.snapshot !== undefined && run.snapshot !== null) {
     if (!object(run.snapshot) || nonHTTP(run.snapshot)) resultError();
     if (Object.hasOwn(run.snapshot, "steps")) {
@@ -47,7 +58,12 @@ export function assertNativeHTTPResult(run) {
   if (run.results !== undefined) {
     if (!Array.isArray(run.results)) resultError();
     for (const record of run.results)
-      if (!object(record) || nonHTTP(record)) resultError();
+      if (
+        !object(record) ||
+        nonHTTP(record) ||
+        (object(record.result) && nonHTTP(record.result))
+      )
+        resultError();
   }
   // Old sparse HTTP histories need not contain request/snapshot identity.
   // Keep existing counts, never synthesize missing request IDs or protocol data.
