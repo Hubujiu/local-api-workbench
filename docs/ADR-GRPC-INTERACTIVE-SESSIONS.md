@@ -77,3 +77,30 @@ universal payload redaction. Evidence is JSON-level, not a packet capture.
 Real loopback, storage fault, restart/restore, read-only MCP and shutdown acceptance
 runs only in normal GitHub CI. Local work is limited to static review, syntax and
 format checks; no local application/HTTP/MCP/CLI/VM/database execution is claimed.
+
+## Root integration contracts
+
+Saved native-import `requiredMetadata` policy is frozen with the definition and
+is checked by the shared transport preflight before acquiring a slot or creating
+a client. Open/send input cannot override that policy. Explicit execution metadata
+satisfies it only for the admitted call and is never copied to session evidence.
+
+The five-slot pool belongs to one running app: owner finite calls, reflection,
+scripted/unscripted plans, HTTP MCP finite plans and live sessions all share it.
+Existing independent stdio MCP and CLI processes retain their finite-plan
+contracts; no live-session mutation tools or cross-process connection reattachment
+are introduced. Cancellation releases transport admission independently of the
+storage receipt, while the existing Store identity, signal and lock guards remain.
+
+Native HTTP execution-result projection rejects session-only state, including a
+sparse legacy envelope around a canonical session result, rather than reporting
+an empty HTTP success. This check does not inspect HTTP business response bodies.
+Native Apipost export is still **definition interchange, not an execution backup**:
+a supported native definition remains exportable during/after a live session, but
+that output contains no runtime history. Workbench backup and read-only canonical
+MCP retain the complete typed session evidence; restore/restart do not reopen RPCs.
+
+`grpc-sessions-root-workflow.test.mjs` specifies one cross-feature CI chain through
+native import, real TCP admission counting, PR79 scripts and shared slots, official
+HTTP/stdio SDK, CLI, durable receipts and backup/restart. Its presence is not a
+claim that a particular root commit has passed CI.

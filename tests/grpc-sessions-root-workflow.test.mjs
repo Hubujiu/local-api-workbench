@@ -14,6 +14,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { assertNativeHTTPResult } from "../src/native-mcp-http-shape.mjs";
 import { extendedProtocolFixture } from "./fixtures/apipost-extended-protocols.mjs";
 
@@ -704,7 +705,35 @@ test(
       const document = await f.owner(cleanBase + "/export?format=" + format);
       assert.equal(document.protocolRuns, undefined);
       assert(!JSON.stringify(document).includes(cleanSession.id));
-      assert(document.apis.length > 0);
+      const roundtrip = {
+        requests: [],
+        environments: [],
+        folders: [],
+        servers: [],
+        settings: {},
+        plans: [],
+      };
+      importIntoProject(roundtrip, document);
+      const definitions = (project) =>
+        project.settings.grpcDefinitions.map(
+          ({
+            target,
+            proto,
+            service,
+            method,
+            timeoutMs,
+            requiredMetadata,
+          }) => ({
+            target,
+            proto,
+            service,
+            method,
+            timeoutMs,
+            requiredMetadata,
+          }),
+        );
+      assert.deepEqual(definitions(roundtrip), definitions(clean));
+      assert.equal(roundtrip.protocolRuns, undefined);
       const exported = decode(
         await cleanReader.callTool({
           name: "localapi_export_project",
