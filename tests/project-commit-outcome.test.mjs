@@ -82,15 +82,16 @@ test("HTTP failed creation exposes recoverable project ID without claiming rollb
     app.server.closeAllConnections();
     await new Promise((r) => app.server.close(r));
   });
-  const save = app.store.save.bind(app.store);
+  const read = app.store.readUnlocked.bind(app.store);
   let attempted = 0,
     createdId;
-  app.store.save = async (p, ...args) => {
-    attempted++;
-    createdId = p.id;
-    await mkdir(app.store.directory(p.id), { recursive: true });
-    await writeFile(path.join(app.store.directory(p.id), "apis"), "blocked");
-    return save(p, ...args);
+  app.store.readUnlocked = async (key, base) => {
+    if (!createdId) {
+      attempted++;
+      createdId = key;
+      await writeFile(path.join(base, key, "apis"), "blocked");
+    }
+    return read(key, base);
   };
   const response = await fetch(app.url + "/api/projects", {
     method: "POST",
@@ -115,7 +116,7 @@ test("HTTP failed creation exposes recoverable project ID without claiming rollb
   assert.equal(denied.code, "PROJECT_RECOVERY_REQUIRED");
   assert.deepEqual(denied.project_ids, [createdId]);
   assert.equal(attempted, 1);
-  app.store.save = save;
+  app.store.readUnlocked = read;
   await rm(path.join(app.store.directory(createdId), "apis"));
   assert.equal((await app.store.get(createdId)).name, "Create once");
   assert.equal((await app.store.list()).length, 1);
