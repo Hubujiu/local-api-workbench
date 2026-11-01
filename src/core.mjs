@@ -1,6 +1,14 @@
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
-import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
-import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
+import {
+  snapshotWireStep,
+  wirePlanCredentials,
+  resolveWirePlanPayload,
+} from "./wire-plan.mjs";
+import { runScriptedWireStep } from "./wire-plan-scripts.mjs";
+import {
+  validatePlanProtocolScripts,
+  rejectHTTPProtocolScripts,
+} from "./wire-script-context.mjs";
 import {
   runScriptedGrpcStep,
   validatePlanGrpcScripts,
@@ -182,6 +190,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  rejectHTTPProtocolScripts(r);
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -384,6 +393,7 @@ export function snapshotPlan(plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
   validatePlanGrpcScripts(plan.steps);
+  validatePlanProtocolScripts(plan.steps);
   return {
     id: plan.id || id(),
     name: plan.name || "新执行计划",
@@ -455,15 +465,19 @@ export async function runPlan(
   } = {},
 ) {
   const runStarted = performance.now();
+  validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   const snapshot = structuredClone(plan);
   validatePlanGrpcScripts(snapshot.steps);
+  const requiresWireExecutor = validatePlanProtocolScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
+  if (requiresWireExecutor && typeof executeProtocol !== "function")
+    throw Error("此执行入口未授权protocol调用");
   for (const step of snapshot.steps)
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
@@ -536,6 +550,31 @@ export async function runPlan(
             replaceVariables(vars, effectiveScopes(scopes));
           },
         });
+      } else if (
+        step.type === "protocol" &&
+        step.protocolScripts &&
+        (step.protocolScripts.before?.trim() ||
+          step.protocolScripts.after?.trim())
+      ) {
+        await runScriptedWireStep({
+          step,
+          record,
+          scopes,
+          functions: snapshot.functions || [],
+          executionContext,
+          credentials: wireCredentials.get(step.id),
+          signal,
+          executeProtocol,
+          interpolate,
+          evaluateAssertions,
+          extractResponseValue,
+          onScopeChanges,
+          publishScopes: (accepted) => {
+            scopes = accepted;
+            committedScopes = structuredClone(scopes);
+            replaceVariables(vars, effectiveScopes(scopes));
+          },
+        });
       } else if (["grpc", "socketio", "protocol"].includes(step.type)) {
         const isGrpc = step.type === "grpc";
         const validated = isGrpc
@@ -560,28 +599,14 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
-          const mode = validated.protocol.definition.templateMode;
-          const definition = resolveProtocolDefinition(
-            validated.protocol.definition,
+          const protocol = resolveWirePlanPayload(
+            validated.protocol,
             vars,
-            validated.protocol.message,
+            interpolate,
           );
-          const message =
-            validated.protocol.message === undefined
-              ? undefined
-              : mode === "variables"
-                ? definition.message
-                : mode === "literal"
-                  ? validated.protocol.message
-                  : interpolate(validated.protocol.message, vars);
-          // SSE body and WS/TCP message in the result are the actual resolved payload.
-          if (definition.type !== "sse") delete definition.message;
-          record.protocol.definition = definition;
-          if (message !== undefined) record.protocol.message = message;
+          record.protocol = structuredClone(protocol);
           request = {
-            ...validated.protocol,
-            definition,
-            ...(message !== undefined ? { message } : {}),
+            ...protocol,
             ...wireCredentials.get(step.id),
           };
         } else {
@@ -941,8 +966,8 @@ export async function runPlan(
     results.push(record);
     await onStep?.(record);
     if (
-      step.type === "grpc" &&
-      step.grpcScripts &&
+      ((step.type === "grpc" && step.grpcScripts) ||
+        (step.type === "protocol" && step.protocolScripts)) &&
       record.scopeCommit?.outcome === "unknown"
     )
       break;
@@ -1528,6 +1553,7 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    rejectHTTPProtocolScripts(source);
     const r = sdkOpenAPIDefinition(project, source);
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
@@ -1683,6 +1709,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input) {
+  rejectHTTPProtocolScripts(input);
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>
       isApipostFunctionSource(spec?.source),

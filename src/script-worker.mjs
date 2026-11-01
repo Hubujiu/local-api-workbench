@@ -6,6 +6,11 @@ import {
   normalizeGrpcScriptContext,
   validateGrpcScriptBinding,
 } from "./grpc-script-context.mjs";
+import {
+  wireScriptContextSource,
+  normalizeWireScriptContext,
+  validateWireScriptBinding,
+} from "./wire-script-context.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
@@ -103,6 +108,22 @@ const receive = (message) => {
 };
 parentPort.on("message", receive);
 try {
+  if (
+    Object.hasOwn(workerData.input, "grpcContext") ||
+    Object.hasOwn(workerData.input, "wireContext")
+  )
+    throw Error("协议上下文只能由执行入口提供");
+  if (
+    workerData.wireContext !== undefined &&
+    workerData.grpcContext !== undefined
+  )
+    throw Error("协议脚本上下文不能同时绑定wire与gRPC");
+  const wireContext =
+    workerData.wireContext === undefined
+      ? undefined
+      : normalizeWireScriptContext(workerData.wireContext);
+  if (wireContext !== undefined)
+    validateWireScriptBinding(workerData.input, workerData.requestLimit);
   const grpcContext =
     workerData.grpcContext === undefined
       ? undefined
@@ -581,6 +602,14 @@ try {
           JSON.stringify(JSON.stringify(grpcContext)) +
           "),pm,apt,request});",
       );
+    if (wireContext !== undefined)
+      install(
+        "(" +
+          wireScriptContextSource +
+          ")({context:JSON.parse(" +
+          JSON.stringify(JSON.stringify(wireContext)) +
+          "),pm,apt,request});",
+      );
     run(compatibilitySources.join(";\n"));
   });
   let remaining = deadline - monotonicNow();
@@ -601,7 +630,9 @@ try {
   for (const [index, code] of [
     library,
     "(async()=>{\n" +
-      (grpcContext !== undefined ? '"use strict";\n' : "") +
+      (grpcContext !== undefined || wireContext !== undefined
+        ? '"use strict";\n'
+        : "") +
       workerData.code +
       "\n})()",
   ].entries()) {
