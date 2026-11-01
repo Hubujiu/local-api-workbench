@@ -377,3 +377,84 @@ test("HTTP projection rejects executable marker presence without scanning busine
     }),
   );
 });
+
+test("wire graph authority requires only active scripted leaves and rejects recursive malformed graphs", () => {
+  const scripted = {
+    type: "protocol",
+    protocolScripts: { version: 1, before: "apt.setVar('x',1)" },
+  };
+  assert.equal(validatePlanProtocolScripts([scripted]), true);
+  assert.equal(
+    validatePlanProtocolScripts([{ ...scripted, enabled: false }]),
+    false,
+  );
+  assert.equal(
+    validatePlanProtocolScripts([
+      { type: "repeat", enabled: false, steps: [scripted] },
+    ]),
+    false,
+  );
+  assert.equal(
+    validatePlanProtocolScripts([{ type: "repeat", steps: [scripted] }]),
+    true,
+  );
+  assert.equal(
+    validatePlanProtocolScripts([
+      { ...scripted, protocolScripts: { version: 1, before: " " } },
+    ]),
+    false,
+  );
+  const repeat = { type: "repeat", steps: [] };
+  repeat.steps.push(repeat);
+  assert.throws(() => validatePlanProtocolScripts([repeat]), /步骤图/);
+  let reads = 0;
+  assert.throws(() =>
+    validatePlanProtocolScripts([
+      {
+        get type() {
+          reads++;
+          return "protocol";
+        },
+      },
+    ]),
+  );
+  assert.equal(reads, 0);
+});
+
+test("wire context bounds raw string and repeated-reference bytes before whole-graph serialization", () => {
+  const context = wireScriptContext(tcp(), "before"),
+    original = JSON.stringify;
+  let serialized = 0;
+  JSON.stringify = (...args) => {
+    serialized++;
+    return original(...args);
+  };
+  try {
+    const repeated = { text: "x".repeat(4096) };
+    for (const message of [
+      "x".repeat(WIRE_SCRIPT_CONTEXT_BYTES),
+      { items: Array(600).fill(repeated) },
+    ])
+      assert.throws(
+        () =>
+          normalizeWireScriptContext({
+            ...context,
+            request: { ...context.request, message },
+          }),
+        /上下文/,
+      );
+    assert.equal(serialized, 0);
+  } finally {
+    JSON.stringify = original;
+  }
+  // Escaping adds bytes beyond the early raw-text count; final exact accounting
+  // must still reject instead of admitting a larger serialized context.
+  assert.throws(
+    () =>
+      normalizeWireScriptContext({
+        ...context,
+        request: { ...context.request, message: "\u0000".repeat(400000) },
+      }),
+    /上下文/,
+  );
+});

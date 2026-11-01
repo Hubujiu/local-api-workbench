@@ -469,13 +469,15 @@ export async function runPlan(
   validatePlanGrpcScripts(plan.steps);
   const snapshot = structuredClone(plan);
   validatePlanGrpcScripts(snapshot.steps);
-  validatePlanProtocolScripts(snapshot.steps);
+  const requiresWireExecutor = validatePlanProtocolScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
+  if (requiresWireExecutor && typeof executeProtocol !== "function")
+    throw Error("此执行入口未授权protocol调用");
   for (const step of snapshot.steps)
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;

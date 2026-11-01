@@ -139,12 +139,17 @@ export function wireScriptContext(protocol, phase, result) {
 // One budget covers the whole context, including key bytes and this phase's
 // request/result views. Check descriptors before serialization can invoke code.
 export function normalizeWireScriptContext(value) {
-  let nodes = 0;
+  let nodes = 0,
+    bytes = 0;
+  const boundedText = (text) => {
+    bytes += Buffer.byteLength(text);
+    return bytes <= WIRE_SCRIPT_CONTEXT_BYTES && text.isWellFormed();
+  };
   const safeJSON = (item, depth = 0) => {
     if (depth > 64 || ++nodes > 20000) return false;
     if (item === null || typeof item === "boolean") return true;
     if (typeof item === "number") return Number.isFinite(item);
-    if (typeof item === "string") return item.isWellFormed();
+    if (typeof item === "string") return boundedText(item);
     if (Array.isArray(item)) {
       if (
         Object.getPrototypeOf(item) !== Array.prototype ||
@@ -166,6 +171,7 @@ export function normalizeWireScriptContext(value) {
     return Object.entries(item).every(
       ([key, child]) =>
         !["__proto__", "prototype", "constructor"].includes(key) &&
+        boundedText(key) &&
         safeJSON(child, depth + 1),
     );
   };
@@ -388,11 +394,17 @@ export function validatePlanProtocolScripts(
   steps,
   depth = 0,
   budget = { nodes: 0 },
+  active = true,
 ) {
   if (!Array.isArray(steps) || depth > 32)
     throw Error("协议脚本计划步骤图无效");
+  let requiresExecutor = false;
   for (const step of steps) {
-    if (!plain(step) || ++budget.nodes > 10000)
+    if (
+      !plain(step) ||
+      !dataKeys(step, Object.keys(step)) ||
+      ++budget.nodes > 10000
+    )
       throw Error("协议脚本计划步骤图无效");
     const field = Object.getOwnPropertyDescriptor(step, "protocolScripts");
     if (field) {
@@ -400,11 +412,24 @@ export function validatePlanProtocolScripts(
         throw Error("protocolScripts仅可用于协议计划步骤");
       if (!field.enumerable || !Object.hasOwn(field, "value"))
         throw Error("protocolScripts必须是普通JSON数据字段");
-      normalizeProtocolScripts(field.value);
+      const scripts = normalizeProtocolScripts(field.value);
+      if (
+        active &&
+        step.enabled !== false &&
+        (scripts?.before.trim() || scripts?.after.trim())
+      )
+        requiresExecutor = true;
     }
     if (step.type === "repeat")
-      validatePlanProtocolScripts(step.steps, depth + 1, budget);
+      requiresExecutor =
+        validatePlanProtocolScripts(
+          step.steps,
+          depth + 1,
+          budget,
+          active && step.enabled !== false,
+        ) || requiresExecutor;
   }
+  return requiresExecutor;
 }
 
 export function rejectHTTPProtocolScripts(request) {

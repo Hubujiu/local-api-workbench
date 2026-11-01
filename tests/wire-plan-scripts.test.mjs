@@ -260,6 +260,8 @@ test("wire scripts cannot retarget edit evidence or enable HTTP cookie database 
     "pm.setRequestBody('changed');",
     "apt.setRequestHeader('x','y');",
     "pm.cookies.set('x','y');",
+    "await databaseQuery({});",
+    "apt.visualizer.set('<p>not-available</p>',{});",
     "pm.sendRequest('http://evil.invalid');",
     "input.allowNetwork=true;__sendRequest('{}',()=>{});",
     "input.allowNetwork=true;await $.ajax({url:'http://example.invalid/'});",
@@ -314,6 +316,9 @@ test("wire host options alone select native mode and reject mixed or HTTP bindin
     { finalBody: "changed" },
     { responseWire: {} },
     { responseOriginals: {} },
+    { databaseQuery: {} },
+    { cookieSession: {} },
+    { nativeTask: {} },
     { request: { scriptDialect: "apipost8" } },
     { request: { scriptURLMode: "sdk" } },
     { request: { url: "http://example.invalid" } },
@@ -323,11 +328,72 @@ test("wire host options alone select native mode and reject mixed or HTTP bindin
 });
 
 test("wire executor authority and whole credential maps are validated before any PRE", async () => {
-  const denied = await run(step("pm.environment.set('mustNotRun',true);"), {
-    executeProtocol: undefined,
-  });
-  assert.equal(denied.report.status, "failed");
-  assert.equal(denied.commits.length, 0);
+  for (const executeProtocol of [undefined, null, {}, true, "not-a-function"]) {
+    let httpCalls = 0,
+      scopeCommits = 0,
+      prepared = 0,
+      completed = 0;
+    await assert.rejects(
+      runPlan(
+        snapshotPlan({
+          steps: [
+            {
+              request: {
+                ...http.request,
+                beforeScript:
+                  "pm.environment.set('httpBefore','must-not-run');",
+              },
+            },
+            step("pm.environment.set('wireBefore','must-not-run');"),
+          ],
+        }),
+        { value: "initial" },
+        async () => {
+          httpCalls++;
+          return response();
+        },
+        {
+          executeProtocol,
+          prepareRequest: (request) => {
+            prepared++;
+            return request;
+          },
+          onScopeChanges: async () => scopeCommits++,
+          onStep: () => completed++,
+        },
+      ),
+      /未授权|executor|执行入口/,
+    );
+    assert.equal(httpCalls, 0);
+    assert.equal(
+      scopeCommits,
+      0,
+      "an earlier HTTP PRE cannot persist effects before authority preflight",
+    );
+    assert.equal(prepared, 0);
+    assert.equal(completed, 0);
+  }
+  let allowedHTTP = 0;
+  const disabled = await runPlan(
+    snapshotPlan({
+      steps: [
+        http,
+        step("pm.environment.set('mustNotRun',true);", "", { enabled: false }),
+      ],
+    }),
+    { value: "initial" },
+    async () => {
+      allowedHTTP++;
+      return response();
+    },
+  );
+  assert.equal(disabled.status, "passed", JSON.stringify(disabled));
+  assert.equal(
+    allowedHTTP,
+    1,
+    "disabled script leaves do not require a wire executor grant",
+  );
+  assert.equal(disabled.variables.mustNotRun, undefined);
   for (const credentials of [
     { wire: { headers: { Authorization: "secret" } } },
     { wire: { url: "http://elsewhere.invalid" } },
@@ -349,6 +415,40 @@ test("wire executor authority and whole credential maps are validated before any
       ),
     );
     assert.equal(invoked, 0);
+  }
+  for (const [laterDefinition, credential] of [
+    [{ type: "sse", url: "http://example.invalid/events" }, { tls: {} }],
+    [
+      { type: "websocket", url: "ws://example.invalid" },
+      { headers: { Host: "override.invalid" } },
+    ],
+  ]) {
+    let invoked = 0;
+    const later = {
+      id: "later",
+      type: "protocol",
+      enabled: false,
+      protocol: { definition: laterDefinition },
+    };
+    await assert.rejects(
+      runPlan(
+        snapshotPlan({
+          steps: [step("pm.environment.set('mustNotRun',true);"), later],
+        }),
+        {},
+        async () => invoked++,
+        {
+          executeProtocol: async () => invoked++,
+          onScopeChanges: async () => invoked++,
+          protocolCredentials: { later: credential },
+        },
+      ),
+    );
+    assert.equal(
+      invoked,
+      0,
+      "the whole binding map is checked before the first PRE",
+    );
   }
 });
 

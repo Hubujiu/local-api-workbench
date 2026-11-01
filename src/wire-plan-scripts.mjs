@@ -20,7 +20,8 @@ export async function runScriptedWireStep({
   publishScopes,
 }) {
   const validated = snapshotWireStep(step);
-  if (!executeProtocol) throw Error("此执行入口未授权protocol调用");
+  if (typeof executeProtocol !== "function")
+    throw Error("此执行入口未授权protocol调用");
   record.type = "protocol";
   record.protocol = structuredClone(validated.protocol);
   const phases = createPlanScriptPhases({
