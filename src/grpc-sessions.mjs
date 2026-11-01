@@ -14,6 +14,7 @@ import {
   grpcSessionHash,
   makeGrpcSessionRecord,
   finalizeGrpcSession,
+  grpcSessionMessageBytes,
 } from "./grpc-session-evidence.mjs";
 import { recordSaveFailure, recordSaveSuccess } from "./execution-evidence.mjs";
 
@@ -22,12 +23,16 @@ const plain = (value) =>
   typeof value === "object" &&
   !Array.isArray(value) &&
   [Object.prototype, null].includes(Object.getPrototypeOf(value));
+const safeDetails = (value) => {
+  const text = String(value).toWellFormed().slice(0, 2000);
+  return /[\uD800-\uDBFF]$/.test(text) ? text.slice(0, -1) : text;
+};
 const status = (code, details = "") => ({
   code:
     Number.isInteger(code) && code >= 0 && code <= 16
       ? code
       : grpc.status.UNKNOWN,
-  details: String(details).slice(0, 2000),
+  details: safeDetails(details),
 });
 
 export class GrpcSessions {
@@ -150,11 +155,20 @@ export class GrpcSessions {
       definition.timeoutMs,
     );
     const callback = (error, message) => {
+      this.checkDeadline(s);
       if (s.view.lifecycle !== "active") return;
       s.view.callback = {
         ...status(
-          error ? error.code : 0,
-          error ? error.details || error.message : "",
+          error
+            ? error.code
+            : message === undefined
+              ? grpc.status.UNIMPLEMENTED
+              : 0,
+          error
+            ? error.details || error.message
+            : message === undefined
+              ? "gRPC客户端流未收到响应"
+              : "",
         ),
         responseReceived: message !== undefined,
       };
@@ -186,6 +200,7 @@ export class GrpcSessions {
           options,
         );
       s.call.on("error", (error) => {
+        this.checkDeadline(s);
         if (s.view.lifecycle !== "active") return;
         s.view.transportError = status(
           error.code,
@@ -194,6 +209,7 @@ export class GrpcSessions {
         this.maybeComplete(s);
       });
       s.call.on("status", (value) => {
+        this.checkDeadline(s);
         if (s.view.lifecycle !== "active") return;
         s.view.remoteStatus = status(value.code, value.details);
         this.maybeComplete(s);
@@ -201,6 +217,7 @@ export class GrpcSessions {
       if (desc.responseStream) {
         s.call.on("data", (message) => this.receive(s, message));
         s.call.on("end", () => {
+          this.checkDeadline(s);
           if (s.view.lifecycle !== "active") return;
           s.view.responseEnded = true;
           this.maybeComplete(s);
@@ -213,16 +230,13 @@ export class GrpcSessions {
     return this.snapshot(projectId, s.id);
   }
   receive(s, message) {
+    this.checkDeadline(s);
     if (s.view.lifecycle !== "active") return;
-    let json;
+    let json, bytes;
     try {
-      // Non-finite values cannot be represented truthfully in JSON evidence.
-      json = JSON.stringify(message, (_key, value) => {
-        if (typeof value === "number" && !Number.isFinite(value))
-          throw Error("nonfinite");
-        return value;
-      });
-      if (!json || !plain(message)) throw Error("invalid response");
+      // Admission and persisted evidence use exactly the same JSON constraints.
+      bytes = grpcSessionMessageBytes(message);
+      json = JSON.stringify(message);
     } catch {
       this.finish(
         s,
@@ -231,7 +245,8 @@ export class GrpcSessions {
       );
       return;
     }
-    const bytes = Buffer.byteLength(json);
+    this.checkDeadline(s);
+    if (s.view.lifecycle !== "active") return;
     if (
       s.view.messages.length >= 100 ||
       s.view.responseBytes + bytes > GRPC_MAX_BYTES
@@ -248,6 +263,7 @@ export class GrpcSessions {
     s.view.responseBytes += bytes;
   }
   maybeComplete(s) {
+    this.checkDeadline(s);
     const v = s.view;
     if (v.lifecycle !== "active" || !v.remoteStatus) return;
     if (v.streaming.response ? !v.responseEnded : !v.callback) return;
@@ -286,6 +302,8 @@ export class GrpcSessions {
       throw Error("gRPC请求方向不可写");
     if (s.pending) throw Error("gRPC发送仍在等待本地回调或drain；不可重复发送");
     const prepared = prepareGrpcMessage(s.selected, message);
+    this.checkDeadline(s);
+    if (v.lifecycle !== "active") throw Error("gRPC会话总期限已到");
     if (
       v.requestMessages.length >= 100 ||
       v.requestBytes + prepared.jsonBytes > GRPC_MAX_BYTES ||
@@ -303,6 +321,7 @@ export class GrpcSessions {
     const pending = { callback: false, drained: false, returned: false };
     s.pending = pending;
     const complete = () => {
+      this.checkDeadline(s);
       if (
         v.lifecycle !== "active" ||
         s.pending !== pending ||
@@ -364,8 +383,16 @@ export class GrpcSessions {
     if (s.pending) throw Error("gRPC发送未完成本地回调或drain，不能半关闭");
     v.requestState = "halfClosing";
     try {
-      s.call.end(() => {
-        if (v.lifecycle === "active") v.requestState = "halfClosed";
+      s.call.end((error) => {
+        this.checkDeadline(s);
+        if (v.lifecycle !== "active") return;
+        if (error)
+          this.finish(
+            s,
+            status(grpc.status.UNKNOWN, "gRPC请求方向关闭失败"),
+            "error",
+          );
+        else v.requestState = "halfClosed";
       });
     } catch {
       this.finish(

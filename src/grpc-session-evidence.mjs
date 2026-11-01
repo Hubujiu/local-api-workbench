@@ -62,7 +62,7 @@ export function makeGrpcSessionRecord(definition, result) {
   validateGrpcSessionRecord(record);
   return record;
 }
-function jsonMessage(value) {
+export function grpcSessionMessageBytes(value) {
   if (!plain(value)) throw Error("gRPC响应记录必须为JSON对象");
   let nodes = 0;
   const visit = (item, depth) => {
@@ -102,8 +102,7 @@ export function validateGrpcSessionRecord(record) {
     !record.id ||
     record.runId !== record.id ||
     !date(record.createdAt) ||
-    !date(record.finishedAt) ||
-    Date.parse(record.finishedAt) < Date.parse(record.createdAt)
+    !date(record.finishedAt)
   )
     throw Error("gRPC交互记录格式无效");
   const definition = normalizeGrpcDefinition(record.definition),
@@ -223,7 +222,7 @@ export function validateGrpcSessionRecord(record) {
     wireBytes += entry.wireBytes;
   }
   const responseBytes = r.messages.reduce(
-    (sum, message) => sum + jsonMessage(message),
+    (sum, message) => sum + grpcSessionMessageBytes(message),
     0,
   );
   if (
@@ -270,9 +269,17 @@ export function validateGrpcSessionRecord(record) {
 }
 // Apply on read/restore before retention slicing as well as the general save codec.
 export function validateGrpcSessionHistory(records = []) {
+  if (!Array.isArray(records)) throw Error("gRPC交互历史必须为数组");
+  const identities = new Map();
   for (const record of records)
-    if (record?.type === "grpc" && record.mode === "session")
+    if (typeof record?.id === "string")
+      identities.set(record.id, (identities.get(record.id) || 0) + 1);
+  for (const record of records)
+    if (record?.type === "grpc" && record.mode === "session") {
       validateGrpcSessionRecord(record);
+      if (identities.get(record.id) !== 1)
+        throw Error("gRPC交互记录ID存在歧义");
+    }
 }
 export async function finalizeGrpcSession(store, projectId, record) {
   validateGrpcSessionRecord(record);
