@@ -15,6 +15,10 @@ import {
   validateGrpcScriptBinding,
 } from "./grpc-script-context.mjs";
 import { isDeepStrictEqual } from "node:util";
+import {
+  normalizeWireScriptContext,
+  validateWireScriptBinding,
+} from "./wire-script-context.mjs";
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
@@ -61,7 +65,7 @@ function scriptBudgets({
 
 /** QuickJS has no Node bindings; explicit callback HTTP is brokered by the parent. */
 export function runScript(code, input, options = {}) {
-  const { signal, cookieSession, grpcContext } = options;
+  const { signal, cookieSession, grpcContext, wireContext } = options;
   const {
     activityBudgetMs,
     wallBudgetMs,
@@ -71,8 +75,18 @@ export function runScript(code, input, options = {}) {
     jobLimit,
     assertionLimit,
   } = scriptBudgets(options);
-  if (Object.hasOwn(input, "grpcContext"))
+  if (
+    Object.hasOwn(input, "grpcContext") ||
+    Object.hasOwn(input, "wireContext")
+  )
     throw Error("协议上下文只能由执行入口提供");
+  if (wireContext !== undefined && grpcContext !== undefined)
+    throw Error("协议脚本上下文不能同时绑定wire与gRPC");
+  if (wireContext !== undefined) {
+    if (cookieSession !== undefined) throw Error("协议脚本不能绑定Cookie会话");
+    validateWireScriptBinding(input, requestLimit);
+    normalizeWireScriptContext(wireContext);
+  }
   if (grpcContext !== undefined) {
     validateGrpcScriptBinding(input, requestLimit);
     normalizeGrpcScriptContext(grpcContext);
@@ -118,6 +132,10 @@ export function runScript(code, input, options = {}) {
           grpcContext === undefined
             ? undefined
             : normalizeGrpcScriptContext(grpcContext),
+        wireContext:
+          wireContext === undefined
+            ? undefined
+            : normalizeWireScriptContext(wireContext),
         code,
         input,
         activityBudgetMs,
@@ -155,7 +173,7 @@ export function runScript(code, input, options = {}) {
       } else {
         try {
           if (
-            grpcContext !== undefined &&
+            (grpcContext !== undefined || wireContext !== undefined) &&
             (!isDeepStrictEqual(result.request, input.request || {}) ||
               result.finalBody !== undefined ||
               result.responseOverride != null ||
@@ -163,7 +181,11 @@ export function runScript(code, input, options = {}) {
               result.visualization != null ||
               networkRequests.length)
           )
-            throw Error("gRPC脚本不能输出HTTP请求/响应修改");
+            throw Error(
+              grpcContext !== undefined
+                ? "gRPC脚本不能输出HTTP请求/响应修改"
+                : "协议脚本不能输出HTTP请求/响应修改",
+            );
           resolve({
             ...result,
             responseOverride: validateResponseMutation(
