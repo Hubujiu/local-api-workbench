@@ -1,3 +1,4 @@
+import { sqliteOperationDetails } from "./sqlite-operation-progress.mjs";
 // Codes only: never retain messages, stacks, SQL, parameters or database paths.
 const codes = new Set([
   "EACCES",
@@ -88,6 +89,7 @@ export function sqliteProcessFailureDetails(error) {
       supervisorReadyMs: milliseconds(d.supervisorReadyMs),
       workerReadyMs: milliseconds(d.workerReadyMs),
       resultReceivedMs: milliseconds(d.resultReceivedMs),
+      ...sqliteOperationDetails(d.operationStage, d.operationElapsedMs),
     },
   };
 }

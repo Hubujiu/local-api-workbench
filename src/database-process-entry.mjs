@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import { createSQLiteOperationTracker } from "./sqlite-operation-progress.mjs";
 import {
   sqliteProcessErrorCode,
   sqliteExitCode,
@@ -20,6 +21,7 @@ process.once("message", (input) => {
   };
   stage("supervisor-ready");
   let message, failure;
+  let progress;
   const failWorker = (error) => {
     stage("worker-error", { errorCode: sqliteProcessErrorCode(error) });
     timer.unref();
@@ -45,6 +47,16 @@ process.once("message", (input) => {
   worker.on("message", (value) => {
     if (value?.kind === "sqlite-worker-ready") {
       stage("worker-ready");
+      return;
+    }
+    if (value?.kind === "sqlite-operation-stage") {
+      try {
+        progress ??= createSQLiteOperationTracker();
+        const observation = progress(value);
+        if (observation && process.connected)
+          process.send(observation, () => {});
+      } catch {}
+      // Even malformed/exhausted progress is never a result envelope.
       return;
     }
     message = value;
