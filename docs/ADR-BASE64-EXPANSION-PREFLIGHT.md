@@ -38,3 +38,28 @@ call is a negative mutant: the unchanged later check still rejects, but both
 allocation and encoding now occur. Valid input still reaches both original
 CryptoJS functions. This semantic instrumentation is not a replacement for the
 real-worker quota and encoding tests.
+
+## Failure-only pipeline observations
+
+The original pipeline vectors and the preflight real-worker boundary cases now
+carry fixed, nonsecret branch identifiers through the project's existing
+`withWorkerPhaseDiagnostics` helper. The 17 successful-value calls keep their
+original expected values and order. Exact-rejection assertions see the original
+Error and regex first; only a failure receives diagnostic text. There is no
+retry, additional worker, budget change or production-code change.
+
+The two test helpers and their existing synthetic tests are copied byte-for-byte
+from accepted integration commit `ffe37e904cc2772fa5ee6995eaf9f61acc5a6474`;
+this is a test-only dependency, not that integration's business ancestry. The
+phase wrapper originated at `05c3cbd44c03aaec303f332791b3c22936881686`.
+The PR32 parent already supplies `scriptStage`, `lastWorkerStage` and monotonic
+`elapsedMs` on its parent watchdog error. Absent CPU/bootstrap fields remain
+absent, rather than being inferred from the test duration or invented.
+
+Combined CI `41257656020` at `9d988c32fc5672ceceaa7d807180f5891d79b866`
+failed the old positive Base64 case on Windows shard 4/6 in 2075.8684 ms, with a
+parent-watchdog stack but without those Error properties in TAP. The duration
+covers the entire multi-vector case, not a proven single-worker interval. Its
+failure is retained; these observations neither identify nor repair its cause.
+The added pure synthetic tests check same-Error identity, one invocation, absent
+metrics, and continued failure of the unchanged size matcher on a timeout.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
 import { base64EncodingPreflight } from "../src/base64-encoding-preflight.mjs";
 import { resolveApipostFunctionTemplate } from "../src/apipost-function-templates.mjs";
+import { withWorkerPhaseDiagnostics } from "./helpers/worker-phase-diagnostics.mjs";
 
 const boundaryInputs = [
   "x".repeat(49148),
@@ -82,55 +83,84 @@ test("negative quota mutant loses the exact reject while the real preflight stil
 });
 
 test("real Base64 pipelines retain the encoder, intermediate/final JSON cap and exact rejection messages", async () => {
-  for (const token of ["a中文😀é", "\u0000a", "".padEnd(49149, "x")])
+  for (const [caseId, token] of [
+    ["unicode", "a中文😀é"],
+    ["nul", "\u0000a"],
+    ["ascii-boundary", "".padEnd(49149, "x")],
+  ])
     assert.equal(
-      await resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
-        token,
-      }),
+      await withWorkerPhaseDiagnostics(`preflight-encode-${caseId}`, () =>
+        resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
+          token,
+        }),
+      ),
       Buffer.from(token).toString("base64"),
     );
-  for (const token of [
-    "x".repeat(49150),
-    "中".repeat(16383) + "x",
-    "😀".repeat(12287) + "xx",
+  for (const [caseId, token] of [
+    ["ascii", "x".repeat(49150)],
+    ["bmp", "中".repeat(16383) + "x"],
+    ["astral", "😀".repeat(12287) + "xx"],
   ])
-    await assert.rejects(
-      resolveApipostFunctionTemplate("{{token|base64|length}}", [], "body", {
-        token,
-      }),
-      /64KiB/,
+    await withWorkerPhaseDiagnostics(
+      `preflight-oversized-${caseId}`,
+      (capture) =>
+        assert.rejects(
+          resolveApipostFunctionTemplate(
+            "{{token|base64|length}}",
+            [],
+            "body",
+            {
+              token,
+            },
+          ).catch(capture),
+          /64KiB/,
+        ),
     );
-  await assert.rejects(
-    resolveApipostFunctionTemplate("{{token|base64|length}}", [], "body", {
-      token: "x".repeat(50000) + "\ud800",
-    }),
-    /有效Unicode/,
+  await withWorkerPhaseDiagnostics(
+    "preflight-oversized-invalid-unicode",
+    (capture) =>
+      assert.rejects(
+        resolveApipostFunctionTemplate("{{token|base64|length}}", [], "body", {
+          token: "x".repeat(50000) + "\ud800",
+        }).catch(capture),
+        /有效Unicode/,
+      ),
   );
-  await assert.rejects(
-    resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
-      token: '"'.repeat(32768),
-    }),
-    /初值超过64KiB/,
+  await withWorkerPhaseDiagnostics("preflight-initial-json-cap", (capture) =>
+    assert.rejects(
+      resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
+        token: '"'.repeat(32768),
+      }).catch(capture),
+      /初值超过64KiB/,
+    ),
   );
   // A valid stage result can still exceed the unchanged final field JSON cap.
-  await assert.rejects(
-    resolveApipostFunctionTemplate("X{{token|base64}}XXX", [], "body", {
-      token: "x".repeat(49149),
-    }),
-    /64KiB/,
+  await withWorkerPhaseDiagnostics("preflight-final-json-cap", (capture) =>
+    assert.rejects(
+      resolveApipostFunctionTemplate("X{{token|base64}}XXX", [], "body", {
+        token: "x".repeat(49149),
+      }).catch(capture),
+      /64KiB/,
+    ),
   );
   // unbase64 remains on the original validation and UTF-8 decoding path.
   assert.equal(
-    await resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
-      token: "8J-YgA",
-    }),
+    await withWorkerPhaseDiagnostics("preflight-decode-url-safe", () =>
+      resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
+        token: "8J-YgA",
+      }),
+    ),
     "😀",
   );
-  await assert.rejects(
-    resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
-      token: "/w==",
-    }),
-    /有效Unicode/,
+  await withWorkerPhaseDiagnostics(
+    "preflight-decode-invalid-unicode",
+    (capture) =>
+      assert.rejects(
+        resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
+          token: "/w==",
+        }).catch(capture),
+        /有效Unicode/,
+      ),
   );
 });
 
