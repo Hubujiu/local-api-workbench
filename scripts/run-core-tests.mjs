@@ -134,6 +134,7 @@ export async function main(args, cwd = process.cwd()) {
   }
   return runNode(
     [
+      `--import=${new URL("./core-worker-observer-preload.mjs", import.meta.url).href}`,
       "--test",
       `--test-concurrency=${plan.fileConcurrency}`,
       "--test-reporter=spec",

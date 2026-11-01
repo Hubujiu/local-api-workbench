@@ -11,6 +11,10 @@ import progress, {
   MAX_BYTES,
   MAX_LINES,
 } from "../scripts/core-progress-reporter.mjs";
+import {
+  createWorkerObserver,
+  WORKER_PREFIX,
+} from "../scripts/core-worker-observations.mjs";
 
 const launcher = fileURLToPath(
   new URL("../scripts/run-core-tests.mjs", import.meta.url),
@@ -152,6 +156,106 @@ test("progress caps lines and bytes but drains every remaining event", async () 
       1,
     );
   }
+});
+
+test("progress accepts only revalidated worker packets with actual event location", () => {
+  let message;
+  createWorkerObserver()(
+    Object.assign(Error("SECRET_ERROR"), {
+      scriptStage: "script",
+      elapsedMs: 7,
+      body: "SECRET_BODY",
+    }),
+    (line) => {
+      message = line;
+    },
+  );
+  const data = {
+    message,
+    file: path.join(process.cwd(), "tests/safe.test.mjs"),
+    line: 42,
+    nesting: 2,
+    name: "forged identity",
+    details: { passed: true, duration_ms: 999 },
+  };
+  const row = projectEvent(
+    { type: "test:diagnostic", data },
+    10,
+    process.cwd(),
+  );
+  assert.equal(row.file, "tests/safe.test.mjs");
+  assert.equal(row.line, 42);
+  assert.equal(row.name, undefined);
+  assert.equal(row.status, "unknown");
+  assert.equal(row.durationMs, undefined);
+  assert.equal(row.workerObservation.workers[0].scriptStage, "script");
+  assert(!JSON.stringify(row).includes("SECRET"));
+  assert(!Object.hasOwn(row, "message"));
+  assert.equal(
+    projectEvent(
+      {
+        type: "test:diagnostic",
+        data: { ...data, message: "arbitrary SECRET" },
+      },
+      0,
+      process.cwd(),
+    ),
+    undefined,
+  );
+  assert.equal(
+    projectEvent(
+      {
+        type: "test:diagnostic",
+        data: {
+          ...data,
+          message:
+            WORKER_PREFIX +
+            '{"version":1,"availability":"capped","secret":"SECRET"}',
+        },
+      },
+      0,
+      process.cwd(),
+    ),
+    undefined,
+  );
+  let traps = 0;
+  const proxy = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor() {
+        traps++;
+        throw Error("proxy");
+      },
+    },
+  );
+  assert.equal(projectEvent(proxy, 0, process.cwd()), undefined);
+  projectEvent({ type: "test:complete", data: proxy }, 0, process.cwd());
+  assert.equal(traps, 0);
+});
+
+test("worker diagnostic rows share the original JSONL cap and full drain", async () => {
+  let message;
+  createWorkerObserver()({ scriptStage: "script", elapsedMs: 1 }, (line) => {
+    message = line;
+  });
+  let consumed = 0;
+  async function* events() {
+    for (let i = 0; i < MAX_LINES + 30; i++) {
+      consumed++;
+      yield { type: "test:diagnostic", data: { message, line: 1, nesting: 0 } };
+    }
+  }
+  let output = "";
+  for await (const line of progress(events())) output += line;
+  const rows = parse(output);
+  assert.equal(consumed, MAX_LINES + 30);
+  assert(rows.length <= MAX_LINES);
+  assert(Buffer.byteLength(output) <= MAX_BYTES);
+  assert.equal(rows.at(-1).type, "progress:truncated");
+  assert.equal(
+    rows.filter((row) => row.type === "progress:truncated").length,
+    1,
+  );
 });
 
 test("launcher preserves success and failure with spec TAP and JSONL together", async (t) => {

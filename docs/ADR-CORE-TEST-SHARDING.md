@@ -434,3 +434,107 @@ six-way execution, checking all files and nested concurrent tests exactly once,
 complete TAP and failure propagation. Coverage-only enumeration now exercises
 one through six shards. Historical cancelled/failed runs remain unaccepted;
 this capacity change does not claim to fix historical VM/XML/script timeouts.
+
+## Bounded pre-IPC worker observations, 2026-11-01
+
+This revision adds observation, not a timeout fix or a different test verdict.
+Node 24.22.1 synthetic evidence shows that test-file IPC preserves an
+AssertionError's `actual` Error but drops its custom worker fields. Node's error
+serializer recursively handles `cause`, not nested `actual` Errors. Extending
+only the parent reporter cannot recover those fields. A stack-marker alternative
+was rejected: native/deserialized stack accessors cannot be read under the
+no-getter rule, and TAP removes the non-frame suffix. No production Error,
+message, stack, matcher, application budget or runtime code is changed.
+
+The existing core launcher alone passes an explicit `--import=<file URL>`.
+There is no NODE_OPTIONS setting. Before importing node:test or the projection
+module, the preload requires the main thread, the exact explicit import flag,
+Node's observed `NODE_TEST_CONTEXT=child-v8`, and a regular, non-dot, nonrecursive
+`tests/*.test.mjs` entry beneath this module's repository root. The tests directory
+and entry must not be symlinks. CLI/src/helper/outside entries, unknown contexts
+and missing files do not register hooks. This Node context value is an observed
+implementation detail, not a promised cross-version API; missing/unsupported
+setup is unavailable evidence, never a passing result or a reason to change
+isolation. Setup and observation failures cannot replace test outcomes.
+
+A file-global afterEach uses trusted Node TestContext APIs only after Node has
+marked the test failed. It follows own-data `actual`/`cause` links before IPC,
+with a visited set, depth 4, at most 15 examined nodes and 4 observations. It
+does not enumerate Error fields or read Error message/stack/getters, prototypes,
+bodies, SQL, parameters, paths or environment. Proxies (including revoked ones)
+are rejected before descriptors. The enum/numeric schema is a CI-only snapshot
+of the reviewed workerFailureMetadata helper, blob
+`030ec8aaa608704ef0757799bbcc9f788cef6e51`, including stage/last-received stage,
+activity operation, elapsed time, counters, conditional bootstrap operation and
+wall/CPU observations, activity wall metrics and activity CPU microseconds.
+Invalid/out-of-range/missing values are omitted, not invented. No application
+module or existing per-case assertion wrapper is imported or migrated.
+
+The helper captures its descriptor, JSON, proxy-detection and other used builtin
+functions before test code. All output objects, arrays and schema tuples have
+null prototypes; output cannot invoke inherited toJSON, array iterators or index
+hooks. The proxy function is captured as a value, not left as a live ESM builtin
+binding that syncBuiltinESMExports can replace. Packets contain only protocol
+version, fixed availability/traversal enums, fixed worker enums and bounded
+numbers. **There is no context name, body ID, input label or free-text field.**
+
+Each failed test may emit a fixed-prefix `t.diagnostic()` packet. The 2-KiB
+packet bound includes its prefix; oversized multi-observation packets retain
+fewer observations and report bounded traversal. Missing fields produce explicit
+unavailable observations. Per test-file process, emission is capped at 64 packets
+and 128 KiB, reserving one capped marker; it is not enough to cap only parent
+JSONL because child buffers and TAP also receive diagnostics. New files get a
+fresh independent observer. Successful tests do not emit worker diagnostics.
+
+The parent reporter accepts only that prefix, bounds text before parsing,
+revalidates every key/type/enum/range and constructs another null-prototype
+projection. It never copies raw diagnostic text. Diagnostic rows use only Node's
+actual declaration file/line/nesting, `status: unknown`, and the validated packet;
+forged name/duration/pass fields on a diagnostic do not become identity or test
+status. Existing dequeue/complete/summary fields and success/failure handling are
+unchanged. All rows share the original 12,000-line/4-MiB cap, one truncation marker
+and full source drain. Packet validation minimizes data; it does not authenticate
+the origin of a diagnostic, and even a well-shaped forged packet cannot affect
+test acceptance.
+
+### Important evidence limits
+
+- Diagnostics are declaration-ordered, not immediate execution-ordered events.
+  They may be buffered behind another test or lost on abrupt process exit;
+  existing immediate test:complete progress is unchanged.
+- Node supplies declaration location but not a unique diagnostic test identity.
+  Same-line generated cases, duplicate names and a ten-input loop remain
+  ambiguous. No nearest-completion matching or guessed body index is performed.
+- A file-global afterEach may run before a later-registered cleanup hook. Suite
+  errors, later hook failures, pre-test module failures, cancellations, process
+  exits, discarded original errors and unsupported setup can have no observation.
+  This is not a claim to capture every failure or that absent packets mean success.
+- Stage means last received/recorded observation, not causal proof. Test duration
+  is not worker elapsed time; wall/CPU differences alone do not establish cause.
+  The previously red XML/SQLite/PR15 runs remain red/limited.
+- Node's existing serializer/formatters may themselves inspect Errors and invoke
+  getters. This observer adds no such reads; it does not claim to replace or secure
+  Node's existing spec/TAP Error serialization.
+- Application script Workers can inherit execArgv; the early main-thread guard
+  therefore matters. Existing database supervisor/Worker execArgv overrides were
+  source-reviewed, not used as a reason to remove the guard. Local tests use only
+  builtins and synthetic fixtures: no product Worker/VM/SQLite/network/app CLI.
+  Guard unit checks and synthetic CLI processes are not a real product regression
+  result; normal exact-head feature and integration CI remain required.
+
+Pure contracts preserve all existing sharder/reporter cases and add full-schema
+projection, hostile descriptor/proxy/toJSON/builtin-export/prototype checks,
+finite graph and packet limits, immutable Error descriptors, strict malformed
+packet rejection, exact entry guards, and real Node-test IPC with spec/TAP/JSONL.
+The original regex deliberately still fails with exit 1; independent successful
+assertions stay exit 0 without observations. Same-line concurrent cases retain
+only actual locations; per-file capping keeps every test failure and does not
+suppress the next file. Missing setup and throwing diagnostic emitters do not
+replace original outcomes. Existing cancellation, signal, nonzero exit, spawn
+error, file isolation and internal concurrency contracts remain intact.
+
+Six shards, fileConcurrency 1, Node24 selection, ordinary npm test concurrency 2,
+the frozen weights, all original tests, within-test concurrency, job deadlines,
+application/VM/security budgets, non-core jobs and workflow triggers are unchanged.
+There is no rerun/skip/filter/timeout-as-pass path. New pure contract files join
+the same exhaustive discovery and conservative unknown-weight policy.
