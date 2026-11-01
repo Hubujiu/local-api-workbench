@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { trackedQuickJS } from "./tracked-quickjs.mjs";
+// Host elapsed budgets are independent of civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
 const zero = new Set([
   "cfirst",
   "clast",
@@ -94,11 +96,11 @@ export function createNativeMockEvaluator(random) {
   const runtime = engine.newRuntime();
   runtime.setMemoryLimit(16 * 1024 * 1024);
   runtime.setMaxStackSize(512 * 1024);
-  let deadline = Date.now() + 1000,
+  let deadline = monotonicNow() + 1000,
     remaining = 250,
     calls = 0,
     disposed = false;
-  runtime.setInterruptHandler(() => Date.now() > deadline);
+  runtime.setInterruptHandler(() => monotonicNow() > deadline);
   const vm = runtime.newContext();
   const dispose = () => {
     if (!disposed) {
@@ -143,9 +145,9 @@ export function createNativeMockEvaluator(random) {
         if (!checked) throw Error("原版Mock库函数不支持");
         if (++calls > 1000 || remaining <= 0)
           throw Error("原版Mock库运行额度已用尽");
-        deadline = Date.now() + remaining;
-        const start = performance.now();
-        let handle;
+        const start = monotonicNow();
+        deadline = start + remaining;
+        let handle, value;
         try {
           handle = read(
             vm.evalCode(
@@ -159,13 +161,19 @@ export function createNativeMockEvaluator(random) {
           const text = vm.getString(handle);
           if (Buffer.byteLength(text) > 65536)
             throw Error("原版Mock库结果超过64KiB");
-          const value = JSON.parse(text);
+          value = JSON.parse(text);
           if (typeof value !== "string") throw Error("原版Mock库结果类型不符");
-          return value;
         } finally {
-          remaining -= performance.now() - start;
-          handle?.dispose();
+          try {
+            handle?.dispose();
+          } finally {
+            remaining -= monotonicNow() - start;
+          }
         }
+        // Native string/JSON conversion and handle cleanup may finish between
+        // interrupt checks. Never publish a successful over-budget last call.
+        if (remaining < 0) throw Error("原版Mock库运行额度已用尽");
+        return value;
       },
       dispose,
     };
