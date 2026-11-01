@@ -23,12 +23,15 @@ const decode = (result) => {
 };
 const before = [
   "pm.test('no preceding collection',()=>{pm.expect(apt.getVar('collectionOnly')).to.equal(undefined);pm.expect(pm.variables.get('collectionOnly')).to.equal(undefined);pm.expect(typeof pm.collectionVariables?.set).to.equal('undefined');});",
+  "pm.test('fresh occurrence locals',()=>pm.expect(pm.variables.get('occurrenceLocal')).to.equal(undefined));",
   "pm.environment.set('preCount',pm.environment.get('preCount')+1);",
   "pm.variables.set('message',pm.environment.get('fromHttp')+'|'+pm.environment.get('preCount'));",
+  "pm.variables.set('occurrenceLocal',pm.variables.get('message'));",
   "apt.setVar('preRuntime','confirmed-'+pm.environment.get('preCount'));console.log('grpc-pre');",
 ].join("\n");
 const after = [
   "pm.test('native response and no collection',()=>{pm.expect(grpc.result.status.code).to.equal(0);pm.expect(apt.getVar('collectionOnly')).to.equal(undefined);pm.expect(pm.variables.get('collectionOnly')).to.equal(undefined);pm.expect(pm.response).to.equal(undefined);});",
+  "pm.test('same occurrence local survives POST',()=>pm.expect(pm.variables.get('occurrenceLocal')).to.equal(grpc.request.messages[0].text));",
   "const token=grpc.result.messages[0].text;apt.setVar('runtimeToken',token);pm.environment.set('postToken',token);pm.globals.set('globalToken',token);console.log('grpc-post');",
 ].join("\n");
 
@@ -37,7 +40,7 @@ async function fixture(t) {
     calls = [],
     seen = [],
     clients = [];
-  let app, peer, rpc;
+  let app, peer, rpc, admissionGate;
   t.after(async () => {
     await Promise.all(clients.map((client) => client.close().catch(() => {})));
     rpc?.forceShutdown();
@@ -84,7 +87,17 @@ async function fixture(t) {
       const headers = new grpc.Metadata();
       headers.set("x-private", String(row.auth));
       call.sendMetadata(headers);
-      done(null, { text: row.token, count: calls.length });
+      const reply = { text: row.token, count: calls.length };
+      const finish = () => done(null, reply);
+      if (admissionGate) {
+        admissionGate.waiting.push(finish);
+        if (admissionGate.waiting.length === 2) {
+          const gate = admissionGate;
+          admissionGate = undefined;
+          gate.entered.resolve();
+          for (const complete of gate.waiting) complete();
+        }
+      } else finish();
     },
   });
   const port = await new Promise((resolve, reject) =>
@@ -166,6 +179,11 @@ async function fixture(t) {
     seen,
     credentials,
     owner,
+    gateTwoCalls() {
+      const entered = Promise.withResolvers();
+      admissionGate = { entered, waiting: [] };
+      return entered.promise;
+    },
     get app() {
       return app;
     },
@@ -580,5 +598,128 @@ test(
         assert.equal(f.calls.length, 4);
         assert.equal(f.seen.length, 12);
       });
+  },
+);
+
+test(
+  "concurrent runs of one nested gRPC plan keep runtime and local variables bound to their own environment",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t),
+      project = await f.app.store.get(f.project.id);
+    project.environments[0].variables = { tag: "A" };
+    project.environments.push({
+      ...structuredClone(project.environments[0]),
+      id: "concurrent-B",
+      name: "B",
+      variables: { tag: "B" },
+    });
+    await f.app.store.save(project);
+    const plan = await f.owner(`/api/projects/${project.id}/plans`, "POST", {
+      name: "Concurrent variables",
+      environmentId: project.environments[0].id,
+      steps: [
+        {
+          id: "outer",
+          type: "repeat",
+          count: 2,
+          steps: [
+            {
+              id: "inner",
+              type: "repeat",
+              count: 1,
+              steps: [
+                {
+                  id: "rpc",
+                  type: "grpc",
+                  grpc: {
+                    definitionId: "saved-rpc",
+                    messages: [{ text: "{{message}}" }],
+                  },
+                  grpcScripts: {
+                    version: 1,
+                    before: [
+                      "pm.test('fresh concurrent local',()=>pm.expect(pm.variables.get('localTag')).to.equal(undefined));",
+                      "const sequence=(apt.getVar('sequence')||0)+1;apt.setVar('sequence',sequence);apt.setVar('selected',pm.environment.get('tag'));",
+                      "const text=pm.environment.get('tag')+'-'+sequence;pm.variables.set('localTag',text);pm.variables.set('message',text);apt.setVar('runtimeMessage',text);",
+                    ].join("\n"),
+                    after:
+                      "pm.test('own request local',()=>pm.expect(grpc.request.messages[0].text).to.equal(pm.variables.get('localTag')));apt.setVar('issued',grpc.result.messages[0].text);",
+                  },
+                },
+                {
+                  id: "consume",
+                  request: {
+                    url:
+                      f.base +
+                      "/concurrent?tag={{selected}}&reply={{issued}}&request={{runtimeMessage}}",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const bothEntered = f.gateTwoCalls();
+    const pending = Promise.all(
+      project.environments
+        .slice(0, 2)
+        .map((environment) =>
+          f.owner(`/api/projects/${project.id}/run`, "POST", {
+            planId: plan.id,
+            environmentId: environment.id,
+            grpcCredentials: f.credentials,
+          }),
+        ),
+    );
+    // The first pair of real RPCs cannot complete until both executions reached
+    // the server, so Promise.all alone is not the evidence of overlap.
+    await Promise.race([
+      bothEntered,
+      pending.then(() => {
+        throw Error("both RPCs must overlap before completion");
+      }),
+    ]);
+    const runs = await pending;
+    for (const [index, run] of runs.entries()) {
+      const tag = index === 0 ? "A" : "B";
+      assert.equal(run.status, "passed", JSON.stringify(run.results));
+      assert.equal(run.recordSaved, true);
+      assert.equal(run.results.length, 4);
+      assert.equal(run.variables.selected, tag);
+      assert.equal(run.variables.sequence, 2);
+      assert.equal(run.variables.localTag, undefined);
+      assert.equal(run.variables.message, undefined);
+      assert.equal(run.environmentId, project.environments[index].id);
+      assert.equal(run.planHash, runs[0].planHash);
+      for (let cycle = 0; cycle < 2; cycle++) {
+        const rpc = run.results[cycle * 2],
+          consumer = run.results[cycle * 2 + 1],
+          text = tag + "-" + (cycle + 1);
+        assert.equal(rpc.grpc.messages[0].text, text);
+        const wire = f.calls.find((row) => row.input.text === text);
+        assert(wire);
+        assert.equal(rpc.grpcResult.messages[0].text, wire.token);
+        assert.deepEqual(JSON.parse(consumer.response.body).query, {
+          tag,
+          reply: wire.token,
+          request: text,
+        });
+      }
+    }
+    assert.deepEqual(f.calls.map((row) => row.input.text).sort(), [
+      "A-1",
+      "A-2",
+      "B-1",
+      "B-2",
+    ]);
+    assert.equal(f.seen.length, 4);
+    const saved = await new Store(f.root).get(project.id);
+    assert.deepEqual(
+      saved.environments.map((environment) => environment.variables),
+      [{ tag: "A" }, { tag: "B" }],
+    );
+    assert.equal(saved.runs.length, 2);
   },
 );
