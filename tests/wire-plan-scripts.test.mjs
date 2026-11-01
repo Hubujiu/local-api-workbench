@@ -752,16 +752,44 @@ test("wire script semantics cannot disappear through HTTP definition exporters b
     bodyType: "raw",
     body: '{"protocolScripts":{"version":1}}',
   };
+  // OpenAPI projects contain stored normalized requests, not partial editor input.
+  // Keep the negative fixture otherwise valid so an unrelated shape error cannot
+  // satisfy the executable-state rejection assertions.
+  const normalized = normalizeRequest(request);
   const poisoned = {
-    ...request,
+    ...normalized,
     protocolScripts: { version: 1, before: "apt.setVar('x',1);" },
   };
-  assert.throws(() => normalizeRequest(poisoned));
-  assert.throws(() => toCurl(poisoned));
-  assert.throws(() => exportOpenAPI({ name: "bad", requests: [poisoned] }));
-  assert.equal(normalizeRequest(request).body, request.body);
-  assert.match(toCurl(request), /protocolScripts/);
-  assert.doesNotThrow(() =>
-    exportOpenAPI({ name: "business", requests: [request] }),
+  assert.throws(() => normalizeRequest(poisoned), /protocolScripts/);
+  assert.throws(() => toCurl(poisoned), /protocolScripts/);
+  assert.throws(
+    () => exportOpenAPI({ name: "bad", requests: [poisoned] }),
+    /protocolScripts/,
+  );
+  assert.equal(normalized.body, request.body);
+  assert.ok(toCurl(request).includes(request.body));
+  const project = {
+    name: "business",
+    requests: [
+      normalized,
+      normalizeRequest({
+        ...request,
+        url: "http://example.invalid/json",
+        bodyType: "json",
+      }),
+    ],
+  };
+  let exported;
+  assert.doesNotThrow(() => {
+    exported = exportOpenAPI(project);
+  });
+  assert.equal(
+    exported.paths["/"].post.requestBody.content["text/plain"].example,
+    request.body,
+  );
+  assert.deepEqual(
+    exported.paths["/json"].post.requestBody.content["application/json"]
+      .example,
+    { protocolScripts: { version: 1 } },
   );
 });
