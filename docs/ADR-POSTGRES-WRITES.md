@@ -4,7 +4,7 @@
 
 默认查询仍只读。只有手工数据库面板勾选“仅本次允许 PostgreSQL 写入”并确认目标主机、端口、数据库、用户及 SQL 后，才发送 allowWrite=true。取消不发送请求；切换提供方或 TLS 重置勾选；完成或失败后重置。服务端继续要求本机令牌、合法 Origin 和布尔授权标识，并要求显式主机、用户、数据库。凭据仅用于本次连接，不持久化。
 
-只读会话、脚本前后置数据库操作、CLI 和 MCP 不因此获得数据库写权限。MySQL 和其他远程提供方仍只读，不能假设所有 MySQL 存储引擎都能回滚。
+只读会话、脚本前后置数据库操作、CLI 和 MCP 不因此获得数据库写权限。本节不授权其他提供方写入；后续 MySQL 受限写入有[独立契约](ADR-MYSQL-WRITES.md)，不能假设所有 MySQL 存储引擎都能回滚。
 
 ## 支持子集与边界
 
@@ -20,10 +20,23 @@
 
 旧 PostgreSQL 查询在参数为空时可能进入 simple 协议。现将只读查询也固定为 extended 协议，避免手工 SQL 通过多命令结束 READ ONLY 事务再执行写入。保留只读事务和原查询预算；不把只读返回限制称为任意 SQL 的通用资源沙箱。
 
+## 2026-10-26：终态确认后的实际传输关闭
+
+已确认的缺口仅是清理：pg 8.16.3 收到 COMMIT 或 ROLLBACK 的成功终态后，空闲连接上的 `client.end()` 会发送 Terminate/FIN，却仍等待对端关闭。独立半开 TCP peer 可让 HTTP 响应永久等待；旧 SSH 路径有既存 8 秒通道总时限兜底，直连没有相同兜底。不能把 FIN 已发送或 graceful end 称为本地资源已关闭。
+
+每次显式 PostgreSQL 写入现在通过现有客户端工厂的公开 stream 参数持有自己的 `net.Socket`，或直接持有既有固定主机指纹 SSH 通道；构造、连接与事务均在 finally 清理范围内。清理销毁自有传输并等待实际 close，而不等待 `client.end()`、访问驱动私有字段或只做 Promise.race。已收到的 COMMIT/ROLLBACK 确认不因清理延迟降级；COMMIT 未确认仍是未知结果，不再发 ROLLBACK，也不重放写入。关闭只影响本次传输。
+
+与 MySQL 不同，pg 的 `query_timeout` 从查询入队开始，已经覆盖 extended PREPARE，不存在本次需要补齐的 PREPARE 超时缺口。连接 3000ms、驱动查询 3000ms、服务端 statement_timeout 2000ms 保持不变，不借用 MySQL 的两秒写阶段策略。独立 peer 持有 COMMIT 时约三秒返回未知结果；持有 DML 时保留原查询超时加排队回滚超时（约六秒）与“未收到回滚确认”契约，不发送 COMMIT。初始化未确认时不发送 DML。
+
+不增加 PostgreSQL 五写入租约或新的并发策略：SSH 的既有五通道容量仍只由 SSH helper 管理，并在实际关闭后释放。owner HTTP 断开仍不取消已经明确授权的写入。显式 user/database/password（包括空密码）、无环境 PG*/pgpass/native 回退、TLS/SSH 校验、SQL/行数限制与只读授权范围均不变。
+
+`tests/postgres-write-lifecycle.test.mjs` 使用真实 pg 和独立协议 peer，覆盖普通/TLS 半开终态、上述超时负控、SSH 关闭/容量归还、TLS 与 SSH 身份失败前零 DML、调用隔离、HTTP 断开语义及自然进程退出。退出证据仅说明没有引用的生命周期句柄/定时器留住进程，不证明不存在任何 unref 定时器。协议 peer 与 force-close 都不能证明服务端提交、回滚、停止执行或外部副作用消失；既有真实 PostgreSQL/SSH 事务与读回 CI 仍须在最终提交上通过，不用旧 CI 或协议测试代替。
+
 ## 固定验证
 
 - tests/postgres-write.test.mjs：显式授权与目标、引用/括号/批次逃逸、严格 TLS、计数边界、提交/回滚失败、无自动重试，以及只读协议的先失败回归。
 - tests/remote-database.mjs：CI 专用 PostgreSQL 服务，经真实 HTTP 路由完成授权拒绝、参数化写入/更新/删除、1000 行边界、1001 行回滚和只读批次逃逸拒绝；专用表自动清理，不使用用户数据库。
+- 真实 PostgreSQL 超时回归另由额外 fixture 连接先取得现有测试行的 FOR UPDATE 锁，再调用 owner HTTP UPDATE；持锁直到既有 2000ms 服务端 statement_timeout 触发且响应明确确认 ROLLBACK，finally 释放锁后经正常只读路径确认原值未变。不使用 sleep、替换驱动或修改生产预算；成功才输出 `REAL_POSTGRES_LOCK_TIMEOUT_ROLLBACK_READBACK_PASS`。这是本测试行的超时回滚/读回证据，不是 COMMIT 响应丢失、任意副作用或 raw peer 的服务端事务证明；新增检查须等待其最终头真实数据库 CI，不能借用 MySQL timeout marker。
 - tests/ui-smoke.mjs：切换提供方清除授权，确认目标及风险提示，取消后零数据库请求，MySQL 不展示写入授权。浏览器本身不冒充真实 PostgreSQL 成功执行，成功执行证据来自独立真实服务测试。
 - dde1ea720242bb9dda15eae985563fa05a7146b6 已通过402项核心回归及全部10项CI，包含真实数据库 HTTP 验证和浏览器取消路径：[Actions 39743195242](https://github.com/Hubujiu/local-api-workbench/actions/runs/39743195242)。
 - 后续界面补充：保留原有提供方切换清空/失效旧结果的行为，并增加 TLS 切换清理。仅写入等待期间锁定提供方与 TLS，保留只读查询期间切换并丢弃旧响应的既有能力。门控真实 SQLite 响应确认等待期间控件锁定，完成后恢复；PostgreSQL 面板另有截图。后续改动以其独立CI为准。

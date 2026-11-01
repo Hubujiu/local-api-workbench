@@ -110,8 +110,9 @@ test("PostgreSQL explicit DML uses extended protocol, bounded count, strict TLS 
   assert.equal(f.options().statement_timeout, 2000);
   assert.deepEqual(
     f.calls.filter((v) => typeof v === "string"),
-    ["construct", "connect", "BEGIN READ WRITE", "COMMIT", "end"],
+    ["construct", "connect", "BEGIN READ WRITE", "COMMIT"],
   );
+  assert.equal(f.options().stream.closed, true);
 });
 test("PostgreSQL count overflow, malformed count and query failures roll back without commit", async () => {
   for (const config of [
@@ -125,7 +126,8 @@ test("PostgreSQL count overflow, malformed count and query failures roll back wi
     await assert.rejects(mutatePostgres(input, f), /已回滚/);
     assert.ok(f.calls.includes("ROLLBACK"));
     assert.equal(f.calls.includes("COMMIT"), false);
-    assert.equal(f.calls.at(-1), "end");
+    assert.equal(f.options().stream.closed, true);
+    assert.equal(f.calls.includes("end"), false);
   }
 });
 test("PostgreSQL uncertain commit or rollback is never retried or called successful", async () => {
@@ -135,7 +137,8 @@ test("PostgreSQL uncertain commit or rollback is never retried or called success
   assert.equal(commit.calls.includes("ROLLBACK"), false);
   const rollback = fixture({ failQuery: true, failRollback: true });
   await assert.rejects(mutatePostgres(input, rollback), /未收到回滚确认/);
-  assert.equal(rollback.calls.at(-1), "end");
+  assert.equal(commit.options().stream.closed, true);
+  assert.equal(rollback.options().stream.closed, true);
 });
 
 test("PostgreSQL read-only path also forbids multi-command protocol and ignores write flags", async () => {
