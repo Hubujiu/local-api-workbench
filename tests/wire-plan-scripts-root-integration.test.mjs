@@ -1104,9 +1104,96 @@ test("wire script native projection checks exact markers and source-derived equi
     id: "http",
     name: "HTTP",
     url: "http://fixture.invalid/",
+    method: "POST",
     bodyType: "raw",
     body: '{"protocolScripts":{"version":1}}',
+    // Native text interchange requires an explicit persisted media header.
+    // This positive fixture must be valid independently of script markers.
+    headers: [{ key: "Content-Type", value: "text/plain", enabled: true }],
   });
+  const jsonRequest = normalizeRequest({
+    id: "http-json",
+    name: "HTTP JSON",
+    url: "http://fixture.invalid/json",
+    method: "POST",
+    bodyType: "json",
+    body: request.body,
+    headers: [
+      { key: "Content-Type", value: "application/json", enabled: true },
+    ],
+  });
+  const checkBusinessDefinitions = (exported) => {
+    const directory = exported.format === "apipost-offline-directory-v1";
+    const nodes = directory
+      ? exported.files
+          .filter(
+            (file) =>
+              /^apis\/[^/]+\.json$/.test(file.path) &&
+              !file.path.endsWith("/index.json"),
+          )
+          .map((file) => JSON.parse(file.text).data)
+      : exported.apis;
+    for (const [source, mode, media] of [
+      [request, "plain", "text/plain"],
+      [jsonRequest, "json", "application/json"],
+    ]) {
+      const node = nodes.find((item) => item.name === source.name);
+      assert(node, "business definition " + source.name);
+      assert.equal(node.method, "POST");
+      assert.equal(node.request.body.mode, mode);
+      assert.equal(node.request.body.raw, source.body);
+      assert.equal(
+        node.request.header.parameter.find(
+          (header) => header.key.toLowerCase() === "content-type",
+        ).value,
+        media,
+      );
+    }
+    if (directory) {
+      const flows = exported.files
+        .filter(
+          (file) =>
+            /^executions\/flows\/[^/]+\.json$/.test(file.path) &&
+            !file.path.endsWith("/index.json"),
+        )
+        .map((file) => JSON.parse(file.text));
+      assert.equal(flows.length, 1);
+      assert.equal(flows[0].steps.length, 1);
+      const frozen = flows[0].steps[0].api_snapshot.request;
+      assert.equal(frozen.body.mode, "plain");
+      assert.equal(frozen.body.raw, request.body);
+      assert.equal(
+        frozen.header.parameter.find(
+          (header) => header.key.toLowerCase() === "content-type",
+        ).value,
+        "text/plain",
+      );
+    }
+    const restored = { requests: [], environments: [], settings: {} };
+    importIntoProject(restored, exported);
+    for (const source of [request, jsonRequest]) {
+      const actual = restored.requests.find(
+        (item) => item.name === source.name,
+      );
+      assert(actual, "roundtrip business definition " + source.name);
+      assert.equal(actual.bodyType, source.bodyType);
+      assert.equal(actual.body, source.body);
+      assert.deepEqual(JSON.parse(actual.body), {
+        protocolScripts: { version: 1 },
+      });
+      assert.equal(
+        actual.headers.find(
+          (header) => header.key.toLowerCase() === "content-type",
+        ).value,
+        source.headers[0].value,
+      );
+    }
+    if (directory) {
+      assert.equal(restored.plans.length, 1);
+      assert.equal(restored.plans[0].steps[0].request.bodyType, "raw");
+      assert.equal(restored.plans[0].steps[0].request.body, request.body);
+    }
+  };
   assertNativeHTTPPlan({ steps: [{ request }] });
   assertNativeHTTPResult({
     results: [
@@ -1116,7 +1203,7 @@ test("wire script native projection checks exact markers and source-derived equi
   const project = {
     id: "wire-export",
     name: "Wire export",
-    requests: [request],
+    requests: [request, jsonRequest],
     folders: [],
     environments: [{ id: "env", name: "Default", variables: {} }],
     servers: [],
@@ -1134,7 +1221,11 @@ test("wire script native projection checks exact markers and source-derived equi
     steps: [{ id: "http-step", name: "HTTP", request }],
   });
   project.plans = [httpPlan];
-  assert.doesNotThrow(() => exportApipostDirectory(project));
+  let directory;
+  assert.doesNotThrow(() => {
+    directory = exportApipostDirectory(project);
+  });
+  checkBusinessDefinitions(directory);
   for (const marker of [
     undefined,
     null,
@@ -1155,7 +1246,7 @@ test("wire script native projection checks exact markers and source-derived equi
     const original = structuredClone(modified);
     assert.throws(
       () => exportApipostDirectory(modified),
-      /HTTP|protocolScripts|协议/,
+      /原生目录计划仅支持HTTP步骤/,
     );
     assert.deepEqual(modified, original);
   }
@@ -1189,7 +1280,11 @@ test("wire script native projection checks exact markers and source-derived equi
     const input = structuredClone(project);
     if (exporter === exportApipost) input.plans = [];
     const original = structuredClone(input);
-    const exported = exporter(input);
+    let exported;
+    assert.doesNotThrow(() => {
+      exported = exporter(input);
+    });
+    checkBusinessDefinitions(exported);
     assert.doesNotMatch(
       JSON.stringify(exported),
       /old-script|historical-session/,
@@ -1221,10 +1316,7 @@ test("wire script native projection checks exact markers and source-derived equi
           .find((step) => step.type === "grpc");
       step.protocolScripts = scripts;
       const original = structuredClone(modified);
-      assert.throws(
-        () => exporter(modified),
-        /已编辑派生消息计划|协议.*计划|HTTP/,
-      );
+      assert.throws(() => exporter(modified), /已编辑派生消息计划/);
       assert.deepEqual(modified, original);
     }
   }
