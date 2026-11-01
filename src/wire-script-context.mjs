@@ -136,7 +136,7 @@ export function wireScriptContext(protocol, phase, result) {
   });
 }
 
-// One budget covers the whole context, including key bytes and both phases'
+// One budget covers the whole context, including key bytes and this phase's
 // request/result views. Check descriptors before serialization can invoke code.
 export function normalizeWireScriptContext(value) {
   let nodes = 0;
