@@ -32,6 +32,7 @@ import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 
 import { normalizeNativeMock } from "./native-mock.mjs";
 
+import { validateGrpcSessionHistory } from "./grpc-session-evidence.mjs";
 import {
   ProjectCommitUncertain,
   ProjectRecoveryRequired,
@@ -320,6 +321,7 @@ export class Store {
       validateNativeInheritanceProject(project);
       validateAPIResourceTrash(project);
       validatePostmanOAuth2Project(project);
+      validateGrpcSessionHistory(project.protocolRuns ?? []);
       return project;
     }
     const project = JSON.parse(
@@ -328,6 +330,7 @@ export class Store {
     validateNativeInheritanceProject(project);
     validateAPIResourceTrash(project);
     validatePostmanOAuth2Project(project);
+    validateGrpcSessionHistory(project.protocolRuns ?? []);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }

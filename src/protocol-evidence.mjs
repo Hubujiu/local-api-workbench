@@ -1,3 +1,4 @@
+import { validateGrpcSessionRecord } from "./grpc-session-evidence.mjs";
 import { validateWireSessionRecord } from "./wire-session-evidence.mjs";
 import { validateWireRecord } from "./wire-evidence.mjs";
 import { validateProtocolRuns as validateGrpcRuns } from "./grpc.mjs";
@@ -22,7 +23,8 @@ export function validateProtocolRuns(values = []) {
       continue;
     }
     if (record.type === "grpc") {
-      validateGrpcRuns([record]);
+      if (record.mode === "session") validateGrpcSessionRecord(record);
+      else validateGrpcRuns([record]);
       continue;
     }
     if (

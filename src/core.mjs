@@ -95,6 +95,7 @@ import {
   postmanOAuth2Definition,
 } from "../public/postman-oauth2-model.js";
 import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
+import { validateGrpcSessionHistory } from "./grpc-session-evidence.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
@@ -2424,6 +2425,7 @@ export function restoreProject(document) {
   copy.plans = (copy.plans || []).map(snapshotPlan);
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
+  validateGrpcSessionHistory(copy.protocolRuns ?? []);
   copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
