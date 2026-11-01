@@ -82,3 +82,45 @@ semantics are unchanged. Local verification uses only fake Errors/Promise
 callbacks and a tiny fake-error TAP child, plus syntax/format checks; it does
 not run SQLite/native/database workloads. Exact-commit CI must establish the
 next result; an old CI rerun cannot validate this change.
+
+## Bounded operation-stage evidence (not a root-cause fix)
+
+Windows desktop job124714254611 / CI41261066003 at root eb63e640 reached
+worker-ready at 76ms, then reported an unknown write after parent timeout and
+SIGKILL at 2086ms without a result. Its native SQLite closure and desktop smoke
+were byte-identical to the prior accepted root. This does not locate a stalled
+native operation, prove no commit, or justify replay. The original 30s smoke
+assertion was not satisfied and its independent readback was never reached.
+
+Writes now emit a bounded diagnostic side channel around validation, read-only
+probe open/close, write open, BEGIN, prepare, step, change-count checks, COMMIT,
+rollback and close. There are no per-row events, extra SQL calls or readbacks.
+The worker measures integer elapsed milliseconds from its first operation
+observation with a monotonic clock; these are not host elapsed timestamps.
+Worker, supervisor and host each independently admit at most 16 attempts,
+including rejected traffic, and accept only three own-data envelope fields,
+known stages, bounded integer times and a forward subsequence of a fixed
+acyclic state graph. Missing events are allowed; repeated, backward and
+post-commit rollback events are rejected. Only the last accepted stage and
+elapsed value are retained. The HTTP/CI boundary reconstructs those two fields;
+no SQL, parameters, paths, credentials, messages or stacks are added.
+
+Every operation-stage envelope remains diagnostic-only even if malformed or
+containing result-shaped fields. It cannot fall through to the result channel.
+Any stage, including commit-complete, may be followed by timeout or failed
+process close: it never upgrades an unknown write to success. The existing
+completed envelope + exit0 + no timeout/process fault condition is unchanged.
+Both 2000ms timers, 16/64MiB limits, disconnect termination, SQL order,
+transaction/finally behavior and no-replay semantics remain unchanged. Observer
+validation, clock and send failures are swallowed and cannot substitute their
+own exception for a SQL result/error. No timer is reset or extended.
+
+Local verification is limited to syntax, formatting and reviewed pure helper
+tests. Real subprocess/Worker, SQLite and packaged desktop execution remains
+ordinary exact-commit CI only. CI fixtures cover stage-only and result-smuggling
+envelopes, secrets/invalid Unicode, nonmonotonic or excessive traffic, one
+execution followed by a hung worker after commit-stage, unchanged invalid-mode
+errors and throwing-observer commit/rollback behavior. Existing native tests,
+success assertions and deadlines remain required. This is evidence gathering,
+not a performance/root-cause fix; a later green run cannot establish why the
+historical write failed. No recovery write or failure-time readback was added.

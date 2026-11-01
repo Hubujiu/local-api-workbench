@@ -178,6 +178,103 @@ test("public SQLite diagnostics reconstruct only bounded known fields", async ()
   );
 });
 
+// These exercise real process/Worker IPC only in ordinary CI. Operation stages
+// must never become a result, including when they smuggle a result-shaped key.
+for (const smuggled of [false, true])
+  test(`SQLite operation-only worker exit cannot acknowledge a write (smuggled=${smuggled})`, async (t) => {
+    const h = await harness(
+      t,
+      null,
+      `import {parentPort} from 'node:worker_threads';parentPort.postMessage({kind:'sqlite-worker-ready'});parentPort.postMessage({kind:'sqlite-operation-stage',stage:'commit-complete',elapsedMs:1${smuggled ? ",result:{committed:true}" : ""}});`,
+    );
+    await assert.rejects(h.runSQLiteProcess({ mode: "write" }), (error) => {
+      safe(error, "SQLITE_WRITE_OUTCOME_UNKNOWN");
+      assert.equal(error.diagnostics.receivedResult, false);
+      assert.equal(error.diagnostics.timeout, false);
+      assert.equal(
+        error.diagnostics.operationStage,
+        smuggled ? undefined : "commit-complete",
+      );
+      return true;
+    });
+  });
+
+for (const boundary of ["supervisor", "host"])
+  test(`SQLite ${boundary} progress rejects secrets, replayed stages and overflow without result fallthrough`, async (t) => {
+    const traffic = `
+      send({kind:'sqlite-operation-stage',stage:'begin',elapsedMs:10});
+      send({kind:'sqlite-operation-stage',stage:'step',elapsedMs:9});
+      send({kind:'sqlite-operation-stage',stage:'begin',elapsedMs:11});
+      send({kind:'sqlite-operation-stage',stage:'commit-complete',elapsedMs:11,result:{committed:true},payload:{result:{committed:true}}});
+      for(let i=0;i<20;i++)send({kind:'sqlite-operation-stage',stage:'PRIVATE_SQL_SENTINEL\\ud800',elapsedMs:i+10});
+      send({kind:'sqlite-operation-stage',stage:'commit-complete',elapsedMs:40});`;
+    const h =
+      boundary === "supervisor"
+        ? await harness(
+            t,
+            null,
+            `import {parentPort} from 'node:worker_threads';const send=v=>parentPort.postMessage(v);${traffic}`,
+          )
+        : await harness(
+            t,
+            `process.once('message',()=>{const send=v=>process.send(v);${traffic}process.disconnect();});`,
+          );
+    await assert.rejects(h.runSQLiteProcess({ mode: "write" }), (error) => {
+      safe(error, "SQLITE_WRITE_OUTCOME_UNKNOWN");
+      assert.equal(error.diagnostics.receivedResult, false);
+      assert.equal(error.diagnostics.operationStage, "begin");
+      assert.equal(error.diagnostics.operationElapsedMs, 10);
+      return true;
+    });
+  });
+
+test(
+  "SQLite commit-stage followed by hung worker keeps deadline and one execution",
+  { timeout: 7000 },
+  async (t) => {
+    const h = await harness(
+      t,
+      null,
+      `import {parentPort,workerData} from 'node:worker_threads';import {appendFileSync} from 'node:fs';appendFileSync(workerData.marker,'one\\n');parentPort.postMessage({kind:'sqlite-worker-ready'});parentPort.postMessage({kind:'sqlite-operation-stage',stage:'commit-complete',elapsedMs:1});setInterval(()=>{},100);`,
+    );
+    const marker = path.join(h.root, "one-execution.txt");
+    await assert.rejects(
+      h.runSQLiteProcess({ mode: "write", marker }),
+      (error) => {
+        safe(error, "SQLITE_WRITE_OUTCOME_UNKNOWN");
+        assert.equal(error.diagnostics.timeout, true);
+        assert.equal(error.diagnostics.receivedResult, false);
+        assert.equal(error.diagnostics.operationStage, "commit-complete");
+        assert.equal(error.diagnostics.phase, "worker-ready");
+        assert(error.diagnostics.elapsedMs >= 1900);
+        assert(error.diagnostics.elapsedMs < 4500);
+        return true;
+      },
+    );
+    assert.equal(await readFile(marker, "utf8"), "one\n");
+  },
+);
+
+test("SQLite real execution worker preserves invalid-mode error envelope", async (t) => {
+  const h = await harness(t, null);
+  for (const name of [
+    "database-execution-worker.mjs",
+    "database.mjs",
+    "database-values.mjs",
+  ])
+    await copyFile(
+      new URL("../src/" + name, import.meta.url),
+      path.join(h.root, name),
+    );
+  for (const input of [{}, { mode: "invalid" }])
+    await assert.rejects(h.runSQLiteProcess(input), (error) => {
+      assert.equal(error.message, "数据库操作模式无效");
+      assert.equal(error.code, undefined);
+      assert.equal(error.diagnostics, undefined);
+      return true;
+    });
+});
+
 test(
   "authenticated HTTP preserves unknown-write protection and exposes only redacted stage evidence",
   { timeout: 10000 },
