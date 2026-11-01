@@ -88,6 +88,13 @@ test("gRPC plan uses per-run mTLS and metadata without saving credentials, then 
           id: "secure-step",
           type: "grpc",
           grpc: { definition: f.definition, messages: [{ text: "payload" }] },
+          grpcScripts: {
+            version: 1,
+            before:
+              "pm.test('no transport credentials',()=>{pm.expect(grpc.request.tls).to.equal(undefined);pm.expect(grpc.request.metadata).to.equal(undefined);});console.log(JSON.stringify(grpc));",
+            after:
+              "pm.test('no response metadata',()=>{pm.expect(grpc.result.metadata).to.equal(undefined);pm.expect(grpc.result.trailers).to.equal(undefined);});console.log(JSON.stringify(grpc));",
+          },
         },
       ],
     }),
