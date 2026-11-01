@@ -109,7 +109,8 @@ export function exportApipostDirectory(project, options = {}) {
       input.steps?.some(
         (step) =>
           (step.type !== undefined && step.type !== "http") ||
-          Object.hasOwn(step, "grpcScripts"),
+          Object.hasOwn(step, "grpcScripts") ||
+          Object.hasOwn(step, "protocolScripts"),
       )
     )
       throw Error("原生目录计划仅支持HTTP步骤");

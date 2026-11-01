@@ -58,7 +58,6 @@ import { normalizeNativeMock } from "./native-mock.mjs";
 import { normalizeNativeMCPState } from "./native-mcp-plan.mjs";
 import { validateAPIResourceTrash } from "./api-resource-lifecycle.mjs";
 import { mergeImportedDocuments } from "./apipost-documents.mjs";
-import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 
@@ -96,7 +95,16 @@ import {
 } from "../public/postman-oauth2-model.js";
 import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { validateGrpcSessionHistory } from "./grpc-session-evidence.mjs";
-import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
+import {
+  snapshotWireStep,
+  wirePlanCredentials,
+  resolveWirePlanPayload,
+} from "./wire-plan.mjs";
+import { runScriptedWireStep } from "./wire-plan-scripts.mjs";
+import {
+  validatePlanProtocolScripts,
+  rejectHTTPProtocolScripts,
+} from "./wire-script-context.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
   runScriptedGrpcStep,
@@ -298,6 +306,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  rejectHTTPProtocolScripts(r);
   validatePostmanOAuth2Project({ requests: [r] });
   validatePathSerialization(r);
   const nativeInheritance = normalizeNativeInheritanceBinding(
@@ -568,6 +577,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   const snapshot = {
     ...(importedNativeFlowSource === undefined
@@ -688,6 +698,7 @@ export async function runPlan(
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
@@ -721,12 +732,15 @@ export async function runPlan(
   for (const step of planLeaves(snapshot.steps))
     collections.select(step.request?.postmanCollectionId);
   validatePlanGrpcScripts(snapshot.steps);
+  const requiresWireExecutor = validatePlanProtocolScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
   );
+  if (requiresWireExecutor && typeof executeProtocol !== "function")
+    throw Error("此执行入口未授权protocol调用");
   for (const step of planLeaves(snapshot.steps))
     if (!["grpc", "socketio", "protocol"].includes(step.type))
       step.request.serviceSnapshot = true;
@@ -848,6 +862,31 @@ export async function runPlan(
             replaceVariables(vars, effectiveScopes(scopes));
           },
         });
+      } else if (
+        step.type === "protocol" &&
+        step.protocolScripts &&
+        (step.protocolScripts.before?.trim() ||
+          step.protocolScripts.after?.trim())
+      ) {
+        await runScriptedWireStep({
+          step,
+          record,
+          scopes,
+          functions: snapshot.functions || [],
+          executionContext,
+          credentials: wireCredentials.get(step.id),
+          signal,
+          executeProtocol,
+          interpolate,
+          evaluateAssertions,
+          extractResponseValue,
+          onScopeChanges,
+          publishScopes: (accepted) => {
+            scopes = accepted;
+            committedScopes = structuredClone(scopes);
+            replaceVariables(vars, effectiveScopes(scopes));
+          },
+        });
       } else if (["grpc", "socketio", "protocol"].includes(step.type)) {
         const isGrpc = step.type === "grpc";
         const validated = isGrpc
@@ -872,28 +911,14 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
-          const mode = validated.protocol.definition.templateMode;
-          const definition = resolveProtocolDefinition(
-            validated.protocol.definition,
+          const protocol = resolveWirePlanPayload(
+            validated.protocol,
             vars,
-            validated.protocol.message,
+            interpolate,
           );
-          const message =
-            validated.protocol.message === undefined
-              ? undefined
-              : mode === "variables"
-                ? definition.message
-                : mode === "literal"
-                  ? validated.protocol.message
-                  : interpolate(validated.protocol.message, vars);
-          // SSE body and WS/TCP message in the result are the actual resolved payload.
-          if (definition.type !== "sse") delete definition.message;
-          record.protocol.definition = definition;
-          if (message !== undefined) record.protocol.message = message;
+          record.protocol = structuredClone(protocol);
           request = {
-            ...validated.protocol,
-            definition,
-            ...(message !== undefined ? { message } : {}),
+            ...protocol,
             ...wireCredentials.get(step.id),
           };
         } else {
@@ -1390,8 +1415,8 @@ export async function runPlan(
     if (stopAfterExtractionFailure) break;
     if (record.failure || record.redirectFailure) break;
     if (
-      step.type === "grpc" &&
-      step.grpcScripts &&
+      ((step.type === "grpc" && step.grpcScripts) ||
+        (step.type === "protocol" && step.protocolScripts)) &&
       record.scopeCommit?.outcome === "unknown"
     )
       break;
@@ -2062,6 +2087,7 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    rejectHTTPProtocolScripts(source);
     assertRedirectExportable(source);
     validatePathSerialization(source);
     const r = sdkOpenAPIDefinition(project, source);
@@ -2204,6 +2230,7 @@ export function exportOpenAPI(project) {
   });
 }
 export function toCurl(input, { collectionResolved = false } = {}) {
+  rejectHTTPProtocolScripts(input);
   validatePostmanOAuth2Project({ requests: [input] });
   if (input.postmanCollectionId !== undefined && !collectionResolved)
     throw Error("cURL须先通过项目上下文解析Postman collection变量");

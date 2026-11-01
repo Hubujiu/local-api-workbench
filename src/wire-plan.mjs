@@ -1,6 +1,10 @@
 import { planLeaves, activePlanLeaves } from "./plan-repeat.mjs";
 import { resolveHandshake } from "./protocol-handshake.mjs";
-import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
+import {
+  validateProtocolTemplate,
+  resolveProtocolDefinition,
+} from "./protocol-text-templates.mjs";
+import { normalizeProtocolScripts } from "./wire-script-context.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
@@ -112,6 +116,7 @@ export function snapshotWireStep(step) {
           "extract",
           "assertions",
           "expectedStatus",
+          "protocolScripts",
         ].includes(k),
     ) ||
     !plain(step.protocol) ||
@@ -126,7 +131,14 @@ export function snapshotWireStep(step) {
         ].includes(k),
     )
   )
-    throw Error("协议计划仅保存冻结定义和消息，不保存凭据或脚本");
+    throw Error("协议计划仅保存冻结定义、消息与版本化协议脚本，不保存凭据");
+  const scriptField = Object.getOwnPropertyDescriptor(step, "protocolScripts");
+  if (
+    scriptField &&
+    (!scriptField.enumerable || !Object.hasOwn(scriptField, "value"))
+  )
+    throw Error("protocolScripts必须是普通JSON数据字段");
+  const scripts = normalizeProtocolScripts(scriptField?.value);
   const { message: savedMessage, ...rawDefinition } =
     step.protocol.definition || {};
   const definition = normalizeProtocol(rawDefinition);
@@ -173,8 +185,33 @@ export function snapshotWireStep(step) {
     ...structuredClone(step),
     type: "protocol",
     protocol,
+    ...(scripts === undefined ? {} : { protocolScripts: scripts }),
     expectedStatus,
     ...rules(step),
+  };
+}
+// Identical mode selection for ordinary and scripted plans. This function does
+// not interpolate endpoints or recursively resolve replacement values.
+export function resolveWirePlanPayload(protocol, variables, interpolate) {
+  const mode = protocol.definition.templateMode;
+  const definition = resolveProtocolDefinition(
+    protocol.definition,
+    variables,
+    protocol.message,
+  );
+  const message =
+    protocol.message === undefined
+      ? undefined
+      : mode === "variables"
+        ? definition.message
+        : mode === "literal"
+          ? protocol.message
+          : interpolate(protocol.message, variables);
+  if (definition.type !== "sse") delete definition.message;
+  return {
+    ...protocol,
+    definition,
+    ...(message !== undefined ? { message } : {}),
   };
 }
 export function freezeWireStep(project, step) {

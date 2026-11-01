@@ -38,6 +38,10 @@ import {
   validateGrpcScriptBinding,
 } from "./grpc-script-context.mjs";
 import { isDeepStrictEqual } from "node:util";
+import {
+  normalizeWireScriptContext,
+  validateWireScriptBinding,
+} from "./wire-script-context.mjs";
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
@@ -88,6 +92,7 @@ export function runScript(code, input, options = {}) {
     signal,
     cookieSession,
     grpcContext,
+    wireContext,
     databaseQuery,
     nativeWrite,
     nativePhase,
@@ -96,6 +101,8 @@ export function runScript(code, input, options = {}) {
   // Native HTTP/database task capabilities must never cross into protocol mode.
   if (grpcContext !== undefined)
     validateGrpcScriptBinding(input, options.requestLimit ?? 10, options);
+  if (wireContext !== undefined)
+    validateWireScriptBinding(input, options.requestLimit ?? 10, options);
   const nativeWaits = compileNativeWaits(options.nativeWaits);
   const responseAssertions = compileNativeAssertions(
     options.responseAssertions,
@@ -144,8 +151,18 @@ export function runScript(code, input, options = {}) {
   if (responseAssertions.length > assertionLimit)
     throw Error("声明的原生断言超过本次共享断言预算");
 
-  if (Object.hasOwn(input, "grpcContext"))
+  if (
+    Object.hasOwn(input, "grpcContext") ||
+    Object.hasOwn(input, "wireContext")
+  )
     throw Error("协议上下文只能由执行入口提供");
+  if (wireContext !== undefined && grpcContext !== undefined)
+    throw Error("协议脚本上下文不能同时绑定wire与gRPC");
+  if (wireContext !== undefined) {
+    if (cookieSession !== undefined) throw Error("协议脚本不能绑定Cookie会话");
+    validateWireScriptBinding(input, requestLimit, options);
+    normalizeWireScriptContext(wireContext);
+  }
   if (grpcContext !== undefined) {
     validateGrpcScriptBinding(input, requestLimit, options);
     normalizeGrpcScriptContext(grpcContext);
@@ -187,7 +204,7 @@ export function runScript(code, input, options = {}) {
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
-        ...(grpcContext === undefined
+        ...(grpcContext === undefined && wireContext === undefined
           ? {
               databaseTaskCount: databaseOperations.length,
               responseExtractions,
@@ -207,6 +224,10 @@ export function runScript(code, input, options = {}) {
           grpcContext === undefined
             ? undefined
             : normalizeGrpcScriptContext(grpcContext),
+        wireContext:
+          wireContext === undefined
+            ? undefined
+            : normalizeWireScriptContext(wireContext),
         code,
         input,
         activityBudgetMs,
@@ -254,7 +275,7 @@ export function runScript(code, input, options = {}) {
           } else {
             try {
               if (
-                grpcContext !== undefined &&
+                (grpcContext !== undefined || wireContext !== undefined) &&
                 (!isDeepStrictEqual(result.request, input.request || {}) ||
                   result.finalBody !== undefined ||
                   result.responseOverride != null ||
@@ -263,7 +284,11 @@ export function runScript(code, input, options = {}) {
                   networkRequests.length ||
                   databaseQueries.length)
               )
-                throw Error("gRPC脚本不能输出HTTP请求/响应修改或数据库活动");
+                throw Error(
+                  grpcContext !== undefined
+                    ? "gRPC脚本不能输出HTTP请求/响应修改或数据库活动"
+                    : "协议脚本不能输出HTTP请求/响应修改或数据库活动",
+                );
               resolve({
                 ...result,
                 responseOverride: validateResponseMutation(

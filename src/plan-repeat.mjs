@@ -129,6 +129,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
               "assertions",
               "expectedStatus",
               ...(step.type === "grpc" ? ["grpcScripts"] : []),
+              ...(step.type === "protocol" ? ["protocolScripts"] : []),
             ]
           : ["id", "name", "enabled", "type", "request", "expectedStatus"]
         : undefined,

@@ -4,6 +4,7 @@ const protocolFields = [
   "grpcScripts",
   "socketio",
   "protocol",
+  "protocolScripts",
   "grpcResult",
   "socketioResult",
   "protocolResult",

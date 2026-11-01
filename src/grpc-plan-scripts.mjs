@@ -1,16 +1,11 @@
-import { runScript } from "./scripts.mjs";
+import { validateCollectionScope } from "./postman-collection-scopes.mjs";
 import {
   grpcScriptContext,
   normalizeGrpcScripts,
 } from "./grpc-script-context.mjs";
 import { grpcPlanRequest, snapshotGrpcStep } from "./grpc-plan.mjs";
-import {
-  createScopes,
-  effectiveScopes,
-  scopeChanges,
-} from "./variable-scopes.mjs";
-import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
-import { validateCollectionScope } from "./postman-collection-scopes.mjs";
+import { effectiveScopes } from "./variable-scopes.mjs";
+import { createPlanScriptPhases } from "./plan-script-phases.mjs";
 
 export function validatePlanGrpcScripts(steps) {
   for (const step of steps) {
@@ -49,100 +44,33 @@ export async function runScriptedGrpcStep({
   if (!executeGrpc) throw Error("此执行入口未授权grpc调用");
   record.type = "grpc";
   record.grpc = structuredClone(validated.grpc);
-  let scopes = structuredClone(initialScopes),
-    localVariables = {};
-  const cancelled = () => {
-    if (signal?.aborted)
-      throw Error("执行已取消，未开始新的gRPC脚本或变量提交");
-  };
-  const commit = async (nextScopes, extracted, phase) => {
-    cancelled();
-    record.scriptPhase = phase;
-    const changes = scopeChanges(scopes, nextScopes);
-    if (changes.length && onScopeChanges) {
-      try {
-        const accepted = await onScopeChanges(changes, signal);
-        if (accepted?.globals && accepted?.environment) {
-          nextScopes.globals = accepted.globals;
-          nextScopes.environment = accepted.environment;
-        }
-      } catch (error) {
-        if (
-          error instanceof ProjectCommitUncertain ||
-          error?.code === "PROJECT_COMMIT_UNCERTAIN"
-        ) {
-          record.scopeCommit = { outcome: "unknown", retrySafe: false, phase };
-          throw Error(
-            "gRPC脚本变量持久化提交未确认；请重新读取项目，勿自动重试",
-          );
-        }
-        throw Error(
-          "gRPC脚本变量持久化失败；未采纳本阶段变量，勿重放已完成请求",
-        );
-      }
-    }
-    // A confirmed write remains committed even if cancelled during acknowledgement.
-    scopes = nextScopes;
-    publishScopes(scopes);
-    if (extracted) record.extracted = extracted;
-    delete record.scriptPhase;
-    for (const change of changes)
-      record.logs.push({
-        phase: "variables",
-        scriptPhase: phase,
-        scope: change.scope,
-        name: change.name,
-        operation: change.after.exists ? "set" : "unset",
-      });
-  };
-  const script = async (phase, state, messages, result) => {
-    const code = validated.grpcScripts[phase];
-    if (!code.trim()) return state;
-    cancelled();
-    record.scriptPhase = phase;
-    const scripted = await runScript(
-      code,
-      {
-        allowNetwork: false,
-        executionContext,
-        variables: effectiveScopes(state),
-        scopes: state,
-        localVariables,
-        functions,
-        request: { id: String(step.id || ""), name: String(step.name || "") },
-      },
-      {
-        signal,
-        requestLimit: 0,
-        grpcContext: grpcScriptContext(validated, phase, messages, result),
-      },
-    );
-    record.logs.push(...scripted.logs.map((message) => ({ phase, message })));
-    record.assertions.push(
-      ...scripted.tests.map((test) => ({ ...test, phase })),
-    );
-    cancelled();
-    if (scripted.tests.some((test) => !test.passed))
-      throw Error(
-        phase === "before" ? "gRPC前置脚本断言失败" : "gRPC后置脚本断言失败",
-      );
-    delete record.scriptPhase;
-    localVariables = structuredClone(scripted.localVariables || {});
-    // Protocol scripts are never bound to the preceding HTTP collection.
-    validateCollectionScope(scripted.scopes, undefined);
-    return createScopes(scripted.variables, scripted.scopes);
-  };
-  const beforeScopes = await script(
+  const phases = createPlanScriptPhases({
+    step,
+    record,
+    scopes: initialScopes,
+    functions,
+    executionContext,
+    signal,
+    onScopeChanges,
+    publishScopes,
+    scripts: validated.grpcScripts,
+    protocolLabel: "gRPC",
+    validateScopes: (scopes) => validateCollectionScope(scopes, undefined),
+    contextOptions: (phase, messages, result) => ({
+      grpcContext: grpcScriptContext(validated, phase, messages, result),
+    }),
+  });
+  const beforeScopes = await phases.script(
     "before",
-    structuredClone(scopes),
+    structuredClone(phases.scopes),
     validated.grpc.messages,
   );
   if (validated.grpcScripts.before.trim())
-    await commit(beforeScopes, undefined, "before");
-  cancelled();
+    await phases.commit(beforeScopes, undefined, "before");
+  phases.cancelled();
   const messages = interpolate(validated.grpc.messages, {
-    ...effectiveScopes(scopes),
-    ...localVariables,
+    ...effectiveScopes(phases.scopes),
+    ...phases.localVariables,
   });
   // Apply the same message envelope again after interpolation, before transport.
   snapshotGrpcStep({ ...validated, grpc: { ...validated.grpc, messages } });
@@ -153,7 +81,7 @@ export async function runScriptedGrpcStep({
     signal,
   );
   record.grpcResult = { ...result, metadata: [], trailers: [] };
-  cancelled();
+  phases.cancelled();
   const evidence = {
     status: result.status.code,
     duration: result.durationMs,
@@ -166,9 +94,9 @@ export async function runScriptedGrpcStep({
       phase: "response",
     })),
   );
-  const nextScopes = await script(
+  const nextScopes = await phases.script(
     "after",
-    structuredClone(scopes),
+    structuredClone(phases.scopes),
     messages,
     result,
   );
@@ -194,6 +122,6 @@ export async function runScriptedGrpcStep({
     else nextScopes.globals[extraction.name] = value;
     extracted[extraction.name] = value;
   }
-  await commit(nextScopes, extracted, "after");
+  await phases.commit(nextScopes, extracted, "after");
   record.status = "passed";
 }
