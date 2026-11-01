@@ -107,7 +107,9 @@ export function exportApipostDirectory(project, options = {}) {
       throw Error("原生目录尚不能无损导出MCP历史来源；请使用项目备份");
     if (
       input.steps?.some(
-        (step) => step.type !== undefined && step.type !== "http",
+        (step) =>
+          (step.type !== undefined && step.type !== "http") ||
+          Object.hasOwn(step, "grpcScripts"),
       )
     )
       throw Error("原生目录计划仅支持HTTP步骤");

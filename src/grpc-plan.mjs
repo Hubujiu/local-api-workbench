@@ -2,6 +2,7 @@ import { planLeaves, activePlanLeaves } from "./plan-repeat.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 import { grpcTransport, normalizeGrpcDefinition } from "./grpc.mjs";
 import { grpcSource } from "./grpc-schema.mjs";
+import { normalizeGrpcScripts } from "./grpc-script-context.mjs";
 const plain = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
 export function snapshotGrpcStep(step) {
@@ -11,12 +12,14 @@ export function snapshotGrpcStep(step) {
     "name",
     "enabled",
     "grpc",
+    "grpcScripts",
     "extract",
     "assertions",
     "expectedStatus",
   ];
   if (Object.keys(step).some((key) => !keys.includes(key)))
-    throw Error("gRPC计划暂不支持额外字段、脚本或保存凭据");
+    throw Error("gRPC计划不支持额外字段、通用HTTP脚本或保存凭据");
+  const grpcScripts = normalizeGrpcScripts(step.grpcScripts);
   if (
     !plain(step.grpc) ||
     Object.keys(step.grpc).some(
@@ -92,6 +95,7 @@ export function snapshotGrpcStep(step) {
     ...structuredClone(step),
     type: "grpc",
     grpc: { definition, messages: structuredClone(messages) },
+    ...(grpcScripts === undefined ? {} : { grpcScripts }),
     extract: structuredClone(extract),
     assertions: structuredClone(assertions),
     expectedStatus,

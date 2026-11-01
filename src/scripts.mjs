@@ -33,6 +33,11 @@ import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { normalizeExecutionContext } from "./script-context.mjs";
 import { validateResources } from "./resources.mjs";
 import { Worker } from "node:worker_threads";
+import {
+  normalizeGrpcScriptContext,
+  validateGrpcScriptBinding,
+} from "./grpc-script-context.mjs";
+import { isDeepStrictEqual } from "node:util";
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
@@ -82,11 +87,15 @@ export function runScript(code, input, options = {}) {
   const {
     signal,
     cookieSession,
+    grpcContext,
     databaseQuery,
     nativeWrite,
     nativePhase,
     databaseOrdinals,
   } = options;
+  // Native HTTP/database task capabilities must never cross into protocol mode.
+  if (grpcContext !== undefined)
+    validateGrpcScriptBinding(input, options.requestLimit ?? 10, options);
   const nativeWaits = compileNativeWaits(options.nativeWaits);
   const responseAssertions = compileNativeAssertions(
     options.responseAssertions,
@@ -135,6 +144,12 @@ export function runScript(code, input, options = {}) {
   if (responseAssertions.length > assertionLimit)
     throw Error("声明的原生断言超过本次共享断言预算");
 
+  if (Object.hasOwn(input, "grpcContext"))
+    throw Error("协议上下文只能由执行入口提供");
+  if (grpcContext !== undefined) {
+    validateGrpcScriptBinding(input, requestLimit, options);
+    normalizeGrpcScriptContext(grpcContext);
+  }
   if (input.finalBody !== undefined)
     finalBodyLiteral(input.finalBody, input.request || {});
   normalizeScriptDialect(input.request?.scriptDialect);
@@ -172,14 +187,26 @@ export function runScript(code, input, options = {}) {
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
-        databaseTaskCount: databaseOperations.length,
-        responseExtractions,
-        requestSnapshot,
-        responseAssertions,
-        nativeWaits,
-        // Never trust serialized fields supplied by a request, response or VM.
-        responseHeaderEvidence: readResponseHeaderEvidence(input.response),
-        responseCookieEvidence: readResponseCookieEvidence(input.response),
+        ...(grpcContext === undefined
+          ? {
+              databaseTaskCount: databaseOperations.length,
+              responseExtractions,
+              requestSnapshot,
+              responseAssertions,
+              nativeWaits,
+              // Never trust serialized fields supplied by a request, response or VM.
+              responseHeaderEvidence: readResponseHeaderEvidence(
+                input.response,
+              ),
+              responseCookieEvidence: readResponseCookieEvidence(
+                input.response,
+              ),
+            }
+          : {}),
+        grpcContext:
+          grpcContext === undefined
+            ? undefined
+            : normalizeGrpcScriptContext(grpcContext),
         code,
         input,
         activityBudgetMs,
@@ -226,6 +253,17 @@ export function runScript(code, input, options = {}) {
             reject(error);
           } else {
             try {
+              if (
+                grpcContext !== undefined &&
+                (!isDeepStrictEqual(result.request, input.request || {}) ||
+                  result.finalBody !== undefined ||
+                  result.responseOverride != null ||
+                  result.responseOriginals != null ||
+                  result.visualization != null ||
+                  networkRequests.length ||
+                  databaseQueries.length)
+              )
+                throw Error("gRPC脚本不能输出HTTP请求/响应修改或数据库活动");
               resolve({
                 ...result,
                 responseOverride: validateResponseMutation(

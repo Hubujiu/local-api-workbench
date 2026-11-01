@@ -1,6 +1,7 @@
 // Native flow definitions are HTTP-only. Do not erase canonical protocol state.
 const protocolFields = [
   "grpc",
+  "grpcScripts",
   "socketio",
   "protocol",
   "grpcResult",

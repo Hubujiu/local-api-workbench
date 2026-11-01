@@ -7,6 +7,11 @@ import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { observeBootstrap } from "./script-bootstrap-diagnostics.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
+import {
+  grpcScriptContextSource,
+  normalizeGrpcScriptContext,
+  validateGrpcScriptBinding,
+} from "./grpc-script-context.mjs";
 import { collectionIteratorsSource } from "./script-collection-iterators.mjs";
 import { headerEntriesSource } from "./script-header-entries.mjs";
 import { urlQueryToolsSource } from "./script-url-query.mjs";
@@ -104,6 +109,16 @@ const receive = (message) => {
 };
 parentPort.on("message", receive);
 try {
+  const grpcContext =
+    workerData.grpcContext === undefined
+      ? undefined
+      : normalizeGrpcScriptContext(workerData.grpcContext);
+  if (grpcContext !== undefined)
+    validateGrpcScriptBinding(
+      workerData.input,
+      workerData.requestLimit,
+      workerData,
+    );
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
   const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
   const facadeBundle = useURLFacade
@@ -665,6 +680,14 @@ try {
     if(errorJSON){reject(Error(errorJSON));return;}
     try{const result=JSON.parse(responseJSON);for(const entry of result.assignments)({environment,global,temporary})[entry.type](entry.name,entry.value);if(Object.prototype.hasOwnProperty.call(result,"rows"))log(JSON.stringify(result.rows));resolve();}catch(error){reject(error);}
   })))(globalThis.__nativeDatabaseBridge,pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),console.log.bind(console));delete globalThis.__nativeDatabaseBridge;`);
+    if (grpcContext !== undefined)
+      install(
+        "(" +
+          grpcScriptContextSource +
+          ")({context:JSON.parse(" +
+          JSON.stringify(JSON.stringify(grpcContext)) +
+          "),pm,apt,request});",
+      );
     run(compatibilitySources.join(";\n"));
   });
   let remaining = deadline - monotonicNow();
@@ -684,7 +707,10 @@ try {
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   for (const [index, code] of [
     library,
-    "(async()=>{\n" + workerData.code + "\n})()",
+    "(async()=>{\n" +
+      (grpcContext !== undefined ? '"use strict";\n' : "") +
+      workerData.code +
+      "\n})()",
   ].entries()) {
     const result = measuredBounded(
       index === 0 ? "function-library" : "user-script",

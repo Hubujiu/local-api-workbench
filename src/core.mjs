@@ -98,6 +98,10 @@ import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
 import {
+  runScriptedGrpcStep,
+  validatePlanGrpcScripts,
+} from "./grpc-plan-scripts.mjs";
+import {
   snapshotSocketIOStep,
   socketioPlanCredentials,
 } from "./socketio-plan.mjs";
@@ -563,6 +567,7 @@ export function snapshotPlan(plan) {
     throw Error("未知执行状态规则");
   if (!Array.isArray(plan.steps) || plan.steps.length > 200)
     throw Error("执行计划必须包含至多 200 步");
+  validatePlanGrpcScripts(plan.steps);
   const snapshot = {
     ...(importedNativeFlowSource === undefined
       ? {}
@@ -682,6 +687,7 @@ export async function runPlan(
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  validatePlanGrpcScripts(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
     const auth = step.request?.auth;
@@ -713,6 +719,7 @@ export async function runPlan(
   const collections = createCollectionSession(collectionScopes);
   for (const step of planLeaves(snapshot.steps))
     collections.select(step.request?.postmanCollectionId);
+  validatePlanGrpcScripts(snapshot.steps);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
   const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
   const socketCredentials = socketioPlanCredentials(
@@ -816,7 +823,31 @@ export async function runPlan(
       replaceVariables(vars, effectiveScopes(scopes));
     };
     try {
-      if (["grpc", "socketio", "protocol"].includes(step.type)) {
+      if (
+        step.type === "grpc" &&
+        step.grpcScripts &&
+        (step.grpcScripts.before?.trim() || step.grpcScripts.after?.trim())
+      ) {
+        await runScriptedGrpcStep({
+          step,
+          record,
+          scopes,
+          functions: snapshot.functions || [],
+          executionContext,
+          credentials: credentials.get(step.id),
+          signal,
+          executeGrpc,
+          interpolate,
+          evaluateAssertions,
+          extractResponseValue,
+          onScopeChanges,
+          publishScopes: (accepted) => {
+            scopes = accepted;
+            committedScopes = structuredClone(scopes);
+            replaceVariables(vars, effectiveScopes(scopes));
+          },
+        });
+      } else if (["grpc", "socketio", "protocol"].includes(step.type)) {
         const isGrpc = step.type === "grpc";
         const validated = isGrpc
           ? snapshotGrpcStep(step)
@@ -1357,6 +1388,12 @@ export async function runPlan(
     }
     if (stopAfterExtractionFailure) break;
     if (record.failure || record.redirectFailure) break;
+    if (
+      step.type === "grpc" &&
+      step.grpcScripts &&
+      record.scopeCommit?.outcome === "unknown"
+    )
+      break;
   }
   const writeReceipts = nativeWrite
     ? await finishNativeWrite(nativeWrite)
