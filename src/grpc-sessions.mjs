@@ -17,6 +17,7 @@ import {
   grpcSessionMessageBytes,
 } from "./grpc-session-evidence.mjs";
 import { recordSaveFailure, recordSaveSuccess } from "./execution-evidence.mjs";
+import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 
 const plain = (value) =>
   value !== null &&
@@ -446,11 +447,15 @@ export class GrpcSessions {
         s.receipt = recordSaveSuccess(s.id);
         s.receiptState = "saved";
       } catch (error) {
-        s.receipt = recordSaveFailure(s.projectId, s.id, error);
-        s.receiptState =
-          s.receipt.persistenceOutcome.code === "PROJECT_COMMIT_UNCERTAIN"
-            ? "unknown"
-            : "failed";
+        // A later failed read cannot prove that a previously uncertain commit rolled back.
+        s.commitUncertain ||=
+          error instanceof ProjectCommitUncertain &&
+          error.projectId === s.projectId;
+        const outcome = s.commitUncertain
+          ? new ProjectCommitUncertain(s.projectId, error)
+          : error;
+        s.receipt = recordSaveFailure(s.projectId, s.id, outcome);
+        s.receiptState = s.commitUncertain ? "unknown" : "failed";
       }
       return s.receipt;
     });

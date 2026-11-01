@@ -327,6 +327,62 @@ test("unknown and generic saves are singleflight, GET is inert, explicit reconci
   }
 });
 
+test("another project's uncertain commit is neither leaked nor attributed to this session", async (t) => {
+  const store = {
+    async get() {
+      throw new ProjectCommitUncertain(
+        "foreign-project",
+        Error("private foreign failure"),
+      );
+    },
+    async append() {
+      assert.fail("foreign read failure must not append");
+    },
+  };
+  const f = fixture(t, { store }),
+    { id } = f.open();
+  const result = await f.sessions.cancel("project", id);
+  assert.equal(result.receiptState, "failed");
+  assert.equal(result.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /foreign-project|private foreign failure/,
+  );
+});
+
+test("an unknown commit stays unknown through failed readback until evidence is confirmed", async (t) => {
+  let readingFailed = false;
+  const records = [];
+  const store = {
+    async get() {
+      if (readingFailed) throw Error("storage still unavailable");
+      return { protocolRuns: structuredClone(records) };
+    },
+    async append(project, _field, record) {
+      records.push(structuredClone(record));
+      throw new ProjectCommitUncertain(project, Error("lost acknowledgement"));
+    },
+  };
+  const f = fixture(t, { store }),
+    { id } = f.open();
+  assert.equal(
+    (await f.sessions.cancel("project", id)).receiptState,
+    "unknown",
+  );
+  readingFailed = true;
+  const again = await f.sessions.reconcile("project", id);
+  assert.equal(again.receiptState, "unknown");
+  assert.equal(again.persistenceOutcome.code, "PROJECT_COMMIT_UNCERTAIN");
+  assert.equal(again.recordSaved, false);
+  readingFailed = false;
+  assert.equal(
+    (await f.sessions.reconcile("project", id)).receiptState,
+    "saved",
+  );
+  assert.equal(records.length, 1);
+  assert.equal(f.calls.length, 1);
+});
+
 test("fifty unresolved retained receipts block admission; a confirmed record can be reclaimed", async (t) => {
   let failing = true;
   const records = [];
@@ -357,6 +413,44 @@ test("fifty unresolved retained receipts block admission; a confirmed record can
   assert.equal(f.calls.length, 51);
   assert.throws(() => f.snapshot(ids[0]));
   await f.sessions.cancel("project", next.id);
+});
+
+test("terminal sessions release shared active slots even while fifty saves remain pending", async (t) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const records = [];
+  const store = {
+    async get() {
+      return { protocolRuns: structuredClone(records) };
+    },
+    async append(_project, _field, record) {
+      await gate;
+      records.push(structuredClone(record));
+    },
+  };
+  const f = fixture(t, { store }),
+    cancellations = [];
+  try {
+    for (let index = 0; index < 50; index++) {
+      const { id } = f.open();
+      cancellations.push(f.sessions.cancel("project", id));
+      assert.equal(f.snapshot(id).receiptState, "pending");
+    }
+    assert.equal(
+      f.calls.length,
+      50,
+      "each terminal transition freed its transport slot before save acknowledgement",
+    );
+    assert.throws(() => f.open(), /50/);
+    assert.equal(f.sessions.sessions.size, 50);
+  } finally {
+    release();
+  }
+  const receipts = await Promise.all(cancellations);
+  assert(receipts.every((value) => value.receiptState === "saved"));
+  assert.equal(records.length, 50);
 });
 
 test("shutdown waits for pending persistence without retrying failed receipts or admitting late opens", async (t) => {

@@ -487,7 +487,8 @@ export async function createApp({
           const action = parts[3];
           // Existing terminal evidence must remain readable while its project
           // storage is damaged or requires recovery. Ownership is checked below;
-          // only GET/stop bypass a project read, never start/send execution.
+          // only observation/terminal storage actions bypass a project read,
+          // never start/send execution.
           const evidenceOnly =
             parts[4] &&
             ((action === "protocol-sessions" &&

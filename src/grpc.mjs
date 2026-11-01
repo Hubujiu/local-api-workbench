@@ -295,9 +295,9 @@ export function prepareGrpcMessage(selected, message) {
   validateMessage(selected.type, message);
   const json = JSON.stringify(message);
   const jsonBytes = Buffer.byteLength(json);
+  if (jsonBytes > MAX_BYTES) throw Error("gRPC请求消息超过1MiB");
   const wireBytes = selected.desc.requestSerialize(message).length;
-  if (jsonBytes > MAX_BYTES || wireBytes > MAX_BYTES)
-    throw Error("gRPC请求消息或编码超过1MiB");
+  if (wireBytes > MAX_BYTES) throw Error("gRPC请求编码超过1MiB");
   return { message: JSON.parse(json), jsonBytes, wireBytes };
 }
 export function createGrpcClient(address, credentials) {

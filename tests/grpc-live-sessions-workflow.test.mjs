@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile, mkdtemp, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import * as grpc from "@grpc/grpc-js";
 import * as loader from "@grpc/proto-loader";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
+import { createMCP } from "../src/mcp.mjs";
 
 // Real owner HTTP + grpc-js acceptance. Run only in the normal GitHub CI suite;
 // authoring this file does not require starting a local application or fixture.
@@ -131,6 +132,14 @@ async function fixture(t, { secure = false } = {}) {
         call.on("data", (message) => value.messages.push(message));
         call.on("end", () => {
           value.ended = true;
+          if (
+            value.messages.some((message) => message.text === "no-response")
+          ) {
+            // grpc-js's public callback status-only branch deliberately omits the
+            // message. done(null, null) would instead fail response serialization.
+            done({ code: grpc.status.OK, details: "OK" }, null, trailers());
+            return;
+          }
           done(
             null,
             {
@@ -276,8 +285,15 @@ async function fixture(t, { secure = false } = {}) {
     saved(id) {
       return wait(
         id,
-        (value) =>
-          value.lifecycle === "terminal" && value.receiptState === "saved",
+        (value) => {
+          assert(
+            !["failed", "unknown"].includes(value.receiptState),
+            JSON.stringify(value),
+          );
+          return (
+            value.lifecycle === "terminal" && value.receiptState === "saved"
+          );
+        },
         "terminal session and durable receipt",
       );
     },
@@ -326,7 +342,7 @@ test("interactive bidi interleaves owner sends and polls, freezes its definition
     count: 2,
   };
   const second = { text: "second", count: 3 };
-  successful(await f.action(id, "send", { message: first }));
+  await f.send(id, first);
   const partial = await f.wait(id, (value) => value.messages.length === 1);
   assert.equal(partial.lifecycle, "active");
   assert.equal(
@@ -349,7 +365,7 @@ test("interactive bidi interleaves owner sends and polls, freezes its definition
       body: { id: definition.id },
     }),
   );
-  successful(await f.action(id, "send", { message: second }));
+  await f.send(id, second);
   await f.wait(id, (value) => value.messages.length === 2);
   successful(await f.action(id, "half-close"));
   const terminal = await f.saved(id);
@@ -445,6 +461,30 @@ test("interactive bidi interleaves owner sends and polls, freezes its definition
     "restart and restore must not reopen transport",
   );
   assert.equal(JSON.stringify(await f.record(id)), immutable);
+  const mcp = createMCP({ store: f.app.store, projects: [f.project.id] });
+  const catalogue = await mcp({ id: 1, method: "tools/list" });
+  assert.equal(
+    catalogue.result.tools.some((tool) =>
+      /grpc.*session|session.*grpc/i.test(tool.name),
+    ),
+    false,
+  );
+  const read = await mcp({
+    id: 2,
+    method: "tools/call",
+    params: {
+      name: "localapi_get_protocol_run",
+      arguments: { projectId: f.project.id, recordId: id },
+    },
+  });
+  assert.notEqual(read.result.isError, true, JSON.stringify(read));
+  assert.deepEqual(JSON.parse(read.result.content[0].text), record);
+  privateTransport(read);
+  assert.equal(
+    f.calls.length,
+    1,
+    "read-only MCP history must not reopen or replay a session",
+  );
 });
 
 test("client streaming sends only explicitly, aggregates after half-close, and retains callback plus wire status", async (t) => {
@@ -478,6 +518,26 @@ test("client streaming sends only explicitly, aggregates after half-close, and r
   assert.equal(f.calls[0].messages.length, 3);
 });
 
+test("client-stream trailers-only OK preserves missing-response callback failure independently from remote status", async (t) => {
+  const f = await fixture(t);
+  const definition = await f.define("Collect");
+  const opened = await f.open(definition);
+  await f.send(opened.id, { text: "no-response" });
+  successful(await f.action(opened.id, "half-close"));
+  const result = await f.saved(opened.id);
+  assert.equal(result.status.code, grpc.status.UNIMPLEMENTED);
+  assert.equal(result.remoteStatus.code, grpc.status.OK);
+  assert.equal(result.callback.code, grpc.status.UNIMPLEMENTED);
+  assert.equal(result.callback.responseReceived, false);
+  assert.deepEqual(result.messages, []);
+  const record = await f.record(opened.id);
+  assert.equal(record.status, "failed");
+  assert.equal(record.result.remoteStatus.code, grpc.status.OK);
+  assert.equal(record.result.status.code, grpc.status.UNIMPLEMENTED);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].messages.length, 1);
+});
+
 test("server streaming retains partial cancellation and remote error evidence without forging OK", async (t) => {
   const f = await fixture(t);
   const definition = await f.define("Watch");
@@ -494,7 +554,6 @@ test("server streaming retains partial cancellation and remote error evidence wi
   assert.equal((await f.record(id)).status, "partial");
   await until(() => f.calls[0].cancelled, "remote cancellation");
   const frozen = JSON.stringify(cancelled);
-  await delay(25);
   assert.equal(
     JSON.stringify(await f.get(id)),
     frozen,
@@ -604,6 +663,13 @@ test("interactive sessions and finite grpc-run share five slots, released by rea
   const chat = await f.define("Chat");
   const slow = await f.define("Slow", { timeoutMs: 5000 });
   const unary = await f.define("Unary");
+  const plan = successful(
+    await f.request("plans", {
+      body: {
+        steps: [{ type: "grpc", grpc: { definition: unary, messages: [{}] } }],
+      },
+    }),
+  );
   const active = [];
   for (let index = 0; index < 4; index++) active.push(await f.open(chat));
   await until(() => f.calls.length === 4, "four live session transports");
@@ -619,6 +685,16 @@ test("interactive sessions and finite grpc-run share five slots, released by rea
       await f.request("grpc-sessions", { body: { definitionId: chat.id } }),
     );
     rejected(await f.request("grpc-run", { body: { definitionId: unary.id } }));
+    const reflection = await f.request("grpc-reflection", {
+      body: { target: unary.target, service: unary.service },
+    });
+    rejected(reflection);
+    assert.match(reflection.value.error, /5个/);
+    const busy = successful(
+      await f.request("run", { body: { planId: plan.id } }),
+    );
+    assert.equal(busy.status, "failed");
+    assert.match(busy.results[0].error, /5个/);
     assert.equal(
       f.calls.length,
       5,
@@ -669,18 +745,27 @@ test("polling and repeated sends never renew the saved definition's total deadli
       const snapshot = await f.get(opened.id);
       assert.equal(snapshot.deadlineAt, opened.deadlineAt);
       if (snapshot.lifecycle === "terminal") return snapshot;
+      if (
+        snapshot.requestMessages.some((entry) => entry.sendState === "pending")
+      )
+        return false;
       const response = await f.action(opened.id, "send", {
         message: { text: "keep-alive-" + sent++ },
       });
       if (response.status !== 200) {
         rejected(response);
-        assert.equal(
-          (await f.get(opened.id)).lifecycle,
-          "terminal",
-          "only deadline termination may reject this sequential send",
+        const current = await f.get(opened.id);
+        assert(
+          current.lifecycle === "terminal" ||
+            current.requestMessages.some(
+              (entry) => entry.sendState === "pending",
+            ),
+          "a late sequential send can only race deadline or outstanding local progress",
         );
       }
-      await delay(100);
+      // Pace traffic across the configured budget; the next write is gated by
+      // observed local receipt state, never an assumption that this delay drains it.
+      await delay(Math.floor(definition.timeoutMs / 12));
       return false;
     },
     "fixed deadline despite continued traffic",
@@ -754,7 +839,7 @@ test("request count and cumulative bytes are bounded before transport while vali
   assert.equal((await f.record(bytes.id)).result.requestMessages.length, 3);
 });
 
-test("response count and byte overflow freeze bounded partial evidence and cancel the peer", async (t) => {
+test("response count and byte overflow freeze bounded partial evidence", async (t) => {
   const f = await fixture(t);
   for (const [method, message, expectedCount] of [
     ["Overflow", {}, 100],
@@ -783,7 +868,6 @@ test("response count and byte overflow freeze bounded partial evidence and cance
     assert.deepEqual(record.result.messages, result.messages);
     assert.equal(record.result.responseBytes, result.responseBytes);
     const frozen = JSON.stringify(result);
-    await delay(25);
     assert.equal(JSON.stringify(await f.get(opened.id)), frozen);
   }
 });
@@ -938,4 +1022,191 @@ test("normal application shutdown waits for automatic gRPC receipts and restart 
     stored.protocolRuns,
   );
   assert.equal(f.calls.length, callCount);
+});
+
+test("generic save failure stays explicitly unsaved until storage-only reconciliation and never repeats a send", async (t) => {
+  const f = await fixture(t);
+  const definition = await f.define("Chat");
+  const opened = await f.open(definition);
+  await f.send(opened.id, { text: "effect-before-disk-failure" });
+  await f.wait(opened.id, (value) => value.messages.length === 1);
+  const append = f.app.store.append.bind(f.app.store);
+  let attempts = 0,
+    attemptedRecord;
+  f.app.store.append = async (...args) => {
+    if (args[1] === "protocolRuns") {
+      attempts++;
+      attemptedRecord = structuredClone(args[2]);
+      throw Error("private-disk-error " + f.root);
+    }
+    return append(...args);
+  };
+  try {
+    const failed = successful(await f.action(opened.id, "cancel"));
+    assert.equal(failed.lifecycle, "terminal");
+    assert.equal(failed.receiptState, "failed");
+    assert.equal(failed.recordSaved, false);
+    assert.equal(failed.recordId, null);
+    assert.equal(failed.attemptedRecordId, opened.id);
+    assert.equal(failed.persistenceOutcome.code, "RECORD_SAVE_FAILED");
+    assert.equal(failed.persistenceOutcome.retry_safe, false);
+    assert.equal(JSON.stringify(failed).includes(f.root), false);
+    assert.doesNotMatch(JSON.stringify(failed), /private-disk-error/);
+    assert.equal(attempts, 1);
+    await until(
+      () => f.calls[0].cancelled,
+      "cancelled stream before storage repair",
+    );
+    assert.deepEqual(await f.get(opened.id), failed);
+    assert.deepEqual(await f.get(opened.id), failed);
+    assert.equal(attempts, 1, "GET must not retry failed persistence");
+    assert.equal(
+      (await new Store(f.root).get(f.project.id)).protocolRuns.length,
+      0,
+    );
+    f.app.store.append = async (...args) => {
+      if (args[1] === "protocolRuns") attempts++;
+      return append(...args);
+    };
+    const repaired = await Promise.all([
+      f.action(opened.id, "reconcile"),
+      f.action(opened.id, "reconcile"),
+    ]);
+    for (const response of repaired) {
+      const receipt = successful(response);
+      assert.equal(receipt.receiptState, "saved");
+      assert.equal(receipt.recordId, opened.id);
+      assert.equal(receipt.recordSaved, true);
+      assert.deepEqual(receipt.requestMessages, failed.requestMessages);
+      assert.deepEqual(receipt.messages, failed.messages);
+    }
+    assert.equal(
+      attempts,
+      2,
+      "one failed attempt plus one joined explicit storage retry",
+    );
+    const stored = await new Store(f.root).get(f.project.id);
+    assert.equal(stored.protocolRuns.length, 1);
+    assert.deepEqual(stored.protocolRuns[0], attemptedRecord);
+    successful(await f.action(opened.id, "cancel"));
+    assert.equal(attempts, 2);
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].messages.length, 1);
+  } finally {
+    f.app.store.append = append;
+  }
+});
+
+test("real post-journal disk failure stays unknown through GET and reconciles the same immutable record without append or network replay", async (t) => {
+  const f = await fixture(t);
+  const definition = await f.define("Chat");
+  const opened = await f.open(definition);
+  await f.send(opened.id, { text: "effect-before-journal-failure" });
+  await f.wait(opened.id, (value) => value.messages.length === 1);
+  const directory = f.app.store.directory(f.project.id);
+  const apis = path.join(directory, "apis");
+  const journalPath = path.join(directory, ".transaction.json");
+  const append = f.app.store.append.bind(f.app.store);
+  const get = f.app.store.get.bind(f.app.store);
+  let appends = 0,
+    reads = 0,
+    obstacle = false;
+  f.app.store.append = async (...args) => {
+    if (args[1] === "protocolRuns") appends++;
+    return append(...args);
+  };
+  f.app.store.get = async (...args) => {
+    reads++;
+    return get(...args);
+  };
+  try {
+    // The fixture project has no API records, so reads remain valid. Its next
+    // write publishes the journal, then mkdir(apis) fails on this real file.
+    await rm(apis, { recursive: true });
+    await writeFile(apis, "private-journal-obstacle");
+    obstacle = true;
+    const unknown = successful(await f.action(opened.id, "cancel"));
+    assert.equal(unknown.receiptState, "unknown");
+    assert.equal(unknown.lifecycle, "terminal");
+    assert.equal(unknown.recordSaved, false);
+    assert.equal(unknown.recordId, null);
+    assert.equal(unknown.attemptedRecordId, opened.id);
+    assert.equal(unknown.persistenceOutcome.code, "PROJECT_COMMIT_UNCERTAIN");
+    assert.equal(unknown.persistenceOutcome.commit_outcome, "unknown");
+    assert.equal(unknown.persistenceOutcome.retry_safe, false);
+    assert.equal(unknown.persistenceOutcome.project_id, f.project.id);
+    assert.equal(JSON.stringify(unknown).includes(f.root), false);
+    assert.doesNotMatch(JSON.stringify(unknown), /private-journal-obstacle/);
+    assert.equal(appends, 1);
+    await until(
+      () => f.calls[0].cancelled,
+      "remote cancellation before recovery",
+    );
+    const journal = JSON.parse(await readFile(journalPath, "utf8"));
+    const candidate = journal.protocolRuns.find(
+      (record) => record.id === opened.id,
+    );
+    assert(
+      candidate,
+      "the uncertain attempt must really have published its immutable journal record",
+    );
+    const readsBeforePolling = reads;
+    assert.deepEqual(await f.get(opened.id), unknown);
+    assert.deepEqual(await f.get(opened.id), unknown);
+    rejected(
+      await f.request("grpc-sessions/" + opened.id, {
+        method: "GET",
+        projectId: f.other.id,
+      }),
+    );
+    assert.equal(
+      reads,
+      readsBeforePolling,
+      "GET cannot invoke project read/recovery even while storage is damaged",
+    );
+    assert.equal(appends, 1);
+    await rm(apis);
+    obstacle = false;
+    assert.deepEqual(await f.get(opened.id), unknown);
+    assert.equal(
+      reads,
+      readsBeforePolling,
+      "repairing the obstacle alone does not authorize GET to reconcile",
+    );
+    assert.deepEqual(JSON.parse(await readFile(journalPath, "utf8")), journal);
+    const repaired = await Promise.all([
+      f.action(opened.id, "reconcile"),
+      f.action(opened.id, "reconcile"),
+    ]);
+    for (const response of repaired) {
+      const receipt = successful(response);
+      assert.equal(receipt.receiptState, "saved");
+      assert.equal(receipt.recordSaved, true);
+      assert.equal(receipt.recordId, opened.id);
+      assert.equal(receipt.definitionHash, unknown.definitionHash);
+      assert.deepEqual(receipt.requestMessages, unknown.requestMessages);
+      assert.deepEqual(receipt.messages, unknown.messages);
+    }
+    assert.equal(
+      appends,
+      1,
+      "matching recovered journal evidence is read back, never appended again",
+    );
+    const stored = await new Store(f.root).get(f.project.id);
+    assert.equal(stored.protocolRuns.length, 1);
+    assert.deepEqual(stored.protocolRuns[0], candidate);
+    assert.equal(
+      stored.protocolRuns[0].resultHash,
+      evidenceHash(candidate.result),
+    );
+    await assert.rejects(readFile(journalPath), { code: "ENOENT" });
+    successful(await f.action(opened.id, "cancel"));
+    assert.equal(appends, 1);
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].messages.length, 1);
+  } finally {
+    f.app.store.append = append;
+    f.app.store.get = get;
+    if (obstacle) await rm(apis, { force: true });
+  }
 });
