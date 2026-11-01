@@ -663,15 +663,13 @@ test(
     });
     const bothEntered = f.gateTwoCalls();
     const pending = Promise.all(
-      project.environments
-        .slice(0, 2)
-        .map((environment) =>
-          f.owner(`/api/projects/${project.id}/run`, "POST", {
-            planId: plan.id,
-            environmentId: environment.id,
-            grpcCredentials: f.credentials,
-          }),
-        ),
+      project.environments.slice(0, 2).map((environment) =>
+        f.owner(`/api/projects/${project.id}/run`, "POST", {
+          planId: plan.id,
+          environmentId: environment.id,
+          grpcCredentials: f.credentials,
+        }),
+      ),
     );
     // The first pair of real RPCs cannot complete until both executions reached
     // the server, so Promise.all alone is not the evidence of overlap.
