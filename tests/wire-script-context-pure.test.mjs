@@ -168,6 +168,13 @@ test("wire context distinguishes SSE handshake status from bounded native comple
   assert.equal(context.result.result.status, 200);
   assert.deepEqual(context.result.result.events, native.result.events);
   assert.equal(Object.hasOwn(context.result.result, "timedOut"), false);
+  const timeout = wireScriptContext(protocol, "after", {
+    status: "partial",
+    durationMs: 1000,
+    result: { status: 0, events: [], timedOut: true, cancelled: false },
+  });
+  assert.equal(timeout.result.result.status, 0);
+  assert.deepEqual(timeout.result.result.events, []);
   protocol.definition = {
     ...protocol.definition,
     method: "POST",
