@@ -1,3 +1,4 @@
+import { validateTemplateProvenance } from "./protocol-text-templates.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
 import { protocolEvidenceHash } from "./wire-evidence.mjs";
 import { createHash } from "node:crypto";
@@ -34,6 +35,9 @@ export function makeWireSessionRecord(session, snapshot) {
       Date.parse(snapshot.finishedAt) - Date.parse(snapshot.createdAt),
     ),
     definition: structuredClone(session.definition),
+    ...(session.templateProvenance
+      ? { templateProvenance: structuredClone(session.templateProvenance) }
+      : {}),
     definitionHash: protocolEvidenceHash(session.definition),
     result: { ...snapshot, resultTruncated: truncated },
     resultHash: null,
@@ -55,6 +59,7 @@ export function validateWireSessionRecord(record) {
       "durationMs",
       "definition",
       "definitionHash",
+      "templateProvenance",
       "result",
       "resultHash",
       "status",
@@ -79,6 +84,7 @@ export function validateWireSessionRecord(record) {
     protocolEvidenceHash(record.definition) !== record.definitionHash
   )
     throw Error("交互协议定义哈希无效");
+  validateTemplateProvenance(record.templateProvenance, definition);
   const r = record.result;
   if (
     !only(r, [

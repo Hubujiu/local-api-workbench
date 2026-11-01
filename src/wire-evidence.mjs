@@ -1,3 +1,10 @@
+import {
+  protocolTemplateContext,
+  resolveProtocolDefinition,
+  validateTemplateProvenance,
+} from "./protocol-text-templates.mjs";
+import { validateTCPDelimiterEvidence } from "./tcp-delimiter.mjs";
+import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { websocketConfiguration } from "./websocket-client.mjs";
 import { decodeISO8583 } from "./iso8583-codec.mjs";
 import { createHash, randomUUID } from "node:crypto";
@@ -34,7 +41,16 @@ export function prepareWireExecution(project, input) {
     saved = (project.protocols || []).find((x) => x.id === input.definitionId);
     if (!saved) throw Error("协议定义不存在或不属于此项目");
     if (
-      ["url", "host", "port"].some((key) => input[key] !== undefined) ||
+      [
+        "url",
+        "host",
+        "port",
+        "method",
+        "body",
+        "completion",
+        "templateMode",
+        "delimiterHex",
+      ].some((key) => input[key] !== undefined) ||
       (input.type !== undefined && input.type !== saved.type)
     )
       throw Error("已保存协议定义不能在调用时替换端点");
@@ -48,9 +64,13 @@ export function prepareWireExecution(project, input) {
     throw Error("该协议不支持 WebSocket TLS/子协议配置");
   if (type === "tcp" && input.headers !== undefined)
     throw Error("TCP 不支持 HTTP Headers");
-  const definition = normalizeProtocol({
+  const sourceDefinition = normalizeProtocol({
     ...(saved || {}),
     type,
+    ...((saved?.templateMode ?? input.templateMode) !== undefined
+      ? { templateMode: saved?.templateMode ?? input.templateMode }
+      : {}),
+    ...protocolRequestOptions(saved || input),
     name: saved?.name ?? input.name,
     url: saved?.url ?? (type === "tcp" ? input.host : input.url),
     ...(type === "tcp"
@@ -69,9 +89,22 @@ export function prepareWireExecution(project, input) {
         }
       : {}),
   });
+  const context =
+    sourceDefinition.templateMode === "variables"
+      ? protocolTemplateContext(project, input.environmentId)
+      : undefined;
+  const definition = context
+    ? resolveProtocolDefinition(sourceDefinition, context.variables)
+    : sourceDefinition;
+  const templateProvenance = context
+    ? {
+        sourceDefinitionHash: protocolEvidenceHash(sourceDefinition),
+        environmentId: context.environmentId,
+      }
+    : undefined;
   const duration = Math.min(
     30000,
-    Math.max(100, Number(input.duration) || 3000),
+    Math.max(100, Number(input.duration ?? definition.duration) || 3000),
   );
   const limit = (value) =>
     Number.isFinite(Number(value))
@@ -84,8 +117,12 @@ export function prepareWireExecution(project, input) {
   };
   const request = {
     ...input,
+    ...protocolRequestOptions(definition),
     ...options,
     type,
+    ...(definition.templateMode !== undefined
+      ? { templateMode: definition.templateMode }
+      : {}),
     ...(type === "tcp"
       ? {
           host: definition.url,
@@ -109,6 +146,15 @@ export function prepareWireExecution(project, input) {
   }
   return {
     definition,
+    ...(context
+      ? {
+          templateContext: {
+            ...context,
+            defaultMessage: sourceDefinition.message,
+          },
+          templateProvenance,
+        }
+      : {}),
     definitionHash: protocolEvidenceHash(definition),
     options,
     request,
@@ -146,6 +192,9 @@ export function makeWireRecord(
     startedAt: new Date(startedAt).toISOString(),
     durationMs: Math.max(0, Date.now() - startedAt),
     definition: prepared.definition,
+    ...(prepared.templateProvenance
+      ? { templateProvenance: prepared.templateProvenance }
+      : {}),
     definitionHash: prepared.definitionHash,
     requestHash: prepared.requestHash,
     options: prepared.options,
@@ -181,6 +230,7 @@ export function validateWireRecord(record) {
       "durationMs",
       "definition",
       "definitionHash",
+      "templateProvenance",
       "requestHash",
       "options",
       "status",
@@ -211,6 +261,7 @@ export function validateWireRecord(record) {
     protocolEvidenceHash(definition) !== record.definitionHash
   )
     throw Error("协议执行定义或哈希不一致");
+  validateTemplateProvenance(record.templateProvenance, definition);
   const requestHash =
     record.type === "sse"
       ? null
@@ -273,6 +324,7 @@ export function validateWireRecord(record) {
           "partial",
           "decoded",
           "decodeError",
+          ...(definition.completion === "delimiter" ? ["framing"] : []),
         ]) ||
         !text(r.base64, 1400000) ||
         !Number.isInteger(r.size) ||
@@ -285,6 +337,8 @@ export function validateWireRecord(record) {
         (r.decodeError !== undefined && !text(r.decodeError, 4096))
       )
         throw Error("TCP 执行证据无效");
+      if (definition.completion === "delimiter")
+        validateTCPDelimiterEvidence(definition, r);
       if (definition.message?.format === "iso8583") {
         let decoded;
         try {

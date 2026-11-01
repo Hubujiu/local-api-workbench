@@ -1,4 +1,5 @@
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
+import { resolveProtocolDefinition } from "./protocol-text-templates.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   runScriptedGrpcStep,
@@ -559,13 +560,27 @@ export async function runPlan(
             ...credentials.get(step.id),
           };
         } else if (step.type === "protocol") {
+          const mode = validated.protocol.definition.templateMode;
+          const definition = resolveProtocolDefinition(
+            validated.protocol.definition,
+            vars,
+            validated.protocol.message,
+          );
           const message =
             validated.protocol.message === undefined
               ? undefined
-              : interpolate(validated.protocol.message, vars);
+              : mode === "variables"
+                ? definition.message
+                : mode === "literal"
+                  ? validated.protocol.message
+                  : interpolate(validated.protocol.message, vars);
+          // SSE body and WS/TCP message in the result are the actual resolved payload.
+          if (definition.type !== "sse") delete definition.message;
+          record.protocol.definition = definition;
           if (message !== undefined) record.protocol.message = message;
           request = {
             ...validated.protocol,
+            definition,
             ...(message !== undefined ? { message } : {}),
             ...wireCredentials.get(step.id),
           };
