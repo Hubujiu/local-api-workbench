@@ -1,3 +1,4 @@
+import { validateGrpcSessionHistory } from "./grpc-session-evidence.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1781,6 +1782,7 @@ export function restoreProject(document) {
   copy.plans = (copy.plans || []).map(snapshotPlan);
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
+  validateGrpcSessionHistory(copy.protocolRuns ?? []);
   copy.protocolRuns = (copy.protocolRuns || []).slice(0, 50);
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];

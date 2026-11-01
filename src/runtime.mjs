@@ -1,3 +1,4 @@
+import { validateGrpcSessionHistory } from "./grpc-session-evidence.mjs";
 import {
   ProjectCommitUncertain,
   ProjectRecoveryRequired,
@@ -254,11 +255,15 @@ export class Store {
     if (
       existsSync(path.join(directory, "project.json")) ||
       existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    ) {
+      const project = await readProject(directory, key);
+      validateGrpcSessionHistory(project.protocolRuns ?? []);
+      return project;
+    }
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
     );
+    validateGrpcSessionHistory(project.protocolRuns ?? []);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
