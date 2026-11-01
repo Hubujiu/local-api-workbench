@@ -36,7 +36,7 @@ budget injection is exposed in production, no quota is replenished and no host
 operation is claimed to be preemptible. The completion guard rejects late values
 rather than claiming it can interrupt host JSON parsing.
 
-New CI runtime regressions synchronously wrap and restore host `JSON.parse` to
+Initial CI runtime regressions synchronously wrap and restore host `JSON.parse` to
 wait only on quoted-string output parsing, after VM execution has returned. A
 single bounded 300 ms tail must be rejected; two 160 ms tails must share the same
 250 ms allowance. Exact output-tail counts prevent an unrelated early timeout
@@ -49,3 +49,43 @@ Local verification is limited to syntax, formatting and a source-only wiring
 regression which never imports the runtime. The new VM regressions are authored
 for ordinary exact-commit CI, not executed locally. Their runtime result remains
 pending; static checks alone do not prove interruption or complete acceptance.
+
+## Deterministic cumulative accounting regression (2026-11-01)
+
+The cumulative fixture's first call failed at the terminal budget guard in
+macOS CI run `41257656020`, job `124704152321`. Its case duration was
+317.847333 ms, but the log does not separate VM, host parse and runner scheduling
+time. The production adapter, vendor assets and test were unchanged from the
+previous passing integration. A 160 ms timed wait does not guarantee that the
+complete first evaluation returns within 250 ms; requiring that upper bound
+made this an unreliable cumulative-accounting oracle. The failure is not
+evidence that the production guard should accept a late result.
+
+The real 300 ms final-output-tail test remains unchanged and still verifies
+actual elapsed-time rejection before publication. The cumulative test instead
+starts a separate, bounded Node subprocess. That test-only fixture temporarily
+replaces `performance.now` before dynamically importing the unmodified adapter,
+then immediately restores its original property descriptor in `finally`. The
+adapter captures the controlled monotonic clock through its existing code; no
+production injection hook, environment switch, alternate engine or budget is
+introduced. The runner process's clock is never replaced.
+
+The fixture executes the real QuickJS engine and checked original library. Only
+successful host quoted-string output parses advance the captured clock, by
+exactly 160 ms each. The first call must succeed at 160 ms. The second must reach
+its output tail and fail with the exact budget error at 320 ms. A third call must
+fail without another output or guest RNG call. A fresh scope must successfully
+produce a third output at 480 ms without resetting the clock. `JSON.parse` is
+restored in `finally`; the parent checks normal child exit and the exact evidence
+object, not merely a success status. A real 10 s subprocess watchdog with a hard
+kill and bounded output protects this test fixture; it does not alter any
+application or VM limit.
+
+This separates two proofs: deterministic cumulative debit and terminal refusal
+through real output tails, versus the unchanged real-clock overrun guard. A
+per-call reset to 250 ms, missing debit, or return before the final budget check
+would make the second call succeed and fail the new assertion. No retry,
+first-call-error acceptance, shorter wait or relaxed production limit is used.
+All production and vendor files remain byte-identical. Local verification is
+source-only, syntax and formatting; the new subprocess fixture is not executed
+locally and requires ordinary exact-commit CI runtime verification.

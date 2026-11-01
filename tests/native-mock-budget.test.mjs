@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import { createNativeMockEvaluator } from "../src/native-mock-library.mjs";
 
 // CI-only runtime regression: delay the host output parse, after VM execution
@@ -44,26 +46,32 @@ test("native Mock refuses a final host-parsing overrun before returning its valu
 });
 
 test("native Mock charges output tails cumulatively without resetting across calls", () => {
-  const scope = createNativeMockEvaluator(() => 0.5);
-  try {
-    withSlowOutputParse(160, (outputs) => {
-      assert.equal(typeof scope.evaluate(spec), "string");
-      assert.equal(outputs(), 1);
-      assert.throws(() => scope.evaluate(spec), /原版Mock库运行额度已用尽/);
-      assert.equal(
-        outputs(),
-        2,
-        "second output must exhaust the shared budget",
-      );
-    });
-  } finally {
-    scope.dispose();
-  }
-  // A fresh scope still succeeds; failed scopes do not contaminate later VMs.
-  const fresh = createNativeMockEvaluator(() => 0.5);
-  try {
-    assert.equal(typeof fresh.evaluate(spec), "string");
-  } finally {
-    fresh.dispose();
-  }
+  // A timed wait is a lower bound, not a guarantee that the first call fits
+  // 250 ms on a paused runner. Isolate a controlled accounting clock from this
+  // process; the unchanged test above independently checks real elapsed time.
+  const child = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(
+        new URL("./fixtures/native-mock-budget-clock.mjs", import.meta.url),
+      ),
+    ],
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      killSignal: "SIGKILL",
+      maxBuffer: 8192,
+    },
+  );
+  assert.ifError(child.error);
+  assert.equal(child.signal, null, child.stderr);
+  assert.equal(child.status, 0, child.stderr);
+  assert.deepEqual(JSON.parse(child.stdout), {
+    first: { outputs: 1, elapsed: 160 },
+    second: { outputs: 2, elapsed: 320 },
+    exhausted: { outputs: 2, elapsed: 320 },
+    fresh: { outputs: 3, elapsed: 480 },
+    clockRestored: true,
+    parseRestored: true,
+  });
 });
