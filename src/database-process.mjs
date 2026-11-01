@@ -4,6 +4,7 @@ import {
 } from "./database-read-cancellation.mjs";
 import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { createSQLiteOperationTracker } from "./sqlite-operation-progress.mjs";
 import {
   sqliteProcessErrorCode,
   sqliteProcessStages,
@@ -36,6 +37,7 @@ export function runSQLiteProcess(input, { signal } = {}) {
       workerReadyMs: null,
       resultReceivedMs: null,
     };
+    let progress, operation;
     const fail = (code = null, signal = null) => {
       const error = Error(
         input.mode === "write"
@@ -66,6 +68,12 @@ export function runSQLiteProcess(input, { signal } = {}) {
         workerErrorCode,
         workerExitCode,
         ...checkpoints,
+        ...(operation
+          ? {
+              operationStage: operation.stage,
+              operationElapsedMs: operation.elapsedMs,
+            }
+          : {}),
       };
       if (failure) error.cause = { code: sqliteProcessErrorCode(failure) };
       reject(error);
@@ -106,6 +114,14 @@ export function runSQLiteProcess(input, { signal } = {}) {
       phase = "process-spawned";
     });
     child.on("message", (value) => {
+      if (value?.kind === "sqlite-operation-stage") {
+        try {
+          progress ??= createSQLiteOperationTracker();
+          const observation = progress(value);
+          if (observation) operation = observation;
+        } catch {}
+        return;
+      }
       if (
         value?.kind === "sqlite-stage" &&
         sqliteProcessStages.has(value.stage)

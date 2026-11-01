@@ -24,6 +24,8 @@ const diagnosticKeys = [
   "supervisorReadyMs",
   "workerReadyMs",
   "resultReceivedMs",
+  "operationStage",
+  "operationElapsedMs",
 ];
 
 function ownValue(object, key) {
