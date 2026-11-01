@@ -4,7 +4,7 @@
 
 Use the maintained Apache-2.0 `@grpc/grpc-js@1.14.6` and `@grpc/proto-loader@0.8.1`, with BSD-3-Clause `protobufjs@7.6.6`, rather than reimplement HTTP/2 framing, Protobuf encoding, TLS or streaming. Original-application static inspection identified schema discovery, reflection and request/stream entrypoints; that is feature evidence, not proof of runtime equivalence. The older public Apipost wrapper remains a reference, not an unreviewed dependency replacement.
 
-This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. It does not yet implement native Apipost gRPC project migration, interactive long-lived streaming, a frontend, or gRPC-plan scripts. Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
+This backend milestone supports inline Proto, explicit in-memory file bundles and Protobuf JSON schemas, plus all four RPC styles: unary, server stream, client stream and bidirectional stream. Reflection supports v1 and v1alpha discovery. [Bounded interactive streaming sessions](ADR-GRPC-INTERACTIVE-SESSIONS.md) add owner HTTP send/poll/half-close/cancel with frozen project evidence; indefinite long-lived connections and reconnect remain unsupported. This baseline does not yet implement native Apipost gRPC project migration, a frontend, or gRPC-plan scripts. Arbitrary filesystem/network proto imports are not permitted. These remain explicit delivery gaps.
 
 ## API and persistence
 

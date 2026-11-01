@@ -9,7 +9,8 @@ import protobuf from "protobufjs";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 const unsafe = new Set(["__proto__", "prototype", "constructor"]);
-const MAX_BYTES = 1024 * 1024;
+export const GRPC_MAX_BYTES = 1024 * 1024;
+const MAX_BYTES = GRPC_MAX_BYTES;
 const plain = (value) =>
   value !== null &&
   typeof value === "object" &&
@@ -282,6 +283,32 @@ export function grpcTransport(target, input = {}) {
     : grpc.credentials.createInsecure();
   return { metadata, address, credentials };
 }
+// The interactive and finite executors share strict schema/encoding preflight.
+export function selectGrpcMethod(definition) {
+  const selected = compile(grpcSource(definition)).methods.get(
+    definition.service + "/" + definition.method,
+  );
+  if (!selected) throw Error("gRPC执行必须指定服务和方法");
+  return selected;
+}
+export function prepareGrpcMessage(selected, message) {
+  validateMessage(selected.type, message);
+  const json = JSON.stringify(message);
+  const jsonBytes = Buffer.byteLength(json);
+  if (jsonBytes > MAX_BYTES) throw Error("gRPC请求消息超过1MiB");
+  const wireBytes = selected.desc.requestSerialize(message).length;
+  if (wireBytes > MAX_BYTES) throw Error("gRPC请求编码超过1MiB");
+  return { message: JSON.parse(json), jsonBytes, wireBytes };
+}
+export function createGrpcClient(address, credentials) {
+  return new grpc.Client(address.target, credentials, {
+    "grpc.enable_retries": 0,
+    "grpc.enable_http_proxy": 0,
+    "grpc.max_send_message_length": MAX_BYTES,
+    "grpc.max_receive_message_length": MAX_BYTES,
+    "grpc.max_metadata_size": 16384,
+  });
+}
 export async function executeGrpc(input, signal) {
   if (
     !plain(input) ||
@@ -319,11 +346,8 @@ export async function executeGrpc(input, signal) {
         .map((k) => [k, input[k]]),
     ),
   );
-  const selected = compile(grpcSource(definition)).methods.get(
-    definition.service + "/" + definition.method,
-  );
-  if (!selected) throw Error("gRPC执行必须指定服务和方法");
-  const { desc, type } = selected,
+  const selected = selectGrpcMethod(definition);
+  const { desc } = selected,
     messages = input.messages ?? [{}];
   if (
     !Array.isArray(messages) ||
@@ -335,9 +359,7 @@ export async function executeGrpc(input, signal) {
   if (!text || Buffer.byteLength(text) > MAX_BYTES)
     throw Error("gRPC请求消息超过1MiB");
   for (const message of messages) {
-    validateMessage(type, message);
-    if (desc.requestSerialize(message).length > MAX_BYTES)
-      throw Error("gRPC请求编码超过1MiB");
+    prepareGrpcMessage(selected, message);
   }
   const { metadata, address, credentials } = grpcTransport(
     definition.target,
@@ -363,13 +385,7 @@ export async function executeGrpc(input, signal) {
       status: { code: grpc.status.CANCELLED, details: "已取消" },
       durationMs: 0,
     };
-  const client = new grpc.Client(address.target, credentials, {
-    "grpc.enable_retries": 0,
-    "grpc.enable_http_proxy": 0,
-    "grpc.max_send_message_length": MAX_BYTES,
-    "grpc.max_receive_message_length": MAX_BYTES,
-    "grpc.max_metadata_size": 16384,
-  });
+  const client = createGrpcClient(address, credentials);
   return new Promise((resolve) => {
     let call,
       settled = false,

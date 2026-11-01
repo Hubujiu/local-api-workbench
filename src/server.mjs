@@ -1,3 +1,5 @@
+import { GrpcSessions } from "./grpc-sessions.mjs";
+import { GrpcSlots } from "./grpc-slots.mjs";
 import { installNodeShutdown } from "./host-shutdown.mjs";
 import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
 import {
@@ -117,6 +119,8 @@ export async function createApp({
     return session.recordPromise;
   }
   const protocolSessions = new ProtocolSessions({ onFinish: saveWireSession });
+  const grpcSlots = new GrpcSlots();
+  const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
@@ -164,7 +168,6 @@ export async function createApp({
   };
   const executePlanWire = (input, signal) =>
     withWireSlot(() => executeWireFlow(input, signal));
-  let grpcActive = 0;
   const withGrpcTask = async (candidate, operation) => {
     const runId = candidate || id();
     if (
@@ -173,15 +176,14 @@ export async function createApp({
       controllers.has(runId)
     )
       throw Error("gRPC运行标识无效或正在使用");
-    if (grpcActive >= 5) throw Error("最多同时执行5个gRPC调用");
+    const releaseGrpc = grpcSlots.acquire();
     const controller = new AbortController();
     controllers.set(runId, controller);
-    grpcActive++;
     try {
       return await operation(runId, controller.signal);
     } finally {
       controllers.delete(runId);
-      grpcActive--;
+      releaseGrpc();
     }
   };
   const executePlanGrpc = (input, parentSignal) =>
@@ -485,12 +487,17 @@ export async function createApp({
           const action = parts[3];
           // Existing terminal evidence must remain readable while its project
           // storage is damaged or requires recovery. Ownership is checked below;
-          // only GET/stop bypass a project read, never start/send execution.
+          // only observation/terminal storage actions bypass a project read,
+          // never start/send execution.
           const evidenceOnly =
-            action === "protocol-sessions" &&
             parts[4] &&
-            ((req.method === "GET" && !parts[5]) ||
-              (req.method === "POST" && parts[5] === "stop"));
+            ((action === "protocol-sessions" &&
+              ((req.method === "GET" && !parts[5]) ||
+                (req.method === "POST" && parts[5] === "stop"))) ||
+              (action === "grpc-sessions" &&
+                ((req.method === "GET" && !parts[5]) ||
+                  (req.method === "POST" &&
+                    ["cancel", "reconcile"].includes(parts[5])))));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
           if (action === "cookies") {
             const b = req.method === "POST" ? await body(req) : {};
@@ -788,6 +795,69 @@ export async function createApp({
                 return json(res, 200, recorded);
               }
             }
+          }
+          if (action === "grpc-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (parts.length > 6) throw Error("gRPC会话路径无效");
+            if (sessionId && req.method === "GET" && !operation)
+              return json(res, 200, grpcSessions.snapshot(p.id, sessionId));
+            if (req.method !== "POST") throw Error("gRPC会话操作无效");
+            const input = await body(req);
+            if (!input || typeof input !== "object" || Array.isArray(input))
+              throw Error("gRPC会话参数必须为对象");
+            if (!sessionId) {
+              if (
+                Object.keys(input).some(
+                  (key) =>
+                    !["definitionId", "message", "metadata", "tls"].includes(
+                      key,
+                    ),
+                )
+              )
+                throw Error("gRPC会话仅接受已保存定义及临时消息/凭据");
+              const definition = (p.settings.grpcDefinitions || []).find(
+                (item) => item.id === input.definitionId,
+              );
+              if (!definition) throw Error("gRPC定义不存在或不属于此项目");
+              const options = Object.fromEntries(
+                ["message", "metadata", "tls"]
+                  .filter((key) => Object.hasOwn(input, key))
+                  .map((key) => [key, input[key]]),
+              );
+              return json(
+                res,
+                200,
+                grpcSessions.start(p.id, definition, options),
+              );
+            }
+            // Check ownership even for an invalid operation; IDs never cross projects.
+            grpcSessions.get(p.id, sessionId);
+            if (operation === "send") {
+              if (
+                Object.keys(input).some((key) => key !== "message") ||
+                !Object.hasOwn(input, "message")
+              )
+                throw Error("gRPC会话send须且仅须message");
+              return json(
+                res,
+                200,
+                grpcSessions.send(p.id, sessionId, input.message),
+              );
+            }
+            if (Object.keys(input).length)
+              throw Error("gRPC会话终止操作不接受额外字段");
+            if (operation === "half-close")
+              return json(res, 200, grpcSessions.halfClose(p.id, sessionId));
+            if (operation === "cancel")
+              return json(res, 200, await grpcSessions.cancel(p.id, sessionId));
+            if (operation === "reconcile")
+              return json(
+                res,
+                200,
+                await grpcSessions.reconcile(p.id, sessionId),
+              );
+            throw Error("未知gRPC会话操作");
           }
           if (action === "grpc-runs" && req.method === "GET")
             return json(
@@ -1408,8 +1478,16 @@ export async function createApp({
     }
   });
   let protocolShutdown;
+  const beginProtocolShutdown = () =>
+    (protocolShutdown ??= Promise.all([
+      protocolSessions.close(),
+      grpcSessions.close(),
+    ]).then(([protocolSessions, grpcSessions]) => ({
+      protocolSessions,
+      grpcSessions,
+    })));
   server.on("close", () => {
-    protocolShutdown ??= protocolSessions.close();
+    beginProtocolShutdown();
     socketioSessions.close();
     oauth.close();
     oauth1.close();
@@ -1419,7 +1497,7 @@ export async function createApp({
   // graceful transport finalization and the one automatic persistence attempt.
   const closeServer = server.close.bind(server);
   server.close = (callback) => {
-    protocolShutdown ??= protocolSessions.close();
+    beginProtocolShutdown();
     return closeServer((error) => {
       Promise.resolve(protocolShutdown).then(() => callback?.(error));
     });
@@ -1460,12 +1538,13 @@ export async function createApp({
         if (error && error.code !== "ERR_SERVER_NOT_RUNNING")
           return reject(error);
         Promise.resolve(protocolShutdown).then(
-          (protocolSessions) =>
+          ({ protocolSessions, grpcSessions }) =>
             resolve({
-              allRecordsSaved: protocolSessions.every(
+              allRecordsSaved: [...protocolSessions, ...grpcSessions].every(
                 (receipt) => receipt.recordSaved,
               ),
               protocolSessions,
+              grpcSessions,
             }),
           reject,
         );
