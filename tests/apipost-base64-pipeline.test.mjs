@@ -2,35 +2,54 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveApipostFunctionTemplate } from "../src/apipost-function-templates.mjs";
 import { parseApipostFunctionTemplate } from "../public/apipost-function-template.js";
+import { withWorkerPhaseDiagnostics } from "./helpers/worker-phase-diagnostics.mjs";
 
 test("source Base64 text stages match independent Unicode and URL-safe vectors", async () => {
-  for (const token of ["", "abc", "中文 😀", "\u0000a"]) {
+  for (const [caseId, token] of [
+    ["empty", ""],
+    ["ascii", "abc"],
+    ["unicode", "中文 😀"],
+    ["nul", "\u0000a"],
+  ]) {
     const encoded = Buffer.from(token, "utf8").toString("base64");
     assert.equal(
-      await resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
-        token,
-      }),
+      await withWorkerPhaseDiagnostics(`base64-encode-${caseId}`, () =>
+        resolveApipostFunctionTemplate("{{token|base64}}", [], "body", {
+          token,
+        }),
+      ),
       encoded,
     );
     assert.equal(
-      await resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
-        token: encoded,
-      }),
+      await withWorkerPhaseDiagnostics(`base64-decode-${caseId}`, () =>
+        resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
+          token: encoded,
+        }),
+      ),
       token,
     );
   }
-  for (const token of ["8J-YgA", "77-_", " YQ==\r\n", "YQ"])
+  for (const [caseId, token] of [
+    ["url-safe-emoji", "8J-YgA"],
+    ["url-safe-bmp", "77-_"],
+    ["whitespace", " YQ==\r\n"],
+    ["unpadded", "YQ"],
+  ])
     assert.equal(
-      await resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
-        token,
-      }),
+      await withWorkerPhaseDiagnostics(`base64-decode-${caseId}`, () =>
+        resolveApipostFunctionTemplate("{{token|unbase64}}", [], "body", {
+          token,
+        }),
+      ),
       Buffer.from(token, "base64").toString("utf8"),
     );
   assert.equal(
-    await resolveApipostFunctionTemplate(
-      "{{'abc'|base64|unbase64|upper}}",
-      [],
-      "body",
+    await withWorkerPhaseDiagnostics("base64-literal-roundtrip-upper", () =>
+      resolveApipostFunctionTemplate(
+        "{{'abc'|base64|unbase64|upper}}",
+        [],
+        "body",
+      ),
     ),
     "ABC",
   );
@@ -53,11 +72,15 @@ test("Base64 stages reject unsupported byte inputs and preserve bounds without c
       token: null,
     }),
   );
-  await assert.rejects(
-    resolveApipostFunctionTemplate("{{token|base64|length}}", [], "body", {
-      token: "x".repeat(50000),
-    }),
-    /64KiB/,
+  await withWorkerPhaseDiagnostics(
+    "base64-oversized-before-length",
+    (capture) =>
+      assert.rejects(
+        resolveApipostFunctionTemplate("{{token|base64|length}}", [], "body", {
+          token: "x".repeat(50000),
+        }).catch(capture),
+        /64KiB/,
+      ),
   );
   assert.throws(
     () => parseApipostFunctionTemplate("{{$function.fn_seed(x)|base64}}"),
