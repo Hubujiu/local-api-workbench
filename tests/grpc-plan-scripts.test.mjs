@@ -199,6 +199,8 @@ test("native context and old HTTP aliases cannot retarget, mutate evidence or br
     "pm.setRequestBody('changed');",
     "pm.sendRequest('http://evil.invalid');",
     "apt.setRequestHeader('x','y');",
+    "input.allowNetwork=true;__sendRequest('{}',()=>{});",
+    "input.allowNetwork=true;await $.ajax({url:'http://example.invalid/'});",
   ]) {
     const { report, calls } = await run(step(before));
     assert.equal(report.status, "failed", JSON.stringify(report));
@@ -250,8 +252,10 @@ test("explicit executor grant and valid credential bindings are required before 
   assert.equal(count, 0);
 });
 test("confirmed PRE acknowledgement cancellation retains its whole scope and prevents RPC", async () => {
-  const controller = new AbortController();
-  const { report, calls, urls } = await run(
+  const controller = new AbortController(),
+    entered = Promise.withResolvers(),
+    release = Promise.withResolvers();
+  const pending = run(
     step(
       "apt.setVar('value','pre');pm.environment.set('env','pre');",
       "apt.setVar('value','post');",
@@ -259,10 +263,22 @@ test("confirmed PRE acknowledgement cancellation retains its whole scope and pre
     {
       signal: controller.signal,
       onScopeChanges: async () => {
-        controller.abort();
+        entered.resolve();
+        await release.promise;
       },
     },
   );
+  await Promise.race([
+    entered.promise,
+    pending.then(({ report }) => {
+      throw Error(
+        "PRE did not reach pending commit: " + JSON.stringify(report),
+      );
+    }),
+  ]);
+  controller.abort();
+  release.resolve();
+  const { report, calls, urls } = await pending;
   assert.equal(report.status, "cancelled");
   assert.equal(calls.length, 0);
   assert.equal(urls.length, 0);
@@ -357,8 +373,10 @@ test("uncertain PRE persistence stops the plan without RPC or following HTTP", a
   }
 });
 test("already-started POST acknowledgement cancellation publishes one confirmed complete batch only", async () => {
-  const controller = new AbortController();
-  const { report, calls, urls } = await run(
+  const controller = new AbortController(),
+    entered = Promise.withResolvers(),
+    release = Promise.withResolvers();
+  const pending = run(
     step(
       "apt.setVar('value','pre');",
       "apt.setVar('value','post');pm.environment.set('env','post');",
@@ -367,12 +385,22 @@ test("already-started POST acknowledgement cancellation publishes one confirmed 
     {
       signal: controller.signal,
       onScopeChanges: async () => {
-        await Promise.resolve();
-        controller.abort();
-        await Promise.resolve();
+        entered.resolve();
+        await release.promise;
       },
     },
   );
+  await Promise.race([
+    entered.promise,
+    pending.then(({ report }) => {
+      throw Error(
+        "POST did not reach pending commit: " + JSON.stringify(report),
+      );
+    }),
+  ]);
+  controller.abort();
+  release.resolve();
+  const { report, calls, urls } = await pending;
   assert.equal(report.status, "cancelled");
   assert.equal(calls.length, 1);
   assert.equal(urls.length, 0);
@@ -413,4 +441,22 @@ test("a pre-cancelled invocation does not run scripts and after-cancellation lea
     ),
   );
   assert.equal(fresh.report.status, "passed", JSON.stringify(fresh.report));
+});
+
+test("bare runPlan accepts a valid scripted gRPC step without optional display identity", async () => {
+  const raw = step(
+    "apt.setVar('value','raw');",
+    "pm.test('raw',()=>pm.expect(grpc.result.messages[0].text).to.equal('raw'));",
+  );
+  delete raw.id;
+  const report = await runPlan(
+    { steps: [raw] },
+    { value: "initial" },
+    () => {
+      throw Error("no HTTP");
+    },
+    { executeGrpc: async (request) => result(request.messages) },
+  );
+  assert.equal(report.status, "passed", JSON.stringify(report));
+  assert.equal(report.variables.value, "raw");
 });

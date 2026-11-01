@@ -102,7 +102,7 @@ export async function runScriptedGrpcStep({
         scopes: state,
         localVariables,
         functions,
-        request: { id: step.id, name: step.name },
+        request: { id: String(step.id || ""), name: String(step.name || "") },
       },
       {
         signal,

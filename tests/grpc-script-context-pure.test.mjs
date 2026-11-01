@@ -168,3 +168,23 @@ test("direct callers cannot execute accessors or hide fields in versioned JSON",
     );
   assert.equal(reads, 0);
 });
+
+test("array subclasses cannot smuggle inherited serialization callbacks", () => {
+  let calls = 0;
+  class CustomArray extends Array {
+    toJSON() {
+      calls++;
+      return [];
+    }
+  }
+  const messages = new CustomArray({ text: "hidden" });
+  assert.throws(
+    () =>
+      normalizeGrpcScriptContext({
+        ...context(),
+        request: { ...context().request, messages },
+      }),
+    /上下文/,
+  );
+  assert.equal(calls, 0);
+});

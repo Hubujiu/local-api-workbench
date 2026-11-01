@@ -70,6 +70,7 @@ export function normalizeGrpcScriptContext(value) {
     if (typeof value === "number") return Number.isFinite(value);
     if (typeof value === "string") return !/[\uD800-\uDFFF]/u.test(value);
     if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) return false;
       if (Reflect.ownKeys(value).length !== value.length + 1) return false;
       for (let index = 0; index < value.length; index++) {
         const descriptor = Object.getOwnPropertyDescriptor(
