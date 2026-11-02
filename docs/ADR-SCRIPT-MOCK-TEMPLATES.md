@@ -10,11 +10,14 @@ script.exec. Its one-argument mock enters Handler.gen. There is no original
 runtime fixture here. Its project Mock server instead uses json-schema-faker
 for schema responses and JSON5.parse/raw for raw responses.
 
-Reuse published MIT apipost-mock1.0.2, with no runtime dependencies, already in
-develop. Dist SHA256 is
+Adapt the admitted-path algorithms from published MIT apipost-mock1.0.2, with
+no runtime dependencies, already in develop. Dist SHA256 is
 `444c7ccad3c4ee00ce6871517995852d5a5928715a6b449d3f2622291e6e816a`.
-The dedicated builder pins this source and both retained notices, checks the
-exact three-input esbuild graph and emits an integrity manifest. No extracted
+The dedicated builder pins this source, seven inclusive source spans and both
+retained notices, checks the exact three-input esbuild graph (entry, modified
+core, facade), and emits source hashes and an integrity manifest. Attribution
+and exact span hashes are in `scripts/script-mock-source.json`. This is a
+modified semantic adaptation, not a byte-identical extracted module. No extracted
 proprietary wrapper is distributed and no old wrapper/Faker chain is installed.
 The old native Random bundle, manifest and adapter are unchanged.
 
@@ -25,7 +28,9 @@ Keep APIPOST-MOCK-LICENSE.txt (Apipost2022) and MOCKJS-UPSTREAM-LICENSE.txt
 1.0.1-beta3 labels do not prove complete equivalence: original placeholder
 regexp permits slash/dot while the published package excludes them, and
 multiargument registration behavior differs. Only the admitted numeric/array
-handlers were statically compared; random sequence equivalence is not claimed.
+handlers were statically compared; original-runtime random equivalence is not
+claimed. CI-only differential cases compare the admitted subset to the locked
+public distribution, including a deterministic draw stream and draw count.
 
 ## Contract
 
@@ -60,7 +65,10 @@ Preserve core semantics: nonempty array|1 returns one selected element;
 array|1-1 returns an array; other counts repeat the entire template sequence;
 empty arrays stay empty. Selection generates ALL candidates before picking.
 Numeric generation retains the core Math.round distribution, not a substituted
-uniform floor. No seed/replay/cryptographic-random promise. Increments and
+uniform floor. An explicit equal-bound range still draws before dispatch; even
+an empty ranged array consumes that parser draw. A single-count rule does not
+draw its count; `|1` draws its pick after all candidates, including a one-item
+array. No seed/replay/cryptographic-random promise. Increments and
 aliases that would mutate templates are deliberately rejected.
 
 ## Resource and integrity envelope
@@ -83,6 +91,9 @@ terminal saturation does not claim the rejected generation actually ran.
 Parent validates integral counters against supplied bounds before publishing
 and subtracts them for subsequent scopes. PRE and POST remain separate phases
 under the existing phase contract. Independent future runs start fresh.
+No-Mock error diagnostics keep the preexisting exact shape. Relevant attempted
+Mock calls or exhausted zero-credit calls include the trusted Mock counters;
+success usage always includes all three counters for parent-side accounting.
 
 A final primitive-only checkpoint checks the existing host activity deadline
 after result validation, before returning the Mock value. It does not debit or
@@ -92,22 +103,34 @@ termination or rollback of unrelated script HTTP/database side effects.
 
 The core executes in the EXISTING script QuickJS, with unchanged250ms active
 time,2s wall,16MiB heap,512KiB stack,1MiB final output and all existing quotas.
-No second Mock VM or additional bootstrap budget. Eager installation currently
-means EVERY script pays load/hash/compile/initialization, even without a Mock
+No second Mock VM or additional bootstrap budget. Eager installation of the
+small admitted-path adaptation means EVERY script pays load/hash/compile/
+initialization, even without a Mock
 call. Read/hash elapsed time is charged into compatibility activity; compile
 and install occur after the activity deadline starts. Each fresh scope pays
 again against the shared remaining budget. Runtime CI must establish whether
 this fits; failures require redesign, not increased budgets or soft skips.
 
-Vendor and adapter are enclosed with captured lexical intrinsic globals before
-user functions/scripts. Full reachable intrinsic graphs (including function
-objects, own symbols, descriptors and prototype edges) are captured. Calls
-fail closed if changed, both before validation and after traversal immediately
-before generation. This covers inherited payloads, altered string/regex/array
-methods, Math.random and native-function own .call overrides, including changes
-made by Proxy traps. No temporary restoration of globals. The guard itself uses
-captured reflection and own-field checks; property descriptors used for cloning
-have null prototypes. Core references never leave the private closure.
+Core and adapter are enclosed with captured lexical intrinsic globals before
+user functions/scripts. The modified private core uses captured direct native
+calls, own-key loops and defineProperty writes, not ambient prototype methods,
+for-in, implicit iterators or `.call`. Unsupported placeholder/eval, RegExp,
+Random catalogue/media/require and context/reference branches are physically
+absent from the new asset; the old Random asset is untouched.
+
+An explicit surface guard checks the named captured global descriptors, their
+native objects, Object/Array/String/RegExp/Function/Number/Boolean/WeakSet/Error
+prototypes, directly captured callable objects, Math.random/round and the
+Object.prototype.toString own-call anchor. Each surface includes its complete
+own-key order, descriptors and prototype. Checks occur before validation and
+after traversal immediately before generation, covering the existing inherited
+payload, method replacement and Proxy mutation cases. This is no longer a
+recursive graph of every unrelated intrinsic; direct captured-call semantics
+provide the core's safety boundary. Changes to arbitrary unused nested builtin
+function properties are not claimed to be universally detected. No globals are
+temporarily restored or frozen. Native descriptors are read only by their own
+data/accessor kind; cloning and result-write descriptors have null prototypes.
+Core references never leave the private closure.
 
 ## Verification state
 
@@ -142,4 +165,36 @@ was independently read back with its manifest/exact input graph and notices;
 old native Random JS/JSON remain unchanged. No generated bundle or product
 runtime was executed locally. Syntax/formatting/static-byte evidence does not
 prove QuickJS semantic behavior, load cost or end-to-end runtime acceptance;
-the authored real runtime/workflow tests still require ordinary exact-head CI.
+the authored real runtime/workflow tests required ordinary exact-head CI.
+
+### First ordinary CI and redesign (2026-11-02)
+
+PR #82 run `41424728494`, attempt 1, exact head
+`9438514e01ad677c963a2fd3dd6e6a6d9a2f5a9e`, failed 3 of 10 jobs. All three new
+HTTP/persistence workflows passed on Linux, macOS and Windows, but repeated Mock
+cases exceeded activity time and existing no-Mock shared-scope workflows also
+regressed. Full-core eager installation and recursive graph setup consumed the
+remaining phase budget even with zero Mock calls. This candidate was rejected;
+no limits, concurrency, old assertions or negative cases were relaxed.
+
+The redesign replaces the full package asset with the attributed narrow core
+above and explicit captured-native surfaces. Differential public-package tests
+are ordinary-CI-only, never part of local inert-generator pure checks. The first
+red evidence remains preserved; the redesigned candidate requires a new exact-
+head ordinary CI before any runtime or performance acceptance claim.
+
+The reviewed static rebuild emits 8,539 bytes, SHA256
+`3117f7627c19d4cfa1d7d02b0e2b347acdd29be277dd64651982fc3acd723e3a`.
+Its exact three source inputs and attribution JSON use LF checkout attributes;
+the manifest hashes both source inputs and the upstream span map. Independent
+readback verified the new graph, both MIT notices and unchanged old Random and
+lock bytes. Size reduction is not runtime performance acceptance.
+
+The revised local checks passed 20/20: twelve inert-generator adapter/ledger
+checks, two fs/hash/source artifact checks and six preserved bootstrap pure
+checks. A first run caught missing Array.prototype.length restoration in the
+new numeric-getter test's finally block; its red log is retained. The fixture
+now restores the original index and length descriptors, proves the complete
+original key/descriptor set, and then verifies positive recovery. Production
+guard behavior was not relaxed. Neither the adapted generator nor public-core
+reference tests have been executed locally.

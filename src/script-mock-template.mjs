@@ -47,9 +47,10 @@ export function createScriptMockFacade(generate, reserve) {
   const rulePattern =
     /^([^|\u0000-\u001f\u007f\u2028\u2029]+)\|(-?[1-9]\d*|0)(?:-(-?[1-9]\d*|0))?$/;
 
-  // Snapshot the complete reachable intrinsic graph, including function
-  // objects (e.g. an own toString.call), symbols and prototype chains. Never
-  // restore monkeypatched globals: refuse before calling the ambient vendor.
+  // The private admitted-path core and validator use captured direct natives,
+  // not ambient method lookup. Preserve fail-closed mutation checks over this
+  // explicit dependency surface without traversing unrelated builtin graphs.
+  // Each surface includes its complete own descriptors, symbols and prototype.
   const names = [
     "Object",
     "Array",
@@ -72,19 +73,19 @@ export function createScriptMockFacade(generate, reserve) {
   const globalDescriptors = [],
     records = [],
     seenIntrinsics = new Weak();
-  const fields = [
-    "value",
-    "get",
-    "set",
-    "writable",
-    "enumerable",
-    "configurable",
-  ];
   const copyDescriptor = (source) => {
     const result = create(null);
-    for (let i = 0; i < fields.length; i++) {
-      const key = fields[i];
-      if (owns(source, key)) result[key] = source[key];
+    // Native reflection always returns own enumerable/configurable plus either
+    // own value/writable or own get/set. Never read an absent inherited field.
+    result.enumerable = source.enumerable;
+    result.configurable = source.configurable;
+    result.data = owns(source, "value");
+    if (result.data) {
+      result.value = source.value;
+      result.writable = source.writable;
+    } else {
+      result.get = source.get;
+      result.set = source.set;
     }
     return result;
   };
@@ -100,14 +101,8 @@ export function createScriptMockFacade(generate, reserve) {
       descriptions = [],
       parent = prototype(value);
     records[records.length] = { value, keys, descriptions, parent };
-    snapshot(parent);
     for (let i = 0; i < keys.length; i++) {
-      const description = copyDescriptor(descriptor(value, keys[i]));
-      descriptions[i] = description;
-      for (let j = 0; j < 3; j++) {
-        const field = fields[j];
-        if (owns(description, field)) snapshot(description[field]);
-      }
+      descriptions[i] = copyDescriptor(descriptor(value, keys[i]));
     }
   };
   for (let i = 0; i < names.length; i++) {
@@ -115,17 +110,52 @@ export function createScriptMockFacade(generate, reserve) {
     globalDescriptors[i] = description;
     snapshot(description.value);
   }
+  const surfaces = [
+    objectPrototype,
+    arrayPrototype,
+    String.prototype,
+    RegExp.prototype,
+    Function.prototype,
+    Number.prototype,
+    Boolean.prototype,
+    WeakSet.prototype,
+    Error.prototype,
+    apply,
+    ownKeys,
+    descriptor,
+    prototype,
+    define,
+    create,
+    freeze,
+    same,
+    array,
+    finite,
+    safe,
+    charCode,
+    includes,
+    regexpExec,
+    has,
+    weakHas,
+    weakAdd,
+    Math.random,
+    Math.round,
+    // Keep the existing native-function-own-call rejection case. The narrowed
+    // core does not depend on toString.call (or any ambient .call) for safety.
+    Object.prototype.toString,
+  ];
+  for (let i = 0; i < surfaces.length; i++) snapshot(surfaces[i]);
   const equalDescriptor = (actual, expected) => {
-    if (!actual) return false;
-    for (let i = 0; i < fields.length; i++) {
-      const key = fields[i];
-      if (
-        owns(actual, key) !== owns(expected, key) ||
-        (owns(expected, key) && !same(actual[key], expected[key]))
-      )
-        return false;
-    }
-    return true;
+    if (
+      !actual ||
+      owns(actual, "value") !== expected.data ||
+      actual.enumerable !== expected.enumerable ||
+      actual.configurable !== expected.configurable
+    )
+      return false;
+    return expected.data
+      ? same(actual.value, expected.value) &&
+          actual.writable === expected.writable
+      : same(actual.get, expected.get) && same(actual.set, expected.set);
   };
   const guard = () => {
     for (let i = 0; i < names.length; i++)
@@ -366,7 +396,7 @@ export function createScriptMockFacade(generate, reserve) {
     if (arguments.length !== 1) fail("仅支持单个JSON模板参数");
     const checked = inspect(template, true, true);
     // Proxy traps during traversal may mutate intrinsics. Core receives only
-    // the fresh owned clone after this second complete integrity check.
+    // the fresh owned clone after this second explicit-surface integrity check.
     guard();
     reserve(1, checked.workNodes, checked.workBytes);
     const result = generate(checked.value);

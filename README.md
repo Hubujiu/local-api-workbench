@@ -121,7 +121,7 @@ SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体
 
 ## 脚本工具库
 
-工作中候选：单参数 `Mock.mock(JSON模板)`，仅有界纯 JSON、数字和数组整数规则；含 `@` 的字符串值、增量/引用、函数、XHR及任意模块均拒绝。复用已固定许可的公开核心，在原脚本 VM 与阶段配额内执行；不是项目 Mock 新模式或完整 Mock.js 兼容。当前 eager 加载使未调用 Mock 的脚本也计入加载成本，普通精确 CI 尚待验证。见 [契约与验收边界](docs/ADR-SCRIPT-MOCK-TEMPLATES.md)。
+工作中候选：单参数 `Mock.mock(JSON模板)`，仅有界纯 JSON、数字和数组整数规则；含 `@` 的字符串值、增量/引用、函数、XHR及任意模块均拒绝。基于已固定 MIT 公开核心的允许分支做窄适配，在原脚本 VM 与阶段配额内执行；不是项目 Mock 新模式或完整 Mock.js 兼容。首轮普通 CI 暴露全库 eager 成本回归，现改为小型许可子集，未放宽预算；新候选仍待精确 CI 验证。见 [契约与验收边界](docs/ADR-SCRIPT-MOCK-TEMPLATES.md)。
 
 隔离脚本可直接使用 lodash（\_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
 

@@ -16,6 +16,10 @@
 /src/vendor/script-mock-library.js -text
 /src/vendor/script-mock-library.json -text
 /src/vendor/MOCKJS-UPSTREAM-LICENSE.txt -text
+/scripts/script-mock-entry.mjs text eol=lf
+/src/script-mock-core.mjs text eol=lf
+/src/script-mock-template.mjs text eol=lf
+/scripts/script-mock-source.json text eol=lf
 /src/vendor/APIPOST-MOCK-LICENSE.txt -text
 # Native XML has an exact-source manifest and a reproducible private bundle.
 /scripts/sandbox-intrinsic-guard.mjs text eol=lf

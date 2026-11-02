@@ -7,6 +7,11 @@ const pkg = JSON.parse(
 );
 const source = await readFile("node_modules/apipost-mock/dist/index.js");
 const sourceHash = createHash("sha256").update(source).digest("hex");
+const derivationText = await readFile(
+  "scripts/script-mock-source.json",
+  "utf8",
+);
+const derivation = JSON.parse(derivationText);
 for (const [path, expected] of [
   [
     "node_modules/apipost-mock/LICENSE",
@@ -38,6 +43,31 @@ if (
   throw Error(
     "Review script Mock package source/version/license before rebuilding",
   );
+if (
+  derivation.package !== pkg.name ||
+  derivation.version !== pkg.version ||
+  derivation.path !== "node_modules/apipost-mock/dist/index.js" ||
+  derivation.sha256 !== sourceHash ||
+  !Array.isArray(derivation.ranges) ||
+  derivation.ranges.length !== 7
+)
+  throw Error("Review modified script Mock core attribution");
+// Inclusive upstream line spans retain original line-ending bytes. They are
+// semantic provenance, not assertions that the modified core is byte-identical.
+const lines = source.toString("utf8").match(/[^\n]*\n|[^\n]+$/g);
+for (const range of derivation.ranges) {
+  if (
+    !Number.isInteger(range.start) ||
+    !Number.isInteger(range.end) ||
+    range.start < 1 ||
+    range.end < range.start ||
+    range.end > lines.length ||
+    createHash("sha256")
+      .update(lines.slice(range.start - 1, range.end).join(""))
+      .digest("hex") !== range.sha256
+  )
+    throw Error("Review modified script Mock core source span");
+}
 const result = await build({
   entryPoints: ["scripts/script-mock-entry.mjs"],
   bundle: true,
@@ -56,13 +86,19 @@ const result = await build({
 const inputs = Object.keys(result.metafile.inputs).sort();
 if (
   JSON.stringify(inputs) !==
-  JSON.stringify([
-    "node_modules/apipost-mock/dist/index.js",
-    "scripts/script-mock-entry.mjs",
-    "src/script-mock-template.mjs",
-  ])
+    JSON.stringify([
+      "scripts/script-mock-entry.mjs",
+      "src/script-mock-core.mjs",
+      "src/script-mock-template.mjs",
+    ]) ||
+  Object.values(result.metafile.outputs).some((output) => output.imports.length)
 )
   throw Error("Unexpected script Mock bundle dependency");
+const sourceHashes = {};
+for (const path of inputs)
+  sourceHashes[path] = createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
 const code = result.outputFiles[0].text;
 await writeFile("src/vendor/script-mock-library.js", code);
 await writeFile(
@@ -71,9 +107,15 @@ await writeFile(
     {
       package: "apipost-mock",
       version: pkg.version,
+      implementation: "modified-admitted-json-subset",
       sourceSha256: sourceHash,
+      sourceRanges: derivation.ranges,
+      derivationSha256: createHash("sha256")
+        .update(derivationText)
+        .digest("hex"),
       sha256: createHash("sha256").update(code).digest("hex"),
       inputs,
+      sourceHashes,
     },
     null,
     2,

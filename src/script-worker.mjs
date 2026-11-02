@@ -1025,7 +1025,7 @@ try {
     scriptDiagnostics: {
       ...(scriptStage === "bootstrap" ? bootstrapObservation?.failure() : {}),
       activityBudgetMs: workerData.activityBudgetMs,
-      ...mockBudget.usage(),
+      ...mockBudget.diagnostics(),
       fakerCalls,
       timerCount,
       requestCount,
