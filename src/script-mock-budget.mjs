@@ -48,6 +48,13 @@ export function createScriptMockBudget(limits) {
     usage() {
       return { mockCalls: calls, mockNodes: nodes, mockBytes: bytes };
     },
+    diagnostics() {
+      // Preserve the existing no-Mock error shape. Even a zero-credit attempted
+      // call is relevant once it has exhausted the private ledger.
+      return calls || nodes || bytes || exhausted
+        ? { mockCalls: calls, mockNodes: nodes, mockBytes: bytes }
+        : {};
+    },
   };
 }
 

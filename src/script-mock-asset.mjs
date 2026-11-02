@@ -18,6 +18,7 @@ export async function readScriptMockAsset() {
   if (
     manifest.package !== "apipost-mock" ||
     manifest.version !== "1.0.2" ||
+    manifest.implementation !== "modified-admitted-json-subset" ||
     manifest.sourceSha256 !==
       "444c7ccad3c4ee00ce6871517995852d5a5928715a6b449d3f2622291e6e816a" ||
     createHash("sha256").update(code).digest("hex") !== manifest.sha256

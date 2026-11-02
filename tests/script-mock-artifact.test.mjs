@@ -15,16 +15,25 @@ test("script Mock artifact retains exact reviewed source, input graph and both M
   );
   assert.equal(manifest.package, "apipost-mock");
   assert.equal(manifest.version, "1.0.2");
+  assert.equal(manifest.implementation, "modified-admitted-json-subset");
   assert.equal(
     manifest.sourceSha256,
     "444c7ccad3c4ee00ce6871517995852d5a5928715a6b449d3f2622291e6e816a",
   );
   assert.equal(manifest.sha256, hash(code));
   assert.deepEqual(manifest.inputs, [
-    "node_modules/apipost-mock/dist/index.js",
     "scripts/script-mock-entry.mjs",
+    "src/script-mock-core.mjs",
     "src/script-mock-template.mjs",
   ]);
+  for (const path of manifest.inputs)
+    assert.equal(manifest.sourceHashes[path], hash(await source(path)), path);
+  const derivationText = await source("scripts/script-mock-source.json");
+  assert.equal(manifest.derivationSha256, hash(derivationText));
+  assert.deepEqual(manifest.sourceRanges, JSON.parse(derivationText).ranges);
+  // Source-only absence check complements, but does not replace, the CI-only
+  // admitted-data differential tests against the actual locked distribution.
+  assert.doesNotMatch(code, /\beval\s*\(|\bnew\s+Function\b|module\.require/);
   for (const [path, digest] of [
     [
       "src/vendor/APIPOST-MOCK-LICENSE.txt",
