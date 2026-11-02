@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
@@ -161,8 +161,7 @@ test("conditional Mock survives authenticated JSON/directory export, real HTTP, 
   }
   assert.deepEqual(await app.store.get(p.id), before);
   assert.equal(JSON.stringify(directory), sourceBytes);
-  const restored = restoreProject(before);
-  await app.store.save(restored);
+  const restored = await app.store.restore(before);
   ids.push(restored.id);
   await check(restored.id);
   const other = await app.store.get(ids[1]);

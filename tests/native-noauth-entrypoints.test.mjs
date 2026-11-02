@@ -10,11 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
-import {
-  normalizeRequest,
-  snapshotPlan,
-  restoreProject,
-} from "../src/core.mjs";
+import { normalizeRequest, snapshotPlan } from "../src/core.mjs";
 const decode = (result) => {
   assert.notEqual(result.isError, true, JSON.stringify(result));
   return JSON.parse(result.content[0].text);
@@ -374,7 +370,7 @@ for (const [transport, format] of [
       assert.equal(result.code, 0, result.stderr);
       checkRun(JSON.parse(result.stdout));
       const persisted = await app.store.get(target.id),
-        restored = restoreProject(persisted);
+        restored = await app.store.restore(persisted);
       for (const project of [persisted, restored]) {
         const records = project.runs.filter(
           (run) => run.snapshot?.id === plan.id,
@@ -385,7 +381,6 @@ for (const [transport, format] of [
         );
         assert(records.every((run) => run.environmentId === "override-env"));
       }
-      await app.store.save(restored);
       await closeServer(app.server);
       app = await createApp({ root, port: 0 });
       const restoredResult = await cli(

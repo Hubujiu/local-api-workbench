@@ -59,8 +59,7 @@ test("original directory selection imports genuine user records and preserves bu
   assert.match(p.requests[0].importNotes.join(" "), /仅保留.*不启用/);
   await store.save(p);
   const loaded = await new Store(root).get(p.id);
-  const restored = restoreProject(structuredClone(loaded));
-  await store.save(restored);
+  const restored = await store.restore(structuredClone(loaded));
   assert.deepEqual(
     (await store.get(restored.id)).settings.apipostDirectoryArtifacts,
     p.settings.apipostDirectoryArtifacts,

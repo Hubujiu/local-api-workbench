@@ -4,11 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  normalizeRequest,
-} from "../src/core.mjs";
+import { importIntoProject, normalizeRequest } from "../src/core.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
 import { nativeMockResponse } from "../src/native-mock-runtime.mjs";
 import { normalizeNativeMock } from "../src/native-mock.mjs";
@@ -42,8 +38,7 @@ test("native directory Mock import -> actual HTTP -> save/reload/restore preserv
   await app.store.save(p);
   assert.equal(JSON.stringify(source), before);
   const saved = await app.store.get(p.id),
-    restored = restoreProject(JSON.stringify(saved));
-  await app.store.save(restored);
+    restored = await app.store.restore(JSON.stringify(saved));
   const check = async (project, query, expected) => {
     const r = await fetch(
       app.url + "/mock/" + project.id + "/" + project.requests[0].id + query,

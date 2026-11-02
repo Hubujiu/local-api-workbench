@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import * as grpc from "@grpc/grpc-js";
 import * as loader from "@grpc/proto-loader";
 import { Server } from "socket.io";
-import { snapshotPlan, runPlan, restoreProject } from "../src/core.mjs";
+import { snapshotPlan, runPlan } from "../src/core.mjs";
 import { projectScopes, persistScopeChanges } from "../src/variable-scopes.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import { executeRequest, Store } from "../src/runtime.mjs";
@@ -481,8 +481,7 @@ for (const family of ["grpc", "socketio", "protocol"])
       envToken: fresh,
       globalToken: fresh,
     });
-    const copy = restoreProject(JSON.stringify(backup));
-    await store.save(copy);
+    const copy = await store.restore(JSON.stringify(backup));
     const restored = await new Store(root).get(copy.id);
     assert.deepEqual(restored.plans[0].steps[0], backup.plans[0].steps[0]);
     assert.equal(restored.runs[0].id, first.id);

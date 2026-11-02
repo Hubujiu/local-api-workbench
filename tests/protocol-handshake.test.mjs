@@ -8,12 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { Store } from "../src/runtime.mjs";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  snapshotPlan,
-  runPlan,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan, runPlan } from "../src/core.mjs";
 import { executeWireFlow } from "../src/wire-plan.mjs";
 import { normalizeProtocol } from "../src/protocol-definitions.mjs";
 import {
@@ -155,8 +150,7 @@ test(
       false,
     );
     ws.handshake.requiredHeaders.pop();
-    const restored = restoreProject(p);
-    await app.store.save(restored);
+    const restored = await app.store.restore(p);
     const ownerHeaders = {
       "x-local-token": app.token,
       "content-type": "application/json",

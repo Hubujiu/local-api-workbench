@@ -10,7 +10,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import { restoreProject } from "../src/core.mjs";
 import { nativeInheritanceFixture } from "./fixtures/native-inheritance.mjs";
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
 
@@ -259,8 +258,7 @@ for (const transport of ["http", "stdio"])
         );
         const persisted = await reopened.get(third.id);
         assert.equal(persisted.runs.length, 1);
-        const restored = restoreProject(persisted);
-        await reopened.save(restored);
+        const restored = await reopened.restore(persisted);
         projects.push(restored.id);
         await connect(true, true);
         const afterRestore = new Store(root);

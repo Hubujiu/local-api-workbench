@@ -14,7 +14,6 @@ import {
   snapshotPlan,
   runPlan,
   importIntoProject,
-  restoreProject,
 } from "../src/core.mjs";
 import { executeRequest } from "../src/runtime.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
@@ -156,8 +155,7 @@ for (const engine of ["pg", "redis", "mongodb"])
       assert.equal(invalidResponse.status, 400);
       assert.match((await invalidResponse.json()).error, /未知字段/);
       assert.deepEqual(await app.store.get(p.id), storedBeforeInvalid);
-      const restored = restoreProject(p);
-      await app.store.save(restored);
+      const restored = await app.store.restore(p);
       for (const current of [p, restored])
         for (const plan of current.plans) {
           const r = await fetch(

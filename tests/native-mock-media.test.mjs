@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { normalizeNativeMock } from "../src/native-mock.mjs";
 import { nativeMockResponse } from "../src/native-mock-runtime.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
@@ -123,17 +123,18 @@ test("native scalar/array/raw XML responses survive real HTTP, matching, restore
       saved.requests[0].nativeMock.fallback.serialization,
       "raw-xml",
     );
-    const restored = restoreProject(JSON.stringify(saved));
-    assert.deepEqual(
-      restored.requests[0].nativeMock,
-      saved.requests[0].nativeMock,
-    );
-    restored.requests[0].nativeMock.fallback.body += "<!-- restored -->";
+    const restoreDocument = JSON.parse(JSON.stringify(saved));
+    restoreDocument.requests[0].nativeMock.fallback.body += "<!-- restored -->";
     // Direct canonical edits may use mixed header casing; do not add a second
     // default Content-Type, and do not change the explicitly selected MIME.
-    restored.requests[0].nativeMock.rules[0].response.headers["CoNtEnT-TyPe"] =
-      "application/x-explicit-fixture";
-    await app.store.save(restored);
+    restoreDocument.requests[0].nativeMock.rules[0].response.headers[
+      "CoNtEnT-TyPe"
+    ] = "application/x-explicit-fixture";
+    const restored = await app.store.restore(restoreDocument);
+    assert.deepEqual(
+      restored.requests[0].nativeMock,
+      restoreDocument.requests[0].nativeMock,
+    );
     checks.push(
       () => check(saved, "?mode=fail", body, mime, "matched"),
       () =>

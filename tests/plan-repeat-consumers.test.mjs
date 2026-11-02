@@ -223,8 +223,7 @@ test("native strict extraction stops all later iterations and native adapters re
     3,
     "unsupported native projections never replay the graph",
   );
-  const restored = restoreProject(current);
-  await f.store.save(restored);
+  const restored = await f.store.restore(current);
   assert.equal(restored.plans[0].steps[0].type, "repeat");
   const bad = structuredClone(restored);
   bad.plans[0].steps[0].steps[0].steps[0].request.importedNativeTaskSource = {
@@ -368,8 +367,7 @@ test("graph-bound loop leaves freeze before storage and remain trusted only with
     "manual",
     current,
   );
-  const restored = restoreProject(current);
-  await f.store.save(restored);
+  const restored = await f.store.restore(current);
   const reload = await new Store(f.root).get(restored.id);
   const run = await runPlan(
     reload.plans[0],

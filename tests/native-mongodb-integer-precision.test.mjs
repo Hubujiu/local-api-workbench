@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  importIntoProject,
-  snapshotPlan,
-  restoreProject,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
 import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
 
@@ -106,12 +102,11 @@ test("owner native import is atomic and exact EJSON survives save, frozen plan, 
   ];
   assertExact(saved.plans[0].steps[0].request);
   await app.store.save(saved);
-  const restored = restoreProject(
+  const restored = await app.store.restore(
     JSON.stringify(await app.store.get(project.id)),
   );
   assertExact(restored.requests[0]);
   assertExact(restored.plans[0].steps[0].request);
-  await app.store.save(restored);
   await stop();
   app = await createApp({ root, port: 0 });
   for (const id of [project.id, restored.id]) {

@@ -501,11 +501,10 @@ test("trash validation is bounded, descriptor-safe, retained by backup and rejec
     /容量/,
   );
   assert.deepEqual(full, snapshot);
-  const restored = restoreProject(deleted);
+  const restored = await store.restore(deleted);
   assert.deepEqual(restored.apiResourceTrash, deleted.apiResourceTrash);
   assert.notEqual(restored.id, deleted.id);
   assert.equal(restored.documents.length, 1);
-  await store.save(restored);
   assert.deepEqual(
     (await new Store(root).get(restored.id)).apiResourceTrash,
     deleted.apiResourceTrash,

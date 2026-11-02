@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Store } from "../src/runtime.mjs";
-import { snapshotPlan, restoreProject } from "../src/core.mjs";
+import { snapshotPlan } from "../src/core.mjs";
 import { createMCP } from "../src/mcp.mjs";
 import { MCPActivity } from "../src/mcp-activity.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
@@ -292,8 +292,9 @@ for (const native of [false, true])
           }
         }
         assert.deepEqual(await store.get(other.id), isolated);
-        const restored = restoreProject(JSON.parse(JSON.stringify(recovered)));
-        await new Store(root).save(restored);
+        const restored = await new Store(root).restore(
+          JSON.parse(JSON.stringify(recovered)),
+        );
         for (const target of [project.id, restored.id]) {
           await client?.close();
           client = await connect(target);

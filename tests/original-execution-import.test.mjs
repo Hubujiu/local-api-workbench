@@ -158,8 +158,7 @@ test("genuine native flow imports frozen repeated steps, runs through CLI and pr
   assert.equal(saved.runs.length, 1);
   assert.equal(saved.runs[0].id, run.id);
   assert.equal((await store.get(other.id)).runs.length, 0);
-  const restored = restoreProject(structuredClone(saved));
-  await store.save(restored);
+  const restored = await store.restore(structuredClone(saved));
   codes = [200, 200];
   const success = await cli(root, restored.id, plan.id);
   assert.equal(success.code, 0, success.stderr);
@@ -727,8 +726,10 @@ test("synthetic extraction assertion and wait API sources remain inert and unint
     plan.steps.map((step) => step.request.importedNativeTaskSource),
   );
   await store.save(p);
-  for (const project of [p, restoreProject(await new Store(root).get(p.id))]) {
-    if (project.id !== p.id) await store.save(project);
+  for (const project of [
+    p,
+    await store.restore(await new Store(root).get(p.id)),
+  ]) {
     const result = await cli(root, project.id, project.plans[0].id);
     assert.equal(result.code, 0, result.stderr);
     const run = JSON.parse(result.stdout);

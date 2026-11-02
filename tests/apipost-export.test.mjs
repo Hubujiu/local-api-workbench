@@ -69,7 +69,7 @@ test("native JSON definition export reimports, persists and restores literal HTT
   importIntoProject(target, JSON.stringify(document));
   await store.save(target);
   const saved = await store.get(target.id),
-    restored = restoreProject(saved);
+    restored = await store.restore(saved);
   const repeatedExport = exportApipost(saved),
     third = await store.create("Second export");
   third.environments = [];
@@ -77,7 +77,6 @@ test("native JSON definition export reimports, persists and restores literal HTT
   assert.equal(third.requests[0].url, saved.requests[0].url);
   assert.deepEqual(third.requests[0].query, saved.requests[0].query);
 
-  await store.save(restored);
   for (const copy of [saved, await store.get(restored.id)]) {
     assert.equal(copy.requests[0].folder, "A/B");
     assert.equal(
@@ -396,8 +395,7 @@ test("native export matrix preserves service, URL-only query, path and multipart
   p.environments = [];
   importIntoProject(p, doc);
   await store.save(p);
-  const restored = restoreProject(await store.get(p.id));
-  await store.save(restored);
+  const restored = await store.restore(await store.get(p.id));
   for (const id of [p.id, restored.id]) {
     const reopened = new Store(root),
       copy = await reopened.get(id),

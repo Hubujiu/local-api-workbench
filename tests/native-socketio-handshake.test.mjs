@@ -9,12 +9,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  runPlan,
-  snapshotPlan,
-} from "../src/core.mjs";
+import { importIntoProject, runPlan, snapshotPlan } from "../src/core.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
 import { extendedProtocolFixture } from "./fixtures/apipost-extended-protocols.mjs";
 test(
@@ -92,8 +87,7 @@ test(
     );
     assert.equal(sent, 0);
     assert.equal(seen.length, 0);
-    const restored = restoreProject(p);
-    await app.store.save(restored);
+    const restored = await app.store.restore(p);
     const ownerHeaders = {
       "x-local-token": app.token,
       "content-type": "application/json",

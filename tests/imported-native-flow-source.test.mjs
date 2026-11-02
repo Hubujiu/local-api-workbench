@@ -261,8 +261,7 @@ test("Store rejects invalid plan and run-snapshot provenance before any disk wri
     assert.deepEqual(await store.get(p.id), saved);
   }
   const restarted = await new Store(root).get(p.id);
-  const restored = restoreProject(restarted);
-  await store.save(restored);
+  const restored = await store.restore(restarted);
   assert.deepEqual(
     (await store.get(restored.id)).plans[0].importedNativeFlowSource,
     fixture(),

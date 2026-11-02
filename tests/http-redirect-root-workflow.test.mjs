@@ -10,7 +10,6 @@ import {
   normalizeRequest,
   runPlan,
   snapshotPlan,
-  restoreProject,
   exportOpenAPI,
 } from "../src/core.mjs";
 import { snapshotCase } from "../src/cases.mjs";
@@ -147,8 +146,7 @@ test("redirect final live response alone carries Header/Cookie authority; persis
     response: result,
   });
   const disk = await new Store(root).get(project.id);
-  const restored = restoreProject(disk);
-  await store.save(restored);
+  const restored = await store.restore(disk);
   for (const saved of [disk, await new Store(root).get(restored.id)]) {
     assert.deepEqual(
       saved.history[0].response,
@@ -279,8 +277,7 @@ test("genuine progress journal failure after a redirect preserves completed fina
   await rm(journal);
   await rename(journal + "-owned-kept", journal);
   const disk = await new Store(root).get(project.id);
-  const restored = restoreProject(disk);
-  await store.save(restored);
+  const restored = await store.restore(disk);
   for (const saved of [disk, await new Store(root).get(restored.id)]) {
     assert.deepEqual(
       saved.runs[0].results,

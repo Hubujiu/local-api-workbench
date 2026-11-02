@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Store } from "../src/runtime.mjs";
-import { snapshotPlan, restoreProject } from "../src/core.mjs";
+import { snapshotPlan } from "../src/core.mjs";
 import { snapshotCase } from "../src/cases.mjs";
 
 // Disk-only fixture: no HTTP, scripts, VM, native database, or imported sample.
@@ -43,8 +43,7 @@ test("redirect policy persists across restart and backup restore, while malforme
   invalid.requests[0].redirect = { mode: "same-origin", maxHops: 99 };
   await assert.rejects(store.save(invalid), /redirect/);
   assert.equal(JSON.stringify(await new Store(root).get(p.id)), before);
-  const restored = restoreProject(JSON.parse(JSON.stringify(reopened)));
-  await store.save(restored);
+  const restored = await store.restore(JSON.parse(JSON.stringify(reopened)));
   const restoredRead = await new Store(root).get(restored.id);
   assert.notEqual(restoredRead.id, reopened.id);
   assert.deepEqual(restoredRead.requests[0].redirect, definition.redirect);

@@ -89,9 +89,7 @@ export async function verifyNativeImportHTTPFlow(
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { createApp } = await import("../src/server.mjs");
-  const { importIntoProject, restoreProject, snapshotPlan } = await import(
-    "../src/core.mjs"
-  );
+  const { importIntoProject, snapshotPlan } = await import("../src/core.mjs");
   const { nativeDatabaseFixture } = await import(
     "./fixtures/apipost-database.mjs"
   );
@@ -229,8 +227,7 @@ export async function verifyNativeImportHTTPFlow(
       true,
     );
     if (requiresSSH) {
-      const restored = restoreProject(await app.store.get(project.id));
-      await app.store.save(restored);
+      const restored = await app.store.restore(await app.store.get(project.id));
       assert.equal((await execute(restored.id)).outcome, "failed");
       assert.equal(count, expectedCount);
       const granted = await fetch(endpoint(restored.id), {

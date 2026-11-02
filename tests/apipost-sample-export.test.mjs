@@ -8,12 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
-import {
-  importIntoProject,
-  snapshotPlan,
-  runPlan,
-  restoreProject,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan, runPlan } from "../src/core.mjs";
 import { Store, executeRequest } from "../src/runtime.mjs";
 import {
   environmentVariables,
@@ -315,8 +310,7 @@ test(
       };
       await run(await store.get(two.id));
       const backup = await store.get(two.id),
-        restored = restoreProject(backup);
-      await store.save(restored);
+        restored = await store.restore(backup);
       const restarted = await new Store(root).get(restored.id);
       assert.deepEqual(restarted.cases, expected);
       await run(restarted);

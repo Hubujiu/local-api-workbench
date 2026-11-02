@@ -5,12 +5,7 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import {
-  runPlan,
-  snapshotPlan,
-  normalizeRequest,
-  restoreProject,
-} from "../src/core.mjs";
+import { runPlan, snapshotPlan, normalizeRequest } from "../src/core.mjs";
 import { Store, executeRequest } from "../src/runtime.mjs";
 import { DatabaseSessions } from "../src/database-sessions.mjs";
 const script = (data) => ({ type: "customScript", enabled: 1, data });
@@ -73,8 +68,7 @@ test("native tasks execute through frozen plans after save/reload/restore withou
   project.plans = [snapshotPlan({ steps: [{ request }] })];
   await store.save(project);
   const reloaded = await store.get(project.id);
-  const restored = restoreProject(JSON.stringify(reloaded));
-  await store.save(restored);
+  const restored = await store.restore(JSON.stringify(reloaded));
   assert.deepEqual(reloaded.requests[0].nativeTasks, request.nativeTasks);
   assert.deepEqual(
     restored.plans[0].steps[0].request.nativeTasks,

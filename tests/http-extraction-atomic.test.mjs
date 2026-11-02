@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runPlan, snapshotPlan, restoreProject } from "../src/core.mjs";
+import { runPlan, snapshotPlan } from "../src/core.mjs";
 import { executeRequest, Store } from "../src/runtime.mjs";
 import { projectScopes, persistScopeChanges } from "../src/variable-scopes.mjs";
 
@@ -229,8 +229,7 @@ test("HTTP successful prior scopes survive failed extraction lists in frozen pla
     return disk;
   };
   const backup = await execute(await store.get(p.id));
-  const restored = restoreProject(backup);
-  await store.save(restored);
+  const restored = await store.restore(backup);
   assert.deepEqual(restored.plans, backup.plans);
   assert.deepEqual(restored.runs, backup.runs);
   await execute(await new Store(root).get(restored.id));

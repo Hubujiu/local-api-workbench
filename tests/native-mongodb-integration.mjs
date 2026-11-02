@@ -4,11 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  snapshotPlan,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
 
 // Dedicated real MongoDB CI fixture. No original-runtime equivalence is inferred.
@@ -185,8 +181,7 @@ export async function verifyNativeMongoFlow(config) {
       }),
     ];
     await app.store.save(saved);
-    const restored = restoreProject(saved);
-    await app.store.save(restored);
+    const restored = await app.store.restore(saved);
     const prior = seen.length;
     assert.equal((await execute(restored)).outcome, "failed");
     assert.equal(seen.length, prior);

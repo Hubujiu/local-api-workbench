@@ -202,8 +202,7 @@ test("owner native import → live/curl/MCP → frozen plan → backup/restart p
   assert(persisted.history.length >= 2);
   assert.equal(persisted.runs.length, 1);
   assert.throws(() => exportApipost(persisted), /plans|冻结/);
-  const copy = restoreProject(persisted);
-  await app.store.save(copy);
+  const copy = await app.store.restore(persisted);
   const restarted = new Store(root);
   const restored = await restarted.get(copy.id);
   assert.deepEqual(
@@ -513,8 +512,7 @@ test("absolute URL graph executes through official SDK HTTP and CLI frozen plans
   await client.close();
   const restarted = await restart();
   const loaded = await restarted.store.get(p.id);
-  const restoredCaseProject = restoreProject(loaded);
-  await restarted.store.save(restoredCaseProject);
+  const restoredCaseProject = await restarted.store.restore(loaded);
   await call(`projects/${restoredCaseProject.id}/execute`, {
     request: restoredCaseProject.cases[0].request,
   });

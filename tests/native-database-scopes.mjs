@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
 export async function verifyNativeDatabaseScopes(config) {
   const root = await mkdtemp(path.join(tmpdir(), "native-scopes-"));
@@ -107,8 +107,7 @@ export async function verifyNativeDatabaseScopes(config) {
         'pm.test("no cross project",()=>pm.expect(pm.globals.get("dbGlobal")).to.equal(undefined));pm.test("no environment leak",()=>pm.expect(pm.environment.get("dbEnvironment")).to.equal(undefined));',
     };
     assert.equal((await call(other.id, foreign)).outcome, "passed");
-    const restored = restoreProject(saved);
-    await app.store.save(restored);
+    const restored = await app.store.restore(saved);
     assert.equal(restored.globalVariables.dbGlobal, "from-database");
     assert.deepEqual(restored.requests[0].nativeTasks, request.nativeTasks);
     const denied = await call(restored.id, request);

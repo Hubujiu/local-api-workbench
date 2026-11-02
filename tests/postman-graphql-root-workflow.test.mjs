@@ -12,7 +12,6 @@ import {
   importIntoProject,
   snapshotPlan,
   runPlan,
-  restoreProject,
 } from "../src/core.mjs";
 import { snapshotCase } from "../src/cases.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
@@ -130,8 +129,7 @@ test("structured Postman GraphQL import freezes explicitly saved redirect policy
   );
   await recordPlanRun(store, project.id, run, "mcp");
   const backup = await new Store(root).get(project.id);
-  const restored = restoreProject(JSON.parse(JSON.stringify(backup)));
-  await store.save(restored);
+  const restored = await store.restore(JSON.parse(JSON.stringify(backup)));
   assert.equal(
     seen.length,
     3,
@@ -191,8 +189,7 @@ for (const format of ["json-case", "directory-flow"])
     importIntoProject(target, document);
     await store.save(target);
     const disk = await new Store(root).get(target.id);
-    const restored = restoreProject(JSON.parse(JSON.stringify(disk)));
-    await store.save(restored);
+    const restored = await store.restore(JSON.parse(JSON.stringify(disk)));
     assert.equal(seen.length, 0, "definition import/restore is inert");
     for (const current of [disk, await new Store(root).get(restored.id)]) {
       assert.equal(current.requests[0].body, source.requests[0].body);

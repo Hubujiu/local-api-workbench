@@ -291,8 +291,7 @@ test(
       { path: "/changed?q=dynamic-default", body: '{"new":true}' },
     ]);
     p = await app.store.get(p.id);
-    const restored = restoreProject(p);
-    await app.store.save(restored);
+    const restored = await app.store.restore(p);
     const tampered = structuredClone(p);
     tampered.plans[0].steps[0].nativeMCP.input = { body: { tampered: true } };
     assert.throws(() => restoreProject(tampered), /不一致/);
@@ -530,8 +529,7 @@ test(
       "passed",
     );
     await c.close();
-    const restored = restoreProject(await store.get(p.id));
-    await store.save(restored);
+    const restored = await store.restore(await store.get(p.id));
     const other = await connect(restored.id, true, true);
     assert.equal(
       (

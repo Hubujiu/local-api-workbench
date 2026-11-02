@@ -6,12 +6,7 @@ import os from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import http from "node:http";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
-import {
-  importIntoProject,
-  runPlan,
-  snapshotPlan,
-  restoreProject,
-} from "../src/core.mjs";
+import { importIntoProject, runPlan, snapshotPlan } from "../src/core.mjs";
 import { Store, executeRequest } from "../src/runtime.mjs";
 import { DatabaseSessions } from "../src/database-sessions.mjs";
 const project = () => ({
@@ -55,8 +50,7 @@ test("native PostgreSQL definition imports without connection configuration; exp
   p.plans = [snapshotPlan({ steps: [{ request: p.requests[0] }] })];
   await store.save(p);
   const loaded = await store.get(p.id),
-    restored = restoreProject(JSON.stringify(loaded));
-  await store.save(restored);
+    restored = await store.restore(JSON.stringify(loaded));
   assert.deepEqual(
     restored.requests[0].nativeTasks,
     loaded.requests[0].nativeTasks,

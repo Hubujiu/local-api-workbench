@@ -10,11 +10,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import {
-  normalizeRequest,
-  snapshotPlan,
-  restoreProject,
-} from "../src/core.mjs";
+import { normalizeRequest, snapshotPlan } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 
 const decode = (result) => {
@@ -763,8 +759,7 @@ for (const transport of ["http", "stdio"])
           assert.equal(executed.runs.length, 1);
           assert.deepEqual(documentDefinitions(executed), expectedDocuments);
           verifyModelGraph(executed, mode);
-          const restored = restoreProject(executed);
-          await store.save(restored);
+          const restored = await store.restore(executed);
           assert.deepEqual(
             (await store.get(restored.id)).documents,
             executed.documents,

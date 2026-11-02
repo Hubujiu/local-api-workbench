@@ -60,8 +60,7 @@ for (const filename of [
       await store.save(p);
       const loaded = await new Store(root).get(p.id);
       assert.equal((await executeRequest(loaded.requests[0])).status, 200);
-      const restored = restoreProject(structuredClone(loaded));
-      await store.save(restored);
+      const restored = await store.restore(structuredClone(loaded));
       assert.equal(
         (await executeRequest((await store.get(restored.id)).requests[0]))
           .status,

@@ -4,7 +4,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import { restoreProject } from "../src/core.mjs";
 import { Store } from "../src/runtime.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
@@ -170,14 +169,12 @@ for (const [label, schema, expected] of variants)
         const disk = await new Store(root).get(consumer.id);
         assert.equal(disk.runs.length, 1);
         assert.equal(disk.runs[0].id, run.id);
-        const restoredConsumer = restoreProject(disk);
-        await app.store.save(restoredConsumer);
+        const restoredConsumer = await app.store.restore(disk);
         assert.equal(
           (await new Store(root).get(restoredConsumer.id)).runs[0].id,
           run.id,
         );
-        const restored = restoreProject(current);
-        await app.store.save(restored);
+        const restored = await app.store.restore(current);
         await check(restored, expected);
         records.push({
           project: restored,

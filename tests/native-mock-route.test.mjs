@@ -4,11 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  normalizeRequest,
-} from "../src/core.mjs";
+import { importIntoProject, normalizeRequest } from "../src/core.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
 import {
   resolveNativeMockRoute,
@@ -30,8 +26,7 @@ test("native method/path/selectors share the bounded Mock pipeline and preserve 
     'throw Error("Mock must not run request scripts")';
   await app.store.save(p);
   const saved = await app.store.get(p.id),
-    copy = restoreProject(JSON.stringify(saved));
-  await app.store.save(copy);
+    copy = await app.store.restore(JSON.stringify(saved));
   assert.deepEqual(
     copy.requests[0].nativeMockRoute,
     saved.requests[0].nativeMockRoute,

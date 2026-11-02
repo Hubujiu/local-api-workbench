@@ -10,7 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { fixture, verify } from "./helpers/native-signing-fixture.mjs";
 const decode = (result) => {
   assert.notEqual(result.isError, true, JSON.stringify(result));
@@ -231,7 +231,7 @@ for (const [transport, format] of [
       checkRun(JSON.parse(executed.stdout));
       assert.deepEqual(seen, [0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5]);
       const persisted = await app.store.get(target.id),
-        restored = restoreProject(persisted);
+        restored = await app.store.restore(persisted);
       for (const project of [persisted, restored]) {
         const runs = project.runs.filter((r) => r.snapshot?.id === plan.id);
         assert.equal(
@@ -247,7 +247,6 @@ for (const [transport, format] of [
           expectedAuth,
         );
       }
-      await app.store.save(restored);
       await closeServer(app.server);
       app = await createApp({ root, port: 0 });
       const afterRestart = await cli(

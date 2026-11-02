@@ -10,12 +10,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  snapshotPlan,
-  runPlan,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan, runPlan } from "../src/core.mjs";
 import {
   executeGrpc,
   normalizeGrpcDefinition,
@@ -150,8 +145,7 @@ test(
     );
     assert.equal(beforeNetwork, 0);
     assert.equal(seen.length, 0);
-    const restored = restoreProject(p);
-    await app.store.save(restored);
+    const restored = await app.store.restore(p);
     const owner = {
       "x-local-token": app.token,
       "content-type": "application/json",

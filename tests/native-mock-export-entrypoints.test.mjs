@@ -14,7 +14,6 @@ import {
   importIntoProject,
   normalizeRequest,
   snapshotPlan,
-  restoreProject,
 } from "../src/core.mjs";
 import { nativeMockFixture } from "./fixtures/apipost-native-mock.mjs";
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
@@ -384,8 +383,7 @@ for (const [transport, format] of [
         persisted.runs.find((item) => item.id === run.id).results,
         run.results,
       );
-      const restored = restoreProject(persisted);
-      await app.store.save(restored);
+      const restored = await app.store.restore(persisted);
       assert(restored.runs.some((item) => item.id === run.id));
       await stop(app);
       app = await createApp({ root, port: 0 });

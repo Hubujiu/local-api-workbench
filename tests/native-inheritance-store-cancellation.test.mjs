@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Store } from "../src/runtime.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { acquireFileLock } from "../src/file-lock.mjs";
 import { nativeInheritanceFixture } from "./fixtures/native-inheritance.mjs";
 
@@ -73,8 +73,7 @@ test(
       persisted.settings.nativeInheritance.projectLayer.headers[0].value,
       "explicit-save",
     );
-    const copy = restoreProject(persisted);
-    await reopened.save(copy);
+    const copy = await reopened.restore(persisted);
     const restarted = new Store(root);
     assert.deepEqual(
       (await restarted.get(copy.id)).settings.nativeInheritance,

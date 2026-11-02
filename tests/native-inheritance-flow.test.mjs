@@ -136,7 +136,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import { restoreProject } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 const close = (server) =>
   new Promise((resolve) => {
@@ -453,8 +452,7 @@ for (const transport of ["http", "stdio"])
         assert.equal(wire.length, count);
       }
       assert.throws(() => exportApipost(p), /plans|冻结/);
-      const restored = restoreProject(p);
-      await app.store.save(restored);
+      const restored = await app.store.restore(p);
       await close(app.server);
       app = await createApp({ root, port: 0 });
       const restarted = await cli(root, restored.id, plan.id);

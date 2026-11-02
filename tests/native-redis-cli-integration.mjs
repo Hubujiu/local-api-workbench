@@ -5,11 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { Store } from "../src/runtime.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  snapshotPlan,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
 // Cross-feature acceptance: native database import + invocation-only CLI grants.
@@ -164,8 +160,7 @@ export async function verifyNativeDatabaseCLIFlow(
     assert(!JSON.stringify(saved).includes("discard-this-fictional-password"));
     assert.equal((await invoke(p.id, "native")).code, 1);
     assert.equal(calls, 1);
-    const restored = restoreProject(saved);
-    await store.save(restored);
+    const restored = await store.restore(saved);
     assert.equal((await invoke(restored.id, "native")).code, 1);
     assert.equal(calls, 1);
     const restoredRun = await invoke(restored.id, "native", {

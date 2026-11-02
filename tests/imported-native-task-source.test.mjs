@@ -143,8 +143,7 @@ test("Store rejects invalid provenance before persisting and preserves valid sou
   await assert.rejects(store.save(invalid), /未知字段/);
   assert.deepEqual(await store.get(p.id), saved);
   const restarted = await new Store(root).get(p.id);
-  const restored = restoreProject(restarted);
-  await store.save(restored);
+  const restored = await store.restore(restarted);
   assert.deepEqual(
     (await store.get(restored.id)).requests[0].importedNativeTaskSource,
     fixture(),
@@ -373,8 +372,7 @@ test("wait provenance retains enabled history and literal disabled scalars witho
   project.plans = [snapshotPlan({ steps: [{ request: project.requests[0] }] })];
   await store.save(project);
   const reloaded = await new Store(root).get(project.id),
-    restored = restoreProject(reloaded);
-  await store.save(restored);
+    restored = await store.restore(reloaded);
   let calls = 0;
   for (const saved of [reloaded, await new Store(root).get(restored.id)]) {
     assert.equal(saved.requests[0].nativeTasks, undefined);

@@ -12,7 +12,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import { restoreProject } from "../src/core.mjs";
 import { readMCPActivities } from "../src/mcp-activity.mjs";
 const exec = promisify(execFile);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -264,9 +263,9 @@ for (const nested of [false, true]) {
           ),
       );
       const saved = await f.app.store.get(allowed.id);
-      const restored = restoreProject(saved);
-      restored.environments[0].variables.identity = "restored";
-      await f.app.store.save(restored);
+      const restoreDocument = structuredClone(saved);
+      restoreDocument.environments[0].variables.identity = "restored";
+      const restored = await f.app.store.restore(restoreDocument);
       const originalEvidence = restored.runs.find(
         (run) => run.id === owner.value.id,
       );

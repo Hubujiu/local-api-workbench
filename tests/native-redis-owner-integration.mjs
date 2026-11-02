@@ -7,7 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { mutateRedis, queryRedis, parseRESP } from "../src/redis.mjs";
 import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
@@ -133,8 +133,7 @@ export async function verifyNativeRedisOwnerFlow(config) {
       saved.history.at(-1).writeReceipts,
       executed.data.writeReceipts,
     );
-    const restored = restoreProject(saved);
-    await app.store.save(restored);
+    const restored = await app.store.restore(saved);
     assert.equal(
       (
         await post(restored.id, "native-write/execute", {

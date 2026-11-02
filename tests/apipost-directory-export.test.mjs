@@ -9,7 +9,6 @@ import {
   normalizeRequest,
   snapshotPlan,
   importIntoProject,
-  restoreProject,
 } from "../src/core.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
@@ -171,8 +170,7 @@ test("directory export preserves independent frozen HTTP steps, inert sources an
   const second = await app.store.create("Again");
   importIntoProject(second, again);
   await app.store.save(second);
-  const restored = restoreProject(p);
-  await app.store.save(restored);
+  const restored = await app.store.restore(p);
   for (const current of [p, second, restored]) {
     const response = await fetch(
       app.url + "/api/projects/" + current.id + "/run",
@@ -397,8 +395,7 @@ test("HTTP native export rejects stale frozen folders without changing disk, whi
   assert.equal(response.status, 400);
   assert.match(await response.text(), /目录.*项目备份/);
   assert.deepEqual(await app.store.get(p.id), before);
-  const restored = restoreProject(before);
-  await app.store.save(restored);
+  const restored = await app.store.restore(before);
   const reopened = await app.store.get(restored.id);
   assert.deepEqual(reopened.folders, ["Deleted/Other"]);
   assert.equal(reopened.requests[0].deletedAt, before.requests[0].deletedAt);

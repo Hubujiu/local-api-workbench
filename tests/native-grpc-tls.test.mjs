@@ -9,7 +9,7 @@ import protobuf from "protobufjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import {
   extendedProtocolFixture,
   extendedProto,
@@ -91,8 +91,7 @@ test(
     const before = JSON.stringify(p);
     assert.throws(() => importIntoProject(p, invalid), /证书验证/);
     assert.equal(JSON.stringify(p), before);
-    const restored = restoreProject(p);
-    await app.store.save(restored);
+    const restored = await app.store.restore(p);
     const metadata = [
         { key: "authorization", value: "Bearer runtime-tls-token" },
       ],

@@ -4,7 +4,7 @@ import http from "node:http";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { executeRequest, Store } from "../src/runtime.mjs";
-import { snapshotPlan, restoreProject } from "../src/core.mjs";
+import { snapshotPlan } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
@@ -385,8 +385,7 @@ for (const multipleChallenges of [false, true])
       };
       await run(p);
       const stored = await app.store.get(p.id);
-      const restored = restoreProject(stored);
-      await app.store.save(restored);
+      const restored = await app.store.restore(stored);
       await run(restored);
       app.server.closeAllConnections();
       await new Promise((resolve) => app.server.close(resolve));

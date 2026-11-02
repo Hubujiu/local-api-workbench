@@ -9,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
-import { normalizeRequest, restoreProject } from "../src/core.mjs";
+import { normalizeRequest } from "../src/core.mjs";
 const decode = (r) => {
   assert.notEqual(r.isError, true, r.content?.[0]?.text);
   return JSON.parse(r.content[0].text);
@@ -429,8 +429,7 @@ test(
         (e) => !Object.hasOwn(e.serverUrls || {}, custom.server_id),
       ),
     );
-    const restored = restoreProject(await app.store.get(p.id));
-    await app.store.save(restored);
+    const restored = await app.store.restore(await app.store.get(p.id));
     const disposable = decode(
       await call("create_environment", { name: "Disposable" }),
     ).environment;

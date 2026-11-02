@@ -5,7 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { Store } from "../src/runtime.mjs";
 import { createApp } from "../src/server.mjs";
 const flowPath = "executions/flows/flow_1792937049044.json";
@@ -214,8 +214,7 @@ test("synthetic MCP saved-flow CLI uses current input/environment, continues 503
   );
   assert.deepEqual(saved.plans[0].importedNativeFlowSource, history);
   assert.deepEqual(await store.get(other.id), otherBefore);
-  const restored = restoreProject(JSON.stringify(saved));
-  await store.save(restored);
+  const restored = await store.restore(JSON.stringify(saved));
   const again = await cli(root, restored.id, plan.id);
   assert.equal(again.code, 0, again.stderr);
   assert.equal(JSON.parse(again.stdout).status, "passed");

@@ -10,7 +10,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
-import { importIntoProject, restoreProject } from "../src/core.mjs";
+import { importIntoProject } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { nativeInheritanceFixture } from "./fixtures/native-inheritance.mjs";
@@ -409,8 +409,7 @@ for (const mode of ["urlencoded", "form-data"])
         await client.close();
         client = null;
         const stored = await app.store.get(p.id);
-        const restored = restoreProject(stored);
-        await app.store.save(restored);
+        const restored = await app.store.restore(stored);
         await close(app.server);
         app = await createApp({ root, port: 0 });
         const disk = await new Store(root).get(restored.id);

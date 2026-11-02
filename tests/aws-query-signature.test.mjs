@@ -11,7 +11,6 @@ import {
   importDocument,
   normalizeRequest,
   snapshotPlan,
-  restoreProject,
   runPlan,
 } from "../src/core.mjs";
 import { recordPlanRun } from "../src/plan-evidence.mjs";
@@ -645,9 +644,8 @@ test("Postman query auth survives frozen plans, real Store backup/restart and co
       reloaded = await freshStore.get(p.id);
     await execute(reloaded, freshStore);
     const backup = JSON.parse(JSON.stringify(await freshStore.get(p.id))),
-      restored = restoreProject(backup);
+      restored = await freshStore.restore(backup);
     const originalPlan = JSON.parse(JSON.stringify(restored.plans[0]));
-    await freshStore.save(restored);
     const afterRestart = await new Store(root).get(p.id);
     await execute(afterRestart, new Store(root));
     assert.deepEqual(afterRestart.plans[0], originalPlan);

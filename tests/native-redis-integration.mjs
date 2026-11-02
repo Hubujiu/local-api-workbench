@@ -5,11 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import {
-  importIntoProject,
-  restoreProject,
-  snapshotPlan,
-} from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { mutateRedis } from "../src/redis.mjs";
 import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
@@ -185,8 +181,7 @@ export async function verifyNativeRedisFlow(config) {
       }),
     ];
     await app.store.save(saved);
-    const restored = restoreProject(saved);
-    await app.store.save(restored);
+    const restored = await app.store.restore(saved);
     assert.equal((await execute(restored)).outcome, "failed");
     assert.equal(seen.length, 9);
     assert.equal((await grant(restored)).status, 200);
