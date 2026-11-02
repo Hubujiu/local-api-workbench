@@ -187,7 +187,6 @@ test("Socket.IO rejects insecure overrides, reserved events, oversized data and 
 test("Socket.IO HTTP project APIs persist definitions and final evidence, isolate projects and retry storage only", async (t) => {
   const { createApp } = await import("../src/server.mjs");
   const { Store } = await import("../src/runtime.mjs");
-  const { restoreProject } = await import("../src/core.mjs");
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
