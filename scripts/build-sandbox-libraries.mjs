@@ -102,3 +102,6 @@ await import("./build-native-mock.mjs");
 
 // Build the private native scalar XML adapter in the same audited toolchain.
 await import("./build-native-xml.mjs");
+
+// Independent same-VM script facade; retain the native Random asset unchanged.
+await import("./build-script-mock.mjs");

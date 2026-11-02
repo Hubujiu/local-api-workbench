@@ -13,6 +13,9 @@
 # Preserve the licensed Mock bundle's exact-byte integrity on Windows checkout.
 /src/vendor/native-mock-library.js -text
 /src/vendor/native-mock-library.json -text
+/src/vendor/script-mock-library.js -text
+/src/vendor/script-mock-library.json -text
+/src/vendor/MOCKJS-UPSTREAM-LICENSE.txt -text
 /src/vendor/APIPOST-MOCK-LICENSE.txt -text
 # Native XML has an exact-source manifest and a reproducible private bundle.
 /scripts/sandbox-intrinsic-guard.mjs text eol=lf

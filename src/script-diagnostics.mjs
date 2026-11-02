@@ -30,6 +30,9 @@ export function scriptFailureDetails(error) {
   for (const [key, max] of Object.entries({
     activityBudgetMs: 250,
     fakerCalls: 1001,
+    mockCalls: 1000,
+    mockNodes: 10000,
+    mockBytes: 1048576,
     timerCount: 101,
     requestCount: 11,
     compatibilityCPUUs: 60000000,
@@ -101,6 +104,9 @@ export function scriptFailureDetails(error) {
             scriptDiagnostics: {
               activityBudgetMs: entry.activityBudgetMs,
               fakerCalls: entry.fakerCalls,
+              mockCalls: entry.mockCalls,
+              mockNodes: entry.mockNodes,
+              mockBytes: entry.mockBytes,
               timerCount: entry.timerCount,
               requestCount: entry.requestCount,
             },

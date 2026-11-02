@@ -1,0 +1,11 @@
+{
+  "package": "apipost-mock",
+  "version": "1.0.2",
+  "sourceSha256": "444c7ccad3c4ee00ce6871517995852d5a5928715a6b449d3f2622291e6e816a",
+  "sha256": "f489fcf16ee9f1fbea348b1ef6d3c227ef86c05a0cf33b2dce294e3a178330f3",
+  "inputs": [
+    "node_modules/apipost-mock/dist/index.js",
+    "scripts/script-mock-entry.mjs",
+    "src/script-mock-template.mjs"
+  ]
+}

@@ -1,3 +1,5 @@
+import { readScriptMockAsset } from "./script-mock-asset.mjs";
+import { createScriptMockBudget } from "./script-mock-budget.mjs";
 import { performance } from "node:perf_hooks";
 import { collectionRuntimeSource } from "./postman-collection-runtime.mjs";
 import { nativeRequestSnapshotSource } from "./native-request-snapshot.mjs";
@@ -112,6 +114,7 @@ const receive = (message) => {
     wake = null;
   }
 };
+const mockBudget = createScriptMockBudget(workerData);
 parentPort.on("message", receive);
 try {
   if (
@@ -145,6 +148,10 @@ try {
       workerData,
     );
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
+  const mockReadStarted = monotonicNow();
+  const mockLibrary = await readScriptMockAsset();
+  const mockLoadMs = monotonicNow() - mockReadStarted;
+  activityMetrics.compatibilityMs += mockLoadMs;
   const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
   const facadeBundle = useURLFacade
     ? await readFile(
@@ -186,6 +193,30 @@ try {
   runtime.setInterruptHandler(() => monotonicNow() > deadline);
   bootstrapObservation = observeBootstrap(monotonicNow, threadCPU);
   context = runtime.newContext();
+  const mockReserve = context.newFunction(
+    "__scriptMockReserve",
+    (kind, nodes, bytes) => {
+      if (
+        [kind, nodes, bytes].some(
+          (handle) => context.typeof(handle) !== "number",
+        )
+      )
+        return { error: context.newError("Mock模板内部计费无效") };
+      try {
+        mockBudget.reserve(
+          context.getNumber(kind),
+          context.getNumber(nodes),
+          context.getNumber(bytes),
+        );
+        if (monotonicNow() > deadline) throw Error("脚本执行超时");
+        return context.undefined;
+      } catch (error) {
+        return { error: context.newError(error.message) };
+      }
+    },
+  );
+  context.setProp(context.global, "__scriptMockReserve", mockReserve);
+  mockReserve.dispose();
   const randomFunction = context.newFunction("__randomBytes", (countHandle) => {
     const count = context.getNumber(countHandle);
     if (!Number.isInteger(count) || count < 0 || count > 65536)
@@ -572,7 +603,23 @@ try {
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   deadline = monotonicNow() + workerData.activityBudgetMs;
+  deadline -= mockLoadMs;
+  if (mockLoadMs >= workerData.activityBudgetMs) throw Error("脚本执行超时");
   measureActivity("compatibility", "compatibilityMs", () => {
+    // Eager installation is charged to the existing activity budget. Lexical
+    // parameters pin vendor globals against later top-level lexical shadowing;
+    // the facade additionally rejects descriptor/prototype mutations.
+    const mockGlobals =
+      "Object,Array,String,RegExp,Function,Number,Boolean,Math,JSON,Reflect,Symbol,parseInt,parseFloat,isNaN,isFinite,WeakSet,Error,globalThis";
+    run(
+      "Object.defineProperty(globalThis,'Mock',{value:((" +
+        mockGlobals +
+        ",reserve)=>{" +
+        mockLibrary +
+        ";return ScriptMockLibrary.install(reserve);})(" +
+        mockGlobals +
+        ",globalThis.__scriptMockReserve),enumerable:true});delete globalThis.__scriptMockReserve;",
+    );
     const compatibilitySources = [];
     const install = (code) => compatibilitySources.push(code);
     install(
@@ -942,7 +989,12 @@ try {
   outcome = {
     result: {
       ...serializedResult,
-      usage: { timers: timerCount, fakerCalls, jobs: jobCount },
+      usage: {
+        timers: timerCount,
+        fakerCalls,
+        jobs: jobCount,
+        ...mockBudget.usage(),
+      },
       activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {
         ...readActivityMetrics(),
@@ -973,6 +1025,7 @@ try {
     scriptDiagnostics: {
       ...(scriptStage === "bootstrap" ? bootstrapObservation?.failure() : {}),
       activityBudgetMs: workerData.activityBudgetMs,
+      ...mockBudget.usage(),
       fakerCalls,
       timerCount,
       requestCount,

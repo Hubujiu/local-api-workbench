@@ -1,3 +1,7 @@
+import {
+  scriptMockLimits,
+  validateScriptMockUsage,
+} from "./script-mock-budget.mjs";
 import { compileNativeWaits } from "./native-wait-tasks.mjs";
 import {
   compileNativeAssertions,
@@ -54,6 +58,9 @@ function scriptBudgets({
   fakerLimit = 1000,
   jobLimit = 10000,
   assertionLimit = 1000,
+  mockCallLimit = scriptMockLimits.mockCallLimit,
+  mockNodeLimit = scriptMockLimits.mockNodeLimit,
+  mockByteLimit = scriptMockLimits.mockByteLimit,
 } = {}) {
   if (
     !Number.isFinite(activityBudgetMs) ||
@@ -72,6 +79,9 @@ function scriptBudgets({
     [fakerLimit, 1000],
     [jobLimit, 10000],
     [assertionLimit, 1000],
+    [mockCallLimit, scriptMockLimits.mockCallLimit],
+    [mockNodeLimit, scriptMockLimits.mockNodeLimit],
+    [mockByteLimit, scriptMockLimits.mockByteLimit],
   ])
     if (!Number.isInteger(limit) || limit < 0 || limit > max)
       throw Error("脚本预算无效");
@@ -83,6 +93,9 @@ function scriptBudgets({
     fakerLimit,
     jobLimit,
     assertionLimit,
+    mockCallLimit,
+    mockNodeLimit,
+    mockByteLimit,
   };
 }
 
@@ -147,6 +160,9 @@ export function runScript(code, input, options = {}) {
     fakerLimit,
     jobLimit,
     assertionLimit,
+    mockCallLimit,
+    mockNodeLimit,
+    mockByteLimit,
   } = scriptBudgets(options);
   if (responseAssertions.length > assertionLimit)
     throw Error("声明的原生断言超过本次共享断言预算");
@@ -236,6 +252,9 @@ export function runScript(code, input, options = {}) {
         fakerLimit,
         jobLimit,
         assertionLimit,
+        mockCallLimit,
+        mockNodeLimit,
+        mockByteLimit,
       },
       resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 },
     });
@@ -274,6 +293,11 @@ export function runScript(code, input, options = {}) {
             reject(error);
           } else {
             try {
+              validateScriptMockUsage(result.usage, {
+                mockCallLimit,
+                mockNodeLimit,
+                mockByteLimit,
+              });
               if (
                 (grpcContext !== undefined || wireContext !== undefined) &&
                 (!isDeepStrictEqual(result.request, input.request || {}) ||
@@ -511,6 +535,9 @@ export async function runScriptSequence(stages, input, options = {}) {
     fakerLimit = budgets.fakerLimit,
     jobLimit = budgets.jobLimit,
     assertionLimit = budgets.assertionLimit,
+    mockCallLimit = budgets.mockCallLimit,
+    mockNodeLimit = budgets.mockNodeLimit,
+    mockByteLimit = budgets.mockByteLimit,
     state = structuredClone(input);
   state.responseOverride = null;
   state.responseOriginals = null;
@@ -540,6 +567,9 @@ export async function runScriptSequence(stages, input, options = {}) {
         fakerLimit,
         jobLimit,
         assertionLimit,
+        mockCallLimit,
+        mockNodeLimit,
+        mockByteLimit,
       });
     } catch (error) {
       error.scriptScope = stage.name;
@@ -559,6 +589,9 @@ export async function runScriptSequence(stages, input, options = {}) {
       activityMs: result.activityMs,
       elapsedMs: Math.round(performance.now() - stageStartedAt),
       fakerCalls: result.usage.fakerCalls,
+      mockCalls: result.usage.mockCalls,
+      mockNodes: result.usage.mockNodes,
+      mockBytes: result.usage.mockBytes,
       timerCount: result.usage.timers,
       requestCount: result.networkRequests.length,
       activityMetrics: { ...result.activityMetrics },
@@ -578,6 +611,9 @@ export async function runScriptSequence(stages, input, options = {}) {
     timerLimit -= result.usage.timers;
     fakerLimit = Math.max(0, fakerLimit - result.usage.fakerCalls);
     jobLimit -= result.usage.jobs;
+    mockCallLimit -= result.usage.mockCalls;
+    mockNodeLimit -= result.usage.mockNodes;
+    mockByteLimit -= result.usage.mockBytes;
     assertionLimit -= result.tests.length;
     logs.push(
       ...result.logs
