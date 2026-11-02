@@ -184,6 +184,7 @@ const record = (p, entry) => {
 };
 
 export class ActiveProjectImports {
+  #owner = null;
   constructor({ store, request, now = Date.now }) {
     this.store = store;
     this.request = request;
@@ -224,30 +225,27 @@ export class ActiveProjectImports {
       nextRuns: [...this.next].map(([sourceId, at]) => ({ sourceId, at })),
     };
   }
-  async deactivate(projectId) {
-    if (projectId !== undefined && projectId !== this.active)
-      return this.snapshot();
+  // Ownership outlives `active`: a pending activation or suspended save must
+  // still be cancelled by a targeted stop. Lease identities never leave this
+  // controller except as opaque, single-use tokens returned by suspend().
+  #reset(owner = null) {
+    this.#owner = owner;
     this.epoch++;
     this.active = null;
     this.next.clear();
     this.signatures.clear();
     this.credentials.clear();
     this.controller?.abort();
-    await this.running?.catch(() => {});
-    return this.snapshot();
+    return this.running?.catch(() => {});
   }
-  async activate(projectId, credentials = {}) {
-    if (this.closed) throw Error("自动导入服务已关闭");
-    const stop = this.deactivate();
-    const epoch = this.epoch;
-    await stop;
-    const p = await this.store.get(projectId);
-    if (epoch !== this.epoch || this.closed) throw Error("项目激活已取消");
-    if (p.archived) throw Error("归档项目不能自动导入");
-    const sources = definitions(p);
-    const bindings = sourceCredentials(sources, credentials);
-    this.credentials = bindings;
-    this.active = projectId;
+  #owns(owner) {
+    return !this.closed && this.#owner === owner;
+  }
+  #install(owner, sources, credentials) {
+    this.credentials = credentials;
+    this.active = owner.projectId;
+    owner.phase = "active";
+    owner.lease = null;
     this.warning = "";
     for (const source of sources)
       if (source.enabled) {
@@ -256,18 +254,81 @@ export class ActiveProjectImports {
       }
     return this.snapshot();
   }
-  async reactivate(projectId) {
-    const p = await this.store.get(projectId);
-    if (
-      definitions(p).some(
-        (s) => s.enabled && s.authType && s.authType !== "none",
-      )
-    ) {
-      await this.deactivate();
-      this.warning = "配置已更改，请提供临时凭据重新激活数据源";
+  async deactivate(projectId) {
+    if (projectId !== undefined && projectId !== this.#owner?.projectId)
       return this.snapshot();
+    await this.#reset();
+    return this.snapshot();
+  }
+  async activate(projectId, credentials = {}) {
+    if (this.closed) throw Error("自动导入服务已关闭");
+    const owner = { projectId, phase: "pending", lease: null };
+    const check = () => {
+      if (!this.#owns(owner)) throw Error("项目激活已取消");
+    };
+    try {
+      await this.#reset(owner);
+      check();
+      const p = await this.store.get(projectId);
+      check();
+      if (p.archived) throw Error("归档项目不能自动导入");
+      const sources = definitions(p);
+      return this.#install(
+        owner,
+        sources,
+        sourceCredentials(sources, credentials),
+      );
+    } catch (error) {
+      if (this.#owns(owner)) this.#reset();
+      throw error;
     }
-    return this.activate(projectId);
+  }
+  async suspend(projectId) {
+    if (this.closed || this.#owner?.projectId !== projectId) return null;
+    const owner = {
+      projectId,
+      phase: "suspended",
+      lease: Object.freeze({}),
+    };
+    await this.#reset(owner);
+    return this.#owns(owner) ? owner.lease : null;
+  }
+  discard(lease) {
+    if (lease && this.#owner?.lease === lease) this.#reset();
+  }
+  async reactivate(lease) {
+    const owner = this.#owner;
+    if (
+      !lease ||
+      !this.#owns(owner) ||
+      owner?.lease !== lease ||
+      owner.phase !== "suspended"
+    )
+      return this.snapshot();
+    // Claim before the first await; duplicate/replayed resumes cannot read or
+    // schedule anything. A later activation, stop or edit replaces the owner.
+    owner.phase = "resuming";
+    try {
+      const p = await this.store.get(owner.projectId);
+      if (!this.#owns(owner)) return this.snapshot();
+      if (p.archived) {
+        this.#reset();
+        return this.snapshot();
+      }
+      const sources = definitions(p);
+      if (
+        sources.some((s) => s.enabled && s.authType && s.authType !== "none")
+      ) {
+        this.#reset();
+        this.warning = "配置已更改，请提供临时凭据重新激活数据源";
+        return this.snapshot();
+      }
+      return this.#install(owner, sources, new Map());
+    } catch (error) {
+      if (!this.#owns(owner)) return this.snapshot();
+      this.#reset();
+      throw error;
+    }
   }
   async close() {
     this.closed = true;
@@ -336,11 +397,7 @@ export class ActiveProjectImports {
       (!binding || binding.signature !== key)
     ) {
       this.warning = "数据源凭据已失效，请重新激活";
-      this.active = null;
-      this.epoch++;
-      this.next.clear();
-      this.signatures.clear();
-      this.credentials.clear();
+      this.#reset();
       throw Error(this.warning);
     }
     const auth =
@@ -394,18 +451,21 @@ export class ActiveProjectImports {
       record(current, entry);
       writeAttempted = true;
       await this.store.save(current, { signal: controller.signal });
+      this.current(projectId, epoch);
       return structuredClone(entry);
     } catch (error) {
-      if (writeAttempted && error.code !== "STORE_SAVE_ABORTED") {
+      if (
+        writeAttempted &&
+        error.code !== "STORE_SAVE_ABORTED" &&
+        this.active === projectId &&
+        this.epoch === epoch &&
+        !this.closed
+      ) {
         // A failed acknowledgement does not establish whether the atomic write
         // committed. Stop this session instead of retrying on the next interval.
         this.warning =
           "保存结果需重新加载核实，自动同步已停止；请检查后重新激活";
-        this.active = null;
-        this.epoch++;
-        this.next.clear();
-        this.signatures.clear();
-        this.credentials.clear();
+        this.#reset();
       }
       if (
         !writeAttempted &&
@@ -418,6 +478,7 @@ export class ActiveProjectImports {
           if (
             this.active === projectId &&
             this.epoch === epoch &&
+            !this.closed &&
             !current.archived &&
             signature(definitions(current).find((d) => d.id === sourceId)) ===
               key
@@ -426,7 +487,10 @@ export class ActiveProjectImports {
             // Do not persist fetched source text, transport details or arbitrary error objects.
             entry.message = "同步请求、文档解析或导入失败；项目接口保持不变";
             record(current, entry);
-            await this.store.save(current, { activity: true });
+            await this.store.save(current, {
+              activity: true,
+              signal: controller.signal,
+            });
           }
         } catch {
           /* Preserve the original error; do not retry uncertain writes. */
