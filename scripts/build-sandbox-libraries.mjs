@@ -99,3 +99,6 @@ await import("./build-url-sdk.mjs");
 
 // Rebuild the separately isolated, licensed original Mock core.
 await import("./build-native-mock.mjs");
+
+// Independent same-VM script facade; retain the native Random asset unchanged.
+await import("./build-script-mock.mjs");

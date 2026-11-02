@@ -78,9 +78,17 @@ The private host bridge grants accounting only, not network/database authority.
 Attempt debit occurs before arity, guard or validation; failed caught attempts
 are charged. Work is reserved before core execution. Exhaustion is sticky and
 saturates trusted counters, so a later fresh scope cannot refill a caught limit.
+These counters are consumed reservation credits, not observed execution counts;
+terminal saturation does not claim the rejected generation actually ran.
 Parent validates integral counters against supplied bounds before publishing
 and subtracts them for subsequent scopes. PRE and POST remain separate phases
 under the existing phase contract. Independent future runs start fresh.
+
+A final primitive-only checkpoint checks the existing host activity deadline
+after result validation, before returning the Mock value. It does not debit or
+replenish credits. The ordinary error is catchable by script code: this closes
+the helper's late-value publication gap, not a promise of globally atomic
+termination or rollback of unrelated script HTTP/database side effects.
 
 The core executes in the EXISTING script QuickJS, with unchanged250ms active
 time,2s wall,16MiB heap,512KiB stack,1MiB final output and all existing quotas.
@@ -117,3 +125,21 @@ prove cumulative failed-call accounting and all-candidate array work, byte/node
 limits and fresh-run recovery. Preserve all old tests and require cross-platform
 asset/notice integrity plus final fresh packaged bytes. No frontend or visual
 work, overall delivery, original-runtime parity, merge or deployment claim.
+
+### Local static checkpoint (2026-11-01)
+
+Independent source review found no unresolved safety blocker in the bounded
+facade/ledger. The first reviewed adapter set passed8 builtin-only tests; the
+final checkpoint increment passed9 adapter/ledger tests plus2 actual-file
+artifact/source checks and6 preserved bootstrap pure checks (17/17). Generators
+in the pure tests are inert stubs, not the public Mock implementation.
+
+The dedicated builder and exact installed package/esbuild/platform binary were
+independently checked against real registry tarballs and lock integrity before
+static generation. Actual generated bundle182743bytes, SHA256
+`f489fcf16ee9f1fbea348b1ef6d3c227ef86c05a0cf33b2dce294e3a178330f3`,
+was independently read back with its manifest/exact input graph and notices;
+old native Random JS/JSON remain unchanged. No generated bundle or product
+runtime was executed locally. Syntax/formatting/static-byte evidence does not
+prove QuickJS semantic behavior, load cost or end-to-end runtime acceptance;
+the authored real runtime/workflow tests still require ordinary exact-head CI.
