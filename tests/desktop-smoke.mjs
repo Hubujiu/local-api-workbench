@@ -1,3 +1,4 @@
+import { sqliteProcessFailureDetails } from "../src/sqlite-process-diagnostics.mjs";
 import { desktopScriptProbes } from "./fixtures/desktop-script-probes.mjs";
 import http from "node:http";
 import {
@@ -123,7 +124,7 @@ try {
       request.failure()?.errorText,
     );
   });
-  window.on("response", (response) => {
+  window.on("response", async (response) => {
     if (response.status() >= 400) {
       const url = new URL(response.url());
       console.error(
@@ -131,6 +132,16 @@ try {
         response.status(),
         url.origin + url.pathname,
       );
+      if (url.pathname.endsWith("/database")) {
+        try {
+          const details = sqliteProcessFailureDetails(await response.json());
+          if (details.diagnostics)
+            console.error(
+              "DESKTOP_SQLITE_PROCESS_FAILURE",
+              JSON.stringify(details),
+            );
+        } catch {}
+      }
     }
   });
   phase = "request";

@@ -44,7 +44,14 @@ export async function querySQLiteBounded(filename, sql, parameters = []) {
 }
 
 // Opt-in DML path; existing query functions remain read-only.
-export function mutateSQLite(filename, sql, parameters = []) {
+export function mutateSQLite(filename, sql, parameters = [], onStage) {
+  // Observations are best-effort and cannot replace a SQL result or exception.
+  const observe = (stage) => {
+    try {
+      onStage?.(stage);
+    } catch {}
+  };
+  observe("validate");
   if (
     typeof sql !== "string" ||
     sql.length > 50000 ||
@@ -112,18 +119,23 @@ export function mutateSQLite(filename, sql, parameters = []) {
   if (typeof filename !== "string" || !filename.trim())
     throw Error("数据库路径为空");
   // Do not create a new file merely because an opt-in operation fails.
+  observe("probe-open");
   const probe = new DatabaseSync(filename, {
     readOnly: true,
     allowExtension: false,
   });
+  observe("probe-close");
   probe.close();
+  observe("write-open");
   const db = new DatabaseSync(filename, {
     readOnly: false,
     allowExtension: false,
   });
   let committed = false;
   try {
+    observe("begin");
     db.exec("BEGIN IMMEDIATE");
+    observe("prepare");
     const statement = db.prepare(sql),
       columns = statement.columns().map((c) => c.name),
       rows = [];
@@ -131,6 +143,7 @@ export function mutateSQLite(filename, sql, parameters = []) {
     databaseColumns(columns);
     let info,
       bytes = 0;
+    observe("step");
     if (columns.length) {
       for (const row of statement.iterate(...parameters)) {
         if (rows.length >= 1000) throw Error("写入返回结果超过1000行，已回滚");
@@ -140,12 +153,15 @@ export function mutateSQLite(filename, sql, parameters = []) {
         rows.push(converted);
       }
     } else info = statement.run(...parameters);
+    observe("changes");
     const changed = db.prepare("SELECT total_changes() AS count").get().count;
     if (changed > 1000) throw Error("写入及触发器修改超过1000行，已回滚");
     const affectedRows =
       info?.changes ?? db.prepare("SELECT changes() AS count").get().count;
+    observe("commit");
     db.exec("COMMIT");
     committed = true;
+    observe("commit-complete");
     return {
       columns,
       rows,
@@ -156,11 +172,14 @@ export function mutateSQLite(filename, sql, parameters = []) {
     };
   } finally {
     if (!committed) {
+      observe("rollback");
       try {
         db.exec("ROLLBACK");
       } catch {}
     }
+    observe("close");
     db.close();
+    observe("close-complete");
   }
 }
 export async function mutateSQLiteBounded(filename, sql, parameters = []) {
