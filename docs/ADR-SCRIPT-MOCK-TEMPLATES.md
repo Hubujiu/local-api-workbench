@@ -182,3 +182,19 @@ above and explicit captured-native surfaces. Differential public-package tests
 are ordinary-CI-only, never part of local inert-generator pure checks. The first
 red evidence remains preserved; the redesigned candidate requires a new exact-
 head ordinary CI before any runtime or performance acceptance claim.
+
+The reviewed static rebuild emits 8,539 bytes, SHA256
+`3117f7627c19d4cfa1d7d02b0e2b347acdd29be277dd64651982fc3acd723e3a`.
+Its exact three source inputs and attribution JSON use LF checkout attributes;
+the manifest hashes both source inputs and the upstream span map. Independent
+readback verified the new graph, both MIT notices and unchanged old Random and
+lock bytes. Size reduction is not runtime performance acceptance.
+
+The revised local checks passed 20/20: twelve inert-generator adapter/ledger
+checks, two fs/hash/source artifact checks and six preserved bootstrap pure
+checks. A first run caught missing Array.prototype.length restoration in the
+new numeric-getter test's finally block; its red log is retained. The fixture
+now restores the original index and length descriptors, proves the complete
+original key/descriptor set, and then verifies positive recovery. Production
+guard behavior was not relaxed. Neither the adapted generator nor public-core
+reference tests have been executed locally.

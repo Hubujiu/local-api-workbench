@@ -216,6 +216,43 @@ test("Mock pure surface guard rejects both native descriptor kind conversions wi
     assert.equal(facade.mock(1), 1);
   }
 });
+test("Mock pure surface guard refuses inherited numeric array getters before generator execution", () => {
+  const { facade, received } = fixture([1]);
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, "3");
+  const length = Object.getOwnPropertyDescriptor(Array.prototype, "length");
+  const originalKeys = Reflect.ownKeys(Array.prototype);
+  const originalDescriptors = Object.getOwnPropertyDescriptors(Array.prototype);
+  let invoked = 0,
+    error;
+  try {
+    Object.defineProperty(Array.prototype, "3", {
+      configurable: true,
+      get() {
+        invoked++;
+        return "inherited";
+      },
+    });
+    try {
+      facade.mock([1]);
+    } catch (caught) {
+      error = caught;
+    }
+  } finally {
+    if (original) Object.defineProperty(Array.prototype, "3", original);
+    else delete Array.prototype[3];
+    // Defining an indexed property also grows this real array's own length.
+    Object.defineProperty(Array.prototype, "length", length);
+  }
+  assert.deepEqual(Reflect.ownKeys(Array.prototype), originalKeys);
+  assert.deepEqual(
+    Object.getOwnPropertyDescriptors(Array.prototype),
+    originalDescriptors,
+  );
+  assert.equal(error?.message, "Mock模板: 内建对象已修改");
+  assert.equal(invoked, 0);
+  assert.equal(received.length, 0);
+  assert.deepEqual(facade.mock([1]), [1]);
+});
 test("Mock pure post-traversal guard rejects Proxy-induced inherited pollution without getter execution", () => {
   const { facade, received } = fixture({ a: 1 });
   let invoked = 0,

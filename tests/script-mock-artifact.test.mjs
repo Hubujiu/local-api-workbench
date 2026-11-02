@@ -62,6 +62,8 @@ test("script Mock artifact retains exact reviewed source, input graph and both M
     assert(
       attributes.split(/\r?\n/).includes("/src/vendor/" + path + " -text"),
     );
+  for (const path of [...manifest.inputs, "scripts/script-mock-source.json"])
+    assert(attributes.split(/\r?\n/).includes("/" + path + " text eol=lf"));
 });
 
 test("script Mock source wiring charges read and eager install inside the existing activity envelope", async () => {
