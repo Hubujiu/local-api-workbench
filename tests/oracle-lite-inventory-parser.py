@@ -122,6 +122,16 @@ class ParserFixtures(unittest.TestCase):
 
 
 class RestrictionFixtures(unittest.TestCase):
+    def test_minimal_cleanup_identity_never_needs_runtime_restrictions(self):
+        info = {"id": "1" * 64, "image": "sha256:" + "2" * 64, "labels": {MODULE.LABEL: "owner"}, "requestedMounts": None, "mounts": []}
+        MODULE.validate_cleanup_identity(info, "owner", "1" * 64, "sha256:" + "2" * 64)
+        self.assertEqual(MODULE.new_anonymous_mounts(info, [], set()), [])
+        for key, value in [("id", "3" * 64), ("image", "other"), ("labels", {MODULE.LABEL: "other"})]:
+            changed = copy.deepcopy(info)
+            changed[key] = value
+            with self.assertRaises(MODULE.ProbeError):
+                MODULE.validate_cleanup_identity(changed, "owner", "1" * 64, "sha256:" + "2" * 64)
+
     def test_expected_restrictions(self):
         proof = validate(safe_container())
         self.assertTrue(proof["readonly"])

@@ -36,9 +36,9 @@ ENV_CLEAR_KEYS = (
 )
 HASH_STATES = {"sha256", "metadata-only-wallet", "not-regular", "size-limit", "budget-limit", "read-error"}
 SCAN_STATES = {"complete", "absent", "unreadable", "not-inspected", "scan-error", "entry-limit", "depth-limit", "path-limit", "candidate-limit", "hash-incomplete", "symlink-root", "symlink-ancestor"}
-IMAGE_FORMAT = '{"id":{{json .Id}},"digests":{{json .RepoDigests}},"os":{{json .Os}},"architecture":{{json .Architecture}},"volumes":{{json .Config.Volumes}},"size":{{json .Size}}}'
+IMAGE_FORMAT = '{"id":{{json .ID}},"digests":{{json .RepoDigests}},"os":{{json .Os}},"architecture":{{json .Architecture}},"volumes":{{json .Config.Volumes}},"size":{{json .Size}}}'
 # Selected fields only: no raw Env values, inspect dump, or host mount Source.
-CONTAINER_FORMAT = '''{"id":{{json .Id}},"image":{{json .Image}},"path":{{json .Path}},"args":{{json .Args}},"user":{{json .Config.User}},"workingDir":{{json .Config.WorkingDir}},"restartPolicy":{{json .HostConfig.RestartPolicy.Name}},"entrypoint":{{json .Config.Entrypoint}},"cmd":{{json .Config.Cmd}},"healthcheck":{{json .Config.Healthcheck}},"labels":{{json .Config.Labels}},"readonly":{{json .HostConfig.ReadonlyRootfs}},"network":{{json .HostConfig.NetworkMode}},"privileged":{{json .HostConfig.Privileged}},"capAdd":{{json .HostConfig.CapAdd}},"capDrop":{{json .HostConfig.CapDrop}},"securityOpt":{{json .HostConfig.SecurityOpt}},"memory":{{json .HostConfig.Memory}},"memorySwap":{{json .HostConfig.MemorySwap}},"nanoCpus":{{json .HostConfig.NanoCpus}},"pidsLimit":{{json .HostConfig.PidsLimit}},"ipcMode":{{json .HostConfig.IpcMode}},"pidMode":{{json .HostConfig.PidMode}},"utsMode":{{json .HostConfig.UTSMode}},"usernsMode":{{json .HostConfig.UsernsMode}},"binds":{{json .HostConfig.Binds}},"volumesFrom":{{json .HostConfig.VolumesFrom}},"devices":{{json .HostConfig.Devices}},"deviceRequests":{{json .HostConfig.DeviceRequests}},"portBindings":{{json .HostConfig.PortBindings}},"publishAllPorts":{{json .HostConfig.PublishAllPorts}},"logType":{{json .HostConfig.LogConfig.Type}},"ulimits":{{json .HostConfig.Ulimits}},"requestedMounts":{{json .HostConfig.Mounts}},"mounts":[{{range $i,$m := .Mounts}}{{if $i}},{{end}}{"name":{{json $m.Name}},"driver":{{json $m.Driver}},"type":{{json $m.Type}},"destination":{{json $m.Destination}},"rw":{{json $m.RW}}}{{end}}],"networks":{{json .NetworkSettings.Networks}},"running":{{json .State.Running}},"status":{{json .State.Status}},"exitCode":{{json .State.ExitCode}},"oomKilled":{{json .State.OOMKilled}}}'''
+CONTAINER_FORMAT = '''{"id":{{json .ID}},"image":{{json .Image}},"path":{{json .Path}},"args":{{json .Args}},"user":{{json .Config.User}},"workingDir":{{json .Config.WorkingDir}},"restartPolicy":{{json .HostConfig.RestartPolicy.Name}},"entrypoint":{{json .Config.Entrypoint}},"cmd":{{json .Config.Cmd}},"healthcheck":{{json .Config.Healthcheck}},"labels":{{json .Config.Labels}},"readonly":{{json .HostConfig.ReadonlyRootfs}},"network":{{json .HostConfig.NetworkMode}},"privileged":{{json .HostConfig.Privileged}},"capAdd":{{json .HostConfig.CapAdd}},"capDrop":{{json .HostConfig.CapDrop}},"securityOpt":{{json .HostConfig.SecurityOpt}},"memory":{{json .HostConfig.Memory}},"memorySwap":{{json .HostConfig.MemorySwap}},"nanoCpus":{{json .HostConfig.NanoCPUs}},"pidsLimit":{{json .HostConfig.PidsLimit}},"ipcMode":{{json .HostConfig.IpcMode}},"pidMode":{{json .HostConfig.PidMode}},"utsMode":{{json .HostConfig.UTSMode}},"usernsMode":{{json .HostConfig.UsernsMode}},"binds":{{json .HostConfig.Binds}},"volumesFrom":{{json .HostConfig.VolumesFrom}},"devices":{{json .HostConfig.Devices}},"deviceRequests":{{json .HostConfig.DeviceRequests}},"portBindings":{{json .HostConfig.PortBindings}},"publishAllPorts":{{json .HostConfig.PublishAllPorts}},"logType":{{json .HostConfig.LogConfig.Type}},"ulimits":{{json .HostConfig.Ulimits}},"requestedMounts":{{json .HostConfig.Mounts}},"mounts":[{{range $i,$m := .Mounts}}{{if $i}},{{end}}{"name":{{json $m.Name}},"driver":{{json $m.Driver}},"type":{{json $m.Type}},"destination":{{json $m.Destination}},"rw":{{json $m.RW}}}{{end}}],"networks":{{json .NetworkSettings.Networks}},"running":{{json .State.Running}},"status":{{json .State.Status}},"exitCode":{{json .State.ExitCode}},"oomKilled":{{json .State.OOMKilled}}}'''
 # Transform only these selected environment entries into safe key/boolean pairs.
 # Raw Config.Env values are NEVER emitted by Docker, saved, or uploaded.
 HOOK_ENV_PREDICATE = "or " + " ".join('(eq $key "' + key + '")' for key in ENV_CLEAR_KEYS)
@@ -49,6 +49,9 @@ HOOK_ENV_FORMAT = (
     '{{end}}{{end}}]'
 )
 CONTAINER_FORMAT = CONTAINER_FORMAT[:-1] + "," + HOOK_ENV_FORMAT + "}"
+# Cleanup must not depend on the full restrictions/command/environment template.
+# These are typed Go field names, not JSON tags (ID != Id, NanoCPUs != NanoCpus).
+CLEANUP_FORMAT = '{"id":{{json .ID}},"image":{{json .Image}},"labels":{{json .Config.Labels}},"requestedMounts":{{json .HostConfig.Mounts}},"mounts":[{{range $i,$m := .Mounts}}{{if $i}},{{end}}{"name":{{json $m.Name}},"driver":{{json $m.Driver}},"type":{{json $m.Type}},"destination":{{json $m.Destination}},"rw":{{json $m.RW}}}{{end}}]}'
 
 
 class ProbeError(Exception):
@@ -191,6 +194,14 @@ def new_anonymous_mounts(info, volumes, old_volumes):
     return actual_mounts
 
 
+def validate_cleanup_identity(info, token, container_id, image_id):
+    """Ownership proof only; never authorizes starting or weakening containment."""
+    if (info.get("labels") or {}).get(LABEL) != token or not re.fullmatch(r"[a-f0-9]{64}", info.get("id", "")):
+        raise ProbeError("cleanup-ownership-unverified")
+    if info.get("image") != image_id or (container_id is not None and info["id"] != container_id):
+        raise ProbeError("cleanup-identity-mismatch")
+
+
 def validate_container(info, image_id, command, volumes, token, old_volumes, started=False):
     """Validate selected actual Docker state, not merely requested CLI flags."""
     expected = {
@@ -325,8 +336,9 @@ def main():
                 raise ProbeError(result["failure"] or "docker-command-failed")
             return result
 
-        def inspect_container(target):
-            return json.loads(call(["container", "inspect", "--format", CONTAINER_FORMAT, target])["output"])
+        def inspect_container(target, cleanup=False):
+            template = CLEANUP_FORMAT if cleanup else CONTAINER_FORMAT
+            return json.loads(call(["container", "inspect", "--format", template, target])["output"])
 
         try:
             runner_guard()
@@ -402,9 +414,8 @@ def main():
             # volumes. No image prune, host deletion, or prior evidence mutation.
             if create_attempted:
                 try:
-                    owned = inspect_container(container_id or name)
-                    if (owned.get("labels") or {}).get(LABEL) != token or not re.fullmatch(r"[a-f0-9]{64}", owned.get("id", "")):
-                        raise ProbeError("cleanup-ownership-unverified")
+                    owned = inspect_container(container_id or name, cleanup=True)
+                    validate_cleanup_identity(owned, token, container_id, info["id"])
                     try:
                         owned_mounts = new_anonymous_mounts(owned, volumes, old_volumes)
                     except ProbeError:

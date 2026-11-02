@@ -114,3 +114,60 @@ existing Oracle candidate workflow, public-provider disabled state, and strict
 native TCPS gates remain unchanged: actual `SYS_CONTEXT` protocol `tcps`, listener
 TCPS 2484, bad-CA/wrong-SAN rejection, and recovery must still pass separately.
 There is no TLS-proxy substitution and no assertion that Full is mandatory.
+
+## Inspect-template regression and first-run evidence
+
+Inventory run `41466649833` stopped at `verify-before-start` with a Docker command
+failure; the same full inspector also prevented cleanup confirmation. Its
+original evidence is retained. It verified the exact image identity and observed
+`declaredVolumes: []`, but produced **no capability scan**. No inventory shell or
+database started; capability absence cannot be inferred.
+
+The concrete source defect is Go-field versus JSON-tag spelling: typed container
+and image identity is `ID` (JSON `Id`), and typed resources use `NanoCPUs` (JSON
+`NanoCpus`). Docker attempts typed template execution first, then falls back to a
+strict raw JSON map on error. The old spellings forced that fallback; zero-volume
+HostConfig omits its `Mounts` JSON key, which the old template dereferenced. This
+is a source-consistent explanation, not recovered stderr: raw stderr was not
+saved and the exact runner Docker version was not recorded.
+
+All three templates now use typed field names. Cleanup has its own minimal
+identity/label/mount inspector, independent of full restriction, command,
+environment, and resource fields. It still requires owned container ID/label and
+exact image identity, and removes anonymous volumes only after the same strict
+new/source-less/read-only/local-driver mount checks. No containment validator is
+weakened or skipped before start.
+
+Primary source pins (Docker/Moby `v28.5.1`):
+
+- [Container ID and inspection shapes](https://github.com/moby/moby/blob/v28.5.1/api/types/container/container.go)
+- [NanoCPUs and omitempty HostConfig.Mounts](https://github.com/moby/moby/blob/v28.5.1/api/types/container/hostconfig.go)
+- [Image ID and Os fields](https://github.com/moby/moby/blob/v28.5.1/api/types/image/image_inspect.go)
+- [Typed execution and strict raw fallback](https://github.com/docker/cli/blob/v28.5.1/cli/command/inspect/inspector.go)
+- [Docker json/split template functions](https://github.com/docker/cli/blob/v28.5.1/templates/templates.go)
+
+`tests/oracle-lite-inspect-template.go` is an offline **standard-library-only**
+fixture using real Go `text/template`, with selected synthetic typed structures
+matching these official field names, embedding, and JSON tags. It checks image,
+full-container, and minimal-cleanup templates with zero/nonzero volumes; legacy
+typed errors/raw-map fallback; nil configuration fail-closed behavior; omitted
+healthcheck remaining unaccepted; and boolean-only environment proof. No Docker
+or repository/application package is imported, no subprocess/network/file write
+exists, and no actual inspect dump is consumed.
+
+After independent closure audit only, the parent may run the already installed Go
+toolchain with an isolated temporary working directory/cache/output and **all**
+of these settings: `GOTOOLCHAIN=local`, `GOWORK=off`, `GOPROXY=off`, `GOSUMDB=off`,
+`GO111MODULE=off`, `GOENV=off`, `CGO_ENABLED=0`. If the toolchain is unavailable,
+stop; do not install/download one. The pure Python bridge exports only the exact
+current template strings and then checks Go-rendered synthetic outputs with the
+production pure validators:
+
+```text
+python3 -I tests/oracle-lite-template-input.py export > TEMP/templates.json
+go run tests/oracle-lite-inspect-template.go < TEMP/templates.json > TEMP/results.json
+python3 -I tests/oracle-lite-template-input.py verify TEMP/results.json
+```
+
+The commands above describe only the audited synthetic regression, never a local
+Docker probe. First failed CI evidence must remain distinct from any later run.
