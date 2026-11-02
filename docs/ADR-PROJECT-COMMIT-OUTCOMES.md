@@ -130,8 +130,10 @@ parameter-dictionary files retain their existing read defaults.
 New identities use `Store.create(name, directory)` or `Store.restore(document)`.
 Restore retains `restoreProject`'s backup validation, normalization and generated
 ID, but discards source revision/configuration/fingerprint ownership metadata and
-uses the same exclusive directory reservation, registry guard and creation intent
-as ordinary creation. First revision/configuration revision are both 1. Direct
+uses the same exclusive directory reservation and creation intent as ordinary
+creation. Unlike ordinary create, explicit restore remains available while a
+source/unrelated project is damaged; it preserves unrelated pending creation
+intents and never overwrites the damaged identity. First revision/configuration revision are both 1. Direct
 callers that previously used `save(restoreProject(document))` must use `restore`;
 ordinary HTTP/MCP updates cannot select this creation path. This changes no MCP
 grant or credential policy.

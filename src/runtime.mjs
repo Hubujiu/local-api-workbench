@@ -327,17 +327,17 @@ export class Store {
     // The exclusive creation path assigns its own first revision and fingerprint.
     delete p.configRevision;
     delete p._diskFingerprint;
-    return this.#queueCreation(p);
+    return this.#queueCreation(p, undefined, true);
   }
-  #queueCreation(p, directory) {
+  #queueCreation(p, directory, restoring = false) {
     this.#validateProject(p);
     const task = this.pending
       .catch(() => {})
-      .then(() => this.#createProject(p, directory));
+      .then(() => this.#createProject(p, directory, restoring));
     this.pending = task;
     return task;
   }
-  async #createProject(p, directory) {
+  async #createProject(p, directory, restoring = false) {
     await mkdir(this.root, { recursive: true });
     const releaseRegistry = await acquireFileLock(
       path.join(this.root, ".registry.lock"),
@@ -346,18 +346,24 @@ export class Store {
       primaryError;
     try {
       await this.#loadRegistry();
-      const unresolved = (await this.#listRegistered()).filter(
-        (project) => project.error,
-      );
-      if (unresolved.length)
-        throw new ProjectRecoveryRequired(
-          unresolved.map((project) => project.id),
+      // A backup must remain usable to create a separate healthy copy while an
+      // unrelated/source project is damaged. Ordinary create keeps its guard.
+      if (!restoring) {
+        const unresolved = (await this.#listRegistered()).filter(
+          (project) => project.error,
         );
+        if (unresolved.length)
+          throw new ProjectRecoveryRequired(
+            unresolved.map((project) => project.id),
+          );
+      }
+      const pending = { ...this.pendingLocations };
       const base = path.resolve(directory || this.root),
         target = path.join(base, p.id);
       await mkdir(base, { recursive: true });
       if (
         Object.hasOwn(this.locations, p.id) ||
+        Object.hasOwn(pending, p.id) ||
         (await this.#pathExists(path.join(this.root, p.id))) ||
         (await this.#pathExists(path.join(this.root, p.id + ".json")))
       )
@@ -375,7 +381,10 @@ export class Store {
           throw Error("项目ID或存储目录已存在");
         // Exclusive reservation: never initialize inside a pre-existing user directory.
         await mkdir(target);
-        await this.#writeRegistryFile(".creations.json", { [p.id]: base });
+        await this.#writeRegistryFile(".creations.json", {
+          ...pending,
+          [p.id]: base,
+        });
         intent = true;
         try {
           await this.#saveLocked(p, {}, base, true);
@@ -409,7 +418,7 @@ export class Store {
             this.locations[p.id] = base;
             await this.#writeRegistryFile(".locations.json", this.locations);
           }
-          await this.#writeRegistryFile(".creations.json", {});
+          await this.#writeRegistryFile(".creations.json", pending);
         }
       } catch (error) {
         // A committed project remains discoverable through its durable intent.
