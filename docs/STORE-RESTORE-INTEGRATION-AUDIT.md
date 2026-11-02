@@ -6,7 +6,8 @@ This integration starts at accepted backend root `e0ba44e275da95435ae0c0d70593d4
 (tree `2b8f2d65c0fbba527783417465198776cf10fa4c`) and applies only the PR #17 delta
 from `82336c421e9702b258228c2cdfd95197c1eb8125` to
 `b2ff5ef24362cc45b03931861ecab0f739953990` (feature tree
-`c5bf0c46b2b24e3e7bbffee0a043e13689935cf6`). This is **source integration, not a
+`c5bf0c46b2b24e3e7bbffee0a043e13689935cf6`), followed by the fixture-only
+correction `45394302c4664062ec741c30267a1ca0448ace68`. This is **source integration, not a
 runtime acceptance claim**. No app, Store, filesystem-corruption fixture, server,
 CLI, VM/Worker/Mock/SQL test, build or reference was executed locally. Ordinary
 exact-integrated-head CI remains required; feature CI cannot substitute for it.
@@ -163,7 +164,7 @@ case counts. Only three existing assertion expressions change: the actual restor
 Mock comparison described above, the invalid-record call to the new explicit API,
 and that case's all-fixture journal-absence check. No assertion is deleted.
 
-Both new regression files are preserved from the feature: 11 test declarations
+Both new regression files are preserved from the corrected feature: 11 test declarations
 expand to the feature's 24 scenarios (21 real-filesystem plus owner stale import,
 direct MCP stale sync, and owner backup restore). Direct MCP is dispatcher-level,
 not an official SDK claim. Existing official SDK and CLI restore/restart workflows
@@ -172,3 +173,16 @@ are retained through the fixture setup migrations above.
 Static syntax parsing, the complete repository formatter check and diff whitespace
 checks are the only validation performed here. The accepted root's previous CI and
 the feature's separate CI do not establish this integrated tree's runtime result.
+
+## First feature CI fixture correction
+
+The first feature run `41433978668` genuinely failed the new legacy migration and
+permission fixtures before reaching their intended branches: three source backup
+literals used `environments: []`, which existing validation rejects. The four
+expanded scenarios (one loop has two variants) were not runtime passes.
+
+Feature commit `45394302c4664062ec741c30267a1ca0448ace68` changes only those three
+fixture fields to one valid named environment with empty variables. This correction
+is incorporated into the isolated root. No production validation, assertions,
+names, skips or safety gates were relaxed. Corrected feature CI and then exact
+integrated-root ordinary CI remain separate evidence requirements.
