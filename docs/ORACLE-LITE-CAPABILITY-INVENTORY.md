@@ -96,7 +96,8 @@ Candidate basename patterns include `orapki`, `mkstore`, `configTcps`, `java`,
   commands share 660 seconds, with a separate 70-second cleanup command budget.
   Forced client termination may add a bounded wait of at most five seconds.
 
-Only `inventory.json` and a short sanitized status log are uploaded, under
+Only `inventory.json`, a short sanitized status log, and a bounded preflight-only
+status JSON are uploaded, under
 `contents: read`, with a unique run/attempt artifact name. Pull/auth/access errors
 fail closed without an alternate registry, login, or larger-image fallback.
 
@@ -171,3 +172,22 @@ python3 -I tests/oracle-lite-template-input.py verify TEMP/results.json
 
 The commands above describe only the audited synthetic regression, never a local
 Docker probe. First failed CI evidence must remain distinct from any later run.
+
+The local `/usr/bin/go` command proved not to be a usable Go toolchain: it rejected
+`run` before compilation. No toolchain was installed, and no local Go fixture pass
+is claimed. The retained attempt is separate from the successful 18 pure Python
+fixtures. CI therefore has a **mandatory three-minute offline preflight before
+any image pull or container operation**, using only the GitHub-hosted runner's
+preinstalled Go, an isolated runner-temporary working directory/cache, and the
+download-disabled settings above. It exports the exact templates, executes the Go
+fixture, applies the production Python validators to its synthetic output, and
+runs the pure Python fixtures. Missing/incompatible Go or any test failure skips
+the image collector. No setup/install action or toolchain fallback exists. The
+collector also requires the preflight-passed marker supplied only by that gated
+step; the marker is not passed into the image. The preflight resolves a non-repo
+executable path and verifies a stable Go 1.18+ `linux/amd64` version before using
+that same executable for the fixture. It writes only a tiny preflight-status JSON
+(`incomplete`, `failed`, or `passed`, explicitly scoped to no image operations),
+so a preflight failure still has bounded evidence rather than an unexplained
+missing inventory artifact. The existing image restrictions,
+13-minute collector budget and separate cleanup budget remain unchanged.

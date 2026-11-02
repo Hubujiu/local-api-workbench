@@ -287,7 +287,7 @@ def bounded_command(argv, env, timeout, limit=MAX_OUTPUT):
 
 
 def runner_guard():
-    expected = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted", "RUNNER_OS": "Linux", "GITHUB_EVENT_NAME": "push", "GITHUB_REF": BRANCH, "GITHUB_REPOSITORY": "Hubujiu/local-api-workbench", "GITHUB_REPOSITORY_ID": "1423306754"}
+    expected = {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted", "RUNNER_OS": "Linux", "GITHUB_EVENT_NAME": "push", "GITHUB_REF": BRANCH, "GITHUB_REPOSITORY": "Hubujiu/local-api-workbench", "GITHUB_REPOSITORY_ID": "1423306754", "ORACLE_LITE_TEMPLATE_PREFLIGHT": "passed"}
     if any(os.environ.get(key) != value for key, value in expected.items()):
         raise ProbeError("not-approved-github-push-runner")
     if not re.fullmatch(r"[0-9]+", os.environ.get("GITHUB_RUN_ID", "")):

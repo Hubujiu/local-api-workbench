@@ -17,7 +17,7 @@ jobs:
       github.repository_id == '1423306754' &&
       github.ref == 'refs/heads/wip/oracle-lite-capability-probe'
     runs-on: ubuntu-24.04
-    timeout-minutes: 16
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         timeout-minutes: 2
@@ -26,9 +26,59 @@ jobs:
           sparse-checkout: |
             scripts/oracle-lite-inventory.py
             scripts/oracle-lite-inventory.sh
+            tests/oracle-lite-inventory-parser.py
+            tests/oracle-lite-template-input.py
+            tests/oracle-lite-inspect-template.go
           sparse-checkout-cone-mode: false
+      - name: Validate typed inspectors offline before any image access
+        id: inspect_templates
+        timeout-minutes: 3
+        env:
+          GOTOOLCHAIN: local
+          GOWORK: "off"
+          GOPROXY: "off"
+          GOSUMDB: "off"
+          GO111MODULE: "off"
+          GOENV: "off"
+          CGO_ENABLED: "0"
+          GOTELEMETRY: "off"
+          GOFLAGS: ""
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          evidence="$GITHUB_WORKSPACE/oracle-lite-template-preflight-output"
+          mkdir "$evidence"
+          report="$evidence/preflight.json"
+          printf '%s\n' '{"schemaVersion":1,"scope":"preflight-only","status":"incomplete","imageOperationsExecuted":false,"runtimeAcceptance":false,"databaseStarted":false}' > "$report"
+          finish_preflight() {
+            code=$?
+            status=failed
+            if (( code == 0 )); then status=passed; fi
+            printf '{"schemaVersion":1,"scope":"preflight-only","status":"%s","exitCode":%s,"imageOperationsExecuted":false,"runtimeAcceptance":false,"databaseStarted":false}\n' "$status" "$code" > "$report"
+          }
+          trap finish_preflight EXIT
+          # Use only the hosted runner's existing Go; never setup/install/download.
+          go_path="$(command -v go)"
+          [[ "$go_path" = /* && -x "$go_path" && "$go_path" != "$GITHUB_WORKSPACE/"* ]]
+          version="$("$go_path" version)"
+          [[ "$version" =~ ^go\ version\ go1\.([0-9]+)(\.[0-9]+)?\ linux/amd64$ ]]
+          (( 10#${BASH_REMATCH[1]} >= 18 ))
+          printf '%s\n' "$version"
+          scratch="$(mktemp -d "$RUNNER_TEMP/oracle-template-check.XXXXXX")"
+          export GOCACHE="$scratch/cache" GOMODCACHE="$scratch/modules"
+          export GOPATH="$scratch/gopath" GOTMPDIR="$scratch/tmp"
+          mkdir -p "$GOCACHE" "$GOMODCACHE" "$GOPATH" "$GOTMPDIR"
+          cd "$scratch"
+          python3 -I -B "$GITHUB_WORKSPACE/tests/oracle-lite-template-input.py" export > templates.json
+          "$go_path" run "$GITHUB_WORKSPACE/tests/oracle-lite-inspect-template.go" < templates.json > results.json
+          python3 -I -B "$GITHUB_WORKSPACE/tests/oracle-lite-template-input.py" verify results.json
+          python3 -I -B "$GITHUB_WORKSPACE/tests/oracle-lite-inventory-parser.py"
       - name: Collect bounded read-only metadata from the exact approved Lite image
+        if: success() && steps.inspect_templates.outcome == 'success'
         timeout-minutes: 13
+        env:
+          ORACLE_LITE_TEMPLATE_PREFLIGHT: passed
         run: python3 -I scripts/oracle-lite-inventory.py
       - name: Preserve only bounded JSON metadata and sanitized status logs
         if: always()
@@ -37,6 +87,7 @@ jobs:
         with:
           name: oracle-lite-capability-inventory-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            oracle-lite-template-preflight-output/preflight.json
             oracle-lite-inventory-output/inventory.json
             oracle-lite-inventory-output/sanitized.log
           retention-days: 7
