@@ -107,3 +107,44 @@ The local-token-protected activation API is the only grant entry point. No new
 frontend or automatic secret persistence is included. Actual Basic/Bearer/API-key
 HTTP, unauthorized responses, invalid-input preflight, scheduled credential use,
 configuration changes, project isolation and backup/restart are covered.
+
+## Configuration-save session ownership
+
+Activation intent is distinct from the public `active` project: an owner remains
+identifiable while activation reads configuration, while an old run drains, and
+while a configuration save suspends scheduling. Explicit activation replaces the
+owner before awaiting anything. A targeted stop cancels that project's pending,
+active or suspended owner, but never an unrelated project's owner. Shutdown
+invalidates every owner. No lock is held across network or Store waits.
+
+Both configuration-writing HTTP paths use an opaque, controller-issued
+`suspend(projectId)` lease. Suspension revokes old credentials, aborts/drains the
+old run and clears its schedule. A later save supersedes an earlier suspension,
+including when `active` is already null. `reactivate(lease)` claims a lease once,
+then rereads durable configuration; it checks ownership before and after the
+read. It never invokes global activation/deactivation. Invalid, stale, replayed
+or discarded leases cannot read configuration, install credentials, schedule a
+run, clear a newer session or replace its warning. A stale read already in flight
+may settle, but its result/error has no session effect. Save failure discards
+only its own lease and does not restart anything. Authenticated definitions still
+require a fresh explicit grant; an old resume cannot erase newer credentials.
+An ordinary project metadata save does not suspend an unchanged session.
+
+Archive PUT invalidates the matching pending/suspended owner before saving.
+Source removal is a configuration replacement and participates in the same lease
+protocol. This branch has no project DELETE route; unrelated definition DELETE
+routes are not project lifecycle operations. A later explicit activation admitted
+while an archive write is pending may still be visible until the next tick, but
+run-now and tick reread durable archive state and reject outbound fetches after
+that write commits. No unconditional post-save stop revokes a newer project.
+These are session-ownership guarantees, not a new last-request-wins policy for
+concurrent disk writes: existing Store revisions, conflicts and atomic transaction
+boundaries remain authoritative, and already-started commits are not rolled back.
+
+`tests/auto-import-session-ownership.test.mjs` uses the actual controller, real
+Store and loopback HTTP, with gated Store reads/saves instead of timing sleeps.
+It covers both public save paths, switch/stop/fresh same-project credentials,
+late successful/failed reads, overlapping saves, one-use/invalid leases, save
+failure, pending archive/source removal, shutdown, unchanged metadata, old-run
+drain and cancelled queued success/failure writes. It runs in the existing
+ordinary CI suite; no separate dispatch or execution-budget change is required.

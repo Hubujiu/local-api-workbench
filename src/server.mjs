@@ -1134,13 +1134,14 @@ export async function createApp({
             );
             b.runs = p.runs;
             b.history = p.history;
-            const importSessionActive = autoImports.active === p.id;
             const importSessionChanged =
               b.archived ||
               JSON.stringify(normalizeAutoImports(b.settings?.autoImports)) !==
                 JSON.stringify(normalizeAutoImports(p.settings?.autoImports));
-            if (importSessionActive && importSessionChanged)
-              await autoImports.deactivate(p.id);
+            let importLease = null;
+            if (b.archived) await autoImports.deactivate(p.id);
+            else if (importSessionChanged)
+              importLease = await autoImports.suspend(p.id);
             const saveWithArchiveRevocation = async () => {
               const saved = await saveProjectArchive(
                 b,
@@ -1157,11 +1158,15 @@ export async function createApp({
                 await persistMCP(rememberedMCPSnapshot());
               return saved;
             };
-            const saved = b.archived
-              ? await mcpPublication.run(saveWithArchiveRevocation)
-              : await saveWithArchiveRevocation();
-            if (importSessionActive && importSessionChanged && !b.archived)
-              await autoImports.reactivate(p.id);
+            let saved;
+            try {
+              saved = b.archived
+                ? await mcpPublication.run(saveWithArchiveRevocation)
+                : await saveWithArchiveRevocation();
+              await autoImports.reactivate(importLease);
+            } finally {
+              autoImports.discard(importLease);
+            }
             return json(res, 200, saved);
           }
           if (action === "auto-imports") {
@@ -1179,12 +1184,15 @@ export async function createApp({
               )
                 throw Error("自动导入配置字段无效");
               const definitions = normalizeAutoImports(data.definitions);
-              const active = autoImports.active === p.id;
-              if (active) await autoImports.deactivate(p.id);
+              const importLease = await autoImports.suspend(p.id);
               p.settings ??= {};
               p.settings.autoImports = definitions;
-              await store.save(p);
-              if (active && !p.archived) await autoImports.reactivate(p.id);
+              try {
+                await store.save(p);
+                await autoImports.reactivate(importLease);
+              } finally {
+                autoImports.discard(importLease);
+              }
               return json(res, 200, {
                 definitions,
                 session: autoImports.snapshot(),
