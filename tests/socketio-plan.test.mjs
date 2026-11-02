@@ -432,8 +432,7 @@ test("HTTP and MCP Socket.IO plans share live limits, cancel, restore new copies
   assert.equal(f.seen.length, count + 1);
   app.store.append = append;
   const reloaded = await new Store(root).get(p.id);
-  const restored = restoreProject({ ...reloaded, version: 1 });
-  await app.store.save(restored);
+  const restored = await app.store.restore({ ...reloaded, version: 1 });
   const copy = await new Store(root).get(restored.id);
   assert.notEqual(copy.id, p.id);
   assert(

@@ -116,3 +116,37 @@ and stdio detail readback, invalid-input byte-for-byte disk preservation, and
 unchanged peer call counts. The pre-fix reproduction returned 201, persisted two
 same-ID entries across restart, and listed both through the SDK while detail
 retrieval failed as ambiguous. These are functional tests, not script workloads.
+
+## Missing files are not permission to create
+
+`Store.save(project)` is update-only. Under the project lock it must read the
+existing project successfully before checking revisions/fingerprints, merging
+latest execution history, or writing a new journal. Missing required children,
+a missing manifest, and a completely missing project all fail before the new
+write; none reset revisions or silently reconstruct a stale snapshot. Other read
+errors also propagate. Intentionally optional history/runs/protocol-history and
+parameter-dictionary files retain their existing read defaults.
+
+New identities use `Store.create(name, directory)` or `Store.restore(document)`.
+Restore retains `restoreProject`'s backup validation, normalization and generated
+ID, but discards source revision/configuration/fingerprint ownership metadata and
+uses the same exclusive directory reservation, registry guard and creation intent
+as ordinary creation. First revision/configuration revision are both 1. Direct
+callers that previously used `save(restoreProject(document))` must use `restore`;
+ordinary HTTP/MCP updates cannot select this creation path. This changes no MCP
+grant or credential policy.
+
+A split directory containing resource files, a manifest, or a published journal
+is authoritative: a missing manifest must not select the retained legacy backup.
+An empty directory or one containing only unpublished journal temporary files
+may still use an intact legacy JSON source, because a failed migration can create
+that layout before publishing its journal. Legacy-only projects still migrate
+normally and their original JSON bytes are preserved. If an entire split
+directory is removed and an intact legacy file remains, there is no on-disk
+migration marker to distinguish that from a legacy-only project; the legacy read
+contract remains, and stale post-migration saves still face revision/fingerprint
+checks. This patch adds no migration marker or automatic repair/deletion.
+
+Published transactions still roll forward through `recoverProject` before reads;
+this is recovery of the already journaled snapshot, not a new save from stale
+memory. Missing files without an intact journal are not automatically recoverable.

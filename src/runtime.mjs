@@ -52,7 +52,7 @@ import {
   lstat,
 } from "node:fs/promises";
 import path from "node:path";
-import { id, normalizeRequest, snapshotPlan } from "./core.mjs";
+import { id, normalizeRequest, snapshotPlan, restoreProject } from "./core.mjs";
 export class Store {
   constructor(root) {
     this.root = root;
@@ -251,11 +251,20 @@ export class Store {
   }
   async readUnlocked(key, base = this.base(key)) {
     const directory = path.join(base, key);
-    if (
-      existsSync(path.join(directory, "project.json")) ||
-      existsSync(path.join(directory, ".transaction.json"))
-    )
-      return readProject(directory, key);
+    if (await this.#pathExists(directory)) {
+      const entries = await readdir(directory, { withFileTypes: true });
+      // A failed legacy migration can leave only its unpublished journal temp
+      // (or an empty directory). Only that precommit layout may use the legacy
+      // source again. Split resources with a missing manifest are not a backup.
+      if (
+        entries.some(
+          (entry) =>
+            !entry.isFile() ||
+            !/^\.transaction\.json\.[a-f0-9-]{36}\.tmp$/i.test(entry.name),
+        )
+      )
+        return readProject(directory, key);
+    }
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
     );
@@ -310,6 +319,17 @@ export class Store {
       documents: [],
       settings: {},
     };
+    return this.#queueCreation(p, directory);
+  }
+  async restore(document) {
+    const p = restoreProject(document);
+    // A backup is an explicitly requested new identity, never an update/upsert.
+    // The exclusive creation path assigns its own first revision and fingerprint.
+    delete p.configRevision;
+    delete p._diskFingerprint;
+    return this.#queueCreation(p);
+  }
+  #queueCreation(p, directory) {
     this.#validateProject(p);
     const task = this.pending
       .catch(() => {})
@@ -524,7 +544,17 @@ export class Store {
     try {
       previous = await this.readUnlocked(p.id, base);
     } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      // Only #createProject owns an exclusively reserved new directory. A
+      // missing child, manifest, or whole project is never an update-as-create.
+      // Even creation cannot reinterpret existing commit evidence as absence.
+      if (
+        !creating ||
+        error.code !== "ENOENT" ||
+        (await this.#pathExists(path.join(base, p.id, "project.json"))) ||
+        (await this.#pathExists(path.join(base, p.id, ".transaction.json"))) ||
+        (await this.#pathExists(path.join(base, p.id + ".json")))
+      )
+        throw error;
     }
     if (creating && previous) throw Error("项目ID或存储目录已存在");
     if (

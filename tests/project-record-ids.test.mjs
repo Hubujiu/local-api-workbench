@@ -49,7 +49,7 @@ test("unrepresentable record IDs reject before journaling without changing persi
       }),
     ],
   });
-  await assert.rejects(store.save(restored), /记录ID/);
+  await assert.rejects(store.restore(restored), /记录ID/);
   await assert.rejects(
     readFile(path.join(store.directory(restored.id), ".transaction.json")),
     { code: "ENOENT" },
@@ -71,8 +71,7 @@ test("maximum safe encoded component and distinct valid Unicode IDs roundtrip on
   await store.save(p);
   const saved = await new Store(root).get(p.id);
   assert.deepEqual(saved.environments, p.environments);
-  const restored = restoreProject(saved);
-  await store.save(restored);
+  const restored = await store.restore(saved);
   assert.deepEqual(
     (await new Store(root).get(restored.id)).environments,
     p.environments,
