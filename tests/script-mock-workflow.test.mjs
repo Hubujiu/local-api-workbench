@@ -325,7 +325,10 @@ test("script Mock refusal sends no PRE request and preserves POST wire evidence 
   `;
   const failed = (result) => {
     assert.equal(result.outcome, "failed");
-    assert.equal(result.error, "Mock模板: 暂不支持占位符或含@字符串");
+    assert.equal(
+      result.error,
+      "脚本Promise被拒绝: Mock模板: 暂不支持占位符或含@字符串",
+    );
     assert.doesNotMatch(result.error, /not defined|is not a function/);
     assert.equal(result.scriptStage, "script");
   };
@@ -342,7 +345,10 @@ test("script Mock refusal sends no PRE request and preserves POST wire evidence 
   assert.equal(saved.history[0].status, "failed");
   assert.equal(saved.history[0].requestUnresolved, true);
   assert.equal(saved.history[0].source, "manual");
-  assert.equal(saved.history[0].error, "Mock模板: 暂不支持占位符或含@字符串");
+  assert.equal(
+    saved.history[0].error,
+    "脚本Promise被拒绝: Mock模板: 暂不支持占位符或含@字符串",
+  );
 
   const after = await owner(app, projectPath(project, "execute"), {
     request: {
@@ -378,7 +384,10 @@ test("script Mock refusal sends no PRE request and preserves POST wire evidence 
   assert.equal(postHistory.status, "failed");
   assert.equal(postHistory.source, "manual");
   assert.equal(postHistory.response.body, after.body);
-  assert.equal(postHistory.error, "Mock模板: 暂不支持占位符或含@字符串");
+  assert.equal(
+    postHistory.error,
+    "脚本Promise被拒绝: Mock模板: 暂不支持占位符或含@字符串",
+  );
   const historyBefore = structuredClone(saved.history);
 
   await close(app.server);

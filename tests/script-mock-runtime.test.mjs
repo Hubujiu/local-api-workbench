@@ -366,7 +366,7 @@ for (const {
       await assert.rejects(
         runScriptSequence(stages, { variables: {} }, limits),
         (error) => {
-          assert.equal(error.message, "Mock模板额度已用尽");
+          assert.equal(error.message, "脚本Promise被拒绝: Mock模板额度已用尽");
           assert.equal(error.scriptScope, "scope-" + admitted);
           assert.equal(error.sequenceActivity.length, admitted);
           for (const activity of error.sequenceActivity) {
@@ -404,7 +404,7 @@ for (const {
           limits,
         ),
         (error) => {
-          assert.equal(error.message, "Mock模板额度已用尽");
+          assert.equal(error.message, "脚本Promise被拒绝: Mock模板额度已用尽");
           assert.equal(error.scriptScope, "after-caught-exhaustion");
           assert.equal(error.sequenceActivity.length, 1);
           assert.equal(
@@ -449,7 +449,7 @@ test("script Mock array selection reserves every generated candidate rather than
     { mockCallLimit: 1, mockNodeLimit: 6, mockByteLimit: 17 },
   ])
     await assert.rejects(runScript(code, { variables: {} }, limits), {
-      message: "Mock模板额度已用尽",
+      message: "脚本Promise被拒绝: Mock模板额度已用尽",
     });
 });
 
