@@ -152,3 +152,16 @@ checks. This patch adds no migration marker or automatic repair/deletion.
 Published transactions still roll forward through `recoverProject` before reads;
 this is recovery of the already journaled snapshot, not a new save from stale
 memory. Missing files without an intact journal are not automatically recoverable.
+
+The missing-file regression fixtures use real temporary Store files, including
+all required collection/fixed-file categories, default/custom whole-directory
+loss, retained-legacy manifest loss, pre-journal migration retry, optional-file
+defaults and published-journal recovery. Owner HTTP import and in-process MCP
+sync are deterministically paused before the real save; a second Store commits
+new configuration and actual owner-execution history before a fixture-owned file
+is removed. Refusal must leave every remaining project byte unchanged, publish no
+journal, and retain the newer archive/history/revisions when the exact missing
+bytes are reinstated. This MCP coverage is dispatcher-level, not an SDK claim.
+Backup tests also preserve damaged source files and unrelated unresolved intents.
+These fixtures run in ordinary CI; source/syntax review alone is not a runtime
+pass.
