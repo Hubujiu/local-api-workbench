@@ -284,7 +284,6 @@ test("Socket.IO CLI executes a saved anonymous flow and persists native result e
 
 test("HTTP and MCP Socket.IO plans share live limits, cancel, restore new copies and retain results after disk failure", async (t) => {
   const { createApp } = await import("../src/server.mjs");
-  const { restoreProject } = await import("../src/core.mjs");
   const f = await fixture(t),
     root = await mkdtemp(path.join(tmpdir(), "socketio-plan-api-")),
     app = await createApp({ root, port: 0 });
@@ -433,8 +432,7 @@ test("HTTP and MCP Socket.IO plans share live limits, cancel, restore new copies
   assert.equal(f.seen.length, count + 1);
   app.store.append = append;
   const reloaded = await new Store(root).get(p.id);
-  const restored = restoreProject({ ...reloaded, version: 1 });
-  await app.store.save(restored);
+  const restored = await app.store.restore({ ...reloaded, version: 1 });
   const copy = await new Store(root).get(restored.id);
   assert.notEqual(copy.id, p.id);
   assert(

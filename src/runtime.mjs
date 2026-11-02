@@ -114,7 +114,7 @@ import {
   lstat,
 } from "node:fs/promises";
 import path from "node:path";
-import { id, normalizeRequest, snapshotPlan } from "./core.mjs";
+import { id, normalizeRequest, snapshotPlan, restoreProject } from "./core.mjs";
 export class Store {
   constructor(root) {
     this.root = root;
@@ -313,16 +313,25 @@ export class Store {
   }
   async readUnlocked(key, base = this.base(key)) {
     const directory = path.join(base, key);
-    if (
-      existsSync(path.join(directory, "project.json")) ||
-      existsSync(path.join(directory, ".transaction.json"))
-    ) {
-      const project = await readProject(directory, key);
-      validateNativeInheritanceProject(project);
-      validateAPIResourceTrash(project);
-      validatePostmanOAuth2Project(project);
-      validateGrpcSessionHistory(project.protocolRuns ?? []);
-      return project;
+    if (await this.#pathExists(directory)) {
+      const entries = await readdir(directory, { withFileTypes: true });
+      // A failed legacy migration can leave only its unpublished journal temp
+      // (or an empty directory). Only that precommit layout may use the legacy
+      // source again. Split resources with a missing manifest are not a backup.
+      if (
+        entries.some(
+          (entry) =>
+            !entry.isFile() ||
+            !/^\.transaction\.json\.[a-f0-9-]{36}\.tmp$/i.test(entry.name),
+        )
+      ) {
+        const project = await readProject(directory, key);
+        validateNativeInheritanceProject(project);
+        validateAPIResourceTrash(project);
+        validatePostmanOAuth2Project(project);
+        validateGrpcSessionHistory(project.protocolRuns ?? []);
+        return project;
+      }
     }
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
@@ -383,14 +392,25 @@ export class Store {
       documents: [],
       settings: {},
     };
+    return this.#queueCreation(p, directory);
+  }
+  async restore(document) {
+    const p = restoreProject(document);
+    // A backup is an explicitly requested new identity, never an update/upsert.
+    // The exclusive creation path assigns its own first revision and fingerprint.
+    delete p.configRevision;
+    delete p._diskFingerprint;
+    return this.#queueCreation(p, undefined, true);
+  }
+  #queueCreation(p, directory, restoring = false) {
     this.#validateProject(p);
     const task = this.pending
       .catch(() => {})
-      .then(() => this.#createProject(p, directory));
+      .then(() => this.#createProject(p, directory, restoring));
     this.pending = task;
     return task;
   }
-  async #createProject(p, directory) {
+  async #createProject(p, directory, restoring = false) {
     await mkdir(this.root, { recursive: true });
     const releaseRegistry = await acquireFileLock(
       path.join(this.root, ".registry.lock"),
@@ -399,18 +419,24 @@ export class Store {
       primaryError;
     try {
       await this.#loadRegistry();
-      const unresolved = (await this.#listRegistered()).filter(
-        (project) => project.error,
-      );
-      if (unresolved.length)
-        throw new ProjectRecoveryRequired(
-          unresolved.map((project) => project.id),
+      // A backup must remain usable to create a separate healthy copy while an
+      // unrelated/source project is damaged. Ordinary create keeps its guard.
+      if (!restoring) {
+        const unresolved = (await this.#listRegistered()).filter(
+          (project) => project.error,
         );
+        if (unresolved.length)
+          throw new ProjectRecoveryRequired(
+            unresolved.map((project) => project.id),
+          );
+      }
+      const pending = { ...this.pendingLocations };
       const base = path.resolve(directory || this.root),
         target = path.join(base, p.id);
       await mkdir(base, { recursive: true });
       if (
         Object.hasOwn(this.locations, p.id) ||
+        Object.hasOwn(pending, p.id) ||
         (await this.#pathExists(path.join(this.root, p.id))) ||
         (await this.#pathExists(path.join(this.root, p.id + ".json")))
       )
@@ -428,7 +454,10 @@ export class Store {
           throw Error("项目ID或存储目录已存在");
         // Exclusive reservation: never initialize inside a pre-existing user directory.
         await mkdir(target);
-        await this.#writeRegistryFile(".creations.json", { [p.id]: base });
+        await this.#writeRegistryFile(".creations.json", {
+          ...pending,
+          [p.id]: base,
+        });
         intent = true;
         try {
           await this.#saveLocked(p, {}, base, true);
@@ -462,7 +491,7 @@ export class Store {
             this.locations[p.id] = base;
             await this.#writeRegistryFile(".locations.json", this.locations);
           }
-          await this.#writeRegistryFile(".creations.json", {});
+          await this.#writeRegistryFile(".creations.json", pending);
         }
       } catch (error) {
         // A committed project remains discoverable through its durable intent.
@@ -736,7 +765,17 @@ export class Store {
     try {
       previous = await this.readUnlocked(p.id, base);
     } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      // Only #createProject owns an exclusively reserved new directory. A
+      // missing child, manifest, or whole project is never an update-as-create.
+      // Even creation cannot reinterpret existing commit evidence as absence.
+      if (
+        !creating ||
+        error.code !== "ENOENT" ||
+        (await this.#pathExists(path.join(base, p.id, "project.json"))) ||
+        (await this.#pathExists(path.join(base, p.id, ".transaction.json"))) ||
+        (await this.#pathExists(path.join(base, p.id + ".json")))
+      )
+        throw error;
     }
     if (creating && previous) throw Error("项目ID或存储目录已存在");
     // Preserve graph identity after applying the same snapshot normalization to

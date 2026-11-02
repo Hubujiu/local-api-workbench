@@ -123,7 +123,6 @@ import {
   snapshotPlan,
   runPlan,
   toCurl,
-  restoreProject,
 } from "./core.mjs";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 export async function createApp({
@@ -882,8 +881,7 @@ export async function createApp({
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
           const b = await body(req);
-          const restored = restoreProject(b.document);
-          await store.save(restored);
+          const restored = await store.restore(b.document);
           return json(res, 201, restored);
         }
         if (u.pathname === "/api/cancel" && req.method === "POST") {

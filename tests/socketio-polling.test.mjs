@@ -202,7 +202,6 @@ test("polling stops oversized chunked responses while reading instead of bufferi
 test("polling saved definitions execute through fixed plans and restore without transport secrets", async (t) => {
   const { createApp } = await import("../src/server.mjs");
   const { Store } = await import("../src/runtime.mjs");
-  const { restoreProject } = await import("../src/core.mjs");
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
@@ -267,11 +266,10 @@ test("polling saved definitions execute through fixed plans and restore without 
   ]);
   await wait(() => boundedPollingUsage().active === 0);
   await wait(() => f.engineClients === 0);
-  const restored = restoreProject({
+  const restored = await app.store.restore({
     ...(await app.store.get(p.id)),
     version: 1,
   });
-  await app.store.save(restored);
   const copy = await new Store(root).get(restored.id);
   assert.equal(copy.settings.socketioDefinitions[0].transport, "polling");
   assert.equal(copy.plans[0].steps[0].socketio.definition.transport, "polling");

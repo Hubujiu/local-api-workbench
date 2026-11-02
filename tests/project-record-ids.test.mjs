@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { Store } from "../src/runtime.mjs";
-import { restoreProject, normalizeRequest } from "../src/core.mjs";
+import { normalizeRequest } from "../src/core.mjs";
 
 test("unrepresentable record IDs reject before journaling without changing persisted state", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "record-ids-"));
@@ -39,7 +39,7 @@ test("unrepresentable record IDs reject before journaling without changing persi
       { code: "ENOENT" },
     );
   }
-  const restored = restoreProject({
+  const document = {
     ...before,
     requests: [
       normalizeRequest({
@@ -48,11 +48,15 @@ test("unrepresentable record IDs reject before journaling without changing persi
         url: "http://127.0.0.1/",
       }),
     ],
-  });
-  await assert.rejects(store.save(restored), /记录ID/);
-  await assert.rejects(
-    readFile(path.join(store.directory(restored.id), ".transaction.json")),
-    { code: "ENOENT" },
+  };
+  await assert.rejects(store.restore(document), /记录ID/);
+  // Store.restore generates its own new identity. Inspect every owned fixture
+  // path rather than checking the input backup's now-unrelated ID.
+  assert.equal(
+    (await readdir(root, { recursive: true })).some(
+      (file) => path.basename(file) === ".transaction.json",
+    ),
+    false,
   );
   assert.deepEqual(await store.get(original.id), before);
 });
@@ -71,8 +75,7 @@ test("maximum safe encoded component and distinct valid Unicode IDs roundtrip on
   await store.save(p);
   const saved = await new Store(root).get(p.id);
   assert.deepEqual(saved.environments, p.environments);
-  const restored = restoreProject(saved);
-  await store.save(restored);
+  const restored = await store.restore(saved);
   assert.deepEqual(
     (await new Store(root).get(restored.id)).environments,
     p.environments,
