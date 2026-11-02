@@ -1,3 +1,7 @@
+import {
+  ActiveProjectImports,
+  normalizeAutoImports,
+} from "./active-project-import.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -81,6 +85,10 @@ export async function createApp({
   const requestedPort = port;
   const store = new Store(path.resolve(root));
   await store.init();
+  const autoImports = new ActiveProjectImports({
+    store,
+    request: executeRequest,
+  });
   const protocolSessions = new ProtocolSessions();
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
@@ -557,7 +565,21 @@ export async function createApp({
               mcp.projects = mcp.projects.filter((id) => id !== b.id);
             b.runs = p.runs;
             b.history = p.history;
-            const saved = await store.save(b);
+            const importSessionChanged =
+              b.archived ||
+              JSON.stringify(normalizeAutoImports(b.settings?.autoImports)) !==
+                JSON.stringify(normalizeAutoImports(p.settings?.autoImports));
+            let importLease = null;
+            if (b.archived) await autoImports.deactivate(p.id);
+            else if (importSessionChanged)
+              importLease = await autoImports.suspend(p.id);
+            let saved;
+            try {
+              saved = await store.save(b);
+              await autoImports.reactivate(importLease);
+            } finally {
+              autoImports.discard(importLease);
+            }
             if (b.archived && mcp.remember)
               await saveMCPConfig(path.resolve(root), {
                 ...mcp,
@@ -565,6 +587,65 @@ export async function createApp({
                 port: server.address().port,
               });
             return json(res, 200, saved);
+          }
+          if (action === "auto-imports") {
+            if (req.method === "GET")
+              return json(res, 200, {
+                definitions: normalizeAutoImports(p.settings?.autoImports),
+                runs: p.settings?.autoImportRuns || [],
+                session: autoImports.snapshot(),
+              });
+            if (req.method === "PUT") {
+              const data = await body(req);
+              if (
+                !Array.isArray(data.definitions) ||
+                Object.keys(data).some((k) => k !== "definitions")
+              )
+                throw Error("自动导入配置字段无效");
+              const definitions = normalizeAutoImports(data.definitions);
+              const importLease = await autoImports.suspend(p.id);
+              p.settings ??= {};
+              p.settings.autoImports = definitions;
+              try {
+                await store.save(p);
+                await autoImports.reactivate(importLease);
+              } finally {
+                autoImports.discard(importLease);
+              }
+              return json(res, 200, {
+                definitions,
+                session: autoImports.snapshot(),
+              });
+            }
+            return json(res, 405, { error: "Method not allowed" });
+          }
+          if (action === "auto-import-session" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some(
+                (k) => !["action", "credentials"].includes(k),
+              ) ||
+              (data.action === "deactivate" &&
+                data.credentials !== undefined) ||
+              !["activate", "deactivate"].includes(data.action)
+            )
+              throw Error("自动导入会话操作无效");
+            return json(
+              res,
+              200,
+              await (data.action === "activate"
+                ? autoImports.activate(p.id, data.credentials)
+                : autoImports.deactivate(p.id)),
+            );
+          }
+          if (action === "auto-import-run" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some((k) => k !== "sourceId") ||
+              typeof data.sourceId !== "string"
+            )
+              throw Error("数据源标识无效");
+            return json(res, 200, await autoImports.run(p.id, data.sourceId));
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
@@ -1396,6 +1477,7 @@ export async function createApp({
     }
   });
   server.on("close", () => {
+    void autoImports.close();
     protocolSessions.close();
     socketioSessions.close();
     oauth.close();
