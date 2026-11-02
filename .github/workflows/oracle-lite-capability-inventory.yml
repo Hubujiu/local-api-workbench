@@ -1,0 +1,43 @@
+name: Oracle Lite Read-Only Capability Inventory
+on:
+  push:
+    branches:
+      - wip/oracle-lite-capability-probe
+permissions:
+  contents: read
+concurrency:
+  group: oracle-lite-capability-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    # No PR, dispatch, schedule, other branch, custom runner, or database service.
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'Hubujiu/local-api-workbench' &&
+      github.repository_id == '1423306754' &&
+      github.ref == 'refs/heads/wip/oracle-lite-capability-probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 2
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/oracle-lite-inventory.py
+            scripts/oracle-lite-inventory.sh
+          sparse-checkout-cone-mode: false
+      - name: Collect bounded read-only metadata from the exact approved Lite image
+        timeout-minutes: 13
+        run: python3 -I scripts/oracle-lite-inventory.py
+      - name: Preserve only bounded JSON metadata and sanitized status logs
+        if: always()
+        timeout-minutes: 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-lite-capability-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            oracle-lite-inventory-output/inventory.json
+            oracle-lite-inventory-output/sanitized.log
+          retention-days: 7
+          if-no-files-found: error
