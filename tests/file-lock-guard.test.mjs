@@ -288,12 +288,18 @@ test(
           for (const probe of probes)
             if (probe.p.exitCode === null && probe.p.signalCode === null)
               probe.p.kill("SIGKILL");
-          await Promise.all(probes.map((probe) => probe.exited));
+          const exits = await Promise.allSettled(
+            probes.map((probe) => probe.exited),
+          );
           if (pending)
             await pending.then(
               (release) => release(),
               () => {},
             );
+          const failedExit = exits.find(
+            (result) => result.status === "rejected",
+          );
+          if (failedExit) throw failedExit.reason;
         } finally {
           DatabaseSync.prototype.exec = original;
           if (owner.isOpen) owner.close();
