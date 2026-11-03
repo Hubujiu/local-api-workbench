@@ -23,6 +23,7 @@ import { Store } from "../src/runtime.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import { snapshotPlan } from "../src/core.mjs";
 import { installScopeSaveLockGate } from "./helpers/scope-save-lock-gate.mjs";
+import { installScopeSaveAdmissionGate } from "./helpers/scope-save-admission-gate.mjs";
 
 async function waitFor(read) {
   const deadline = Date.now() + 5000;
@@ -65,7 +66,9 @@ const decode = (result) => {
 };
 for (const mode of ["owner", "http", "stdio", "stateless"])
   test(
-    `${mode} queued pre/post scope saves honor cancellation before transaction admission and retain readable terminal evidence`,
+    mode === "stateless"
+      ? "stateless pre/post scope saves reject admission after confirmed owner revocation and retain readable terminal evidence"
+      : `${mode} queued pre/post scope saves honor cancellation before transaction admission and retain readable terminal evidence`,
     { timeout: 30000 },
     async (t) => {
       const temporary = await mkdtemp(
@@ -76,7 +79,8 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
       await mkdir(gate);
       let app = await createApp({ root, port: 0 }),
         client,
-        undo;
+        undo,
+        activeOutcome;
       const seen = [];
       const peer = http.createServer((req, res) => {
         seen.push(req.url);
@@ -85,6 +89,11 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
       });
       await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
       t.after(async () => {
+        const closing =
+          mode === "stateless"
+            ? new Promise((resolve) => app.server.close(resolve))
+            : undefined;
+        let cleanupError;
         await Promise.all(
           ["pre", "post"].map((label) =>
             writeFile(path.join(gate, label + ".release"), "release").catch(
@@ -92,6 +101,23 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
             ),
           ),
         );
+        if (mode === "stateless" && activeOutcome) {
+          const cleanupControl = new AbortController();
+          try {
+            await Promise.race([
+              Promise.all([activeOutcome, closing]),
+              delay(10000, undefined, { signal: cleanupControl.signal }).then(
+                () => {
+                  throw Error("stateless scope cleanup did not settle");
+                },
+              ),
+            ]);
+          } catch (error) {
+            cleanupError = error;
+          } finally {
+            cleanupControl.abort();
+          }
+        }
         await client?.close().catch(() => {});
         undo?.();
         app.server.closeAllConnections();
@@ -101,7 +127,9 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
             (server) => new Promise((resolve) => server.close(resolve)),
           ),
         );
-        await rm(temporary, { recursive: true, force: true });
+        if (!cleanupError)
+          await rm(temporary, { recursive: true, force: true });
+        if (cleanupError) throw cleanupError;
       });
       const owner = async (route, method = "GET", body, status = 200) => {
         const response = await fetch(app.url + route, {
@@ -168,7 +196,10 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
         write: true,
         execute: true,
       };
-      if (mode !== "stdio") undo = installScopeSaveLockGate(app.store, gate);
+      if (mode === "stateless")
+        undo = installScopeSaveAdmissionGate(app.store, gate);
+      else if (mode !== "stdio")
+        undo = installScopeSaveLockGate(app.store, gate);
       if (mode !== "owner" && mode !== "stateless") {
         client = new Client({ name: "scope-save-" + mode, version: "1" });
         let transport;
@@ -269,16 +300,21 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
           (value) => ({ value }),
           (error) => ({ error }),
         );
+        if (mode === "stateless") activeOutcome = outcome;
         let checkpoint;
         try {
           checkpoint = await waitFor(() =>
             ready(path.join(gate, phase + ".ready")),
           );
-          assert.equal(
-            checkpoint.settled,
-            false,
-            "real Store.save remains behind its owned project lock",
-          );
+          if (mode === "stateless") {
+            assert.equal(checkpoint.saveStarted, false);
+            assert.equal(checkpoint.signalAborted, false);
+          } else
+            assert.equal(
+              checkpoint.settled,
+              false,
+              "real Store.save remains behind its owned project lock",
+            );
           const bytesAtAdmission = await configurationBytes(
             app.store.directory(p.id),
           );
@@ -315,6 +351,12 @@ for (const mode of ["owner", "http", "stdio", "stateless"])
             assert.equal(answer.value.error?.code, -32000);
             assert.match(answer.value.error.message, /authorization changed/);
             assert.equal(saved.runs[0].source, "mcp");
+            assert.equal(
+              (await ready(path.join(gate, phase + ".attempted")))
+                .signalAborted,
+              true,
+              "the original Store.save receives the actual owner-aborted signal",
+            );
           }
           assert.equal(
             checkpoint.signalForwarded,

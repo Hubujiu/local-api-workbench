@@ -176,10 +176,29 @@ callback that waits for protocol/gRPC terminal-record persistence. The close
 event repeats only the idempotent MCP close. Root's typed-outcome handling and
 other owners' cleanup remain unchanged.
 
-The combined source adds stateless owner revocation to the real queued scope-save
-workflow, and a concurrent MCP/protocol-session close workflow. Their assertions
+The combined source adds stateless owner revocation before real scope-save
+admission, and a concurrent MCP/protocol-session close workflow. Their assertions
 require actual file-backed cancellation evidence and require the HTTP close
 callback to wait for the existing protocol persistence path. Local root runtime
 execution is blocked by the missing locked node-oauth1 dependency; feature-branch
 results are not treated as proof that these combined workflows ran. Pure registry
 contracts and syntax checks are independent of that missing application graph.
+
+
+### Stateless scope fixture ordering correction
+
+The first combined CI exposed a test-induced lock cycle: the fixture held a
+project lock while awaiting owner-policy publication, whose real project
+validation needed that same lock. The gate expired before revocation completed;
+the resulting failed history was not evidence of work after successful revocation.
+The original failure is retained.
+
+The stateless case now pauses before calling the original Store.save without
+holding that project lock. It confirms successful owner revocation over HTTP,
+then releases a bounded gate and observes the actual aborted signal reaching
+Store.save. The real save rejects admission; unchanged configuration bytes,
+prior acknowledged writes, cancelled history, later-step suppression and restart
+assertions remain. The existing owner/SDK HTTP/stdio cases still exercise actual
+lock-queued saves unchanged. No timeout or production code is changed. Owner
+policy validation can itself wait for a project lock; this separate availability
+limitation is not resolved by correcting the fixture.
