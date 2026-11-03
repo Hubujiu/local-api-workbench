@@ -67,3 +67,11 @@ so the real app cannot load locally; no stub, replacement dependency or original
 runtime was used. The first saved owner contract is expected to fail against the
 old exporter, but is not a locally observed HTTP RED. Normal exact-head CI must
 establish the real workflows. Feature results do not certify a later root merge.
+
+
+The follow-up local batch runs the two public pure exporters and importer against
+exactly the same shared fixture as the owner contracts, twice per format. It also
+checks whole-project immutability on unsupported fields and zero accessor calls
+at both public export entrypoints. These pure conversion checks passed alongside
+the helper tests; they do not execute HTTP, Store, server restart or the fresh
+process readback contract. Those app workflows still require exact-head CI.
