@@ -1,5 +1,5 @@
 import { validateMockResponse } from "../public/response-example.js";
-import { jsonPath } from "./core.mjs";
+import { createMockConditionBudget } from "./mock-condition-budget.mjs";
 export function validateMockRules(rules = []) {
   if (!Array.isArray(rules) || rules.length > 100)
     throw Error("Mock规则最多100条");
@@ -38,19 +38,22 @@ export function selectMockResponse(request, input, fallback) {
     headers: input.headers || {},
     body: input.body,
   };
+  const budget = createMockConditionBudget();
   for (const rule of request.mockRules || []) {
     if (rule.enabled === false) continue;
     const matches = rule.conditions.every((condition) => {
-      const actual = jsonPath(source, condition.target);
+      const actual = budget.read(source, condition.target);
       switch (condition.op) {
         case "eq":
-          return JSON.stringify(actual) === JSON.stringify(condition.value);
+          return budget.json(actual) === budget.json(condition.value);
         case "neq":
-          return JSON.stringify(actual) !== JSON.stringify(condition.value);
+          return budget.json(actual) !== budget.json(condition.value);
         case "contains":
-          return String(actual ?? "").includes(String(condition.value));
+          return budget
+            .string(actual ?? "")
+            .includes(budget.string(condition.value));
         case "exists":
-          return actual !== undefined && actual !== null;
+          return budget.exists(actual);
       }
     });
     if (matches) return { ...rule.response, ruleName: rule.name || "" };
