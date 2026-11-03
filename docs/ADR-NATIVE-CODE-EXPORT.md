@@ -66,9 +66,11 @@ including two JSON-serialized generations for each format. Helper and public
 entrypoint contracts cover strict schema, zero getter/proxy execution, negative
 zero, type and order fidelity, unchanged inputs and the existing limits.
 
-The three saved owner HTTP contracts cover two formats, two generations,
+The four saved owner HTTP contracts cover two formats, two generations,
 Store persistence, full backup/restore, owner reopen, fresh-process Store
-readback, unauthorized export, project isolation and atomic invalid imports.
+readback, unauthorized export, project isolation and atomic invalid imports and
+exports of unsupported stored options. Full backup remains available for those
+options without pretending native output can represent them.
 Those owner contracts have not been run locally because the locked
 `node-oauth1@1.3.0` dependency is absent. Exact-head CI must establish their result;
 pure tests are not owner/Store/restart acceptance.

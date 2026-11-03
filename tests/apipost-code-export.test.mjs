@@ -307,3 +307,87 @@ test(
     assert.notEqual(before.settings.statusCodes[0].httpHint, true);
   },
 );
+
+test(
+  "owner native export refuses unrepresentable saved code settings without partial output or disk and grant changes",
+  { timeout: 15000 },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "code-export-atomic-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      try {
+        await close(app);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+    const call = async (route, method = "GET", body, status = 200) => {
+      const response = await fetch(app.url + route, {
+        method,
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const text = await response.text();
+      assert.equal(response.status, status, text);
+      return JSON.parse(text);
+    };
+    const project = await call(
+      "/api/projects",
+      "POST",
+      { name: "Refused code export" },
+      201,
+    );
+    const unrelated = await call(
+      "/api/projects",
+      "POST",
+      { name: "Unrelated" },
+      201,
+    );
+    const otherBefore = await new Store(root).get(unrelated.id);
+    for (const row of [
+      { code: 409, label: "Conflict", httpHint: true },
+      { code: "x", label: "value", unknown: true },
+      {
+        code: "x",
+        label: "value",
+        apipostSource: { projectId: "old", unknown: true },
+      },
+      { code: "x", label: "value", apipostSource: { projectId: 7 } },
+    ]) {
+      // Existing local storage accepts these shapes. Export must not silently
+      // project away their unsupported meaning; full backup remains available.
+      const changed = await app.store.get(project.id);
+      changed.settings.statusCodes = [row];
+      await app.store.save(changed);
+      const before = await new Store(root).get(project.id);
+      const diskBefore = await diskSnapshot(app.store.directory(project.id));
+      const grantsBefore = await call("/api/mcp/config");
+      for (const format of ["apipost", "apipost-directory"]) {
+        const failure = await call(
+          `/api/projects/${project.id}/export?format=${format}`,
+          "GET",
+          undefined,
+          400,
+        );
+        assert.deepEqual(Object.keys(failure), ["error"]);
+        assert.equal(typeof failure.error, "string");
+        assert.deepEqual(await new Store(root).get(project.id), before);
+        assert.deepEqual(
+          await diskSnapshot(app.store.directory(project.id)),
+          diskBefore,
+        );
+        assert.deepEqual(await call("/api/mcp/config"), grantsBefore);
+        assert.deepEqual(await new Store(root).get(unrelated.id), otherBefore);
+      }
+      const backup = await call(`/api/projects/${project.id}/export`);
+      assert.deepEqual(backup.settings.statusCodes, [row]);
+      assert.deepEqual(
+        await diskSnapshot(app.store.directory(project.id)),
+        diskBefore,
+      );
+    }
+  },
+);
