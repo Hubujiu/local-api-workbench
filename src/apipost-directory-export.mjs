@@ -1,3 +1,8 @@
+import {
+  preflightApipostAttributes,
+  prepareApipostAttributeExport,
+  verifyApipostAttributeExport,
+} from "./apipost-attribute-export.mjs";
 import { verifyApipostCodeDefinitions } from "./apipost-code-export.mjs";
 import { verifyApipostDescriptionDefinitions } from "./apipost-description-export.mjs";
 import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
@@ -20,6 +25,7 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
+  preflightApipostAttributes(project);
   // Check the original project before any protocol/sample projection.
   rejectCollectionExport(project, "Apipost directory");
   const extended = prepareExtendedProtocolExport(project);
@@ -397,6 +403,12 @@ export function exportApipostDirectory(project, options = {}) {
     result,
     (id) => nativeIds.get(apipostExportId("a", id)),
     options,
+  );
+  verifyApipostAttributeExport(
+    project,
+    check,
+    prepareApipostAttributeExport(project, projectId),
+    (id) => nativeIds.get(apipostExportId("a", id)),
   );
   verifyApipostCodeDefinitions(
     project.settings?.statusCodes,

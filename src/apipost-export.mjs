@@ -1,4 +1,9 @@
 import {
+  preflightApipostAttributes,
+  prepareApipostAttributeExport,
+  verifyApipostAttributeExport,
+} from "./apipost-attribute-export.mjs";
+import {
   exportApipostCodes,
   verifyApipostCodeDefinitions,
 } from "./apipost-code-export.mjs";
@@ -181,6 +186,7 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  preflightApipostAttributes(project);
   // Check the original project before any protocol/sample projection.
   rejectCollectionExport(project, "Apipost");
   if (project.settings?.nativeInheritance?.folderLifecycle !== undefined)
@@ -218,6 +224,7 @@ export function exportApipost(project, options = {}) {
     if (
       ![
         "statuses",
+        "attributes",
         "parameterDescriptions",
         "statusCodes",
         "recursiveFolderScopes",
@@ -284,6 +291,7 @@ export function exportApipost(project, options = {}) {
     projectId,
     apipostExportId,
   );
+  const attributeExport = prepareApipostAttributeExport(project, projectId);
   const modelExport = prepareApipostModelExport(
     project,
     (kind, value) => apipostExportId(kind, projectId + "\0" + value),
@@ -367,7 +375,6 @@ export function exportApipost(project, options = {}) {
       "extract",
       "mockRules",
       "openapiOperation",
-      "attributes",
       "proxy",
       "tls",
       "sharedBeforeScripts",
@@ -446,7 +453,7 @@ export function exportApipost(project, options = {}) {
       sort: apis.length + 1,
       version: 0,
       status: 1,
-      attribute_info: {},
+      attribute_info: attributeExport.values(input.attributes),
       ...(r.serviceId ? { server_id: serverIds.get(r.serviceId) } : {}),
       ...(r.statusId ? { mark_id: apipostExportId("m", r.statusId) } : {}),
       request: {
@@ -538,7 +545,7 @@ export function exportApipost(project, options = {}) {
       },
       codes,
       marks,
-      attributes: [],
+      attributes: attributeExport.rows,
       mock_custom_rules: [],
       db_link: databaseExport.records,
       describe_library: descriptions,
@@ -564,6 +571,7 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
   if (
+    attributeExport.rows.length ||
     codes.length ||
     descriptions.length ||
     samples.length ||
@@ -578,7 +586,10 @@ export function exportApipost(project, options = {}) {
       servers: [],
       settings: {},
     };
-    importIntoProject(check, document, options);
+    importIntoProject(check, JSON.parse(JSON.stringify(document)), options);
+    verifyApipostAttributeExport(project, check, attributeExport, (id) =>
+      apipostExportId("a", id),
+    );
     verifyApipostCodeDefinitions(
       project.settings?.statusCodes,
       check.settings?.statusCodes,
