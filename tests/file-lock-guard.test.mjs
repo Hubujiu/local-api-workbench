@@ -318,23 +318,51 @@ test(
       `
     import assert from 'node:assert/strict';import fs from 'node:fs';import fsp from 'node:fs/promises';import {syncBuiltinESMExports} from 'node:module';
     import {setImmediate as turn} from 'node:timers/promises';
+    const started=performance.now();const mark=stage=>process.send({stage,elapsed:performance.now()-started});mark('started');
     const original=fsp.realpath, sync=fs.realpathSync.native;
     let enabled=false,calls=0,unblock,thirdReady;
     const third=new Promise(resolve=>{thirdReady=resolve;});
-    fsp.realpath=async function(...args){const number=enabled?++calls:0;const result=await original(...args);if(enabled){if(number===1)await new Promise(resolve=>{unblock=resolve;});else if(number===2)thirdReady();}return result;};
+    const gate=new Promise(resolve=>{unblock=resolve;});
+    fsp.realpath=async function(...args){const number=enabled?++calls:0;const result=await original(...args);if(enabled){if(number===1)await gate;else if(number===2)thirdReady();}return result;};
     fs.realpathSync.native=function(...args){const result=sync(...args);if(enabled&&++calls===2)thirdReady();return result;};
     syncBuiltinESMExports();
     const {acquireFileLock}=await import(${JSON.stringify(source)});
-    const first=await acquireFileLock(process.argv[1]);enabled=true;
+    const first=await acquireFileLock(process.argv[1]);mark('first-held');enabled=true;
     const order=[];
     const second=acquireFileLock(process.argv[1]).then(async release=>{order.push('second');await release();});
     const last=acquireFileLock(process.argv[1]).then(async release=>{order.push('third');await release();});
-    await third;if(unblock)unblock();await turn();await first();await Promise.all([second,last]);
+    mark('contenders-queued');await third;mark('third-path-completed');unblock();await turn();await first();mark('first-released');await Promise.all([second,last]);mark('both-completed');
     assert.deepEqual(order,['second','third']);process.send(order);process.disconnect();
   `,
       [lock],
     );
+    const stages = [];
+    let finished = false;
+    t.after(() => {
+      t.diagnostic(
+        JSON.stringify({
+          finished,
+          stages,
+          pid: worker.p.pid,
+          exitCode: worker.p.exitCode,
+          signalCode: worker.p.signalCode,
+        }),
+      );
+    });
+    for (const expected of [
+      "started",
+      "first-held",
+      "contenders-queued",
+      "third-path-completed",
+      "first-released",
+      "both-completed",
+    ]) {
+      const message = await worker.next();
+      stages.push(message);
+      assert.equal(message.stage, expected);
+    }
     assert.deepEqual(await worker.next(), ["second", "third"]);
+    finished = true;
     assert.equal((await worker.exited)[0], 0);
   },
 );
