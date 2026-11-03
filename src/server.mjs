@@ -1034,6 +1034,8 @@ export async function createApp({
             const b = await body(req);
             if (b.allowWrite !== undefined && typeof b.allowWrite !== "boolean")
               throw Error("写入标识必须为布尔值");
+            if ((!b.type || b.type === "sqlite") && b.ssh !== undefined)
+              throw Error("SQLite暂不支持SSH；已拒绝本地执行");
             if (b.allowWrite === true) {
               if (b.type === "postgres")
                 return json(res, 200, await mutatePostgres(b));
