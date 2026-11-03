@@ -66,3 +66,20 @@ Local close does not prove remote cessation, rollback or durable persistence.
 These new runtime checks are pending exact-head CI. Local development validation
 is limited to syntax/format and static review; no local app, provider or database
 was run for this change.
+
+## Unsupported SSH is rejected before transport creation
+
+Redis does not implement SSH tunneling. The shared direct read/write execution
+boundary rejects every supplied `ssh` value other than `undefined`, including
+empty objects, empty strings, `null` and `false`. It never silently drops that
+configuration and sends AUTH or SET over a direct connection. The existing
+remote read wrapper's rejection remains unchanged. Native task write support is
+not introduced or expanded by this repair.
+
+A real loopback regression exercises the exported read/write functions and the
+owner-authenticated HTTP route. Both candidate database and SSH endpoints must
+receive zero connections for rejected configuration; errors contain no input
+credentials. A subsequent ungranted SET remains rejected, while an explicit
+no-SSH SET retains the normal AUTH/SELECT/SET acknowledgement path and project
+storage remains unchanged. These protocol peers establish dispatch boundaries,
+not real Redis persistence or durability.

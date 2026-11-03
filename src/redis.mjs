@@ -265,6 +265,9 @@ export async function queryRedis(input, { signal } = {}) {
 }
 async function executeRedis(input, command, writing, signal) {
   checkDatabaseSignal(signal);
+  // Redis has no SSH transport. Never reinterpret an unsupported tunnel as
+  // permission to send credentials or a command over a direct connection.
+  if (input.ssh !== undefined) throw Error("Redis暂不支持SSH；已拒绝直连回退");
   const host = input.host || "127.0.0.1",
     port = Number(input.port) || 6379,
     database = Number(input.database || 0);
