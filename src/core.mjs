@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   postmanVariableMode,
   collectionIdentifier,
@@ -544,6 +545,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  validatePlanStepTypes(plan.steps);
   validatePostmanOAuth2Project({ plans: [plan] });
   const repeated = validateRepeatGraph(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
@@ -694,6 +696,7 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  validatePlanStepTypes(plan.steps);
   validatePostmanOAuth2Project({ plans: [plan] });
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
@@ -2444,6 +2447,10 @@ export function restoreProject(document) {
         validateRequestTaskSource(step.request);
     }
   validateProjectDatabaseWriteEvidence(document);
+  for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
+  for (const run of document.runs || [])
+    if (run.snapshot?.steps !== undefined)
+      validatePlanStepTypes(run.snapshot.steps);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

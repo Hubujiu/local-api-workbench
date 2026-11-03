@@ -1,3 +1,8 @@
+import { isProxy } from "node:util/types";
+import {
+  validatePlanDefinitionTypes,
+  sameStoredPlan,
+} from "./plan-step-types.mjs";
 import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
 import { applyPostmanOAuth2 } from "./postman-oauth2-token.mjs";
 import {
@@ -590,6 +595,33 @@ export class Store {
     return this.save(next, { apiResourceRestore });
   }
   #validateProject(p) {
+    if (
+      !Array.isArray(p.plans) ||
+      isProxy(p.plans) ||
+      p.plans.length > 1000 ||
+      Object.getPrototypeOf(p.plans) !== Array.prototype ||
+      Reflect.ownKeys(p.plans).length !== p.plans.length + 1
+    )
+      throw Error("计划最多1000个普通数据项");
+    for (let index = 0; index < p.plans.length; index++) {
+      const entry = Object.getOwnPropertyDescriptor(p.plans, String(index));
+      if (!entry?.enumerable || !Object.hasOwn(entry, "value"))
+        throw Error("计划不能包含访问器或空洞");
+    }
+    // Unknown legacy discriminators remain inert until lock-held disk comparison.
+    // Never defer accessor, Proxy or cyclic input to later normalizers.
+    for (const plan of p.plans) {
+      try {
+        validatePlanDefinitionTypes(plan);
+      } catch (error) {
+        if (
+          error.code !== "PLAN_STEP_TYPE_INVALID" ||
+          !sameStoredPlan(plan, plan, 100000)
+        )
+          throw error;
+      }
+    }
+
     validatePostmanOAuth2Project(p);
     validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
@@ -620,7 +652,6 @@ export class Store {
     }));
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
-    p.plans = p.plans.map(snapshotPlan);
     for (const run of p.runs || [])
       if (run.snapshot) {
         readImportedNativeFlowSource(run.snapshot);
@@ -778,22 +809,6 @@ export class Store {
         throw error;
     }
     if (creating && previous) throw Error("项目ID或存储目录已存在");
-    // Preserve graph identity after applying the same snapshot normalization to
-    // both disk and candidate shapes, including frozen cases/plans/history.
-    const identityPrevious =
-      nativeInheritanceEdit && previous
-        ? {
-            ...previous,
-            plans: previous.plans.map(snapshotPlan),
-            cases: previous.cases?.map(snapshotCase),
-          }
-        : previous;
-    assertNativeInheritanceIdentity(
-      identityPrevious,
-      p,
-      nativeInheritanceEdit,
-      nativeInheritanceEditContext,
-    );
     if (
       previous &&
       p._diskFingerprint &&
@@ -810,6 +825,50 @@ export class Store {
         : expectedConfiguration !== previousConfiguration)
     )
       throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
+    if (activity && previous && !sameStoredPlan(p.plans, previous.plans))
+      throw Error("活动记录保存不能修改计划定义或步骤类型");
+    // Only exact existing disk definitions may remain inert. Never use
+    // activity:true or a matching ID as authority to admit edited types.
+    const opaquePlans = new Set();
+    const retainedPlans = new Set();
+    for (const plan of p.plans) {
+      try {
+        validatePlanDefinitionTypes(plan);
+      } catch (error) {
+        const old = previous?.plans?.find(
+          (item) => !retainedPlans.has(item) && sameStoredPlan(plan, item),
+        );
+        if (
+          error.code !== "PLAN_STEP_TYPE_INVALID" ||
+          !old ||
+          retainedPlans.has(old)
+        )
+          throw error;
+        retainedPlans.add(old);
+        opaquePlans.add(plan);
+      }
+    }
+    const normalizedPlans = p.plans.map((plan) =>
+      opaquePlans.has(plan) ? structuredClone(plan) : snapshotPlan(plan),
+    );
+    p.plans =
+      activity && previous ? structuredClone(previous.plans) : normalizedPlans;
+    // Preserve graph identity after applying the same snapshot normalization to
+    // both disk and candidate shapes, including frozen cases/plans/history.
+    const identityPrevious =
+      nativeInheritanceEdit && previous
+        ? {
+            ...previous,
+            plans: previous.plans.map(snapshotPlan),
+            cases: previous.cases?.map(snapshotCase),
+          }
+        : previous;
+    assertNativeInheritanceIdentity(
+      identityPrevious,
+      p,
+      nativeInheritanceEdit,
+      nativeInheritanceEditContext,
+    );
     // Preserve the existing stale-activity retry gate before checking history.
     const resourcePrevious =
       apiResourceRestore && previous
