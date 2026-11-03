@@ -37,7 +37,13 @@ function record(value, allowed) {
   return value;
 }
 function own(value, key) {
-  if (!value || types.isProxy(value) || typeof value !== "object") fail("对象");
+  if (
+    !value ||
+    types.isProxy(value) ||
+    typeof value !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    fail("普通对象原型");
   const d = Object.getOwnPropertyDescriptor(value, key);
   if (d && (!Object.hasOwn(d, "value") || !d.enumerable))
     fail("访问器或非数据字段");
@@ -142,7 +148,8 @@ function rejectValues(object) {
 // Check before cloning, normalizing or enumerating values in the existing adapters.
 export function preflightApipostAttributes(project) {
   const settings = own(project, "settings") ?? {};
-  const fields = definitions(own(settings, "attributes") ?? []);
+  const storedFields = own(settings, "attributes");
+  const fields = definitions(storedFields === undefined ? [] : storedFields);
   for (const request of list(own(project, "requests") ?? [], 5000))
     if (!own(request, "deletedAt")) values(own(request, "attributes"), fields);
   for (const key of ["documents", "protocols"])
@@ -159,6 +166,12 @@ export function preflightApipostAttributes(project) {
   return fields;
 }
 export function prepareApipostAttributeExport(project, projectId) {
+  if (
+    typeof projectId !== "string" ||
+    !projectId.trim() ||
+    projectId.length > 200
+  )
+    fail("目标项目标识");
   const fields = preflightApipostAttributes(project);
   const ids = new Map(
     fields.map((f) => [
