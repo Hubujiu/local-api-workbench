@@ -9,17 +9,21 @@ export function sampleFromSchema(
 ) {
   const budget = { nodes: 0 };
   const uniqueSamples = createUniqueSampleSelector();
+  let uniqueTupleDepth = 0;
+  const literal = (value) =>
+    uniqueTupleDepth ? uniqueSamples.check(value) : structuredClone(value);
   function sample(schema, level, seen, fieldName = "") {
+    if (uniqueTupleDepth) uniqueSamples.check(schema);
     if (++budget.nodes > 10000 || level > 12)
       throw Error("Schema 生成超过节点/深度上限");
     if (schema === false) throw Error("Schema 禁止任何值");
     if (schema === true) return null;
     if (!schema || typeof schema !== "object" || Array.isArray(schema))
       throw Error("Schema 必须为对象");
-    if (schema.const !== undefined) return structuredClone(schema.const);
-    if (schema.example !== undefined) return structuredClone(schema.example);
-    if (schema.default !== undefined) return structuredClone(schema.default);
-    if (schema.enum?.length) return structuredClone(schema.enum[0]);
+    if (schema.const !== undefined) return literal(schema.const);
+    if (schema.example !== undefined) return literal(schema.example);
+    if (schema.default !== undefined) return literal(schema.default);
+    if (schema.enum?.length) return literal(schema.enum[0]);
     if (schema.$ref) {
       let ref = schema.$ref;
       if (typeof ref !== "string" || !ref.startsWith("#"))
@@ -39,19 +43,28 @@ export function sampleFromSchema(
         .slice(2)
         .split("/")
         .map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+        if (uniqueTupleDepth && types.isProxy(target))
+          throw Error("唯一数组引用不支持 Proxy");
         if (
           ["__proto__", "prototype", "constructor"].includes(part) ||
           !target ||
           !Object.hasOwn(target, part)
         )
           throw Error("Schema 引用不存在");
-        target = target[part];
+        if (uniqueTupleDepth) {
+          if (types.isProxy(target)) throw Error("唯一数组引用不支持 Proxy");
+          const descriptor = Object.getOwnPropertyDescriptor(target, part);
+          if (!descriptor || !Object.hasOwn(descriptor, "value"))
+            throw Error("唯一数组引用不支持访问器");
+          target = descriptor.value;
+        } else target = target[part];
       }
       if (
         typeof target !== "boolean" &&
         (!target || typeof target !== "object" || Array.isArray(target))
       )
         throw Error("Schema 引用目标不是Schema");
+      if (uniqueTupleDepth) uniqueSamples.check(target);
       const overrides = { ...schema };
       delete overrides.$ref;
       const next =
@@ -86,7 +99,7 @@ export function sampleFromSchema(
       if (schema[key] !== undefined)
         throw Error("复杂约束 " + key + " 请提供 example");
     const mocked = options.valueForField?.(fieldName, schema);
-    if (mocked !== undefined) return structuredClone(mocked);
+    if (mocked !== undefined) return literal(mocked);
     if (schema.oneOf !== undefined || schema.anyOf !== undefined) {
       if (schema.oneOf !== undefined && schema.anyOf !== undefined)
         throw Error("多个组合关键字请提供 example");
@@ -276,14 +289,24 @@ export function sampleFromSchema(
       const count = Math.max(min, Math.min(prefix?.length ?? 1, limit));
       if (count > 100) throw Error("数组样例上限100项，请提供 example");
       if (prefix) {
-        const values = Array.from({ length: count }, (_, index) =>
-          sample(
-            index < prefix.length ? prefix[index] : tail,
-            level + 1,
-            seen,
-            fieldName,
-          ),
-        );
+        if (schema.uniqueItems) {
+          uniqueSamples.check(prefix);
+          uniqueSamples.check(tail);
+          uniqueTupleDepth++;
+        }
+        let values;
+        try {
+          values = Array.from({ length: count }, (_, index) =>
+            sample(
+              index < prefix.length ? prefix[index] : tail,
+              level + 1,
+              seen,
+              fieldName,
+            ),
+          );
+        } finally {
+          if (schema.uniqueItems) uniqueTupleDepth--;
+        }
         if (schema.uniqueItems) uniqueSamples(values, values.length, true);
         return values;
       }
@@ -559,7 +582,11 @@ function createUniqueSampleSelector() {
     try {
       for (const key of keys) {
         if (array && key === "length") continue;
-        if (typeof key !== "string" || (array && !/^(0|[1-9]\d*)$/.test(key)))
+        if (
+          typeof key !== "string" ||
+          (array &&
+            (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))
+        )
           throw Error("唯一数组候选须为普通 JSON 数据");
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
         if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
@@ -580,7 +607,7 @@ function createUniqueSampleSelector() {
       costs: array ? entries.map((entry) => entry[2]) : undefined,
     };
   };
-  return (values, count, rejectDuplicates = false) => {
+  const select = (values, count, rejectDuplicates = false) => {
     // Inspect the container too: direct JS callers cannot invoke getters while
     // validating candidates. HTTP input is already JSON, but uses this same path.
     const checked = inspect(values, 0, new Set());
@@ -609,4 +636,6 @@ function createUniqueSampleSelector() {
     if (selected.length < count) throw Error("唯一数组约束无法满足");
     return selected.map((item) => item.value);
   };
+  select.check = (value) => inspect(value, 0, new Set()).value;
+  return select;
 }
