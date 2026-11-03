@@ -352,3 +352,129 @@ test("UTF-8 logical bytes include JSON escaping and separators while exists and 
     "fallback",
   );
 });
+
+test("direct inert values preserve negative zero, sparse arrays and undefined properties without admitting executable conversion", async () => {
+  const { createMockConditionBudget } = await import(
+    "../src/mock-condition-budget.mjs"
+  );
+  const hole = Array(3);
+  hole[1] = undefined;
+  hole[2] = -0;
+  for (const value of [
+    -0,
+    undefined,
+    hole,
+    { a: undefined, b: -0, c: null },
+    [undefined, null, [undefined, "雪"]],
+  ]) {
+    assert.equal(
+      createMockConditionBudget().json(value),
+      JSON.stringify(value),
+    );
+    assert.equal(createMockConditionBudget().string(value), String(value));
+  }
+  const b = createMockConditionBudget();
+  assert.equal(b.json(-0), b.json(0));
+  assert.equal(b.string(-0), b.string(0));
+  assert.throws(
+    () => createMockConditionBudget().string({ toString: 1 }),
+    TypeError,
+  );
+  assert.throws(
+    () => createMockConditionBudget().string(Object.create(null)),
+    TypeError,
+  );
+  let conversions = 0;
+  for (const value of [
+    {
+      toString() {
+        conversions++;
+        return "x";
+      },
+    },
+    {
+      valueOf() {
+        conversions++;
+        return 1;
+      },
+    },
+    {
+      [Symbol.toPrimitive]() {
+        conversions++;
+        return "x";
+      },
+    },
+  ])
+    assert.throws(() => createMockConditionBudget().string(value), /JSON数据/);
+  assert.equal(conversions, 0);
+});
+
+test("budget exhaustion never executes fallback and short-circuiting never inspects unused values", () => {
+  let fallback = 0,
+    conversions = 0;
+  const request = definition();
+  request.examples = [];
+  assert.throws(
+    () =>
+      selectMockResponse(request, { body: { value: largeValue } }, () => {
+        fallback++;
+        return { status: 200, body: "wrong" };
+      }),
+    /预算/,
+  );
+  assert.equal(fallback, 0);
+  const unreachable = {
+    toJSON() {
+      conversions++;
+      throw Error("unreachable");
+    },
+  };
+  const rules = [
+    {
+      conditions: [
+        { target: "body.value", op: "eq", value: "different" },
+        { target: "body.value", op: "eq", value: unreachable },
+      ],
+      response: { status: 201, body: "wrong" },
+    },
+  ];
+  assert.equal(
+    selectMockResponse(
+      { mockRules: rules },
+      { body: { value: "small" } },
+      () => {
+        fallback++;
+        return { status: 200, body: "healthy" };
+      },
+    ).body,
+    "healthy",
+  );
+  assert.equal(fallback, 1);
+  assert.equal(conversions, 0);
+});
+
+test("lookup rejects callable proxies before traps and retains the existing path grammar limits", async () => {
+  const { createMockConditionBudget } = await import(
+    "../src/mock-condition-budget.mjs"
+  );
+  let traps = 0;
+  const callback = new Proxy(() => {}, {
+    getOwnPropertyDescriptor() {
+      traps++;
+      return { value: 1, configurable: true };
+    },
+  });
+  assert.throws(
+    () => createMockConditionBudget().read({ callback }, "callback.x"),
+    /JSON数据/,
+  );
+  assert.equal(traps, 0);
+  assert.throws(
+    () => createMockConditionBudget().read({}, "a".repeat(4097)),
+    /JSON 路径超过长度上限/,
+  );
+  assert.throws(
+    () => createMockConditionBudget().read({}, "body.__proto__.x"),
+    /禁止的 JSON 路径/,
+  );
+});

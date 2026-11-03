@@ -164,11 +164,13 @@ export function createMockConditionBudget() {
   };
   return {
     read(source, path) {
+      const segments = jsonPathSegments(path);
       visit();
       text(path);
-      for (const key of jsonPathSegments(path)) {
+      for (const key of segments) {
         visit();
         if (source == null) return undefined;
+        if (typeof source === "function") unsupported();
         if (typeof source === "object") object(source);
         source = own(Object(source), key);
       }
