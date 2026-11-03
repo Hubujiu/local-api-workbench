@@ -79,6 +79,13 @@ function rejectRepeatDataHooks(root) {
     if (++nodes > 100000 || depth > 32) throw fail("循环计划数据结构超限");
     if (isProxy(value)) throw fail("循环计划数据不能包含Proxy");
     if (value === null || typeof value !== "object") continue;
+    const prototype = Object.getPrototypeOf(value);
+    if (
+      !(
+        Array.isArray(value) ? [Array.prototype] : [Object.prototype, null]
+      ).includes(prototype)
+    )
+      throw fail("循环计划数据原型无效");
     if (ancestors.has(value)) throw fail("循环计划须为无循环的普通数据");
     ancestors.add(value);
     pending.push([value, depth, true]);

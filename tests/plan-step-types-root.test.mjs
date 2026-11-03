@@ -390,3 +390,112 @@ test("repeat payload Proxy protection runs before OAuth descriptor readers witho
     assert.equal(reads, 0);
   }
 });
+
+test("repeat data rejects inherited Proxy hooks before OAuth inherited-marker detection", async () => {
+  for (const position of ["request", "auth", "nativeOAuth2", "extra"]) {
+    let traps = 0;
+    const trap = () => {
+      traps++;
+      return false;
+    };
+    const inherited = Object.create(
+      new Proxy(
+        {},
+        {
+          has: trap,
+          get() {
+            traps++;
+            throw Error("trap");
+          },
+          getOwnPropertyDescriptor() {
+            traps++;
+            throw Error("trap");
+          },
+          getPrototypeOf() {
+            traps++;
+            throw Error("trap");
+          },
+        },
+      ),
+    );
+    const request = {
+      url: "http://127.0.0.1:1/never",
+      auth: {
+        type: "oauth2",
+        nativeOAuth2: { access_token: "owned-fake-token" },
+      },
+    };
+    const step = { id: "leaf", request };
+    if (position === "request") step.request = inherited;
+    else if (position === "auth") request.auth = inherited;
+    else if (position === "nativeOAuth2") request.auth.nativeOAuth2 = inherited;
+    else request.extra = inherited;
+    const plan = {
+      steps: [
+        {
+          id: "outer",
+          type: "repeat",
+          count: 1,
+          enabled: false,
+          steps: [step],
+        },
+      ],
+    };
+    assert.throws(() => snapshotPlan(plan), /原型/);
+    await assert.rejects(
+      runPlan(plan, {}, () => {
+        throw Error("must not execute");
+      }),
+      /原型/,
+    );
+    assert.throws(
+      () =>
+        restoreProject({
+          version: 1,
+          requests: [],
+          environments: [],
+          plans: [plan],
+        }),
+      /原型/,
+    );
+    assert.equal(traps, 0, position);
+  }
+});
+
+test("type preflight and repeat data safety retain exact group-depth and data-work boundaries", () => {
+  const group = (steps, id) => [{ id, type: "repeat", count: 1, steps }];
+  let groups = [leaf("s", "http://localhost")];
+  for (let i = 0; i < 4; i++) groups = group(groups, "g" + i);
+  validatePlanStepTypes(groups);
+  snapshotPlan({ steps: groups });
+  const deeper = group(groups, "too-deep");
+  assert.throws(() => validatePlanStepTypes(deeper));
+  assert.throws(() => snapshotPlan({ steps: deeper }));
+  const graph = () =>
+    group([{ id: "s", request: { url: "http://localhost", extra: 0 } }], "g");
+  const depth32 = graph();
+  let extra = 0;
+  for (let i = 0; i < 27; i++) extra = { child: extra };
+  depth32[0].steps[0].request.extra = extra;
+  validatePlanStepTypes(depth32);
+  snapshotPlan({ steps: depth32 });
+  depth32[0].steps[0].request.extra = { child: extra };
+  assert.throws(() => validatePlanStepTypes(depth32), /超限/);
+  assert.throws(() => snapshotPlan({ steps: depth32 }), /超限/);
+  const count = (value) =>
+    1 +
+    (value && typeof value === "object"
+      ? Object.values(value).reduce((sum, item) => sum + count(item), 0)
+      : 0);
+  const bounded = graph();
+  bounded[0].steps[0].request.extra = [];
+  const overhead = count(bounded);
+  bounded[0].steps[0].request.extra = Array(100000 - overhead).fill(0);
+  assert.equal(count(bounded), 100000);
+  validatePlanStepTypes(bounded);
+  snapshotPlan({ steps: bounded });
+  bounded[0].steps[0].request.extra.push(0);
+  assert.equal(count(bounded), 100001);
+  assert.throws(() => validatePlanStepTypes(bounded), /超限/);
+  assert.throws(() => snapshotPlan({ steps: bounded }), /超限/);
+});
