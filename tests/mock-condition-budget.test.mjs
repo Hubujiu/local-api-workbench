@@ -144,3 +144,211 @@ test(
     );
   },
 );
+
+test("ordinary comparison budgets retain JSON key order, scalar distinctions and String contains semantics", () => {
+  const selected = (actual, op, value) =>
+    selectMockResponse(
+      {
+        mockRules: [
+          {
+            conditions: [{ target: "body.value", op, value }],
+            response: { status: 201, body: "matched" },
+          },
+        ],
+        examples: [{ status: 200, body: "fallback" }],
+      },
+      { body: { value: actual } },
+    ).status === 201;
+  for (const [actual, expected] of [
+    [null, null],
+    [false, false],
+    [0, 0],
+    ["", ""],
+    [undefined, undefined],
+    [
+      [1, null, "x"],
+      [1, null, "x"],
+    ],
+    [
+      { a: 1, b: 2 },
+      { a: 1, b: 2 },
+    ],
+    [
+      { a: 1, b: 2 },
+      { b: 2, a: 1 },
+    ],
+    [NaN, null],
+    ["0", 0],
+  ]) {
+    assert.equal(
+      selected(actual, "eq", expected),
+      JSON.stringify(actual) === JSON.stringify(expected),
+    );
+    assert.equal(
+      selected(actual, "neq", expected),
+      JSON.stringify(actual) !== JSON.stringify(expected),
+    );
+  }
+  for (const [actual, expected] of [
+    [null, ""],
+    [undefined, "undefined"],
+    [false, "false"],
+    [0, "0"],
+    [[1, null, [2, 3]], ",,2"],
+    [{ x: 1 }, "[object Object]"],
+    ["雪😀\u0000", "😀"],
+  ]) {
+    assert.equal(
+      selected(actual, "contains", expected),
+      String(actual ?? "").includes(String(expected)),
+    );
+  }
+  for (const value of [undefined, null, false, 0, ""])
+    assert.equal(
+      selected(value, "exists", null),
+      value !== undefined && value !== null,
+    );
+});
+
+test("encoding preflight bounds escaping and arrays before conversion, and getters or conversion callbacks never run", async (t) => {
+  const { createMockConditionBudget } = await import(
+    "../src/mock-condition-budget.mjs"
+  );
+  const escaped = "\u0000".repeat(200000);
+  const original = JSON.stringify;
+  let calls = 0;
+  const observer = t.mock.method(JSON, "stringify", function (value, ...args) {
+    if (value === escaped) calls++;
+    return original.call(this, value, ...args);
+  });
+  try {
+    assert.throws(() => createMockConditionBudget().json(escaped), /预算/);
+    assert.equal(calls, 0);
+  } finally {
+    observer.mock.restore();
+  }
+  let effects = 0;
+  for (const value of [
+    {
+      toJSON() {
+        effects++;
+        return 1;
+      },
+    },
+    {
+      get x() {
+        effects++;
+        return 1;
+      },
+    },
+    {
+      toString() {
+        effects++;
+        return "changed";
+      },
+    },
+    new Proxy(
+      {},
+      {
+        ownKeys() {
+          effects++;
+          return [];
+        },
+      },
+    ),
+  ]) {
+    assert.throws(() => createMockConditionBudget().json(value), /JSON数据/);
+  }
+  assert.equal(effects, 0);
+  const hugeArray = Array(100001).fill(null);
+  assert.throws(() => createMockConditionBudget().string(hugeArray), /预算/);
+  const cycle = [];
+  cycle.push(cycle);
+  assert.throws(() => createMockConditionBudget().json(cycle), /circular/);
+  assert.throws(() => createMockConditionBudget().string(cycle), /JSON数据/);
+  let deep = 0;
+  for (let i = 0; i < 66; i++) deep = { x: deep };
+  assert.throws(() => createMockConditionBudget().json(deep), /预算/);
+});
+
+test("primitive caching still charges each comparison and no budget or mutable object cache crosses requests", async (t) => {
+  const { createMockConditionBudget } = await import(
+    "../src/mock-condition-budget.mjs"
+  );
+  const budget = createMockConditionBudget(),
+    observer = observeSerialization(t);
+  try {
+    for (let i = 0; i < 15; i++)
+      assert.equal(budget.json(largeValue), '"' + largeValue + '"');
+    assert.throws(() => budget.json(largeValue), /预算/);
+    assert.equal(observer.count(), 1);
+  } finally {
+    observer.restore();
+  }
+  const object = { x: 1 },
+    fresh = createMockConditionBudget();
+  assert.equal(fresh.json(object), '{"x":1}');
+  object.x = 2;
+  assert.equal(fresh.json(object), '{"x":2}');
+  assert.equal(
+    createMockConditionBudget().json(largeValue),
+    '"' + largeValue + '"',
+  );
+  const path = "body." + Array(60).fill("x").join(".");
+  let body = {};
+  let cursor = body;
+  for (let i = 0; i < 60; i++) cursor = cursor.x = {};
+  const paths = createMockConditionBudget();
+  assert.throws(() => {
+    for (let i = 0; i < 5000; i++) paths.exists(paths.read({ body }, path));
+  }, /预算/);
+});
+
+test("UTF-8 logical bytes include JSON escaping and separators while exists and unreachable rules do no unused work", async () => {
+  const { createMockConditionBudget } = await import(
+    "../src/mock-condition-budget.mjs"
+  );
+  const exact = "a".repeat(1024 * 1024 - 2);
+  const limit = createMockConditionBudget();
+  assert.equal(Buffer.byteLength(limit.json(exact)), 1024 * 1024);
+  assert.throws(() => limit.json(0), /预算/);
+  assert.throws(() => createMockConditionBudget().json(exact + "a"), /预算/);
+  for (const value of [
+    '雪😀\ud800\u0000\n\\"',
+    ["雪", null, ["😀", "\ud800"]],
+    { '雪"': [true, null, "\n"] },
+  ]) {
+    const b = createMockConditionBudget(),
+      encoded = JSON.stringify(value);
+    b.json(value);
+    // Consume exactly the remaining bytes with another JSON string, including quotes.
+    const remainder = 1024 * 1024 - Buffer.byteLength(encoded);
+    b.json("a".repeat(remainder - 2));
+    assert.throws(() => b.json(0), /预算/);
+  }
+  const rules = [
+    {
+      conditions: [{ target: "body.value", op: "exists", value: "ignored" }],
+      response: { status: 201, body: "exists" },
+    },
+    ...definition().mockRules,
+  ];
+  assert.equal(
+    selectMockResponse(
+      { mockRules: rules.slice(0, 100) },
+      { body: { value: largeValue } },
+    ).body,
+    "exists",
+  );
+  const missing = {
+    conditions: [{ target: "body.missing", op: "exists", value: largeValue }],
+    response: { status: 201, body: "wrong" },
+  };
+  assert.equal(
+    selectMockResponse(
+      { mockRules: [missing], examples: [{ status: 200, body: "fallback" }] },
+      { body: { value: largeValue } },
+    ).body,
+    "fallback",
+  );
+});
