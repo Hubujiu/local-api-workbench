@@ -1,3 +1,4 @@
+import { verifyApipostCodeDefinitions } from "./apipost-code-export.mjs";
 import {
   prepareExtendedProtocolExport,
   verifyExtendedProtocolExport,
@@ -357,6 +358,10 @@ export function exportApipostDirectory(project, options = {}) {
     dictionary: [],
   };
   importIntoProject(check, result, options);
+  verifyApipostCodeDefinitions(
+    project.settings?.statusCodes,
+    check.settings?.statusCodes,
+  );
   verifyProtocolDefinitions(project.protocols, check.protocols);
   verifySampleDefinitions(project, check, (id) =>
     nativeIds.get(apipostExportId("a", id)),
