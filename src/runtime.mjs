@@ -307,8 +307,9 @@ export class Store {
             try {
               validatePlanDefinitionTypes(plan);
             } catch (error) {
-              const old = previous?.plans?.find((item) =>
-                sameStoredPlan(plan, item),
+              const old = previous?.plans?.find(
+                (item) =>
+                  !retainedPlans.has(item) && sameStoredPlan(plan, item),
               );
               if (
                 error.code !== "PLAN_STEP_TYPE_INVALID" ||
