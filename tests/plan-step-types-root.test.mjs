@@ -109,3 +109,28 @@ test("repeat input admission rejects cyclic and proxy data without traps but acc
   cyclic[0].steps[0].request.cycle = cyclic;
   assert.throws(() => validatePlanStepTypes(cyclic));
 });
+
+test("restore preflights live and historical type getters before any generic plan traversal", () => {
+  for (const history of [false, true]) {
+    let calls = 0;
+    const step = leaf("s", "http://127.0.0.1:1/never");
+    Object.defineProperty(step, "type", {
+      enumerable: true,
+      get() {
+        calls++;
+        return "http";
+      },
+    });
+    const backup = {
+      version: 1,
+      requests: [],
+      environments: [],
+      plans: history ? [] : [{ steps: [step] }],
+      runs: history
+        ? [{ id: "r", results: [], snapshot: { steps: [step] } }]
+        : [],
+    };
+    assert.throws(() => restoreProject(backup));
+    assert.equal(calls, 0);
+  }
+});

@@ -2364,6 +2364,10 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
+  for (const run of document.runs || [])
+    if (run.snapshot?.steps !== undefined)
+      validatePlanStepTypes(run.snapshot.steps);
   validatePostmanOAuth2Project(document);
   validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
@@ -2447,10 +2451,6 @@ export function restoreProject(document) {
         validateRequestTaskSource(step.request);
     }
   validateProjectDatabaseWriteEvidence(document);
-  for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
-  for (const run of document.runs || [])
-    if (run.snapshot?.steps !== undefined)
-      validatePlanStepTypes(run.snapshot.steps);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

@@ -859,7 +859,11 @@ export class Store {
       nativeInheritanceEdit && previous
         ? {
             ...previous,
-            plans: previous.plans.map(snapshotPlan),
+            plans: previous.plans.map((plan) =>
+              retainedPlans.has(plan)
+                ? structuredClone(plan)
+                : snapshotPlan(plan),
+            ),
             cases: previous.cases?.map(snapshotCase),
           }
         : previous;
@@ -874,7 +878,11 @@ export class Store {
       apiResourceRestore && previous
         ? {
             ...previous,
-            plans: previous.plans.map(snapshotPlan),
+            plans: previous.plans.map((plan) =>
+              retainedPlans.has(plan)
+                ? structuredClone(plan)
+                : snapshotPlan(plan),
+            ),
             cases: previous.cases?.map(snapshotCase),
           }
         : previous;
