@@ -328,9 +328,56 @@ test("unrelated valid execution retains evidence alongside inert legacy history 
   const saved = await new Store(root).get(p.id);
   assert.deepEqual(saved.plans, diskBefore.plans);
   assert.deepEqual(saved.runs.slice(1), diskBefore.runs);
-  const changed = await app.store.get(p.id);
-  changed.plans[0].name = "changed";
-  await assert.rejects(app.store.save(changed, { activity: true }), /步骤类型/);
+  for (const activity of [false, true]) {
+    const changed = await app.store.get(p.id);
+    changed.plans[0].name = "changed";
+    await assert.rejects(app.store.save(changed, { activity }), /步骤类型/);
+    const added = await app.store.get(p.id);
+    added.plans.push({ ...structuredClone(added.plans[0]), id: "new-bad" });
+    await assert.rejects(app.store.save(added, { activity }), /步骤类型/);
+  }
+  for (const position of ["type", "nested", "row"]) {
+    for (const activity of [false, true]) {
+      const injected = await app.store.get(p.id);
+      let calls = 0;
+      if (position === "row")
+        injected.plans[0] = new Proxy(injected.plans[0], {
+          get() {
+            calls++;
+            throw Error("trap");
+          },
+          getPrototypeOf() {
+            calls++;
+            throw Error("trap");
+          },
+        });
+      else {
+        const object =
+          position === "type"
+            ? injected.plans[0].steps[0]
+            : injected.plans[0].steps[0].request;
+        const key = position === "type" ? "type" : "url";
+        const value = object[key];
+        Object.defineProperty(object, key, {
+          enumerable: true,
+          get() {
+            calls++;
+            return value;
+          },
+        });
+      }
+      await assert.rejects(app.store.save(injected, { activity }));
+      assert.equal(calls, 0, position);
+    }
+  }
+  const duplicated = await app.store.get(p.id);
+  duplicated.plans.push(structuredClone(duplicated.plans[0]));
+  await assert.rejects(app.store.save(duplicated), /步骤类型/);
+  const stale = await app.store.get(p.id);
+  const updated = await app.store.get(p.id);
+  updated.name = "unrelated config update";
+  await app.store.save(updated);
+  await assert.rejects(app.store.save(stale, { activity: true }), /其他窗口/);
   assert.deepEqual((await app.store.get(p.id)).plans, diskBefore.plans);
 });
 test("backup null and absent historical snapshots remain inert and unmodified", () => {

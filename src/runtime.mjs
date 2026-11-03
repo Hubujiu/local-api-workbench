@@ -1,5 +1,7 @@
-import { isDeepStrictEqual } from "node:util";
-import { validatePlanStepTypes } from "./plan-step-types.mjs";
+import {
+  validatePlanDefinitionTypes,
+  sameStoredPlan,
+} from "./plan-step-types.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -283,26 +285,26 @@ export class Store {
               : expectedConfiguration !== previousConfiguration)
           )
             throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
-          if (
-            activity &&
-            previous &&
-            !isDeepStrictEqual(p.plans, previous.plans)
-          )
+          if (activity && previous && !sameStoredPlan(p.plans, previous.plans))
             throw Error("活动记录保存不能修改计划定义或步骤类型");
           // Only exact existing disk definitions may remain inert. Never use
           // activity:true or a matching ID as authority to admit edited types.
           const opaquePlans = new Set();
+          const retainedPlans = new Set();
           for (const plan of p.plans) {
             try {
-              validatePlanStepTypes(plan.steps);
+              validatePlanDefinitionTypes(plan);
             } catch (error) {
-              const old = previous?.plans?.find((item) => item.id === plan?.id);
+              const old = previous?.plans?.find((item) =>
+                sameStoredPlan(plan, item),
+              );
               if (
                 error.code !== "PLAN_STEP_TYPE_INVALID" ||
                 !old ||
-                !isDeepStrictEqual(plan, old)
+                retainedPlans.has(old)
               )
                 throw error;
+              retainedPlans.add(old);
               opaquePlans.add(plan);
             }
           }
