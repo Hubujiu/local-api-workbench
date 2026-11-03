@@ -68,3 +68,91 @@ for (const [format, encode] of exporters)
     assert.deepEqual(project, before);
     assert.deepEqual(document, sourceBefore);
   });
+
+test("both native formats reject unsupported stored code state without returning partial data or mutating history", () => {
+  const original = blank("invalid-project");
+  original.settings.statusCodes = [
+    {
+      code: 409,
+      label: "Conflict",
+      apipostSource: { projectId: "old", codeId: "origin" },
+    },
+  ];
+  original.history = [{ id: "history", detail: "unchanged" }];
+  for (const change of [
+    (p) => {
+      p.settings.statusCodes[0].unknown = true;
+    },
+    (p) => {
+      p.settings.statusCodes[0].apipostSource.unknown = true;
+    },
+    (p) => {
+      p.settings.statusCodes[0].apipostSource.projectId = null;
+    },
+    (p) => {
+      p.settings.statusCodes[0].httpHint = true;
+    },
+    (p) => {
+      p.settings.statusCodes[0].code = -0;
+    },
+    (p) => {
+      p.settings.statusCodes.push({ code: "409", label: "Conflict" });
+    },
+  ]) {
+    const project = structuredClone(original);
+    change(project);
+    const before = structuredClone(project);
+    for (const [, encode] of exporters) assert.throws(() => encode(project));
+    assert.deepEqual(project, before);
+  }
+});
+
+test("both native format entrypoints reject code accessors before invocation", () => {
+  for (const position of ["settings", "array", "row", "origin"])
+    for (const [, encode] of exporters) {
+      const project = blank("getter-project");
+      project.settings.statusCodes = [
+        { code: "x", label: "value", apipostSource: { projectId: "old" } },
+      ];
+      const rows = project.settings.statusCodes;
+      let calls = 0;
+      const descriptor = {
+        enumerable: true,
+        get() {
+          calls++;
+          return "value";
+        },
+      };
+      if (position === "settings")
+        Object.defineProperty(project.settings, "statusCodes", descriptor);
+      if (position === "array") Object.defineProperty(rows, "0", descriptor);
+      if (position === "row")
+        Object.defineProperty(rows[0], "label", descriptor);
+      if (position === "origin")
+        Object.defineProperty(rows[0].apipostSource, "projectId", descriptor);
+      assert.throws(() => encode(project));
+      assert.equal(calls, 0, position);
+    }
+});
+
+test("native outputs retain the four-MiB guard without applying the unrelated one-MiB bulk-text limit", () => {
+  const project = blank("large-catalogue");
+  project.settings.statusCodes = Array.from({ length: 2000 }, (_, index) => ({
+    code: `c${index}`,
+    label: "v".repeat(600),
+  }));
+  for (const [format, encode] of exporters) {
+    const output = JSON.parse(JSON.stringify(encode(project)));
+    const rows = emittedCatalogue(output, format).rows;
+    assert.equal(rows.length, 2000);
+    assert.ok(Buffer.byteLength(JSON.stringify(rows)) > 1024 * 1024);
+  }
+  project.settings.statusCodes = project.settings.statusCodes.map((row) => ({
+    ...row,
+    label: "界".repeat(2000),
+  }));
+  const before = structuredClone(project);
+  for (const [, encode] of exporters)
+    assert.throws(() => encode(project), /4MiB/);
+  assert.deepEqual(project, before);
+});
