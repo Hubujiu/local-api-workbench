@@ -63,7 +63,7 @@ const decode = (result) => {
   assert.notEqual(result.isError, true, result.content?.[0]?.text);
   return JSON.parse(result.content[0].text);
 };
-for (const mode of ["owner", "http", "stdio"])
+for (const mode of ["owner", "http", "stdio", "stateless"])
   test(
     `${mode} queued pre/post scope saves honor cancellation before transaction admission and retain readable terminal evidence`,
     { timeout: 30000 },
@@ -161,10 +161,15 @@ for (const mode of ["owner", "http", "stdio"])
       const other = await app.store.create("untouched"),
         otherBefore = await app.store.get(other.id),
         otherBytes = await configurationBytes(app.store.directory(other.id));
-      let cancelAck;
-      if (mode === "owner" || mode === "http")
-        undo = installScopeSaveLockGate(app.store, gate);
-      if (mode !== "owner") {
+      let cancelAck, statelessToken;
+      const statelessPolicy = {
+        enabled: true,
+        projects: projects.map((p) => p.id),
+        write: true,
+        execute: true,
+      };
+      if (mode !== "stdio") undo = installScopeSaveLockGate(app.store, gate);
+      if (mode !== "owner" && mode !== "stateless") {
         client = new Client({ name: "scope-save-" + mode, version: "1" });
         let transport;
         if (mode === "http") {
@@ -220,6 +225,10 @@ for (const mode of ["owner", "http", "stdio"])
           JSON.stringify({ label: phase, projectId: p.id }),
         );
         const controller = new AbortController();
+        if (mode === "stateless")
+          statelessToken = (
+            await owner("/api/mcp/config", "POST", statelessPolicy)
+          ).token;
         cancelAck = Promise.withResolvers();
         const pending =
           mode === "owner"
@@ -227,14 +236,34 @@ for (const mode of ["owner", "http", "stdio"])
                 planId: "flow",
                 runId: "queued-" + phase,
               })
-            : client.callTool(
-                {
-                  name: "localapi_execute_flow",
-                  arguments: { projectId: p.id, planId: "flow" },
-                },
-                undefined,
-                { signal: controller.signal },
-              );
+            : mode === "stateless"
+              ? fetch(app.url + "/mcp", {
+                  method: "POST",
+                  headers: {
+                    authorization: "Bearer " + statelessToken,
+                    "content-type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: "stateless-" + phase,
+                    method: "tools/call",
+                    params: {
+                      name: "localapi_execute_flow",
+                      arguments: { projectId: p.id, planId: "flow" },
+                    },
+                  }),
+                }).then(async (response) => {
+                  assert.equal(response.status, 200);
+                  return response.json();
+                })
+              : client.callTool(
+                  {
+                    name: "localapi_execute_flow",
+                    arguments: { projectId: p.id, planId: "flow" },
+                  },
+                  undefined,
+                  { signal: controller.signal },
+                );
         // Attach rejection handling before cancellation or any assertion can fail.
         const outcome = pending.then(
           (value) => ({ value }),
@@ -256,6 +285,11 @@ for (const mode of ["owner", "http", "stdio"])
           assert(!Object.hasOwn(bytesAtAdmission, ".transaction.json"));
           if (mode === "owner")
             await owner("/api/cancel", "POST", { id: "queued-" + phase });
+          else if (mode === "stateless")
+            await owner("/api/mcp/config", "POST", {
+              ...statelessPolicy,
+              execute: false,
+            });
           else {
             controller.abort();
             assert.match(String((await outcome).error), /abort|cancel/i);
@@ -275,6 +309,12 @@ for (const mode of ["owner", "http", "stdio"])
             assert.equal(answer.error, undefined);
             assert.equal(answer.value.status, "cancelled");
             assert.equal(answer.value.recordSaved, true);
+          } else if (mode === "stateless") {
+            const answer = await outcome;
+            assert.equal(answer.error, undefined);
+            assert.equal(answer.value.error?.code, -32000);
+            assert.match(answer.value.error.message, /authorization changed/);
+            assert.equal(saved.runs[0].source, "mcp");
           }
           assert.equal(
             checkpoint.signalForwarded,

@@ -507,7 +507,9 @@ export async function createApp({
         const execution =
           sessionId !== undefined && message.id !== undefined
             ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
-            : { signal: undefined, finish() {} };
+            : message.id !== undefined && cancellable
+              ? mcpHTTPSessions.beginTransient()
+              : { signal: undefined, finish() {} };
         const activityId = id();
         if (message.method === "tools/call") {
           const active = [...mcpActivities.values()].filter(
@@ -2183,7 +2185,7 @@ export async function createApp({
     })));
   server.on("close", () => {
     void autoImports.close();
-    mcpHTTPSessions.advance({ dropSessions: true });
+    mcpHTTPSessions.close();
     beginProtocolShutdown();
     socketioSessions.close();
     oauth.close();
@@ -2196,6 +2198,7 @@ export async function createApp({
   // graceful transport finalization and the one automatic persistence attempt.
   const closeServer = server.close.bind(server);
   server.close = (callback) => {
+    mcpHTTPSessions.close();
     nativeWriteOwner.close();
     // Abort held provider requests before waiting for HTTP close.
     oauth.close();
