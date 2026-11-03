@@ -88,6 +88,7 @@ jobs:
           node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production --no-audit
       - run: node scripts/build-desktop.mjs
+      - run: node tests/mcp-production-smoke.mjs
       - run: node scripts/build-manifest.mjs
         env:
           BUILD_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}

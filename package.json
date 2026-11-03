@@ -21,6 +21,7 @@
     "@faker-js/faker": "10.6.0",
     "@grpc/grpc-js": "1.14.6",
     "@grpc/proto-loader": "0.8.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@msgpack/msgpack": "3.1.2",
     "@smithy/signature-v4": "5.7.4",
     "@tikpay/iso8583-ts": "0.4.0",
@@ -48,7 +49,6 @@
   },
   "devDependencies": {
     "@grpc/reflection": "1.0.4",
-    "@modelcontextprotocol/sdk": "1.32.1",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "apipost-mock": "1.0.2",
