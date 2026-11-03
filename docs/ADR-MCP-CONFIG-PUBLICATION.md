@@ -102,3 +102,102 @@ then grants exactly its three active projects. Existing archived/denied/missing
 SDK import/export negatives and no-mutation checks stay. The stdio explicit ID
 list is unchanged. No production permission gate or assertion is weakened;
 this corrected root needs its own ordinary CI result.
+
+## Immediate process-local attenuation (2026-11-03)
+
+This section supersedes the old failed-disable memory behavior above, not its
+publication ordering. A valid owner request which only disables the service,
+removes write/execute permission, or removes existing canonical project grants
+replaces the process policy synchronously, with a detached projects array. It
+advances a revocation generation before joining the existing publication FIFO.
+New MCP calls and requests which were still receiving their body cannot cross
+that fence. The owner HTTP request still waits for actual ordered persistence:
+there is no 202, early success, frontend change, or automatic retry.
+
+Only strict Boolean capability inputs, the unchanged retention choice, no token
+rotation, and a subset of existing canonical grants qualify. Effective execute
+permission remains write AND execute. Mixed additions, rotation, retention
+changes, malformed inputs and ordinary grants use the original validation path.
+Rotation therefore remains an atomic disk-before-memory owner update; combining
+rotation with reduction does not partially revoke early. Ordinary owner requests
+capture the revocation generation before body parsing and check it at queue
+entry, after validation and after persistence. A superseded write already in
+progress may complete on disk but cannot reinstall its runtime grants. It fails
+explicitly; this is not a rollback claim. Ordinary FIFO updates do not advance
+this generation and remain sequentially valid.
+
+The reduction's ordered turn saves a fresh current snapshot, including any
+archive removals which completed earlier. It never reinstalls a captured policy
+at completion. Old canonical-create references are detached and the existing
+identity check rejects their remembered publication. Current-generation creates
+and unrelated archive grants retain their normal behavior. Retention-disabled
+owner snapshots still write the existing disabled sentinel, rather than using
+the auxiliary writer's null-snapshot shortcut.
+
+Persistence failure returns the existing non-2xx JSON error channel with an
+explicit warning: current-process permissions were restricted, but persistence
+is unconfirmed and restart may restore old authority. Runtime restriction is not
+rolled back. The existing UI already surfaces this error and does not show its
+success toast. A later explicit owner operation may recover. This is not a
+crash-durable revocation journal or a cross-process authorization guarantee.
+
+The independent PR70 baseline predates PR19 HTTP cancellation. This stage blocks
+new admission but does NOT abort already admitted execution. Composition must
+call the existing PR19 epoch/controller invalidation in the synchronous fence,
+then prove the long-request/revocation/no-next-step/persisted-cancellation flow.
+Already-sent network operations and admitted or confirmed writes are not undone.
+No second cancellation implementation is introduced here.
+
+At this checkpoint, nine real loopback HTTP/SDK/filesystem workflows passed,
+including all four attenuation classes held behind an older owner operation and
+a real project lock, prior-owner supersession, create/archive isolation, real
+persistence failures, and actual restart from unchanged prior bytes. Fifteen
+pure coordinator/filesystem/state-contract tests also passed. The finite
+policy-state enumeration and transition tests are executable contracts, not a
+TLA proof or a refinement proof. Wider tests, exact-head CI and combined PR19
+cancellation remain pending; earlier CI results do not validate this change.
+
+Design references: [OWASP default deny and per-request authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html),
+[AWS IAM explicit deny precedence](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html),
+and [RFC 7009 revocation outcome semantics](https://www.rfc-editor.org/rfc/rfc7009.html#section-2).
+These inform local deny precedence and truthful outcomes; this application does
+not claim to implement an OAuth revocation endpoint.
+
+Additional real HTTP contracts now cover partially received MCP and owner bodies
+crossing the fence, and two successive reductions while an older owner holds the
+FIFO behind a real project lock. Superseded requests return non-2xx; only the
+latest intersection is persisted and an unrelated project remains usable. A
+combined real archive/create/reduction interleaving preserves the archive removal
+and denies both the late old create and explicitly removed project after restart.
+The delayed create is confirmed to exist exactly as admitted; it is not rolled
+back or silently replayed. All 61 MCP and archive tests passed locally against
+this independent feature tree, plus repository-wide formatting and syntax checks.
+Exact-head CI and the PR19-composed abort contract remain separate requirements.
+
+## Composition with PR19 cancellation (WIP)
+
+The root based on `3edac584c5b2d488ea0e765dc092fff991504d3f` applies the
+same fence and also synchronously invalidates existing MCP database grants and
+advances the existing HTTP-session registry. This aborts both initialized-session
+and transient sessionless cancellable executions; it does not introduce a second
+execution registry. Native session-only grant arrays are detached using the same
+owner replacement rule as before. Mixed/ordinary owner updates retain their
+post-persistence invalidation. Server admission, postflight checks, independent
+protocol/auto-import/OAuth owners and the close callback remain byte-identical
+outside the owner-config block and its import.
+
+Two new root-only actual HTTP workflows hold an earlier owner publication behind
+a real lock on the retained project while another project is executing a real
+loopback request. They require cancellation and its saved history/receipt before
+that lock is released, no next external request, no premature owner success,
+and a later successful execution on the retained project. Existing committed
+results and external sends are not rolled back. The combined archive/create test
+retains the root's real stale-response rejection rather than expecting the old
+independent PR70 response shape.
+
+These root-only workflows have syntax checks but are not locally executed: the
+root dependency graph is unavailable, and comparison with the existing installed
+lock graph identifies missing `node-oauth1`. No stub or obsolete dependency graph
+was substituted. The 21 pure publication/session/archive tests pass locally.
+Exact combined CI is required; neither the independent PR70 results nor previous
+root CI validate this new composition.

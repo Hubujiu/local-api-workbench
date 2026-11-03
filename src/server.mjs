@@ -83,7 +83,10 @@ import {
   parseParameterImport,
   previewParameterImport,
 } from "./parameter-dictionary.mjs";
-import { MCPConfigPublication } from "./mcp-config-publication.mjs";
+import {
+  MCPConfigPublication,
+  immediateMCPReduction,
+} from "./mcp-config-publication.mjs";
 import { loadMCPConfig, saveMCPConfig } from "./mcp-config-store.mjs";
 import { selectMockResponse } from "./mock.mjs";
 import { snapshotCase } from "./cases.mjs";
@@ -823,43 +826,77 @@ export async function createApp({
         }
         if (u.pathname === "/api/mcp/config") {
           if (req.method === "POST") {
+            const generation = mcpPublication.captureRevocation();
             const config = await body(req);
-            await mcpPublication.run(async () => {
-              if (!Array.isArray(config.projects))
-                throw Error("项目授权列表无效");
-              const existing = new Set(
-                (await store.list())
-                  .filter((project) => !project.archived && !project.error)
-                  .map((project) => project.id),
-              );
-              if (config.projects.some((id) => !existing.has(id)))
-                throw Error("不能授权不存在、已归档或不可读取的项目");
-              const next = {
-                enabled: config.enabled === true,
-                remember: config.remember === true,
-                projects: config.projects,
-                write: config.write === true,
-                execute: config.write === true && config.execute === true,
-              };
-              const nextToken = next.enabled
-                ? !mcpToken || config.rotate === true
-                  ? randomBytes(32).toString("hex")
-                  : mcpToken
-                : "";
-              await saveMCPConfig(path.resolve(root), {
-                ...next,
-                token: nextToken,
-                port: server.address().port,
-              });
-              mcpDatabaseGrants.invalidate();
-              mcpHTTPSessions.advance({
-                dropSessions: !next.enabled || nextToken !== mcpToken,
-              });
-              mcp = next;
+            mcpPublication.assertRevocation(generation);
+            const reduction = immediateMCPReduction(mcp, config);
+            if (reduction) {
+              mcp = reduction;
               mcpSessionProjects = [];
-              mcpToken = nextToken;
-              mcpWarning = "";
-            });
+              mcpDatabaseGrants.invalidate();
+              mcpHTTPSessions.advance({ dropSessions: !mcp.enabled });
+              if (!mcp.enabled) mcpToken = "";
+              const reducedGeneration = mcpPublication.advanceRevocation();
+              mcpWarning =
+                "当前进程已限制MCP权限，持久化尚未确认；重启可能恢复旧授权。";
+              try {
+                await mcpPublication.run(async () => {
+                  mcpPublication.assertRevocation(reducedGeneration);
+                  await persistMCP({
+                    ...mcp,
+                    projects: [...mcp.projects],
+                    token: mcpToken,
+                    port: server.address().port,
+                  });
+                  mcpPublication.assertRevocation(reducedGeneration);
+                  mcpWarning = "";
+                });
+              } catch (error) {
+                throw Error(
+                  "当前进程已限制MCP权限，但持久化未确认；重启可能恢复旧授权。" +
+                    error.message,
+                );
+              }
+            } else
+              await mcpPublication.run(async () => {
+                mcpPublication.assertRevocation(generation);
+                if (!Array.isArray(config.projects))
+                  throw Error("项目授权列表无效");
+                const existing = new Set(
+                  (await store.list())
+                    .filter((project) => !project.archived && !project.error)
+                    .map((project) => project.id),
+                );
+                if (config.projects.some((id) => !existing.has(id)))
+                  throw Error("不能授权不存在、已归档或不可读取的项目");
+                mcpPublication.assertRevocation(generation);
+                const next = {
+                  enabled: config.enabled === true,
+                  remember: config.remember === true,
+                  projects: config.projects,
+                  write: config.write === true,
+                  execute: config.write === true && config.execute === true,
+                };
+                const nextToken = next.enabled
+                  ? !mcpToken || config.rotate === true
+                    ? randomBytes(32).toString("hex")
+                    : mcpToken
+                  : "";
+                await saveMCPConfig(path.resolve(root), {
+                  ...next,
+                  token: nextToken,
+                  port: server.address().port,
+                });
+                mcpPublication.assertRevocation(generation);
+                mcpDatabaseGrants.invalidate();
+                mcpHTTPSessions.advance({
+                  dropSessions: !next.enabled || nextToken !== mcpToken,
+                });
+                mcp = next;
+                mcpSessionProjects = [];
+                mcpToken = nextToken;
+                mcpWarning = "";
+              });
           } else if (req.method !== "GET")
             return json(res, 405, { error: "Method not allowed" });
           return json(res, 200, {

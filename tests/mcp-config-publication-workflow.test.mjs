@@ -13,6 +13,15 @@ const deferred = () => {
   const promise = new Promise((done) => (resolve = done));
   return { promise, resolve };
 };
+function bounded(promise, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Error(label)), 3000);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "mcp-policy-workflow-"));
   const f = { root, app: await createApp({ root, port: 0 }), clients: [] };
@@ -137,12 +146,21 @@ for (const mode of ["disable", "rotate", "forget"]) {
         releaseOwner = deferred(),
         enteredAuxiliary = deferred();
       const originalList = f.app.store.list.bind(f.app.store);
-      const listMock = t.mock.method(f.app.store, "list", async () => {
-        const result = await originalList();
-        enteredOwner.resolve();
-        await releaseOwner.promise;
-        return result;
-      });
+      const originalRun = MCPConfigPublication.prototype.run;
+      let ownerAdmitted = false;
+      const ownerGate = t.mock.method(
+        MCPConfigPublication.prototype,
+        "run",
+        function (operation) {
+          if (ownerAdmitted) return originalRun.call(this, operation);
+          ownerAdmitted = true;
+          return originalRun.call(this, async () => {
+            enteredOwner.resolve();
+            await releaseOwner.promise;
+            return operation();
+          });
+        },
+      );
       const originalPersist = MCPConfigPublication.prototype.persist;
       const persistMock = t.mock.method(
         MCPConfigPublication.prototype,
@@ -175,7 +193,7 @@ for (const mode of ["disable", "rotate", "forget"]) {
       assert.equal(outcome.error?.code, -32000);
       assert.match(outcome.error.message, /authorization changed/);
       createMock.mock.restore();
-      listMock.mock.restore();
+      ownerGate.mock.restore();
       persistMock.mock.restore();
       const all = await originalList();
       assert.equal(all.filter((p) => p.name === "Delayed create").length, 1);
@@ -353,7 +371,7 @@ test(
 );
 
 test(
-  "real failed policy rename does not publish and later owner update recovers",
+  "failed reduction stays denied while failed expansion preserves prior policy",
   { timeout: 15000 },
   async (t) => {
     const f = await fixture(t);
@@ -364,17 +382,29 @@ test(
     const beforeBytes = await readFile(file);
     await rm(ignore);
     await mkdir(ignore);
-    await f.configure(grant([f.allowed.id], { enabled: false }), 400);
+    const failed = await f.configure(
+      grant([f.allowed.id], { enabled: false }),
+      400,
+    );
+    assert.match(failed.error, /当前进程已限制MCP权限.*重启可能恢复旧授权/);
     assert.equal((await readFile(file)).equals(beforeBytes), true);
+    assert.equal((await f.policy()).enabled, false);
+    await rejectedBearer(f, before.token);
+    // No durable success was claimed: a fresh process actually loads old bytes.
+    await f.restart();
+    assert.equal((await f.policy()).enabled, true);
     assert.equal((await f.policy()).token === before.token, true);
     await rm(ignore, { recursive: true });
     await rm(file);
     await mkdir(file);
     await f.configure(grant([f.allowed.id], { enabled: false }), 400);
     const unchanged = await f.policy();
-    assert.equal(unchanged.enabled, true);
-    assert.equal(unchanged.token === before.token, true);
-    assert((await client.listTools()).tools.length > 0);
+    assert.equal(unchanged.enabled, false);
+    assert.equal(unchanged.token, "");
+    await rejectedBearer(f, before.token);
+    const failedExpansion = await f.configure(grant([f.allowed.id]), 400);
+    assert.equal(typeof failedExpansion.error, "string");
+    assert.equal((await f.policy()).enabled, false);
     assert.equal(
       (await readdir(f.root)).some((entry) => entry.endsWith(".tmp")),
       false,
@@ -491,5 +521,124 @@ test(
       ).map((p) => p.id),
       [f.allowed.id],
     );
+  },
+);
+
+test(
+  "queued archive and delayed old create cannot undo an immediate project reduction",
+  { timeout: 15000 },
+  async (t) => {
+    const enteredCreate = deferred(),
+      releaseCreate = deferred(),
+      enteredArchive = deferred(),
+      releaseArchive = deferred(),
+      enteredFence = deferred();
+    t.after(() => {
+      releaseCreate.resolve();
+      releaseArchive.resolve();
+    });
+    const f = await fixture(t);
+    const archive = await f.owner(
+      "/api/projects",
+      "POST",
+      { name: "Synthetic archived target" },
+      201,
+    );
+    const granted = await f.configure(
+      grant([f.allowed.id, f.denied.id, archive.id]),
+    );
+    const client = await f.connect(granted.token);
+    const originalCreate = f.app.store.create.bind(f.app.store);
+    let createdId;
+    const createMock = t.mock.method(f.app.store, "create", async (...args) => {
+      const result = await originalCreate(...args);
+      createdId = result.id;
+      enteredCreate.resolve();
+      await bounded(releaseCreate.promise, "old create gate not released");
+      return result;
+    });
+    const create = client.callTool({
+      name: "localapi_create_project",
+      arguments: { name: "Already admitted, no current grant" },
+    });
+    const createOutcome = create.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await bounded(enteredCreate.promise, "create not entered");
+    const originalSave = f.app.store.save.bind(f.app.store);
+    const saveMock = t.mock.method(
+      f.app.store,
+      "save",
+      async (project, ...args) => {
+        if (project.id === archive.id && project.archived) {
+          enteredArchive.resolve();
+          await bounded(releaseArchive.promise, "archive gate not released");
+        }
+        return originalSave(project, ...args);
+      },
+    );
+    const originalRun = MCPConfigPublication.prototype.run;
+    let admissions = 0;
+    const runMock = t.mock.method(
+      MCPConfigPublication.prototype,
+      "run",
+      function (operation) {
+        const task = originalRun.call(this, operation);
+        if (++admissions === 2) enteredFence.resolve();
+        return task;
+      },
+    );
+    const archived = f.owner(`/api/projects/${archive.id}`, "PUT", {
+      ...archive,
+      archived: true,
+    });
+    await bounded(enteredArchive.promise, "archive not entered");
+    const fenced = f.configure(grant([f.allowed.id, archive.id]));
+    await bounded(enteredFence.promise, "fence not admitted");
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id, archive.id]);
+    releaseCreate.resolve();
+    releaseArchive.resolve();
+    const [archivedProject, , createdResult] = await bounded(
+      Promise.all([archived, fenced, createOutcome]),
+      "publication did not settle",
+    );
+    assert.equal(createdResult.error?.code, -32000);
+    assert.match(createdResult.error.message, /authorization changed/);
+    createMock.mock.restore();
+    saveMock.mock.restore();
+    runMock.mock.restore();
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id]);
+    assert.deepEqual((await f.disk()).projects, [f.allowed.id]);
+    assert.equal(
+      (await f.app.store.get(createdId)).name,
+      "Already admitted, no current grant",
+    );
+    await f.owner(`/api/projects/${archive.id}`, "PUT", {
+      ...archivedProject,
+      archived: false,
+    });
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id]);
+    await f.restart();
+    const current = await f.connect((await f.policy()).token);
+    assert.deepEqual(
+      decode(
+        await current.callTool({
+          name: "localapi_list_projects",
+          arguments: {},
+        }),
+      ).map((project) => project.id),
+      [f.allowed.id],
+    );
+    for (const id of [f.denied.id, archive.id, createdId])
+      assert.equal(
+        (
+          await current.callTool({
+            name: "localapi_list_apis",
+            arguments: { projectId: id },
+          })
+        ).isError,
+        true,
+      );
   },
 );
