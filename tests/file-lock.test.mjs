@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  rm,
+  realpath,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { acquireFileLock } from "../src/file-lock.mjs";
@@ -317,8 +324,8 @@ test(
   async (t) => {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
-    const root = await mkdtemp(
-      path.join(os.tmpdir(), "api-lock-cancel-order-"),
+    const root = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "api-lock-cancel-order-")),
     );
     t.after(() => rm(root, { recursive: true, force: true }));
     // Observe real mkdir calls in an isolated process. No lock behavior is mocked;
