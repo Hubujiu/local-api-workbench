@@ -24,7 +24,10 @@ entry data. An absent source description becomes empty text; null or other
 non-string descriptions are rejected instead of coerced.
 
 All display paths escape text. Descriptions and provenance survive project save,
-restart, native export and restoration as a new local copy. Browser regression
+restart, Workbench full-backup export and restoration as a new local copy.
+That existing test does not exercise Apipost-format export. The separate bounded
+native catalogue adapter and its validation boundary are described in
+ADR-NATIVE-DESCRIPTION-EXPORT.md. Browser regression
 covers import, explicit adoption, cancellation, unchanged parameter data, settings
 create/edit/delete and the existing restored-project metadata check. This does
 not claim every original description suggestion or automatic-fill behavior.

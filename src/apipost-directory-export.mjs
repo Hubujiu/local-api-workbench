@@ -1,3 +1,4 @@
+import { verifyApipostDescriptionDefinitions } from "./apipost-description-export.mjs";
 import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
 import {
   validateInheritancePlans,
@@ -395,6 +396,10 @@ export function exportApipostDirectory(project, options = {}) {
     result,
     (id) => nativeIds.get(apipostExportId("a", id)),
     options,
+  );
+  verifyApipostDescriptionDefinitions(
+    project.settings?.parameterDescriptions,
+    check.settings?.parameterDescriptions,
   );
   verifyProtocolDefinitions(project.protocols, check.protocols);
   verifySampleDefinitions(project, check, (id) =>

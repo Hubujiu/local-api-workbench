@@ -1,4 +1,8 @@
 import {
+  exportApipostDescriptions,
+  verifyApipostDescriptionDefinitions,
+} from "./apipost-description-export.mjs";
+import {
   prepareApipostDatabaseExport,
   readDatabaseExportMode,
 } from "./apipost-database-export.mjs";
@@ -210,6 +214,7 @@ export function exportApipost(project, options = {}) {
     if (
       ![
         "statuses",
+        "parameterDescriptions",
         "recursiveFolderScopes",
         "apipostProtocolSources",
         "nativeInheritance",
@@ -263,6 +268,10 @@ export function exportApipost(project, options = {}) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const descriptions = exportApipostDescriptions(
+    project.settings?.parameterDescriptions,
+    { projectId, id: apipostExportId },
+  );
   const databaseExport = prepareApipostDatabaseExport(
     project,
     readDatabaseExportMode(options),
@@ -526,7 +535,7 @@ export function exportApipost(project, options = {}) {
       attributes: [],
       mock_custom_rules: [],
       db_link: databaseExport.records,
-      describe_library: [],
+      describe_library: descriptions,
       custom_func: [],
     },
     apis,
@@ -549,6 +558,7 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
   if (
+    descriptions.length ||
     samples.length ||
     extended.derivedPlans.length ||
     originalProject.settings?.grpcDefinitions?.length ||
@@ -562,6 +572,10 @@ export function exportApipost(project, options = {}) {
       settings: {},
     };
     importIntoProject(check, document, options);
+    verifyApipostDescriptionDefinitions(
+      project.settings?.parameterDescriptions,
+      check.settings?.parameterDescriptions,
+    );
     verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
     verifyExtendedProtocolExport(originalProject, check);
   }
