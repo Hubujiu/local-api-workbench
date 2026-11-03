@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile, rm, realpath } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -15,8 +16,9 @@ const localQueues = new Map();
 export async function acquireFileLock(directory, controls = {}) {
   throwIfInactive(controls);
   directory = path.resolve(directory);
+  // Keep canonicalization synchronous: queue registration must preserve call order.
   directory = path.join(
-    await realpath(path.dirname(directory) + path.sep),
+    realpathSync.native(path.dirname(directory) + path.sep),
     path.basename(directory),
   );
   throwIfInactive(controls);
