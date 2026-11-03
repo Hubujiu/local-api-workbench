@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { importIntoProject } from "../src/core.mjs";
+import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { exportApipost, apipostExportId } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import {
@@ -357,4 +357,31 @@ test("field text, option and value bounds are exact and neither defaults nor sel
   shorthand.settings.attributes[2].options = ["a", "b"];
   for (const [, encode] of formats)
     assert.doesNotThrow(() => encode(shorthand));
+});
+
+test("valid directory HTTP snapshots remain supported only when their explicit attribute maps are empty", () => {
+  const p = fixture(),
+    request = { ...structuredClone(p.requests[0]), attributes: {} };
+  p.plans = [
+    snapshotPlan({
+      id: "plan",
+      name: "Frozen",
+      statusPolicy: "strict200",
+      environmentId: p.environments[0].id,
+      steps: [{ id: "step", name: request.name, request }],
+    }),
+  ];
+  const before = structuredClone(p),
+    output = exportApipostDirectory(p);
+  assert.ok(
+    output.files.some(
+      (f) =>
+        f.path.startsWith("executions/flows/") &&
+        f.path !== "executions/flows/index.json",
+    ),
+  );
+  assert.deepEqual(p, before);
+  p.plans[0].steps[0].request.attributes[p.settings.attributes[0].key] =
+    "snapshot cannot be represented";
+  assert.throws(() => exportApipostDirectory(p), /计划/);
 });
