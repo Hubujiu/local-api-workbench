@@ -8,6 +8,23 @@ const fail = (message) =>
 // and auth payloads retain their existing domain-specific preflight ordering.
 export function validatePlanStepTypes(steps) {
   const ancestors = new Set();
+  // Determine the diagnostic context without evaluating step/type accessors or
+  // Proxy traps, even when a malformed sibling precedes a repeat group.
+  const hasRepeat =
+    Array.isArray(steps) &&
+    !isProxy(steps) &&
+    steps.length <= 200 &&
+    Array.from({ length: steps.length }, (_, index) => {
+      const entry = Object.getOwnPropertyDescriptor(steps, String(index));
+      const step = entry?.value;
+      return (
+        step !== null &&
+        typeof step === "object" &&
+        !isProxy(step) &&
+        Object.getOwnPropertyDescriptor(step, "type")?.value === "repeat"
+      );
+    }).some(Boolean);
+  const label = hasRepeat ? "循环计划步骤类型" : "执行计划步骤类型";
   let nodes = 0,
     repeated = false;
   const visit = (items, depth) => {
@@ -18,13 +35,13 @@ export function validatePlanStepTypes(steps) {
       depth > 4 ||
       ancestors.has(items)
     )
-      throw fail("执行计划步骤类型或集合无效");
+      throw fail(label + "或集合无效");
     ancestors.add(items);
     for (let index = 0; index < items.length; index++) {
-      if (++nodes > 100000) throw fail("执行计划步骤类型遍历超限");
+      if (++nodes > 100000) throw fail(label + "遍历超限");
       const entry = Object.getOwnPropertyDescriptor(items, String(index));
       if (!entry || !Object.hasOwn(entry, "value"))
-        throw fail("执行计划步骤类型不能包含访问器或空洞");
+        throw fail(label + "不能包含访问器或空洞");
       const step = entry.value;
       if (
         !step ||
@@ -33,29 +50,26 @@ export function validatePlanStepTypes(steps) {
         isProxy(step) ||
         ![Object.prototype, null].includes(Object.getPrototypeOf(step))
       )
-        throw fail("执行计划步骤类型须来自普通数据对象");
+        throw fail(label + "须来自普通数据对象");
       const descriptor = Object.getOwnPropertyDescriptor(step, "type");
       if (
         descriptor &&
         (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
       )
-        throw fail("执行计划步骤类型不能包含访问器");
+        throw fail(label + "不能包含访问器");
       const type = descriptor?.value;
       if (type === "repeat") {
         repeated = true;
         const children = Object.getOwnPropertyDescriptor(step, "steps");
-        if (
-          !children ||
-          !children.enumerable ||
-          !Object.hasOwn(children, "value")
-        )
-          throw fail("执行计划步骤类型不能包含子步骤访问器");
+        if (!children) throw fail("循环计划步骤类型缺少子步骤");
+        if (!children.enumerable || !Object.hasOwn(children, "value"))
+          throw fail("循环计划步骤类型不能包含子步骤访问器");
         visit(children.value, depth + 1);
       } else if (
         type !== undefined &&
         !["http", "grpc", "socketio", "protocol"].includes(type)
       )
-        throw fail("未知执行计划步骤类型");
+        throw fail("未知" + label);
     }
     ancestors.delete(items);
   };

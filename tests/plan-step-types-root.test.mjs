@@ -77,6 +77,62 @@ test("direct CLI grants reject unknown types before reading connection input", (
   );
   assert.equal(reads, 0);
 });
+
+test("repeat type and structural diagnostics retain loop context without evaluating hooks", async () => {
+  let calls = 0;
+  const changes = [
+    (steps) => (steps[1].steps[0].type = "repeat"),
+    (steps) => (steps[1].steps[0].type = "unknown"),
+    (steps) => (steps[0].type = "unknown"),
+    (steps) => (steps[1].steps = null),
+    (steps) => delete steps[1].steps[0],
+    (steps) => (steps[1].steps[0] = null),
+    (steps) =>
+      Object.defineProperty(steps[1], "steps", {
+        enumerable: true,
+        get() {
+          calls++;
+          throw Error("must not read children");
+        },
+      }),
+    (steps) =>
+      Object.defineProperty(steps[1].steps[0], "type", {
+        enumerable: true,
+        get() {
+          calls++;
+          throw Error("must not read type");
+        },
+      }),
+    (steps) =>
+      (steps[1].steps[0] = new Proxy(steps[1].steps[0], {
+        getOwnPropertyDescriptor() {
+          calls++;
+          throw Error("must not trap");
+        },
+      })),
+  ];
+  for (const change of changes) {
+    const steps = [
+      leaf("first", "http://localhost"),
+      {
+        id: "group",
+        type: "repeat",
+        enabled: false,
+        count: 2,
+        steps: [leaf("child", "http://localhost")],
+      },
+    ];
+    change(steps);
+    assert.throws(() => snapshotPlan({ steps }), /循环.*步骤类型/);
+    await assert.rejects(
+      runPlan({ steps }, {}, () => {
+        throw Error("must not execute");
+      }),
+      /循环.*步骤类型/,
+    );
+  }
+  assert.equal(calls, 0);
+});
 test("repeat input admission rejects cyclic and proxy data without traps but accepts inert aliases", () => {
   const request = { url: "http://localhost" };
   const steps = [
