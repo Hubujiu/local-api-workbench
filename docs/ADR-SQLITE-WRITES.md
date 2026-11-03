@@ -19,3 +19,24 @@ The worker has a 64 MiB JavaScript old-generation limit and a 2 second terminati
 `tests/ui-smoke.mjs`: real temporary SQLite file, default write rejection, confirmation cancellation without mutation, explicit successful insert and checkbox reset; screenshot `local-api-sqlite-write.png` in the browser evidence artifact.
 
 No user database, external credentials or production service is used in these tests. No claim is made for remote SQL writes, multi-statement editing, database pre/post hooks or full vendor parity.
+
+## Explicitly reject unsupported SSH in manual HTTP dispatch
+
+SQLite runs against a local file; it has no SSH transport. The owner HTTP database
+route now rejects every supplied `ssh` value other than `undefined` before choosing
+either SQLite read or write execution. This includes explicit `type: "sqlite"`
+and the route's existing omitted/falsy default type. Empty objects/strings, `null`
+and `false` must not silently downgrade a requested transport to local execution.
+
+The check remains after owner authentication and write-flag type validation, before
+any SQLite process is dispatched. Its error contains no submitted credentials.
+No-SSH SQLite behavior, per-request write authorization, unknown-provider handling
+and PostgreSQL/MySQL SSH support remain unchanged. This is a dispatch repair, not
+remote SQLite support or a change to transaction/timeout semantics.
+
+A real temporary SQLite file and owner HTTP requests reproduce the old local
+mutation and verify the fix: unchanged bytes/rows, no native SQLite process,
+no SSH connection, and no creation of a missing target file on rejection.
+Ordinary no-SSH reads/writes and rejected unauthenticated/ungranted writes are
+checked separately. Observation wraps the real process fork and forwards it;
+it does not substitute a fake database or filesystem result.

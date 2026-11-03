@@ -193,7 +193,13 @@ test(
     assert.equal(f.forks(), 0);
     assert.equal((await f.send({ ...write, allowWrite: false })).status, 400);
     assert.equal(f.count(), 0);
+    const beforeWriteForks = f.forks();
     const result = await f.send(write);
+    assert.equal(
+      f.forks(),
+      beforeWriteForks + 1,
+      "observer must see actual SQLite dispatch",
+    );
     assert.equal(result.status, 200);
     assert.equal(result.body.committed, true);
     assert.equal(f.count(), 1);
