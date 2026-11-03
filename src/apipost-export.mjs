@@ -1,4 +1,9 @@
 import {
+  preflightApipostAttributes,
+  prepareApipostAttributeExport,
+  verifyApipostAttributeExport,
+} from "./apipost-attribute-export.mjs";
+import {
   prepareExtendedProtocolExport,
   verifyExtendedProtocolExport,
 } from "./apipost-extended-protocol-export.mjs";
@@ -153,6 +158,7 @@ function tasks(request, phase) {
     : [];
 }
 export function exportApipost(project, options = {}) {
+  preflightApipostAttributes(project);
   const originalProject = project;
   const extended = prepareExtendedProtocolExport(project);
   project = extended.base;
@@ -178,9 +184,12 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (
-      !["statuses", "recursiveFolderScopes", "apipostProtocolSources"].includes(
-        key,
-      )
+      ![
+        "statuses",
+        "recursiveFolderScopes",
+        "apipostProtocolSources",
+        "attributes",
+      ].includes(key)
     )
       unsupported(value, `设置 ${key}`);
   if (
@@ -229,6 +238,7 @@ export function exportApipost(project, options = {}) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const attributeExport = prepareApipostAttributeExport(project, projectId);
   const modelExport = prepareApipostModelExport(
     project,
     (kind, value) => apipostExportId(kind, projectId + "\0" + value),
@@ -311,7 +321,6 @@ export function exportApipost(project, options = {}) {
       "extract",
       "mockRules",
       "openapiOperation",
-      "attributes",
       "proxy",
       "tls",
       "sharedBeforeScripts",
@@ -390,7 +399,7 @@ export function exportApipost(project, options = {}) {
       sort: apis.length + 1,
       version: 0,
       status: 1,
-      attribute_info: {},
+      attribute_info: attributeExport.values(input.attributes),
       ...(r.serviceId ? { server_id: serverIds.get(r.serviceId) } : {}),
       ...(r.statusId ? { mark_id: apipostExportId("m", r.statusId) } : {}),
       request: {
@@ -482,7 +491,7 @@ export function exportApipost(project, options = {}) {
       },
       codes: [],
       marks,
-      attributes: [],
+      attributes: attributeExport.rows,
       mock_custom_rules: [],
       db_link: [],
       describe_library: [],
@@ -497,6 +506,7 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
   if (
+    attributeExport.rows.length ||
     samples.length ||
     extended.derivedPlans.length ||
     originalProject.settings?.grpcDefinitions?.length ||
@@ -509,7 +519,10 @@ export function exportApipost(project, options = {}) {
       servers: [],
       settings: {},
     };
-    importIntoProject(check, document, options);
+    importIntoProject(check, JSON.parse(JSON.stringify(document)), options);
+    verifyApipostAttributeExport(project, check, attributeExport, (id) =>
+      apipostExportId("a", id),
+    );
     verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
     verifyExtendedProtocolExport(originalProject, check);
   }
