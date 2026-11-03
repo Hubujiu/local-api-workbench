@@ -1,3 +1,4 @@
+import { isProxy } from "node:util/types";
 import {
   validatePlanDefinitionTypes,
   sameStoredPlan,
@@ -196,8 +197,19 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
-    if (!Array.isArray(p.plans) || p.plans.length > 1000)
-      throw Error("计划最多1000个");
+    if (
+      !Array.isArray(p.plans) ||
+      isProxy(p.plans) ||
+      p.plans.length > 1000 ||
+      Object.getPrototypeOf(p.plans) !== Array.prototype ||
+      Reflect.ownKeys(p.plans).length !== p.plans.length + 1
+    )
+      throw Error("计划最多1000个普通数据项");
+    for (let index = 0; index < p.plans.length; index++) {
+      const entry = Object.getOwnPropertyDescriptor(p.plans, String(index));
+      if (!entry?.enumerable || !Object.hasOwn(entry, "value"))
+        throw Error("计划不能包含访问器或空洞");
+    }
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

@@ -336,11 +336,26 @@ test("unrelated valid execution retains evidence alongside inert legacy history 
     added.plans.push({ ...structuredClone(added.plans[0]), id: "new-bad" });
     await assert.rejects(app.store.save(added, { activity }), /步骤类型/);
   }
-  for (const position of ["type", "nested", "row"]) {
+  for (const position of ["type", "nested", "row", "array", "entry"]) {
     for (const activity of [false, true]) {
       const injected = await app.store.get(p.id);
       let calls = 0;
-      if (position === "row")
+      if (position === "array")
+        injected.plans = new Proxy(injected.plans, {
+          get() {
+            calls++;
+            throw Error("trap");
+          },
+        });
+      else if (position === "entry")
+        Object.defineProperty(injected.plans, "0", {
+          enumerable: true,
+          get() {
+            calls++;
+            throw Error("getter");
+          },
+        });
+      else if (position === "row")
         injected.plans[0] = new Proxy(injected.plans[0], {
           get() {
             calls++;
