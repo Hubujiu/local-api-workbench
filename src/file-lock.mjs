@@ -1,4 +1,6 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
@@ -14,6 +16,12 @@ const localQueues = new Map();
 export async function acquireFileLock(directory, controls = {}) {
   throwIfInactive(controls);
   directory = path.resolve(directory);
+  // Keep canonicalization synchronous: queue registration must preserve call order.
+  directory = path.join(
+    realpathSync.native(path.dirname(directory) + path.sep),
+    path.basename(directory),
+  );
+  throwIfInactive(controls);
   const key =
     process.platform === "win32" ? directory.toLowerCase() : directory;
   const previous = localQueues.get(key) || Promise.resolve();
@@ -64,23 +72,117 @@ export function isTransientWindowsLockMkdir(
   );
 }
 
-/** Recover locks only when their recorded owner process is demonstrably gone. */
+// This persistent sibling is an OS-lock identity, not disposable lock state.
+// Never unlink/rename it. Stop all older instances before upgrading: old binaries
+// do not participate in this guard. Use a local filesystem with SQLite locking.
 async function acquireDiskLock(directory, controls) {
+  const budget = {
+    hardDeadline: performance.now() + 10000,
+    idleDeadline: performance.now() + 2000,
+    lastOwner: undefined,
+  };
+  throwIfInactive(controls);
+  const database = new DatabaseSync(directory + ".guard.sqlite", {
+    timeout: 0,
+    allowExtension: false,
+  });
+  let held = false;
+  const close = () => {
+    try {
+      if (held) database.exec("ROLLBACK");
+    } finally {
+      database.close();
+    }
+  };
+  try {
+    while (
+      performance.now() < Math.min(budget.hardDeadline, budget.idleDeadline)
+    ) {
+      throwIfInactive(controls);
+      try {
+        database.exec("BEGIN IMMEDIATE");
+        held = true;
+        break;
+      } catch (error) {
+        // Retry BUSY only, never corruption, permissions or arbitrary SQL errors.
+        if (
+          error.code !== "ERR_SQLITE_ERROR" ||
+          !Number.isInteger(error.errcode) ||
+          (error.errcode & 0xff) !== 5
+        )
+          throw error;
+      }
+      try {
+        const owner = JSON.parse(
+          await readFile(path.join(directory, "owner.json"), "utf8"),
+        );
+        observeOwner(owner, budget);
+      } catch {
+        /* Observation cannot authorize recovery outside the guard. */
+      }
+      await delayForControl(20, controls);
+    }
+    throwIfInactive(controls);
+    if (!held) throw Error("项目正在由其他进程写入，请稍后重试");
+    const release = await acquireLegacyDiskLock(directory, controls, budget);
+    return async () => {
+      try {
+        await release();
+      } finally {
+        close();
+      }
+    };
+  } catch (error) {
+    close();
+    throw error;
+  }
+}
+
+function recognizedOwner(owner) {
+  return (
+    owner &&
+    Number.isInteger(owner.pid) &&
+    owner.pid > 0 &&
+    typeof owner.nonce === "string" &&
+    owner.nonce.length > 0 &&
+    owner.nonce.length <= 256
+  );
+}
+
+function observeOwner(owner, budget) {
+  if (!recognizedOwner(owner)) return;
+  process.kill(owner.pid, 0);
+  const identity = owner.pid + ":" + owner.nonce;
+  if (budget.lastOwner !== undefined && identity !== budget.lastOwner)
+    budget.idleDeadline = performance.now() + 2000;
+  budget.lastOwner = identity;
+}
+
+/** Recover locks only when their recorded owner process is demonstrably gone. */
+async function acquireLegacyDiskLock(directory, controls, budget) {
   const ownerFile = path.join(directory, "owner.json"),
     nonce = randomUUID();
-  const hardDeadline = performance.now() + 10000;
-  let idleDeadline = performance.now() + 2000,
-    lastOwner,
-    lastTransient;
-  while (performance.now() < Math.min(hardDeadline, idleDeadline)) {
+  let lastTransient;
+  while (
+    performance.now() < Math.min(budget.hardDeadline, budget.idleDeadline)
+  ) {
     throwIfInactive(controls);
     try {
       await mkdir(directory);
       // Once mkdir succeeds, finish our ownership receipt before checking the
       // controls so the caller can safely release this exact nonce on abort.
-      await writeFile(ownerFile, JSON.stringify({ pid: process.pid, nonce }), {
-        mode: 0o600,
-      });
+      try {
+        await writeFile(
+          ownerFile,
+          JSON.stringify({ pid: process.pid, nonce }),
+          {
+            mode: 0o600,
+          },
+        );
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+      }
       return async () => {
         try {
           const owner = JSON.parse(await readFile(ownerFile, "utf8"));
@@ -102,19 +204,9 @@ async function acquireDiskLock(directory, controls) {
       try {
         const owner = JSON.parse(await readFile(ownerFile, "utf8"));
         throwIfInactive(controls);
-        if (Number.isInteger(owner.pid) && owner.pid > 0) {
+        if (recognizedOwner(owner)) {
           try {
-            process.kill(owner.pid, 0);
-            if (
-              typeof owner.nonce === "string" &&
-              owner.nonce.length > 0 &&
-              owner.nonce.length <= 256
-            ) {
-              const identity = owner.pid + ":" + owner.nonce;
-              if (lastOwner !== undefined && identity !== lastOwner)
-                idleDeadline = performance.now() + 2000;
-              lastOwner = identity;
-            }
+            observeOwner(owner, budget);
           } catch (checkError) {
             if (checkError.code === "ESRCH") {
               const current = JSON.parse(await readFile(ownerFile, "utf8"));
