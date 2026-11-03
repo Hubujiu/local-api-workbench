@@ -134,3 +134,18 @@ test("restore preflights live and historical type getters before any generic pla
     assert.equal(calls, 0);
   }
 });
+
+test("restore keeps invalid run-container diagnostics before snapshot admission", () => {
+  for (const runs of [{}, "invalid", [null], [[]], [false]])
+    assert.throws(
+      () =>
+        restoreProject({
+          version: 1,
+          requests: [],
+          environments: [],
+          plans: [],
+          runs,
+        }),
+      { name: "Error", message: "备份中的 runs 格式无效" },
+    );
+});

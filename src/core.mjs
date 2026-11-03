@@ -2364,6 +2364,14 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  if (
+    document.runs !== undefined &&
+    (!Array.isArray(document.runs) ||
+      document.runs.some(
+        (item) => !item || typeof item !== "object" || Array.isArray(item),
+      ))
+  )
+    throw Error("备份中的 runs 格式无效");
   for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
   for (const run of document.runs || [])
     if (run.snapshot?.steps !== undefined)
