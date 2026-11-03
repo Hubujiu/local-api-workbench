@@ -25,7 +25,10 @@ Blank descriptions remain unsupported under the current local dictionary rule;
 they are rejected rather than replaced with invented text.
 
 Tests cover spelling, merge conflicts and atomicity, inert metadata, accessor
-rejection, HTTP import, persistence across restart and native export. The browser
+rejection, HTTP import, persistence across restart and full Workbench backup.
+The earlier HTTP test uses the default `/export` response, not a native format.
+The bounded native definition export is described separately in
+[ADR-NATIVE-CODE-EXPORT.md](ADR-NATIVE-CODE-EXPORT.md). The browser
 fixture imports the dictionary and verifies the code and description in generated
 project documentation. This does not establish full native-project reimport or
 all original metadata compatibility.

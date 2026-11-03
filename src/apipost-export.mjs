@@ -1,4 +1,8 @@
 import {
+  exportApipostCodes,
+  verifyApipostCodeDefinitions,
+} from "./apipost-code-export.mjs";
+import {
   exportApipostDescriptions,
   verifyApipostDescriptionDefinitions,
 } from "./apipost-description-export.mjs";
@@ -215,6 +219,7 @@ export function exportApipost(project, options = {}) {
       ![
         "statuses",
         "parameterDescriptions",
+        "statusCodes",
         "recursiveFolderScopes",
         "apipostProtocolSources",
         "nativeInheritance",
@@ -267,6 +272,7 @@ export function exportApipost(project, options = {}) {
           throw Error("Apipost导出服务地址不等价或无效");
       }
     }
+  const codes = exportApipostCodes(project.settings?.statusCodes);
   const projectId = apipostExportId("project", project.id);
   const descriptions = exportApipostDescriptions(
     project.settings?.parameterDescriptions,
@@ -530,7 +536,7 @@ export function exportApipost(project, options = {}) {
         pre_tasks: [],
         post_tasks: [],
       },
-      codes: [],
+      codes,
       marks,
       attributes: [],
       mock_custom_rules: [],
@@ -558,6 +564,7 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
   if (
+    codes.length ||
     descriptions.length ||
     samples.length ||
     extended.derivedPlans.length ||
@@ -572,6 +579,10 @@ export function exportApipost(project, options = {}) {
       settings: {},
     };
     importIntoProject(check, document, options);
+    verifyApipostCodeDefinitions(
+      project.settings?.statusCodes,
+      check.settings?.statusCodes,
+    );
     verifyApipostDescriptionDefinitions(
       project.settings?.parameterDescriptions,
       check.settings?.parameterDescriptions,

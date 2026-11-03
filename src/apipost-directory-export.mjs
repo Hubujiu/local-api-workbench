@@ -1,3 +1,4 @@
+import { verifyApipostCodeDefinitions } from "./apipost-code-export.mjs";
 import { verifyApipostDescriptionDefinitions } from "./apipost-description-export.mjs";
 import { rejectCollectionExport } from "./postman-collection-scopes.mjs";
 import {
@@ -396,6 +397,10 @@ export function exportApipostDirectory(project, options = {}) {
     result,
     (id) => nativeIds.get(apipostExportId("a", id)),
     options,
+  );
+  verifyApipostCodeDefinitions(
+    project.settings?.statusCodes,
+    check.settings?.statusCodes,
   );
   verifyApipostDescriptionDefinitions(
     project.settings?.parameterDescriptions,
