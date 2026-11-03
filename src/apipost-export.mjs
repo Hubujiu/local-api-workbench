@@ -1,4 +1,8 @@
 import {
+  exportApipostDescriptions,
+  verifyApipostDescriptionDefinitions,
+} from "./apipost-description-export.mjs";
+import {
   prepareExtendedProtocolExport,
   verifyExtendedProtocolExport,
 } from "./apipost-extended-protocol-export.mjs";
@@ -178,9 +182,12 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出不能保留项目Mock关闭状态；请使用项目备份");
   for (const [key, value] of Object.entries(project.settings || {}))
     if (
-      !["statuses", "recursiveFolderScopes", "apipostProtocolSources"].includes(
-        key,
-      )
+      ![
+        "statuses",
+        "recursiveFolderScopes",
+        "apipostProtocolSources",
+        "parameterDescriptions",
+      ].includes(key)
     )
       unsupported(value, `设置 ${key}`);
   if (
@@ -229,6 +236,10 @@ export function exportApipost(project, options = {}) {
       }
     }
   const projectId = apipostExportId("project", project.id);
+  const descriptions = exportApipostDescriptions(
+    project.settings?.parameterDescriptions,
+    { projectId, id: apipostExportId },
+  );
   const modelExport = prepareApipostModelExport(
     project,
     (kind, value) => apipostExportId(kind, projectId + "\0" + value),
@@ -485,7 +496,7 @@ export function exportApipost(project, options = {}) {
       attributes: [],
       mock_custom_rules: [],
       db_link: [],
-      describe_library: [],
+      describe_library: descriptions,
       custom_func: [],
     },
     apis,
@@ -497,6 +508,7 @@ export function exportApipost(project, options = {}) {
     throw Error("Apipost导出超过4MiB");
   verifyProtocolDocument(project, document);
   if (
+    descriptions.length ||
     samples.length ||
     extended.derivedPlans.length ||
     originalProject.settings?.grpcDefinitions?.length ||
@@ -510,6 +522,10 @@ export function exportApipost(project, options = {}) {
       settings: {},
     };
     importIntoProject(check, document, options);
+    verifyApipostDescriptionDefinitions(
+      project.settings?.parameterDescriptions,
+      check.settings?.parameterDescriptions,
+    );
     verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
     verifyExtendedProtocolExport(originalProject, check);
   }

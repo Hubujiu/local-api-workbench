@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readdir, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -261,3 +262,122 @@ for (const format of ["apipost", "apipost-directory"])
       assert.equal(upstreamRequests, 0);
     },
   );
+
+async function diskSnapshot(directory, prefix = "") {
+  const entries = [];
+  for (const item of await readdir(directory, { withFileTypes: true })) {
+    const relative = prefix + item.name;
+    const file = join(directory, item.name);
+    if (item.isDirectory())
+      entries.push(...(await diskSnapshot(file, relative + "/")));
+    else
+      entries.push([
+        relative,
+        createHash("sha256")
+          .update(await readFile(file))
+          .digest("hex"),
+      ]);
+  }
+  return entries.sort(([a], [b]) => a.localeCompare(b));
+}
+
+test(
+  "owner catalogue merges retain local provenance and invalid imports leave all project bytes and grants unchanged",
+  { timeout: 15000 },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "description-import-atomic-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      try {
+        await close(app);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+    const call = async (route, method = "GET", body, status = 200) => {
+      const response = await fetch(app.url + route, {
+        method,
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const text = await response.text();
+      assert.equal(response.status, status, text);
+      return JSON.parse(text);
+    };
+    const project = await call(
+      "/api/projects",
+      "POST",
+      { name: "Atomic descriptions" },
+      201,
+    );
+    const base = catalogueDocument("http://127.0.0.1:1/never");
+    base.apis = [];
+    base.global.describe_library = [
+      {
+        id: "keep-id",
+        project_id: base.project_id,
+        key: "key",
+        description: "same",
+      },
+    ];
+    const imported = await call(`/api/projects/${project.id}/import`, "POST", {
+      document: base,
+    });
+    const incoming = structuredClone(base);
+    incoming.project_id = "another-source";
+    incoming.global.describe_library = [
+      {
+        id: "replace-attempt",
+        project_id: incoming.project_id,
+        key: "key",
+        description: "same",
+      },
+    ];
+    const repeated = await call(`/api/projects/${project.id}/import`, "POST", {
+      document: incoming,
+    });
+    assert.deepEqual(
+      repeated.settings.parameterDescriptions,
+      imported.settings.parameterDescriptions,
+    );
+    const before = await new Store(root).get(project.id);
+    const diskBefore = await diskSnapshot(app.store.directory(project.id));
+    const grantsBefore = await call("/api/mcp/config");
+    const invalidRows = [
+      [{ key: "key", description: "conflict" }],
+      [
+        { id: "duplicate", key: "a", description: "a" },
+        { id: "duplicate", key: "b", description: "b" },
+      ],
+      [{ project_id: "foreign", key: "new", description: "new" }],
+      [{ key: "new", description: "new", unknown: true }],
+      [
+        { key: "new", description: "a" },
+        { key: "new", description: "b" },
+      ],
+      [{ key: "new", description: null }],
+    ];
+    for (const rows of invalidRows) {
+      const document = structuredClone(base);
+      document.global.describe_library = rows;
+      const sourceBefore = JSON.stringify(document);
+      await call(
+        `/api/projects/${project.id}/import`,
+        "POST",
+        { document },
+        400,
+      );
+      assert.equal(JSON.stringify(document), sourceBefore);
+      assert.deepEqual(await new Store(root).get(project.id), before);
+      assert.deepEqual(
+        await diskSnapshot(app.store.directory(project.id)),
+        diskBefore,
+      );
+      assert.deepEqual(await call("/api/mcp/config"), grantsBefore);
+    }
+    assert.equal(Object.hasOwn(before.settings, "is_describe_library"), false);
+  },
+);
