@@ -43,7 +43,7 @@ function repeated(p) {
   };
 }
 
-test("three catalogues survive typed repeat snapshot, pure dispatch and backup while native snapshots with attributes remain refused", async () => {
+test("three catalogues and values survive typed repeat dispatch and backup without implying native repeat export support", async () => {
   const p = fixture(),
     expected = catalogueSemantics(p),
     plan = snapshotPlan(repeated(p));
@@ -58,6 +58,7 @@ test("three catalogues survive typed repeat snapshot, pure dispatch and backup w
   assert.deepEqual(seen, Array(3).fill(p.requests[0].attributes));
   const restored = restoreProject(JSON.parse(JSON.stringify(p)));
   assert.deepEqual(catalogueSemantics(restored), expected);
+  assert.deepEqual(restored.plans[0].steps, plan.steps);
   assert.equal(restored.plans[0].steps[1].type, "repeat");
   assert.equal(restored.plans[0].steps[1].count, 2);
   for (const encode of [exportApipost, exportApipostDirectory])
