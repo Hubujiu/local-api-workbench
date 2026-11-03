@@ -78,3 +78,48 @@ test("invalid initialize IDs cannot exhaust session slots", () => {
     assert.throws(() => registry.create(invalid), /request ID/);
   assert(registry.create(0));
 });
+
+test("transient executions are bounded, independent and retain ownership until finish", () => {
+  const registry = new MCPHTTPSessions({ maxSessions: 1, maxTransient: 2 });
+  const session = registry.create();
+  const registered = registry.begin(session, "same", true);
+  const first = registry.beginTransient();
+  const second = registry.beginTransient();
+  assert.throws(() => registry.beginTransient(), /transient execution limit/);
+  registry.cancel(session, "same");
+  assert(registered.signal.aborted);
+  assert(!first.signal.aborted && !second.signal.aborted);
+  registry.cancel(undefined, "same");
+  assert(!first.signal.aborted && !second.signal.aborted);
+  registry.advance();
+  assert(first.signal.aborted && second.signal.aborted);
+  assert.throws(() => registry.beginTransient(), /transient execution limit/);
+  first.finish();
+  first.finish();
+  const next = registry.beginTransient();
+  assert(!next.signal.aborted);
+  assert.throws(() => registry.beginTransient(), /transient execution limit/);
+  second.finish();
+  registered.finish();
+  next.finish();
+  const final = registry.beginTransient();
+  registry.advance({ dropSessions: true });
+  assert(final.signal.aborted);
+  final.finish();
+});
+
+test("close aborts stateful and transient work before rejecting new admission", () => {
+  const registry = new MCPHTTPSessions();
+  const session = registry.create();
+  const registered = registry.begin(session, 1, true);
+  const transient = registry.beginTransient();
+  registry.close();
+  registry.close();
+  assert(registered.signal.aborted && transient.signal.aborted);
+  assert.throws(() => registry.create(), /closed/);
+  assert.throws(() => registry.begin(session, 2, true), /closed/);
+  assert.throws(() => registry.beginTransient(), /closed/);
+  registered.finish();
+  transient.finish();
+  transient.finish();
+});

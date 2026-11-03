@@ -7,17 +7,21 @@ export const requestKey = (id) => {
 // Session IDs are ephemeral routing identifiers, not project permissions.
 export class MCPHTTPSessions {
   #sessions = new Map();
+  #transient = new Set();
   #epoch = 0;
+  #closed = false;
   constructor({
     now = Date.now,
     maxSessions = 32,
     idleMs = 900000,
     maxRequests = 1024,
+    maxTransient = 32,
   } = {}) {
     this.now = now;
     this.maxSessions = maxSessions;
     this.idleMs = idleMs;
     this.maxRequests = maxRequests;
+    this.maxTransient = maxTransient;
   }
   capture() {
     return this.#epoch;
@@ -28,6 +32,7 @@ export class MCPHTTPSessions {
         this.#sessions.delete(id);
   }
   create(requestId) {
+    if (this.#closed) throw Error("MCP execution ownership is closed");
     // Validate initialization before allocating a bounded session slot.
     if (requestId !== undefined) requestKey(requestId);
     this.#prune();
@@ -49,6 +54,7 @@ export class MCPHTTPSessions {
     return session;
   }
   begin(id, requestId, cancellable) {
+    if (this.#closed) throw Error("MCP execution ownership is closed");
     const session = this.get(id);
     if (!session) throw Error("Unknown MCP session");
     const key = requestKey(requestId);
@@ -79,6 +85,22 @@ export class MCPHTTPSessions {
       },
     };
   }
+  beginTransient() {
+    if (this.#closed) throw Error("MCP execution ownership is closed");
+    if (this.#transient.size >= this.maxTransient)
+      throw Error("MCP transient execution limit reached");
+    const active = { controller: new AbortController(), epoch: this.#epoch };
+    this.#transient.add(active);
+    let finished = false;
+    return {
+      signal: active.controller.signal,
+      finish: () => {
+        if (finished) return;
+        finished = true;
+        this.#transient.delete(active);
+      },
+    };
+  }
   cancel(id, requestId) {
     const session = this.get(id);
     if (!session) return;
@@ -103,10 +125,16 @@ export class MCPHTTPSessions {
   }
   advance({ dropSessions = false } = {}) {
     this.#epoch++;
+    for (const { controller } of this.#transient) controller.abort();
     for (const session of this.#sessions.values()) {
       for (const { controller } of session.active.values()) controller.abort();
       session.active.clear();
     }
     if (dropSessions) this.#sessions.clear();
+  }
+  close() {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.advance({ dropSessions: true });
   }
 }

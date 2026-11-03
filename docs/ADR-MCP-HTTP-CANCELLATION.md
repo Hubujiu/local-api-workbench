@@ -4,7 +4,7 @@ An initialized HTTP client receives an ephemeral Mcp-Session-Id. Session IDs rou
 
 Each session remembers all request IDs, preserving string/number identity and rejecting reuse as required by the MCP 2025-06-18 basic protocol. Limits: 32 sessions, 1024 request IDs/session, 256 UTF-8 bytes/string ID, 15 minutes idle expiry, existing 10 concurrent tool-execution slots. In-flight handlers are not idle. Cancellation/DELETE bypass execution-slot admission. Unknown, late, malformed and noncancellable notifications do not start work. The seen-ID set is never evicted within a session.
 
-Canonical localapi_execute_api, localapi_execute_flow and localapi_run_plan are cancellable here. The two bounded apipost_execute_api/apipost_execute_flow aliases are also routed when the separate native adapter feature is present; this develop-based branch alone does not implement or grant those tools. CRUD changes are not treated as rollbackable transactions. A same-token policy update advances the execution epoch and aborts old active calls, while retaining session routing and consumed IDs; future calls read current policy. Rotation and disabling drop all sessions. The server close event also clears them, but does not claim that Node graceful close proactively cancels in-flight calls before waiting for HTTP shutdown. Requests that waited across an authorization change reject before dispatch.
+Canonical localapi_execute_api, localapi_execute_flow and localapi_run_plan are cancellable here. The two bounded apipost_execute_api/apipost_execute_flow aliases are also routed when the separate native adapter feature is present; this develop-based branch alone does not implement or grant those tools. CRUD changes are not treated as rollbackable transactions. A same-token policy update advances the execution epoch and aborts old active calls, while retaining session routing and consumed IDs; future calls read current policy. Rotation and disabling drop all sessions. Starting server close aborts registered cancellable execution before Node waits for active HTTP handlers; terminal execution/history persistence can still finish during that wait. Requests that waited across an authorization change reject before dispatch.
 
 Client notifications/cancelled cause the server to finish and persist cancelled execution evidence before ending the original POST with 202 and no late JSON-RPC reply. DELETE/policy cancellation still yields a terminal result or bounded authorization-changed error to callers still waiting. Activities and API history preserve cancelled status. Notification receipt or the SDK's immediate local abort rejection is not evidence that server-side work has finished.
 
@@ -80,9 +80,10 @@ queued rejection, confirmed late abort and unchanged storage-error identity.
 The older feature line does not acquire root-only typed commit-outcome facilities;
 genuine typed-uncertainty coverage remains an explicit root integration check.
 
-Local verification is restricted to inspected pure helpers plus syntax/format;
-no application, VM, XML or database workload was run locally. Actual owner/SDK/
-Store workflow outcomes remain pending exact-head ordinary CI.
+At the scope-save checkpoint, local verification was restricted to inspected
+pure helpers plus syntax/format; the actual owner/SDK/Store workflows were left
+to ordinary CI. The stateless checkpoint below additionally runs those existing
+workflows locally, without changing their assertions.
 
 ## Active plan edit/archive/result lifecycle acceptance
 
@@ -109,3 +110,46 @@ root-only typed uncertainty and richer receipt fields are not backported. This i
 closure of a cross-workflow acceptance gap, not a newly identified production
 fix. Syntax/format are checked locally; the real lifecycle remains pending the
 new exact-head ordinary CI. Existing tests and their limits remain unchanged.
+
+## Stateless owner-policy cancellation
+
+The original HTTP path registered execution signals only after a client initialized
+an MCP session. A real loopback regression reproduced a two-request stateless
+flow continuing to its second request and saving a passed run after the owner
+successfully revoked execution permission. The final authorization-changed RPC
+error hid the reply but did not prevent those subsequent effects.
+
+ID-bearing stateless calls to the same five cancellable tool names now acquire
+independent transient execution ownership. Registration is synchronous after the
+request-body epoch check. An owner policy change aborts these signals, including
+project removal, execution revocation, disabling and token rotation. Transient
+ownership has a separate 32-entry hard cap; the existing ten concurrent tool-call
+limit is unchanged. Aborted entries continue to count until their handler's
+idempotent finish releases them. Different calls may reuse the same JSON-RPC ID
+without sharing a controller or releasing another call's ownership.
+
+This does not add a stateless cancellation protocol: without a session,
+notifications/cancelled still cannot select a call by ID, and ID-less tools/call
+notifications still start no execution. An unrelated initialized session cannot
+cancel transient work. Starting server.close aborts both registered session and
+transient calls and closes future execution admission; the existing HTTP shutdown
+wait still permits terminal evidence to settle.
+
+The execution signal uses the existing dispatcher, runtime, plan and scope-save
+paths. It stops later work at those paths' cancellation boundaries, not at an
+imaginary atomic rollback point. Already-sent external requests, admitted store
+transactions, confirmed history writes, and noncancellable CRUD mutations cannot
+be recalled. Nonexecution MCP tools keep their previous admission and result
+semantics; this change does not claim that all MCP changes are atomically revoked.
+A response rejected after confirmed persistence does not change the saved outcome
+or authorize replay.
+
+The new tests use the real HTTP server, loopback upstream and file-backed Store,
+without a fake dispatcher or save result. They cover each owner-policy transition,
+upstream abort, later-step suppression, persisted cancelled evidence, concurrent
+same-ID calls in separate projects, unowned cancellation notifications, repeated
+error cleanup, notification nonexecution, close-time cleanup, and an owner change
+after confirmed history persistence. The original SDK session and stdio tests
+remain unchanged. These focused local tests pass on the fix; full exact-head CI,
+other platforms and integration with the newer combined source remain separate
+verification obligations.

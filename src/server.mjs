@@ -273,7 +273,9 @@ export async function createApp({
         const execution =
           sessionId !== undefined && message.id !== undefined
             ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
-            : { signal: undefined, finish() {} };
+            : message.id !== undefined && cancellable
+              ? mcpHTTPSessions.beginTransient()
+              : { signal: undefined, finish() {} };
         const activityId = id();
         if (message.method === "tools/call") {
           const active = [...mcpActivities.values()].filter(
@@ -1507,13 +1509,18 @@ export async function createApp({
     }
   });
   server.on("close", () => {
-    mcpHTTPSessions.advance({ dropSessions: true });
+    mcpHTTPSessions.close();
     protocolSessions.close();
     socketioSessions.close();
     oauth.close();
     oauth1.close();
     databaseSessions.close();
   });
+  const closeServer = server.close.bind(server);
+  server.close = (...args) => {
+    mcpHTTPSessions.close();
+    return closeServer(...args);
+  };
   const listen = (listenPort) =>
     new Promise((resolve, reject) => {
       server.once("error", reject);
