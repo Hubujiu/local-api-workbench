@@ -129,3 +129,14 @@ Design references: [OWASP default deny and per-request authorization](https://ch
 and [RFC 7009 revocation outcome semantics](https://www.rfc-editor.org/rfc/rfc7009.html#section-2).
 These inform local deny precedence and truthful outcomes; this application does
 not claim to implement an OAuth revocation endpoint.
+
+Additional real HTTP contracts now cover partially received MCP and owner bodies
+crossing the fence, and two successive reductions while an older owner holds the
+FIFO behind a real project lock. Superseded requests return non-2xx; only the
+latest intersection is persisted and an unrelated project remains usable. A
+combined real archive/create/reduction interleaving preserves the archive removal
+and denies both the late old create and explicitly removed project after restart.
+The delayed create is confirmed to exist exactly as admitted; it is not rolled
+back or silently replayed. All 61 MCP and archive tests passed locally against
+this independent feature tree, plus repository-wide formatting and syntax checks.
+Exact-head CI and the PR19-composed abort contract remain separate requirements.

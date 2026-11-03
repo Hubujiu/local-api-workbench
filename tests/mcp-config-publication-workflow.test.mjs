@@ -13,6 +13,15 @@ const deferred = () => {
   const promise = new Promise((done) => (resolve = done));
   return { promise, resolve };
 };
+function bounded(promise, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Error(label)), 3000);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "mcp-policy-workflow-"));
   const f = { root, app: await createApp({ root, port: 0 }), clients: [] };
@@ -172,8 +181,8 @@ for (const mode of ["disable", "rotate", "forget"]) {
       await enteredAuxiliary.promise;
       releaseOwner.resolve();
       const after = await owner;
-      // The canonical project creation happened exactly once even if root's later
-      // authorization-generation response intentionally hides its stale result.
+      // Already-admitted creation still completes on this pre-PR19 baseline.
+      // Its retired policy reference must not regain or persist authority.
       await create;
       createMock.mock.restore();
       ownerGate.mock.restore();
@@ -398,5 +407,117 @@ test(
     await f.restart();
     assert.equal((await f.policy()).enabled, false);
     await rejectedBearer(f, before.token);
+  },
+);
+
+test(
+  "queued archive and delayed old create cannot undo an immediate project reduction",
+  { timeout: 15000 },
+  async (t) => {
+    const enteredCreate = deferred(),
+      releaseCreate = deferred(),
+      enteredArchive = deferred(),
+      releaseArchive = deferred(),
+      enteredFence = deferred();
+    t.after(() => {
+      releaseCreate.resolve();
+      releaseArchive.resolve();
+    });
+    const f = await fixture(t);
+    const archive = await f.owner(
+      "/api/projects",
+      "POST",
+      { name: "Synthetic archived target" },
+      201,
+    );
+    const granted = await f.configure(
+      grant([f.allowed.id, f.denied.id, archive.id]),
+    );
+    const client = await f.connect(granted.token);
+    const originalCreate = f.app.store.create.bind(f.app.store);
+    const createMock = t.mock.method(f.app.store, "create", async (...args) => {
+      const result = await originalCreate(...args);
+      enteredCreate.resolve();
+      await bounded(releaseCreate.promise, "old create gate not released");
+      return result;
+    });
+    const create = client.callTool({
+      name: "localapi_create_project",
+      arguments: { name: "Already admitted, no current grant" },
+    });
+    await bounded(enteredCreate.promise, "create not entered");
+    const originalSave = f.app.store.save.bind(f.app.store);
+    const saveMock = t.mock.method(
+      f.app.store,
+      "save",
+      async (project, ...args) => {
+        if (project.id === archive.id && project.archived) {
+          enteredArchive.resolve();
+          await bounded(releaseArchive.promise, "archive gate not released");
+        }
+        return originalSave(project, ...args);
+      },
+    );
+    const originalRun = MCPConfigPublication.prototype.run;
+    let admissions = 0;
+    const runMock = t.mock.method(
+      MCPConfigPublication.prototype,
+      "run",
+      function (operation) {
+        const task = originalRun.call(this, operation);
+        if (++admissions === 2) enteredFence.resolve();
+        return task;
+      },
+    );
+    const archived = f.owner(`/api/projects/${archive.id}`, "PUT", {
+      ...archive,
+      archived: true,
+    });
+    await bounded(enteredArchive.promise, "archive not entered");
+    const fenced = f.configure(grant([f.allowed.id, archive.id]));
+    await bounded(enteredFence.promise, "fence not admitted");
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id, archive.id]);
+    releaseCreate.resolve();
+    releaseArchive.resolve();
+    const [archivedProject, , createdResult] = await bounded(
+      Promise.all([archived, fenced, create]),
+      "publication did not settle",
+    );
+    const created = decode(createdResult);
+    createMock.mock.restore();
+    saveMock.mock.restore();
+    runMock.mock.restore();
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id]);
+    assert.deepEqual((await f.disk()).projects, [f.allowed.id]);
+    assert.equal(
+      (await f.app.store.get(created.id)).name,
+      "Already admitted, no current grant",
+    );
+    await f.owner(`/api/projects/${archive.id}`, "PUT", {
+      ...archivedProject,
+      archived: false,
+    });
+    assert.deepEqual((await f.policy()).projects, [f.allowed.id]);
+    await f.restart();
+    const current = await f.connect((await f.policy()).token);
+    assert.deepEqual(
+      decode(
+        await current.callTool({
+          name: "localapi_list_projects",
+          arguments: {},
+        }),
+      ).map((project) => project.id),
+      [f.allowed.id],
+    );
+    for (const id of [f.denied.id, archive.id, created.id])
+      assert.equal(
+        (
+          await current.callTool({
+            name: "localapi_list_apis",
+            arguments: { projectId: id },
+          })
+        ).isError,
+        true,
+      );
   },
 );
