@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdtemp,
+  realpath,
   mkdir,
   rm,
   readFile,
@@ -17,7 +18,9 @@ import { DatabaseSync } from "node:sqlite";
 import { acquireFileLock } from "../src/file-lock.mjs";
 const source = new URL("../src/file-lock.mjs", import.meta.url).href;
 async function root(t) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "guard-lock-"));
+  const dir = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "guard-lock-")),
+  );
   t.after(() => rm(dir, { recursive: true, force: true }));
   return dir;
 }

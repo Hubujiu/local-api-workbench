@@ -22,10 +22,10 @@ test(
     let stdout = "",
       stderr = "";
     child.stdout.on("data", (data) => {
-      stdout += data;
+      stdout = (stdout + data).slice(-16384);
     });
     child.stderr.on("data", (data) => {
-      stderr += data;
+      stderr = (stderr + data).slice(-16384);
     });
     const code = await new Promise((resolve, reject) => {
       child.once("error", reject);

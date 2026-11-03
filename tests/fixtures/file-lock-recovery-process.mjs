@@ -77,7 +77,9 @@ if (process.argv[2] === "child") {
   process.send({ type: "committed", name, pid: process.pid });
   process.disconnect();
 } else {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "real-lock-recovery-"));
+  const root = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "real-lock-recovery-")),
+  );
   const children = [];
   const transcript = [];
   const make = (name) => {
@@ -89,7 +91,7 @@ if (process.argv[2] === "child") {
       waits = new Map();
     let stderr = "";
     child.stderr.on("data", (b) => {
-      stderr += b;
+      stderr = (stderr + b).slice(-16384);
     });
     child.on("message", (m) => {
       transcript.push(m);
