@@ -306,11 +306,11 @@ test(
   "revocation after confirmed history persistence does not rewrite completed effects",
   { timeout: 15000 },
   async (t) => {
+    const releaseAppend = deferred();
+    t.after(() => releaseAppend.resolve());
     const f = await fixture(t);
     const enteredAppend = deferred();
-    const releaseAppend = deferred();
     const append = f.app.store.append.bind(f.app.store);
-    t.after(() => releaseAppend.resolve());
     t.mock.method(f.app.store, "append", async (...args) => {
       const value = await append(...args);
       enteredAppend.resolve();
