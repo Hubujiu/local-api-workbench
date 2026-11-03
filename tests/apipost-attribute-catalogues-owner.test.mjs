@@ -187,9 +187,26 @@ for (const format of ["apipost", "apipost-directory"])
       assert.deepEqual(await new Store(root).get(source.id), sourceBefore);
       assert.deepEqual(await new Store(root).get(other.id), otherBefore);
       const grantsBefore = await call("/api/mcp/config");
+      // Descriptions reject unknown fields during save, before export is reached.
+      const valid = await new Store(root).get(current.id);
+      const validFiles = await diskSnapshot(app.store.directory(current.id));
+      const invalidDescription = structuredClone(valid);
+      invalidDescription.settings.parameterDescriptions[0].unknown = true;
+      const rejectedSave = await call(
+        `/api/projects/${current.id}`,
+        "PUT",
+        invalidDescription,
+        400,
+      );
+      assert.deepEqual(Object.keys(rejectedSave), ["error"]);
+      assert.deepEqual(await new Store(root).get(current.id), valid);
+      assert.deepEqual(
+        await diskSnapshot(app.store.directory(current.id)),
+        validFiles,
+      );
+      assert.deepEqual(await call("/api/mcp/config"), grantsBefore);
       for (const mutate of [
-        (p) => (p.settings.statusCodes[0].httpHint = true),
-        (p) => (p.settings.parameterDescriptions[0].unknown = true),
+        (p) => (p.settings.statusCodes[1].httpHint = true),
         (p) => (p.settings.attributes[8].required = false),
       ]) {
         const invalid = await app.store.get(current.id);

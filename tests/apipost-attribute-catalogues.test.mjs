@@ -1,4 +1,5 @@
 import test from "node:test";
+import { validateResources } from "../src/resources.mjs";
 import assert from "node:assert/strict";
 import { importIntoProject } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
@@ -123,4 +124,20 @@ test("combined export retains the separate description budget while codes can ex
     assert.throws(() => encode(largeDescriptions), /1\s?MiB/);
   p.settings.attributes[0].description = "x".repeat(2001);
   for (const [, encode] of formats) assert.throws(() => encode(p), /属性/);
+});
+
+test("joint owner negative fixtures distinguish storage admission from export rejection", () => {
+  const p = fixture();
+  for (const mutate of [
+    (q) => (q.settings.statusCodes[1].httpHint = true),
+    (q) => (q.settings.attributes[8].required = false),
+  ]) {
+    const changed = structuredClone(p);
+    mutate(changed);
+    assert.doesNotThrow(() => validateResources(changed.settings));
+    for (const [, encode] of formats) assert.throws(() => encode(changed));
+  }
+  const invalidDescription = structuredClone(p);
+  invalidDescription.settings.parameterDescriptions[0].unknown = true;
+  assert.throws(() => validateResources(invalidDescription.settings));
 });
