@@ -125,6 +125,7 @@ export function prepareSampleExport(project, { projectId, id, encodeRequest }) {
     )
       fail("请求名称或当前API目录关联");
     for (const key of [
+      "attributes",
       "beforeScript",
       "afterScript",
       "importedScriptTasks",
