@@ -23,10 +23,11 @@ test(
   async (t) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "mcp-revocation-fence-"));
     const app = await createApp({ root, port: 0 });
-    let release, update;
+    let release, update, older;
     t.after(async () => {
       await release?.();
       await update?.catch(() => {});
+      await older?.catch(() => {});
       app.server.closeAllConnections();
       await new Promise((done) => app.server.close(done));
       await rm(root, { recursive: true, force: true });
@@ -56,16 +57,23 @@ test(
     assert.equal(granted.status, 200);
     const before = await readFile(path.join(root, ".mcp-config.json"));
     release = await acquireFileLock(app.store.lockFile(project.id));
-    let entered;
+    let firstEntered, entered;
+    const firstAdmitted = new Promise((resolve) => {
+      firstEntered = resolve;
+    });
     const admitted = new Promise((resolve) => {
       entered = resolve;
     });
+    let admissions = 0;
     const originalRun = MCPConfigPublication.prototype.run;
     t.mock.method(MCPConfigPublication.prototype, "run", function (operation) {
       const task = originalRun.call(this, operation);
-      entered();
+      if (++admissions === 1) firstEntered();
+      else entered();
       return task;
     });
+    older = owner("/api/mcp/config", "POST", config);
+    await bounded(firstAdmitted, "older owner publication was not admitted");
     let replied = false;
     update = owner("/api/mcp/config", "POST", {
       ...config,
@@ -97,6 +105,11 @@ test(
     const settled = await bounded(
       update,
       "owner publication did not settle after lock release",
+    );
+    assert.equal(
+      (await older).status,
+      400,
+      "pre-fence owner cannot republish grants",
     );
     assert.equal(settled.status, 200);
     assert.equal(settled.value.enabled, false);
