@@ -107,6 +107,8 @@ test("repeat input admission rejects cyclic and proxy data without traps but acc
   assert.equal(traps, 0);
   const cyclic = structuredClone(steps);
   cyclic[0].steps[0].request.cycle = cyclic;
+  assert.throws(() => snapshotPlan({ steps: cyclic }), /循环计划/);
+  cyclic[0].steps = cyclic;
   assert.throws(() => validatePlanStepTypes(cyclic));
 });
 
@@ -148,4 +150,243 @@ test("restore keeps invalid run-container diagnostics before snapshot admission"
         }),
       { name: "Error", message: "备份中的 runs 格式无效" },
     );
+});
+
+test("type-only preflight preserves Postman OAuth2 diagnostics without invoking disabled auth getters", async () => {
+  for (const repeated of [false, true]) {
+    let reads = 0;
+    const request = {
+      id: "getter",
+      method: "GET",
+      url: "http://127.0.0.1:1/never",
+    };
+    Object.defineProperty(request, "auth", {
+      enumerable: true,
+      get() {
+        reads++;
+        return {
+          type: "oauth2",
+          postmanOAuth2: { version: 1, accessToken: "owned-fake-token" },
+        };
+      },
+    });
+    const leaf = { id: "leaf", enabled: false, request };
+    const plan = {
+      id: "getter-plan",
+      steps: repeated
+        ? [
+            {
+              type: "repeat",
+              id: "outer",
+              count: 1,
+              enabled: false,
+              steps: [leaf],
+            },
+          ]
+        : [leaf],
+    };
+    assert.throws(() => snapshotPlan(plan), /Postman OAuth2/);
+    assert.throws(
+      () =>
+        restoreProject({
+          version: 1,
+          requests: [],
+          environments: [],
+          plans: [plan],
+        }),
+      /Postman OAuth2/,
+    );
+    await assert.rejects(
+      runPlan(plan, {}, () => {
+        throw Error("must not execute");
+      }),
+      /Postman OAuth2/,
+    );
+    assert.equal(reads, 0);
+  }
+});
+
+test("native OAuth2 and OAuth1 payload accessors retain existing repeat diagnostics and zero side effects", async () => {
+  for (const enabled of [true, false])
+    for (const kind of ["oauth2", "oauth1"]) {
+      let reads = 0,
+        executions = 0;
+      const auth =
+        kind === "oauth2"
+          ? {
+              type: "oauth2",
+              nativeOAuth2: {
+                addTokenTo: "queryParams",
+                access_token: "owned-fake-token",
+              },
+            }
+          : {
+              type: "oauth1",
+              consumerKey: "owned-fake-key",
+              parameterPolicy: {
+                placement: "auto",
+                includeBodyHash: true,
+                includeEmptyParams: false,
+                headerEncoding: "percent",
+              },
+            };
+      const object = kind === "oauth2" ? auth.nativeOAuth2 : auth;
+      Object.defineProperty(
+        object,
+        kind === "oauth2" ? "access_token" : "consumerKey",
+        {
+          enumerable: true,
+          get() {
+            reads++;
+            return "owned-fake-value";
+          },
+        },
+      );
+      const plan = {
+        steps: [
+          {
+            type: "repeat",
+            id: "outer",
+            count: 2,
+            enabled,
+            steps: [
+              {
+                type: "repeat",
+                id: "inner",
+                count: 2,
+                steps: [
+                  {
+                    id: "leaf",
+                    request: { url: "http://127.0.0.1:1/never", auth },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      assert.throws(() => snapshotPlan(plan), /循环计划.*访问器/);
+      await assert.rejects(
+        runPlan(plan, {}, () => {
+          executions++;
+        }),
+        /循环计划.*访问器/,
+      );
+      assert.equal(reads, 0);
+      assert.equal(executions, 0);
+    }
+});
+test("type graph preflight rejects nested node, child-array proxies and children/type accessors without reading payloads", () => {
+  for (const position of ["node", "children", "childrenGetter", "typeGetter"]) {
+    let calls = 0;
+    const step = {
+      id: "g",
+      type: "repeat",
+      enabled: false,
+      count: 1,
+      steps: [leaf("s", "http://localhost")],
+    };
+    const fail = () => {
+      calls++;
+      throw Error("must not inspect");
+    };
+    if (position === "node")
+      step.steps[0] = new Proxy(step.steps[0], {
+        get: fail,
+        getOwnPropertyDescriptor: fail,
+        getPrototypeOf: fail,
+      });
+    else if (position === "children")
+      step.steps = new Proxy(step.steps, {
+        get: fail,
+        getOwnPropertyDescriptor: fail,
+        getPrototypeOf: fail,
+      });
+    else
+      Object.defineProperty(
+        position === "childrenGetter" ? step : step.steps[0],
+        position === "childrenGetter" ? "steps" : "type",
+        { enumerable: true, get: fail },
+      );
+    assert.throws(() => validatePlanStepTypes([step]), /步骤类型/);
+    assert.equal(calls, 0);
+  }
+  let calls = 0;
+  const request = {};
+  Object.defineProperty(request, "auth", {
+    get() {
+      calls++;
+      throw Error("payload");
+    },
+  });
+  assert.throws(
+    () => validatePlanStepTypes([{ id: "s", type: "unknown", request }]),
+    /步骤类型/,
+  );
+  assert.equal(calls, 0);
+});
+
+test("repeat payload Proxy protection runs before OAuth descriptor readers without consuming accessors", async () => {
+  for (const position of ["request", "auth", "nativeOAuth2", "extra"]) {
+    let traps = 0,
+      reads = 0;
+    const trap = () => {
+      traps++;
+      throw Error("must not trap");
+    };
+    const auth = {
+      type: "oauth2",
+      nativeOAuth2: { access_token: "owned-fake-token" },
+    };
+    const request = { url: "http://127.0.0.1:1/never", auth };
+    const plan = {
+      steps: [
+        {
+          id: "outer",
+          type: "repeat",
+          enabled: false,
+          count: 1,
+          steps: [{ id: "leaf", request }],
+        },
+      ],
+    };
+    Object.defineProperty(request, "unused", {
+      enumerable: true,
+      get() {
+        reads++;
+        return "must not read";
+      },
+    });
+    const proxy = (value) =>
+      new Proxy(value, {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+        ownKeys: trap,
+        getPrototypeOf: trap,
+      });
+    if (position === "request") plan.steps[0].steps[0].request = proxy(request);
+    else if (position === "auth") request.auth = proxy(auth);
+    else if (position === "nativeOAuth2")
+      auth.nativeOAuth2 = proxy(auth.nativeOAuth2);
+    else request.extra = proxy(function () {});
+    assert.throws(() => snapshotPlan(plan), /Proxy/);
+    await assert.rejects(
+      runPlan(plan, {}, () => {
+        throw Error("must not execute");
+      }),
+      /Proxy/,
+    );
+    assert.throws(
+      () =>
+        restoreProject({
+          version: 1,
+          requests: [],
+          environments: [],
+          plans: [plan],
+        }),
+      /Proxy/,
+    );
+    assert.equal(traps, 0);
+    assert.equal(reads, 0);
+  }
 });

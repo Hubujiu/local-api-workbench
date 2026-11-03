@@ -1,45 +1,93 @@
-import { validateRepeatGraph } from "./plan-repeat.mjs";
 import { isProxy } from "node:util/types";
 
 const fail = (message) =>
   Object.assign(Error(message), { code: "PLAN_STEP_TYPE_INVALID" });
 
 // Missing/undefined is the historical HTTP spelling. Never infer HTTP from an
-// unrecognized discriminator. Repeat trees retain their full existing validator.
+// unrecognized discriminator. Only inspect graph structure/type here: request
+// and auth payloads retain their existing domain-specific preflight ordering.
 export function validatePlanStepTypes(steps) {
-  if (!Array.isArray(steps) || isProxy(steps) || steps.length > 200)
-    throw fail("执行计划步骤类型或集合无效");
-  for (let index = 0; index < steps.length; index++) {
-    const entry = Object.getOwnPropertyDescriptor(steps, String(index));
-    if (!entry || !Object.hasOwn(entry, "value"))
-      throw fail("执行计划步骤类型不能包含访问器或空洞");
-    const step = entry.value;
+  const ancestors = new Set();
+  let nodes = 0,
+    repeated = false;
+  const visit = (items, depth) => {
     if (
-      !step ||
-      typeof step !== "object" ||
-      Array.isArray(step) ||
-      isProxy(step) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(step))
+      !Array.isArray(items) ||
+      isProxy(items) ||
+      items.length > 200 ||
+      depth > 4 ||
+      ancestors.has(items)
     )
-      throw fail("执行计划步骤类型须来自普通数据对象");
-    const descriptor = Object.getOwnPropertyDescriptor(step, "type");
-    if (
-      descriptor &&
-      (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
-    )
-      throw fail("执行计划步骤类型不能包含访问器");
-    const type = descriptor?.value;
-    if (type === "repeat") {
-      if (!sameStoredPlan(steps, steps, 100000))
-        throw fail("循环计划须为普通数据");
-      validateRepeatGraph(steps);
-      return;
+      throw fail("执行计划步骤类型或集合无效");
+    ancestors.add(items);
+    for (let index = 0; index < items.length; index++) {
+      if (++nodes > 100000) throw fail("执行计划步骤类型遍历超限");
+      const entry = Object.getOwnPropertyDescriptor(items, String(index));
+      if (!entry || !Object.hasOwn(entry, "value"))
+        throw fail("执行计划步骤类型不能包含访问器或空洞");
+      const step = entry.value;
+      if (
+        !step ||
+        typeof step !== "object" ||
+        Array.isArray(step) ||
+        isProxy(step) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(step))
+      )
+        throw fail("执行计划步骤类型须来自普通数据对象");
+      const descriptor = Object.getOwnPropertyDescriptor(step, "type");
+      if (
+        descriptor &&
+        (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+      )
+        throw fail("执行计划步骤类型不能包含访问器");
+      const type = descriptor?.value;
+      if (type === "repeat") {
+        repeated = true;
+        const children = Object.getOwnPropertyDescriptor(step, "steps");
+        if (
+          !children ||
+          !children.enumerable ||
+          !Object.hasOwn(children, "value")
+        )
+          throw fail("执行计划步骤类型不能包含子步骤访问器");
+        visit(children.value, depth + 1);
+      } else if (
+        type !== undefined &&
+        !["http", "grpc", "socketio", "protocol"].includes(type)
+      )
+        throw fail("未知执行计划步骤类型");
     }
-    if (
-      type !== undefined &&
-      !["http", "grpc", "socketio", "protocol"].includes(type)
-    )
-      throw fail("未知执行计划步骤类型");
+    ancestors.delete(items);
+  };
+  visit(steps, 0);
+  if (repeated) rejectRepeatDataHooks(steps);
+}
+
+// Accessors are never evaluated here. Their owning OAuth/repeat validator keeps
+// its existing error. Data-valued descendants are inspected before those
+// validators can encounter a Proxy; cycles/depth/work retain the repeat limits.
+function rejectRepeatDataHooks(root) {
+  const pending = [[root, 0, false]],
+    ancestors = new Set();
+  let nodes = 0;
+  while (pending.length) {
+    const [value, depth, exit] = pending.pop();
+    if (exit) {
+      ancestors.delete(value);
+      continue;
+    }
+    if (++nodes > 100000 || depth > 32) throw fail("循环计划数据结构超限");
+    if (isProxy(value)) throw fail("循环计划数据不能包含Proxy");
+    if (value === null || typeof value !== "object") continue;
+    if (ancestors.has(value)) throw fail("循环计划须为无循环的普通数据");
+    ancestors.add(value);
+    pending.push([value, depth, true]);
+    for (const key of Reflect.ownKeys(value)) {
+      if (Array.isArray(value) && key === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (Object.hasOwn(descriptor, "value"))
+        pending.push([descriptor.value, depth + 1, false]);
+    }
   }
 }
 

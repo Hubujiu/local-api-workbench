@@ -63,11 +63,21 @@ identity is the supported repair path described above.
 ## Integration adapter
 
 The combined tree retains PR44 repeat validation, recursively including disabled
-ancestors. The new admission calls that existing complete validator, rather than
-admitting repeat merely by name. A descriptor-only preflight rejects hooks/cycles
-before repeat traversal, with the same 100000-node domain as its data validator.
+ancestors. The new admission checks only array/node/type/child-step descriptors and walks
+all descendants, including disabled ones, with a four-group-depth and 100000-node
+ceiling. Existing complete repeat validation remains in the original snapshot,
+execution and grant paths. Request/auth payloads are deliberately not inspected
+by the type pass: Postman OAuth2 and repeat-data validators keep their existing
+diagnostics and accessor protections. This ordering avoids the initial generic
+repeat-data rejection masking more specific OAuth diagnostics.
 CLI database-grant preparation now performs admission before reading connections.
 Root Store moves plan normalization to its lock-held save stage; conflict gates
 run before retaining any exact unchanged legacy definition. Native inheritance,
 resource-trash identity and history validation remain in place. These combined
 owner/Store workflows need exact-root CI where all locked dependencies exist.
+
+Repeat input additionally receives a separate descriptor-only data safety scan:
+it rejects data-valued Proxy descendants, cycles, excessive depth and node work
+before existing validators can observe them. It never evaluates accessors and
+leaves ordinary accessor diagnostics to their existing OAuth/repeat validator.
+Thus preserving diagnostic precedence does not reintroduce Proxy trap execution.
