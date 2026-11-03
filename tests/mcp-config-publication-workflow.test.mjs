@@ -131,12 +131,21 @@ for (const mode of ["disable", "rotate", "forget"]) {
         releaseOwner = deferred(),
         enteredAuxiliary = deferred();
       const originalList = f.app.store.list.bind(f.app.store);
-      const listMock = t.mock.method(f.app.store, "list", async () => {
-        const result = await originalList();
-        enteredOwner.resolve();
-        await releaseOwner.promise;
-        return result;
-      });
+      const originalRun = MCPConfigPublication.prototype.run;
+      let ownerAdmitted = false;
+      const ownerGate = t.mock.method(
+        MCPConfigPublication.prototype,
+        "run",
+        function (operation) {
+          if (ownerAdmitted) return originalRun.call(this, operation);
+          ownerAdmitted = true;
+          return originalRun.call(this, async () => {
+            enteredOwner.resolve();
+            await releaseOwner.promise;
+            return operation();
+          });
+        },
+      );
       const originalPersist = MCPConfigPublication.prototype.persist;
       const persistMock = t.mock.method(
         MCPConfigPublication.prototype,
@@ -167,7 +176,7 @@ for (const mode of ["disable", "rotate", "forget"]) {
       // authorization-generation response intentionally hides its stale result.
       await create;
       createMock.mock.restore();
-      listMock.mock.restore();
+      ownerGate.mock.restore();
       persistMock.mock.restore();
       const all = await originalList();
       assert.equal(all.filter((p) => p.name === "Delayed create").length, 1);
@@ -345,7 +354,7 @@ test(
 );
 
 test(
-  "real failed policy rename does not publish and later owner update recovers",
+  "failed reduction stays denied while failed expansion preserves prior policy",
   { timeout: 15000 },
   async (t) => {
     const f = await fixture(t);
@@ -356,17 +365,29 @@ test(
     const beforeBytes = await readFile(file);
     await rm(ignore);
     await mkdir(ignore);
-    await f.configure(grant([f.allowed.id], { enabled: false }), 400);
+    const failed = await f.configure(
+      grant([f.allowed.id], { enabled: false }),
+      400,
+    );
+    assert.match(failed.error, /当前进程已限制MCP权限.*重启可能恢复旧授权/);
     assert.equal((await readFile(file)).equals(beforeBytes), true);
+    assert.equal((await f.policy()).enabled, false);
+    await rejectedBearer(f, before.token);
+    // No durable success was claimed: a fresh process actually loads old bytes.
+    await f.restart();
+    assert.equal((await f.policy()).enabled, true);
     assert.equal((await f.policy()).token === before.token, true);
     await rm(ignore, { recursive: true });
     await rm(file);
     await mkdir(file);
     await f.configure(grant([f.allowed.id], { enabled: false }), 400);
     const unchanged = await f.policy();
-    assert.equal(unchanged.enabled, true);
-    assert.equal(unchanged.token === before.token, true);
-    assert((await client.listTools()).tools.length > 0);
+    assert.equal(unchanged.enabled, false);
+    assert.equal(unchanged.token, "");
+    await rejectedBearer(f, before.token);
+    const failedExpansion = await f.configure(grant([f.allowed.id]), 400);
+    assert.equal(typeof failedExpansion.error, "string");
+    assert.equal((await f.policy()).enabled, false);
     assert.equal(
       (await readdir(f.root)).some((entry) => entry.endsWith(".tmp")),
       false,
