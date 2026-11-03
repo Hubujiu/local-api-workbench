@@ -1768,7 +1768,8 @@ export function restoreProject(document) {
     throw Error("文档备份格式无效");
   for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
   for (const run of document.runs || [])
-    if (run.snapshot !== undefined) validatePlanStepTypes(run.snapshot?.steps);
+    if (run.snapshot?.steps !== undefined)
+      validatePlanStepTypes(run.snapshot.steps);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";

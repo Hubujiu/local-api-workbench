@@ -46,3 +46,16 @@ ID through project PUT, and review any caller references. This does not rewrite
 historical run evidence or execute either plan. The real owner regression tests
 same-ID rejection and explicit new-ID replacement. A malformed historical run
 snapshot instead requires deliberate backup repair; it is never normalized away.
+
+Compatibility correction: stored inert history is not executable input and is
+not revalidated by Store.save. Restore preserves null/absent/step-less snapshots,
+but checks any snapshot with a defined steps collection before retention. A real
+regression demonstrated that blanket validation let an unrelated valid HTTP run
+finish before its evidence save failed. Store now admits unchanged malformed
+legacy plans only by exact deep comparison against the current disk project
+while holding its lock, after the existing conflict gates. Any newly added or
+changed malformed definition still rejects. Activity writes cannot change the
+plans collection and inherit the lock-held disk plans without normalization.
+Thus unrelated execution can record evidence without rewriting an inert bad
+plan. Owner versioned edits remain strict; explicit replacement under a new
+identity is the supported repair path described above.

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
@@ -195,10 +196,6 @@ export class Store {
   async save(p, { activity = false } = {}) {
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
-    for (const plan of p.plans) validatePlanStepTypes(plan.steps);
-    for (const run of p.runs || [])
-      if (run.snapshot !== undefined)
-        validatePlanStepTypes(run.snapshot?.steps);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);
@@ -213,7 +210,6 @@ export class Store {
     }));
     if (!Array.isArray(p.plans) || p.plans.length > 1000)
       throw Error("计划最多1000个");
-    p.plans = p.plans.map(snapshotPlan);
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
         p.settings.grpcDefinitions,
@@ -287,7 +283,37 @@ export class Store {
               : expectedConfiguration !== previousConfiguration)
           )
             throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
+          if (
+            activity &&
+            previous &&
+            !isDeepStrictEqual(p.plans, previous.plans)
+          )
+            throw Error("活动记录保存不能修改计划定义或步骤类型");
+          // Only exact existing disk definitions may remain inert. Never use
+          // activity:true or a matching ID as authority to admit edited types.
+          const opaquePlans = new Set();
+          for (const plan of p.plans) {
+            try {
+              validatePlanStepTypes(plan.steps);
+            } catch (error) {
+              const old = previous?.plans?.find((item) => item.id === plan?.id);
+              if (
+                error.code !== "PLAN_STEP_TYPE_INVALID" ||
+                !old ||
+                !isDeepStrictEqual(plan, old)
+              )
+                throw error;
+              opaquePlans.add(plan);
+            }
+          }
+          const normalizedPlans = p.plans.map((plan) =>
+            opaquePlans.has(plan) ? structuredClone(plan) : snapshotPlan(plan),
+          );
           const next = structuredClone(p);
+          next.plans =
+            activity && previous
+              ? structuredClone(previous.plans)
+              : normalizedPlans;
           next.revision = (previous?.revision || 0) + 1;
           next.configRevision = activity
             ? previousConfiguration

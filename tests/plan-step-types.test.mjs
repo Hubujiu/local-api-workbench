@@ -282,3 +282,63 @@ test("MCP refuses invalid plans and explicit owner replacement can repair a lega
   );
   assert.deepEqual(f.seen, []);
 });
+
+test("unrelated valid execution retains evidence alongside inert legacy history and an unchanged invalid plan", async (t) => {
+  const f = await endpoint(t);
+  const root = await mkdtemp(join(tmpdir(), "step-type-legacy-"));
+  const app = await createApp({ root, port: 0 });
+  t.after(async () => {
+    try {
+      app.server.closeAllConnections();
+      await new Promise((r) => app.server.close(r));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  const p = await app.store.create("legacy");
+  p.plans = [
+    { id: "bad", steps: [leaf(f.url, "unknown")] },
+    snapshotPlan({ id: "good", steps: [leaf(f.url, "http")] }),
+  ];
+  p.runs = [
+    { id: "null", results: [], snapshot: null },
+    { id: "missing", results: [], snapshot: {} },
+    {
+      id: "old-unknown",
+      results: [],
+      snapshot: { steps: [leaf(f.url, "unknown")] },
+    },
+  ];
+  await writeProject(app.store.directory(p.id), p);
+  const diskBefore = await app.store.get(p.id);
+  const response = await fetch(app.url + `/api/projects/${p.id}/run`, {
+    method: "POST",
+    headers: { "x-local-token": app.token, "content-type": "application/json" },
+    body: JSON.stringify({ planId: "good" }),
+  });
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.seen, ["POST /effect"]);
+  assert.equal(result.status, "passed");
+  assert.equal(
+    result.recordSaved,
+    true,
+    JSON.stringify(result.persistenceError),
+  );
+  const saved = await new Store(root).get(p.id);
+  assert.deepEqual(saved.plans, diskBefore.plans);
+  assert.deepEqual(saved.runs.slice(1), diskBefore.runs);
+  const changed = await app.store.get(p.id);
+  changed.plans[0].name = "changed";
+  await assert.rejects(app.store.save(changed, { activity: true }), /步骤类型/);
+  assert.deepEqual((await app.store.get(p.id)).plans, diskBefore.plans);
+});
+test("backup null and absent historical snapshots remain inert and unmodified", () => {
+  const p = backup([]);
+  p.runs = [
+    { id: "n", results: [], snapshot: null },
+    { id: "a", results: [] },
+    { id: "e", results: [], snapshot: {} },
+  ];
+  assert.deepEqual(restoreProject(p).runs, p.runs);
+});
