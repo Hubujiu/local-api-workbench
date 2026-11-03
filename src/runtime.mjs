@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -192,6 +193,12 @@ export class Store {
     return p;
   }
   async save(p, { activity = false } = {}) {
+    if (!Array.isArray(p.plans) || p.plans.length > 1000)
+      throw Error("计划最多1000个");
+    for (const plan of p.plans) validatePlanStepTypes(plan.steps);
+    for (const run of p.runs || [])
+      if (run.snapshot !== undefined)
+        validatePlanStepTypes(run.snapshot?.steps);
     validateEnvironmentModel(p);
     validateModelFolders(p);
     validateCaseFolders(p);

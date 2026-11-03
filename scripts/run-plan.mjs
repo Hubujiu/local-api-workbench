@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "../src/plan-step-types.mjs";
 import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
 import { executeWireFlow } from "../src/wire-plan.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
@@ -28,6 +29,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       project = await store.get(option("--project")),
       plan = project.plans.find((p) => p.id === option("--plan"));
     if (!plan) throw Error("Plan not found");
+    validatePlanStepTypes(plan.steps);
     const controller = new AbortController();
     process.once("SIGINT", () => controller.abort());
     const credentials = args.includes("--credentials-stdin")

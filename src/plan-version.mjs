@@ -1,9 +1,11 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import { freezeWireStep } from "./wire-plan.mjs";
 import { freezeSocketIOStep } from "./socketio-plan.mjs";
 import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  validatePlanStepTypes(input.steps);
   if (project && Array.isArray(input.steps))
     input = {
       ...input,

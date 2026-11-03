@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -370,6 +371,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  validatePlanStepTypes(plan.steps);
   if (
     plan.statusPolicy !== undefined &&
     !["assertions", "strict200"].includes(plan.statusPolicy)
@@ -447,6 +449,7 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  validatePlanStepTypes(plan.steps);
   const runStarted = performance.now();
   const snapshot = structuredClone(plan);
   const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
@@ -1763,6 +1766,9 @@ export function restoreProject(document) {
     )
   )
     throw Error("文档备份格式无效");
+  for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
+  for (const run of document.runs || [])
+    if (run.snapshot !== undefined) validatePlanStepTypes(run.snapshot?.steps);
   const copy = structuredClone(document);
   copy.id = id();
   copy.name = (document.name || "项目") + " · 恢复副本";
