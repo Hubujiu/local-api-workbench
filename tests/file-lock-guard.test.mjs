@@ -17,11 +17,26 @@ import os from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { acquireFileLock } from "../src/file-lock.mjs";
 const source = new URL("../src/file-lock.mjs", import.meta.url).href;
+const fixtureChildren = new WeakMap();
 async function root(t) {
   const dir = await realpath(
     await mkdtemp(path.join(os.tmpdir(), "guard-lock-")),
   );
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  const children = [];
+  fixtureChildren.set(t, children);
+  t.after(async () => {
+    for (const child of children)
+      if (child.p.exitCode === null && child.p.signalCode === null)
+        child.p.kill("SIGKILL");
+    await Promise.all(children.map((child) => child.exited));
+    assert(
+      children.every(
+        (child) => child.p.exitCode !== null || child.p.signalCode !== null,
+      ),
+      "children must exit before fixture directory removal",
+    );
+    await rm(dir, { recursive: true, force: true });
+  });
   return dir;
 }
 function child(t, code, args = []) {
@@ -45,10 +60,13 @@ function child(t, code, args = []) {
     for (const w of waiting.splice(0))
       w.reject(Error(`child exited ${code}: ${stderr}`));
   });
-  t.after(async () => {
-    if (p.exitCode === null && p.signalCode === null) p.kill("SIGKILL");
-    await exited;
-  });
+  const children = fixtureChildren.get(t);
+  if (children) children.push({ p, exited });
+  else
+    t.after(async () => {
+      if (p.exitCode === null && p.signalCode === null) p.kill("SIGKILL");
+      await exited;
+    });
   return {
     p,
     exited,
@@ -111,11 +129,14 @@ test(
     );
     // An independent SQLite connection must still see the owner's OS lock.
     const db = new DatabaseSync(lock + ".guard.sqlite", { timeout: 0 });
-    assert.throws(
-      () => db.exec("BEGIN IMMEDIATE"),
-      (e) => e.errcode === 5,
-    );
-    db.close();
+    try {
+      assert.throws(
+        () => db.exec("BEGIN IMMEDIATE"),
+        (e) => e.errcode === 5,
+      );
+    } finally {
+      db.close();
+    }
     owner.p.send("release");
     assert.equal(await owner.next(), "released");
     const release = await acquireFileLock(lock);
@@ -129,9 +150,12 @@ test("different projects and cookie paths remain independent while a lock is hel
     a = await acquireFileLock(path.join(dir, "a.json.lock"));
   try {
     const b = await acquireFileLock(path.join(dir, "b.json.lock"));
-    const cookie = await acquireFileLock(path.join(dir, "cookies.lock"));
-    await b();
-    await cookie();
+    try {
+      const cookie = await acquireFileLock(path.join(dir, "cookies.lock"));
+      await cookie();
+    } finally {
+      await b();
+    }
   } finally {
     await a();
   }
@@ -162,19 +186,23 @@ test(
     }
     t.after(() => rm(alias, { force: true }));
     const release = await acquireFileLock(path.join(dir, "project.lock"));
-    const abort = new AbortController();
-    const second = acquireFileLock(path.join(alias, "project.lock"), {
-      signal: abort.signal,
-    });
-    abort.abort();
-    await assert.rejects(second);
-    const probe = child(
-      t,
-      `import {DatabaseSync} from 'node:sqlite';const d=new DatabaseSync(process.argv[1]);try{d.exec('BEGIN IMMEDIATE');process.send('unsafe');}catch(e){process.send(e.errcode);}finally{d.close();process.disconnect();}`,
-      [path.join(dir, "project.lock.guard.sqlite")],
-    );
-    assert.equal(await probe.next(), 5);
-    await release();
+    try {
+      const abort = new AbortController();
+      const second = acquireFileLock(path.join(alias, "project.lock"), {
+        signal: abort.signal,
+      });
+      abort.abort();
+      await assert.rejects(second);
+      const probe = child(
+        t,
+        `import {DatabaseSync} from 'node:sqlite';const d=new DatabaseSync(process.argv[1]);try{d.exec('BEGIN IMMEDIATE');process.send('unsafe');}catch(e){process.send(e.errcode);}finally{d.close();process.disconnect();}`,
+        [path.join(dir, "project.lock.guard.sqlite")],
+      );
+      assert.equal(await probe.next(), 5);
+      assert.equal((await probe.exited)[0], 0);
+    } finally {
+      await release();
+    }
   },
 );
 
@@ -241,48 +269,99 @@ test(
   "opening and closing a contender never revokes another SQLite connection OS lock",
   { timeout: 10000 },
   async (t) => {
-    const dir = await root(t),
+    // This fixture owns its entire lifecycle. Windows cannot unlink an open
+    // SQLite file; never rely on the registration order of separate after hooks.
+    const dir = await realpath(
+        await mkdtemp(path.join(os.tmpdir(), "guard-owner-")),
+      ),
       lock = path.join(dir, "project.lock");
     const owner = new DatabaseSync(lock + ".guard.sqlite", { timeout: 0 });
-    owner.exec("BEGIN IMMEDIATE");
-    t.after(() => owner.close());
-    const original = DatabaseSync.prototype.exec;
-    let attempted;
-    const barrier = new Promise((resolve) => {
-      attempted = resolve;
-    });
-    DatabaseSync.prototype.exec = function (sql) {
-      try {
-        return original.call(this, sql);
-      } catch (e) {
-        if (this !== owner && sql === "BEGIN IMMEDIATE") attempted(e);
-        throw e;
-      }
-    };
-    t.after(() => {
-      DatabaseSync.prototype.exec = original;
-    });
-    const abort = new AbortController(),
+    const original = DatabaseSync.prototype.exec,
+      abort = new AbortController();
+    const probes = [];
+    let pending, cleanup;
+    const dispose = () =>
+      (cleanup ||= (async () => {
+        try {
+          abort.abort();
+          // Stop only children created by this fixture, then await their actual exit.
+          for (const probe of probes)
+            if (probe.p.exitCode === null && probe.p.signalCode === null)
+              probe.p.kill("SIGKILL");
+          const exits = await Promise.allSettled(
+            probes.map((probe) => probe.exited),
+          );
+          if (pending)
+            await pending.then(
+              (release) => release(),
+              () => {},
+            );
+          const failedExit = exits.find(
+            (result) => result.status === "rejected",
+          );
+          if (failedExit) throw failedExit.reason;
+        } finally {
+          DatabaseSync.prototype.exec = original;
+          if (owner.isOpen) owner.close();
+        }
+        assert.equal(
+          owner.isOpen,
+          false,
+          "close SQLite before deleting its guard",
+        );
+        assert(
+          probes.every(
+            (probe) => probe.p.exitCode !== null || probe.p.signalCode !== null,
+          ),
+          "await every fixture child before directory removal",
+        );
+        await rm(dir, { recursive: true, force: true });
+      })());
+    t.after(dispose);
+    try {
+      owner.exec("BEGIN IMMEDIATE");
+      let attempted;
+      const barrier = new Promise((resolve) => {
+        attempted = resolve;
+      });
+      DatabaseSync.prototype.exec = function (sql) {
+        try {
+          return original.call(this, sql);
+        } catch (e) {
+          if (this !== owner && sql === "BEGIN IMMEDIATE") attempted(e);
+          throw e;
+        }
+      };
       pending = acquireFileLock(lock, { signal: abort.signal });
-    const rejection = assert.rejects(pending, { code: "ABORT_ERR" });
-    assert.equal((await barrier).errcode, 5);
-    async function probe() {
-      const p = child(
-        t,
-        `import {DatabaseSync} from 'node:sqlite';const db=new DatabaseSync(process.argv[1],{timeout:0});try{db.exec('BEGIN IMMEDIATE');process.send('unsafe');}catch(e){process.send(e.errcode);}finally{db.close();process.disconnect();}`,
-        [lock + ".guard.sqlite"],
-      );
-      assert.equal(await p.next(), 5);
-      assert.equal((await p.exited)[0], 0);
+      const rejection = assert.rejects(pending, { code: "ABORT_ERR" });
+      // Keep unexpected success observed even if an earlier probe assertion fails.
+      rejection.catch(() => {});
+      assert.equal((await barrier).errcode, 5);
+      async function probe() {
+        const p = child(
+          t,
+          `import {DatabaseSync} from 'node:sqlite';const db=new DatabaseSync(process.argv[1],{timeout:0});try{db.exec('BEGIN IMMEDIATE');process.send('unsafe');}catch(e){process.send(e.errcode);}finally{db.close();process.disconnect();}`,
+          [lock + ".guard.sqlite"],
+        );
+        probes.push(p);
+        assert.equal(await p.next(), 5);
+        assert.equal((await p.exited)[0], 0);
+      }
+      await probe();
+      abort.abort();
+      await rejection;
+      assert.equal(owner.isTransaction, true);
+      await probe();
+      owner.exec("ROLLBACK");
+      const release = await acquireFileLock(lock);
+      try {
+        /* A healthy successor acquired the unchanged guard. */
+      } finally {
+        await release();
+      }
+    } finally {
+      await dispose();
     }
-    await probe();
-    abort.abort();
-    await rejection;
-    assert.equal(owner.isTransaction, true);
-    await probe();
-    owner.exec("ROLLBACK");
-    const release = await acquireFileLock(lock);
-    await release();
   },
 );
 
