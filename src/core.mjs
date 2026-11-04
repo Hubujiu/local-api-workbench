@@ -677,7 +677,12 @@ export function snapshotPlan(plan) {
               name: step.name ?? (step.type === "if" ? "条件组" : "循环组"),
               enabled: step.enabled !== false,
               ...(step.type === "repeat"
-                ? { count: step.count }
+                ? {
+                    count: step.count,
+                    ...(step.rows === undefined
+                      ? {}
+                      : { rows: structuredClone(step.rows) }),
+                  }
                 : { condition: structuredClone(step.condition) }),
               steps: normalizeGroups(step.steps),
             }
@@ -810,8 +815,12 @@ export async function runPlan(
       : {}),
   });
   for (; cursor < occurrences.length; cursor++) {
-    const { step, repeat, condition, occurrenceId, skipTo } =
+    const { step, repeat, condition, occurrenceId, skipTo, dataContext } =
       occurrences[cursor];
+    const stepExecutionContext =
+      dataContext === undefined
+        ? executionContext
+        : { ...executionContext, ...dataContext };
     if (signal?.aborted) break;
     if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
       evidenceStopped = true;
@@ -919,7 +928,7 @@ export async function runPlan(
           record,
           scopes,
           functions: snapshot.functions || [],
-          executionContext,
+          executionContext: stepExecutionContext,
           credentials: credentials.get(step.id),
           signal,
           executeGrpc,
@@ -944,7 +953,7 @@ export async function runPlan(
           record,
           scopes,
           functions: snapshot.functions || [],
-          executionContext,
+          executionContext: stepExecutionContext,
           credentials: wireCredentials.get(step.id),
           signal,
           executeProtocol,
@@ -1182,7 +1191,7 @@ export async function runPlan(
                 : configuredRequest.beforeScript,
             {
               allowNetwork: true,
-              executionContext,
+              executionContext: stepExecutionContext,
               variables: vars,
               scopes,
               localVariables,
@@ -1348,7 +1357,7 @@ export async function runPlan(
                 : record.request.afterScript,
             {
               allowNetwork: true,
-              executionContext,
+              executionContext: stepExecutionContext,
               variables: vars,
               scopes,
               localVariables,
