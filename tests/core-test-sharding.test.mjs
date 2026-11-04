@@ -68,7 +68,7 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
   const baseline = globSync("tests/*.test.mjs", { cwd: root })
     .map((file) => file.split(path.sep).join("/"))
     .sort();
-  for (const total of [1, 2, 3, 4, 5, 6]) {
+  for (const total of [1, 2, 3, 4, 5, 6, 7]) {
     const plans = await Promise.all(
       Array.from({ length: total }, (_, i) =>
         createPlan(root, { index: i + 1, total }),
@@ -386,11 +386,11 @@ test("glob-like filenames cannot be silently ignored by Node", async (t) => {
   assert.equal(result.status, 1);
 });
 
-for (const total of [4, 6])
+for (const total of [4, 6, 7])
   test(
     total === 4
       ? "real shards execute every file and nested concurrent test exactly once with separate TAP evidence"
-      : "six CI shards execute every file and nested concurrent test exactly once with separate TAP evidence",
+      : `${total} CI shards execute every file and nested concurrent test exactly once with separate TAP evidence`,
     async (t) => {
       const cwd = await fixture(t);
       await mkdir(path.join(cwd, "seen"));
@@ -401,7 +401,8 @@ for (const total of [4, 6])
         "A",
         "é",
       ];
-      if (total === 6) names.push("sixth-capacity-fixture");
+      if (total >= 6) names.push("sixth-capacity-fixture");
+      if (total >= 7) names.push("seventh-capacity-fixture");
       for (const name of names) {
         const source = `import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -517,16 +518,25 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
     "utf8",
   );
   const core = workflow.split("  core:")[1].split("  browser:")[0];
-  assert.match(core, /shard: \[1, 2, 3, 4, 5, 6\]/);
+  assert.match(core, /shard: \[1, 2, 3, 4, 5, 6, 7\]/);
   assert.match(core, /timeout-minutes: 10/);
   assert.match(core, /if: always\(\)/);
-  assert.match(core, /of-6\.progress\.jsonl/);
+  assert.match(
+    core,
+    /name: core-test-diagnostics-\$\{\{ matrix\.os \}\}-shard-\$\{\{ matrix\.shard \}\}-of-7/,
+  );
+  for (const extension of ["json", "tap", "progress.jsonl"])
+    assert(
+      core.includes(
+        `test-results/core-\${{ matrix.os }}-shard-\${{ matrix.shard }}-of-7.${extension}`,
+      ),
+    );
   assert.match(core, /fail-fast: false/);
   assert.match(core, /node-version: "24"/);
   assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
   assert.match(
     core,
-    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/6 --label=\$\{\{ matrix\.os \}\}/,
+    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/7 --label=\$\{\{ matrix\.os \}\}/,
   );
   assert.doesNotMatch(
     core,

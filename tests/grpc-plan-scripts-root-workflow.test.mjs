@@ -15,6 +15,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { createApp } from "../src/server.mjs";
 import { Store, executeRequest } from "../src/runtime.mjs";
 import { runPlan } from "../src/core.mjs";
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const decode = (result) => {
@@ -574,7 +575,12 @@ test(
           assert.equal(rpc.grpcResult.status.code, 0);
           assert.equal(rpc.grpcResult.messages[0].text, "reply-" + (cycle + 1));
           assert.deepEqual(rpc.extracted, {});
-          assert(rpc.assertions.some((item) => item.phase === "after"));
+          withExecutionResultDiagnostics(rpc, () =>
+            assert(
+              rpc.assertions.some((item) => item.phase === "after"),
+              `cycle ${cycle + 1}`,
+            ),
+          );
           for (const row of [rows[2], rows[3]]) {
             const value = JSON.parse(row.response.body).query;
             assert.equal(row.status, "passed", JSON.stringify(row));
