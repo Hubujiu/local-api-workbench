@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import sqlite from "node:sqlite";
 import fs from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { syncBuiltinESMExports, registerHooks } from "node:module";
 import path from "node:path";
 import os from "node:os";
@@ -58,7 +59,12 @@ for (const scenario of [
     const root = await fs.mkdtemp(
       path.join(os.tmpdir(), "pr111-first-attempt-"),
     );
-    const lock = path.join(root, "project.lock");
+    // acquireFileLock canonicalizes the parent before its filesystem calls.
+    // Match the same native path on platforms where the temp root is an alias.
+    const lock = path.join(
+      realpathSync.native(root + path.sep),
+      "project.lock",
+    );
     let offset = 0,
       begins = 0,
       mkdirs = 0,
