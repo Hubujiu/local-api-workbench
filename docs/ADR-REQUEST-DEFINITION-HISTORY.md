@@ -14,7 +14,14 @@ The limits below are Workbench implementation quotas, not original Apipost facts
 Ordinary owner input remains 12 MiB. Current definitions are not pre-admitted
 against a history snapshot quota, and project persistence is not capped by the
 restore HTTP envelope. Complete encoded historical records have a 16 MiB limit;
-all definition history, including metadata, has a 32 MiB project quota. Reaching
+all definition history, including metadata, has a 32 MiB charged project quota.
+The owner identifier is validated as the existing ASCII ID of at most 200
+characters and charged as one fixed ASCII character; the actual envelope is
+also bounded to 32 MiB plus 199 bytes. This bounded identity allowance preserves
+an already-valid exact-limit short-ID backup when restoration creates a longer
+UUID, without deleting versions or changing available content capacity when IDs
+change length. Store prechecks and owned-history comparison use the same real
+envelope limit. Reaching
 that byte quota rejects the whole change before journal publication, preserving
 the previous definition and history. Export the complete project first, then
 explicitly clear selected versions through the definition-history endpoint/tool
@@ -272,3 +279,17 @@ These are a mixture of production compatibility fixes and fixture corrections,
 not ignored CI flakes. Pure/file regressions execute locally; the corresponding
 application and SDK paths still need the exact next published-tree CI. No full
 run is reused as evidence for a different tree.
+
+## Identity-boundary and editable-view follow-up
+
+Independent review reproduced a valid exact-32-MiB short-owner backup failing
+after UUID rebinding added 35 bytes. The bounded identity charging rule above
+corrects that defect while retaining the complete history and per-record quota.
+A real Store regression covers restore, reopened state, ordinary owned-history
+comparison, activity persistence and an over-capacity tag rejected unchanged.
+The previous owner-view projection also exposed five old tests comparing an
+editable HTTP response with a complete Store object. Their baselines are now
+captured from the actual Store at the relevant pre-action point; complete deep
+comparisons still include history. No production access or recovery assertion
+is removed. The previous c35 CI run finished with 16 successful and 9 failed
+jobs (the same five cases on each OS), and remains a failed historical run.

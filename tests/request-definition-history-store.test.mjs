@@ -626,3 +626,82 @@ test(
     );
   },
 );
+
+test(
+  "exact 32MiB short-owner history restores to a new UUID without losing quota or retained versions",
+  { timeout: 60000 },
+  async (t) => {
+    const { root, store, project, peer } = await setup(t);
+    const legacy = await store.get(project.id);
+    legacy.id = "a";
+    legacy.requestDefinitionHistory.projectId = legacy.id;
+    const tracker = lineage(legacy);
+    tracker.currentVersion = 3;
+    tracker.versions = [1, 2].map((version) => ({
+      id: "identity-quota-" + version,
+      version,
+      createdAt: "2026-11-04T08:00:00.000Z",
+      tag: "",
+      definition: { ...json(legacy.requests[0]), bodyType: "raw", body: "" },
+    }));
+    const remaining =
+      32 * 1024 * 1024 -
+      Buffer.byteLength(JSON.stringify(legacy.requestDefinitionHistory));
+    const first = Math.floor(remaining / 2);
+    tracker.versions[0].definition.body = "x".repeat(first);
+    tracker.versions[1].definition.body = "y".repeat(remaining - first);
+    assert.equal(
+      Buffer.byteLength(JSON.stringify(legacy.requestDefinitionHistory)),
+      32 * 1024 * 1024,
+    );
+    for (const version of tracker.versions)
+      assert(Buffer.byteLength(JSON.stringify(version)) <= 16 * 1024 * 1024);
+    const peerBefore = await store.get(peer.id);
+    const sourceBefore = await store.get(project.id);
+    const copy = await store.restore(legacy);
+    assert.notEqual(copy.id, legacy.id);
+    assert.equal(copy.id.length, 36);
+    assert.equal(copy.requestDefinitionHistory.projectId, copy.id);
+    assert.equal(
+      Buffer.byteLength(JSON.stringify(copy.requestDefinitionHistory)),
+      32 * 1024 * 1024 + 35,
+    );
+    assert.deepEqual(
+      copy.requestDefinitionHistory.entries,
+      legacy.requestDefinitionHistory.entries,
+    );
+    assert.deepEqual(copy.requests, legacy.requests);
+    const reopened = await new Store(root).get(copy.id);
+    assert.deepEqual(
+      reopened.requestDefinitionHistory,
+      copy.requestDefinitionHistory,
+    );
+    // Owned-history equality and activity use the same bounded identity envelope.
+    await store.save(reopened);
+    await store.append(copy.id, "history", {
+      id: "identity-budget-activity",
+      status: "passed",
+    });
+    const afterActivity = await store.get(copy.id);
+    assert.deepEqual(
+      afterActivity.requestDefinitionHistory,
+      copy.requestDefinitionHistory,
+    );
+    assert.equal(afterActivity.history[0].id, "identity-budget-activity");
+    await assert.rejects(
+      store.changeRequestDefinitionHistory(copy.id, {
+        configRevision: afterActivity.configRevision,
+        requestId: "api",
+        lineageId: lineage(afterActivity).lineageId,
+        kind: "tag",
+        historyId: "current",
+        tag: "x",
+      }),
+      /32 MiB|容量/,
+    );
+    assert.deepEqual(await new Store(root).get(copy.id), afterActivity);
+    assert.deepEqual(await store.get(project.id), sourceBefore);
+    assert.deepEqual(await store.get(peer.id), peerBefore);
+    await noJournal(store, copy);
+  },
+);

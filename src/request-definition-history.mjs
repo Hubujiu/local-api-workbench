@@ -3,6 +3,10 @@ import { isDeepStrictEqual, types } from "node:util";
 
 export const REQUEST_DEFINITION_HISTORY_LIMIT = 100;
 export const REQUEST_DEFINITION_HISTORY_MAX_BYTES = 32 * 1024 * 1024;
+// Owner IDs are 1..200 ASCII characters. Their spelling never changes the
+// content quota, but the actual serialized envelope must include their bytes.
+export const REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES =
+  REQUEST_DEFINITION_HISTORY_MAX_BYTES + 199;
 // The per-version quota includes the entire encoded record, not only definition.
 export const REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES = 16 * 1024 * 1024;
 const PROJECT_MAX_BYTES = 12 * 1024 * 1024;
@@ -306,12 +310,8 @@ function validateHistory(project, { checkTargets = true } = {}) {
   const requests = requestMap(project);
   const history = project.requestDefinitionHistory;
   if (history === undefined) return;
-  validateHistoryQuota(
-    history,
-    REQUEST_DEFINITION_HISTORY_MAX_BYTES,
-    project.id,
-  );
   exactKeys(history, ["version", "projectId", "entries"]);
+  identifier(history.projectId, "历史项目ID");
   if (
     history.version !== 1 ||
     history.projectId !== project.id ||
@@ -319,6 +319,15 @@ function validateHistory(project, { checkTargets = true } = {}) {
     history.entries.length > TRACKER_LIMIT
   )
     fail("版本、项目归属或历史容量无效");
+  // history is already descriptor-safe projected data. Validate the real owner
+  // before normalizing this accounting-only view. Charging one ASCII character
+  // keeps identity rebinding quota-neutral; the validated 200-character limit
+  // also guarantees the real envelope is at most MAX_BYTES + 199 bytes.
+  validateHistoryQuota(
+    { ...history, projectId: "a" },
+    REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+    project.id,
+  );
   const lineages = new Set();
   const versionIds = new Set();
   const active = new Set();

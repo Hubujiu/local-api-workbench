@@ -408,6 +408,7 @@ test(
       "one terminal history append, never a request retry",
     );
     const recorded = await f.get(project.id);
+    const fullRecorded = await f.store.get(project.id);
     const stored = findExecutionResult(recorded, run.id);
     assert.equal(recorded.runs.length, 1);
     assert.deepEqual(stored, storedJSON(f.appended[0]));
@@ -446,7 +447,8 @@ test(
     assert.equal(restored.status, 201, JSON.stringify(restored.value));
     assert.notEqual(restored.value.id, project.id);
     await f.restart();
-    assert.deepEqual(await new Store(f.root).get(project.id), recorded);
+    assert.deepEqual(await new Store(f.root).get(project.id), fullRecorded);
+    assert.deepEqual(await f.get(project.id), recorded);
     const copy = await f.get(restored.value.id);
     assert.equal(copy.runs.length, 1);
     assert.deepEqual(findExecutionResult(copy, run.id), stored);
