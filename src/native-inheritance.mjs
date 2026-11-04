@@ -632,7 +632,8 @@ export function validateNativeInheritanceProject(project) {
       item.request?.id !== item.sourceRequestId
     )
       fail("冻结用例来源接口与请求身份不一致");
-  for (const plan of project.plans || []) validateRepeatGraph(plan.steps);
+  for (const plan of project.plans || [])
+    validateRepeatGraph(plan.steps, { allowRuntimeRows: true });
   for (const frozen of [
     ...(project.plans || []).flatMap((p) =>
       planLeaves(p.steps || []).map((s) => s.request),

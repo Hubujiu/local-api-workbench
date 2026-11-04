@@ -35,7 +35,11 @@ import {
   serializeRequestPath,
   validatePathSerialization,
 } from "./path-serialization.mjs";
-import { hasRepeatSteps } from "./plan-repeat.mjs";
+import {
+  hasRepeatSteps,
+  hasRuntimeRows,
+  validateRepeatGraph,
+} from "./plan-repeat.mjs";
 import {
   validateNativeInheritanceProject,
   assertNativeInheritanceIdentity,
@@ -148,6 +152,33 @@ import {
   snapshotPlan,
   restoreProject,
 } from "./core.mjs";
+// Parsed disk records are inspected without normalizing historical definitions.
+// Only runtime-row graphs opt into the new strict snapshot contract; legacy
+// opaque plans retain their existing inert read behavior.
+function validateStoredRuntimeRows(project) {
+  const contains = (steps) =>
+    Array.isArray(steps) &&
+    steps.some(
+      (step) =>
+        step &&
+        ["repeat", "if"].includes(step.type) &&
+        ((step.type === "repeat" && Object.hasOwn(step, "rowsFrom")) ||
+          contains(step.steps)),
+    );
+  for (const plan of [
+    ...(project.plans || []),
+    ...(project.runs || []).map((run) => run?.snapshot).filter(Boolean),
+  ]) {
+    if (contains(plan?.steps)) {
+      validateRepeatGraph(plan.steps, {
+        requireIds: true,
+        allowRuntimeRows: true,
+      });
+      snapshotPlan(plan, { allowRuntimeRows: true });
+    }
+  }
+}
+
 export class Store {
   constructor(root) {
     this.root = root;
@@ -359,6 +390,7 @@ export class Store {
         )
       ) {
         const project = await readProject(directory, key);
+        validateStoredRuntimeRows(project);
         validateNativeInheritanceProject(project);
         validateAPIResourceTrash(project);
         validatePostmanOAuth2Project(project);
@@ -370,6 +402,7 @@ export class Store {
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
     );
+    validateStoredRuntimeRows(project);
     validateNativeInheritanceProject(project);
     validateAPIResourceTrash(project);
     validatePostmanOAuth2Project(project);
@@ -791,6 +824,9 @@ export class Store {
       }
     }
 
+    for (const plan of p.plans)
+      if (hasRepeatSteps(plan.steps) && hasRuntimeRows(plan.steps))
+        snapshotPlan(plan, { allowRuntimeRows: true });
     validatePostmanOAuth2Project(p);
     validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
@@ -825,7 +861,14 @@ export class Store {
       if (run.snapshot) {
         readPlanFailurePolicy(run.snapshot);
         readImportedNativeFlowSource(run.snapshot);
-        if (hasRepeatSteps(run.snapshot.steps)) snapshotPlan(run.snapshot);
+        if (hasRepeatSteps(run.snapshot.steps)) {
+          if (hasRuntimeRows(run.snapshot.steps))
+            validateRepeatGraph(run.snapshot.steps, {
+              requireIds: true,
+              allowRuntimeRows: true,
+            });
+          snapshotPlan(run.snapshot, { allowRuntimeRows: true });
+        }
       }
     if (p.settings?.grpcDefinitions !== undefined)
       p.settings.grpcDefinitions = normalizeGrpcDefinitions(
@@ -1083,7 +1126,9 @@ export class Store {
       }
     }
     const normalizedPlans = p.plans.map((plan) =>
-      opaquePlans.has(plan) ? structuredClone(plan) : snapshotPlan(plan),
+      opaquePlans.has(plan)
+        ? structuredClone(plan)
+        : snapshotPlan(plan, { allowRuntimeRows: true }),
     );
     p.plans =
       activity && previous ? structuredClone(previous.plans) : normalizedPlans;
@@ -1096,7 +1141,7 @@ export class Store {
             plans: previous.plans.map((plan) =>
               retainedPlans.has(plan)
                 ? structuredClone(plan)
-                : snapshotPlan(plan),
+                : snapshotPlan(plan, { allowRuntimeRows: true }),
             ),
             cases: previous.cases?.map(snapshotCase),
           }
@@ -1115,7 +1160,7 @@ export class Store {
             plans: previous.plans.map((plan) =>
               retainedPlans.has(plan)
                 ? structuredClone(plan)
-                : snapshotPlan(plan),
+                : snapshotPlan(plan, { allowRuntimeRows: true }),
             ),
             cases: previous.cases?.map(snapshotCase),
           }

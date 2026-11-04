@@ -50,6 +50,7 @@ import {
   activePlanLeaves,
   planOccurrences,
   hasRuntimeRows,
+  hasRepeatSteps,
   validateRuntimeRows,
 } from "./plan-repeat.mjs";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
@@ -2715,7 +2716,8 @@ export function restoreProject(document) {
   validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
   for (const plan of document.plans || [])
-    if (!validateRepeatGraph(plan.steps)) linearPlanStepIds(plan.steps);
+    if (!validateRepeatGraph(plan.steps, { allowRuntimeRows: true }))
+      linearPlanStepIds(plan.steps);
   validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
   for (const environment of document.environments) {
@@ -2782,7 +2784,7 @@ export function restoreProject(document) {
     validateRequestTaskSource(item.request);
   for (const plan of document.plans || []) {
     readPlanFailurePolicy(plan);
-    validateRepeatGraph(plan.steps);
+    validateRepeatGraph(plan.steps, { allowRuntimeRows: true });
     readImportedNativeFlowSource(plan);
     for (const step of planLeaves(plan.steps || [])) {
       liveRequestId(step);
@@ -2792,7 +2794,16 @@ export function restoreProject(document) {
   for (const run of document.runs || [])
     if (run.snapshot) {
       readPlanFailurePolicy(run.snapshot);
-      if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
+      if (
+        hasRepeatSteps(run.snapshot.steps) &&
+        hasRuntimeRows(run.snapshot.steps)
+      )
+        validateRepeatGraph(run.snapshot.steps, {
+          requireIds: true,
+          allowRuntimeRows: true,
+        });
+      if (validateRepeatGraph(run.snapshot.steps, { allowRuntimeRows: true }))
+        snapshotPlan(run.snapshot, { allowRuntimeRows: true });
       readImportedNativeFlowSource(run.snapshot);
       for (const step of planLeaves(run.snapshot.steps || [])) {
         liveRequestId(step);
@@ -2811,7 +2822,9 @@ export function restoreProject(document) {
       ? normalizeRequest
       : normalizeHistoricalRequest,
   );
-  copy.plans = (copy.plans || []).map(snapshotPlan);
+  copy.plans = (copy.plans || []).map((plan) =>
+    snapshotPlan(plan, { allowRuntimeRows: true }),
+  );
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
   validateGrpcSessionHistory(copy.protocolRuns ?? []);
