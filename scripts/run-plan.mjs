@@ -2,7 +2,7 @@ import {
   hasLiveReferences,
   materializeLivePlan,
 } from "../src/live-plan-materialize.mjs";
-import { activePlanLeaves, hasIfSteps } from "../src/plan-repeat.mjs";
+import { activePlanLeaves, hasPlanConditions } from "../src/plan-repeat.mjs";
 import { validatePlanStepTypes } from "../src/plan-step-types.mjs";
 import { prepareCLIDatabaseGrants } from "../src/cli-database-grants.mjs";
 import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
@@ -62,7 +62,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
     // condition later evaluates false. Dynamic script calls retain runtime checks.
     // Do not inspect unrelated DB catalogues for ordinary HTTP-only IF plans.
     const conditionalDatabase =
-      hasIfSteps(plan.steps) &&
+      hasPlanConditions(plan.steps) &&
       activePlanLeaves(plan.steps).some(({ request }) =>
         ["before", "after"].some(
           (phase) =>

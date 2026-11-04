@@ -91,8 +91,31 @@ export function conditionSummary(record) {
   const decisions = record.conditionResults.slice(0, 200);
   const failed = decisions.filter((item) => item?.status === "failed");
   return {
-    ...(record.stopReason === "condition-error"
+    ...(["condition-error", "repeat-condition-exhausted"].includes(
+      record.stopReason,
+    )
       ? { stopReason: record.stopReason }
+      : {}),
+    ...(record.stopReason === "repeat-condition-exhausted" &&
+    record.untilLimit &&
+    typeof record.untilLimit.groupId === "string" &&
+    record.untilLimit.groupId.length <= 200 &&
+    typeof record.untilLimit.occurrenceId === "string" &&
+    record.untilLimit.occurrenceId.length <= 4096 &&
+    Number.isInteger(record.untilLimit.count) &&
+    record.untilLimit.count >= 1 &&
+    record.untilLimit.count <= 100 &&
+    Number.isInteger(record.untilLimit.completedIterations) &&
+    record.untilLimit.completedIterations >= 1 &&
+    record.untilLimit.completedIterations <= record.untilLimit.count
+      ? {
+          untilLimit: {
+            groupId: record.untilLimit.groupId,
+            count: record.untilLimit.count,
+            completedIterations: record.untilLimit.completedIterations,
+            occurrenceId: record.untilLimit.occurrenceId,
+          },
+        }
       : {}),
     conditionCount: record.conditionResults.length,
     failedConditionCount: failed.length,

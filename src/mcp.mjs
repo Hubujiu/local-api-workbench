@@ -14,7 +14,7 @@ import {
 import { failureStopSummary } from "./plan-failure-policy.mjs";
 import { publishDebugVariables } from "./debug-publication.mjs";
 import { conditionSummary } from "./execution-history.mjs";
-import { activePlanStepCount, hasIfSteps } from "./plan-repeat.mjs";
+import { activePlanStepCount, hasPlanConditions } from "./plan-repeat.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
   listImportedExecutionRuns,
@@ -313,7 +313,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存独立快照计划；failurePolicy可选stop以在普通失败后停止整计划，默认continue且不回滚副作用；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100，可选intervalMs为0至10000毫秒，整图潜在等待最多60000毫秒。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte/contains/notContains，operand为{literal}或{scope:globals/environment/runtime/iterationData,name}，contains/notContains仅比较非空文本且区分大小写，不隐式转换；iterationData仅限数据行循环后代的顶层字段。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
+            "保存独立快照计划；failurePolicy可选stop以在普通失败后停止整计划，默认continue且不回滚副作用；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100，可选intervalMs为0至10000毫秒，整图潜在等待最多60000毫秒；repeat可选untilCondition在每轮后判断，达到count仍不满足则失败，同组不支持rows且后代仅HTTP。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte/contains/notContains，operand为{literal}或{scope:globals/environment/runtime/iterationData,name}，contains/notContains仅比较非空文本且区分大小写，不隐式转换；iterationData仅限数据行循环后代的顶层字段。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
@@ -1269,6 +1269,7 @@ export function createMCP({
                     planHash,
                     stopReason,
                     conditionResults,
+                    untilLimit,
                     failureStop,
                   }) => ({
                     id,
@@ -1277,7 +1278,11 @@ export function createMCP({
                     createdAt,
                     planHash,
                     ...(stopReason ? { stopReason } : {}),
-                    ...conditionSummary({ conditionResults, stopReason }),
+                    ...conditionSummary({
+                      conditionResults,
+                      stopReason,
+                      untilLimit,
+                    }),
                     ...failureStopSummary({ stopReason, failureStop }),
                   }),
                 ),
@@ -1552,7 +1557,7 @@ export function createMCP({
                     emitProgress({
                       completed: ++completed,
                       total: totalSteps,
-                      ...(hasIfSteps(plan.steps)
+                      ...(hasPlanConditions(plan.steps)
                         ? { totalIsPotential: true }
                         : {}),
                       ...(step.repeat ? { repeat: step.repeat } : {}),

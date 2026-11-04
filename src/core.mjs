@@ -19,7 +19,7 @@ import {
   evaluatePlanCondition,
   validateConditionScopeInput,
 } from "./plan-condition.mjs";
-import { hasIfSteps } from "./plan-repeat.mjs";
+import { hasPlanConditions, hasRepeatUntil } from "./plan-repeat.mjs";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   postmanVariableMode,
@@ -688,6 +688,11 @@ export function snapshotPlan(plan) {
               ...(step.type === "repeat"
                 ? {
                     count: step.count,
+                    ...(step.untilCondition === undefined
+                      ? {}
+                      : {
+                          untilCondition: structuredClone(step.untilCondition),
+                        }),
                     ...(step.intervalMs === undefined
                       ? {}
                       : { intervalMs: step.intervalMs }),
@@ -804,7 +809,8 @@ export async function runPlan(
     denyNativeWrites(
       activePlanLeaves(snapshot.steps).map((step) => step.request || {}),
     );
-  const conditional = hasIfSteps(snapshot.steps);
+  const conditional = hasPlanConditions(snapshot.steps);
+  const untilEnabled = hasRepeatUntil(snapshot.steps);
   if (conditional) validateConditionScopeInput(variables, variableScopes);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
@@ -820,6 +826,7 @@ export async function runPlan(
   let evidenceBytes = 0,
     evidenceStopped = false,
     conditionStopped = false,
+    untilLimit,
     cursor = 0,
     lastEvidence;
   const evidenceIdentity = (occurrence) => ({
@@ -834,6 +841,9 @@ export async function runPlan(
       step,
       repeat,
       condition,
+      until,
+      iteration,
+      lastIteration,
       occurrenceId,
       skipTo,
       dataContext,
@@ -864,11 +874,12 @@ export async function runPlan(
         stepId: step.id,
         groupId: step.id,
         occurrenceId,
+        ...(until ? { kind: "repeat-until", phase: "after", iteration } : {}),
         status: "passed",
       };
       try {
         decision.matched = evaluatePlanCondition(
-          step.condition,
+          until ? step.untilCondition : step.condition,
           scopes,
           dataContext?.iterationData,
         );
@@ -882,7 +893,18 @@ export async function runPlan(
       lastEvidence = evidenceIdentity(occurrences[cursor]);
       evidenceBytes += Buffer.byteLength(JSON.stringify(decision));
       if (conditionStopped) break;
-      if (!decision.matched) cursor = skipTo - 1;
+      if (until) {
+        if (decision.matched) cursor = skipTo - 1;
+        else if (lastIteration) {
+          untilLimit = {
+            groupId: step.id,
+            count: step.count,
+            completedIterations: iteration + 1,
+            occurrenceId,
+          };
+          break;
+        }
+      } else if (!decision.matched) cursor = skipTo - 1;
       continue;
     }
     const collectionId = step.request?.postmanCollectionId;
@@ -1529,6 +1551,12 @@ export async function runPlan(
       record.progressFailure = progressFailure;
       break;
     }
+    // A completion condition must never continue on a possibly committed scope.
+    // Preserve the prior behavior for plans that do not opt into this feature.
+    if (untilEnabled && record.scopeCommit?.outcome === "unknown") {
+      scopeCommitStopped = true;
+      break;
+    }
     if (stopAfterExtractionFailure) break;
     if (record.failure || record.redirectFailure) break;
     if (
@@ -1577,6 +1605,7 @@ export async function runPlan(
       : !progressFailure &&
           !evidenceStopped &&
           !conditionStopped &&
+          !untilLimit &&
           results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
@@ -1584,6 +1613,9 @@ export async function runPlan(
     ...(failureStop ? { stopReason: "step-failure", failureStop } : {}),
     ...(scopeCommitStopped ? { stopReason: "scope-commit-unknown" } : {}),
     ...(conditionStopped ? { stopReason: "condition-error" } : {}),
+    ...(untilLimit
+      ? { stopReason: "repeat-condition-exhausted", untilLimit }
+      : {}),
     ...(evidenceStopped
       ? {
           stopReason: "evidence-limit",
