@@ -880,15 +880,29 @@ export function createMCP({
                     resolveServiceRequest(p, request, environmentId),
                 },
               );
-              if (output.conditionResults)
-                emitProgress({
-                  completed: output.results.length,
-                  total: totalSteps,
-                  totalIsPotential: true,
-                  finished: true,
-                  status: output.status,
-                  conditions: output.conditionResults.length,
-                });
+              if (output.conditionResults) {
+                try {
+                  await emitProgress({
+                    completed: output.results.length,
+                    total: totalSteps,
+                    totalIsPotential: true,
+                    finished: true,
+                    status: output.status,
+                    conditions: output.conditionResults.length,
+                  });
+                } catch {
+                  // Reporting is not execution. Preserve completed leaf/decision
+                  // evidence and save the reporting failure without replay.
+                  if (output.status !== "cancelled") output.status = "failed";
+                  output.stopReason ||= "progress-failure";
+                  output.progressFailure = {
+                    code: "EXECUTION_PROGRESS_FAILED",
+                    message:
+                      "Execution stopped because progress reporting failed; inspect saved results, do not replay.",
+                    retry_safe: false,
+                  };
+                }
+              }
               output.environmentId = environmentId;
               output = await recordPlanRun(store, p.id, output, "mcp");
               break;

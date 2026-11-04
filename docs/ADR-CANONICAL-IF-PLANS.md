@@ -134,3 +134,16 @@ an unrelated legacy DB catalogue. Existing non-IF linear/repeat behavior is
 unchanged. This is static declaration recognition only; arbitrary script-driven
 database calls retain their existing runtime authorization checks, not a claim of
 complete static discovery. No connection is persisted or borrowed across runs.
+
+
+### Terminal reporting failures
+
+The terminal IF progress callback is awaited before persistence. Synchronous throws
+and rejected promises do not discard completed HTTP or condition evidence: the
+run is marked failed (cancelled stays cancelled), with a sanitized progressFailure
+and retry_safe false. An existing condition-error/evidence-limit stop reason wins;
+otherwise stopReason is progress-failure. No last successful leaf is relabelled.
+The complete result, including this notification failure, is then saved once by the
+normal record path, so reopened history agrees with the returned receipt. This does
+not retrofit unrelated older per-step reporter behavior on the fixed dependency
+base; integration retains its existing per-step progress-failure contract.
