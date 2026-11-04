@@ -222,18 +222,73 @@ export class DatabaseSessions {
       revalidate,
     });
   }
-  async query(projectId, operation, signal) {
-    if (signal?.aborted) throw Error("数据库操作已取消");
-    const resolvedId = this.#connections.has(operation.connectionId)
-      ? operation.connectionId
+  #resolveAuthorized(projectId, connectionId) {
+    const resolvedId = this.#connections.has(connectionId)
+      ? connectionId
       : [...this.#connections].find(
           ([, item]) =>
-            item.projectId === projectId &&
-            item.bindingId === operation.connectionId,
+            item.projectId === projectId && item.bindingId === connectionId,
         )?.[0];
     const item = this.#connections.get(resolvedId);
     if (!item || item.projectId !== projectId)
       throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
+    return { resolvedId, item };
+  }
+  // Authorization-only snapshot: no SQL, driver, connection or config escapes.
+  // Unbound sessions (or sessions without a resolver) retain their existing
+  // session-only checks; they do not establish current imported-source validity.
+  async assertAuthorized(projectId, connectionId, signal) {
+    if (signal?.aborted) throw Error("数据库操作已取消");
+    // Do not let a missing ID alias the undefined binding of an unbound grant.
+    if (typeof connectionId !== "string" || !connectionId)
+      throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
+    const { resolvedId, item } = this.#resolveAuthorized(
+      projectId,
+      connectionId,
+    );
+    const assertLive = () => {
+      if (signal?.aborted) throw Error("数据库操作已取消");
+      if (
+        this.#connections.get(resolvedId) !== item ||
+        item.controller.signal.aborted
+      )
+        throw Error("数据库会话连接已撤销");
+    };
+    assertLive();
+    await this.#checkSource(projectId, item);
+    assertLive();
+  }
+  // Keep batch identities private and pinned across every asynchronous lookup.
+  // A later alias registration cannot replace any grant admitted by this batch.
+  async assertAuthorizedMany(projectId, ids, signal) {
+    if (signal?.aborted) throw Error("数据库操作已取消");
+    const captured = [...ids].map((id) => {
+      if (typeof id !== "string" || !id)
+        throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
+      return this.#resolveAuthorized(projectId, id);
+    });
+    const assertLive = () => {
+      if (signal?.aborted) throw Error("数据库操作已取消");
+      for (const { resolvedId, item } of captured)
+        if (
+          this.#connections.get(resolvedId) !== item ||
+          item.controller.signal.aborted
+        )
+          throw Error("数据库会话连接已撤销");
+    };
+    assertLive();
+    for (const { resolvedId } of captured) {
+      await this.assertAuthorized(projectId, resolvedId, signal);
+      assertLive();
+    }
+    assertLive();
+  }
+  async query(projectId, operation, signal) {
+    if (signal?.aborted) throw Error("数据库操作已取消");
+    const { resolvedId, item } = this.#resolveAuthorized(
+      projectId,
+      operation.connectionId,
+    );
     // Capture this grant, never a later registration with the same binding ID.
     const readSignal = signal
       ? AbortSignal.any([signal, item.controller.signal])

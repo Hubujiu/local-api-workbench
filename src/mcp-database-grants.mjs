@@ -69,6 +69,20 @@ export class MCPDatabaseGrants {
     this.assertProject(projectId, epoch);
     this.#sessions.revoke(projectId, id);
   }
+  // A preflight snapshot is not a durable grant: query still rechecks authority.
+  async preflight(epoch, projectId, ids, signal) {
+    const check = () => {
+      this.assertProject(projectId, epoch);
+      if (signal?.aborted) throw Error("MCP 数据库操作已取消");
+    };
+    check();
+    try {
+      await this.#sessions.assertAuthorizedMany(projectId, ids, signal);
+    } finally {
+      check();
+    }
+    check();
+  }
   async query(epoch, projectId, operation, signal) {
     const check = () => {
       this.assertProject(projectId, epoch);
