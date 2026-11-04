@@ -442,7 +442,7 @@ export function validatePlanProtocolScripts(
       )
         requiresExecutor = true;
     }
-    if (step.type === "repeat")
+    if (["repeat", "if"].includes(step.type))
       requiresExecutor =
         validatePlanProtocolScripts(
           step.steps,

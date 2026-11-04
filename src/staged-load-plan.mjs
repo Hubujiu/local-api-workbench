@@ -1,9 +1,12 @@
 import { performance } from "node:perf_hooks";
+import { isProxy } from "node:util/types";
 import { snapshotPlan, runPlan } from "./core.mjs";
 import {
   activePlanLeaves,
+  hasRepeatSteps,
   hasRuntimeRows,
-  planOccurrences,
+  planLeaves,
+  potentialPlanStepCount,
 } from "./plan-repeat.mjs";
 import {
   selectedEnvironment,
@@ -15,6 +18,8 @@ import { memoryCookieSession } from "./cookie-jar.mjs";
 import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { normalizeRedirect } from "./http-redirect.mjs";
 import { executeRequest } from "./runtime.mjs";
+import { analyzePlanRequirements } from "./plan-requirements.mjs";
+import { liveRequestId } from "./live-plan-reference.mjs";
 
 // Bounded canonical contract. VU changes are linear, based on monotonic time.
 export function buildLoadSchedule(input) {
@@ -96,21 +101,110 @@ export function buildLoadSchedule(input) {
   };
 }
 
-function assertStagedLoadRows(plan) {
-  // Admission is based on definitions, never on the eventual source value or
-  // enabled state. Canonical storage support must not enable this consumer.
-  if (hasRuntimeRows(plan?.steps || []))
-    throw Error("阶段压测尚不支持运行时数据行循环（包括禁用定义）");
+// Prepared objects are not authority. Recheck the bounded schedule and static
+// graph on both entry points, before reading runtime scopes or starting work.
+function scheduleRecord(value, keys) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    isProxy(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    throw Error("阶段压测调度须为普通数据");
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(descriptors).length !== keys.length)
+    throw Error("阶段压测调度字段无效");
+  const result = {};
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
+      throw Error("阶段压测调度不能包含访问器");
+    result[key] = descriptor.value;
+  }
+  return result;
 }
 
-export function prepareStagedLoad(project, plan, input, options = {}) {
-  assertStagedLoadRows(plan);
-  const schedule = buildLoadSchedule(input);
-  const snapshot = snapshotPlan(plan);
+function admitSchedule(input) {
+  // Never invoke caller hooks, even while copying a forged prepared schedule.
+  // Capture own data descriptors once, then validate exactly the copy we use.
+  const schedule = scheduleRecord(input, [
+    "initialVUs",
+    "maxIterations",
+    "reportIntervalSeconds",
+    "durationMs",
+    "changes",
+  ]);
+  const changes = schedule.changes;
+  if (
+    isProxy(changes) ||
+    !Array.isArray(changes) ||
+    Object.getPrototypeOf(changes) !== Array.prototype
+  )
+    throw Error("阶段压测调度变化须为普通数组");
+  const length = Object.getOwnPropertyDescriptor(changes, "length").value;
+  if (length > 100) throw Error("阶段压测调度变化无效或超限");
+  const descriptors = Object.getOwnPropertyDescriptors(changes);
+  if (Reflect.ownKeys(descriptors).length !== length + 1)
+    throw Error("阶段压测调度变化无效或超限");
+  schedule.changes = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = descriptors[index];
+    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
+      throw Error("阶段压测调度变化不能包含空洞或访问器");
+    schedule.changes.push(scheduleRecord(descriptor.value, ["atMs", "vus"]));
+  }
+  if (
+    !schedule ||
+    !Number.isInteger(schedule.initialVUs) ||
+    schedule.initialVUs < 0 ||
+    schedule.initialVUs > 10 ||
+    !Number.isInteger(schedule.maxIterations) ||
+    schedule.maxIterations < 1 ||
+    schedule.maxIterations > 100 ||
+    !Number.isInteger(schedule.reportIntervalSeconds) ||
+    schedule.reportIntervalSeconds < 1 ||
+    schedule.reportIntervalSeconds > 10 ||
+    !Number.isInteger(schedule.durationMs) ||
+    schedule.durationMs < 1000 ||
+    schedule.durationMs > 60000 ||
+    !Array.isArray(schedule.changes) ||
+    schedule.changes.length > 100
+  )
+    throw Error("阶段压测调度无效");
+  let previous = 0;
+  let maximum = schedule.initialVUs;
+  for (const change of schedule.changes) {
+    if (
+      !change ||
+      !Number.isInteger(change.atMs) ||
+      change.atMs < previous ||
+      change.atMs > schedule.durationMs ||
+      !Number.isInteger(change.vus) ||
+      change.vus < 0 ||
+      change.vus > 10
+    )
+      throw Error("阶段压测调度无效");
+    previous = change.atMs;
+    maximum = Math.max(maximum, change.vus);
+  }
+  if (!maximum) throw Error("阶段压测至少需要一个 VU");
+  return schedule;
+}
+
+function admitPlan(plan, schedule) {
+  const snapshot = snapshotPlan(plan, { allowRuntimeRows: true });
+  // Even disabled live references must be frozen by the server first.
+  for (const step of planLeaves(snapshot.steps))
+    if (liveRequestId(step) !== undefined)
+      throw Error("实时计划须先在项目快照中冻结引用");
   if (Buffer.byteLength(JSON.stringify(snapshot)) > 1024 * 1024)
     throw Error("阶段压测计划快照超过 1 MiB");
-  const leaves = activePlanLeaves(snapshot.steps);
-  const worstCaseSteps = planOccurrences(snapshot.steps).length;
+  const leaves = activePlanLeaves(snapshot.steps, { allowRuntimeRows: true });
+  // Preserve legacy linear metadata admission; control graphs alone need the
+  // strict model validator and multiplicity calculation.
+  const worstCaseSteps = hasRepeatSteps(snapshot.steps)
+    ? potentialPlanStepCount(snapshot, { allowRuntimeRows: true })
+    : leaves.length;
   if (
     !leaves.length ||
     worstCaseSteps < 1 ||
@@ -131,6 +225,21 @@ export function prepareStagedLoad(project, plan, input, options = {}) {
       throw Error("阶段压测暂不支持 collection 作用域或重定向策略");
   }
   denyNativeWrites(leaves.map((step) => step.request));
+  // Runtime rows must admit all potential work before their producer runs.
+  // Keep legacy no-runtime-row DB failure timing in the existing runner.
+  if (hasRuntimeRows(snapshot.steps, { activeOnly: true })) {
+    const requirements = analyzePlanRequirements(snapshot, {
+      allowRuntimeRows: true,
+    });
+    if (requirements.executorTypes.some((type) => type !== "http"))
+      throw Error("阶段压测仅支持 HTTP，不能执行数据库操作");
+  }
+  return snapshot;
+}
+
+export function prepareStagedLoad(project, plan, input, options = {}) {
+  const schedule = buildLoadSchedule(input);
+  const snapshot = admitPlan(plan, schedule);
   const selected = selectedEnvironment(
     project,
     options.environmentId || snapshot.environmentId,
@@ -139,10 +248,12 @@ export function prepareStagedLoad(project, plan, input, options = {}) {
 }
 
 export async function runStagedLoad(project, prepared, options = {}) {
-  const { schedule, snapshot, selected } = prepared;
-  // Direct callers can supply or change a prepared snapshot. Reject before
-  // scopes, timers, scripts, credentials, or transports are touched.
-  assertStagedLoadRows(snapshot);
+  const schedule = admitSchedule(prepared.schedule);
+  const snapshot = admitPlan(prepared.snapshot, schedule);
+  const runtimeRowsEnabled = hasRuntimeRows(snapshot.steps, {
+    activeOnly: true,
+  });
+  const selected = selectedEnvironment(project, prepared.selected?.id);
   const variables =
     options.variables || environmentVariables(project, selected.id);
   const scopes = projectScopes(project, selected.id, variables);
@@ -154,7 +265,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const timers = [];
   let deadlineTimer, reportTimer;
   const samples = new Map(
-    activePlanLeaves(snapshot.steps).map((step) => [
+    activePlanLeaves(snapshot.steps, { allowRuntimeRows: true }).map((step) => [
       step.id,
       { count: 0, failed: 0, durations: [], receivedBytes: 0 },
     ]),
@@ -166,6 +277,14 @@ export async function runStagedLoad(project, prepared, options = {}) {
     active = 0,
     running = 0,
     mainRequests = 0;
+  // Fixed aggregate vocabulary only. Never expose source values or core errors.
+  const iterationOutcomes = {
+    passed: 0,
+    failed: 0,
+    cancelled: 0,
+    runtimeRowsInvalid: 0,
+    executionError: 0,
+  };
   let stopReason;
   let resolveDone;
   const done = new Promise((resolve) => {
@@ -194,6 +313,9 @@ export async function runStagedLoad(project, prepared, options = {}) {
       completed,
       failed,
       mainRequests,
+      ...(runtimeRowsEnabled
+        ? { iterationOutcomes: { ...iterationOutcomes } }
+        : {}),
       stepCompletionsPerSecond: rate(totalStepCompletions),
       iterationsCompletedPerSecond: rate(completed),
       steps: [...samples].map(([stepId, item]) => ({
@@ -265,6 +387,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
               return executeRequest(definition, signal, transport);
             },
             {
+              allowRuntimeRows: true,
               signal: controller.signal,
               executionContext: {
                 environment: {
@@ -299,9 +422,21 @@ export async function runStagedLoad(project, prepared, options = {}) {
           );
           completed++;
           if (result.status !== "passed") failed++;
+          const outcome =
+            result.status === "cancelled"
+              ? "cancelled"
+              : result.runtimeRowsFailure?.code === "PLAN_RUNTIME_ROWS_INVALID"
+                ? "runtimeRowsInvalid"
+                : result.status === "passed"
+                  ? "passed"
+                  : "failed";
+          iterationOutcomes[outcome]++;
         } catch {
           completed++;
           failed++;
+          iterationOutcomes[
+            controller.signal.aborted ? "cancelled" : "executionError"
+          ]++;
         } finally {
           running--;
           progress();
