@@ -134,3 +134,51 @@ test("fixed repeat occurrence identities stay unchanged", () => {
     ['["r","x",0]', '["r","x",1]'],
   );
 });
+
+test("staged load keeps data rows isolated per iteration and out of progress reports", async (t) => {
+  const { prepareStagedLoad, runStagedLoad } = await import(
+    "../src/staged-load-plan.mjs"
+  );
+  const { Store } = await import("../src/runtime.mjs");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const seen = [];
+  const peer = createServer((req, res) => {
+    seen.push(req.headers["x-row"]);
+    res.end("ok");
+  });
+  await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+  const root = await mkdtemp(join(tmpdir(), "staged-rows-"));
+  const store = new Store(root);
+  await store.init();
+  const project = await store.create("rows");
+  t.after(async () => {
+    peer.closeAllConnections();
+    await new Promise((resolve) => peer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const g = group(`http://127.0.0.1:${peer.address().port}/`);
+  g.rows = [{ name: "unique-alice" }, { name: "unique-bob" }];
+  g.steps[0].request.headers = [{ key: "x-row", value: "{{rowName}}" }];
+  const prepared = prepareStagedLoad(
+    project,
+    { steps: [g] },
+    {
+      initialVUs: 2,
+      stages: [{ durationSeconds: 2, targetVUs: 2 }],
+      maxIterations: 2,
+    },
+  );
+  const reports = [];
+  const result = await runStagedLoad(project, prepared, {
+    onProgress: (report) => reports.push(report),
+  });
+  assert.equal(result.failed, 0);
+  assert.equal(result.mainRequests, 4);
+  assert.equal(seen.filter((x) => x === "unique-alice").length, 2);
+  assert.equal(seen.filter((x) => x === "unique-bob").length, 2);
+  assert(!JSON.stringify(reports).includes("unique-alice"));
+  assert(!JSON.stringify(reports).includes("unique-bob"));
+  assert.equal(project.environments[0].variables.rowName, undefined);
+});
