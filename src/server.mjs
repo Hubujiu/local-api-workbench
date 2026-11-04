@@ -2390,27 +2390,33 @@ export async function createApp({
               debugEnvironments,
             );
             const { controller, runId } = claimRun(b.runId);
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
             try {
-              return json(
-                res,
-                200,
-                await runLoad(p, b.request, {
-                  cookieState: await projectCookieSession(
-                    store,
-                    p,
-                    context.environment.id,
-                  ).inspect(),
-                  mode: b.mode,
-                  durationSeconds: b.durationSeconds,
-                  dataCSV: b.dataCSV,
-                  count: b.count,
-                  concurrency: b.concurrency,
-                  environmentId: context.environment.id,
-                  variables: context.variables,
-                  signal: controller.signal,
-                }),
-              );
+              const result = await runLoad(p, b.request, {
+                cookieState: await projectCookieSession(
+                  store,
+                  p,
+                  context.environment.id,
+                ).inspect(),
+                mode: b.mode,
+                durationSeconds: b.durationSeconds,
+                dataCSV: b.dataCSV,
+                count: b.count,
+                concurrency: b.concurrency,
+                environmentId: context.environment.id,
+                variables: context.variables,
+                signal: controller.signal,
+              });
+              if (!res.destroyed) return json(res, 200, result);
+              return;
             } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
               controllers.delete(runId);
             }
           }
