@@ -1055,6 +1055,7 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (config.type === "oauth1") return importPostmanOAuth1(config.oauth1);
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1113,7 +1114,6 @@ export function importDocument(doc) {
               .map((key) => [key, values[key]]),
           ),
         };
-      if (config.type === "oauth1") return importPostmanOAuth1(config.oauth1);
       if (config.type === "oauth2")
         return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
