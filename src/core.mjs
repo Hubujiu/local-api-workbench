@@ -1,3 +1,4 @@
+import { importPostmanRawBody } from "./postman-raw-body.mjs";
 import { importPostmanGraphQLBody } from "./postman-graphql-body.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
@@ -1224,6 +1225,9 @@ export function importDocument(doc) {
             })),
             bodyType: graphql?.bodyType ?? mode,
             body: disabled ? "" : graphql ? graphql.body : body.raw || "",
+            ...(!disabled && body.mode === "raw"
+              ? importPostmanRawBody(body)
+              : {}),
             form: (disabled
               ? []
               : body.mode === "urlencoded"

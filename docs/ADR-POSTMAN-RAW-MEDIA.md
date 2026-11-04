@@ -1,0 +1,25 @@
+# Deferred Postman raw-body media defaults
+
+Status: RED/design checkpoint, not delivered. Fixed dependency PR51 at 0118e16c1f0b2f949d7801d9590a8f878581d480 remains unmerged. No new library, frontend, file upload or original runtime execution.
+
+## Proven gap and reference
+
+Official Apache-2.0 postman-runtime 994227833937323480ceda4682609ae3a5c41284 `lib/requester/core-body-builder.js` blob 68ea0b25dd93301d1834be6fff131fcfbb484986 generates a system Content-Type for nonempty raw bodies: lowercase html→text/html, xml→application/xml, javascript→application/javascript, text/absent/unknown→text/plain (json→application/json has additional existing constraints below). This is not merely an editor hint. `core.js` blob a1936bbc8df2e5dd7bc7f576bfb15185051c6ed7 invokes the builder then extracts enabled headers; `requester.js` blob 3bd8a9e30290c4503c7ffb47b0cd93516e782642 passes these options to the postman-request wrapper. `item.command.js` blob 9d45c331eefb7f652b428506ca939647c6f4499a executes pre-scripts and applies header/body changes first.
+
+The existing importer keeps only json-versus-raw and loses non-JSON language; the raw sender has no generated Content-Type. Thus the ordinary nonempty POST XML input without an explicit header changes its media contract. PRs1–95 were checked: PR51 owns GraphQL/body-mode support and leaves this conditional unchanged; PR66 response examples and PR69 multipart part media do not implement it.
+
+## Intended bounded model
+
+Add source-specific `postmanRawBody:{version:1,language}` only to imported non-JSON raw bodies. Preserve it in normalization, frozen plans, store and backup/restore. Do not append an explicit header at import time: scripts must see their authored headers, and the default is selected after pre-scripts. For an active, nonempty raw body, derive media from the marker only if no enabled case-insensitive Content-Type exists. Enabled empty Content-Type is an explicit override; disabled-only headers permit fallback. Existing duplicate Content-Type refusal stays unchanged. Ordinary canonical raw requests without the marker stay unchanged.
+
+Empty raw bodies generate no default; whitespace is nonempty. Methods GET/HEAD with nonempty marked raw bodies must reject before network instead of silently adopting the upstream method-pruning behavior or changing native raw semantics. Unsupported outer protocolProfileBehavior is explicitly outside this slice and must reject for selected marked requests rather than guessing disableBodyPruning/disabledSystemHeaders.
+
+SDK5.3.1 RequestBody (`e2453a5c1eb23f92f09df68712b30a87f775bb6d`, blob e920ca66ff79a0c0cdc3fefcc8f314fcf7360fd4) successful update replaces options; string update resets language to text. Marked script updates must follow that rule without changing old unmarked shortcut semantics. Explicit raw language changes and header changes affect the late default. Existing form switches remain form semantics; no file capability is added.
+
+JSON is not generalized here. Existing imported JSON remains the existing canonical JSON path. Official presend strips comments (`request-helpers-presend.js`, blob 4dcfb0364c1f5508dc82159819a760c9edee6e56), and empty JSON differs from the canonical fallback object. A marked request that scripts switch to JSON must remain within a validated nonempty JSON subset, not silently claim JSONC or empty-body parity.
+
+Static exports must either materialize the known media default without changing explicit headers or explicitly reject when scripts/dynamic behavior prevents faithful prediction; they must not discard the marker silently. Root integration separately checks native exporters unavailable in this minimal base.
+
+## Planned validation
+
+Dependency-free RED tests exercise the extracted original conversion and fail on all four lost identities. True owner import→freeze→loopback bytes/media→scripts/results→backup/restart/isolation contracts will be authored for normal exact CI; local owner executions are zero while node-oauth1 is unavailable, with no dependency-resolution workaround. Cover explicit mixed-case/empty/disabled headers, empty/whitespace bodies, raw script changes, bounded JSON/form transitions, GET/HEAD and unsupported-config zero-wire failures, atomic invalid mixed imports and static export roundtrips. No VM/XML parser or original execution is part of local validation.
