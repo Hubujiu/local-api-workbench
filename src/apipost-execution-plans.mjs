@@ -69,7 +69,7 @@ export function prepareDirectoryPlans(
   source,
   flows,
   project,
-  { normalizeRequest, snapshotPlan },
+  { normalizeRequest, snapshotPlan, modelNameMode },
 ) {
   if (!flows.length) return [];
   if (
@@ -196,6 +196,7 @@ export function prepareDirectoryPlans(
           cases: [],
           plans: [],
         },
+        { modelNameMode },
       );
       if (converted.requests.length !== 1)
         throw Error("原版计划快照转换结果不唯一");

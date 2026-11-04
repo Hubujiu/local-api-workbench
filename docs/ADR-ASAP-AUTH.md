@@ -25,6 +25,13 @@ rule takes precedence over a symmetric default found in a public source UI.
 This is a request signer; the recipient must already trust the issuer/public key.
 It does not provide server verification, replay storage or clock synchronization.
 OpenAPI exports a Bearer security scheme without credentials. cURL export refuses
-rather than emitting a stale signed token. Postman/Apipost ASAP import remains
-unsupported because source `exp` units/semantics have not been established; the
-runtime rejects an explicit legacy `exp` rather than guessing a lifetime.
+rather than emitting a stale signed token. Postman ASAP import remains unsupported.
+The native Apipost adapter now has a bounded canonical definition contract in
+[ADR-NATIVE-ASAP-CANONICAL-ROUNDTRIP.md](ADR-NATIVE-ASAP-CANONICAL-ROUNDTRIP.md):
+static original evidence establishes native `exp` as a duration, and conversion
+uses explicit `ttlSeconds`. Adapter implementation is pending ordinary CI
+acceptance; it is not original execution or wire-equivalence validation. The
+runtime still rejects an explicit legacy `exp` rather than guessing a lifetime.
+Native conversion rejects unsupported definitions (including legacy PEM key
+envelopes) without changing ordinary signer support; full project backups retain
+those definitions unchanged.

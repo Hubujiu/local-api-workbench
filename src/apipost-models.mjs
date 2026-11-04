@@ -1,6 +1,16 @@
+import {
+  modelNameMode as resolveModelNameMode,
+  validatePreservedModelName,
+} from "./apipost-model-name-mode.mjs";
 import { schemaChildMode } from "../public/schema-positions.js";
 // Independent mapping of the documented modern interchange model fields.
-export function prepareApipostModels(models, resource, projectName) {
+export function prepareApipostModels(
+  models,
+  resource,
+  projectName,
+  options = {},
+) {
+  const mode = resolveModelNameMode(options.modelNameMode);
   if (!Array.isArray(models) || models.length > 100)
     throw Error("Apipost模型最多100项");
   const ids = new Map(),
@@ -204,7 +214,10 @@ export function prepareApipostModels(models, resource, projectName) {
     schemas[id] = schema;
     dictionary.push({
       id,
-      name: projectName + " / " + String(model.display_name || model.name),
+      name:
+        mode === "preserve"
+          ? validatePreservedModelName(model.display_name || model.name)
+          : projectName + " / " + String(model.display_name || model.name),
       ...(["0", ""].includes(parent(model))
         ? {}
         : { folderId: resource("model-folder", parent(model)) }),

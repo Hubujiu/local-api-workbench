@@ -243,7 +243,11 @@ function scriptTasks(value, phase, internalOrigins = false) {
       provenance,
   };
 }
-export function importModernApipost(source, project, { sync = false } = {}) {
+export function importModernApipost(
+  source,
+  project,
+  { sync = false, modelNameMode } = {},
+) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
   if (!isModernApipost(source)) throw Error("Apipost现代JSON结构不完整");
   for (const [key, value] of Object.entries(source))
@@ -262,7 +266,9 @@ export function importModernApipost(source, project, { sync = false } = {}) {
       reject(value, key);
   const resource = apipostResourceFactory(source.project_id);
   for (const name of ["automated_testings"]) reject(source[name], name);
-  const models = prepareApipostModels(source.models, resource, source.name);
+  const models = prepareApipostModels(source.models, resource, source.name, {
+    modelNameMode,
+  });
   const global = source.global;
   const knownGlobal = new Set([
     "envs",
@@ -1013,6 +1019,11 @@ export function importModernApipost(source, project, { sync = false } = {}) {
     components.schemas[key] = schema;
   }
   const dictionary = mergeResources(project.dictionary, models.dictionary);
+  if (
+    modelNameMode === "preserve" &&
+    new Set(dictionary.map((m) => m.name)).size !== dictionary.length
+  )
+    throw Error("Apipost模型名称冲突，请导入新项目");
   const modelFolders = mergeResources(project.modelFolders, models.folders);
   validateModelFolders({ dictionary, modelFolders });
   return {
