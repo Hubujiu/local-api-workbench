@@ -34,9 +34,9 @@ Scope: public native `websocket2.message[].request` with exact `mode`/`raw` lite
 - Text remains text and empty text requires its existing importer-owned `sendEmptyMessage` intent. No relaxation of definition equality, group completeness, private handshake rejection, plain `ws:` restriction, or frozen-plan refusal.
 - JSON and directory exports reimport for two generations. Preserve message order and source raw representation, including hex case and inert response examples. Different source projects with identical target/message IDs must remain independent.
 
-### Proposed minimal production change (not applied)
+### Minimal production change
 
-In `prepareProtocolExport`, classify supported source `request.mode` before the empty-text intent check. Only text mode should require `sendEmptyMessage` for empty raw. Binary modes require the corresponding encoded definition and no text-only flags. Keep `prepareNativeProtocols` reconstruction and exact `verifyProtocolDefinitions` as the final whole-graph oracle; do not rebuild sources from arbitrary canonical payloads or weaken equality to byte equivalence. The importer dependency owns strict mode parsing and size admission.
+In `prepareProtocolExport`, only base64/hexadecimal source modes bypass the empty-text intent check. Binary modes still require the corresponding encoded definition and no text-only flags through unchanged `prepareNativeProtocols` reconstruction and exact `verifyProtocolDefinitions`, the final whole-graph oracle. Sources are never rebuilt from arbitrary canonical payloads and byte equivalence never replaces definition equality. The importer dependency owns strict mode parsing and size admission.
 
 ### Test phases and evidence
 
@@ -45,3 +45,10 @@ In `prepareProtocolExport`, classify supported source `request.mode` before the 
 After the reviewed import dependency is supplied, rerun the tests before production edits to establish actual export RED. Only then implement the scoped exporter change and execute both-format owner roundtrip, backup/reopen, and explicit local WebSocket wire assertions. The server records exact hexadecimal bytes and binary flags, including NUL/non-UTF8 and empty payloads. Import, export, restore and reopen assert zero peer connections. Tests use loopback only and clean temporary projects and listeners.
 
 Negative cases cover removed whole groups or individual definitions, missing provenance, changed bytes/encoding, source mismatch, split folders, private or stripped handshake credentials, WSS, unknown fields/modes, malformed/oversized literals and frozen plans. Do not report these assertions as exercised while import prerequisite still fails.
+
+
+### Dependency-backed RED and local GREEN
+
+The reviewed importer-only dependency was merged at local `eced9af6abd9d383c9f8c8ce8f979970378ec06e` (tree `5204778643f4c5203e6ceeb73d9c46fb3a15ec0d`). With the negative fixture's absent handshake constructed explicitly, the untouched exporter yielded three passing negative cases and three real export failures: both owner formats and cross-source generations rejected empty binary with the text-only empty-send-intent error. This is distinct from the earlier six import prerequisite failures.
+
+The minimal exporter condition change then passed the 12-case focused batch, including both formats' real owner import/save, two export/reimport generations, project backup/restore and server close/reopen. Each format explicitly executed six frames: Unicode/NUL text, empty text, base64 binary, mixed-case hexadecimal binary, empty base64 binary and empty hex binary. Independent peer observations verified exact bytes and text/binary flags. Conversion, restore and reopen opened no peer connections. Malformed source, edited canonical data/encoding, provenance changes, incomplete groups, unknown fields, private handshake, WSS and frozen-plan refusals passed without mutation. No original runtime, public-network target, new dependency, commit, push, merge to main, or deployment was performed.

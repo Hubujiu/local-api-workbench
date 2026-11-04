@@ -226,7 +226,7 @@ test("binary export source groups reject edits and unsafe reconstruction atomica
     [
       "private handshake",
       (p) => {
-        p.protocols[2].handshake.requiredHeaders = ["authorization"];
+        p.protocols[2].handshake = { requiredHeaders: ["authorization"] };
       },
     ],
     [
