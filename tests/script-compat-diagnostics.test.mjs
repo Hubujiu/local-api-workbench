@@ -7,6 +7,7 @@ import {
 import { scriptFailureDetails } from "../src/script-diagnostics.mjs";
 import { runScript } from "../src/scripts.mjs";
 import { workerFailureMetadata } from "./helpers/worker-rejection-diagnostics.mjs";
+import { cliResultMetadata } from "./helpers/cli-result-diagnostics.mjs";
 import { projectWorkerFailure } from "../scripts/core-worker-observations.mjs";
 import { executionResultMetadata } from "./helpers/execution-result-diagnostics.mjs";
 
@@ -122,6 +123,19 @@ test("failure diagnostics carry bounded breakdown through runtime and test proje
     publicResult.scriptDiagnostics.compatibilityOperation,
     "compatibility-eval",
   );
+  const cli = cliResultMetadata(
+    JSON.stringify({
+      status: "failed",
+      results: [{ status: "failed", ...publicResult }],
+    }),
+  );
+  assert.equal(
+    cli.steps[0].compatibilityDiagnostics.operation,
+    "compatibility-eval",
+  );
+  assert(
+    Number.isSafeInteger(cli.steps[0].compatibilityDiagnostics.evaluationMs),
+  );
   const projected = executionResultMetadata({
     status: "failed",
     error: caught.message,
@@ -139,4 +153,37 @@ test("failure diagnostics carry bounded breakdown through runtime and test proje
     "compatibility-eval",
   );
   assert(Buffer.byteLength(JSON.stringify(packet)) < 2048);
+});
+
+test("CLI projection keeps four maximum breakdowns bounded and excludes extra values", () => {
+  const diagnostics = {
+    compatibilityOperation: "compatibility-eval",
+    activityBudgetMs: 250,
+    compatibilityMs: 60000,
+    compatibilityCPUUs: 60000000,
+  };
+  for (const prefix of [
+    "MockAsset",
+    "MockInstall",
+    "SourceBuild",
+    "Evaluation",
+  ]) {
+    diagnostics["compat" + prefix + "Ms"] = 60000;
+    diagnostics["compat" + prefix + "CPUUs"] = 60000000;
+  }
+  diagnostics.privateField = "private-diagnostic-value";
+  const input = JSON.stringify({
+    status: "failed",
+    results: Array.from({ length: 4 }, () => ({
+      status: "failed",
+      scriptStage: "compatibility",
+      scriptDiagnostics: diagnostics,
+    })),
+  });
+  const projected = cliResultMetadata(input);
+  assert.equal(Object.keys(projected.steps).length, 4);
+  assert.equal(projected.steps[3].compatibilityDiagnostics.evaluationMs, 60000);
+  const output = JSON.stringify(projected);
+  assert(Buffer.byteLength(output) < 4096);
+  assert(!output.includes("private-diagnostic-value"));
 });

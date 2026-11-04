@@ -35,6 +35,20 @@ function stepMetadata(step, index) {
   raw.elapsedMs = own(source, "elapsedMs");
   raw.activityMetrics = source;
   raw.activityCPUTimeUs = object();
+  const compatibility = object();
+  compatibility.version = 1;
+  compatibility.operation = own(source, "compatibilityOperation");
+  for (const prefix of [
+    "MockAsset",
+    "MockInstall",
+    "SourceBuild",
+    "Evaluation",
+  ]) {
+    const field = prefix[0].toLowerCase() + prefix.slice(1);
+    compatibility[field + "Ms"] = own(source, "compat" + prefix + "Ms");
+    compatibility[field + "CPUUs"] = own(source, "compat" + prefix + "CPUUs");
+  }
+  raw.compatibilityDiagnostics = compatibility;
   for (const phase of phases)
     raw.activityCPUTimeUs[`${phase}Us`] = own(source, `${phase}CPUUs`);
   Object.assign(result, workerFailureMetadata(raw));
