@@ -143,7 +143,10 @@ and rejected promises do not discard completed HTTP or condition evidence: the
 run is marked failed (cancelled stays cancelled), with a sanitized progressFailure
 and retry_safe false. An existing condition-error/evidence-limit stop reason wins;
 otherwise stopReason is progress-failure. No last successful leaf is relabelled.
-The complete result, including this notification failure, is then saved once by the
+Cancellation that arrives while the terminal callback settles takes precedence
+whether that callback resolves or rejects; completed leaf and decision evidence
+and any existing stop reason remain intact. The complete result, including this
+notification failure, is then saved once by the
 normal record path, so reopened history agrees with the returned receipt. This does
 not retrofit unrelated older per-step reporter behavior on the fixed dependency
 base; integration retains its existing per-step progress-failure contract.
