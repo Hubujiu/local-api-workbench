@@ -800,7 +800,11 @@ test(
     assert.equal(copyResponse.status, 201);
     const copy = await copyResponse.json();
     assert.notEqual(copy.id, p.id);
-    assert.equal(copy.requestDefinitionHistory.projectId, copy.id);
+    assert.equal(copy.requestDefinitionHistory, undefined);
+    assert.equal(
+      (await new Store(root).get(copy.id)).requestDefinitionHistory.projectId,
+      copy.id,
+    );
     assert.equal(
       (await call(client, copy.id, "list_api_definition_history")).isError,
       true,
@@ -891,8 +895,8 @@ test(
     const legacy = structuredClone(p);
     delete legacy.requestDefinitionHistory;
     legacy.requests[0].body = "x".repeat(2 * 1024 * 1024);
-    // Model an already persisted pre-feature definition. No new definition save
-    // may bypass the current snapshot budget; only this test fixture writes it.
+    // Model an already persisted pre-feature definition. Current and snapshot
+    // capacity are separate from the bounded MCP detail transport.
     await writeProject(app.store.directory(p.id), legacy);
     const client = await connectStdio(t, root, p.id);
     const list = decode(
@@ -967,31 +971,126 @@ test(
 );
 
 test(
-  "owner backup restore rejects double-encoded string envelope over 12 MiB without creating a project",
+  "owner backup restore accepts legacy string envelopes above 12 MiB under its dedicated 64 MiB bound",
   { timeout: 30000 },
   async (t) => {
     const { app, root, headers, p } = await fixture(t);
     const { stringBody } = escapedBackup(p);
     const before = await app.store.list();
-    let response;
-    try {
-      response = await fetch(app.url + "/api/restore", {
-        method: "POST",
-        headers,
-        body: stringBody,
-      });
-    } catch (error) {
-      // Node may close the oversized incoming stream before a 400 can be sent.
-      assert(error instanceof TypeError);
-      assert.match(error.cause?.code || "", /ECONNRESET|EPIPE|UND_ERR_SOCKET/);
+    const response = await fetch(app.url + "/api/restore", {
+      method: "POST",
+      headers,
+      body: stringBody,
+    });
+    assert.equal(response.status, 201, await response.clone().text());
+    const restored = await response.json();
+    const disk = await new Store(root).get(restored.id);
+    assert.equal((await app.store.list()).length, before.length + 1);
+    assert.deepEqual(disk.documents, escapedBackup(p).document.documents);
+    assert.deepEqual(
+      disk.requestDefinitionHistory.entries,
+      p.requestDefinitionHistory.entries,
+    );
+    assert.equal(disk.requestDefinitionHistory.projectId, restored.id);
+  },
+);
+
+test(
+  "owner editable responses omit history without losing client edits, while explicit backup remains complete",
+  { timeout: 15000 },
+  async (t) => {
+    const { app, root, headers, p } = await fixture(t);
+    const url = app.url + "/api/projects/" + p.id;
+    const before = await app.store.get(p.id);
+    const response = await fetch(url, { headers });
+    assert.equal(response.status, 200);
+    const editable = await response.json();
+    assert.equal(Object.hasOwn(editable, "requestDefinitionHistory"), false);
+    const expected = structuredClone(before);
+    delete expected.requestDefinitionHistory;
+    assert.deepEqual(editable, expected);
+    editable.name = "Client name retained";
+    editable.requests[0].name = "Client API edit retained";
+    const savedResponse = await fetch(url, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(editable),
+    });
+    assert.equal(savedResponse.status, 200, await savedResponse.clone().text());
+    const saved = await savedResponse.json();
+    assert.equal(Object.hasOwn(saved, "requestDefinitionHistory"), false);
+    assert.equal(saved.name, editable.name);
+    assert.equal(saved.requests[0].name, editable.requests[0].name);
+    const disk = await new Store(root).get(p.id);
+    const oldEntry = before.requestDefinitionHistory.entries.find(
+      (e) => e.requestId === "api",
+    );
+    const newEntry = disk.requestDefinitionHistory.entries.find(
+      (e) => e.requestId === "api",
+    );
+    assert.deepEqual(newEntry.versions.slice(0, -1), oldEntry.versions);
+    assert.deepEqual(newEntry.versions.at(-1).definition, before.requests[0]);
+    assert.equal(newEntry.currentVersion, oldEntry.currentVersion + 1);
+    assert.deepEqual(disk.requests[1], before.requests[1]);
+    const backup = await fetch(url + "/export", { headers }).then((r) =>
+      r.json(),
+    );
+    assert.deepEqual(backup, disk);
+    const stale = await fetch(url, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(editable),
+    });
+    assert.equal(stale.status, 400);
+    assert.deepEqual(await app.store.get(p.id), disk);
+  },
+);
+
+test(
+  "ordinary owner input stays 12 MiB and backups above 64 MiB fail without a new identity",
+  { timeout: 30000 },
+  async (t) => {
+    const { app, root, headers, p } = await fixture(t);
+    const before = await app.store.list();
+    const original = await app.store.get(p.id);
+    for (const [route, method, document, expectedLimit] of [
+      [
+        "/api/projects/" + p.id,
+        "PUT",
+        { ...p, description: "x".repeat(12 * 1024 * 1024) },
+        "12 MiB",
+      ],
+      [
+        "/api/restore",
+        "POST",
+        { document: { ...p, description: "x".repeat(64 * 1024 * 1024) } },
+        "64 MiB",
+      ],
+    ]) {
+      let response;
+      try {
+        response = await fetch(app.url + route, {
+          method,
+          headers,
+          body: JSON.stringify(document),
+        });
+      } catch (error) {
+        assert(error instanceof TypeError);
+        assert.match(
+          error.cause?.code || "",
+          /ECONNRESET|EPIPE|UND_ERR_SOCKET/,
+        );
+      }
+      if (response) {
+        assert.equal(response.status, 400);
+        assert((await response.json()).error.includes(expectedLimit));
+      }
+      assert.deepEqual(await new Store(root).list(), before);
+      assert.deepEqual(await app.store.get(p.id), original);
+      assert.equal(
+        (await fetch(app.url + "/api/projects", { headers })).status,
+        200,
+      );
     }
-    if (response) {
-      assert.equal(response.status, 400);
-      assert.match((await response.json()).error, /12 MiB/);
-    }
-    const healthy = await fetch(app.url + "/api/projects", { headers });
-    assert.equal(healthy.status, 200);
-    assert.deepEqual(await healthy.json(), before);
-    assert.deepEqual(await new Store(root).list(), before);
   },
 );

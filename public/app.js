@@ -2247,7 +2247,10 @@ function bind() {
                 : $("#import-text").value;
         if (stopped()) throw Error("导入已取消或目标项目已变化");
         if ($("#import-mode").value === "restore") {
-          const restored = await api("/restore", "POST", { document });
+          const restored = await api("/restore", "POST", {
+            document:
+              typeof document === "string" ? JSON.parse(document) : document,
+          });
           projects = await api("/projects");
           await openProject(restored.id);
         } else {

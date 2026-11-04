@@ -1,5 +1,44 @@
 # API definition history and restore (WIP)
 
+## Large-definition compatibility correction (WIP, 2026-11-04)
+
+Feature head `250a2b0c81e72a60057435d46eb75ad46d28332a`, tree
+`38cd3f267b9649ae63e52e21d61dd8de0f01fbf8`, passed exact
+[CI 41798142616](https://github.com/Hubujiu/local-api-workbench/actions/runs/41798142616)
+with all 25 jobs. Subsequent composition review nevertheless found a real
+compatibility defect: its new 1 MiB current/snapshot gate and 12 MiB whole-project
+save gate rejected previously admissible large raw definitions. A green run did
+not cover that boundary. The correction below is new WIP and needs its own CI.
+
+The limits below are Workbench implementation quotas, not original Apipost facts.
+Ordinary owner input remains 12 MiB. Current definitions are not pre-admitted
+against a history snapshot quota, and project persistence is not capped by the
+restore HTTP envelope. Complete encoded historical records have a 16 MiB limit;
+all definition history, including metadata, has a 32 MiB project quota. Reaching
+that byte quota rejects the whole change before journal publication, preserving
+the previous definition and history. Export the complete project first, then
+explicitly clear selected versions through the definition-history endpoint/tool
+before retrying. No byte-limit eviction or silent truncation occurs. Separately,
+the established count-retention rule keeps the latest 100 old versions plus
+current; the oldest is removed when recording the 101st old version.
+
+Normal owner project and result.project responses omit the server-owned history
+field so existing configuration PUTs do not resend an ever-growing archive. The
+Store preserves omitted history, still checks revision/fingerprint and captures
+real client definition edits. Dedicated history endpoints retain scoped access,
+and explicit project backup export includes all history. Only owner POST
+/api/restore accepts up to 64 MiB; every normal endpoint retains its old limit.
+The existing GUI parses a selected backup JSON text into an object before that
+request, avoiding a second round of string escaping. This is a transport fix,
+not a new history screen or visual feature. Legacy string backups are still
+accepted within the same 64 MiB wire bound. An existing project or execution
+archive above that bound is not guaranteed to round-trip; no oversized backup
+may be silently truncated or partially registered.
+
+Local owner/Store/official-SDK execution remains blocked by fixed dependencies;
+new authored transport tests are not represented as locally passing. No package
+workaround, original application execution, main merge or deployment occurs.
+
 ## Fixed dependency and first checkpoint
 
 This independent backend module starts at the reviewed integration commit
@@ -63,11 +102,12 @@ are separate capabilities. They are not an API definition version store.
   guarantee. Cancellation is checked immediately before beginning the atomic
   journal rename. Once publication begins, interruption cannot promise rollback;
   existing `PROJECT_COMMIT_UNCERTAIN` recovery semantics still apply.
-- Individual snapshots are at most 1 MiB, total history at most 8 MiB, and
-  there are at most 10,000 lineage records. A configuration/history commit must
-  fit the existing 12 MiB **compact object** `{document: project}` restore body;
-  full input is validated before retention. No silent truncation of malformed
-  data, legal JSON Schema keys, unsupported metadata, or privileges is allowed.
+- Complete encoded historical records are at most 16 MiB, total history at
+  most 32 MiB, with at most 10,000 lineage records. These are independent storage
+  quotas, not a cap on current definitions or the whole project. Full input is
+  validated before the explicit latest-100 retention rule; byte-quota failures
+  reject rather than silently evict. No truncation of malformed data, legal JSON
+  Schema keys, unsupported metadata, or privileges is allowed.
 - Ordinary clients cannot forge, replace or delete the history field. Activity
   saves cannot edit definitions/history. Explicit restore/tag/clear operations
   require current configuration revision and exact resource lineage.
@@ -114,18 +154,13 @@ History changes use current validators. An old definition incompatible with
 current folder/collection/native identity constraints is rejected explicitly,
 not partially restored. Explicit restoration to an identical old definition
 still archives the current value and advances the persistent version number.
-Ordinary no-op saves do not create versions. New/current edited definitions
-must remain snapshotable within the feature's budget. Oversize legacy current
-values can remain unchanged, but an edit/deletion requiring an oversized old
-snapshot is rejected rather than silently discarding that history.
-
-The compact-object restore bound is not a promise that the existing GUI's
-pretty-printed JSON **string** upload has the same size: quoting that string
-adds escaping and whitespace. Later execution evidence may also grow beyond
-12 MiB under the existing execution rules. Activity saves and history reads
-must not acquire a new whole-project budget because of this feature; such
-oversize restore bodies remain explicitly rejected by the existing endpoint.
-This PR does not redesign large-backup transport or execution retention.
+Ordinary no-op saves do not create versions. Current definitions retain their
+existing request/input limits rather than a new future-snapshot admission gate.
+An edit/deletion that cannot fit the encoded old version or project history
+quota fails atomically with an explicit export/clear path, without silently
+losing the prior state. Reads and activity saves remain independent of the
+backup envelope. The 16/32 MiB storage quotas and 64 MiB owner backup transport
+are bounded, not promises of arbitrary-size backups or unlimited retention.
 
 ## Current implementation checkpoint
 

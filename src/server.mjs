@@ -1,3 +1,4 @@
+import { projectOwnerResponse } from "./project-owner-projection.mjs";
 import { nativeOAuth2GrantInput } from "./native-oauth2-grant.mjs";
 import {
   writeDebugVariables,
@@ -360,19 +361,22 @@ export async function createApp({
     }
   };
   let server;
-  const json = (res, status, data) => {
+  const json = (res, status, data, { completeProject = false } = {}) => {
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
     });
-    res.end(JSON.stringify(data));
+    res.end(
+      JSON.stringify(completeProject ? data : projectOwnerResponse(data)),
+    );
   };
-  async function body(req) {
+  async function body(req, maxMiB = 12) {
     let bytes = 0,
       chunks = [];
     for await (const c of req) {
       bytes += c.length;
-      if (bytes > 12 * 1024 * 1024) throw Error("输入超过 12 MiB");
+      if (bytes > maxMiB * 1024 * 1024)
+        throw Error("输入超过 " + maxMiB + " MiB");
       chunks.push(c);
     }
     return JSON.parse(Buffer.concat(chunks).toString() || "{}");
@@ -962,7 +966,9 @@ export async function createApp({
           return json(res, 201, await store.create(b.name, b.directory));
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
-          const b = await body(req);
+          // Full backups have a dedicated bounded transport. Normal owner/MCP
+          // input keeps its existing 12 MiB ceiling. This is not a disk quota.
+          const b = await body(req, 64);
           const restored = await store.restore(b.document);
           return json(res, 201, restored);
         }
@@ -1427,6 +1433,7 @@ export async function createApp({
                   : u.searchParams.get("format") === "openapi"
                     ? exportOpenAPI(p)
                     : p,
+              { completeProject: true },
             );
           }
           if (action === "grpc-reflection" && req.method === "POST") {
