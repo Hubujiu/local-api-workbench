@@ -3,6 +3,7 @@ import { types } from "node:util";
 import { oauth1ParameterPolicy } from "../public/oauth1-policy-model.js";
 const invalid = () => Error("Postman OAuth1 定义不在受支持的字面值子集内");
 const strings = new Set([
+  "type",
   "consumerKey",
   "consumerSecret",
   "token",
@@ -95,6 +96,8 @@ export function importPostmanOAuth1(attributes) {
     }
     values[key] = value;
   }
+  if (Object.hasOwn(values, "type") && values.type !== "oauth1")
+    throw invalid();
   if (Object.hasOwn(values, "token") && Object.hasOwn(values, "accessToken"))
     throw invalid();
   if (
@@ -109,7 +112,7 @@ export function importPostmanOAuth1(attributes) {
     throw invalid();
   const result = { type: "oauth1" };
   for (const key of strings)
-    if (Object.hasOwn(values, key))
+    if (key !== "type" && Object.hasOwn(values, key))
       result[key === "token" ? "accessToken" : key] = values[key];
   result.parameterPolicy = {
     placement: values.addParamsToHeader === true ? "header" : "auto",

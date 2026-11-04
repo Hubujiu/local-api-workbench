@@ -190,3 +190,22 @@ test("array accessor and oversize arrays reject before value hooks", () => {
   assert.throws(() => importPostmanOAuth1(huge));
   assert.equal(hooks, 0);
 });
+test("legacy redundant OAuth1 type is narrowly admitted", () => {
+  assert.equal(importPostmanOAuth1(attrs({ type: "oauth1" })).type, "oauth1");
+  for (const value of ["basic", "", {}, false])
+    assert.throws(() => importPostmanOAuth1(attrs({ type: value })));
+  const duplicate = attrs({ type: "oauth1" });
+  duplicate.push({ key: "type", value: "oauth1" });
+  assert.throws(() => importPostmanOAuth1(duplicate));
+  let hooks = 0;
+  const a = attrs();
+  a.push({
+    key: "type",
+    get value() {
+      hooks++;
+      return "oauth1";
+    },
+  });
+  assert.throws(() => importPostmanOAuth1(a));
+  assert.equal(hooks, 0);
+});

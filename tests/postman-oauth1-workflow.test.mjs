@@ -347,6 +347,25 @@ test(
       steps: saved.requests.map((request) => ({ request })),
     });
     const frozen = structuredClone(plan);
+    const receiptKeys = [
+      "projectRevision",
+      "projectConfigRevision",
+      "projectFingerprint",
+    ];
+    for (const key of receiptKeys) {
+      assert.equal(
+        Object.hasOwn(plan, key),
+        true,
+        `creation receipt includes ${key}`,
+      );
+      delete frozen[key];
+    }
+    const storedDefinition = (
+      await new Store(f.root).get(project.id)
+    ).plans.find((p) => p.id === plan.id);
+    assert.deepEqual(storedDefinition, frozen);
+    for (const key of receiptKeys)
+      assert.equal(Object.hasOwn(storedDefinition, key), false);
     const live = await f.call(`projects/${project.id}`, undefined, "GET");
     for (const request of live.requests) {
       request.auth.accessToken = "edited-live-token";
