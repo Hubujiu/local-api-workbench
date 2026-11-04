@@ -48,10 +48,14 @@ function validateLayout(project) {
   // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
   validateRequestDefinitionHistory(project);
 }
-async function writeJSON(file, value, beforePublish) {
+async function writeJSON(file, value, beforePublish, onPublicationPossible) {
   const text = JSON.stringify(value, null, 2) + "\n";
   try {
-    if ((await readFile(file, "utf8")) === text) return;
+    if ((await readFile(file, "utf8")) === text) {
+      onPublicationPossible?.();
+      beforePublish?.();
+      return;
+    }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -62,6 +66,7 @@ async function writeJSON(file, value, beforePublish) {
     // No await between this gate and beginning the atomic journal rename.
     // Cancellation after publication cannot promise rollback.
     beforePublish?.();
+    onPublicationPossible?.();
     await rename(temporary, file);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => {});
@@ -152,7 +157,11 @@ export async function recoverProject(directory, expectedId) {
     throw new ProjectCommitUncertain(expectedId, error);
   }
 }
-export async function writeProject(directory, project, { signal } = {}) {
+export async function writeProject(
+  directory,
+  project,
+  { signal, beforePublish } = {},
+) {
   const assertNotAborted = () => {
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
@@ -164,11 +173,34 @@ export async function writeProject(directory, project, { signal } = {}) {
   await mkdir(directory, { recursive: true });
   // The complete journal is written before separate files. Reads recover it under the same lock.
   // This covers process interruption, not a promise of power-loss durability.
-  await writeJSON(
-    path.join(directory, ".transaction.json"),
-    project,
-    assertNotAborted,
-  );
+  const journal = path.join(directory, ".transaction.json");
+  let publicationPossible = false;
+  try {
+    await writeJSON(
+      journal,
+      project,
+      () => {
+        assertNotAborted();
+        beforePublish?.();
+      },
+      () => {
+        publicationPossible = true;
+      },
+    );
+  } catch (error) {
+    // Pre-write/read/temp/gate failures never began publication. Once rename
+    // begins (or identical journal bytes were observed), an acknowledgment can
+    // fail after publication, so missing journal evidence must be established.
+    if (!publicationPossible) throw error;
+    let absent = false;
+    try {
+      await readFile(journal);
+    } catch (readError) {
+      absent = readError.code === "ENOENT";
+    }
+    if (!absent) throw new ProjectCommitUncertain(project.id, error);
+    throw error;
+  }
   try {
     await apply(directory, project);
     await rm(path.join(directory, ".transaction.json"));
