@@ -1,3 +1,4 @@
+import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   linearPlanStepIds,
@@ -16,6 +17,11 @@ import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  const policy = readPlanFailurePolicy(input);
+  const oldPolicy = previous ? readPlanFailurePolicy(previous) : undefined;
+  const selectedPolicy = Object.hasOwn(input, "failurePolicy")
+    ? policy
+    : oldPolicy;
   validatePlanStepTypes(input.steps);
   if (!validateRepeatGraph(input.steps)) linearPlanStepIds(input.steps);
   if (previous && !validateRepeatGraph(previous.steps))
@@ -85,8 +91,11 @@ export function versionPlan(previous, input, source = "manual", project) {
         };
       }),
     };
+  const nextInput = { ...input };
+  delete nextInput.failurePolicy;
   const next = snapshotPlan({
-    ...input,
+    ...nextInput,
+    ...(selectedPolicy ? { failurePolicy: selectedPolicy } : {}),
     ...(importedNativeFlowSource === undefined
       ? {}
       : { importedNativeFlowSource }),
@@ -105,6 +114,7 @@ export function versionPlan(previous, input, source = "manual", project) {
       "description",
       "environmentId",
       "statusPolicy",
+      "failurePolicy",
       "functions",
       "steps",
       "importedNativeFlowSource",
@@ -117,7 +127,13 @@ export function versionPlan(previous, input, source = "manual", project) {
     fields: { ...(old.provenance?.fields || {}) },
     steps: {},
   };
-  for (const field of ["name", "description", "environmentId", "statusPolicy"])
+  for (const field of [
+    "name",
+    "description",
+    "environmentId",
+    "statusPolicy",
+    "failurePolicy",
+  ])
     if (JSON.stringify(next[field]) !== JSON.stringify(old[field]))
       provenance.fields[field] = source;
   for (const step of next.steps) {

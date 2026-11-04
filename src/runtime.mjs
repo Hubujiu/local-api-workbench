@@ -1,3 +1,4 @@
+import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import { isProxy } from "node:util/types";
 import {
   validatePlanDefinitionTypes,
@@ -611,6 +612,7 @@ export class Store {
     // Unknown legacy discriminators remain inert until lock-held disk comparison.
     // Never defer accessor, Proxy or cyclic input to later normalizers.
     for (const plan of p.plans) {
+      readPlanFailurePolicy(plan);
       try {
         validatePlanDefinitionTypes(plan);
       } catch (error) {
@@ -654,6 +656,7 @@ export class Store {
       throw Error("计划最多1000个");
     for (const run of p.runs || [])
       if (run.snapshot) {
+        readPlanFailurePolicy(run.snapshot);
         readImportedNativeFlowSource(run.snapshot);
         if (hasRepeatSteps(run.snapshot.steps)) snapshotPlan(run.snapshot);
       }
