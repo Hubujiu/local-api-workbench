@@ -2,7 +2,7 @@ import { types } from "node:util";
 import { variableName } from "./variable-scopes.mjs";
 
 const ops = new Set(["eq", "neq", "gt", "gte", "lt", "lte"]);
-const scopes = new Set(["globals", "environment", "runtime"]);
+const scopes = new Set(["globals", "environment", "runtime", "iterationData"]);
 const fail = (message) =>
   Object.assign(Error("条件计划" + message), {
     code: "PLAN_CONDITION_INVALID",
@@ -51,7 +51,7 @@ function operand(value) {
     primitive(fields.literal.value);
   } else {
     if (Object.keys(fields).length !== 2 || !scopes.has(fields.scope?.value))
-      throw fail("变量须显式选择globals/environment/runtime");
+      throw fail("变量须显式选择globals/environment/runtime/iterationData");
     variableName(fields.name?.value);
     if (!fields.name.value.isWellFormed()) throw fail("变量名称无效");
   }
@@ -87,10 +87,60 @@ function compare(left, op, right) {
   if (op === "lte") return left <= right;
   throw fail("比较操作无效");
 }
-export function evaluatePlanCondition(condition, state) {
+// Validate all potential row values before executing any branch. Rows are
+// already strict frozen JSON; do not treat row fields as mutable variables.
+export function validateIterationDataCondition(condition, rows) {
+  const sides = [condition.left, condition.right];
+  const needed = sides.filter((side) => side.scope === "iterationData");
+  if (!needed.length) return;
+  if (!rows) throw fail("iterationData 只能用于数据行循环内部");
+  for (const row of rows) {
+    for (const side of needed) {
+      const descriptor = Object.getOwnPropertyDescriptor(row, side.name);
+      if (!descriptor || !Object.hasOwn(descriptor, "value"))
+        throw fail("数据行字段不存在");
+      primitive(descriptor.value);
+    }
+    const values = sides.map((side) =>
+      Object.hasOwn(side, "literal")
+        ? side.literal
+        : side.scope === "iterationData"
+          ? row[side.name]
+          : undefined,
+    );
+    if (values.every((value) => value !== undefined))
+      compare(values[0], condition.op, values[1]);
+    else if (!["eq", "neq"].includes(condition.op))
+      for (const value of values)
+        if (value !== undefined && typeof value !== "number")
+          throw fail("顺序比较仅支持有限数字");
+  }
+}
+export function evaluatePlanCondition(condition, state, iterationData) {
   validatePlanCondition(condition);
   const resolve = (value) => {
     if (Object.hasOwn(value, "literal")) return value.literal;
+    if (value.scope === "iterationData") {
+      if (
+        !iterationData ||
+        typeof iterationData !== "object" ||
+        Array.isArray(iterationData) ||
+        types.isProxy(iterationData) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(iterationData))
+      )
+        throw fail("数据行不可用");
+      const descriptor = Object.getOwnPropertyDescriptor(
+        iterationData,
+        value.name,
+      );
+      if (
+        !descriptor ||
+        !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, "value")
+      )
+        throw fail("数据行字段不存在");
+      return descriptor.value;
+    }
     // Deliberately do not resurrect a value hidden by legacy runtime deletion.
     if (state.hidden.includes(value.name)) throw fail("引用的变量已隐藏");
     const map = state[value.scope];

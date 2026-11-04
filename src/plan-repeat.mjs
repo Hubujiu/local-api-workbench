@@ -1,4 +1,7 @@
-import { validatePlanCondition } from "./plan-condition.mjs";
+import {
+  validatePlanCondition,
+  validateIterationDataCondition,
+} from "./plan-condition.mjs";
 import { normalizeExecutionContext } from "./script-context.mjs";
 // Canonical definition traversal only. No transport, interpolation, or execution.
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
@@ -265,6 +268,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
     conditional = false,
     dataDepth = 0,
     rowBytes = 0,
+    rowContext,
   ) => {
     object(step, "步骤");
     if (step.type === "if") {
@@ -279,12 +283,21 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       ]);
       metadata(step);
       validatePlanCondition(step.condition);
+      validateIterationDataCondition(step.condition, rowContext);
       array(step.steps, "条件子步骤");
       decisions += multiplier;
       bytes += Buffer.byteLength(JSON.stringify(step.condition)) * multiplier;
       if (decisions > 200) throw Error("条件计划展开最多200次判断");
       for (const child of step.steps)
-        visit(child, depth + 1, multiplier, true, dataDepth, rowBytes);
+        visit(
+          child,
+          depth + 1,
+          multiplier,
+          true,
+          dataDepth,
+          rowBytes,
+          rowContext,
+        );
     } else if (step.type === "repeat") {
       if (depth >= 4) throw Error("循环组嵌套最多4层");
       object(step, "循环组", [
@@ -340,6 +353,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
           conditional,
           dataDepth + (step.rows === undefined ? 0 : 1),
           nestedRowBytes,
+          step.rows === undefined ? rowContext : step.rows,
         );
     } else {
       if (conditional && step.type !== undefined && step.type !== "http")
@@ -395,6 +409,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
         const control = {
           step,
           condition: true,
+          ...(dataContext === undefined ? {} : { dataContext }),
           occurrenceId: JSON.stringify([
             "if",
             path.map(({ groupId, iteration }) => [groupId, iteration]),
