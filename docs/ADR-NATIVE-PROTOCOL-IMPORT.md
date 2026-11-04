@@ -308,3 +308,31 @@ connections, Store/HTTP identity rejection before and after a fresh child-proces
 restart, cross-project isolation, frozen plans after live definition edits, actual
 CLI child execution and evidence/backup restore. Original app code was not run;
 this is bounded Workbench behavior, not a claim of complete native WS parity.
+
+## websocket2 binary adapter checkpoint (2026-11-04)
+
+The next bounded extension is only `websocket2` messages in
+`message[].request.{mode,raw}`: native `base64` and `hexadecimal` become the
+existing canonical encoded payload objects. Legacy `websocket` has a different
+reachable sender and is not included. Static inspection of the official Offline2
+work/send bundles confirms v2 binary decoding and sendBytes, but not complete
+original runtime or permissive malformed-input equivalence. No original code is
+copied or executed.
+
+The contract is literal canonical base64 or complete even-length hexadecimal,
+with the existing 64 KiB encoded native-input and 1 MiB wire limits. Whitespace
+hex, noncanonical base64, expressions, file/path fields and unknown send flags
+reject atomically. Empty binary is a real encoded-object empty frame, without
+text-only sendEmptyMessage or templateMode; the original lower-level sender
+supports it although its UI disables empty input. Existing text, tuple identity,
+handshake rebind, strict TLS, cancellation and no-replay rules remain unchanged.
+
+The first checkpoint is tests only: 64 real tests executed, with 53 passing
+rejection controls and 11 expected failures (nine binary mapping cases and two
+owner workflows blocked at import by the existing text-only implementation).
+Later persistence/wire assertions in those two workflows have not run yet.
+This is deliberately WIP, not implementation or CI acceptance. The official
+package work.asar SHA256 is
+`36c1f506f9dbee4eef487248874c1f2a061451eebfa9f6cad1735441cc8553fd`;
+the readable send index SHA256 is
+`5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`.
