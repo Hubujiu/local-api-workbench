@@ -18,15 +18,29 @@ export function buildLoadSchedule(input) {
     typeof input !== "object" ||
     Array.isArray(input) ||
     Object.keys(input).some(
-      (key) => !["initialVUs", "stages", "maxIterations"].includes(key),
+      (key) =>
+        ![
+          "initialVUs",
+          "stages",
+          "maxIterations",
+          "reportIntervalSeconds",
+        ].includes(key),
     )
   )
     throw Error("阶段压测参数无效");
-  const { initialVUs, stages, maxIterations } = input;
+  const {
+    initialVUs,
+    stages,
+    maxIterations,
+    reportIntervalSeconds = 1,
+  } = input;
   if (
     !Number.isInteger(initialVUs) ||
     initialVUs < 0 ||
     initialVUs > 10 ||
+    !Number.isInteger(reportIntervalSeconds) ||
+    reportIntervalSeconds < 1 ||
+    reportIntervalSeconds > 10 ||
     !Number.isInteger(maxIterations) ||
     maxIterations < 1 ||
     maxIterations > 100 ||
@@ -68,7 +82,13 @@ export function buildLoadSchedule(input) {
     current = stage.targetVUs;
   }
   if (!maximum) throw Error("阶段压测至少需要一个 VU");
-  return { initialVUs, maxIterations, durationMs: now, changes };
+  return {
+    initialVUs,
+    maxIterations,
+    reportIntervalSeconds,
+    durationMs: now,
+    changes,
+  };
 }
 
 export function prepareStagedLoad(project, plan, input, options = {}) {
@@ -115,7 +135,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
     running: false,
   }));
   const timers = [];
-  let deadlineTimer;
+  let deadlineTimer, reportTimer;
   const samples = new Map(
     snapshot.steps.map((step) => [
       step.id,
@@ -292,6 +312,10 @@ export async function runStagedLoad(project, prepared, options = {}) {
         () => stop("duration", true),
         schedule.durationMs,
       );
+      reportTimer = setInterval(
+        progress,
+        schedule.reportIntervalSeconds * 1000,
+      );
       reconcile(schedule.initialVUs);
     }
     await done;
@@ -304,6 +328,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
   } finally {
     for (const timer of timers) clearTimeout(timer);
     clearTimeout(deadlineTimer);
+    clearInterval(reportTimer);
     options.signal?.removeEventListener("abort", cancelled);
   }
 }

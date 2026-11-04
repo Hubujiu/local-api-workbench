@@ -23,6 +23,7 @@ test("ramp schedule uses cumulative stage time and supports graceful downscale",
   assert.deepEqual(buildLoadSchedule(options), {
     initialVUs: 2,
     maxIterations: 5,
+    reportIntervalSeconds: 1,
     durationMs: 13000,
     changes: [
       { atMs: 5000, vus: 3 },
@@ -590,5 +591,40 @@ test(
     } while (true);
     assert.match(await again.text(), /event: complete/);
     assert.equal(calls, 2);
+  },
+);
+
+test(
+  "long-running requests continue to produce periodic progress",
+  { timeout: 10000 },
+  async (t) => {
+    const { project, url } = await fixture(t, (_req, res) => {
+      res.on("close", () => {});
+    });
+    const prepared = prepareStagedLoad(
+      project,
+      { steps: [{ id: "a", request: { url } }] },
+      {
+        initialVUs: 1,
+        stages: [{ durationSeconds: 5, targetVUs: 1 }],
+        maxIterations: 2,
+        reportIntervalSeconds: 1,
+      },
+    );
+    const controller = new AbortController();
+    let ticks = 0;
+    const result = await runStagedLoad(project, prepared, {
+      signal: controller.signal,
+      onProgress: (report) => {
+        if (
+          report.elapsedMs > 500 &&
+          report.runningIterations === 1 &&
+          ++ticks === 2
+        )
+          controller.abort();
+      },
+    });
+    assert.equal(result.stopReason, "cancelled");
+    assert.equal(ticks, 2);
   },
 );
