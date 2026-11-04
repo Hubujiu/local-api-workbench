@@ -292,3 +292,241 @@ test(
     assert.equal(hits, 1);
   },
 );
+test(
+  "cancel during staged live refresh retains the complete zero-work SSE report",
+  { timeout: 10000 },
+  async (t) => {
+    const { versionPlan } = await import("../src/plan-version.mjs");
+    let hits = 0,
+      entered,
+      release;
+    const waiting = new Promise((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const peer = createServer((_req, res) => {
+      hits++;
+      res.end("ok");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "live-staged-preflight-cancel-"));
+    const app = await createApp({ root, port: 0 });
+    const original = app.store.get.bind(app.store);
+    t.after(async () => {
+      app.store.get = original;
+      release();
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("cancel");
+    const url = `http://127.0.0.1:${peer.address().port}/`;
+    p.requests = [{ id: "api", url }];
+    p.plans = [
+      versionPlan(
+        undefined,
+        {
+          id: "p1",
+          steps: [
+            { id: "s", liveRequestId: "api", request: { id: "api", url } },
+          ],
+        },
+        "manual",
+        p,
+      ),
+    ];
+    await app.store.save(p);
+    let reads = 0;
+    app.store.get = async (...args) => {
+      if (++reads === 2) {
+        entered();
+        await gate;
+      }
+      return original(...args);
+    };
+    const headers = {
+      "x-local-token": app.token,
+      "content-type": "application/json",
+    };
+    const pending = fetch(`${app.url}/api/projects/${p.id}/staged-load`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        planId: "p1",
+        runId: "live-staged-cancel",
+        schedule: {
+          initialVUs: 1,
+          stages: [{ durationSeconds: 1, targetVUs: 1 }],
+          maxIterations: 1,
+        },
+      }),
+    });
+    await waiting;
+    const cancel = await fetch(`${app.url}/api/cancel`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ id: "live-staged-cancel" }),
+    });
+    assert.equal(cancel.status, 200);
+    release();
+    const response = await pending;
+    assert.equal(response.status, 200);
+    const events = (await response.text())
+      .trim()
+      .split("\n\n")
+      .map((frame) => {
+        const [event, data] = frame.split("\n");
+        return { event: event.slice(7), data: JSON.parse(data.slice(6)) };
+      });
+    assert.deepEqual(
+      events.map(({ event }) => event),
+      ["start", "reportEnd", "complete"],
+    );
+    assert.equal(events[0].data.runId, "live-staged-cancel");
+    const report = events[1].data;
+    assert.equal(Number.isInteger(report.elapsedMs), true);
+    assert(report.elapsedMs >= 0);
+    const { elapsedMs, ...rest } = report;
+    assert.deepEqual(rest, {
+      activeVUs: 0,
+      runningIterations: 0,
+      started: 0,
+      completed: 0,
+      failed: 0,
+      mainRequests: 0,
+      stepCompletionsPerSecond: 0,
+      iterationsCompletedPerSecond: 0,
+      steps: [
+        {
+          stepId: "s",
+          count: 0,
+          failed: 0,
+          timingSamples: 0,
+          p50Ms: null,
+          p90Ms: null,
+          p95Ms: null,
+          p99Ms: null,
+          receivedBytes: 0,
+        },
+      ],
+      stopReason: "cancelled",
+      cancelled: true,
+      variableIsolation: "per-iteration",
+    });
+    assert.deepEqual(events[2].data, { stopReason: "cancelled" });
+    assert.equal(hits, 0);
+  },
+);
+test(
+  "staged live references freeze the whole definition once across iterations",
+  { timeout: 15000 },
+  async (t) => {
+    const { versionPlan } = await import("../src/plan-version.mjs");
+    const seen = [];
+    let entered,
+      release,
+      hold = true;
+    const waiting = new Promise((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const peer = createServer(async (req, res) => {
+      seen.push(req.url);
+      if (hold && req.url === "/first-v2") {
+        hold = false;
+        entered();
+        await gate;
+      }
+      res.end("ok");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "live-staged-freeze-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      release();
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("freeze");
+    const url = `http://127.0.0.1:${peer.address().port}`;
+    p.requests = [
+      { id: "first", url: url + "/first-v2" },
+      { id: "second", url: url + "/second-v2" },
+    ];
+    p.plans = [
+      versionPlan(
+        undefined,
+        {
+          id: "p1",
+          steps: ["first", "second"].map((id) => ({
+            id: "s-" + id,
+            liveRequestId: id,
+            request: { id, url: url + "/" + id + "-v1" },
+          })),
+        },
+        "manual",
+        p,
+      ),
+    ];
+    await app.store.save(p);
+    const post = (runId) =>
+      fetch(`${app.url}/api/projects/${p.id}/staged-load`, {
+        method: "POST",
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          planId: "p1",
+          runId,
+          schedule: {
+            initialVUs: 1,
+            stages: [{ durationSeconds: 5, targetVUs: 1 }],
+            maxIterations: 2,
+          },
+        }),
+      });
+    const readReport = async (response) => {
+      assert.equal(response.status, 200);
+      const body = await response.text();
+      const match = /event: reportEnd\ndata: (.*)/.exec(body);
+      assert(match, body);
+      const report = JSON.parse(match[1]);
+      assert.equal(report.stopReason, "iteration-limit");
+      assert.equal(report.started, 2);
+      assert.equal(report.completed, 2);
+      assert.equal(report.failed, 0);
+      assert.equal(report.mainRequests, 4);
+      return report;
+    };
+    const pending = post("live-staged-first");
+    await waiting;
+    const edited = await app.store.get(p.id);
+    edited.requests[1].url = url + "/second-v3";
+    await app.store.save(edited);
+    release();
+    await readReport(await pending);
+    assert.deepEqual(seen, [
+      "/first-v2",
+      "/second-v2",
+      "/first-v2",
+      "/second-v2",
+    ]);
+    await readReport(await post("live-staged-next"));
+    assert.deepEqual(seen.slice(4), [
+      "/first-v2",
+      "/second-v3",
+      "/first-v2",
+      "/second-v3",
+    ]);
+  },
+);
