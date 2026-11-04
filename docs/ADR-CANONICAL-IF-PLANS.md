@@ -183,3 +183,28 @@ real-wire cases must pass on this exact combined tree in normal CI before this
 integration is accepted. Passing the fixed-base feature tree or pure contracts is
 not a substitute. No runtime test is skipped or weakened to accommodate that
 local dependency failure.
+
+### In-flight IF cancellation and project revocation
+
+`plan-if-revocation-sdk.test.mjs` crosses the official HTTP SDK with an IF/repeat
+plan, a completed loopback effect and accepted environment-variable commit, then
+a second genuinely held HTTP child. It checks both an SDK cancellation signal and
+owner project-grant reduction. Neither path may start the next child, repeat
+iteration or following condition. Prior effects are retained, not rolled back.
+
+Each action is paired with a normal run save and an actual missing required API
+file introduced only after the second request is observed. The test observes the
+real Store append input without replacing its save result or error. The missing
+file causes a pre-journal fail-closed read/save refusal, not an unknown-commit
+claim: activity reports recordSaved false while completed-response evidence is
+only observed at the attempted append boundary, and no durable run is claimed.
+Exact removed fixture bytes are restored only after the terminal boundary.
+
+The SDK's rejected promise alone is not success evidence. The test also joins
+network closure, server terminal activity and actual append completion, checks
+run/decision identities or unchanged damaged bytes, restarts without replay, and
+checks an unrelated retained project remains unchanged before a fresh authorized
+call. Owner grant changes advance the global HTTP authorization epoch; this is
+not a promise that another old in-flight session survives. Persisted remembered
+revocation is checked after restart. These four SDK cases require exact combined
+CI; the local dependency-load failure is retained rather than skipped.
