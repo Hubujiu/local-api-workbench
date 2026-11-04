@@ -628,13 +628,8 @@ test(
           { request: { method: "GET", url: base + "/" + phase + "/later" } },
         ],
       });
-      const ready = new Promise((r) => (observed = r)),
-        runId = "cancel_wait_" + phase;
-      const running = post(`/api/projects/${p.id}/run`, {
-        planId: plan.id,
-        runId,
-      });
-      await ready;
+      // Prepare unrelated disk state before starting the measured wait. Once
+      // wait-active arrives, no Store create/save may consume its 1000ms budget.
       const other = await app.store.create("independent " + phase);
       const otherPlan = await post(`/api/projects/${other.id}/plans`, {
         steps: [
@@ -655,6 +650,31 @@ test(
           },
         ],
       });
+      const ready = new Promise((r) => (observed = r)),
+        runId = "cancel_wait_" + phase;
+      let runSettled = false;
+      const running = post(`/api/projects/${p.id}/run`, {
+        planId: plan.id,
+        runId,
+      });
+      running.then(
+        () => {
+          runSettled = true;
+        },
+        () => {
+          runSettled = true;
+        },
+      );
+      await ready;
+      assert.equal(
+        runSettled,
+        false,
+        "target HTTP run has not settled when cancellation is requested",
+      );
+      assert(
+        !events.includes("/" + phase + "/later"),
+        "target has not advanced to its later request",
+      );
       const independent = post(`/api/projects/${other.id}/run`, {
         planId: otherPlan.id,
         runId: "independent_wait_" + phase,

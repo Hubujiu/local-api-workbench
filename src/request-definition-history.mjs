@@ -111,6 +111,99 @@ export function projectHistoryProjection(
   return visit(value, 0, true);
 }
 
+// The final backup envelope has a byte budget, not the history feature's
+// depth/node/array limits. Walk it iteratively without invoking user methods
+// or recursively cloning unrelated, already-persisted project collections.
+export function assertRequestDefinitionProjectBudget(project) {
+  inspectProject(project);
+  let bytes = 0;
+  const ancestors = new Set();
+  const frames = [{ value: { document: project } }];
+  const charge = (amount) => {
+    bytes += amount;
+    if (bytes > PROJECT_MAX_BYTES)
+      fail("JSON体积超过" + PROJECT_MAX_BYTES + "字节限制");
+  };
+  while (frames.length) {
+    const frame = frames.at(-1);
+    if (!frame.descriptors) {
+      const item = frame.value;
+      if (
+        item === null ||
+        typeof item === "boolean" ||
+        typeof item === "string"
+      ) {
+        charge(Buffer.byteLength(JSON.stringify(item)));
+        frames.pop();
+        continue;
+      }
+      if (typeof item === "number" && Number.isFinite(item)) {
+        charge(JSON.stringify(item).length);
+        frames.pop();
+        continue;
+      }
+      if (
+        !item ||
+        typeof item !== "object" ||
+        types.isProxy(item) ||
+        ancestors.has(item)
+      )
+        fail("仅接受无代理、无环的有限JSON数据");
+      const array = Array.isArray(item);
+      if (
+        !(array ? [Array.prototype] : [Object.prototype, null]).includes(
+          Object.getPrototypeOf(item),
+        )
+      )
+        fail("JSON对象原型无效");
+      const descriptors = Object.getOwnPropertyDescriptors(item);
+      const keys = Reflect.ownKeys(descriptors);
+      const length = array ? descriptors.length?.value : 0;
+      if (
+        array &&
+        (!Number.isSafeInteger(length) ||
+          length < 0 ||
+          keys.length !== length + 1)
+      )
+        fail("JSON数组稀疏或含附加属性");
+      ancestors.add(item);
+      charge(2);
+      Object.assign(frame, {
+        descriptors,
+        keys,
+        array,
+        length,
+        index: 0,
+        fields: 0,
+      });
+    }
+    if (frame.index === frame.keys.length) {
+      ancestors.delete(frame.value);
+      frames.pop();
+      continue;
+    }
+    const key = frame.keys[frame.index++];
+    if (frame.array && key === "length") continue;
+    const descriptor = frame.descriptors[key];
+    if (
+      typeof key !== "string" ||
+      !own(descriptor, "value") ||
+      !descriptor.enumerable
+    )
+      fail("JSON含访问器、符号或不可序列化字段");
+    if (
+      frame.array &&
+      (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= frame.length)
+    )
+      fail("JSON数组含附加属性");
+    if (!frame.array && descriptor.value === undefined) continue;
+    if (frame.fields++) charge(1);
+    if (!frame.array) charge(Buffer.byteLength(JSON.stringify(key)) + 1);
+    frames.push({ value: descriptor.value });
+  }
+  return bytes;
+}
+
 export function sameHistoryJSON(a, b, projectionOptions) {
   return isDeepStrictEqual(
     projectHistoryProjection(a, projectionOptions),
@@ -295,14 +388,6 @@ export function validateRequestDefinitionHistory(project) {
   if (projectField(project, "requestDefinitionHistory") === undefined) return;
   validateHistory(historyProjectProjection(project));
 }
-function projectProjection(project) {
-  // A configuration operation may need to clear history from a project that
-  // is already too large. Keep descriptor/depth/node checks while deferring
-  // the complete byte budget until the final configuration-save envelope.
-  return projectHistoryProjection(project, {
-    maxBytes: Number.MAX_SAFE_INTEGER,
-  });
-}
 function definition(request, maxBytes = Number.MAX_SAFE_INTEGER) {
   const result = projectHistoryProjection(request, {
     maxBytes: Number.MAX_SAFE_INTEGER,
@@ -354,7 +439,7 @@ export function reconcileRequestDefinitionHistory(
     previous === undefined ? undefined : historyProjectProjection(previous);
   const after = activity
     ? historyProjectProjection(next)
-    : projectProjection(next);
+    : historyOperationProject(next);
   if (before !== undefined) validateHistory(before);
   validateHistory(after, { checkTargets: before === undefined });
   const nextRequests = requestMap(after);
@@ -476,10 +561,7 @@ export function reconcileRequestDefinitionHistory(
   }
   after.requestDefinitionHistory = history;
   validateHistory(after);
-  projectHistoryProjection(
-    { document: after },
-    { maxBytes: PROJECT_MAX_BYTES },
-  );
+  assertRequestDefinitionProjectBudget(after);
   return history;
 }
 

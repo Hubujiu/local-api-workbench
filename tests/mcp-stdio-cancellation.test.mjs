@@ -1,10 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp, rm, rename, symlink, readFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  rename,
+  symlink,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -349,64 +356,146 @@ test(
       held,
       seen,
     } = await fixture(t);
-    const client = new Client({ name: "stdio-save-failure", version: "1" });
-    t.after(() => client.close().catch(() => {}));
-    await client.connect(
-      new StdioClientTransport({
-        command: process.execPath,
-        args: [main, "--project", p.id, "--write", "--execute"],
-        env: { LOCAL_API_DATA: root },
-        stderr: "pipe",
-      }),
-    );
-    const controller = new AbortController();
-    const rejected = assert.rejects(
-      client.callTool(
-        {
-          name: "localapi_execute_flow",
-          arguments: { projectId: p.id, planId: p.plans[0].id },
-        },
-        undefined,
-        { signal: controller.signal },
-      ),
-      /abort|cancel/i,
-    );
-    await waitFor(() => held.size === 1);
     const directory = store.directory(p.id),
-      history = path.join(directory, "history");
-    await rename(history, path.join(directory, "history-original"));
-    // Reads see ENOENT and retain defaults; atomic application cannot mkdir a
-    // dangling directory link, so failure is after journal publication.
-    await symlink(
-      path.join(directory, "missing-history-target"),
-      history,
-      "junction",
+      history = path.join(directory, "history"),
+      journalFile = path.join(directory, ".transaction.json"),
+      observationFile = path.join(root, "history-fault-observation.json"),
+      preload = path.join(root, "history-fault-after-journal.mjs");
+    const beforeDefinitions = JSON.parse(
+      await readFile(path.join(history, "definitions.json"), "utf8"),
     );
-    controller.abort();
-    await rejected;
-    await waitFor(async () =>
-      (await readMCPActivities(root)).some(
+    // The definition sidecar is mandatory on the real Store read path. Inject
+    // the physical directory fault only after the real cancelled-run journal
+    // has been atomically published, never before Store reads its input.
+    await writeFile(
+      preload,
+      `
+      import fs from "node:fs";
+      import path from "node:path";
+      import { syncBuiltinESMExports } from "node:module";
+      import { isMainThread } from "node:worker_threads";
+      if (isMainThread) {
+        const projectId = ${JSON.stringify(p.id)};
+        const journalFile = ${JSON.stringify(journalFile)};
+        const history = ${JSON.stringify(history)};
+        const originalHistory = ${JSON.stringify(path.join(directory, "history-original"))};
+        const missingHistory = ${JSON.stringify(path.join(directory, "missing-history-target"))};
+        const observationFile = ${JSON.stringify(observationFile)};
+        const originalRename = fs.promises.rename;
+        let injected = 0;
+        fs.promises.rename = async function (source, destination) {
+          const result = await originalRename.call(this, source, destination);
+          if (injected || typeof destination !== "string" ||
+              path.resolve(destination) !== path.resolve(journalFile)) return result;
+          const journal = JSON.parse(await fs.promises.readFile(journalFile, "utf8"));
+          if (journal.id !== projectId || journal.runs?.[0]?.status !== "cancelled")
+            return result;
+          injected++;
+          await originalRename.call(fs.promises, history, originalHistory);
+          await fs.promises.symlink(missingHistory, history, "junction");
+          const observation = {
+            injected, projectId: journal.id,
+            runId: journal.runs[0].id, status: journal.runs[0].status,
+          };
+          await fs.promises.writeFile(observationFile + ".tmp", JSON.stringify(observation));
+          await originalRename.call(fs.promises, observationFile + ".tmp", observationFile);
+          return result;
+        };
+        syncBuiltinESMExports();
+      }
+    `,
+    );
+    const client = new Client({ name: "stdio-save-failure", version: "1" });
+    try {
+      await client.connect(
+        new StdioClientTransport({
+          command: process.execPath,
+          args: [
+            "--import",
+            pathToFileURL(preload).href,
+            main,
+            "--project",
+            p.id,
+            "--write",
+            "--execute",
+          ],
+          env: { LOCAL_API_DATA: root },
+          stderr: "pipe",
+        }),
+      );
+      const controller = new AbortController();
+      const rejected = assert.rejects(
+        client.callTool(
+          {
+            name: "localapi_execute_flow",
+            arguments: { projectId: p.id, planId: p.plans[0].id },
+          },
+          undefined,
+          { signal: controller.signal },
+        ),
+        /abort|cancel/i,
+      );
+      await waitFor(() => held.size === 1);
+      await assert.rejects(readFile(observationFile), { code: "ENOENT" });
+      assert.deepEqual(
+        JSON.parse(
+          await readFile(path.join(history, "definitions.json"), "utf8"),
+        ),
+        beforeDefinitions,
+      );
+      controller.abort();
+      await rejected;
+      await waitFor(async () => {
+        try {
+          return (
+            JSON.parse(await readFile(observationFile, "utf8")).injected === 1
+          );
+        } catch (error) {
+          if (error.code === "ENOENT") return false;
+          throw error;
+        }
+      });
+      await waitFor(async () =>
+        (await readMCPActivities(root)).some(
+          (row) => row.projectId === p.id && row.recordSaved === false,
+        ),
+      );
+      const activity = (await readMCPActivities(root)).find(
         (row) => row.projectId === p.id && row.recordSaved === false,
-      ),
-    );
-    const activity = (await readMCPActivities(root)).find(
-      (row) => row.projectId === p.id && row.recordSaved === false,
-    );
-    assert.equal(activity.status, "failed");
-    assert.equal(activity.executionStatus, "cancelled");
-    assert.match(activity.persistenceError, /保存失败/);
-    assert(!JSON.stringify(activity).includes(root));
-    const journal = JSON.parse(
-      await readFile(path.join(directory, ".transaction.json"), "utf8"),
-    );
-    assert.equal(journal.runs[0].status, "cancelled");
-    await rm(history);
-    await rename(path.join(directory, "history-original"), history);
-    const recovered = await new Store(root).get(p.id);
-    assert.equal(recovered.runs[0].status, "cancelled");
-    assert.equal(seen.filter((url) => url === "/slow-a").length, 1);
-    assert(!seen.includes("/later-a"));
-    await client.ping();
+      );
+      assert.equal(activity.status, "failed");
+      assert.equal(activity.executionStatus, "cancelled");
+      assert.match(activity.persistenceError, /保存失败/);
+      assert(!JSON.stringify(activity).includes(root));
+      const journal = JSON.parse(await readFile(journalFile, "utf8"));
+      assert.equal(journal.id, p.id);
+      assert.equal(journal.runs[0].status, "cancelled");
+      const observation = JSON.parse(await readFile(observationFile, "utf8"));
+      assert.deepEqual(observation, {
+        injected: 1,
+        projectId: p.id,
+        runId: journal.runs[0].id,
+        status: "cancelled",
+      });
+      await rm(history);
+      await rename(path.join(directory, "history-original"), history);
+      const recovered = await new Store(root).get(p.id);
+      assert.equal(recovered.runs[0].status, "cancelled");
+      assert.equal(recovered.runs[0].id, observation.runId);
+      assert.deepEqual(recovered.requestDefinitionHistory, beforeDefinitions);
+      await assert.rejects(readFile(journalFile), { code: "ENOENT" });
+      assert.equal(seen.filter((url) => url === "/slow-a").length, 1);
+      assert(!seen.includes("/later-a"));
+      await client.ping();
+      assert.deepEqual(
+        JSON.parse(await readFile(observationFile, "utf8")),
+        observation,
+        "fault was injected exactly once, including after recovery",
+      );
+    } finally {
+      // Close the real child before the fixture removes its data/preload files.
+      await client.close().catch(() => {});
+    }
   },
 );
 

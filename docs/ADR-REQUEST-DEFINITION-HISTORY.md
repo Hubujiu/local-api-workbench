@@ -174,3 +174,38 @@ real project file lock is held, then cancel/revoke before releasing that lock.
 They assert the genuine later `STORE_SAVE_ABORTED` result and wait for cleanup.
 The explicit `remember: false` revocation uses the existing immediate reduction
 path; it is not a change to persistent grant-update semantics.
+
+## Complete first-CI failure reconciliation
+
+Run `41795840617` on `b20a232` finished with 9 successful and 16 failed jobs.
+All failed job logs were checked: the three OSes share 15 failed test cases,
+plus one Windows-only wait-cancellation case. They reduce to six causes:
+
+1. Eleven existing unknown-outcome cases observed an earlier partial-apply
+   boundary (resource restore, Header/variables/Text/XML scope commits, native
+   folder recycle/restore, and four HTTP/stdio import combinations). Only the
+   new definitions-file write order changes; their existing assertions stay.
+2. A real compatibility regression applied history depth/node limits to saved
+   environment data. A separate iterative, descriptor-safe compact-envelope
+   byte counter now keeps the 12 MiB transport bound without imposing history
+   structure limits on unrelated project data. History/snapshot limits remain.
+3. Original layout-ID validation now retains its earlier diagnostic priority;
+   history validation still runs before any journal publication or recovery.
+4. The old stdio cancellation fixture removed a now-required definitions file
+   before Store read. Its actual-child preload now injects the same disk fault
+   only after publishing the real cancelled-run journal. Missing declared
+   history still fails closed; no defaulting or original assertions are relaxed.
+5. The new stdio fixture's sparse peer API acquired valid defaults during backup
+   normalization. Both seed definitions now use the normal request normalizer;
+   full deep comparisons and isolation/no-replay assertions remain unchanged.
+6. The Windows wait test prepared an unrelated project/plan after receiving
+   `wait-active`, consuming part of the 1000 ms wait before cancellation. That
+   preparation now precedes the target run. Ready-to-cancel performs no awaited
+   disk preparation, observes the target is still unsettled, and preserves the
+   original 1000 ms wait, 800 ms cancellation bound, real HTTP and scope checks.
+   The prior log alone does not establish a platform scheduling root cause.
+
+These are a mixture of production compatibility fixes and fixture corrections,
+not ignored CI flakes. Pure/file regressions execute locally; the corresponding
+application and SDK paths still need the exact next published-tree CI. No full
+run is reused as evidence for a different tree.

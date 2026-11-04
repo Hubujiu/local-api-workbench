@@ -12,6 +12,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { createApp } from "../src/server.mjs";
 import { createMCP } from "../src/mcp.mjs";
 import { Store } from "../src/runtime.mjs";
+import { normalizeRequest } from "../src/core.mjs";
 import { readMCPActivities } from "../src/mcp-activity.mjs";
 import { writeProject } from "../src/project-files.mjs";
 import { acquireFileLock } from "../src/file-lock.mjs";
@@ -30,6 +31,8 @@ const decode = (response) => {
 };
 async function seed(store, base = "https://example.invalid") {
   let p = await store.create("Definition history transport fixture");
+  // Seed canonical definitions just like the owner editor. Backup restore may
+  // add missing defaults to legacy shapes; that is not lost stored data.
   p.requests = [
     {
       id: "api",
@@ -44,7 +47,7 @@ async function seed(store, base = "https://example.invalid") {
       method: "GET",
       url: base + "/other",
     },
-  ];
+  ].map((request) => normalizeRequest(request));
   p = await store.save(p);
   p.requests[0].url = base + "/second";
   p = await store.save(p);

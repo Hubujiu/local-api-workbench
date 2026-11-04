@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   projectHistoryProjection,
+  assertRequestDefinitionProjectBudget,
   sameHistoryJSON,
   validateRequestDefinitionHistory,
   reconcileRequestDefinitionHistory,
@@ -1261,4 +1262,140 @@ test("history operations borrow unrelated committed evidence without new depth o
   assert.equal(entry(cleared).versions.length, 0);
   assert.equal(entry(project).versions.length, 1);
   assert.equal(reads, 0);
+});
+
+test("configuration history preserves existing deep environment and settings persistence contracts", () => {
+  const project = fixture();
+  let deep = {};
+  for (let index = 0; index < 150; index++) deep = { child: deep };
+  project.environments = [{ id: "environment", variables: { deep } }];
+  project.settings = { deep };
+  const saved = save(undefined, project);
+  assert.deepEqual(saved.environments, project.environments);
+  assert.deepEqual(saved.settings, project.settings);
+  assert.equal(entry(saved).versions.length, 0);
+  const next = clone(saved);
+  next.requests[0].body = "edit only selected definition";
+  const changed = save(saved, next);
+  assert.deepEqual(changed.settings, project.settings);
+  assert.equal(entry(changed).currentVersion, 2);
+});
+
+test("unrelated valid JSON collections do not inherit history array and node limits", () => {
+  const project = fixture();
+  project.environments = [
+    {
+      id: "environment",
+      variables: {
+        many: Array.from({ length: 160000 }, (_, index) => ({
+          value: index,
+          enabled: true,
+        })),
+      },
+    },
+  ];
+  assert.ok(
+    Buffer.byteLength(JSON.stringify({ document: project })) < 12 * 1024 * 1024,
+  );
+  const saved = save(undefined, project);
+  assert.equal(saved.environments[0].variables.many.length, 160000);
+  assert.equal(entry(saved).versions.length, 0);
+});
+
+test("project envelope byte counting is exact and iterative without weakening feature limits", () => {
+  const project = {
+    id: "budget-fixture",
+    settings: JSON.parse(
+      '{"constructor":{"safe":true},"__proto__":{"safe":true},"quoted":"\\\"\\n","unicode":"界é"}',
+    ),
+    omitted: undefined,
+    zero: -0,
+    data: [false, null, 1.25, "\ud800"],
+  };
+  assert.equal(
+    assertRequestDefinitionProjectBudget(project),
+    Buffer.byteLength(JSON.stringify({ document: project })),
+  );
+  let deep = {};
+  for (let index = 0; index < 10000; index++) deep = { child: deep };
+  assert.equal(
+    assertRequestDefinitionProjectBudget({ settings: deep }),
+    Buffer.byteLength(JSON.stringify({ document: { settings: {} } })) +
+      10000 * 10,
+  );
+  const feature = fixture();
+  let schema = {};
+  for (let index = 0; index < 70; index++) schema = { child: schema };
+  feature.requests[0].schema = schema;
+  assert.throws(() => save(undefined, feature), /结构/);
+  const current = edited(initial());
+  entry(current).versions[0].definition.schema = schema;
+  assert.throws(() => validateRequestDefinitionHistory(current), /结构/);
+});
+
+test("whole-project byte counting rejects hostile descriptors without executing them", () => {
+  let calls = 0;
+  const getter = {};
+  Object.defineProperty(getter, "value", {
+    enumerable: true,
+    get() {
+      calls++;
+      throw Error("executed");
+    },
+  });
+  const proxy = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        calls++;
+        throw Error("executed");
+      },
+      ownKeys() {
+        calls++;
+        throw Error("executed");
+      },
+    },
+  );
+  const cycle = {};
+  cycle.self = cycle;
+  const sparse = [];
+  sparse.length = 2;
+  sparse[1] = 1;
+  const extra = [1];
+  extra.hidden = 2;
+  const hidden = {};
+  Object.defineProperty(hidden, "hidden", { value: true });
+  const toJSON = {
+    toJSON() {
+      calls++;
+      throw Error("executed");
+    },
+  };
+  for (const value of [
+    getter,
+    proxy,
+    cycle,
+    sparse,
+    extra,
+    hidden,
+    toJSON,
+    { value: Infinity },
+    { value: 1n },
+    { [Symbol("key")]: true },
+    [undefined],
+  ]) {
+    let nested = value;
+    for (let index = 0; index < 100; index++) nested = { child: nested };
+    assert.throws(() =>
+      assertRequestDefinitionProjectBudget({ settings: nested }),
+    );
+  }
+  assert.equal(calls, 0);
+  assert.throws(
+    () =>
+      assertRequestDefinitionProjectBudget({
+        settings: "x".repeat(12 * 1024 * 1024),
+      }),
+    /体积超过12582912/,
+  );
 });

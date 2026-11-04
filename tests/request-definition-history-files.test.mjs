@@ -345,3 +345,31 @@ test("definition history preserves existing environment-before-history partial a
   );
   assert.deepEqual(await readProject(root, project.id), recovered);
 });
+
+test("existing record-ID layout errors retain precedence while history still validates before any journal", async (t) => {
+  const root = await directory(t),
+    project = fixture();
+  await writeProject(root, project);
+  const before = await readProject(root, project.id);
+  for (const requests of [
+    [{ id: "same" }, { id: "same" }],
+    [{ id: "" }],
+    [{ id: 42 }],
+  ]) {
+    await assert.rejects(
+      writeProject(root, { ...project, requests }),
+      /记录ID/,
+    );
+    await assert.rejects(readFile(path.join(root, ".transaction.json")), {
+      code: "ENOENT",
+    });
+    assert.deepEqual(await readProject(root, project.id), before);
+  }
+  const malformed = structuredClone(project);
+  malformed.requestDefinitionHistory.projectId = "different-project";
+  await assert.rejects(writeProject(root, malformed), /历史.*归属/);
+  await assert.rejects(readFile(path.join(root, ".transaction.json")), {
+    code: "ENOENT",
+  });
+  assert.deepEqual(await readProject(root, project.id), before);
+});

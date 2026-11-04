@@ -31,9 +31,6 @@ const filename = (id) => {
   return name;
 };
 function validateLayout(project) {
-  // A malformed history journal must fail before roll-forward touches any
-  // current definition, not only when Store later inspects the reconstructed data.
-  validateRequestDefinitionHistory(project);
   for (const key of Object.keys(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -47,6 +44,9 @@ function validateLayout(project) {
       diskNames.add(name);
     }
   }
+  // Preserve existing layout diagnostics, then validate history as part of the
+  // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
+  validateRequestDefinitionHistory(project);
 }
 async function writeJSON(file, value, beforePublish) {
   const text = JSON.stringify(value, null, 2) + "\n";

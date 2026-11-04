@@ -1,6 +1,7 @@
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   validateRequestDefinitionHistory,
+  assertRequestDefinitionProjectBudget,
   projectHistoryProjection,
   sameHistoryJSON,
   reconcileRequestDefinitionHistory,
@@ -1024,10 +1025,7 @@ export class Store {
     else next.requestDefinitionHistory = definitions;
     validateRequestDefinitionHistory(next);
     if (!activity && next.requestDefinitionHistory !== undefined)
-      projectHistoryProjection(
-        { document: next },
-        { maxBytes: 12 * 1024 * 1024 },
-      );
+      assertRequestDefinitionProjectBudget(next);
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
