@@ -1,3 +1,4 @@
+import { liveRequestId } from "./live-plan-reference.mjs";
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
@@ -23,6 +24,7 @@ export function versionPlan(previous, input, source = "manual", project) {
     ? policy
     : oldPolicy;
   validatePlanStepTypes(input.steps);
+  for (const step of planLeaves(input.steps || [])) liveRequestId(step);
   if (!validateRepeatGraph(input.steps)) linearPlanStepIds(input.steps);
   if (previous && !validateRepeatGraph(previous.steps))
     linearPlanStepIds(previous.steps);

@@ -261,6 +261,19 @@ export function buildManualImportPlan(
     delete item.reason;
     const value = node.value;
     const binding = input.bindings[node.key];
+    // Service/environment bindings for a live API cannot yet be remapped
+    // losslessly by selective import. Refuse the selected plan bundle rather
+    // than create a plan that can point at the wrong service or fail later.
+    if (
+      node.kind === "plan-bundle" &&
+      node.references.some(
+        (ref) =>
+          ref.kind === "api" && !ref.key && ref.path.at(-1) === "liveRequestId",
+      )
+    ) {
+      block(node, "live_plan_import_unsupported");
+      continue;
+    }
     if (node.kind === "folder") {
       const destination = mapFolder(node.id);
       if (!destination) {

@@ -1,6 +1,7 @@
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import { assertNativeHTTPPlan } from "./native-mcp-http-shape.mjs";
-import { hasRepeatSteps } from "./plan-repeat.mjs";
+import { hasRepeatSteps, planLeaves } from "./plan-repeat.mjs";
+import { liveRequestId } from "./live-plan-reference.mjs";
 export function assertNativeLinearPlan(plan) {
   if (plan && readPlanFailurePolicy(plan))
     throw Error(
@@ -10,6 +11,11 @@ export function assertNativeLinearPlan(plan) {
     throw Error(
       "原版兼容流程不支持canonical循环组或条件组；请使用canonical计划工具",
     );
+  if (
+    plan?.steps &&
+    planLeaves(plan.steps).some((step) => liveRequestId(step) !== undefined)
+  )
+    throw Error("原版兼容流程不支持实时接口引用；请使用canonical计划工具");
   if (plan !== undefined) assertNativeHTTPPlan(plan);
 }
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
