@@ -78,3 +78,53 @@ layers already suppress late scope results and record interrupted DB tasks; they
 may finish/persist before all asynchronous transport cleanup has completed.
 Their integration acceptance must separately observe eventual actual socket or
 process closure, rather than treating an SDK's local AbortError as that proof.
+
+## Session revocation extension
+
+The original contract above intentionally limited grant revocation to invalidating
+permissions and results. Session reads now additionally receive the captured
+session controller signal, combined with the original caller signal through
+Node's `AbortSignal.any`. This is a new behavior, not a correction to the original
+scope. `revoke(projectId, id)` cancels all reads using that exact captured grant;
+`close()` invalidates and cancels all current grants, including MCP policy
+invalidation and CLI cleanup. The same sessions object may subsequently register
+fresh grants. A replacement with the same binding ID does not revive old reads.
+
+The synchronous revoke/close return confirms invalidation and cancellation
+signalling, not completed resource cleanup. Existing driver read promises settle
+following their owned resource close. Project-source resolver waits are not newly
+interruptible: a pending resolver must return before its existing identity/source
+checks finish. Successful results already returned are not retroactively changed.
+Both pre-query and post-query source checks and captured-object checks remain.
+
+Cancellation is limited to read transports. PostgreSQL/MySQL/Redis retain their
+checks between asynchronous setup stages; after observing abort they do not issue
+a later setup/query command. ClickHouse authentication and query share one HTTP
+request. SQLite process and Mongo Worker termination are retained, without a new
+cross-thread dispatch barrier. Bytes already sent, driver commands already
+submitted, and server-side execution may precede local termination. No guarantee
+of server query cancellation, rollback, or absence of effects is made. No query
+is replayed, no admin cancellation command is sent, and write APIs/receipts are
+unchanged.
+
+The merged signal does not cancel the entire plan. In DatabaseSessions, an
+original caller abort retains the existing cancellation error; otherwise a revoked
+captured grant is reported as revoked, with no driver/abort-reason disclosure.
+MCP retains its existing outer authorization/epoch-first check and redaction;
+re-registration may therefore surface a generic failed read rather than a revoked
+message. Normal plan failure/continuation and cancellation policy are unchanged.
+No new permission, persisted connection secret, dependency or server license is
+introduced. Root integration must reuse its existing native-write session
+controller, leaving generation, captured write targets and write receipts intact.
+
+Session-specific loopback tests hold PG authentication/BEGIN/query and MySQL
+handshake/SET/START/PREPARE, plus Redis AUTH/SELECT. SSH tests fill five leases,
+revoke a held authentication or forwarding operation, observe closure, then admit
+a sixth connection. They prove owned capacity reclamation; the existing separate
+SSH regression suite supplies the no-direct-fallback contract. Mongo/ClickHouse
+observe actual socket close, and SQLite observes actual child close. Source gates,
+replacement binding grants, simultaneous caller/session abort, actual SDK HTTP
+history and CLI grant cleanup are covered independently. A public PG driver-seam
+case controls error-before-cleanup-abort precedence only; it is not a new server
+or session-wrapper wire test. Full remote-engine and root-composition acceptance
+remain separate from these local loopback observations.

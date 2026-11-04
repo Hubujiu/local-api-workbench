@@ -196,7 +196,12 @@ test("CLI source SSH requirements cannot be downgraded or supplied as a grant fl
     steps: [{ request: { before: [{ type: "database", connectionId: id }] } }],
   };
   const source = [{ id, type: "postgres", requiresSSH: true }],
-    config = { type: "postgres", host: "127.0.0.1", database: "fixture" };
+    config = {
+      type: "postgres",
+      host: "127.0.0.1",
+      user: "fixture",
+      database: "fixture",
+    };
   assert.throws(
     () => prepareCLIDatabaseGrants("p", plan, { [id]: config }, source),
     /SSH/,
