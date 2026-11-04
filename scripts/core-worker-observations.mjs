@@ -111,10 +111,29 @@ const microseconds = [
   ["promiseStateUs", 60000000],
   ["serializationUs", 60000000],
 ];
+const compatibilityOperations = enumeration([
+  "mock-asset",
+  "mock-install",
+  "source-build",
+  "compatibility-eval",
+]);
+const compatibilityFields = [
+  ["version", 1],
+  ["operation", compatibilityOperations],
+  ["mockAssetMs", 60000],
+  ["mockAssetCPUUs", 60000000],
+  ["mockInstallMs", 60000],
+  ["mockInstallCPUUs", 60000000],
+  ["sourceBuildMs", 60000],
+  ["sourceBuildCPUUs", 60000000],
+  ["evaluationMs", 60000],
+  ["evaluationCPUUs", 60000000],
+];
 const nestedFields = [
   ["scriptDiagnostics", counters],
   ["activityMetrics", milliseconds],
   ["activityCPUTimeUs", microseconds],
+  ["compatibilityDiagnostics", compatibilityFields],
 ];
 // Trusted schema tuples must not read inherited optional indices or iterators.
 for (const schema of [
@@ -123,6 +142,7 @@ for (const schema of [
   bootstrap,
   milliseconds,
   microseconds,
+  compatibilityFields,
   nestedFields,
 ]) {
   for (let i = 0; i < schema.length; i++) setPrototypeOf(schema[i], null);
@@ -171,6 +191,12 @@ function metadata(source, strict = false) {
     if (raw === undefined) continue;
     const projected = create(null);
     copyFields(projected, raw, schema);
+    if (
+      key === "compatibilityDiagnostics" &&
+      (own(projected, "version") !== 1 ||
+        own(projected, "operation") === undefined)
+    )
+      continue;
     if (
       key === "scriptDiagnostics" &&
       result.scriptStage === "bootstrap" &&
