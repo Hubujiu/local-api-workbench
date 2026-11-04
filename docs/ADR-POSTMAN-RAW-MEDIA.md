@@ -29,3 +29,9 @@ Dependency-free RED tests exercise the extracted original conversion and fail on
 The extracted original projection produced four real RED assertions and one unchanged JSON control. The implemented pure helper suite currently passes 22/22. The authored owner/script workflows have only syntax/format verification locally (0 runtime executions); normal exact CI is required. No dependency bypass or original/VM/XML-parser execution occurred.
 
 OpenAPI resolves only effective inherited Content-Type for marked requests (not unrelated global query/cookie/auth values). It represents that header once as requestBody media, excluding the redundant Content-Type header parameter so export→import cannot create a duplicate control header. Marker preflight runs before authentication/cookie/connection preparation, with a final body check retained; it does not weaken cancellation or existing duplicate-header rejection.
+
+Marked static exports also reject active template Header names and dynamic Content-Type providers, before owner cURL attempts resolution. A static header placeholder cannot be mistaken for a non-media header and a fixed/variable/mock provider cannot be treated as its stale displayed value. Negative owner tests verify unchanged project/disk and no wire traffic.
+
+For marked raw object script updates, disabled is accepted only when absent or strictly false. true and truthy/coerced non-booleans explicitly reject instead of silently sending a body upstream would suppress; old unmarked script behavior is unchanged.
+
+Final-body resolution validates marked JSON after variable substitution, before its internal setter can downgrade invalid JSON to raw text. JSON lineage paired with raw mode is rejected; this prevents finalization from bypassing the bounded JSON contract. Valid JSON→string script updates explicitly reset the lineage to default and remain supported.

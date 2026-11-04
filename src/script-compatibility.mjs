@@ -162,7 +162,8 @@ function installScriptCompatibility({
             !value ||
             value.mode !== "raw" ||
             typeof value.raw !== "string" ||
-            value.disabled === true
+            (Object.prototype.hasOwnProperty.call(value, "disabled") &&
+              value.disabled !== false)
           )
             throw Error("Postman raw媒体脚本更新仅支持活动raw正文");
           raw = value.raw;

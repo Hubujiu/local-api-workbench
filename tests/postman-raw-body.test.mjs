@@ -214,3 +214,29 @@ test("marked JSON switch does not invent empty JSON payload", () => {
     applyPostmanRawMedia(request("json", { bodyType: "json", body: "" }), {}),
   );
 });
+
+test("static exports reject dynamic media and template header identities", () => {
+  for (const header of [
+    {
+      key: "Content-Type",
+      value: "text/plain",
+      dynamic: { source: "fixed", value: "application/custom" },
+    },
+    { key: "{{mediaHeader}}", value: "application/custom" },
+  ]) {
+    const r = request("xml", { headers: [header] });
+    const before = structuredClone(r);
+    assert.throws(() => postmanRawExportDefinition(r));
+    assert.throws(() => postmanRawExportDefinition(r, { openapi: true }));
+    assert.deepEqual(r, before);
+  }
+});
+
+test("JSON lineage cannot downgrade to raw to bypass final JSON validation", () => {
+  assert.throws(() =>
+    applyPostmanRawMedia(
+      request("json", { bodyType: "raw", body: '{"bad":"""}' }),
+      {},
+    ),
+  );
+});

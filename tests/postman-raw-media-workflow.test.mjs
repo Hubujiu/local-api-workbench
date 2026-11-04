@@ -484,7 +484,8 @@ test("raw media is selected after imported before-script updates without mutatin
       language: "html",
     },
     {
-      script: 'pm.request.body.update({mode:"raw",raw:"options-less raw"});',
+      script:
+        'pm.request.body.update({mode:"raw",raw:"options-less raw",disabled:false});',
       body: "options-less raw",
       media: "text/plain",
       language: "default",
@@ -655,6 +656,21 @@ test("default language plus any Content-Type and invalid script JSON are explici
       script:
         'pm.variables.set("broken", "\\\"");pm.request.body.update({mode:"raw",raw:"{\\"value\\":\\"{{broken}}\\"}",options:{raw:{language:"json"}}});',
     }),
+    rawItem(f.url + "/json-boundary/final-body", {
+      script: [
+        'pm.variables.set("bad", String.fromCharCode(34));',
+        'pm.request.body.update({mode:"raw",raw:JSON.stringify({value:"{{bad}}"}),options:{raw:{language:"json"}}});',
+        "pm.getFinalRequestRawBody();",
+      ].join("\n"),
+    }),
+    ...[true, "false", 1].map((disabled, index) =>
+      rawItem(f.url + "/json-boundary/disabled-" + index, {
+        script:
+          'pm.request.body.update({mode:"raw",raw:"must not send",disabled:' +
+          JSON.stringify(disabled) +
+          "});",
+      }),
+    ),
     rawItem(f.url + "/json-boundary/empty", {
       script:
         'pm.request.body.update({mode:"raw",raw:"",options:{raw:{language:"json"}}});',
@@ -948,4 +964,40 @@ test("cURL preserves empty raw and explicit-empty media while OpenAPI refuses th
     cases.length,
     "export refusal never sends requests",
   );
+});
+
+test("dynamic media export refuses before evaluation and leaves stored project unchanged", async (t) => {
+  const f = await fixture(t);
+  const project = await f.api(f.route + "/import", {
+    document: collection([rawItem(f.url + "/dynamic-media")]),
+  });
+  for (const header of [
+    {
+      key: "Content-Type",
+      value: "text/plain",
+      enabled: true,
+      dynamic: { source: "fixed", value: "application/custom" },
+    },
+    { key: "{{mediaHeader}}", value: "application/custom", enabled: true },
+  ]) {
+    const current = await f.api(f.route, undefined, "GET");
+    current.requests = [{ ...project.requests[0], headers: [header] }];
+    await f.api(f.route, current, "PUT");
+    const before = await f.api(f.route, undefined, "GET"),
+      disk = await diskSnapshot(f.root);
+    for (const [route, data, method] of [
+      [
+        f.route + "/curl",
+        { request: before.requests[0], environmentId: "selected" },
+        "POST",
+      ],
+      [f.route + "/export?format=openapi", undefined, "GET"],
+    ]) {
+      const response = await f.response(route, data, method);
+      assert.equal(response.status, 400, await response.text());
+    }
+    assert.deepEqual(await f.api(f.route, undefined, "GET"), before);
+    assert.deepEqual(await diskSnapshot(f.root), disk);
+  }
+  assert.equal(f.seen.length, 0);
 });

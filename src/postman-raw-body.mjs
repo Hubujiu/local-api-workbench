@@ -92,6 +92,7 @@ export function assertPostmanRawProfiles(profiles) {
 export function validatePostmanRawBodyRequest(request) {
   const policy = postmanRawBodyPolicy(request);
   if (!policy) return;
+  if (policy.language === "json" && request.bodyType === "raw") throw invalid();
   if (
     ["GET", "HEAD"].includes(String(request.method).toUpperCase()) &&
     (request.body ||
@@ -141,6 +142,16 @@ export function postmanRawExportDefinition(request, { openapi = false } = {}) {
     /\{\{/.test(request.body || "")
   )
     throw Error("Postman raw媒体动态正文请使用项目备份，不预测脚本输出");
+  if (
+    (request.headers || []).some(
+      (row) =>
+        row.enabled !== false &&
+        (/\{\{/.test(String(row.key)) ||
+          (String(row.key).toLowerCase() === "content-type" &&
+            row.dynamic !== undefined)),
+    )
+  )
+    throw Error("Postman raw媒体动态Header请使用项目备份");
   const headers = {};
   for (const row of request.headers || [])
     if (
