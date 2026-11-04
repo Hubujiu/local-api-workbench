@@ -1,3 +1,7 @@
+import {
+  applyPostmanRawMedia,
+  validatePostmanRawBodyRequest,
+} from "./postman-raw-body.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -354,6 +358,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       else delete headers.cookie;
     }
   }
+  validatePostmanRawBodyRequest(r);
   let body;
   if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");
@@ -397,6 +402,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   } else if (r.bodyType === "binary") {
     body = Buffer.from(r.body, "base64");
   } else if (r.bodyType !== "none") body = r.body;
+  applyPostmanRawMedia(r, headers, body);
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
   if (body) headers["content-length"] = Buffer.byteLength(body);

@@ -18,7 +18,10 @@ function installFinalBody({ request, response, pm, apt, previous }) {
         );
       // A proof carried from a preceding fresh VM already contains literal output.
       const body = inherited ? inherited.body : pm.variables.replaceIn(source);
+      // Finalization reads/resolves bytes; do not turn an imported XML default into text.
+      const rawPolicy = request.postmanRawBody;
       pm.setRequestBody(body);
+      if (rawPolicy) request.postmanRawBody = rawPolicy;
       finalized = { body: request.body, bodyType: request.bodyType };
       return body;
     };
