@@ -41,7 +41,8 @@ import {
   normalizeGrpcScriptContext,
   validateGrpcScriptBinding,
 } from "./grpc-script-context.mjs";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
+import { observeHostLifecycle } from "./script-host-lifecycle.mjs";
 import {
   normalizeWireScriptContext,
   validateWireScriptBinding,
@@ -49,6 +50,19 @@ import {
 
 // Application startup only; each worker receives immutable compiled code, never a shared VM.
 const compiledEngine = await compileTrackedQuickJS();
+const hostLifecycles = new WeakMap();
+function attachHostObservation(error, key, value) {
+  try {
+    if (error && typeof error === "object" && !types.isProxy(error) && value)
+      Object.defineProperty(error, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+      });
+  } catch {
+    /* diagnostics never replace execution outcomes */
+  }
+}
 
 function scriptBudgets({
   activityBudgetMs = 250,
@@ -217,6 +231,7 @@ export function runScript(code, input, options = {}) {
       reject(Error("脚本执行已取消"));
       return;
     }
+    const lifecycle = observeHostLifecycle(() => performance.now());
     const worker = new Worker(new URL("./script-worker.mjs", import.meta.url), {
       workerData: {
         compiledEngine,
@@ -258,6 +273,8 @@ export function runScript(code, input, options = {}) {
       },
       resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 2 },
     });
+    lifecycle.mark("spawnMs");
+    worker.once("online", () => lifecycle.mark("onlineMs"));
     const controller = new AbortController(),
       networkRequests = [],
       databaseQueries = [];
@@ -270,6 +287,19 @@ export function runScript(code, input, options = {}) {
     let finishing;
     const finish = (error, result, terminate = true) => {
       if (finishing) return finishing;
+      const errorStage =
+        error && typeof error === "object" && !types.isProxy(error)
+          ? Object.getOwnPropertyDescriptor(error, "scriptStage")?.value
+          : undefined;
+      const reason =
+        errorStage === "total-deadline"
+          ? "total-deadline"
+          : errorStage === "cancelled"
+            ? "cancelled"
+            : terminate
+              ? "worker-error"
+              : "worker-exit";
+      lifecycle.finish(reason);
       settled = true;
       finishing = Promise.resolve()
         .then(async () => {
@@ -278,7 +308,10 @@ export function runScript(code, input, options = {}) {
           controller.abort();
           for (const record of databaseQueries)
             if (record.status === "running") record.status = "interrupted";
-          if (terminate) await worker.terminate();
+          if (terminate) {
+            lifecycle.mark("terminateMs");
+            await worker.terminate();
+          }
           if (nativeWrite) await drainNativeWrite(nativeWrite);
           if (error) {
             error.elapsedMs ??= Math.round(performance.now() - startedAt);
@@ -290,6 +323,8 @@ export function runScript(code, input, options = {}) {
               }
             error.databaseQueries = structuredClone(databaseQueries);
             error.networkRequests = structuredClone(networkRequests);
+            lifecycle.mark("settleMs");
+            attachHostObservation(error, "hostLifecycle", lifecycle.snapshot());
             reject(error);
           } else {
             try {
@@ -313,7 +348,7 @@ export function runScript(code, input, options = {}) {
                     ? "gRPC脚本不能输出HTTP请求/响应修改或数据库活动"
                     : "协议脚本不能输出HTTP请求/响应修改或数据库活动",
                 );
-              resolve({
+              const output = {
                 ...result,
                 responseOverride: validateResponseMutation(
                   result.responseOverride,
@@ -326,10 +361,19 @@ export function runScript(code, input, options = {}) {
                 ),
                 databaseQueries,
                 networkRequests,
-              });
+              };
+              lifecycle.mark("settleMs");
+              hostLifecycles.set(output, lifecycle.snapshot());
+              resolve(output);
             } catch (error) {
               error.scriptStage = "response-override";
               error.networkRequests = structuredClone(networkRequests);
+              lifecycle.mark("settleMs");
+              attachHostObservation(
+                error,
+                "hostLifecycle",
+                lifecycle.snapshot(),
+              );
               reject(error);
             }
           }
@@ -337,23 +381,26 @@ export function runScript(code, input, options = {}) {
         .catch((failure) => {
           // Cleanup failures must not strand the outer script promise. The owner
           // still finalizes its independent write receipt before returning.
+          lifecycle.mark("settleMs");
+          attachHostObservation(failure, "hostLifecycle", lifecycle.snapshot());
           reject(failure);
         });
       return finishing;
     };
     const startedAt = performance.now();
     let lastWorkerStage = "starting";
-    const timer = setTimeout(
-      () =>
-        finish(
-          Object.assign(Error("脚本执行超时"), {
-            scriptStage: "total-deadline",
-            lastWorkerStage,
-            elapsedMs: Math.round(performance.now() - startedAt),
-          }),
-        ),
-      wallBudgetMs,
-    );
+    const timer = setTimeout(() => {
+      lifecycle.mark("timerFireMs");
+      return finish(
+        Object.assign(Error("脚本执行超时"), {
+          scriptStage: "total-deadline",
+          lastWorkerStage,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        }),
+      );
+    }, wallBudgetMs);
+    lifecycle.mark("timerArmMs");
+    lifecycle.dueAt(startedAt + wallBudgetMs);
     const cancel = () =>
       finish(
         Object.assign(Error("脚本执行已取消"), { scriptStage: "cancelled" }),
@@ -362,6 +409,7 @@ export function runScript(code, input, options = {}) {
     worker.on("message", async (message) => {
       if (settled) return;
       if (message.kind === "stage") {
+        lifecycle.stage(message.stage);
         lastWorkerStage = message.stage;
         return;
       }
@@ -487,10 +535,14 @@ export function runScript(code, input, options = {}) {
           ...(error ? { error } : {}),
         });
         worker.postMessage({ kind: "http", id: message.id, error, response });
-      } else completedMessage = message;
+      } else {
+        lifecycle.terminal(message.error ? "error" : "result");
+        completedMessage = message;
+      }
     });
     worker.once("error", (error) => finish(error));
     worker.once("exit", (exitCode) => {
+      lifecycle.exit(exitCode);
       if (settled) return;
       if (exitCode === 0 && completedMessage) {
         finish(
@@ -498,6 +550,8 @@ export function runScript(code, input, options = {}) {
             ? Object.assign(Error(completedMessage.error), {
                 scriptStage: completedMessage.scriptStage,
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
+                compatibilityDiagnostics:
+                  completedMessage.compatibilityDiagnostics,
                 activityOperation: completedMessage.activityOperation,
                 activityMetrics: completedMessage.activityMetrics,
                 activityCPUTimeUs: completedMessage.activityCPUTimeUs,
@@ -529,6 +583,19 @@ export async function runScriptSequence(stages, input, options = {}) {
     throw Error("脚本阶段格式无效，最多34阶段、源码合计100000字符");
   const budgets = scriptBudgets(options);
   const deadline = performance.now() + budgets.wallBudgetMs;
+  const sequenceStartedAt = performance.now();
+  let priorWorkerMs = 0,
+    priorSpawnMs = 0,
+    priorExitWaitMs = 0;
+  const sequenceObservation = (stageIndex, completed) => ({
+    version: 1,
+    stageIndex,
+    completed,
+    elapsedMs: Math.max(0, Math.round(performance.now() - sequenceStartedAt)),
+    priorWorkerMs: Math.round(priorWorkerMs),
+    priorSpawnMs: Math.round(priorSpawnMs),
+    priorExitWaitMs: Math.round(priorExitWaitMs),
+  });
   let remaining = budgets.activityBudgetMs,
     requestLimit = budgets.requestLimit,
     timerLimit = budgets.timerLimit,
@@ -549,12 +616,19 @@ export async function runScriptSequence(stages, input, options = {}) {
   for (const [stageIndex, stage] of stages.entries()) {
     if (!stage.code.trim()) continue;
     const wallBudgetMs = Math.min(2000, deadline - performance.now());
-    if (remaining <= 0 || wallBudgetMs <= 0)
-      throw Object.assign(Error("脚本执行超时"), {
+    if (remaining <= 0 || wallBudgetMs <= 0) {
+      const error = Object.assign(Error("脚本执行超时"), {
         scriptStage: "sequence-budget",
         networkRequests,
         sequenceActivity,
       });
+      attachHostObservation(
+        error,
+        "hostSequence",
+        sequenceObservation(stageIndex, sequenceActivity.length),
+      );
+      throw error;
+    }
     let result;
     const stageStartedAt = performance.now();
     try {
@@ -574,6 +648,11 @@ export async function runScriptSequence(stages, input, options = {}) {
     } catch (error) {
       error.scriptScope = stage.name;
       error.sequenceActivity = sequenceActivity;
+      attachHostObservation(
+        error,
+        "hostSequence",
+        sequenceObservation(stageIndex, sequenceActivity.length),
+      );
       error.networkRequests = [
         ...networkRequests,
         ...(error.networkRequests || []).map((item) => ({
@@ -583,6 +662,14 @@ export async function runScriptSequence(stages, input, options = {}) {
       ];
       throw error;
     }
+    const host = hostLifecycles.get(result);
+    priorWorkerMs += Math.max(0, performance.now() - stageStartedAt);
+    if (Number.isSafeInteger(host?.spawnMs)) priorSpawnMs += host.spawnMs;
+    if (
+      Number.isSafeInteger(host?.exitMs) &&
+      Number.isSafeInteger(host?.terminalMs)
+    )
+      priorExitWaitMs += Math.max(0, host.exitMs - host.terminalMs);
     sequenceActivity.push({
       stageIndex,
       activityBudgetMs: remaining,
@@ -633,12 +720,19 @@ export async function runScriptSequence(stages, input, options = {}) {
       "finalBody",
     ])
       state[key] = result[key];
-    if (performance.now() > deadline || remaining < 0)
-      throw Object.assign(Error("脚本执行超时"), {
+    if (performance.now() > deadline || remaining < 0) {
+      const error = Object.assign(Error("脚本执行超时"), {
         scriptStage: "sequence-budget",
         networkRequests,
         sequenceActivity,
       });
+      attachHostObservation(
+        error,
+        "hostSequence",
+        sequenceObservation(stageIndex, sequenceActivity.length),
+      );
+      throw error;
+    }
     if (
       Buffer.byteLength(
         JSON.stringify({

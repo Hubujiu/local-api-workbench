@@ -8,6 +8,7 @@ import { nativeAssertionsInstallerSource } from "./native-response-assertions.mj
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { observeBootstrap } from "./script-bootstrap-diagnostics.mjs";
+import { observeCompatibility } from "./script-compat-diagnostics.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
 import {
   grpcScriptContextSource,
@@ -78,6 +79,7 @@ const readActivityMetrics = () =>
       Math.round(value),
     ]),
   );
+const compatibilityObservation = observeCompatibility(monotonicNow, threadCPU);
 const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
@@ -148,9 +150,11 @@ try {
       workerData,
     );
   parentPort.postMessage({ kind: "stage", stage: "loading-libraries" });
+  compatibilityObservation.enter("mock-asset");
   const mockReadStarted = monotonicNow();
   const mockLibrary = await readScriptMockAsset();
   const mockLoadMs = monotonicNow() - mockReadStarted;
+  compatibilityObservation.leave();
   activityMetrics.compatibilityMs += mockLoadMs;
   const useURLFacade = workerData.input.request?.scriptURLMode === "sdk";
   const facadeBundle = useURLFacade
@@ -611,6 +615,7 @@ try {
     // the facade additionally rejects descriptor/prototype mutations.
     const mockGlobals =
       "Object,Array,String,RegExp,Function,Number,Boolean,Math,JSON,Reflect,Symbol,parseInt,parseFloat,isNaN,isFinite,WeakSet,Error,globalThis";
+    compatibilityObservation.enter("mock-install");
     run(
       "Object.defineProperty(globalThis,'Mock',{value:((" +
         mockGlobals +
@@ -620,6 +625,8 @@ try {
         mockGlobals +
         ",globalThis.__scriptMockReserve),enumerable:true});delete globalThis.__scriptMockReserve;",
     );
+    compatibilityObservation.leave();
+    compatibilityObservation.enter("source-build");
     const compatibilitySources = [];
     const install = (code) => compatibilitySources.push(code);
     install(
@@ -768,7 +775,10 @@ try {
           JSON.stringify(JSON.stringify(wireContext)) +
           "),pm,apt,request});",
       );
+    compatibilityObservation.leave();
+    compatibilityObservation.enter("compatibility-eval");
     run(compatibilitySources.join(";\n"));
+    compatibilityObservation.leave();
   });
   let remaining = deadline - monotonicNow();
   const bounded = (fn) => {
@@ -1013,8 +1023,10 @@ try {
   if (outcome.result.activityMs > workerData.activityBudgetMs)
     throw Error("脚本执行超时");
 } catch (error) {
+  compatibilityObservation.leave();
   outcome = {
     error: error.message,
+    compatibilityDiagnostics: compatibilityObservation.snapshot(),
     scriptStage,
     activityOperation,
     activityCPUTimeUs: { ...activityCPUTimeUs },

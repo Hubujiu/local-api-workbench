@@ -1,3 +1,5 @@
+import { readHostDiagnostics } from "./script-host-lifecycle.mjs";
+import { readCompatibilityDiagnostics } from "./script-compat-diagnostics.mjs";
 import { bootstrapFailureDetails } from "./script-bootstrap-diagnostics.mjs";
 // Public diagnostic fields contain only known stages and bounded scalar counters.
 // Never expose worker input, source text, arbitrary error properties or host paths.
@@ -22,6 +24,17 @@ export function scriptFailureDetails(error) {
   if (typeof error.scriptScope === "string" && error.scriptScope.length <= 200)
     result.scriptScope = error.scriptScope;
   const diagnostics = {};
+  const lifecycle = readHostDiagnostics(error, "hostLifecycle");
+  const sequence = readHostDiagnostics(error, "hostSequence");
+  if (lifecycle) diagnostics.hostLifecycle = lifecycle;
+  if (sequence) diagnostics.hostSequence = sequence;
+  const compatibility = readCompatibilityDiagnostics(error);
+  if (compatibility) {
+    diagnostics.compatibilityOperation = compatibility.operation;
+    for (const [key, value] of Object.entries(compatibility))
+      if (!["version", "operation"].includes(key))
+        diagnostics["compat" + key[0].toUpperCase() + key.slice(1)] = value;
+  }
   const source = error.scriptDiagnostics || {};
   if (error.scriptStage === "bootstrap")
     Object.assign(diagnostics, bootstrapFailureDetails(source));

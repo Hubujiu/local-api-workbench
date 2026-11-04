@@ -1,3 +1,4 @@
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -282,7 +283,9 @@ test(
         arguments: { projectId: restored.id, apiId: "inside" },
       }),
     );
-    assert.equal(execution.status, "passed");
+    withExecutionResultDiagnostics(execution, () =>
+      assert.equal(execution.status, "passed"),
+    );
     assert.equal(seen.length, 1);
     assert.equal(seen[0]["x-ancestor"], "kept");
     assert.equal(seen[0]["x-folder"], "restored");
