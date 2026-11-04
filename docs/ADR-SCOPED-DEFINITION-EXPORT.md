@@ -156,6 +156,15 @@ reads retain their established recovery semantics: a previously published
 journal may roll forward, but export itself creates no configuration commit or
 new execution evidence. Transport observability is not project definition state.
 
-The initial combination is WIP. New cross-workflow assertions and exact combined
-CI are required independently of the feature's local and CI results. No main
-merge, release or deployment is implied.
+The combination now has five real cross-workflow tests: both native formats go
+through owner scoped export, two-step import, overwrite/history, reopen and
+re-export; official SDK HTTP/stdio interleave a read-only export with an existing
+import confirmation. The tests retain exact source/peer state, current environment,
+raw policy, static auth and frozen definitions, and prove stale previews and tokens
+reject. A real journal-temporary-file gate revokes write permission before
+publication and confirms that no target bytes change. DB definitions require the
+explicit credential-free rebind policy; no requests, scripts or DB tasks execute.
+
+These local checks do not replace exact combined CI, which remains pending. The
+candidate is WIP and separate from the accepted integration branch. No main merge,
+release or deployment is implied.
