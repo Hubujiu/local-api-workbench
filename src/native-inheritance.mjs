@@ -1,4 +1,8 @@
-import { planLeaves, validateRepeatGraph } from "./plan-repeat.mjs";
+import {
+  planLeaves,
+  validateRepeatGraph,
+  hasRepeatSteps,
+} from "./plan-repeat.mjs";
 import {
   readNativeFolderLifecycle,
   editNativeFolderLifecycle,
@@ -633,7 +637,9 @@ export function validateNativeInheritanceProject(project) {
     )
       fail("冻结用例来源接口与请求身份不一致");
   for (const plan of project.plans || [])
-    validateRepeatGraph(plan.steps, { allowRuntimeRows: true });
+    validateRepeatGraph(plan.steps, {
+      allowRuntimeRows: hasRepeatSteps(plan.steps),
+    });
   for (const frozen of [
     ...(project.plans || []).flatMap((p) =>
       planLeaves(p.steps || []).map((s) => s.request),

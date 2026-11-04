@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { Store } from "../src/runtime.mjs";
 import { versionPlan } from "../src/plan-version.mjs";
-import { runPlan, importIntoProject } from "../src/core.mjs";
+import { runPlan, importIntoProject, restoreProject } from "../src/core.mjs";
 import { writeProject } from "../src/project-files.mjs";
 import { nativeInheritanceFixture } from "./fixtures/native-inheritance.mjs";
 
@@ -225,4 +225,58 @@ test("runtime history and stored definitions cannot manufacture missing identiti
     plans: [snapshot],
   });
   await assert.rejects(new Store(root).get(project.id), /ID/);
+});
+
+test("linear restore keeps live-reference diagnostics before cloning in definitions and history", () => {
+  for (const history of [false, true])
+    for (const hidden of [false, true]) {
+      let reads = 0;
+      const step = { id: "leaf", request: { url: "http://example.invalid" } };
+      Object.defineProperty(
+        step,
+        "liveRequestId",
+        hidden
+          ? { value: "api" }
+          : {
+              enumerable: true,
+              get() {
+                reads++;
+                return "api";
+              },
+            },
+      );
+      const plan = { id: "plan", steps: [step] };
+      const backup = {
+        version: 1,
+        requests: [],
+        environments: [],
+        plans: history ? [] : [plan],
+        runs: history ? [{ id: "run", results: [], snapshot: plan }] : [],
+      };
+      assert.throws(() => restoreProject(backup), /实时计划引用/);
+      assert.equal(reads, 0);
+    }
+});
+
+test("runtime control graph restore still rejects hidden/accessor hooks without invoking them", () => {
+  for (const history of [false, true]) {
+    let reads = 0;
+    const plan = definition();
+    Object.defineProperty(plan.steps[0].rowsFrom, "name", {
+      enumerable: true,
+      get() {
+        reads++;
+        return "items";
+      },
+    });
+    const backup = {
+      version: 1,
+      requests: [],
+      environments: [],
+      plans: history ? [] : [plan],
+      runs: history ? [{ id: "run", results: [], snapshot: plan }] : [],
+    };
+    assert.throws(() => restoreProject(backup), /访问器/);
+    assert.equal(reads, 0);
+  }
 });

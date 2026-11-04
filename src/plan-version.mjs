@@ -7,6 +7,7 @@ import {
 } from "./plan-step-identities.mjs";
 import {
   validateRepeatGraph,
+  hasRepeatSteps,
   mapPlanLeaves,
   planLeaves,
 } from "./plan-repeat.mjs";
@@ -25,11 +26,17 @@ export function versionPlan(previous, input, source = "manual", project) {
     : oldPolicy;
   validatePlanStepTypes(input.steps);
   for (const step of planLeaves(input.steps || [])) liveRequestId(step);
-  if (!validateRepeatGraph(input.steps, { allowRuntimeRows: true }))
+  if (
+    !validateRepeatGraph(input.steps, {
+      allowRuntimeRows: hasRepeatSteps(input.steps),
+    })
+  )
     linearPlanStepIds(input.steps);
   if (
     previous &&
-    !validateRepeatGraph(previous.steps, { allowRuntimeRows: true })
+    !validateRepeatGraph(previous.steps, {
+      allowRuntimeRows: hasRepeatSteps(previous.steps),
+    })
   )
     linearPlanStepIds(previous.steps);
   const importedNativeFlowSource =
@@ -113,10 +120,12 @@ export function versionPlan(previous, input, source = "manual", project) {
       source,
       updatedAt: new Date().toISOString(),
     },
-    { allowRuntimeRows: true },
+    { allowRuntimeRows: hasRepeatSteps(input.steps) },
   );
   const old = previous
-    ? snapshotPlan(previous, { allowRuntimeRows: true })
+    ? snapshotPlan(previous, {
+        allowRuntimeRows: hasRepeatSteps(previous.steps),
+      })
     : {};
   if (
     previous &&

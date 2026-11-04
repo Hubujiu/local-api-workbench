@@ -174,7 +174,7 @@ function validateStoredRuntimeRows(project) {
         requireIds: true,
         allowRuntimeRows: true,
       });
-      snapshotPlan(plan, { allowRuntimeRows: true });
+      snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) });
     }
   }
 }
@@ -826,7 +826,7 @@ export class Store {
 
     for (const plan of p.plans)
       if (hasRepeatSteps(plan.steps) && hasRuntimeRows(plan.steps))
-        snapshotPlan(plan, { allowRuntimeRows: true });
+        snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) });
     validatePostmanOAuth2Project(p);
     validatePostmanCollections(p);
     // Preflight the whole definition batch before normalizing any collection.
@@ -1128,7 +1128,7 @@ export class Store {
     const normalizedPlans = p.plans.map((plan) =>
       opaquePlans.has(plan)
         ? structuredClone(plan)
-        : snapshotPlan(plan, { allowRuntimeRows: true }),
+        : snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) }),
     );
     p.plans =
       activity && previous ? structuredClone(previous.plans) : normalizedPlans;
@@ -1141,7 +1141,9 @@ export class Store {
             plans: previous.plans.map((plan) =>
               retainedPlans.has(plan)
                 ? structuredClone(plan)
-                : snapshotPlan(plan, { allowRuntimeRows: true }),
+                : snapshotPlan(plan, {
+                    allowRuntimeRows: hasRepeatSteps(plan.steps),
+                  }),
             ),
             cases: previous.cases?.map(snapshotCase),
           }
@@ -1160,7 +1162,9 @@ export class Store {
             plans: previous.plans.map((plan) =>
               retainedPlans.has(plan)
                 ? structuredClone(plan)
-                : snapshotPlan(plan, { allowRuntimeRows: true }),
+                : snapshotPlan(plan, {
+                    allowRuntimeRows: hasRepeatSteps(plan.steps),
+                  }),
             ),
             cases: previous.cases?.map(snapshotCase),
           }

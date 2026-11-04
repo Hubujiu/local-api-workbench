@@ -2715,8 +2715,14 @@ export function restoreProject(document) {
   validatePostmanOAuth2Project(document);
   validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  // Keep linear legacy validation ordering; strict runtime data admission is
+  // needed only for control graphs, not unrelated frozen HTTP definitions.
   for (const plan of document.plans || [])
-    if (!validateRepeatGraph(plan.steps, { allowRuntimeRows: true }))
+    if (
+      !validateRepeatGraph(plan.steps, {
+        allowRuntimeRows: hasRepeatSteps(plan.steps),
+      })
+    )
       linearPlanStepIds(plan.steps);
   validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
@@ -2784,7 +2790,9 @@ export function restoreProject(document) {
     validateRequestTaskSource(item.request);
   for (const plan of document.plans || []) {
     readPlanFailurePolicy(plan);
-    validateRepeatGraph(plan.steps, { allowRuntimeRows: true });
+    validateRepeatGraph(plan.steps, {
+      allowRuntimeRows: hasRepeatSteps(plan.steps),
+    });
     readImportedNativeFlowSource(plan);
     for (const step of planLeaves(plan.steps || [])) {
       liveRequestId(step);
@@ -2802,7 +2810,11 @@ export function restoreProject(document) {
           requireIds: true,
           allowRuntimeRows: true,
         });
-      if (validateRepeatGraph(run.snapshot.steps, { allowRuntimeRows: true }))
+      if (
+        validateRepeatGraph(run.snapshot.steps, {
+          allowRuntimeRows: hasRepeatSteps(run.snapshot.steps),
+        })
+      )
         snapshotPlan(run.snapshot, { allowRuntimeRows: true });
       readImportedNativeFlowSource(run.snapshot);
       for (const step of planLeaves(run.snapshot.steps || [])) {
@@ -2823,7 +2835,7 @@ export function restoreProject(document) {
       : normalizeHistoricalRequest,
   );
   copy.plans = (copy.plans || []).map((plan) =>
-    snapshotPlan(plan, { allowRuntimeRows: true }),
+    snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) }),
   );
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
