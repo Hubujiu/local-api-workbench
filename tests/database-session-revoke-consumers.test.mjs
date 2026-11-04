@@ -143,7 +143,7 @@ const cases = [
       missingFile: false,
     })),
   ),
-  ...["revoke", "rotate"].map((change) => ({
+  ...["sdk-cancel", "disable-execute"].map((change) => ({
     change,
     failurePolicy: "stop",
     native: false,
@@ -231,14 +231,18 @@ for (const { change, failurePolicy, native, missingFile } of cases) {
         otherBytes = await bytes(app.store.directory(other.id));
       let nativeRequest;
       if (native) {
-        importIntoProject(project, nativeRedisFixture(origin + "/database"));
+        const document = nativeRedisFixture(origin + "/database");
+        const source = document.apis.find(
+          (node) => node.target_type === "api",
+        ).request;
+        // Narrow the synthetic source before import, keeping its stored source
+        // and runtime task graph consistent rather than editing imported tasks.
+        source.pre_tasks = source.pre_tasks.filter(
+          (task) => task.type === "database",
+        );
+        source.post_tasks = [];
+        importIntoProject(project, document);
         nativeRequest = structuredClone(project.requests[0]);
-        // Use a real imported DB task without unrelated fixture scripts.
-        nativeRequest.nativeTasks.before =
-          nativeRequest.nativeTasks.before.filter(
-            (task) => task.type === "database",
-          );
-        nativeRequest.nativeTasks.after = [];
       }
       const owner = async (route, body, method = "POST") => {
         const response = await fetch(app.url + "/api/" + route, {
@@ -437,10 +441,13 @@ for (const { change, failurePolicy, native, missingFile } of cases) {
       assert.equal(attempts.length, 1);
       const run = attempts[0];
       assert.equal(run.status, cancelled ? "cancelled" : "failed");
-      assert.equal(run.snapshot.failurePolicy, failurePolicy);
+      assert.equal(
+        run.snapshot.failurePolicy,
+        failurePolicy === "stop" ? "stop" : undefined,
+      );
       assert.equal(
         Object.hasOwn(run.snapshot, "failurePolicy"),
-        failurePolicy !== undefined,
+        failurePolicy === "stop",
       );
       const continues = !cancelled && failurePolicy !== "stop";
       const ids = continues
@@ -483,10 +490,21 @@ for (const { change, failurePolicy, native, missingFile } of cases) {
       failures.forEach((row, index) => {
         assert.equal(row.status, "failed");
         assert.equal(row.response, undefined);
-        assert.equal(row.repeat.iteration, index);
+        assert.deepEqual(row.repeat, {
+          groupId: "repeat",
+          childId: "database",
+          iteration: index,
+          occurrenceId: JSON.stringify(["repeat", "database", index]),
+        });
         if (!cancelled) assert.match(row.error, /权限.*撤销|未授权/);
         if (native) {
           assert.equal(row.databaseQueries.length, 1);
+          assert.equal(
+            row.databaseQueries[0].connectionId,
+            project.settings.apipostDatabases[0].id,
+          );
+          assert.equal(row.databaseQueries[0].index, 0);
+          assert.equal(row.databaseQueries[0].phase, "before");
           assert.equal(
             row.databaseQueries[0].status,
             cancelled ? "interrupted" : "failed",
