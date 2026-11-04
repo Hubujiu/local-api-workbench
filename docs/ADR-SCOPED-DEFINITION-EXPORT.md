@@ -38,7 +38,7 @@ Selectable kinds are API, document, API folder, sample/case, sample folder,
 model, model folder, environment, project globals and indivisible protocol or
 collection bundles. An explicitly selected API folder expands its live subtree;
 this is an explicit Workbench contract, not an inferred original backend API.
-Samples include their live API and ancestor groups. Schema references include
+An explicitly selected folder is an indivisible subtree in this first slice; excluding one of its descendants is a conflict. Samples include their live API and ancestor groups. Schema references include
 their transitive models and model ancestors, without expanding recursive schema
 values. Literal example/default/extension data does not create references.
 Unknown external, dynamic or name-dependent semantic bindings fail at their
@@ -74,9 +74,18 @@ fails closed. A provably independent unselected resource does not poison the
 requested scope. The source project, peer projects, history, revisions, registry,
 execution counters and runtime settings stay unchanged on success and failure.
 
+The source graph has at most 10000 resource identities and 50000 dependency edges.
+Selected definitions have a 32 MiB, 64-level, 200000-value projection budget;
+reference declarations are limited to 8192 UTF-8 bytes and 64 pointer segments.
+Literal example/default data is not interpreted as a reference. Unselected
+large payloads and execution history are not deep-cloned to apply these limits.
+Preview shows resolved model-name and database-rebind options (null means no
+explicit database export approval).
+
 Native documents retain the existing 4 MiB and directory 5000-file bounds. MCP
 retains the 4 MiB document and 8 MiB complete encoded frame bounds. A large
 unselected resource or unrelated history must not acquire a new save/read limit.
+MCP preview also validates the complete future artifact frame using the worst encoded permitted request ID, before removing the artifact from the preview response.
 No host file reads, URL retrieval, scripts, Mock, signing, database connection or
 HTTP execution occur during preview/export.
 
@@ -92,5 +101,9 @@ HTTP execution occur during preview/export.
   rejected, including raw-media, auth and DB policies with no verified mapping.
 - Descriptor/Proxy/size/depth/node/frame boundaries and zero execution counters.
 
-This initial checkpoint contains real missing-route regression evidence only.
-The scope model, application wiring and SDK acceptance are not yet complete.
+The first checkpoint recorded three real missing-route owner failures. The next
+WIP implements the graph, bounded adapters and owner/MCP HTTP/stdio wiring. Pure
+and owner acceptance is in progress; official SDK acceptance and frozen-tree CI
+are required before delivery. Errors do not echo arbitrary Store error values.
+The adapter consumes persisted ordinary JSON and does not execute accessors or
+Proxy traps; this is not a serializer for arbitrary live JavaScript objects.
