@@ -1523,7 +1523,6 @@ export function createMCP({
               if (!definition) throw Error("计划不存在");
               if (nativeName) assertNativeLinearPlan(definition);
               const { plan, bindings } = materializeLivePlan(p, definition);
-              signal?.throwIfAborted();
               const totalSteps = activePlanStepCount(plan);
               const environmentId = selectedEnvironment(
                 p,
