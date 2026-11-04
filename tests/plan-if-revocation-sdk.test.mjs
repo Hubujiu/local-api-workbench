@@ -13,6 +13,7 @@ import { createApp } from "../src/server.mjs";
 import { snapshotPlan } from "../src/core.mjs";
 import { Store } from "../src/runtime.mjs";
 import { observeToolCall } from "./helpers/mcp-cancellation-observation.mjs";
+import { storedJSON } from "./helpers/stored-json.mjs";
 
 function bounded(promise, label) {
   let timer;
@@ -414,7 +415,7 @@ for (const action of ["sdk-cancel", "owner-revoke"])
         } else {
           const saved = await app.store.get(a.id);
           assert.equal(saved.runs.length, 1);
-          assert.deepEqual(saved.runs[0], run);
+          assert.deepEqual(saved.runs[0], storedJSON(run));
         }
         assert.deepEqual(await app.store.get(b.id), otherBefore);
         assert.deepEqual(await bytes(app.store.directory(b.id)), otherBytes);
@@ -505,7 +506,7 @@ for (const action of ["sdk-cancel", "owner-revoke"])
         assert.equal(retainedAppendSettled, true);
         assert.deepEqual(
           (await app.store.get(b.id)).runs[0],
-          retainedAppendInput,
+          storedJSON(retainedAppendInput),
         );
         assert.equal(retained.status, "passed");
         assert.equal(retained.recordSaved, true);
