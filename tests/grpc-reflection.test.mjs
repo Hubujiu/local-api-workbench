@@ -170,7 +170,9 @@ test("gRPC reflection HTTP flow saves its schema, executes it and restores the d
   const { definition } = await created.json();
   const executed = await post("grpc-run", {
     definitionId: definition.id,
-    messages: [{ text: "via reflection", big: "9007199254740993" }],
+    messages: [
+      { ...example.example, text: "via reflection", big: "9007199254740993" },
+    ],
   });
   assert.equal(executed.status, 200);
   const run = await executed.json();

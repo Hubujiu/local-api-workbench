@@ -125,3 +125,40 @@ test("MCP generates from a granted saved definition without changing it or conta
   assert.equal((await invoke([], definition.id)).result.isError, true);
   assert.equal((await invoke([project.id], "missing")).result.isError, true);
 });
+
+test("cuts an optional ancestor of a required cycle without rejecting a valid message", () => {
+  const p =
+    'syntax="proto2"; package x; message Q { optional R r=1; } message R { required Q q=1; } service S {rpc M(Q) returns(Q);}';
+  const result = generateGrpcRequestExample({
+    proto: p,
+    service: "x.S",
+    method: "M",
+  });
+  assert.deepEqual(result.example, {});
+  assert.deepEqual(result.skippedRecursiveFields, ["r"]);
+});
+
+test("bounds all recursive omissions, not only generated values", () => {
+  const fields = (type, n) =>
+    Array.from({ length: n }, (_, i) => `${type} f${i}=${i + 1};`).join(" ");
+  const p = `syntax="proto3"; package x; message Q {${fields("B", 20)}} message B {${fields("C", 20)}} message C {${fields("Q", 100)}} service S {rpc M(Q) returns(Q);}`;
+  assert.throws(
+    () => generateGrpcRequestExample({ proto: p, service: "x.S", method: "M" }),
+    /过大/,
+  );
+});
+
+test("generated boolean map keys survive a real protobuf wire round trip", () => {
+  const p =
+    'syntax="proto3"; package x; message Q {map<bool,string> flags=1;} service S {rpc M(Q) returns(Q);}';
+  const result = generateGrpcRequestExample({
+    proto: p,
+    service: "x.S",
+    method: "M",
+  });
+  const method = compileGrpcSchema({ proto: p }).methods.get("x.S/M");
+  const decoded = method.desc.requestDeserialize(
+    method.desc.requestSerialize(result.example),
+  );
+  assert.deepEqual(decoded.flags, result.example.flags);
+});

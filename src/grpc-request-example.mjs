@@ -21,26 +21,35 @@ export function generateGrpcRequestExample(input) {
   let count = 0;
   const skippedRecursiveFields = [];
   const unsafe = new Set(["__proto__", "prototype", "constructor"]);
+  class RequiredCycle extends Error {}
   function message(type, ancestry, depth, location) {
     if (depth > 32 || ++count > 10000) throw Error("gRPC请求示例结构过大");
     const result = Object.create(null);
     const oneofs = new Set();
     for (const field of type.fieldsArray) {
+      if (++count > 10000) throw Error("gRPC请求示例结构过大");
       if (unsafe.has(field.name)) throw Error("gRPC请求字段名不安全");
       if (field.partOf && oneofs.has(field.partOf.name)) continue;
       const nextPath = location ? location + "." + field.name : field.name;
       const target = field.resolvedType;
       if (target instanceof protobuf.Type && ancestry.has(target)) {
-        if (field.required) throw Error("gRPC必填消息递归无法生成有限示例");
+        if (field.required) throw new RequiredCycle();
         skippedRecursiveFields.push(nextPath);
         continue;
       }
-      if (++count > 10000) throw Error("gRPC请求示例结构过大");
       let value;
       if (target instanceof protobuf.Type) {
         const next = new Set(ancestry);
         next.add(target);
-        value = message(target, next, depth + 1, nextPath);
+        const checkpoint = skippedRecursiveFields.length;
+        try {
+          value = message(target, next, depth + 1, nextPath);
+        } catch (error) {
+          if (!(error instanceof RequiredCycle) || field.required) throw error;
+          skippedRecursiveFields.length = checkpoint;
+          skippedRecursiveFields.push(nextPath);
+          continue;
+        }
       } else if (target instanceof protobuf.Enum) {
         const values = Object.keys(target.values);
         if (!values.length) throw Error("gRPC枚举没有值");
@@ -52,7 +61,7 @@ export function generateGrpcRequestExample(input) {
       if (field.map)
         result[field.name] = {
           [field.keyType === "bool"
-            ? "false"
+            ? "true"
             : field.keyType === "string"
               ? "key"
               : "0"]: value,
@@ -63,14 +72,21 @@ export function generateGrpcRequestExample(input) {
     }
     return result;
   }
-  const example = message(selected.type, new Set([selected.type]), 0, "");
+  let example;
+  try {
+    example = message(selected.type, new Set([selected.type]), 0, "");
+  } catch (error) {
+    if (error instanceof RequiredCycle)
+      throw Error("gRPC必填消息递归无法生成有限示例");
+    throw error;
+  }
   const bytes = JSON.stringify(example);
   if (Buffer.byteLength(bytes) > 262144) throw Error("gRPC请求示例超过256KiB");
   const converted = selected.type.fromObject(example);
   const error = selected.type.verify(converted);
   if (error) throw Error("gRPC请求示例无法编码：" + error);
   selected.desc.requestSerialize(example);
-  return {
+  const result = {
     service,
     method,
     requestType: selected.type.fullName.slice(1),
@@ -78,4 +94,7 @@ export function generateGrpcRequestExample(input) {
     skippedRecursiveFields,
     sha256: compiled.sha256,
   };
+  if (Buffer.byteLength(JSON.stringify(result)) > 262144)
+    throw Error("gRPC请求示例响应超过256KiB");
+  return result;
 }
