@@ -35,9 +35,14 @@ accepted within the same 64 MiB wire bound. An existing project or execution
 archive above that bound is not guaranteed to round-trip; no oversized backup
 may be silently truncated or partially registered.
 
-Local owner/Store/official-SDK execution remains blocked by fixed dependencies;
-new authored transport tests are not represented as locally passing. No package
-workaround, original application execution, main merge or deployment occurs.
+The fixed lockfile was subsequently installed using npm ci --ignore-scripts,
+with all resolved packages from registry.npmjs.org and no version/lock changes.
+The first actual Store/owner/official-SDK batch on the quota candidate ran 26
+cases: 25 passed and one old test still expected the removed whole-project
+12 MiB configuration-save rejection. Its failure is retained; that assertion is
+replaced with successful configuration preservation and fresh backup identity
+checks under the newly approved contract. The revised tree needs its own full
+retest and CI. No original application execution, main merge or deployment occurs.
 
 ## Fixed dependency and first checkpoint
 

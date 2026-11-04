@@ -388,8 +388,8 @@ test("material OpenAPI sync writes capture prior definitions through the same St
   assert.equal(entry.versions[0].definition.name, "initial");
 });
 
-test("activity evidence may exceed old restore envelope without disabling history reads or changing definition history", async (t) => {
-  const { root, store, project } = await setup(t),
+test("activity evidence may exceed old restore envelope without disabling configuration, history or fresh backup restore", async (t) => {
+  const { root, store, project, peer } = await setup(t),
     p = await edit(store, project.id, "v2"),
     history = json(p.requestDefinitionHistory);
   await store.append(p.id, "history", {
@@ -412,10 +412,23 @@ test("activity evidence may exceed old restore envelope without disabling histor
     }).definition.name,
     "v1",
   );
-  large.name = "config must respect envelope";
-  await assert.rejects(store.save(large), /JSON体积|限制/);
-  assert.equal((await store.get(p.id)).name, "history");
+  const peerBefore = await store.get(peer.id);
+  const evidence = json(large.history);
+  large.name = "configuration is not a backup HTTP envelope";
+  const saved = await store.save(large);
+  const reopened = await new Store(root).get(p.id);
+  assert.equal(reopened.name, large.name);
+  assert.deepEqual(reopened.history, evidence);
+  assert.deepEqual(reopened.requestDefinitionHistory, history);
+  const restored = await store.restore(saved);
+  assert.notEqual(restored.id, saved.id);
+  assert.equal(restored.requestDefinitionHistory.projectId, restored.id);
+  assert.deepEqual(restored.requestDefinitionHistory.entries, history.entries);
+  assert.deepEqual(restored.history, evidence);
+  assert.deepEqual(await store.get(p.id), reopened);
+  assert.deepEqual(await store.get(peer.id), peerBefore);
   await noJournal(store, p);
+  await noJournal(store, restored);
 });
 
 function child(t, root, id, name) {
