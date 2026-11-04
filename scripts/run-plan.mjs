@@ -1,3 +1,7 @@
+import {
+  hasLiveReferences,
+  materializeLivePlan,
+} from "../src/live-plan-materialize.mjs";
 import { activePlanLeaves, hasIfSteps } from "../src/plan-repeat.mjs";
 import { validatePlanStepTypes } from "../src/plan-step-types.mjs";
 import { prepareCLIDatabaseGrants } from "../src/cli-database-grants.mjs";
@@ -30,10 +34,11 @@ if (!args.includes("--project") || !args.includes("--plan")) {
     const store = new Store(
         path.resolve(process.env.LOCAL_API_DATA || ".local-api"),
       ),
-      project = await store.get(option("--project")),
-      plan = project.plans.find((p) => p.id === option("--plan"));
-    if (!plan) throw Error("Plan not found");
-    validatePlanStepTypes(plan.steps);
+      initialProject = await store.get(option("--project"));
+    let project = initialProject,
+      definition = project.plans.find((p) => p.id === option("--plan"));
+    if (!definition) throw Error("Plan not found");
+    validatePlanStepTypes(definition.steps);
     const controller = new AbortController();
     process.once("SIGINT", () => controller.abort());
     const databaseEnabled = args.includes("--database-stdin");
@@ -44,6 +49,14 @@ if (!args.includes("--project") || !args.includes("--plan")) {
             allowDatabase: databaseEnabled,
           })
         : {};
+    if (hasLiveReferences(definition)) {
+      project = await store.get(option("--project"));
+      controller.signal.throwIfAborted();
+      definition = project.plans.find((p) => p.id === option("--plan"));
+      if (!definition) throw Error("Plan not found");
+    }
+    const { plan, bindings } = materializeLivePlan(project, definition);
+    controller.signal.throwIfAborted();
     // Canonical IF has a conservative declaration-level grant contract: an
     // enabled potential DB leaf needs an explicit invocation grant even if its
     // condition later evaluates false. Dynamic script calls retain runtime checks.
@@ -98,6 +111,7 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       },
     );
     run.environmentId = environmentId;
+    if (bindings.length) run.liveBindings = bindings;
     run = await recordPlanRun(store, project.id, run, "cli");
     const json = JSON.stringify(run, null, 2) + "\n";
     if (args.includes("--output"))

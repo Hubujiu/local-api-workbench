@@ -1,3 +1,4 @@
+import { materializeLivePlan } from "./live-plan-materialize.mjs";
 import {
   scopedExportArguments,
   previewDefinitionExport,
@@ -1518,9 +1519,11 @@ export function createMCP({
             }
             case "localapi_execute_flow":
             case "localapi_run_plan": {
-              const plan = p.plans.find((r) => r.id === args.planId);
-              if (!plan) throw Error("计划不存在");
-              if (nativeName) assertNativeLinearPlan(plan);
+              const definition = p.plans.find((r) => r.id === args.planId);
+              if (!definition) throw Error("计划不存在");
+              if (nativeName) assertNativeLinearPlan(definition);
+              const { plan, bindings } = materializeLivePlan(p, definition);
+              signal?.throwIfAborted();
               const totalSteps = activePlanStepCount(plan);
               const environmentId = selectedEnvironment(
                 p,
@@ -1590,6 +1593,7 @@ export function createMCP({
                 if (signal?.aborted) output.status = "cancelled";
               }
               output.environmentId = environmentId;
+              if (bindings.length) output.liveBindings = bindings;
               output = await recordPlanRun(store, p.id, output, "mcp");
               break;
             }

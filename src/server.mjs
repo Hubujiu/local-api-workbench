@@ -1,3 +1,7 @@
+import {
+  hasLiveReferences,
+  materializeLivePlan,
+} from "./live-plan-materialize.mjs";
 import { prepareStagedLoad, runStagedLoad } from "./staged-load-plan.mjs";
 import {
   assertCodeTarget,
@@ -2346,24 +2350,30 @@ export async function createApp({
             });
           }
           if (action === "run" && req.method === "POST") {
-            const b = await body(req),
-              plan = p.plans.find((x) => x.id === b.planId);
-            if (!plan) throw Error("计划不存在");
-            const runId = b.runId || id();
-            if (
-              typeof runId !== "string" ||
-              !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
-              controllers.has(runId)
-            )
-              throw Error("计划运行标识无效或正在使用");
-            const controller = new AbortController();
-            controllers.set(runId, controller);
+            const b = await body(req);
+            const { controller, runId } = claimRun(b.runId || undefined);
             try {
+              let executionProject = p;
+              let definition = p.plans.find((x) => x.id === b.planId);
+              if (!definition) throw Error("计划不存在");
+              if (hasLiveReferences(definition)) {
+                executionProject = await store.get(p.id);
+                controller.signal.throwIfAborted();
+                definition = executionProject.plans.find(
+                  (x) => x.id === b.planId,
+                );
+                if (!definition) throw Error("计划不存在");
+              }
+              const { plan, bindings } = materializeLivePlan(
+                executionProject,
+                definition,
+              );
+              controller.signal.throwIfAborted();
               const environmentId = selectedEnvironment(
-                p,
+                executionProject,
                 b.environmentId || plan.environmentId,
               ).id;
-              const env = environmentVariables(p, environmentId);
+              const env = environmentVariables(executionProject, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
                 executeGrpc: executePlanGrpc,
                 grpcCredentials: b.grpcCredentials,
@@ -2375,14 +2385,22 @@ export async function createApp({
                     sessions: socketioSessions,
                   }),
                 socketioCredentials: b.socketioCredentials,
-                ...scopedExecution(store, p, environmentId),
+                ...scopedExecution(store, executionProject, environmentId),
                 databaseQuery: (operation, signal) =>
                   databaseSessions.query(p.id, operation, signal),
-                cookieSession: projectCookieSession(store, p, environmentId),
+                cookieSession: projectCookieSession(
+                  store,
+                  executionProject,
+                  environmentId,
+                ),
                 signal: controller.signal,
-                prepareRequest: createServiceRequestResolver(p, environmentId),
+                prepareRequest: createServiceRequestResolver(
+                  executionProject,
+                  environmentId,
+                ),
               });
               run.environmentId = environmentId;
+              if (bindings.length) run.liveBindings = bindings;
               return json(
                 res,
                 200,
@@ -2394,16 +2412,6 @@ export async function createApp({
           }
           if (action === "staged-load" && req.method === "POST") {
             const b = await body(req);
-            const plan = p.plans.find((item) => item.id === b.planId);
-            if (!plan) throw Error("计划不存在");
-            const prepared = prepareStagedLoad(p, plan, b.schedule, {
-              environmentId: b.environmentId,
-            });
-            const context = debugEnvironment(
-              p,
-              prepared.selected.id,
-              debugEnvironments,
-            );
             const { controller, runId } = claimRun(b.runId);
             const disconnected = () => {
               if (!res.writableFinished) controller.abort();
@@ -2416,18 +2424,47 @@ export async function createApp({
               res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
             };
             try {
-              const cookieState = await projectCookieSession(
-                store,
-                p,
+              let executionProject = p;
+              let definition = p.plans.find((item) => item.id === b.planId);
+              if (!definition) throw Error("计划不存在");
+              if (hasLiveReferences(definition)) {
+                executionProject = await store.get(p.id);
+                definition = executionProject.plans.find(
+                  (item) => item.id === b.planId,
+                );
+                if (!definition) throw Error("计划不存在");
+              }
+              const { plan } = materializeLivePlan(
+                executionProject,
+                definition,
+              );
+              const prepared = prepareStagedLoad(
+                executionProject,
+                plan,
+                b.schedule,
+                {
+                  environmentId: b.environmentId,
+                },
+              );
+              const context = debugEnvironment(
+                executionProject,
                 prepared.selected.id,
-              ).inspect();
+                debugEnvironments,
+              );
+              const cookieState = controller.signal.aborted
+                ? undefined
+                : await projectCookieSession(
+                    store,
+                    executionProject,
+                    prepared.selected.id,
+                  ).inspect();
               if (res.destroyed) return;
               res.writeHead(200, {
                 "Content-Type": "text/event-stream; charset=utf-8",
                 "Cache-Control": "no-store",
               });
               emit("start", { runId });
-              const result = await runStagedLoad(p, prepared, {
+              const result = await runStagedLoad(executionProject, prepared, {
                 signal: controller.signal,
                 variables: context.variables,
                 cookieState,

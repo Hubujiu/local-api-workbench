@@ -528,6 +528,10 @@ export function buildManualImportSourceGraph(input, context) {
           walk(step.steps, [...stepPath, "steps"], seen);
         } else if (step.request) {
           request(plans, [...stepPath, "request"], true);
+          if (step.liveRequestId !== undefined)
+            ref(plans, "api", [...stepPath, "liveRequestId"], {
+              optional: false,
+            });
           if (step.nativeMCP !== undefined)
             fail("手动导入不支持额外live MCP计划绑定");
         } else {

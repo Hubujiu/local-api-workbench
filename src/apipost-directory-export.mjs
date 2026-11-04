@@ -1,3 +1,4 @@
+import { liveRequestId } from "./live-plan-reference.mjs";
 import { postmanRawBodyPolicy } from "./postman-raw-body.mjs";
 import {
   preflightApipostAttributes,
@@ -123,6 +124,8 @@ export function exportApipostDirectory(project, options = {}) {
       )
     )
       throw Error("原生目录计划仅支持HTTP步骤");
+    if ((input.steps || []).some((step) => liveRequestId(step) !== undefined))
+      throw Error("原生目录尚不能无损导出实时接口引用；请使用项目备份");
     const plan = snapshotPlan(input);
     if (plan.failurePolicy)
       throw Error("原生目录计划不支持canonical失败停止策略");

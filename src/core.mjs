@@ -1,3 +1,4 @@
+import { liveRequestId } from "./live-plan-reference.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
 import {
@@ -570,6 +571,7 @@ export function evaluateAssertions(response, assertions = []) {
 export function snapshotPlan(plan) {
   const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
+  for (const step of planLeaves(plan.steps || [])) liveRequestId(step);
   validatePostmanOAuth2Project({ plans: [plan] });
   const repeated = validateRepeatGraph(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
@@ -646,6 +648,9 @@ export function snapshotPlan(plan) {
                 id: s.id || id(),
                 name: s.name || s.request?.name || "步骤",
                 enabled: s.enabled !== false,
+                ...(liveRequestId(s) === undefined
+                  ? {}
+                  : { liveRequestId: liveRequestId(s) }),
                 request: {
                   ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
                   serviceSnapshot: true,
@@ -730,6 +735,9 @@ export async function runPlan(
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
+  for (const step of planLeaves(plan.steps || []))
+    if (liveRequestId(step) !== undefined)
+      throw Error("实时计划须先在项目快照中冻结引用");
   validatePostmanOAuth2Project({ plans: [plan] });
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
@@ -2598,16 +2606,20 @@ export function restoreProject(document) {
     readPlanFailurePolicy(plan);
     validateRepeatGraph(plan.steps);
     readImportedNativeFlowSource(plan);
-    for (const step of planLeaves(plan.steps || []))
+    for (const step of planLeaves(plan.steps || [])) {
+      liveRequestId(step);
       validateRequestTaskSource(step.request);
+    }
   }
   for (const run of document.runs || [])
     if (run.snapshot) {
       readPlanFailurePolicy(run.snapshot);
       if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
       readImportedNativeFlowSource(run.snapshot);
-      for (const step of planLeaves(run.snapshot.steps || []))
+      for (const step of planLeaves(run.snapshot.steps || [])) {
+        liveRequestId(step);
         validateRequestTaskSource(step.request);
+      }
     }
   validateProjectDatabaseWriteEvidence(document);
   const copy = structuredClone(document);
