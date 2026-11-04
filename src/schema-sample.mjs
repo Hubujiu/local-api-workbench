@@ -278,6 +278,10 @@ export function sampleFromSchema(
       const tail = legacyTuple
         ? (schema.additionalItems ?? {})
         : (schema.items ?? {});
+      if (schema.uniqueItems && prefix) {
+        uniqueSamples.check(prefix);
+        uniqueSamples.check(tail);
+      }
       // A false slot forbids this and all later positions, not the shorter prefix.
       const forbidden = prefix?.indexOf(false) ?? -1;
       const allowed =
@@ -291,11 +295,7 @@ export function sampleFromSchema(
       const count = Math.max(min, Math.min(prefix?.length ?? 1, limit));
       if (count > 100) throw Error("数组样例上限100项，请提供 example");
       if (prefix) {
-        if (schema.uniqueItems) {
-          uniqueSamples.check(prefix);
-          uniqueSamples.check(tail);
-          uniqueTupleDepth++;
-        }
+        if (schema.uniqueItems) uniqueTupleDepth++;
         let values;
         try {
           values = Array.from({ length: count }, (_, index) =>

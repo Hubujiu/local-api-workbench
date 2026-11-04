@@ -388,3 +388,100 @@ test("a unique comparison budget failure cannot be swallowed by union fallback",
   assert.equal(calls, 0);
   assert.equal(sampleFromSchema({ const: "healthy" }), "healthy");
 });
+
+for (const dialect of ["prefixItems", "items"]) {
+  for (const hook of ["Proxy", "index getter", "indexOf getter"]) {
+    test(`unique ${dialect} tuple rejects ${hook} before container access`, () => {
+      let calls = 0;
+      let prefix = [{ const: 0 }, { const: 1 }];
+      if (hook === "Proxy") {
+        prefix = new Proxy(prefix, {
+          get(target, key, receiver) {
+            calls++;
+            return Reflect.get(target, key, receiver);
+          },
+          has(target, key) {
+            calls++;
+            return Reflect.has(target, key);
+          },
+          ownKeys(target) {
+            calls++;
+            return Reflect.ownKeys(target);
+          },
+          getOwnPropertyDescriptor(target, key) {
+            calls++;
+            return Reflect.getOwnPropertyDescriptor(target, key);
+          },
+          getPrototypeOf(target) {
+            calls++;
+            return Reflect.getPrototypeOf(target);
+          },
+        });
+      } else {
+        Object.defineProperty(
+          prefix,
+          hook === "index getter" ? "0" : "indexOf",
+          {
+            enumerable: true,
+            get() {
+              calls++;
+              return hook === "index getter"
+                ? { const: 0 }
+                : Array.prototype.indexOf;
+            },
+          },
+        );
+      }
+      const schema = {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        uniqueItems: true,
+        [dialect]: prefix,
+      };
+      if (dialect === "prefixItems") schema.items = false;
+      else schema.additionalItems = false;
+      assert.throws(() => sampleFromSchema(schema), /JSON|访问器|Proxy|稀疏/);
+      assert.equal(calls, 0);
+      assert.deepEqual(sampleFromSchema(schemaFor([0, 1])), [0, 1]);
+    });
+  }
+}
+
+test("early unique tuple inspection preserves both dialects and forbidden-slot bounds", () => {
+  for (const dialect of ["prefixItems", "items"]) {
+    const make = (prefix, minItems = 2, maxItems = 2) => ({
+      type: "array",
+      uniqueItems: true,
+      minItems,
+      maxItems,
+      [dialect]: prefix,
+      ...(dialect === "prefixItems"
+        ? { items: false }
+        : { additionalItems: false }),
+    });
+    assert.deepEqual(
+      sampleFromSchema(make([{ const: 0 }, { const: 1 }])),
+      [0, 1],
+    );
+    assert.deepEqual(
+      sampleFromSchema(make([{ const: 0 }, false, { const: 1 }], 1, 3)),
+      [0],
+    );
+    assert.throws(
+      () => sampleFromSchema(make([{ const: 0 }, false, { const: 1 }], 2, 3)),
+      /禁止项/,
+    );
+    assert.throws(
+      () => sampleFromSchema(make([{ const: -0 }, { const: 0 }])),
+      /唯一/,
+    );
+    assert.throws(
+      () =>
+        sampleFromSchema(
+          make([{ const: { a: 1, b: 2 } }, { const: { b: 2, a: 1 } }]),
+        ),
+      /唯一/,
+    );
+  }
+});
