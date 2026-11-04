@@ -22,6 +22,10 @@ const manualImportTools = new Set([
   "localapi_preview_import",
   "localapi_apply_import",
 ]);
+const scopedExportTools = new Set([
+  "localapi_preview_project_export",
+  "localapi_export_project_selection",
+]);
 const rpcError = (id, message, code = -32603) => {
   let correlation = {};
   try {
@@ -276,7 +280,8 @@ export async function serveMCPStdio({
       isExecution ||
       (isTool &&
         (definitionHistoryMutationTools.has(message.params?.name) ||
-          manualImportTools.has(message.params?.name)));
+          manualImportTools.has(message.params?.name) ||
+          scopedExportTools.has(message.params?.name)));
     let lease;
     try {
       lease = registry.begin(session, message.id, cancellable);

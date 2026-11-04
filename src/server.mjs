@@ -1,3 +1,7 @@
+import {
+  previewDefinitionExport,
+  exportDefinitionSelection,
+} from "./scoped-definition-export.mjs";
 import { postmanRawExportDefinition } from "./postman-raw-body.mjs";
 import { manualImportError } from "./manual-import.mjs";
 import { projectOwnerResponse } from "./project-owner-projection.mjs";
@@ -540,8 +544,17 @@ export async function createApp({
           ["localapi_preview_import", "localapi_apply_import"].includes(
             message.params?.name,
           );
+        const isScopedExport =
+          message.method === "tools/call" &&
+          [
+            "localapi_preview_project_export",
+            "localapi_export_project_selection",
+          ].includes(message.params?.name);
         const cancellable =
-          isExecution || isDefinitionHistoryMutation || isManualImport;
+          isExecution ||
+          isDefinitionHistoryMutation ||
+          isManualImport ||
+          isScopedExport;
         const execution =
           sessionId !== undefined && message.id !== undefined
             ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
@@ -1467,6 +1480,24 @@ export async function createApp({
             });
             await store.save(p);
             return json(res, 200, p);
+          }
+          if (["export-preview", "export-selection"].includes(action)) {
+            if (parts.length !== 4)
+              return json(res, 404, { error: "选择导出路径无效" });
+            if (req.method !== "POST")
+              return json(res, 405, { error: "选择导出仅支持 POST" });
+            if (u.searchParams.size) throw Error("选择导出不接受查询参数");
+            const input = await body(req);
+            // The request body may have arrived after an earlier configuration
+            // read. Use a fresh locked Store snapshot for preview and export.
+            const current = await store.get(p.id);
+            return json(
+              res,
+              200,
+              (action === "export-preview"
+                ? previewDefinitionExport
+                : exportDefinitionSelection)(current, input),
+            );
           }
           if (action === "export" && req.method === "GET") {
             const values = u.searchParams.getAll("modelNameMode");
