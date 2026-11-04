@@ -64,16 +64,22 @@ for (const action of ["sdk-cancel", "owner-revoke"])
         const root = await mkdtemp(path.join(tmpdir(), "if-revoke-sdk-"));
         const entered = Promise.withResolvers(),
           closed = Promise.withResolvers(),
-          appendTerminal = Promise.withResolvers();
+          appendTerminal = Promise.withResolvers(),
+          retainedAppendTerminal = Promise.withResolvers();
         const seen = [],
           clients = [],
           attempted = [];
         let app,
           held,
           observation,
+          retainedObservation,
+          deniedObservation,
+          retainedAppendInput,
           removed,
           originalAppend,
           appendSettled = false,
+          retainedAppendSettled = false,
+          denialConfirmed = false,
           effects = 0;
         const abort = new AbortController();
         const peer = http.createServer((request, response) => {
@@ -135,6 +141,27 @@ for (const action of ["sdk-cancel", "owner-revoke"])
             await settle(() =>
               bounded(observation.completion, "SDK cleanup did not settle"),
             );
+          if (retainedObservation)
+            await settle(() =>
+              bounded(
+                retainedObservation.completion,
+                "retained SDK cleanup did not settle",
+              ),
+            );
+          if (deniedObservation) {
+            await settle(() =>
+              bounded(
+                deniedObservation.completion,
+                "denied SDK cleanup did not settle",
+              ),
+            );
+            if (!denialConfirmed)
+              failures.push(
+                Error(
+                  "Denied-call server outcome was not confirmed; preserve owned fixture",
+                ),
+              );
+          }
           const closeFailure = await closing;
           if (closeFailure) failures.push(closeFailure);
           // A client rejection is not a join of the cancelled server handler.
@@ -144,6 +171,13 @@ for (const action of ["sdk-cancel", "owner-revoke"])
               bounded(
                 appendTerminal.promise,
                 "server append did not settle during cleanup",
+              ),
+            );
+          if (retainedObservation && !retainedAppendSettled)
+            await settle(() =>
+              bounded(
+                retainedAppendTerminal.promise,
+                "retained server append did not settle during cleanup",
               ),
             );
           peer.closeAllConnections();
@@ -404,19 +438,52 @@ for (const action of ["sdk-cancel", "owner-revoke"])
         );
         const fresh = await connect(restarted.token);
         if (action === "owner-revoke") {
-          const denied = await fresh.callTool(
-            {
-              name: "localapi_run_plan",
-              arguments: { projectId: a.id, planId: "conditional" },
-            },
-            undefined,
-            { timeout: 5000 },
+          deniedObservation = observeToolCall(
+            fresh.callTool(
+              {
+                name: "localapi_run_plan",
+                arguments: { projectId: a.id, planId: "conditional" },
+              },
+              undefined,
+              { timeout: 5000 },
+            ),
           );
-          assert.equal(denied.isError, true);
-          assert.match(denied.content[0].text, /项目未授权/);
+          const deniedTerminal = await bounded(
+            deniedObservation.completion,
+            "revoked project denial did not settle",
+          );
+          assert.equal(
+            deniedTerminal.kind,
+            "fulfilled",
+            deniedTerminal.reason?.message,
+          );
+          assert.equal(deniedTerminal.value.isError, true);
+          assert.match(deniedTerminal.value.content[0].text, /项目未授权/);
+          // Only an explicit server denial proves this negative call did not
+          // enter execution. A timeout/transport failure must retain the fixture.
+          denialConfirmed = true;
         }
-        const retained = decode(
-          await fresh.callTool(
+        const retainedAppend = app.store.append;
+        app.store.append = async function (projectId, field, record, ...rest) {
+          const observed = projectId === b.id && field === "runs";
+          if (observed) retainedAppendInput = structuredClone(record);
+          try {
+            return await retainedAppend.call(
+              this,
+              projectId,
+              field,
+              record,
+              ...rest,
+            );
+          } finally {
+            if (observed) {
+              retainedAppendSettled = true;
+              retainedAppendTerminal.resolve();
+            }
+          }
+        };
+        retainedObservation = observeToolCall(
+          fresh.callTool(
             {
               name: "localapi_run_plan",
               arguments: { projectId: b.id, planId: "retained" },
@@ -424,6 +491,21 @@ for (const action of ["sdk-cancel", "owner-revoke"])
             undefined,
             { timeout: 5000 },
           ),
+        );
+        const retainedTerminal = await bounded(
+          retainedObservation.completion,
+          "retained SDK execution did not settle",
+        );
+        assert.equal(
+          retainedTerminal.kind,
+          "fulfilled",
+          retainedTerminal.reason?.message,
+        );
+        const retained = decode(retainedTerminal.value);
+        assert.equal(retainedAppendSettled, true);
+        assert.deepEqual(
+          (await app.store.get(b.id)).runs[0],
+          retainedAppendInput,
         );
         assert.equal(retained.status, "passed");
         assert.equal(retained.recordSaved, true);
