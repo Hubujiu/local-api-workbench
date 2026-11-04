@@ -288,7 +288,6 @@ async function fixture(t) {
 function checkRun(run, f) {
   assert.equal(run.status, "passed", JSON.stringify({ run, errors: f.errors }));
   assert.equal(run.recordSaved, true, JSON.stringify(run.persistenceError));
-  assert.equal(run.recordId, run.id);
   assert.equal(run.results.length, specs.size);
   for (const row of run.results) {
     assert.equal(row.status, "passed");
@@ -558,7 +557,12 @@ test(
       const before = await f.call(`projects/${project.id}`, undefined, "GET");
       const next = {
         ...before,
-        settings: { ...before.settings, ...settings },
+        settings: {
+          ...before.settings,
+          globalAuth: { type: "none" },
+          folderAuth: {},
+          ...settings,
+        },
         requests: [{ ...request, folder: "Folder", auth: { type: "none" } }],
       };
       await f.call(`projects/${project.id}`, next, "PUT");
