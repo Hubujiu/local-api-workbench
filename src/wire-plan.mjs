@@ -1,3 +1,4 @@
+import { resolveHandshake } from "./protocol-handshake.mjs";
 import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { normalizeProtocol } from "./protocol-definitions.mjs";
@@ -145,6 +146,7 @@ export function snapshotWireStep(step) {
         ? step.protocol.message
         : (savedMessage ?? "");
     validateProtocolTemplate(definition, selectedMessage);
+    protocolRequestOptions({ ...definition, message: selectedMessage });
     protocol.message =
       definition.templateMode === undefined
         ? template(selectedMessage)
@@ -250,6 +252,16 @@ export function wirePlanCredentials(plan, input = {}) {
       websocketConfiguration({ url: definition.url, ...value });
     bindings.set(stepId, structuredClone(value));
   }
+  for (const step of plan.steps)
+    if (
+      step.enabled !== false &&
+      step.type === "protocol" &&
+      step.protocol.definition.type !== "tcp"
+    )
+      resolveHandshake(
+        step.protocol.definition,
+        bindings.get(step.id)?.headers,
+      );
   return bindings;
 }
 export async function executeWireFlow(input, signal) {
@@ -269,6 +281,8 @@ export async function executeWireFlow(input, signal) {
         ? { host: input.definition.url, port: input.definition.port }
         : { url: input.definition.url }),
     };
+    if (type !== "tcp")
+      request.headers = resolveHandshake(input.definition, input.headers);
     if (type !== "sse") protocolPayload(request.message);
     const fn = {
       tcp: exchangeTCP,

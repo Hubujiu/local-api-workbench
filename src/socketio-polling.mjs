@@ -35,7 +35,7 @@ export class BoundedPolling extends Fetch {
       ]),
     );
     headers["accept-encoding"] = "identity";
-    headers.accept = "*/*";
+    headers.accept ??= "*/*";
     delete headers["transfer-encoding"];
     delete headers["content-length"];
     if (post) {

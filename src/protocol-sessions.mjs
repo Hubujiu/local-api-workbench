@@ -1,3 +1,4 @@
+import { sseHeaders } from "./protocol-handshake.mjs";
 import {
   resolveProtocolText,
   validateProtocolTemplate,
@@ -76,6 +77,7 @@ export class ProtocolSessions {
     if (input.templateMode === "variables")
       throw Error("协议模板会话须由项目入口解析");
     validateProtocolTemplate(input);
+    protocolRequestOptions(input);
     if (this.sessions.size >= 50)
       for (const old of this.sessions.values()) {
         if (!["open", "connecting"].includes(old.state)) {
@@ -224,7 +226,7 @@ export class ProtocolSessions {
         (async () => {
           const response = await fetch(input.url, {
             ...options,
-            headers: { Accept: "text/event-stream", ...(input.headers || {}) },
+            headers: sseHeaders(input.headers),
             signal: session.controller.signal,
             redirect: "manual",
           });

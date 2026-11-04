@@ -168,6 +168,12 @@ export function socketioPlanCredentials(plan, input = {}) {
     validateSocketIOConnection({ ...steps[0].socketio.definition, ...value });
     result.set(id, structuredClone(value));
   }
+  for (const step of plan.steps)
+    if (step.type === "socketio" && step.enabled !== false)
+      validateSocketIOConnection({
+        ...step.socketio.definition,
+        ...result.get(step.id),
+      });
   return result;
 }
 function awaitState(

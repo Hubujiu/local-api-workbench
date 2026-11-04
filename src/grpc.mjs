@@ -1,4 +1,9 @@
 import {
+  grpcMetadataName,
+  normalizeRequiredMetadata,
+  assertRequiredMetadata,
+} from "./grpc-metadata-requirements.mjs";
+import {
   compileGrpcSchema as compile,
   normalizeGrpcSource,
   grpcSource,
@@ -50,6 +55,7 @@ export function normalizeGrpcDefinition(input) {
         "service",
         "method",
         "timeoutMs",
+        "requiredMetadata",
       ].includes(key)
     )
       throw Error("gRPC定义不保存额外字段或凭据");
@@ -74,7 +80,9 @@ export function normalizeGrpcDefinition(input) {
   const timeoutMs = input.timeoutMs ?? 5000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 50 || timeoutMs > 30000)
     throw Error("gRPC超时须为50至30000毫秒");
+  const requiredMetadata = normalizeRequiredMetadata(input.requiredMetadata);
   return {
+    ...(requiredMetadata === undefined ? {} : { requiredMetadata }),
     id,
     name: String(input.name || "gRPC").slice(0, 200),
     target: input.target,
@@ -231,6 +239,7 @@ function inputMetadata(values = []) {
       typeof row.value !== "string"
     )
       throw Error("gRPC metadata无效");
+    grpcMetadataName(row.key);
     let value = row.value;
     if (row.key.toLowerCase().endsWith("-bin")) {
       value = Buffer.from(value, "base64");
@@ -260,6 +269,7 @@ function outputMetadata(metadata) {
 export function grpcTransport(target, input = {}) {
   const metadata = inputMetadata(input.metadata),
     address = endpoint(target);
+  assertRequiredMetadata(input.requiredMetadata, metadata);
   const tls = input.tls ?? {};
   if (
     !plain(tls) ||
@@ -296,6 +306,7 @@ export async function executeGrpc(input, signal) {
           "service",
           "method",
           "timeoutMs",
+          "requiredMetadata",
           "messages",
           "metadata",
           "tls",
@@ -314,6 +325,7 @@ export async function executeGrpc(input, signal) {
         "service",
         "method",
         "timeoutMs",
+        "requiredMetadata",
       ]
         .filter((k) => input[k] !== undefined)
         .map((k) => [k, input[k]]),

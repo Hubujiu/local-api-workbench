@@ -2,6 +2,16 @@
 // No source application code is used here.
 export function protocolRequestOptions(input) {
   const result = {};
+  if (input.sendEmptyMessage !== undefined) {
+    if (
+      input.type !== "websocket" ||
+      typeof input.sendEmptyMessage !== "boolean"
+    )
+      throw Error("sendEmptyMessage 仅支持 WebSocket 布尔值");
+    if (input.message !== undefined && typeof input.message !== "string")
+      throw Error("sendEmptyMessage 仅支持文本消息");
+    result.sendEmptyMessage = input.sendEmptyMessage;
+  }
   if (input.method !== undefined || input.body !== undefined) {
     if (input.type !== "sse") throw Error("仅 SSE 支持 HTTP 方法与正文");
     const method = input.method ?? "GET";

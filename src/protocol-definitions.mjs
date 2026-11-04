@@ -1,3 +1,4 @@
+import { normalizeHandshake } from "./protocol-handshake.mjs";
 import { validateProtocolTemplate } from "./protocol-text-templates.mjs";
 import { protocolRequestOptions } from "./protocol-request-options.mjs";
 import { protocolPayload } from "./protocol-payload.mjs";
@@ -48,6 +49,7 @@ export function normalizeProtocol(input) {
     if (input.type === "sse") throw Error("SSE 定义不支持发送消息");
     protocolPayload(input.message);
   }
+  const handshake = normalizeHandshake(input.handshake, input.type);
   const requestOptions = protocolRequestOptions(input);
   validateProtocolTemplate(input);
   if (input.duration !== undefined) {
@@ -61,6 +63,7 @@ export function normalizeProtocol(input) {
   }
   return {
     ...requestOptions,
+    ...(handshake === undefined ? {} : { handshake }),
     ...(input.templateMode !== undefined
       ? { templateMode: input.templateMode }
       : {}),
