@@ -1,3 +1,4 @@
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -71,7 +72,6 @@ import {
   snapshotPlan,
   runPlan,
   toCurl,
-  restoreProject,
 } from "./core.mjs";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
 export async function createApp({
@@ -437,8 +437,7 @@ export async function createApp({
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
           const b = await body(req);
-          const restored = restoreProject(b.document);
-          await store.save(restored);
+          const restored = await store.restore(b.document);
           return json(res, 201, restored);
         }
         if (u.pathname === "/api/cancel" && req.method === "POST") {
@@ -1392,7 +1391,10 @@ export async function createApp({
       );
       res.end(data);
     } catch (e) {
-      json(res, e.code === "ENOENT" ? 404 : 400, { error: e.message });
+      json(res, e.code === "ENOENT" ? 404 : 400, {
+        error: e.message,
+        ...publicProjectCommitOutcome(e),
+      });
     }
   });
   server.on("close", () => {
