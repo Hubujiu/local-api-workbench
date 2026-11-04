@@ -597,3 +597,205 @@ test(
     );
   },
 );
+
+// Root integration contract: IF controls gate an explicitly saved OAuth2 token,
+// while repeat, both official SDK transports, CLI, and restoration keep the same
+// frozen definition. No token exchange or refresh is exposed through MCP.
+test(
+  "IF and repeat preserve saved OAuth2 wire identity across HTTP/stdio SDK, CLI and restored owner execution",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t);
+    const project = await f.store.create("Conditional frozen OAuth2"),
+      other = await f.store.create("Isolated IF OAuth2");
+    const otherBefore = await f.store.get(other.id);
+    project.environments[0].variables.tenant = "selected-environment";
+    const exchanged = await f.call("/api/oauth/token", {
+      tokenEndpoint: f.base + "/token",
+      clientAuthentication: "basic",
+      clientId,
+      clientSecret,
+      grantType: "client_credentials",
+      scope: "resource:read",
+    });
+    assert.equal(exchanged.status, 200, JSON.stringify(exchanged));
+    assert.equal(f.resources.length, 0);
+    project.requests = [
+      {
+        id: "if-oauth-api",
+        name: "Frozen IF OAuth2",
+        method: "POST",
+        url: f.base + "/resource",
+        bodyType: "json",
+        body: '{"tenant":"{{tenant}}"}',
+        headers: [{ key: "X-Tenant", value: "{{tenant}}", enabled: true }],
+        auth: { type: "oauth2", token: exchanged.value.accessToken },
+      },
+    ];
+    const stored = await f.call(`/api/projects/${project.id}`, project, "PUT");
+    assert.equal(stored.status, 200, JSON.stringify(stored));
+    const request = stored.value.requests[0];
+    const gate = (id, match, steps) => ({
+      id,
+      type: "if",
+      condition: {
+        op: "eq",
+        left: { literal: match },
+        right: { literal: true },
+      },
+      steps,
+    });
+    const made = await f.call(`/api/projects/${project.id}/plans`, {
+      name: "IF repeated frozen OAuth2",
+      environmentId: project.environments[0].id,
+      steps: [
+        gate("false", false, [
+          {
+            id: "never",
+            request: {
+              ...request,
+              url: f.base + "/must-not-send",
+              auth: { type: "oauth2", token: "must-not-send" },
+            },
+          },
+        ]),
+        {
+          id: "repeat",
+          type: "repeat",
+          count: 2,
+          steps: [gate("true", true, [{ id: "resource", request }])],
+        },
+      ],
+    });
+    assert.equal(made.status, 200, JSON.stringify(made));
+    const planId = made.value.id;
+    const live = await f.store.get(project.id);
+    live.requests[0].url = f.base + "/edited-must-not-send";
+    live.requests[0].auth.token = "edited-must-not-send";
+    assert.equal(
+      (await f.call(`/api/projects/${project.id}`, live, "PUT")).status,
+      200,
+    );
+    const check = (run) => {
+      assert.equal(run.status, "passed");
+      assert.equal(run.recordSaved, true);
+      assert.deepEqual(
+        run.conditionResults.map((d) => d.matched),
+        [false, true, true],
+      );
+      assert.equal(run.results.length, 2);
+      assert.notEqual(
+        run.results[0].repeat.occurrenceId,
+        run.results[1].repeat.occurrenceId,
+      );
+      for (const result of run.results) {
+        assert.equal(result.response.status, 200);
+        assert.equal(result.response.body, '{"authorized":true}');
+        assert.equal(result.request.auth.token, accessToken);
+        assert.equal(result.request.url, f.base + "/resource");
+      }
+    };
+    const httpClient = await f.connect(project.id, {
+      write: true,
+      execute: true,
+    });
+    const nativeDenied = await tool(httpClient.client, "apipost_execute_flow", {
+      project_id: project.id,
+      flow_id: planId,
+    });
+    assert.equal(nativeDenied.isError, true);
+    assert.match(nativeDenied.content[0].text, /循环组或条件组/);
+    assert.equal(f.resources.length, 0);
+    check(
+      decode(
+        await tool(httpClient.client, "localapi_run_plan", {
+          projectId: project.id,
+          planId,
+        }),
+      ),
+    );
+    const { StdioClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/stdio.js"
+    );
+    const stdioClient = new Client({
+      name: "if-oauth-root-stdio",
+      version: "1",
+    });
+    try {
+      await stdioClient.connect(
+        new StdioClientTransport({
+          command: process.execPath,
+          args: [
+            fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
+            "--project",
+            project.id,
+            "--write",
+            "--execute",
+          ],
+          env: { ...process.env, LOCAL_API_DATA: f.root },
+          stderr: "pipe",
+        }),
+        { timeout: 5000 },
+      );
+      check(
+        decode(
+          await stdioClient.callTool(
+            {
+              name: "localapi_run_plan",
+              arguments: { projectId: project.id, planId },
+            },
+            undefined,
+            { timeout: 10000 },
+          ),
+        ),
+      );
+    } finally {
+      await stdioClient.close();
+    }
+    const cliResult = await cli(f.root, project.id, planId);
+    assert.equal(cliResult.code, 0, cliResult.stderr);
+    assert.equal(cliResult.signal, null);
+    check(JSON.parse(cliResult.stdout));
+    assert.equal(f.resources.length, 6);
+    const backup = await f.call(
+      `/api/projects/${project.id}/export`,
+      undefined,
+      "GET",
+    );
+    assert.equal(backup.status, 200);
+    for (const secret of [
+      clientId,
+      clientSecret,
+      "fictional-transient-refresh",
+    ])
+      assert.equal(JSON.stringify(backup.value).includes(secret), false);
+    const original = await f.store.get(project.id);
+    const restored = await f.call("/api/restore", { document: backup.value });
+    assert.equal(restored.status, 201, JSON.stringify(restored));
+    assert.notEqual(restored.value.id, project.id);
+    await f.restart();
+    assert.equal(
+      f.exchanges.length,
+      1,
+      "restore/restart must not acquire credentials",
+    );
+    assert.equal(
+      f.resources.length,
+      6,
+      "restore/restart must not replay effects",
+    );
+    assert.deepEqual(await f.store.get(project.id), original);
+    const copied = await f.store.get(restored.value.id);
+    assert.equal(copied.runs.length, 3);
+    assert.deepEqual(copied.plans, original.plans);
+    const resumed = await f.call(`/api/projects/${restored.value.id}/run`, {
+      planId,
+    });
+    assert.equal(resumed.status, 200, JSON.stringify(resumed));
+    check(resumed.value);
+    assert.equal(f.resources.length, 8);
+    assert.equal(f.exchanges.length, 1);
+    assert.deepEqual(await f.store.get(other.id), otherBefore);
+    assert.deepEqual(await f.store.get(project.id), original);
+  },
+);

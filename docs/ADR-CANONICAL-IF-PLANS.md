@@ -134,3 +134,49 @@ an unrelated legacy DB catalogue. Existing non-IF linear/repeat behavior is
 unchanged. This is static declaration recognition only; arbitrary script-driven
 database calls retain their existing runtime authorization checks, not a claim of
 complete static discovery. No connection is persisted or borrowed across runs.
+
+
+### Terminal reporting failures
+
+The terminal IF progress callback is awaited before persistence. Synchronous throws
+and rejected promises do not discard completed HTTP or condition evidence: the
+run is marked failed (cancelled stays cancelled), with a sanitized progressFailure
+and retry_safe false. An existing condition-error/evidence-limit stop reason wins;
+otherwise stopReason is progress-failure. No last successful leaf is relabelled.
+The complete result, including this notification failure, is then saved once by the
+normal record path, so reopened history agrees with the returned receipt. This does
+not retrofit unrelated older per-step reporter behavior on the fixed dependency
+base; integration retains its existing per-step progress-failure contract.
+
+### Accepted-root integration checks
+
+The independent IF delta is transplanted onto backend integration
+835251263cdd841715abdb75fcf3a045fbf96429 (tree
+c73b411c7ebac044a5ab331391508793277eadc9), without replacing older feature copies
+of the core, MCP dispatch or native projections. The integration keeps the root's
+native-write authority preflight, progress fail-stop, collection switching and
+commit logic, service resolver, database executor, and native HTTP shape checks.
+IF decisions are evaluated before selecting a leaf's collection context.
+
+`plan-if-root-boundaries.test.mjs` checks enabled native Redis SET behind a false
+condition is refused before any earlier executor/preparation callback, disabled
+ancestors do not acquire authority, leaf reporter failures stop later conditions,
+explicit condition scopes do not borrow collection values, and IF/repeat frozen
+backups preserve the three catalogues and unique tuple sample guards in both
+schema dialects. Native linear projections and native full-plan exports still
+refuse IF rather than silently flattening it; explicit definition-only exports
+remain a separate supported subset. These are model/executor contracts, not real
+Redis or wire acceptance.
+
+The additional OAuth2 workbench entrypoint contract uses a fictional loopback
+owner token exchange, explicitly saved frozen Bearer definition, skipped IF child
+and repeated accepted child. It covers both official SDK transports, CLI, full
+backup/restore/restart and an owner run of the fresh copy, with unchanged source
+and unrelated project and no automatic token exchange or effect replay.
+
+Local integration runtime checks remain blocked by a missing locked
+`node-oauth1@1.3.0` in the available dependency cache. Owner, official SDK, CLI and
+real-wire cases must pass on this exact combined tree in normal CI before this
+integration is accepted. Passing the fixed-base feature tree or pure contracts is
+not a substitute. No runtime test is skipped or weakened to accommodate that
+local dependency failure.
