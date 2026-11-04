@@ -1,3 +1,4 @@
+import { postmanRawExportDefinition } from "./postman-raw-body.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -1136,10 +1137,12 @@ export async function createApp({
           if (action === "curl" && req.method === "POST") {
             const data = await body(req);
             const exportRequest =
-              data.request?.scriptURLMode === "sdk"
+              data.request?.scriptURLMode === "sdk" ||
+              data.request?.postmanRawBody !== undefined
                 ? applySharedScripts(p, data.request)
                 : data.request;
             assertSDKCurlDefinition(exportRequest);
+            postmanRawExportDefinition(exportRequest);
             const context = debugEnvironment(
               p,
               data.environmentId,

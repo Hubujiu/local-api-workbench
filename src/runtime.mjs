@@ -1,3 +1,7 @@
+import {
+  applyPostmanRawMedia,
+  validatePostmanRawBodyRequest,
+} from "./postman-raw-body.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import { validateProtocolRuns } from "./protocol-evidence.mjs";
 import { normalizeSocketIODefinitions } from "./socketio.mjs";
@@ -315,6 +319,7 @@ export class Store {
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
   const r = normalizeRequest(input);
+  validatePostmanRawBodyRequest(r);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -397,6 +402,7 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
   } else if (r.bodyType === "binary") {
     body = Buffer.from(r.body, "base64");
   } else if (r.bodyType !== "none") body = r.body;
+  applyPostmanRawMedia(r, headers, body);
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
   if (body) headers["content-length"] = Buffer.byteLength(body);

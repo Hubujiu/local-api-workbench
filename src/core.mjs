@@ -1,3 +1,11 @@
+import { applyGlobalParameters } from "./global-parameters.mjs";
+import { applySharedScripts } from "./shared-scripts.mjs";
+import {
+  importPostmanRawBody,
+  postmanRawBodyPolicy,
+  assertPostmanRawProfiles,
+  postmanRawExportDefinition,
+} from "./postman-raw-body.mjs";
 import { importPostmanGraphQLBody } from "./postman-graphql-body.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
@@ -177,6 +185,7 @@ export async function extractResponse(response, extraction) {
   return result.variables.value;
 }
 export function normalizeRequest(r = {}) {
+  const rawPolicy = postmanRawBodyPolicy(r);
   validateApipostTemplateRequest(r);
   const urlMode = normalizeScriptURLMode(r.scriptURLMode);
   if (r.scriptURLRuntime !== undefined && urlMode !== "sdk")
@@ -281,6 +290,7 @@ export function normalizeRequest(r = {}) {
     cookieEncoding: normalizeCookieEncoding(r.cookieEncoding),
     auth: { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
+    ...(rawPolicy ? { postmanRawBody: rawPolicy } : {}),
     body:
       typeof r.body === "string"
         ? r.body
@@ -1148,6 +1158,7 @@ export function importDocument(doc) {
       folder = "",
       inheritedAuth = doc.auth,
       inheritedEvents = doc.event || [],
+      inheritedProfiles = [doc.protocolProfileBehavior],
     ) =>
       items.flatMap((item) => {
         const currentEvents = [...inheritedEvents, ...(item.event || [])];
@@ -1157,6 +1168,7 @@ export function importDocument(doc) {
             folder ? folder + "/" + item.name : item.name,
             item.auth || inheritedAuth,
             currentEvents,
+            [...inheritedProfiles, item.protocolProfileBehavior],
           );
         const req = item.request || {},
           body = req.body || {};
@@ -1173,6 +1185,16 @@ export function importDocument(doc) {
         )
           throw Error("不支持的Postman正文模式");
         const disabled = body.disabled === true;
+        const rawProjection =
+          !disabled && body.mode === "raw"
+            ? importPostmanRawBody(body)
+            : undefined;
+        if (rawProjection?.postmanRawBody)
+          assertPostmanRawProfiles([
+            ...inheritedProfiles,
+            item.protocolProfileBehavior,
+            req.protocolProfileBehavior,
+          ]);
         if (!disabled && body.mode === "file")
           throw Error("不自动导入Postman二进制文件正文，请显式选择文件");
         const graphql =
@@ -1224,6 +1246,7 @@ export function importDocument(doc) {
             })),
             bodyType: graphql?.bodyType ?? mode,
             body: disabled ? "" : graphql ? graphql.body : body.raw || "",
+            ...(rawProjection || {}),
             form: (disabled
               ? []
               : body.mode === "urlencoded"
@@ -1464,7 +1487,24 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
-    const r = sdkOpenAPIDefinition(project, source);
+    let definition = source;
+    if (postmanRawBodyPolicy(source)) {
+      definition = applySharedScripts(project, source);
+      const effective = applyGlobalParameters(project, source).headers || [];
+      // Only resolve the media control here; do not newly export unrelated shared fields.
+      definition.headers = [
+        ...(source.headers || []).filter(
+          (h) => String(h.key).toLowerCase() !== "content-type",
+        ),
+        ...effective.filter(
+          (h) => String(h.key).toLowerCase() === "content-type",
+        ),
+      ];
+    }
+    const r = postmanRawExportDefinition(
+      sdkOpenAPIDefinition(project, definition),
+      { openapi: true },
+    );
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),
@@ -1590,7 +1630,14 @@ export function exportOpenAPI(project) {
       parameters: [
         ["query", queryDefinition.query],
         ["path", r.path],
-        ["header", r.headers],
+        [
+          "header",
+          postmanRawBodyPolicy(r)
+            ? r.headers.filter(
+                (h) => String(h.key).toLowerCase() !== "content-type",
+              )
+            : r.headers,
+        ],
         ["cookie", r.cookies],
       ].flatMap(([location, parameters]) =>
         parameters
@@ -1633,7 +1680,9 @@ export function toCurl(input) {
     )
   )
     throw Error("cURL不能表达原版函数模板，请使用项目备份或已执行请求证据");
-  const r = normalizeRequest(sdkCurlDefinition(input));
+  const r = normalizeRequest(
+    postmanRawExportDefinition(sdkCurlDefinition(input)),
+  );
   if (r.auth.type === "asap")
     throw Error(
       "ASAP需要逐次签名，请使用原始请求/项目导出，不生成缺失认证的cURL。",
