@@ -346,7 +346,7 @@ for (const held of ["AUTH", "SELECT"]) {
 
 for (const heldStage of ["authentication", "forwarding"]) {
   test(
-    `session revoke during SSH ${heldStage} returns owned capacity without direct fallback`,
+    `session revoke during SSH ${heldStage} returns owned transport capacity`,
     { timeout: 15000 },
     async (t) => {
       const { privateKey } = generateKeyPairSync("rsa", {

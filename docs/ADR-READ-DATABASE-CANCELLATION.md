@@ -116,3 +116,15 @@ message. Normal plan failure/continuation and cancellation policy are unchanged.
 No new permission, persisted connection secret, dependency or server license is
 introduced. Root integration must reuse its existing native-write session
 controller, leaving generation, captured write targets and write receipts intact.
+
+Session-specific loopback tests hold PG authentication/BEGIN/query and MySQL
+handshake/SET/START/PREPARE, plus Redis AUTH/SELECT. SSH tests fill five leases,
+revoke a held authentication or forwarding operation, observe closure, then admit
+a sixth connection. They prove owned capacity reclamation; the existing separate
+SSH regression suite supplies the no-direct-fallback contract. Mongo/ClickHouse
+observe actual socket close, and SQLite observes actual child close. Source gates,
+replacement binding grants, simultaneous caller/session abort, actual SDK HTTP
+history and CLI grant cleanup are covered independently. A public PG driver-seam
+case controls error-before-cleanup-abort precedence only; it is not a new server
+or session-wrapper wire test. Full remote-engine and root-composition acceptance
+remain separate from these local loopback observations.
