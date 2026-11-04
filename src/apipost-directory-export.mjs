@@ -1,4 +1,9 @@
 import {
+  preflightApipostAttributes,
+  prepareApipostAttributeExport,
+  verifyApipostAttributeExport,
+} from "./apipost-attribute-export.mjs";
+import {
   prepareExtendedProtocolExport,
   verifyExtendedProtocolExport,
 } from "./apipost-extended-protocol-export.mjs";
@@ -12,6 +17,7 @@ import { directorySettings } from "../public/apipost-directory-input.js";
 // Definition interchange only. Never writes paths, starts the original app, or
 // turns source task metadata into live API/step execution.
 export function exportApipostDirectory(project, options = {}) {
+  preflightApipostAttributes(project);
   const extended = prepareExtendedProtocolExport(project);
   const plans = extended.base.plans ?? [];
   if (!Array.isArray(plans) || plans.length > 50)
@@ -357,6 +363,12 @@ export function exportApipostDirectory(project, options = {}) {
     dictionary: [],
   };
   importIntoProject(check, result, options);
+  verifyApipostAttributeExport(
+    project,
+    check,
+    prepareApipostAttributeExport(project, projectId),
+    (id) => nativeIds.get(apipostExportId("a", id)),
+  );
   verifyProtocolDefinitions(project.protocols, check.protocols);
   verifySampleDefinitions(project, check, (id) =>
     nativeIds.get(apipostExportId("a", id)),
