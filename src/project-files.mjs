@@ -48,10 +48,14 @@ function validateLayout(project) {
   // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
   validateRequestDefinitionHistory(project);
 }
-async function writeJSON(file, value, beforePublish) {
+async function writeJSON(file, value, beforePublish, onPublicationPossible) {
   const text = JSON.stringify(value, null, 2) + "\n";
   try {
-    if ((await readFile(file, "utf8")) === text) return;
+    if ((await readFile(file, "utf8")) === text) {
+      onPublicationPossible?.();
+      beforePublish?.();
+      return;
+    }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -62,6 +66,7 @@ async function writeJSON(file, value, beforePublish) {
     // No await between this gate and beginning the atomic journal rename.
     // Cancellation after publication cannot promise rollback.
     beforePublish?.();
+    onPublicationPossible?.();
     await rename(temporary, file);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => {});
@@ -169,14 +174,24 @@ export async function writeProject(
   // The complete journal is written before separate files. Reads recover it under the same lock.
   // This covers process interruption, not a promise of power-loss durability.
   const journal = path.join(directory, ".transaction.json");
+  let publicationPossible = false;
   try {
-    await writeJSON(journal, project, () => {
-      assertNotAborted();
-      beforePublish?.();
-    });
+    await writeJSON(
+      journal,
+      project,
+      () => {
+        assertNotAborted();
+        beforePublish?.();
+      },
+      () => {
+        publicationPossible = true;
+      },
+    );
   } catch (error) {
-    // A rename can have taken effect even when its acknowledgment fails. Do
-    // not turn a recoverable published transaction into a safe-to-retry error.
+    // Pre-write/read/temp/gate failures never began publication. Once rename
+    // begins (or identical journal bytes were observed), an acknowledgment can
+    // fail after publication, so missing journal evidence must be established.
+    if (!publicationPossible) throw error;
     let absent = false;
     try {
       await readFile(journal);

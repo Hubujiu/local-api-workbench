@@ -52,7 +52,8 @@ all descendants. Unknown/duplicate keys and excluded required dependencies fail.
 Policies are: API `both|ignore|url|url_and_folder|clear`; samples `both|name`;
 models `both|name`; environments `both`; documents `both`; globals `safe`.
 Defaults are `both` and `safe`. `folderMap` maps source paths to explicit target
-paths; `bindings` maps source keys to explicitly chosen compatible target IDs.
+paths; `bindings` maps source keys to explicitly chosen target IDs under the
+per-resource rules below.
 Options retain supported `modelNameMode` and `postmanVariableMode`. Native
 preserve graph import remains a separate complete-graph operation, not a way to
 escape this planner's guards. `clearScope:{folder:""|existingPath}` is mandatory
@@ -86,11 +87,15 @@ behavior, not its fileDB internals or runtime/crash correctness:
   rather than silently merging or claiming exact identity parity.
 - Samples match name+mapped API+mapped parent group. Both creates fresh case and
   group identities. An ignored API cannot silently adopt new samples. A lone
-  selected sample requires its API/ancestors or explicit compatible binding.
+  selected sample requires its API/ancestors or an explicit binding to an active
+  target API. This deliberate user association need not match method/URL; it
+  reuses that API unchanged and is not implicit URL matching.
 - Model name matching is proven, but original clear/ignore menu values do not
   have corresponding active implementations. This API rejects those modes.
   Workbench modelNameMode is name representation, not overwrite authorization.
   Ambiguous names and changes affecting unselected live consumers block.
+  Target name matching uses dictionary model records. Schema-only OpenAPI
+  component keys are not claimed to support name overwrite.
 - The original active environment UI forces both, with its own special default
   identity. Workbench uses explicit source/default server/environment bindings,
   does not silently overwrite or switch the active environment, and preserves
@@ -235,3 +240,15 @@ revision. History simulation and actual commit both use the existing history
 owner; this feature does not define a replacement current-definition/project
 budget. Final acceptance must rebase on the parent's fixed corrected PR97 and
 re-run this batch and the prior history/backup/current-definition boundaries.
+
+
+### Updated fixed dependency checkpoint
+
+The controlled composition now uses PR97 public commit
+991e6158d70f94a0fdc255486de4d1837ad2bb43, exact tree
+dd9bae6b68b7372ad0ed4c151ca160f04e0f764b. The prior 250a2b0 base remains
+checkpoint evidence, not the active dependency. PR97 owns the updated history
+quota, owner response projection and backup input bound. This feature adds no
+new whole-target limit, and source/preview limits do not cap persisted target
+definitions. Composition and full CI must be reported against the exact new
+feature tree, not inherited from either predecessor.

@@ -388,8 +388,8 @@ test("material OpenAPI sync writes capture prior definitions through the same St
   assert.equal(entry.versions[0].definition.name, "initial");
 });
 
-test("activity evidence may exceed old restore envelope without disabling history reads or changing definition history", async (t) => {
-  const { root, store, project } = await setup(t),
+test("activity evidence may exceed old restore envelope without disabling configuration, history or fresh backup restore", async (t) => {
+  const { root, store, project, peer } = await setup(t),
     p = await edit(store, project.id, "v2"),
     history = json(p.requestDefinitionHistory);
   await store.append(p.id, "history", {
@@ -412,10 +412,23 @@ test("activity evidence may exceed old restore envelope without disabling histor
     }).definition.name,
     "v1",
   );
-  large.name = "config must respect envelope";
-  await assert.rejects(store.save(large), /JSON体积|限制/);
-  assert.equal((await store.get(p.id)).name, "history");
+  const peerBefore = await store.get(peer.id);
+  const evidence = json(large.history);
+  large.name = "configuration is not a backup HTTP envelope";
+  const saved = await store.save(large);
+  const reopened = await new Store(root).get(p.id);
+  assert.equal(reopened.name, large.name);
+  assert.deepEqual(reopened.history, evidence);
+  assert.deepEqual(reopened.requestDefinitionHistory, history);
+  const restored = await store.restore(saved);
+  assert.notEqual(restored.id, saved.id);
+  assert.equal(restored.requestDefinitionHistory.projectId, restored.id);
+  assert.deepEqual(restored.requestDefinitionHistory.entries, history.entries);
+  assert.deepEqual(restored.history, evidence);
+  assert.deepEqual(await store.get(p.id), reopened);
+  assert.deepEqual(await store.get(peer.id), peerBefore);
   await noJournal(store, p);
+  await noJournal(store, restored);
 });
 
 function child(t, root, id, name) {
@@ -544,3 +557,151 @@ test("historical native binding cannot bypass the current graph identity or muta
   );
   assert.deepEqual(await store.get(p.id), before);
 });
+
+test(
+  "8MiB current definitions survive first edits, fresh backup identity and concurrent history quota rejection",
+  { timeout: 30000 },
+  async (t) => {
+    const { root, store, project, peer } = await setup(t);
+    const peerBefore = await store.get(peer.id);
+    let current = await store.get(project.id);
+    current.requests[0].bodyType = "raw";
+    current.requests[0].body = "x".repeat(8 * 1024 * 1024);
+    current = await store.save(current);
+    const firstLarge = json(current.requests[0]);
+    current.requests[0].name = "large edit one";
+    current = await store.save(current);
+    assert.deepEqual(lineage(current).versions.at(-1).definition, firstLarge);
+    current.requests[0].name = "large edit two";
+    current = await store.save(current);
+    assert.equal(
+      lineage(current).versions.at(-1).definition.body,
+      firstLarge.body,
+    );
+    assert(Buffer.byteLength(JSON.stringify(current)) > 12 * 1024 * 1024);
+    const source = await store.get(current.id);
+    const copy = await store.restore(source);
+    assert.notEqual(copy.id, source.id);
+    assert.equal(copy.requestDefinitionHistory.projectId, copy.id);
+    assert.deepEqual(copy.requests, source.requests);
+    assert.deepEqual(
+      copy.requestDefinitionHistory.entries,
+      source.requestDefinitionHistory.entries,
+    );
+    assert.deepEqual(await new Store(root).get(source.id), source);
+    const one = new Store(root),
+      two = new Store(root);
+    const a = await one.get(source.id),
+      b = await two.get(source.id);
+    a.requests[0].name = "writer one";
+    b.requests[0].name = "writer two";
+    const outcomes = await Promise.allSettled([one.save(a), two.save(b)]);
+    assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 1);
+    const rejected = outcomes.find((r) => r.status === "rejected");
+    assert.match(rejected.reason.message, /其他窗口|其他修改|重新加载/);
+    const accepted = await new Store(root).get(source.id);
+    assert.equal(
+      lineage(accepted).currentVersion,
+      lineage(source).currentVersion + 1,
+    );
+    assert.deepEqual(
+      lineage(accepted).versions.slice(0, -1),
+      lineage(source).versions,
+    );
+    const overQuota = structuredClone(accepted);
+    overQuota.requests[0].name = "must remain uncommitted";
+    await assert.rejects(store.save(overQuota), /32 MiB|容量|33554432/);
+    assert.deepEqual(await new Store(root).get(source.id), accepted);
+    assert.deepEqual(await store.get(peer.id), peerBefore);
+    await noJournal(store, accepted);
+    const afterActivity = await store.append(source.id, "history", {
+      id: "quota-independent-activity",
+      status: "passed",
+    });
+    assert.equal(afterActivity.id, accepted.id);
+    assert.equal(afterActivity.history[0].id, "quota-independent-activity");
+    assert.deepEqual(
+      (await store.get(source.id)).requestDefinitionHistory,
+      accepted.requestDefinitionHistory,
+    );
+  },
+);
+
+test(
+  "exact 32MiB short-owner history restores to a new UUID without losing quota or retained versions",
+  { timeout: 60000 },
+  async (t) => {
+    const { root, store, project, peer } = await setup(t);
+    const legacy = await store.get(project.id);
+    legacy.id = "a";
+    legacy.requestDefinitionHistory.projectId = legacy.id;
+    const tracker = lineage(legacy);
+    tracker.currentVersion = 3;
+    tracker.versions = [1, 2].map((version) => ({
+      id: "identity-quota-" + version,
+      version,
+      createdAt: "2026-11-04T08:00:00.000Z",
+      tag: "",
+      definition: { ...json(legacy.requests[0]), bodyType: "raw", body: "" },
+    }));
+    const remaining =
+      32 * 1024 * 1024 -
+      Buffer.byteLength(JSON.stringify(legacy.requestDefinitionHistory));
+    const first = Math.floor(remaining / 2);
+    tracker.versions[0].definition.body = "x".repeat(first);
+    tracker.versions[1].definition.body = "y".repeat(remaining - first);
+    assert.equal(
+      Buffer.byteLength(JSON.stringify(legacy.requestDefinitionHistory)),
+      32 * 1024 * 1024,
+    );
+    for (const version of tracker.versions)
+      assert(Buffer.byteLength(JSON.stringify(version)) <= 16 * 1024 * 1024);
+    const peerBefore = await store.get(peer.id);
+    const sourceBefore = await store.get(project.id);
+    const copy = await store.restore(legacy);
+    assert.notEqual(copy.id, legacy.id);
+    assert.equal(copy.id.length, 36);
+    assert.equal(copy.requestDefinitionHistory.projectId, copy.id);
+    assert.equal(
+      Buffer.byteLength(JSON.stringify(copy.requestDefinitionHistory)),
+      32 * 1024 * 1024 + 35,
+    );
+    assert.deepEqual(
+      copy.requestDefinitionHistory.entries,
+      legacy.requestDefinitionHistory.entries,
+    );
+    assert.deepEqual(copy.requests, legacy.requests);
+    const reopened = await new Store(root).get(copy.id);
+    assert.deepEqual(
+      reopened.requestDefinitionHistory,
+      copy.requestDefinitionHistory,
+    );
+    // Owned-history equality and activity use the same bounded identity envelope.
+    await store.save(reopened);
+    await store.append(copy.id, "history", {
+      id: "identity-budget-activity",
+      status: "passed",
+    });
+    const afterActivity = await store.get(copy.id);
+    assert.deepEqual(
+      afterActivity.requestDefinitionHistory,
+      copy.requestDefinitionHistory,
+    );
+    assert.equal(afterActivity.history[0].id, "identity-budget-activity");
+    await assert.rejects(
+      store.changeRequestDefinitionHistory(copy.id, {
+        configRevision: afterActivity.configRevision,
+        requestId: "api",
+        lineageId: lineage(afterActivity).lineageId,
+        kind: "tag",
+        historyId: "current",
+        tag: "x",
+      }),
+      /32 MiB|容量/,
+    );
+    assert.deepEqual(await new Store(root).get(copy.id), afterActivity);
+    assert.deepEqual(await store.get(project.id), sourceBefore);
+    assert.deepEqual(await store.get(peer.id), peerBefore);
+    await noJournal(store, copy);
+  },
+);

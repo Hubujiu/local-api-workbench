@@ -223,6 +223,7 @@ for (const entry of ["owner", "native"])
       assert.deepEqual(p[key], snapshots[key]);
     const batchId = graph(p).folderLifecycle.records[0].batchId;
     const trash = structuredClone(p.apiResourceTrash);
+    const fullBeforeRefusals = await f.app.store.get(id);
     assert.deepEqual(trash.batches[0].selectedTargetIds, ["folder:Ancestor/A"]);
     assert.deepEqual(trash.batches[0].requestIds, [api(p).id]);
     assert.equal(trash.batches[0].deletedAt, api(p).deletedAt);
@@ -254,7 +255,7 @@ for (const entry of ["owner", "native"])
       },
       400,
     );
-    assert.deepEqual(await f.app.store.get(id), p);
+    assert.deepEqual(await f.app.store.get(id), fullBeforeRefusals);
     assert.equal(
       wire.length,
       start,

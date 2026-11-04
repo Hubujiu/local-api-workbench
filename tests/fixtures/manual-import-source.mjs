@@ -190,8 +190,9 @@ export function manualImportCanonicalFixture() {
 // model and function definitions. This is input to the real converter tests.
 import { nativeSampleExportFixture } from "./apipost-sample-export.mjs";
 import { nativeDirectoryFixture } from "./apipost-directory.mjs";
-export function manualImportModernSourceFixture() {
-  const source = nativeSampleExportFixture();
+export function manualImportModernSourceFixture(url) {
+  const source = nativeSampleExportFixture(url);
+  if (url) source.global.envs[0].server_list[0].uri = url;
   source.models = [
     {
       model_id: "model-folder",
@@ -231,8 +232,8 @@ export function manualImportModernSourceFixture() {
   ).request.body.raw_schema = { $ref: "B" };
   return source;
 }
-export function manualImportDirectorySourceFixture() {
-  const source = manualImportModernSourceFixture();
+export function manualImportDirectorySourceFixture(url) {
+  const source = manualImportModernSourceFixture(url);
   const directory = nativeDirectoryFixture(source);
   const flow = {
     flow_id: "flow",

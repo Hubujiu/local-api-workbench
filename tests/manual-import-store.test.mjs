@@ -1,3 +1,4 @@
+import { writeProject } from "../src/project-files.mjs";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -322,5 +323,63 @@ test(
     );
     assert.deepEqual(await new Store(root).get(project.id), recovered);
     await noJournal(store, project.id);
+  },
+);
+
+test("matching existing journal bytes still invoke the final publication guard and remain recoverable", async (t) => {
+  const { root, store, project } = await fixture(t),
+    directory = store.directory(project.id);
+  await writeFile(
+    path.join(directory, ".transaction.json"),
+    JSON.stringify(project, null, 2) + "\n",
+  );
+  let calls = 0;
+  await assert.rejects(
+    writeProject(directory, project, {
+      beforePublish() {
+        calls++;
+        throw Error("expired before matching publication");
+      },
+    }),
+    { code: "PROJECT_COMMIT_UNCERTAIN" },
+  );
+  assert.equal(calls, 1);
+  const recovered = await new Store(root).get(project.id);
+  assert.equal(recovered.revision, project.revision);
+  assert.equal(recovered.requests.length, 0);
+  await noJournal(store, project.id);
+});
+
+test(
+  "small imports do not impose the bounded source budget on existing large target definitions",
+  { timeout: 30000 },
+  async (t) => {
+    const { root, store, project } = await fixture(t);
+    project.requests = [1, 2].map((index) =>
+      normalizeRequest({
+        id: `large-${index}`,
+        name: `existing-${index}`,
+        method: "POST",
+        url: `https://existing.invalid/${index}`,
+        bodyType: "raw",
+        body: "x".repeat(7 * 1024 * 1024),
+      }),
+    );
+    await store.save(project);
+    const value = input(),
+      p = await preview(store, project.id, value);
+    assert.equal(p.blockers.length, 0);
+    await store.applyManualImport(
+      project.id,
+      { token: p.token, input: value },
+      { sessionId },
+    );
+    const saved = await new Store(root).get(project.id);
+    assert.equal(saved.requests.length, 3);
+    assert.equal(saved.requests[0].body.length, 7 * 1024 * 1024);
+    assert.equal(saved.requests[1].body.length, 7 * 1024 * 1024);
+    const restored = await store.restore(saved);
+    assert.equal(restored.requests[0].body, saved.requests[0].body);
+    assert.equal(restored.requestDefinitionHistory.projectId, restored.id);
   },
 );

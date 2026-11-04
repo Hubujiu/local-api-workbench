@@ -1,3 +1,7 @@
+import {
+  manualImportModernSourceFixture,
+  manualImportDirectorySourceFixture,
+} from "./fixtures/manual-import-source.mjs";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import test from "node:test";
@@ -73,7 +77,16 @@ async function fixture(t) {
     );
     return { status: response.status, data: await response.json() };
   }
-  return { root, app, project, untouched, input, post, hits: () => hits };
+  return {
+    root,
+    app,
+    project,
+    untouched,
+    input,
+    post,
+    peerURL: `http://127.0.0.1:${peer.address().port}`,
+    hits: () => hits,
+  };
 }
 
 test("owner previews without persistence, atomically applies all supported metadata, then reopens and restores a backup", async (t) => {
@@ -296,5 +309,172 @@ test("owner malformed input never reflects secret text and close cancels before 
     ),
     { code: "ENOENT" },
   );
+  assert.equal(f.hits(), 0);
+});
+
+test("owner applies complete modern and native directory resource closures, reopens, and backs up without effects", async (t) => {
+  for (const format of ["apipost", "apipost-directory"]) {
+    const f = await fixture(t),
+      input = {
+        format,
+        document:
+          format === "apipost"
+            ? manualImportModernSourceFixture(f.peerURL)
+            : manualImportDirectorySourceFixture(f.peerURL),
+        selection: { mode: "all" },
+      };
+    const p = await f.post("import-preview", input);
+    assert.equal(p.status, 200, JSON.stringify(p.data));
+    assert.deepEqual(p.data.blockers, []);
+    const applied = await f.post("import-apply", {
+      token: p.data.token,
+      input,
+    });
+    assert.equal(applied.status, 200, JSON.stringify(applied.data));
+    const saved = await new Store(f.root).get(f.project.id);
+    assert.equal(saved.cases.length, 3);
+    assert.equal(saved.caseFolders.length, 2);
+    assert.equal(saved.dictionary.length, 2);
+    for (const sample of saved.cases)
+      assert.ok(
+        saved.requests.some((request) => request.id === sample.sourceRequestId),
+      );
+    const root = saved.cases.find((sample) => sample.name === "root"),
+      ref = root.request.schema.$ref.split("/").at(-1);
+    assert.ok(saved.openapiComponents.schemas[ref]);
+    assert.equal(saved.globalVariableDefinitions.shared.initialValue, "global");
+    assert.equal(saved.globalVariables.shared, "current");
+    assert.equal(saved.settings.functions[0].body, "return text;");
+    if (format === "apipost-directory") {
+      assert.equal(saved.plans.length, 1);
+      assert.ok(saved.settings.apipostDirectoryArtifacts.length);
+    }
+    const restored = await f.app.store.restore(saved);
+    assert.deepEqual(restored.cases, saved.cases);
+    assert.deepEqual(restored.openapiComponents, saved.openapiComponents);
+    assert.deepEqual(restored.plans, saved.plans);
+    assert.equal(f.hits(), 0);
+  }
+});
+
+test("owner Postman registry survives final mapped IDs and explicit sample-only selection closes references", async (t) => {
+  const f = await fixture(t),
+    document = manualImportModernSourceFixture(f.peerURL);
+  const all = { format: "apipost", document, selection: { mode: "all" } };
+  const inventory = await f.post("import-preview", all);
+  assert.equal(inventory.status, 200);
+  const selected = inventory.data.items.find(
+    (item) => item.kind === "case",
+  ).key;
+  const input = { ...all, selection: { mode: "explicit", keys: [selected] } };
+  const p = await f.post("import-preview", input);
+  assert.deepEqual(p.data.blockers, []);
+  assert.equal(
+    (await f.post("import-apply", { token: p.data.token, input })).status,
+    200,
+  );
+  const saved = await f.app.store.get(f.project.id);
+  assert.equal(saved.cases.length, 1);
+  assert.ok(
+    saved.requests.some((r) => r.id === saved.cases[0].sourceRequestId),
+  );
+  assert.equal(f.hits(), 0);
+  for (const mode of ["collection", "environment"]) {
+    const q = await fixture(t),
+      postman = {
+        format: "auto",
+        document: {
+          info: { name: "Registry" },
+          variable: [{ key: "base", value: q.peerURL }],
+          item: [
+            { name: "Read", request: { method: "GET", url: "{{base}}/items" } },
+          ],
+        },
+        selection: { mode: "all" },
+        options: { postmanVariableMode: mode },
+      };
+    const preview = await q.post("import-preview", postman);
+    assert.deepEqual(preview.data.blockers, []);
+    assert.equal(
+      (
+        await q.post("import-apply", {
+          token: preview.data.token,
+          input: postman,
+        })
+      ).status,
+      200,
+    );
+    const after = await new Store(q.root).get(q.project.id);
+    if (mode === "collection") {
+      assert.equal(
+        after.requests[0].postmanCollectionId,
+        after.postmanCollections.items[0].id,
+      );
+      assert.equal(after.postmanCollections.items[0].variables.base, q.peerURL);
+    } else
+      assert.equal(
+        after.environments.find((env) => env.variables.base)?.variables.base,
+        q.peerURL,
+      );
+    assert.equal(q.hits(), 0);
+  }
+});
+
+test("owner OpenAPI schema cycles resolve after final IDs, while unsupported discriminators refuse without persistence", async (t) => {
+  const f = await fixture(t);
+  const document = {
+    openapi: "3.1.0",
+    info: { title: "Cycle", version: "1" },
+    servers: [{ url: f.peerURL }],
+    paths: {
+      "/read": {
+        get: {
+          responses: {
+            200: {
+              description: "OK",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Value" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        Value: {
+          type: "object",
+          properties: { next: { $ref: "#/components/schemas/Value" } },
+          example: { $ref: "literal" },
+        },
+      },
+    },
+  };
+  const input = { format: "openapi", document, selection: { mode: "all" } };
+  const preview = await f.post("import-preview", input);
+  assert.equal(preview.status, 200);
+  assert.deepEqual(preview.data.blockers, []);
+  assert.equal(
+    (await f.post("import-apply", { token: preview.data.token, input })).status,
+    200,
+  );
+  const saved = await new Store(f.root).get(f.project.id),
+    key = Object.keys(saved.openapiComponents.schemas)[0];
+  assert.equal(
+    saved.openapiComponents.schemas[key].properties.next.$ref,
+    `#/components/schemas/${key}`,
+  );
+  assert.equal(saved.openapiComponents.schemas[key].example.$ref, "literal");
+  const before = await snapshot(f.root);
+  document.components.schemas.Value.discriminator = {
+    propertyName: "kind",
+    mapping: { value: "#/components/schemas/Value" },
+  };
+  const refused = await f.post("import-preview", input);
+  assert.equal(refused.status, 400);
+  assert.equal(refused.data.token, undefined);
+  assert.deepEqual(await snapshot(f.root), before);
   assert.equal(f.hits(), 0);
 });

@@ -10,6 +10,7 @@ import {
   getRequestDefinitionVersion,
   applyRequestDefinitionHistoryOperation,
   REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+  REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
   REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
 } from "../src/request-definition-history.mjs";
 
@@ -699,14 +700,14 @@ test("snapshot, history and tracker budgets fail closed without evicting unrelat
   oversized.requests[0].body = "x".repeat(
     REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
   );
-  unchangedFailure(oversized, () => edited(oversized, "new"), /体积/);
+  unchangedFailure(oversized, () => edited(oversized, "new"), /容量/);
   const total = edited(initial());
   const template = entry(total).versions[0];
   entry(total).versions = Array.from({ length: 9 }, (_, i) => ({
     ...clone(template),
     id: "large-" + i,
     version: i + 1,
-    definition: { id: "a", body: "x".repeat(950000) },
+    definition: { id: "a", body: "x".repeat(4 * 1024 * 1024) },
   }));
   entry(total).currentVersion = 10;
   assert.ok(
@@ -716,7 +717,7 @@ test("snapshot, history and tracker budgets fail closed without evicting unrelat
   unchangedFailure(
     total,
     () => validateRequestDefinitionHistory(total),
-    /体积/,
+    /容量/,
   );
   const trackers = initial();
   trackers.requestDefinitionHistory.entries = Array.from(
@@ -985,7 +986,7 @@ test("activity may add execution evidence beyond 12MiB but cannot change definit
   assert.equal(reads, 0);
 });
 
-test("clearing retained definitions may bring an existing over-budget project back below 12MiB", () => {
+test("clearing history preserves execution evidence while reducing independent backup size", () => {
   let project = initial();
   project.requests[0].body = "old-body-" + "x".repeat(900000);
   project = edited(project, "current-small-body");
@@ -1008,18 +1009,22 @@ test("clearing retained definitions may bring an existing over-budget project ba
   assert.equal(entry(project).versions.length, 1);
 });
 
-test("configuration saves enforce only the final complete 12MiB backup envelope", () => {
+test("configuration saves are not gated by the optional backup-size utility", () => {
   const project = edited(initial());
   project.history = [
     { id: "large-execution", body: "x".repeat(13 * 1024 * 1024) },
   ];
   const next = clone(project);
   next.name = "configuration change";
-  unchangedFailure(project, () => save(project, next), /体积超过12582912/);
+  assert.throws(
+    () => assertRequestDefinitionProjectBudget(next),
+    /体积超过12582912/,
+  );
+  assert.doesNotThrow(() => save(project, next));
   const reduced = clone(next);
   reduced.history = [];
   assert.doesNotThrow(() => save(project, reduced));
-  assert.throws(() => save(undefined, next), /体积超过12582912/);
+  assert.doesNotThrow(() => save(undefined, next));
 });
 
 test("history operations reject top-level getters and leave borrowed unrelated proxies untouched", () => {
@@ -1046,7 +1051,7 @@ test("history operations reject top-level getters and leave borrowed unrelated p
   assert.equal(reads, 0);
 });
 
-test("JSON comparison accepts an explicit budget for valid definition collections larger than 8MiB", () => {
+test("JSON comparison accepts explicit budgets independently of history storage quotas", () => {
   const definitions = Array.from({ length: 10 }, (_, index) => ({
     id: "request-" + index,
     body: "x".repeat(900000),
@@ -1061,7 +1066,13 @@ test("JSON comparison accepts an explicit budget for valid definition collection
     },
   };
   const persisted = clone(project);
-  assert.throws(() => sameHistoryJSON(definitions, persisted.requests), /体积/);
+  assert.throws(
+    () =>
+      sameHistoryJSON(definitions, persisted.requests, {
+        maxBytes: 8 * 1024 * 1024,
+      }),
+    /体积/,
+  );
   assert.equal(
     sameHistoryJSON(definitions, persisted.requests, {
       maxBytes: 12 * 1024 * 1024,
@@ -1165,24 +1176,25 @@ test("forced restore context cannot create, revive, retarget or run as activity"
   );
 });
 
-test("newly admitted and materially changed current definitions must fit future snapshot budget", () => {
-  const tooLarge = fixture();
-  tooLarge.requests[0].body = "x".repeat(2 * 1024 * 1024);
-  unchangedFailure(
-    tooLarge,
-    () => save(undefined, tooLarge),
-    /体积超过1048576/,
+test("current creation and edits do not reserve future snapshot quota", () => {
+  const large = fixture();
+  large.requests[0].body = "x".repeat(
+    REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES + 1,
   );
+  const created = save(undefined, large);
+  assert.equal(entry(created).versions.length, 0);
   const project = initial();
   const added = clone(project);
-  added.requests.push({ id: "new-large", body: tooLarge.requests[0].body });
-  unchangedFailure(project, () => save(project, added), /体积超过1048576/);
+  added.requests.push({ id: "new-large", body: large.requests[0].body });
+  assert.equal(entry(save(project, added), "new-large").versions.length, 0);
   const changed = clone(project);
-  changed.requests[0].body = tooLarge.requests[0].body;
-  unchangedFailure(project, () => save(project, changed), /体积超过1048576/);
+  changed.requests[0].body = large.requests[0].body;
+  const saved = save(project, changed);
+  assert.equal(entry(saved).versions.length, 1);
+  assert.equal(entry(saved).versions[0].definition.body, "first");
 });
 
-test("oversized preexisting current remains readable and permits activity, no-op, tag and clear", () => {
+test("large preexisting current remains readable and permits activity, no-op, tag and clear", () => {
   const legacy = fixture();
   legacy.requests[0].body = "x".repeat(2 * 1024 * 1024);
   assert.equal(
@@ -1221,15 +1233,23 @@ test("oversized preexisting current remains readable and permits activity, no-op
   );
 });
 
-test("oversized preexisting current cannot be edited or hard-removed without its history", () => {
+test("a current exceeding the full-record quota cannot be edited or hard-removed without history", () => {
   const legacy = fixture();
-  legacy.requests[0].body = "x".repeat(2 * 1024 * 1024);
+  legacy.requests[0].body = "x".repeat(REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES);
   const changed = clone(legacy);
   changed.requests[0].body = "small replacement";
-  unchangedFailure(legacy, () => save(legacy, changed), /体积超过1048576/);
+  unchangedFailure(
+    legacy,
+    () => save(legacy, changed),
+    /单条历史容量超过 16 MiB/,
+  );
   const removed = clone(legacy);
   removed.requests = removed.requests.filter((request) => request.id !== "a");
-  unchangedFailure(legacy, () => save(legacy, removed), /体积超过1048576/);
+  unchangedFailure(
+    legacy,
+    () => save(legacy, removed),
+    /单条历史容量超过 16 MiB/,
+  );
 });
 
 test("history operations borrow unrelated committed evidence without new depth or node gates", () => {
@@ -1398,4 +1418,382 @@ test("whole-project byte counting rejects hostile descriptors without executing 
       }),
     /体积超过12582912/,
   );
+});
+
+test("8MiB current definitions can be created and archived by two ordinary edits", () => {
+  const project = fixture();
+  project.requests[0].body = "A".repeat(8 * 1024 * 1024);
+  let saved = save(undefined, project);
+  assert.equal(entry(saved).versions.length, 0);
+  saved = edited(saved, "B".repeat(8 * 1024 * 1024));
+  assert.equal(entry(saved).currentVersion, 2);
+  assert.equal(
+    entry(saved).versions[0].definition.body,
+    project.requests[0].body,
+  );
+  saved = edited(saved, "C".repeat(8 * 1024 * 1024));
+  assert.equal(entry(saved).currentVersion, 3);
+  assert.equal(entry(saved).versions.length, 2);
+  assert.equal(
+    entry(saved).versions[1].definition.body,
+    "B".repeat(8 * 1024 * 1024),
+  );
+  assert.ok(
+    Buffer.byteLength(JSON.stringify({ document: saved })) > 12 * 1024 * 1024,
+  );
+});
+
+test("history quotas are independent of the complete project backup size", () => {
+  const project = initial();
+  project.history = [
+    { id: "existing-evidence", body: "x".repeat(13 * 1024 * 1024) },
+  ];
+  const changed = edited(project);
+  assert.equal(entry(changed).currentVersion, 2);
+  assert.deepEqual(changed.history, project.history);
+  assert.equal(entry(changed).versions.length, 1);
+});
+
+test("the 16MiB single-version quota includes encoded quotes, backslashes and all metadata", () => {
+  const project = initial();
+  const expected = {
+    id: "boundary-version",
+    version: 1,
+    createdAt: now,
+    tag: "",
+    definition: { ...clone(project.requests[0]), body: "" },
+  };
+  const remaining =
+    16 * 1024 * 1024 - Buffer.byteLength(JSON.stringify(expected));
+  expected.definition.body =
+    '"\\'.repeat(Math.floor(remaining / 4)) + "x".repeat(remaining % 4);
+  assert.equal(Buffer.byteLength(JSON.stringify(expected)), 16 * 1024 * 1024);
+  project.requests[0] = clone(expected.definition);
+  const saved = edited(project, "small replacement", "a", {
+    makeId: () => "boundary-version",
+  });
+  assert.deepEqual(entry(saved).versions[0], expected);
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(saved));
+  unchangedFailure(
+    saved,
+    () => operation(saved, "tag", { historyId: "boundary-version", tag: "x" }),
+    (error) => {
+      assert.equal(error.code, "REQUEST_DEFINITION_HISTORY_CAPACITY");
+      assert.match(error.message, /单条历史容量超过 16 MiB/);
+      assert.match(error.message, /GET \/api\/projects\/project-a\/export/);
+      assert.match(
+        error.message,
+        /POST \/api\/projects\/project-a\/definition-history/,
+      );
+      assert.match(error.message, /localapi_clear_api_definition_history/);
+      return true;
+    },
+  );
+  const oversized = clone(project);
+  oversized.requests[0].body += "\\";
+  unchangedFailure(
+    oversized,
+    () =>
+      edited(oversized, "small replacement", "a", {
+        makeId: () => "boundary-version",
+      }),
+    /单条历史容量超过 16 MiB/,
+  );
+});
+
+test("32MiB total quota is exact, rejects the whole mutation, and permits explicit cleanup", () => {
+  const project = initial();
+  const tracker = entry(project);
+  tracker.currentVersion = 3;
+  tracker.versions = [1, 2].map((version) => ({
+    id: "total-boundary-" + version,
+    version,
+    createdAt: now,
+    tag: "",
+    definition: { id: "a", body: "" },
+  }));
+  const remaining =
+    32 * 1024 * 1024 -
+    Buffer.byteLength(
+      JSON.stringify({ ...project.requestDefinitionHistory, projectId: "a" }),
+    );
+  const first = Math.floor(remaining / 2);
+  tracker.versions[0].definition.body = "q".repeat(first);
+  const second = remaining - first;
+  tracker.versions[1].definition.body =
+    "\\".repeat(Math.floor(second / 2)) + "x".repeat(second % 2);
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory)),
+    32 * 1024 * 1024 + project.id.length - 1,
+  );
+  assert.ok(
+    tracker.versions.every(
+      (version) =>
+        Buffer.byteLength(JSON.stringify(version)) <= 16 * 1024 * 1024,
+    ),
+  );
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+  unchangedFailure(
+    project,
+    () => operation(project, "tag", { historyId: "current", tag: "x" }),
+    /项目历史总容量超过 32 MiB/,
+  );
+  unchangedFailure(
+    project,
+    () => edited(project),
+    (error) => {
+      assert.match(error.message, /项目历史总容量超过 32 MiB/);
+      assert.match(error.message, /导出完整项目/);
+      assert.match(error.message, /kind: "clear", confirm: true/);
+      return true;
+    },
+  );
+  const cleared = save(
+    project,
+    operation(project, "clear", { historyIds: [tracker.versions[0].id] }),
+  );
+  assert.equal(entry(cleared).currentVersion, 3);
+  assert.equal(entry(cleared).versions.length, 1);
+  const editedAfterCleanup = edited(cleared);
+  assert.equal(entry(editedAfterCleanup).currentVersion, 4);
+  assert.equal(entry(editedAfterCleanup).versions.length, 2);
+  assert.equal(entry(project).versions.length, 2);
+});
+
+function quotaRetentionFixture(largeOldest) {
+  const project = initial();
+  project.requests[0].body = "current" + "x".repeat(8 * 1024 * 1024);
+  const a = entry(project);
+  a.currentVersion = 101;
+  a.versions = Array.from({ length: 100 }, (_, index) => ({
+    id: "retention-a-" + index,
+    version: index + 1,
+    createdAt: now,
+    tag: "",
+    definition: {
+      id: "a",
+      body:
+        index === (largeOldest ? 0 : 99)
+          ? "x".repeat(14 * 1024 * 1024)
+          : "small",
+    },
+  }));
+  const b = entry(project, "b");
+  b.currentVersion = 2;
+  b.versions = [
+    {
+      id: "retention-b",
+      version: 1,
+      createdAt: now,
+      tag: "",
+      definition: { id: "b", body: "x".repeat(15 * 1024 * 1024) },
+    },
+  ];
+  validateRequestDefinitionHistory(project);
+  return project;
+}
+
+test("the 100-version retention crop happens before total quota enforcement without extra eviction", () => {
+  const cropOldest = quotaRetentionFixture(true);
+  const originalPeer = entry(cropOldest, "b");
+  const saved = edited(cropOldest, "next current");
+  assert.equal(entry(saved).versions.length, 100);
+  assert.equal(entry(saved).versions[0].version, 2);
+  assert.equal(entry(saved).versions.at(-1).version, 101);
+  assert.equal(entry(saved).currentVersion, 102);
+  assert.deepEqual(entry(saved, "b"), originalPeer);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(saved.requestDefinitionHistory)) <
+      32 * 1024 * 1024,
+  );
+  const cannotFit = quotaRetentionFixture(false);
+  unchangedFailure(
+    cannotFit,
+    () => edited(cannotFit, "next current"),
+    /项目历史总容量超过 32 MiB/,
+  );
+  assert.equal(entry(cannotFit).versions.length, 100);
+  assert.equal(entry(cannotFit).versions[0].version, 1);
+  assert.equal(entry(cannotFit).currentVersion, 101);
+});
+
+function fullQuotaOwnerFixture() {
+  const project = initial();
+  project.id = "a";
+  project.requestDefinitionHistory.projectId = "a";
+  const tracker = entry(project);
+  tracker.currentVersion = 3;
+  tracker.versions = [1, 2].map((version) => ({
+    id: "owner-boundary-" + version,
+    version,
+    createdAt: now,
+    tag: "",
+    definition: { id: "a", body: "" },
+  }));
+  const remaining =
+    32 * 1024 * 1024 -
+    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory));
+  tracker.versions[0].definition.body = "x".repeat(Math.floor(remaining / 2));
+  tracker.versions[1].definition.body = "y".repeat(
+    remaining - Math.floor(remaining / 2),
+  );
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory)),
+    32 * 1024 * 1024,
+  );
+  return project;
+}
+
+test("a full 32MiB history remains valid when a short owner is rebound to a UUID", () => {
+  const project = fullQuotaOwnerFixture();
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+  const restored = {
+    ...project,
+    id: "12345678-1234-1234-1234-123456789012",
+    requestDefinitionHistory: {
+      ...project.requestDefinitionHistory,
+      projectId: "12345678-1234-1234-1234-123456789012",
+    },
+  };
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(restored.requestDefinitionHistory)),
+    32 * 1024 * 1024 + 35,
+  );
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(restored));
+});
+
+test("owner length changes neither full-quota reads nor operations or one-byte overflow rejection", () => {
+  const original = fullQuotaOwnerFixture();
+  const expected = entry(original);
+  const owners = [
+    "a",
+    "12345678-1234-1234-1234-123456789012",
+    "z".repeat(200),
+    "a",
+  ];
+  assert.equal(
+    REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+    REQUEST_DEFINITION_HISTORY_MAX_BYTES + 199,
+  );
+  for (const owner of owners) {
+    const project = {
+      ...original,
+      id: owner,
+      requestDefinitionHistory: {
+        ...original.requestDefinitionHistory,
+        projectId: owner,
+      },
+    };
+    const actual = Buffer.byteLength(
+      JSON.stringify(project.requestDefinitionHistory),
+    );
+    assert.equal(
+      actual,
+      REQUEST_DEFINITION_HISTORY_MAX_BYTES + owner.length - 1,
+    );
+    assert.ok(actual <= REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES);
+    assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+    const listed = listRequestDefinitionHistory(project, { requestId: "a" });
+    assert.equal(listed.total, 2);
+    assert.equal(listed.lineageId, expected.lineageId);
+    const selected = getRequestDefinitionVersion(project, {
+      requestId: "a",
+      lineageId: expected.lineageId,
+      historyId: expected.versions[0].id,
+    });
+    assert.equal(
+      selected.definition.body,
+      expected.versions[0].definition.body,
+    );
+    const tagged = operation(project, "tag", { historyId: "current", tag: "" });
+    assert.equal(tagged.requestDefinitionHistory.projectId, owner);
+    assert.deepEqual(entry(tagged), expected);
+    const over = {
+      ...project,
+      requestDefinitionHistory: {
+        ...project.requestDefinitionHistory,
+        entries: project.requestDefinitionHistory.entries.map((item) =>
+          item.requestId === "a" ? { ...item, currentTag: "x" } : item,
+        ),
+      },
+    };
+    assert.throws(
+      () => validateRequestDefinitionHistory(over),
+      /项目历史总容量超过 32 MiB/,
+    );
+    assert.throws(
+      () => operation(project, "tag", { historyId: "current", tag: "x" }),
+      /项目历史总容量超过 32 MiB/,
+    );
+    assert.equal(entry(project).currentTag, "");
+    if (owner.length === 200) {
+      assert.equal(actual, REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES);
+      assert.throws(
+        () => projectHistoryProjection(project.requestDefinitionHistory),
+        /体积/,
+      );
+      assert.doesNotThrow(() =>
+        projectHistoryProjection(project.requestDefinitionHistory, {
+          maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+        }),
+      );
+      assert.throws(
+        () =>
+          projectHistoryProjection(over.requestDefinitionHistory, {
+            maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+          }),
+        /体积/,
+      );
+      const cleared = operation(project, "clear", {
+        historyIds: [expected.versions[0].id],
+      });
+      assert.equal(entry(cleared).versions.length, 1);
+      assert.equal(entry(cleared).currentVersion, 3);
+    }
+  }
+  assert.equal(original.id, "a");
+  assert.equal(original.requestDefinitionHistory.projectId, "a");
+  assert.equal(entry(original).versions.length, 2);
+});
+
+test("invalid or mismatched owners cannot use the history envelope allowance", () => {
+  const original = fullQuotaOwnerFixture();
+  for (const [projectId, owner] of [
+    ["a", "b"],
+    ["界", "界"],
+    ["x".repeat(201), "x".repeat(201)],
+    ["a", "x".repeat(201)],
+    ["a", "bad/id"],
+  ]) {
+    const project = {
+      ...original,
+      id: projectId,
+      requestDefinitionHistory: {
+        ...original.requestDefinitionHistory,
+        projectId: owner,
+      },
+    };
+    assert.throws(
+      () => validateRequestDefinitionHistory(project),
+      /项目ID|归属/,
+    );
+  }
+  let calls = 0;
+  const history = { ...original.requestDefinitionHistory };
+  Object.defineProperty(history, "projectId", {
+    enumerable: true,
+    get() {
+      calls++;
+      return "a";
+    },
+  });
+  assert.throws(
+    () =>
+      validateRequestDefinitionHistory({
+        ...original,
+        requestDefinitionHistory: history,
+      }),
+    /访问器/,
+  );
+  assert.equal(calls, 0);
 });

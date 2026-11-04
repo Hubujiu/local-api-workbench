@@ -511,6 +511,7 @@ test("HTTP import, execution, Store restart, OpenAPI reimport and backup restore
   }
   assert.deepEqual(received, Array(6).fill("/v1/one%2Ftwo/items/42"));
   const before = await call(base);
+  const fullBefore = await new Store(root).get(created.id);
   const bad = document(
     server("http://127.0.0.1:{port}", { port: String(target.address().port) }),
     {
@@ -525,6 +526,6 @@ test("HTTP import, execution, Store restart, OpenAPI reimport and backup restore
   const rejected = await call(base + "/import", "POST", { document: bad }, 400);
   assert.match(rejected.error, /default/);
   assert.deepEqual(await call(base), before);
-  assert.deepEqual(await new Store(root).get(created.id), before);
+  assert.deepEqual(await new Store(root).get(created.id), fullBefore);
   assert.equal(received.length, 6);
 });
