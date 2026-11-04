@@ -724,3 +724,93 @@ test("repeat and conditional HTTP plans use worst-case expanded admission and ag
     /100/,
   );
 });
+
+test("nested worst-case admission denies potential writes even under a false condition", async (t) => {
+  const { project, url } = await fixture(t, (_req, res) => res.end("ok"));
+  const leaf = (id) => ({ id, request: { url: url + "/" + id } });
+  const repeat = (id, count, steps, enabled = true) => ({
+    id,
+    type: "repeat",
+    count,
+    steps,
+    enabled,
+  });
+  const condition = (id, left, right, steps) => ({
+    id,
+    type: "if",
+    condition: { left: { literal: left }, op: "eq", right: { literal: right } },
+    steps,
+  });
+  const write = {
+    ...leaf("write"),
+    request: {
+      url,
+      inheritSharedScripts: false,
+      nativeTasks: {
+        version: 1,
+        before: [
+          {
+            id: "set",
+            type: "database",
+            enabled: 1,
+            data: {
+              connectionId: "source",
+              query: '["SET","key","value"]',
+              resultShape: "redis-value",
+              writeIntent: "redis-set",
+              isConsoleOutput: -1,
+              variables: [],
+            },
+          },
+        ],
+        after: [],
+      },
+    },
+  };
+  assert.throws(
+    () =>
+      prepareStagedLoad(
+        project,
+        { steps: [condition("no", 1, 2, [write])] },
+        input,
+      ),
+    (error) => error.code === "NATIVE_WRITE_AUTHORITY_REQUIRED",
+  );
+  const plan = {
+    steps: [
+      repeat("outer", 2, [
+        repeat("inner", 2, [leaf("a")]),
+        condition("yes", 1, 1, [leaf("b")]),
+        condition("no", 1, 2, [leaf("c")]),
+      ]),
+      repeat("disabled-write", 1, [write], false),
+    ],
+  };
+  const result = await runStagedLoad(
+    project,
+    prepareStagedLoad(project, plan, input),
+  );
+  assert.equal(result.mainRequests, 12);
+  assert.equal(result.failed, 0);
+  assert.deepEqual(
+    result.steps.map((item) => [item.stepId, item.count]),
+    [
+      ["a", 8],
+      ["b", 4],
+      ["c", 0],
+    ],
+  );
+  assert.throws(
+    () =>
+      prepareStagedLoad(
+        project,
+        {
+          steps: [
+            repeat("r", 1, [leaf("same"), { ...leaf("same"), enabled: false }]),
+          ],
+        },
+        input,
+      ),
+    /ID/,
+  );
+});
