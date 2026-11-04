@@ -1,3 +1,4 @@
+import { readHostDiagnostics } from "./script-host-lifecycle.mjs";
 import { readCompatibilityDiagnostics } from "./script-compat-diagnostics.mjs";
 import { bootstrapFailureDetails } from "./script-bootstrap-diagnostics.mjs";
 // Public diagnostic fields contain only known stages and bounded scalar counters.
@@ -23,6 +24,10 @@ export function scriptFailureDetails(error) {
   if (typeof error.scriptScope === "string" && error.scriptScope.length <= 200)
     result.scriptScope = error.scriptScope;
   const diagnostics = {};
+  const lifecycle = readHostDiagnostics(error, "hostLifecycle");
+  const sequence = readHostDiagnostics(error, "hostSequence");
+  if (lifecycle) diagnostics.hostLifecycle = lifecycle;
+  if (sequence) diagnostics.hostSequence = sequence;
   const compatibility = readCompatibilityDiagnostics(error);
   if (compatibility) {
     diagnostics.compatibilityOperation = compatibility.operation;

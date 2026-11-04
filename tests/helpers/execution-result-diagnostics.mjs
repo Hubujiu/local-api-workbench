@@ -119,6 +119,46 @@ const compatibilityOperations = enumeration([
   "source-build",
   "compatibility-eval",
 ]);
+const hostTerminals = enumeration(["result", "error"]);
+const hostReasons = enumeration([
+  "total-deadline",
+  "cancelled",
+  "worker-error",
+  "worker-exit",
+  "host-error",
+]);
+const hostLifecycleNumbers = [
+  ["spawnMs", 60000, false],
+  ["timerArmMs", 60000, false],
+  ["timerTargetMs", 60000, false],
+  ["onlineMs", 60000, false],
+  ["librariesMs", 60000, false],
+  ["engineMs", 60000, false],
+  ["bootstrapMs", 60000, false],
+  ["compatibilityMs", 60000, false],
+  ["scriptMs", 60000, false],
+  ["asyncMs", 60000, false],
+  ["serializationMs", 60000, false],
+  ["terminalMs", 60000, false],
+  ["timerFireMs", 60000, false],
+  ["finishMs", 60000, false],
+  ["terminateMs", 60000, false],
+  ["exitMs", 60000, false],
+  ["settleMs", 60000, false],
+  ["exitCode", 255, false],
+];
+const hostSequenceNumbers = [
+  ["stageIndex", 34, false],
+  ["completed", 34, false],
+  ["elapsedMs", 60000, false],
+  ["priorWorkerMs", 60000, false],
+  ["priorSpawnMs", 60000, false],
+  ["priorExitWaitMs", 60000, false],
+];
+const hostNestedSchemas = [
+  ["hostLifecycle", hostLifecycleNumbers],
+  ["hostSequence", hostSequenceNumbers],
+];
 const statuses = enumeration(["passed", "failed", "cancelled", "skipped"]);
 const numbers = [
   ["activityBudgetMs", 250, true],
@@ -244,6 +284,23 @@ export function executionResultMetadata(input) {
         compatibilityOperations,
       );
       copyEnum(diagnostics, raw, "lastWorkerStage", stages);
+      for (let index = 0; index < hostNestedSchemas.length; index++) {
+        const key = hostNestedSchemas[index][0],
+          schema = hostNestedSchemas[index][1];
+        const value = own(raw, key);
+        if (value === missing) continue;
+        if (value === raw || value === input) throw invalid;
+        plainRecord(value);
+        if (own(value, "version") !== 1) continue;
+        const projected = create(null);
+        projected.version = 1;
+        copyNumbers(projected, value, schema);
+        if (key === "hostLifecycle") {
+          copyEnum(projected, value, "terminalKind", hostTerminals);
+          copyEnum(projected, value, "finishReason", hostReasons);
+        }
+        diagnostics[key] = projected;
+      }
       if (result.scriptStage === "bootstrap") {
         copyEnum(diagnostics, raw, "bootstrapOperation", bootstrapOperations);
         if (hasOwn(diagnostics, "bootstrapOperation"))

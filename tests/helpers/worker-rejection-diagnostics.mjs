@@ -154,6 +154,60 @@ export function workerFailureMetadata(error) {
     }
     result.compatibilityDiagnostics = values;
   }
+  for (const [key, names] of [
+    [
+      "hostLifecycle",
+      [
+        "spawnMs",
+        "timerArmMs",
+        "timerTargetMs",
+        "onlineMs",
+        "librariesMs",
+        "engineMs",
+        "bootstrapMs",
+        "compatibilityMs",
+        "scriptMs",
+        "asyncMs",
+        "serializationMs",
+        "terminalMs",
+        "timerFireMs",
+        "finishMs",
+        "terminateMs",
+        "exitMs",
+        "settleMs",
+      ],
+    ],
+    [
+      "hostSequence",
+      ["elapsedMs", "priorWorkerMs", "priorSpawnMs", "priorExitWaitMs"],
+    ],
+  ]) {
+    const source = ownData(error, key);
+    if (ownData(source, "version") !== 1) continue;
+    const out = Object.create(null);
+    out.version = 1;
+    for (const name of names) copyNumber(out, source, name, 60000);
+    if (key === "hostLifecycle") {
+      copyNumber(out, source, "exitCode", 255);
+      const terminal = ownData(source, "terminalKind"),
+        reason = ownData(source, "finishReason");
+      if (["result", "error"].includes(terminal)) out.terminalKind = terminal;
+      if (
+        [
+          "total-deadline",
+          "cancelled",
+          "worker-error",
+          "worker-exit",
+          "host-error",
+        ].includes(reason)
+      )
+        out.finishReason = reason;
+    } else {
+      copyNumber(out, source, "stageIndex", 34);
+      copyNumber(out, source, "completed", 34);
+    }
+    result[key] = out;
+  }
   return result;
 }
 
