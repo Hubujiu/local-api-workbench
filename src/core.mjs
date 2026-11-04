@@ -1,3 +1,4 @@
+import { importPostmanOAuth1 } from "./postman-oauth1-import.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1112,29 +1113,7 @@ export function importDocument(doc) {
               .map((key) => [key, values[key]]),
           ),
         };
-      if (config.type === "oauth1")
-        return {
-          type: "oauth1",
-          ...Object.fromEntries(
-            [
-              "consumerKey",
-              "consumerSecret",
-              "accessToken",
-              "tokenSecret",
-              "signatureMethod",
-              "privateKey",
-              "privateKeyPassphrase",
-              "nonce",
-              "timestamp",
-              "realm",
-              "version",
-              "callback",
-              "verifier",
-            ]
-              .filter((key) => values[key] !== undefined)
-              .map((key) => [key, values[key]]),
-          ),
-        };
+      if (config.type === "oauth1") return importPostmanOAuth1(config.oauth1);
       if (config.type === "oauth2")
         return { type: "oauth2", token: values.accessToken || "" };
       if (config.type === "basic")
