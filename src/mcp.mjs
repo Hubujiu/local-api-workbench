@@ -1,3 +1,8 @@
+import {
+  listRequestDefinitionHistory,
+  getRequestDefinitionVersion,
+  projectHistoryProjection,
+} from "./request-definition-history.mjs";
 import { failureStopSummary } from "./plan-failure-policy.mjs";
 import { publishDebugVariables } from "./debug-publication.mjs";
 import { conditionSummary } from "./execution-history.mjs";
@@ -81,6 +86,74 @@ import {
   isEnvironmentTool,
   executeEnvironmentTool,
 } from "./mcp-environments.mjs";
+export const REQUEST_DEFINITION_HISTORY_MCP_MAX_BYTES = 2 * 1024 * 1024;
+export function requestDefinitionHistoryMCPJSON(value) {
+  const text = JSON.stringify(value);
+  if (Buffer.byteLength(text) > REQUEST_DEFINITION_HISTORY_MCP_MAX_BYTES)
+    throw Error("接口定义历史结果超过 2 MiB；请使用本地项目备份读取完整定义");
+  return text;
+}
+
+// Confirmation is transport-only. The Store receives only the exact mutation
+// contract and owns the configuration conflict check and abort-before-commit gate.
+export function requestDefinitionHistoryChangeInput(input) {
+  const options = projectHistoryProjection(input, { maxBytes: 128 * 1024 });
+  if (!options || typeof options !== "object" || Array.isArray(options))
+    throw Error("接口定义历史操作必须为对象");
+  const required = ["kind", "requestId", "lineageId", "configRevision"];
+  let optional = [];
+  if (options.kind === "tag") required.push("historyId", "tag");
+  else if (options.kind === "restore") required.push("historyId");
+  else if (options.kind === "clear") {
+    required.push("confirm");
+    optional = ["historyIds", "all"];
+  } else throw Error("接口定义历史操作类型无效");
+  if (
+    required.some((key) => !Object.hasOwn(options, key)) ||
+    Object.keys(options).some(
+      (key) => !required.includes(key) && !optional.includes(key),
+    )
+  )
+    throw Error("接口定义历史操作字段缺失或含未知字段");
+  if (
+    !Number.isSafeInteger(options.configRevision) ||
+    options.configRevision < 0
+  )
+    throw Error("接口定义历史操作必须提供有效 configRevision");
+  if (options.kind === "clear") {
+    if (options.confirm !== true)
+      throw Error("清理接口定义历史必须显式传入 confirm: true");
+    delete options.confirm;
+  }
+  return options;
+}
+
+export function requestDefinitionHistoryChangeResult(project, input) {
+  const entry = project.requestDefinitionHistory?.entries.find(
+    (item) =>
+      item.requestId === input.requestId && item.lineageId === input.lineageId,
+  );
+  return {
+    projectId: project.id,
+    revision: project.revision,
+    configRevision: project.configRevision,
+    kind: input.kind,
+    requestId: input.requestId,
+    lineageId: input.lineageId,
+    ...(Object.hasOwn(input, "historyId")
+      ? { historyId: input.historyId }
+      : {}),
+    ...(input.kind === "tag" ? { tag: input.tag } : {}),
+    ...(input.kind === "clear"
+      ? input.all === true
+        ? { all: true }
+        : { historyIds: [...input.historyIds] }
+      : {}),
+    remainingHistory: entry?.versions.length ?? 0,
+    lineageRemoved: !entry,
+  };
+}
+
 export function createMCP({
   store,
   projects = [],
@@ -253,6 +326,61 @@ export function createMCP({
   }
   const str = { type: "string" },
     projectArg = { projectId: str };
+  addTool(
+    "list_api_definition_history",
+    "读取接口定义版本摘要及血缘，不包含定义正文，不执行请求",
+    {
+      ...projectArg,
+      requestId: str,
+      lineageId: str,
+      offset: { type: "integer", minimum: 0, maximum: 10000 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      lineageOffset: { type: "integer", minimum: 0, maximum: 10000 },
+      lineageLimit: { type: "integer", minimum: 1, maximum: 100 },
+    },
+    ["projectId", "requestId"],
+  );
+  addTool(
+    "get_api_definition_version",
+    "读取指定接口定义版本；最多 2 MiB JSON，可能包含已保存的凭据，不执行请求",
+    { ...projectArg, requestId: str, lineageId: str, historyId: str },
+    ["projectId", "requestId", "historyId"],
+  );
+  if (write) {
+    const target = {
+      ...projectArg,
+      requestId: str,
+      lineageId: str,
+      configRevision: { type: "integer", minimum: 0 },
+    };
+    addTool(
+      "tag_api_definition_version",
+      "修改指定接口定义版本标签；需要当前 configRevision，不执行请求",
+      { ...target, historyId: str, tag: { type: "string", maxLength: 200 } },
+    );
+    addTool(
+      "restore_api_definition",
+      "恢复活动血缘的接口定义并保留原当前版本；需要当前 configRevision，不执行请求",
+      { ...target, historyId: str },
+    );
+    addTool(
+      "clear_api_definition_history",
+      "清理指定血缘的历史版本，保留当前接口；必须 confirm: true 与当前 configRevision，不执行请求",
+      {
+        ...target,
+        historyIds: {
+          type: "array",
+          items: str,
+          minItems: 1,
+          maxItems: 100,
+          uniqueItems: true,
+        },
+        all: { type: "boolean", const: true },
+        confirm: { type: "boolean", const: true },
+      },
+      [...Object.keys(target), "confirm"],
+    );
+  }
   const projectFormat = {
     type: "string",
     enum: ["apipost", "apipost-directory"],
@@ -495,14 +623,21 @@ export function createMCP({
         id: requestId,
         error: { code: -32601, message: "Method not found" },
       };
-    // These bounded interchange tools cannot echo an unbounded/structured ID
+    // Bounded interchange/history tools cannot echo an unbounded/structured ID
     // even in their error envelope. Other tools retain their existing contract.
+    const definitionHistory = [
+      "localapi_list_api_definition_history",
+      "localapi_get_api_definition_version",
+      "localapi_tag_api_definition_version",
+      "localapi_restore_api_definition",
+      "localapi_clear_api_definition_history",
+    ].includes(params?.name);
     const projectInterchange = [
       "localapi_import_project",
       "localapi_export_project",
     ].includes(params?.name);
     if (
-      projectInterchange &&
+      (projectInterchange || definitionHistory) &&
       !(
         (typeof requestId === "string" &&
           Buffer.byteLength(requestId) <= 256) ||
@@ -513,7 +648,9 @@ export function createMCP({
         jsonrpc: "2.0",
         error: {
           code: -32600,
-          message: "项目导入导出请求ID必须为安全整数或最多256字节的字符串",
+          message: projectInterchange
+            ? "项目导入导出请求ID必须为安全整数或最多256字节的字符串"
+            : "接口定义历史请求ID必须为安全整数或最多256字节的字符串",
         },
       };
     let importedChunkRequest = false;
@@ -529,6 +666,8 @@ export function createMCP({
         importedChunkRequest = chunkArgs !== null;
         if (chunkArgs) args = chunkArgs;
       }
+      if (definitionHistory)
+        args = projectHistoryProjection(args, { maxBytes: 128 * 1024 });
       if (!args || typeof args !== "object" || Array.isArray(args))
         throw Error("参数必须为对象");
       if (projectInterchange) validateMCPProjectArguments(args);
@@ -642,6 +781,42 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_list_api_definition_history":
+            case "localapi_get_api_definition_version": {
+              const { projectId, ...input } = args;
+              output = {
+                projectId,
+                revision: p.revision,
+                configRevision: p.configRevision,
+                ...(params.name === "localapi_list_api_definition_history"
+                  ? listRequestDefinitionHistory(p, input)
+                  : getRequestDefinitionVersion(p, input)),
+              };
+              break;
+            }
+            case "localapi_tag_api_definition_version":
+            case "localapi_restore_api_definition":
+            case "localapi_clear_api_definition_history": {
+              // Tool visibility never substitutes for an explicit write grant.
+              if (!write) throw Error("接口定义历史写入未授权");
+              signal?.throwIfAborted();
+              const { projectId, ...input } = args;
+              const change = requestDefinitionHistoryChangeInput({
+                ...input,
+                kind: {
+                  localapi_tag_api_definition_version: "tag",
+                  localapi_restore_api_definition: "restore",
+                  localapi_clear_api_definition_history: "clear",
+                }[params.name],
+              });
+              const saved = await store.changeRequestDefinitionHistory(
+                projectId,
+                change,
+                { signal },
+              );
+              output = requestDefinitionHistoryChangeResult(saved, change);
+              break;
+            }
             case "localapi_import_project":
               return result(await importMCPProject(store, p, args, requestId));
             case "localapi_export_project":
@@ -1165,7 +1340,14 @@ export function createMCP({
         }
       }
       return result({
-        content: [{ type: "text", text: JSON.stringify(output) }],
+        content: [
+          {
+            type: "text",
+            text: definitionHistory
+              ? requestDefinitionHistoryMCPJSON(output)
+              : JSON.stringify(output),
+          },
+        ],
       });
     } catch (e) {
       // Archive chunks use a fixed error even for hostile injected Store

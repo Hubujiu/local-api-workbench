@@ -1,3 +1,8 @@
+import {
+  validateRequestDefinitionHistory,
+  projectHistoryProjection,
+  sameHistoryJSON,
+} from "./request-definition-history.mjs";
 import { applySharedAuth } from "./shared-auth.mjs";
 import { importPostmanOAuth1 } from "./postman-oauth1-import.mjs";
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
@@ -2419,6 +2424,26 @@ export function toCurl(input, { collectionResolved = false } = {}) {
   return args.join(" ");
 }
 
+// History-backed definitions are inert persisted data. Current normalization may
+// add defaults, but cannot silently erase or change a previously persisted field.
+export function normalizeHistoricalRequest(request) {
+  const selected = projectHistoryProjection(request, {
+    maxBytes: Number.MAX_SAFE_INTEGER,
+  });
+  const normalized = normalizeRequest(selected);
+  for (const key of Object.keys(selected)) {
+    if (!Object.hasOwn(normalized, key))
+      throw Error("历史定义含当前不能无损恢复的字段：" + key);
+    if (
+      !sameHistoryJSON(selected[key], normalized[key], {
+        maxBytes: Number.MAX_SAFE_INTEGER,
+      })
+    )
+      throw Error("历史定义不能按当前规则无损恢复：" + key);
+  }
+  return normalized;
+}
+
 export function restoreProject(document) {
   if (typeof document === "string") document = JSON.parse(document);
   if (
@@ -2428,6 +2453,7 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  validateRequestDefinitionHistory(document);
   if (
     document.runs !== undefined &&
     (!Array.isArray(document.runs) ||
@@ -2527,9 +2553,15 @@ export function restoreProject(document) {
   validateProjectDatabaseWriteEvidence(document);
   const copy = structuredClone(document);
   copy.id = id();
+  if (copy.requestDefinitionHistory !== undefined)
+    copy.requestDefinitionHistory.projectId = copy.id;
   copy.name = (document.name || "项目") + " · 恢复副本";
   delete copy.revision;
-  copy.requests = copy.requests.map(normalizeRequest);
+  copy.requests = copy.requests.map(
+    copy.requestDefinitionHistory === undefined
+      ? normalizeRequest
+      : normalizeHistoricalRequest,
+  );
   copy.plans = (copy.plans || []).map(snapshotPlan);
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
@@ -2538,6 +2570,7 @@ export function restoreProject(document) {
   copy.documents = copy.documents || [];
   copy.dictionary = copy.dictionary || [];
   validateNativeInheritanceProject(copy);
+  validateRequestDefinitionHistory(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {

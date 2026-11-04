@@ -266,6 +266,15 @@ test(
     assert.equal(response.status, 201);
     const restored = await response.json();
     assert.notEqual(restored.id, project.id);
+    const completeRestored = await app.store.get(restored.id);
+    assert.equal(
+      completeRestored.requestDefinitionHistory.projectId,
+      restored.id,
+    );
+    assert.deepEqual(
+      completeRestored.requestDefinitionHistory.entries,
+      backup.requestDefinitionHistory.entries,
+    );
     assert.equal(restored.revision, 1);
     assert.equal(restored.configRevision, 1);
     assert.deepEqual(restored.requests, backup.requests);
@@ -273,7 +282,7 @@ test(
     await assert.rejects(readFile(removed.file), { code: "ENOENT" });
     const restart = new Store(root);
     await assert.rejects(restart.get(project.id), { code: "ENOENT" });
-    assert.deepEqual(await restart.get(restored.id), restored);
+    assert.deepEqual(await restart.get(restored.id), completeRestored);
     assert.equal((await restart.list()).length, 2);
     await writeFile(removed.file, removed.bytes);
     assert.deepEqual(await restart.get(project.id), backup);

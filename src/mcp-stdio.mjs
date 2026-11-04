@@ -12,6 +12,11 @@ const executionTools = new Set([
   "apipost_execute_api",
   "apipost_execute_flow",
 ]);
+const definitionHistoryMutationTools = new Set([
+  "localapi_tag_api_definition_version",
+  "localapi_restore_api_definition",
+  "localapi_clear_api_definition_history",
+]);
 const rpcError = (id, message, code = -32603) => {
   let correlation = {};
   try {
@@ -191,14 +196,14 @@ export async function serveMCPStdio({
     }
     track(writer.send(message).catch(stop));
   };
-  const handle = async (message, lease, isTool, cancellable) => {
+  const handle = async (message, lease, isTool, isExecution) => {
     let activity,
       answer,
       executionStatus,
       recordSaved,
       replyStarted = false;
     try {
-      if (cancellable) {
+      if (isExecution) {
         activity = activityFactory(message);
         await activity?.start();
       }
@@ -210,8 +215,8 @@ export async function serveMCPStdio({
       try {
         result = JSON.parse(answer?.result?.content?.[0]?.text);
       } catch {}
-      executionStatus = cancellable ? result?.status : undefined;
-      recordSaved = cancellable
+      executionStatus = isExecution ? result?.status : undefined;
+      recordSaved = isExecution
         ? (result?.recordSaved ?? result?.record_saved)
         : undefined;
       const frame =
@@ -259,7 +264,10 @@ export async function serveMCPStdio({
       return;
     }
     const isTool = message.method === "tools/call";
-    const cancellable = isTool && executionTools.has(message.params?.name);
+    const isExecution = isTool && executionTools.has(message.params?.name);
+    const cancellable =
+      isExecution ||
+      (isTool && definitionHistoryMutationTools.has(message.params?.name));
     let lease;
     try {
       lease = registry.begin(session, message.id, cancellable);
@@ -282,7 +290,7 @@ export async function serveMCPStdio({
     }
     if (isTool) tools++;
     // handle() starts synchronously through its first await; lease is already registered.
-    track(handle(message, lease, isTool, cancellable));
+    track(handle(message, lease, isTool, isExecution));
   };
   function onData(chunk) {
     if (ending) return;
