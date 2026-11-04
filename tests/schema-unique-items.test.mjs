@@ -447,3 +447,41 @@ for (const dialect of ["prefixItems", "items"]) {
     });
   }
 }
+
+test("early unique tuple inspection preserves both dialects and forbidden-slot bounds", () => {
+  for (const dialect of ["prefixItems", "items"]) {
+    const make = (prefix, minItems = 2, maxItems = 2) => ({
+      type: "array",
+      uniqueItems: true,
+      minItems,
+      maxItems,
+      [dialect]: prefix,
+      ...(dialect === "prefixItems"
+        ? { items: false }
+        : { additionalItems: false }),
+    });
+    assert.deepEqual(
+      sampleFromSchema(make([{ const: 0 }, { const: 1 }])),
+      [0, 1],
+    );
+    assert.deepEqual(
+      sampleFromSchema(make([{ const: 0 }, false, { const: 1 }], 1, 3)),
+      [0],
+    );
+    assert.throws(
+      () => sampleFromSchema(make([{ const: 0 }, false, { const: 1 }], 2, 3)),
+      /禁止项/,
+    );
+    assert.throws(
+      () => sampleFromSchema(make([{ const: -0 }, { const: 0 }])),
+      /唯一/,
+    );
+    assert.throws(
+      () =>
+        sampleFromSchema(
+          make([{ const: { a: 1, b: 2 } }, { const: { b: 2, a: 1 } }]),
+        ),
+      /唯一/,
+    );
+  }
+});
