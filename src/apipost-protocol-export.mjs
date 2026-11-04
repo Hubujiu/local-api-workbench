@@ -131,7 +131,7 @@ export function prepareProtocolExport(project, { projectId, id }) {
             typeof message?.request?.raw !== "string" ||
             message.request.raw.includes("{{")
           )
-            fail("WS字面量文本消息");
+            fail("WS字面量消息");
           const defId = resource(
               "protocol",
               node.target_id + ":" + message.param_id,
@@ -140,8 +140,11 @@ export function prepareProtocolExport(project, { projectId, id }) {
           if (!definition || covered.has(defId)) fail("缺失/重用的WS活动定义");
           // Empty native text means an actual empty frame, not the canonical
           // legacy receive-only default. Require the importer-owned intent flag.
+          // Encoded binary (including empty) has its own send intent. The final
+          // importer reconstruction and exact comparison validate its mode/data.
           if (
             message.request.raw === "" &&
+            !["base64", "hexadecimal"].includes(message.request.mode) &&
             definition.sendEmptyMessage !== true
           )
             fail("WS空文本发送意图");
