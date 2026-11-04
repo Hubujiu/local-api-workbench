@@ -89,6 +89,30 @@ MCP preview also validates the complete future artifact frame using the worst en
 No host file reads, URL retrieval, scripts, Mock, signing, database connection or
 HTTP execution occur during preview/export.
 
+## API sequence
+
+Owner routes are POST `/api/projects/:id/export-preview` and
+`/api/projects/:id/export-selection`; they accept no query parameters or extra
+path. MCP names are `localapi_preview_project_export` and
+`localapi_export_project_selection`, with the same body plus `projectId`.
+
+Preview input: `format`, `selection`, optional `modelNameMode`, and optional
+`databaseMode: "rebind"`. `selection` is `{mode: "all"}` or
+`{mode: "explicit", resources: [{kind: "api", id: "saved-id"}], exclude?: []}`.
+Kinds use the lowercase names listed above: `api`, `document`, `folder`, `case`,
+`case-folder`, `model`, `model-folder`, `environment`, `globals`,
+`protocol-bundle`, `collection-bundle`. Folder IDs are full saved paths. Fixed
+bundle IDs are `configuration`, `definitions`, and `registry`, respectively.
+
+Export repeats the original input and adds the returned `configRevision`,
+`scopeDigest: preview.scope.digest`, and the exact typed identities from
+`acceptedDependencies: preview.scope.dependencies`. Dependency order is not
+significant; missing, extra and duplicate identities reject. Preview includes
+scope reasons, omitted categories, resolved options, document byte count and
+warnings. Only the successful export response includes `document`. Errors never
+fall back to a wider selection. A changed config or artifact requires preview
+again; no preview token is persisted.
+
 ## Required acceptance
 
 - Real owner and official SDK HTTP/stdio preview/export, read-only authorization,
@@ -101,9 +125,18 @@ HTTP execution occur during preview/export.
   rejected, including raw-media, auth and DB policies with no verified mapping.
 - Descriptor/Proxy/size/depth/node/frame boundaries and zero execution counters.
 
-The first checkpoint recorded three real missing-route owner failures. The next
-WIP implements the graph, bounded adapters and owner/MCP HTTP/stdio wiring. Pure
-and owner acceptance is in progress; official SDK acceptance and frozen-tree CI
-are required before delivery. Errors do not echo arbitrary Store error values.
-The adapter consumes persisted ordinary JSON and does not execute accessors or
-Proxy traps; this is not a serializer for arbitrary live JavaScript objects.
+The first checkpoint recorded three real missing-route owner failures. The
+implementation now has actual graph, owner and official SDK HTTP/stdio acceptance,
+including selected recursive models, source/peer immutability, cancellation and
+revocation during a real locked Store read, persistence/reopen and complete-frame
+limits. Independent review corrected Proxy/getter reads, empty-folder authority
+loss and preview approval of an oversized artifact. The first implementation CI
+also exposed the old exact tool inventory (50 rather than 52); the fixture now
+asserts both new tool names while retaining its complete lifecycle/grant checks.
+This is still a draft until its final exact commit has passed CI and independent
+review. Local test totals are not a feature-completion percentage.
+
+Errors do not echo arbitrary Store error values. The adapter consumes persisted
+ordinary JSON and does not execute accessors or Proxy traps; this is not a
+serializer for arbitrary live JavaScript objects. Native Promise assimilation
+of a caller-supplied async Store is outside that synchronous data boundary.

@@ -402,6 +402,42 @@ export function createMCP({
     },
     ["projectId", "format"],
   );
+  const scopedResource = {
+    type: "object",
+    required: ["kind", "id"],
+    additionalProperties: false,
+    properties: {
+      kind: {
+        type: "string",
+        enum: [
+          "api",
+          "document",
+          "folder",
+          "case",
+          "case-folder",
+          "model",
+          "model-folder",
+          "environment",
+          "globals",
+          "protocol-bundle",
+          "collection-bundle",
+        ],
+      },
+      id: {
+        type: "string",
+        minLength: 1,
+        maxLength: 2000,
+        description:
+          "持久化资源ID；folder为完整路径。固定bundle：globals=configuration，protocol-bundle=definitions，collection-bundle=registry。",
+      },
+    },
+  };
+  const scopedResources = {
+    type: "array",
+    maxItems: 10000,
+    uniqueItems: true,
+    items: scopedResource,
+  };
   for (const exporting of [false, true])
     addTool(
       exporting ? "export_project_selection" : "preview_project_export",
@@ -413,7 +449,26 @@ export function createMCP({
         format: projectFormat,
         selection: {
           type: "object",
-          description: "明确 all 或非空 explicit 资源选择，不读取文件或URL",
+          description:
+            "明确 all 或非空 explicit 资源选择；完整目录子树不可排除内部叶。不是备份，不读取文件或URL。",
+          oneOf: [
+            {
+              type: "object",
+              required: ["mode"],
+              additionalProperties: false,
+              properties: { mode: { const: "all" } },
+            },
+            {
+              type: "object",
+              required: ["mode", "resources"],
+              additionalProperties: false,
+              properties: {
+                mode: { const: "explicit" },
+                resources: { ...scopedResources, minItems: 1 },
+                exclude: scopedResources,
+              },
+            },
+          ],
         },
         modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
         databaseMode: { type: "string", enum: ["rebind"] },

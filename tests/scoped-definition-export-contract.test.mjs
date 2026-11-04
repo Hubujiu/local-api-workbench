@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMCP } from "../src/mcp.mjs";
+import Ajv from "ajv";
 import { normalizeRequest } from "../src/core.mjs";
 import {
   previewDefinitionExport,
@@ -248,6 +249,28 @@ test("read-only scoped tools are closed and structured or overlong request IDs a
     const tool = listed.find((t) => t.name === "localapi_" + name);
     assert.ok(tool);
     assert.equal(tool.inputSchema.additionalProperties, false);
+    const validate = new Ajv({ strict: false }).compile(tool.inputSchema);
+    const args = {
+      ...(name === "preview_project_export" ? input() : accept(p)),
+      projectId: p.id,
+    };
+    assert.equal(validate(args), true, JSON.stringify(validate.errors));
+    for (const selection of [
+      { mode: "explicit", resources: [] },
+      { mode: "all", resources: [] },
+      { mode: "explicit", resources: [{ kind: "unknown", id: "x" }] },
+      {
+        mode: "explicit",
+        resources: [{ kind: "api", id: "api", extra: true }],
+      },
+    ]) {
+      assert.equal(
+        validate({ ...args, selection }),
+        false,
+        JSON.stringify(selection),
+      );
+    }
+
     for (const id of [
       { secret: "do-not-reflect" },
       "x".repeat(257),

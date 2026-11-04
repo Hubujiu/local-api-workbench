@@ -357,3 +357,127 @@ test("owner body arriving after configuration change previews a fresh locked Sto
   assert.deepEqual(await originalGet(f.project.id), saved);
   assert.equal(f.sends(), 0);
 });
+
+test("owner API selection closes recursive models and preserves literal ref data through both native imports", async (t) => {
+  const f = await fixture(t);
+  let p = await f.app.store.get(f.project.id);
+  const a = {
+    type: "object",
+    properties: { b: { $ref: "#/components/schemas/B" } },
+    example: { $ref: "https://literal.invalid/not-a-dependency" },
+  };
+  const b = {
+    type: "object",
+    properties: { a: { $ref: "#/components/schemas/A" } },
+  };
+  p.dictionary = [
+    { id: "A", name: "A", folderId: "mf", schema: a },
+    { id: "B", name: "B", schema: b },
+    { id: "unused", name: "Unused", schema: { type: "string" } },
+  ];
+  p.modelFolders = [{ id: "mf", name: "Models" }];
+  p.openapiComponents = { schemas: { A: a, B: b, unused: { type: "string" } } };
+  p.requests[0].schema = { $ref: "#/components/schemas/A" };
+  p = await f.app.store.save(p);
+  for (const format of ["apipost", "apipost-directory"]) {
+    const input = { ...selected(format), modelNameMode: "preserve" };
+    const preview = await f.post("export-preview", input);
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    for (const id of ["A", "B"])
+      assert.ok(
+        preview.body.scope.dependencies.some(
+          (x) => x.kind === "model" && x.id === id,
+        ),
+      );
+    assert.equal(
+      preview.body.scope.included.some(
+        (x) => x.kind === "model" && x.id === "unused",
+      ),
+      false,
+    );
+    const refused = await f.post("export-preview", {
+      ...input,
+      selection: { ...input.selection, exclude: [{ kind: "model", id: "B" }] },
+    });
+    assert.equal(refused.status, 400);
+    const response = await f.post(
+      "export-selection",
+      acceptance(input, preview.body),
+    );
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    let target = await f.app.store.create("Model target " + format);
+    importIntoProject(target, response.body.document, {
+      modelNameMode: "preserve",
+    });
+    target = await f.app.store.save(target);
+    const reopened = await new Store(f.root).get(target.id);
+    assert.deepEqual(reopened, target);
+    assert.equal(reopened.dictionary.length, 2);
+    assert.equal(reopened.requests.length, 1);
+    const ma = reopened.dictionary.find((x) => x.name === "A"),
+      mb = reopened.dictionary.find((x) => x.name === "B");
+    assert.ok(ma && mb);
+    assert.equal(ma.schema.properties.b.$ref, "#/components/schemas/" + mb.id);
+    assert.equal(mb.schema.properties.a.$ref, "#/components/schemas/" + ma.id);
+    assert.deepEqual(ma.schema.example, a.example);
+    assert.equal(
+      reopened.requests[0].schema.$ref,
+      "#/components/schemas/" + ma.id,
+    );
+    assert.ok(reopened.modelFolders.some((x) => x.name === "Models"));
+  }
+  assert.deepEqual(await f.app.store.get(p.id), p);
+  assert.equal(f.sends(), 0);
+});
+
+test("owner native selection requires explicit database rebind and exports only inert connection placeholders", async (t) => {
+  const f = await fixture(t);
+  let p = await f.app.store.get(f.project.id);
+  const { nativeDatabaseFixture } = await import(
+    "./fixtures/apipost-database.mjs"
+  );
+  const staging = {
+    id: "db-staging",
+    name: "DB staging",
+    requests: [],
+    environments: [],
+    settings: {},
+  };
+  importIntoProject(staging, nativeDatabaseFixture());
+  p.settings.apipostDatabases = staging.settings.apipostDatabases;
+  p = await f.app.store.save(p);
+  assert.equal((await f.post("export-preview", selected())).status, 400);
+  const input = { ...selected(), databaseMode: "rebind" };
+  const preview = await f.post("export-preview", input);
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.equal(preview.body.options.databaseMode, "rebind");
+  assert.ok(preview.body.scope.dependencies.some((x) => x.kind === "globals"));
+  const exported = await f.post(
+    "export-selection",
+    acceptance(input, preview.body),
+  );
+  assert.equal(exported.status, 200, JSON.stringify(exported.body));
+  assert.equal(
+    JSON.stringify(exported.body.document).includes("private-host.invalid"),
+    false,
+  );
+  assert.equal(
+    JSON.stringify(exported.body.document).includes(
+      "discard-this-fictional-password",
+    ),
+    false,
+  );
+  const link = exported.body.document.global.db_link;
+  assert.equal(link.length, 1);
+  assert.deepEqual(link[0].config.default.db_config, {
+    host: "",
+    port: 5432,
+    user: "",
+    password: "",
+    database: "",
+    auth_source: "",
+  });
+  assert.equal(link[0].config.default.ssh.enable, -1);
+  assert.deepEqual(await f.app.store.get(p.id), p);
+  assert.equal(f.sends(), 0);
+});
