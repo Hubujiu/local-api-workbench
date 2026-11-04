@@ -210,7 +210,13 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const progress = () => {
     if (!options.onProgress) return;
     try {
-      options.onProgress(report());
+      const returned = options.onProgress(report());
+      if (returned && typeof returned.then === "function") {
+        // This internal observer is synchronous. Handle a rejected promise so an
+        // accidental async callback cannot escape as an unhandled rejection.
+        Promise.resolve(returned).catch(() => {});
+        stop("observer-failed", true);
+      }
     } catch {
       stop("observer-failed", true);
     }
@@ -305,13 +311,46 @@ export async function runStagedLoad(project, prepared, options = {}) {
   try {
     if (options.signal?.aborted) cancelled();
     if (!stopReason) {
+      const reconcileAtCurrentTime = () => {
+        const elapsed = performance.now() - start;
+        if (elapsed >= schedule.durationMs) {
+          stop("duration", true);
+          return;
+        }
+        let current = schedule.initialVUs;
+        for (const change of schedule.changes) {
+          if (change.atMs > elapsed) break;
+          current = change.vus;
+        }
+        if (current !== active) reconcile(current);
+      };
+      const scheduleChange = (change) => {
+        const trigger = () => {
+          if (stopReason) return;
+          const remaining = change.atMs - (performance.now() - start);
+          if (remaining > 0) {
+            timers.push(setTimeout(trigger, Math.max(1, Math.ceil(remaining))));
+            return;
+          }
+          reconcileAtCurrentTime();
+        };
+        timers.push(setTimeout(trigger, change.atMs));
+      };
       for (const change of schedule.changes)
-        if (change.atMs < schedule.durationMs)
-          timers.push(setTimeout(() => reconcile(change.vus), change.atMs));
-      deadlineTimer = setTimeout(
-        () => stop("duration", true),
-        schedule.durationMs,
-      );
+        if (change.atMs < schedule.durationMs) scheduleChange(change);
+      const checkDeadline = () => {
+        if (stopReason && stopReason !== "iteration-limit") return;
+        const remaining = schedule.durationMs - (performance.now() - start);
+        if (remaining > 0) {
+          deadlineTimer = setTimeout(
+            checkDeadline,
+            Math.max(1, Math.ceil(remaining)),
+          );
+          return;
+        }
+        stop("duration", true);
+      };
+      deadlineTimer = setTimeout(checkDeadline, schedule.durationMs);
       reportTimer = setInterval(
         progress,
         schedule.reportIntervalSeconds * 1000,

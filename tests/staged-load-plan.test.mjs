@@ -628,3 +628,56 @@ test(
     assert.equal(ticks, 2);
   },
 );
+
+test(
+  "event-loop pauses skip expired ramp targets rather than replaying stale VUs",
+  { timeout: 10000 },
+  async (t) => {
+    let calls = 0;
+    const { project, url } = await fixture(t, (_req, res) => {
+      calls++;
+      res.end("ok");
+    });
+    const prepared = prepareStagedLoad(
+      project,
+      { steps: [{ id: "a", request: { url } }] },
+      {
+        initialVUs: 0,
+        stages: [
+          { durationSeconds: 1, targetVUs: 2 },
+          { durationSeconds: 1, targetVUs: 0 },
+          { durationSeconds: 1, targetVUs: 0 },
+        ],
+        maxIterations: 10,
+      },
+    );
+    setTimeout(
+      () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2150),
+      50,
+    );
+    const result = await runStagedLoad(project, prepared);
+    assert.equal(result.stopReason, "duration");
+    assert.equal(result.started, 0);
+    assert.equal(calls, 0);
+  },
+);
+
+test("an accidental async observer cannot escape as an unhandled rejection", async (t) => {
+  const { project, url } = await fixture(t, (_req, res) => res.end("ok"));
+  const prepared = prepareStagedLoad(
+    project,
+    { steps: [{ id: "a", request: { url } }] },
+    {
+      initialVUs: 1,
+      stages: [{ durationSeconds: 3, targetVUs: 1 }],
+      maxIterations: 10,
+    },
+  );
+  const result = await runStagedLoad(project, prepared, {
+    onProgress: async () => {
+      throw Error("observer rejected");
+    },
+  });
+  assert.equal(result.stopReason, "observer-failed");
+  assert.equal(result.runningIterations, 0);
+});
