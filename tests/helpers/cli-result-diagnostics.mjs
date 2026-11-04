@@ -30,11 +30,27 @@ function stepMetadata(step, index) {
   const raw = object();
   raw.scriptStage = own(step, "scriptStage");
   raw.scriptDiagnostics = source;
+  raw.hostLifecycle = own(source, "hostLifecycle");
+  raw.hostSequence = own(source, "hostSequence");
   raw.lastWorkerStage = own(source, "lastWorkerStage");
   raw.activityOperation = own(source, "activityOperation");
   raw.elapsedMs = own(source, "elapsedMs");
   raw.activityMetrics = source;
   raw.activityCPUTimeUs = object();
+  const compatibility = object();
+  compatibility.version = 1;
+  compatibility.operation = own(source, "compatibilityOperation");
+  for (const prefix of [
+    "MockAsset",
+    "MockInstall",
+    "SourceBuild",
+    "Evaluation",
+  ]) {
+    const field = prefix[0].toLowerCase() + prefix.slice(1);
+    compatibility[field + "Ms"] = own(source, "compat" + prefix + "Ms");
+    compatibility[field + "CPUUs"] = own(source, "compat" + prefix + "CPUUs");
+  }
+  raw.compatibilityDiagnostics = compatibility;
   for (const phase of phases)
     raw.activityCPUTimeUs[`${phase}Us`] = own(source, `${phase}CPUUs`);
   Object.assign(result, workerFailureMetadata(raw));
@@ -86,6 +102,36 @@ export function cliResultMetadata(stdout) {
   return result;
 }
 
+function fitMetadata(result) {
+  const tooLarge = () =>
+    Buffer.byteLength("\nCLI_RESULT_METADATA " + JSON.stringify(result)) > 4096;
+  const retained = Object.keys(result.steps || {}).length;
+  let hostOmitted = 0,
+    compatibilityOmitted = 0;
+  for (let index = retained - 1; index >= 0 && tooLarge(); index--) {
+    const step = result.steps[index];
+    if (
+      Object.hasOwn(step, "hostLifecycle") ||
+      Object.hasOwn(step, "hostSequence")
+    ) {
+      delete step.hostLifecycle;
+      delete step.hostSequence;
+      result.hostObservationsOmitted = ++hostOmitted;
+    }
+  }
+  for (let index = retained - 1; index >= 0 && tooLarge(); index--) {
+    const step = result.steps[index];
+    if (Object.hasOwn(step, "compatibilityDiagnostics")) {
+      delete step.compatibilityDiagnostics;
+      result.compatibilityObservationsOmitted = ++compatibilityOmitted;
+    }
+  }
+  for (let index = retained - 1; index >= 0 && tooLarge(); index--) {
+    delete result.steps[index];
+    result.omittedCount++;
+  }
+}
+
 // Optional test-side facts already observed by a fixture. These are not worker
 // request counters or a claimed before/after phase; no URLs or values are copied.
 // Response presence means an own record property, not success or phase completion.
@@ -124,6 +170,7 @@ export function withCLIResultDiagnostics(assertion, stdout, observations) {
         const workflow = workflowFailureObservations(observations);
         if (Object.keys(workflow).length)
           metadata.workflowObservations = workflow;
+        fitMetadata(metadata);
         let suffix = "\nCLI_RESULT_METADATA " + JSON.stringify(metadata);
         if (Buffer.byteLength(suffix) > 4096)
           suffix = '\nCLI_RESULT_METADATA {"input":"metadata-too-large"}';
