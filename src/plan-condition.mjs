@@ -1,7 +1,18 @@
 import { types } from "node:util";
 import { variableName } from "./variable-scopes.mjs";
 
-const ops = new Set(["eq", "neq", "gt", "gte", "lt", "lte"]);
+const ops = new Set([
+  "eq",
+  "neq",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "notContains",
+]);
+const numericOps = new Set(["gt", "gte", "lt", "lte"]);
+const textOps = new Set(["contains", "notContains"]);
 const scopes = new Set(["globals", "environment", "runtime", "iterationData"]);
 const fail = (message) =>
   Object.assign(Error("条件计划" + message), {
@@ -56,6 +67,12 @@ function operand(value) {
     if (!fields.name.value.isWellFormed()) throw fail("变量名称无效");
   }
 }
+function validateKnownType(op, value) {
+  if (numericOps.has(op) && typeof value !== "number")
+    throw fail("顺序比较仅支持有限数字");
+  if (textOps.has(op) && typeof value !== "string")
+    throw fail("文本包含比较仅支持文本");
+}
 export function validatePlanCondition(condition) {
   const fields = object(condition, ["op", "left", "right"]);
   if (Object.keys(fields).length !== 3 || !ops.has(fields.op?.value))
@@ -67,10 +84,10 @@ export function validatePlanCondition(condition) {
     Object.hasOwn(condition.right, "literal")
   )
     compare(condition.left.literal, condition.op, condition.right.literal);
-  else if (!["eq", "neq"].includes(condition.op))
+  else
     for (const side of [condition.left, condition.right])
-      if (Object.hasOwn(side, "literal") && typeof side.literal !== "number")
-        throw fail("顺序比较仅支持有限数字");
+      if (Object.hasOwn(side, "literal"))
+        validateKnownType(condition.op, side.literal);
   return condition;
 }
 function compare(left, op, right) {
@@ -80,6 +97,11 @@ function compare(left, op, right) {
     throw fail("比较值类型不匹配，禁止隐式转换");
   if (op === "eq") return left === right;
   if (op === "neq") return left !== right;
+  if (textOps.has(op)) {
+    validateKnownType(op, left);
+    const contains = left.includes(right);
+    return op === "contains" ? contains : !contains;
+  }
   if (typeof left !== "number") throw fail("顺序比较仅支持有限数字");
   if (op === "gt") return left > right;
   if (op === "gte") return left >= right;
@@ -110,10 +132,9 @@ export function validateIterationDataCondition(condition, rows) {
     );
     if (values.every((value) => value !== undefined))
       compare(values[0], condition.op, values[1]);
-    else if (!["eq", "neq"].includes(condition.op))
+    else
       for (const value of values)
-        if (value !== undefined && typeof value !== "number")
-          throw fail("顺序比较仅支持有限数字");
+        if (value !== undefined) validateKnownType(condition.op, value);
   }
 }
 export function evaluatePlanCondition(condition, state, iterationData) {
