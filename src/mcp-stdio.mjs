@@ -17,6 +17,10 @@ const definitionHistoryMutationTools = new Set([
   "localapi_restore_api_definition",
   "localapi_clear_api_definition_history",
 ]);
+const scopedExportTools = new Set([
+  "localapi_preview_project_export",
+  "localapi_export_project_selection",
+]);
 const rpcError = (id, message, code = -32603) => {
   let correlation = {};
   try {
@@ -267,7 +271,9 @@ export async function serveMCPStdio({
     const isExecution = isTool && executionTools.has(message.params?.name);
     const cancellable =
       isExecution ||
-      (isTool && definitionHistoryMutationTools.has(message.params?.name));
+      (isTool &&
+        (definitionHistoryMutationTools.has(message.params?.name) ||
+          scopedExportTools.has(message.params?.name)));
     let lease;
     try {
       lease = registry.begin(session, message.id, cancellable);

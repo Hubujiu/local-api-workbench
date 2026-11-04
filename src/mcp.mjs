@@ -1,4 +1,11 @@
 import {
+  scopedExportArguments,
+  previewDefinitionExport,
+  exportDefinitionSelection,
+  scopedExportMCPResult,
+  scopedExportErrorMessage,
+} from "./scoped-definition-export.mjs";
+import {
   listRequestDefinitionHistory,
   getRequestDefinitionVersion,
   projectHistoryProjection,
@@ -395,6 +402,50 @@ export function createMCP({
     },
     ["projectId", "format"],
   );
+  for (const exporting of [false, true])
+    addTool(
+      exporting ? "export_project_selection" : "preview_project_export",
+      exporting
+        ? "导出明确选择并确认依赖的原生定义；可能含静态凭据，不执行请求"
+        : "预览原生定义选择、必需依赖及大小，不返回定义或凭据",
+      {
+        ...projectArg,
+        format: projectFormat,
+        selection: {
+          type: "object",
+          description: "明确 all 或非空 explicit 资源选择，不读取文件或URL",
+        },
+        modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+        databaseMode: { type: "string", enum: ["rebind"] },
+        ...(exporting
+          ? {
+              configRevision: { type: "integer", minimum: 0 },
+              scopeDigest: { type: "string", pattern: "^[a-f0-9]{64}$" },
+              acceptedDependencies: {
+                type: "array",
+                maxItems: 10000,
+                items: {
+                  type: "object",
+                  required: ["kind", "id"],
+                  additionalProperties: false,
+                  properties: {
+                    kind: { type: "string" },
+                    id: { type: "string" },
+                  },
+                },
+              },
+            }
+          : {}),
+      },
+      [
+        "projectId",
+        "format",
+        "selection",
+        ...(exporting
+          ? ["configRevision", "scopeDigest", "acceptedDependencies"]
+          : []),
+      ],
+    );
   if (write)
     addTool(
       "import_project",
@@ -632,9 +683,15 @@ export function createMCP({
       "localapi_restore_api_definition",
       "localapi_clear_api_definition_history",
     ].includes(params?.name);
+    const scopedExport = [
+      "localapi_preview_project_export",
+      "localapi_export_project_selection",
+    ].includes(params?.name);
     const projectInterchange = [
       "localapi_import_project",
       "localapi_export_project",
+      "localapi_preview_project_export",
+      "localapi_export_project_selection",
     ].includes(params?.name);
     if (
       (projectInterchange || definitionHistory) &&
@@ -666,6 +723,11 @@ export function createMCP({
         importedChunkRequest = chunkArgs !== null;
         if (chunkArgs) args = chunkArgs;
       }
+      if (scopedExport)
+        args = scopedExportArguments(args, {
+          exporting: params.name === "localapi_export_project_selection",
+          mcp: true,
+        });
       if (definitionHistory)
         args = projectHistoryProjection(args, { maxBytes: 128 * 1024 });
       if (!args || typeof args !== "object" || Array.isArray(args))
@@ -739,8 +801,10 @@ export function createMCP({
         const lockId = nativePlanArgs?.flow_id || args.planId || args.plan?.id;
         if (lockId && lockedOperations.includes(params.name))
           unlockPlan = lockMCPPlan(store, args.projectId, lockId);
+        if (scopedExport) signal?.throwIfAborted();
         const p = await store.get(args.projectId);
-        if (p.archived) throw Error("项目已归档");
+        if (scopedExport) signal?.throwIfAborted();
+        if (!scopedExport && p.archived) throw Error("项目已归档");
         if (nativeName && Object.hasOwn(args, "environmentId"))
           args = {
             ...args,
@@ -816,6 +880,17 @@ export function createMCP({
               );
               output = requestDefinitionHistoryChangeResult(saved, change);
               break;
+            }
+            case "localapi_preview_project_export":
+            case "localapi_export_project_selection": {
+              signal?.throwIfAborted();
+              const { projectId: _projectId, ...input } = args;
+              const scoped =
+                params.name === "localapi_preview_project_export"
+                  ? previewDefinitionExport(p, input, { mcp: true })
+                  : exportDefinitionSelection(p, input);
+              signal?.throwIfAborted();
+              return result(scopedExportMCPResult(scoped, requestId));
             }
             case "localapi_import_project":
               return result(await importMCPProject(store, p, args, requestId));
@@ -1356,6 +1431,11 @@ export function createMCP({
         return result({
           isError: true,
           content: [{ type: "text", text: importedExecutionChunkError }],
+        });
+      if (scopedExport)
+        return result({
+          isError: true,
+          content: [{ type: "text", text: scopedExportErrorMessage(e) }],
         });
       const outcome = publicProjectCommitOutcome(e);
       if (outcome.project_ids)
