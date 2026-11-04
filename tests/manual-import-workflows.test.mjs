@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -229,6 +231,70 @@ test("clear is a recoverable scoped leaf replacement, not a destructive folder o
   assert.equal(
     recovered.requests.filter((request) => !request.deletedAt).length,
     3,
+  );
+  assert.equal(f.hits(), 0);
+});
+
+test("owner malformed input never reflects secret text and close cancels before journal publication", async (t) => {
+  const f = await fixture(t);
+  const malformed = await fetch(
+    `${f.app.url}/api/projects/${f.project.id}/import-preview`,
+    {
+      method: "POST",
+      headers: {
+        "x-local-token": f.app.token,
+        "content-type": "application/json",
+      },
+      body: '{"document":"private-malformed-secret",bad',
+    },
+  );
+  assert.equal(malformed.status, 400);
+  assert.equal(
+    (await malformed.text()).includes("private-malformed-secret"),
+    false,
+  );
+  const p = await f.post("import-preview", f.input);
+  assert.equal(p.status, 200);
+  const original = fs.promises.writeFile;
+  let unblock, entered;
+  const ready = new Promise((resolve) => (entered = resolve)),
+    barrier = new Promise((resolve) => (unblock = resolve));
+  fs.promises.writeFile = async function (file, ...args) {
+    const result = await original.call(this, file, ...args);
+    if (
+      String(file).includes(".transaction.json.") &&
+      String(file).endsWith(".tmp")
+    ) {
+      entered();
+      await barrier;
+    }
+    return result;
+  };
+  syncBuiltinESMExports();
+  try {
+    const apply = f.post("import-apply", {
+      token: p.data.token,
+      input: f.input,
+    });
+    await ready;
+    const closed = new Promise((resolve) => f.app.server.close(resolve));
+    unblock();
+    const result = await apply;
+    assert.notEqual(result.status, 200);
+    await closed;
+  } finally {
+    unblock();
+    fs.promises.writeFile = original;
+    syncBuiltinESMExports();
+  }
+  const saved = await f.app.store.get(f.project.id);
+  assert.equal(saved.requests.length, 0);
+  assert.equal(saved.configRevision, f.project.configRevision);
+  await assert.rejects(
+    readFile(
+      path.join(f.app.store.directory(f.project.id), ".transaction.json"),
+    ),
+    { code: "ENOENT" },
   );
   assert.equal(f.hits(), 0);
 });

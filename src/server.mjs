@@ -1,3 +1,4 @@
+import { manualImportError } from "./manual-import.mjs";
 import { nativeOAuth2GrantInput } from "./native-oauth2-grant.mjs";
 import {
   writeDebugVariables,
@@ -289,6 +290,13 @@ export async function createApp({
     snapshot: rememberedMCPSnapshot,
     write: persistMCP,
   });
+  const manualImportInstanceId = randomBytes(32).toString("hex");
+  const manualImportControllers = new Set();
+  let manualImportClosed = false;
+  const closeManualImports = () => {
+    manualImportClosed = true;
+    for (const controller of manualImportControllers) controller.abort();
+  };
   const token = randomBytes(32).toString("hex"),
     controllers = new Map();
   const claimRun = (candidate) => {
@@ -522,7 +530,13 @@ export async function createApp({
             "localapi_restore_api_definition",
             "localapi_clear_api_definition_history",
           ].includes(message.params?.name);
-        const cancellable = isExecution || isDefinitionHistoryMutation;
+        const isManualImport =
+          message.method === "tools/call" &&
+          ["localapi_preview_import", "localapi_apply_import"].includes(
+            message.params?.name,
+          );
+        const cancellable =
+          isExecution || isDefinitionHistoryMutation || isManualImport;
         const execution =
           sessionId !== undefined && message.id !== undefined
             ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
@@ -554,9 +568,10 @@ export async function createApp({
         }
         // History writes belong to both the MCP grant/session and the incoming
         // HTTP caller. Existing execution tools retain their evidence lifecycle.
-        const callerController = isDefinitionHistoryMutation
-          ? new AbortController()
-          : undefined;
+        const callerController =
+          isDefinitionHistoryMutation || isManualImport
+            ? new AbortController()
+            : undefined;
         const disconnected = () => {
           if (!res.writableFinished) callerController?.abort();
         };
@@ -600,7 +615,13 @@ export async function createApp({
                 });
             },
           });
-          result = await dispatch(message, { signal });
+          result = await dispatch(message, {
+            signal,
+            manualImportSessionId:
+              sessionId === undefined
+                ? undefined
+                : `${manualImportInstanceId}:mcp:${sessionId}:${requestEpoch}:${mcpEpoch}`,
+          });
         } catch {
           result = {
             jsonrpc: "2.0",
@@ -1044,6 +1065,49 @@ export async function createApp({
               200,
               await store.editNativeInheritance(p.id, await body(req)),
             );
+          }
+          if (["import-preview", "import-apply"].includes(action)) {
+            if (parts.length !== 4 || u.searchParams.size)
+              return json(res, 400, {
+                error: "手动导入不接受额外路径或查询参数",
+              });
+            if (req.method !== "POST") {
+              res.setHeader("Allow", "POST");
+              return json(res, 405, { error: "手动导入仅支持POST" });
+            }
+            if (manualImportClosed)
+              return json(res, 400, { error: "手动导入宿主已关闭" });
+            const { runId, controller } = claimRun();
+            manualImportControllers.add(controller);
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            try {
+              const input = await body(req);
+              controller.signal.throwIfAborted();
+              const method =
+                action === "import-preview"
+                  ? "previewManualImport"
+                  : "applyManualImport";
+              return json(
+                res,
+                200,
+                await store[method](p.id, input, {
+                  sessionId: `${manualImportInstanceId}:owner`,
+                  signal: controller.signal,
+                }),
+              );
+            } catch (error) {
+              throw manualImportError(error);
+            } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+              manualImportControllers.delete(controller);
+            }
           }
           if (action === "definition-history") {
             const version = parts.length === 5 && parts[4] === "version";
@@ -2345,6 +2409,7 @@ export async function createApp({
       grpcSessions,
     })));
   server.on("close", () => {
+    closeManualImports();
     void autoImports.close();
     mcpHTTPSessions.close();
     beginProtocolShutdown();
@@ -2359,6 +2424,7 @@ export async function createApp({
   // graceful transport finalization and the one automatic persistence attempt.
   const closeServer = server.close.bind(server);
   server.close = (callback) => {
+    closeManualImports();
     mcpHTTPSessions.close();
     nativeWriteOwner.close();
     // Abort held provider requests before waiting for HTTP close.

@@ -209,3 +209,29 @@ composition gates, as are existing authentication/raw-body/protocol snapshots.
 Unsupported history/trash definition exports must remain fail-closed. Tests and
 actual portable-package dependencies/licenses bind the final exact tree on all
 three systems. No old green run or helper-only pass is complete acceptance.
+
+
+## Implemented conservative boundaries
+
+The first implementation rejects active OpenAPI Schema discriminator semantics
+(explicit or implicit) and Link operationId/operationRef semantics. Renaming
+component identities without a complete proof for those non-$ref edges would
+change meaning. The existing import endpoint is unchanged; this is an explicit
+restriction of the new two-stage interface, not claimed original parity. Literal
+examples, defaults and extension values do not become references.
+
+Global variable values and variable-definition records, non-schema component
+records and per-folder configuration records are atomic. Missing registry keys
+can be added and equal complete records reused; unequal records conflict. No
+recursive merge invents a third object value from two conflicting records.
+
+The token expires at the last synchronous validation immediately before starting
+the journal rename, after writing its temporary file. Both live cancellation and
+full signed-plan verification run at that gate. Once publication begins, an
+uncertain outcome requires recovery and observation, never automatic replay.
+
+The dependency remains the fixed initial PR97 tree, not its final compatibility
+revision. History simulation and actual commit both use the existing history
+owner; this feature does not define a replacement current-definition/project
+budget. Final acceptance must rebase on the parent's fixed corrected PR97 and
+re-run this batch and the prior history/backup/current-definition boundaries.

@@ -37,6 +37,7 @@ import { appendExecutionRecord } from "./execution-evidence.mjs";
 
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { realpathSync } from "node:fs";
+import { types } from "node:util";
 import {
   importedExecutionChunkArguments,
   importedExecutionChunkDefaultBytes,
@@ -93,6 +94,51 @@ export function requestDefinitionHistoryMCPJSON(value) {
     throw Error("接口定义历史结果超过 2 MiB；请使用本地项目备份读取完整定义");
   return text;
 }
+
+// Validate only the transport envelope here. The Store owns the shared nested
+// input contract and its budgets; history/interchange limits do not apply.
+function manualImportMCPArguments(value, apply) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    types.isProxy(value) ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    throw Error("手动导入参数必须为普通对象");
+  const fields = apply
+    ? ["projectId", "token", "input"]
+    : ["projectId", "input"];
+  const keys = Reflect.ownKeys(value);
+  if (
+    keys.length !== fields.length ||
+    keys.some((key) => !fields.includes(key))
+  )
+    throw Error("手动导入参数字段缺失或含未知字段");
+  const args = {};
+  for (const key of fields) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
+      throw Error("手动导入参数必须为普通数据");
+    args[key] = descriptor.value;
+  }
+  return args;
+}
+const manualImportErrorCodes = new Set([
+  "MANUAL_IMPORT_INVALID",
+  "MANUAL_IMPORT_ABORTED",
+  "MANUAL_IMPORT_INPUT_INVALID",
+  "MANUAL_IMPORT_CONFLICT",
+  "MANUAL_IMPORT_PLAN_INVALID",
+  "MANUAL_IMPORT_RESOURCE_CONFLICT",
+  "MANUAL_IMPORT_TARGET_UNSUPPORTED",
+  "MANUAL_IMPORT_SELECTION_INVALID",
+  "MANUAL_IMPORT_DEPENDENCY_EXCLUDED",
+  "MANUAL_IMPORT_DEPENDENCY_MISSING",
+  "MANUAL_IMPORT_FOLDER_MAP_INVALID",
+  "MANUAL_IMPORT_CLEAR_SCOPE_INVALID",
+  "MANUAL_IMPORT_CLEAR_SELECTION_EMPTY",
+]);
 
 // Confirmation is transport-only. The Store receives only the exact mutation
 // contract and owns the configuration conflict check and abort-before-commit gate.
@@ -326,6 +372,89 @@ export function createMCP({
   }
   const str = { type: "string" },
     projectArg = { projectId: str };
+  const manualImportInput = {
+    type: "object",
+    description:
+      "内联导入输入；必须提供 format、document、selection。支持 policies、folderMap、bindings、options、clearScope；不接受路径或 URL，不执行请求",
+    properties: {
+      format: {
+        type: "string",
+        enum: ["auto", "apipost", "apipost-directory", "openapi"],
+      },
+      document: { oneOf: [{ type: "object" }, { type: "string" }] },
+      selection: {
+        oneOf: [
+          {
+            type: "object",
+            properties: { mode: { type: "string", const: "all" } },
+            required: ["mode"],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              mode: { type: "string", const: "explicit" },
+              keys: { type: "array", items: str, uniqueItems: true },
+              exclude: { type: "array", items: str, uniqueItems: true },
+            },
+            required: ["mode", "keys"],
+            additionalProperties: false,
+          },
+        ],
+      },
+      policies: {
+        type: "object",
+        properties: {
+          api: {
+            type: "string",
+            enum: ["both", "ignore", "url", "url_and_folder", "clear"],
+          },
+          samples: { type: "string", enum: ["both", "name"] },
+          models: { type: "string", enum: ["both", "name"] },
+          environments: { type: "string", const: "both" },
+          documents: { type: "string", const: "both" },
+          globals: { type: "string", const: "safe" },
+        },
+        additionalProperties: false,
+      },
+      folderMap: { type: "object", additionalProperties: str },
+      bindings: { type: "object", additionalProperties: str },
+      options: {
+        type: "object",
+        properties: {
+          modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+          postmanVariableMode: {
+            type: "string",
+            enum: ["environment", "collection"],
+          },
+        },
+        additionalProperties: false,
+      },
+      clearScope: {
+        type: "object",
+        properties: { folder: str },
+        required: ["folder"],
+        additionalProperties: false,
+      },
+    },
+    required: ["format", "document", "selection"],
+    additionalProperties: false,
+  };
+  addTool(
+    "preview_import",
+    "预览已授权项目的手动资源导入；需要有效会话，不修改项目、不执行请求",
+    { ...projectArg, input: manualImportInput },
+  );
+  if (write)
+    addTool(
+      "apply_import",
+      "应用同一会话、来源与项目配置的导入预览；需要当前写入授权，不执行请求",
+      {
+        ...projectArg,
+        token: { type: "string", maxLength: 4096 },
+        input: manualImportInput,
+      },
+    );
   addTool(
     "list_api_definition_history",
     "读取接口定义版本摘要及血缘，不包含定义正文，不执行请求",
@@ -594,7 +723,11 @@ export function createMCP({
   tools.push(...nativeMCPTools(write, execute));
   return async function dispatch(
     message,
-    { signal, onProgress: emitProgress = onProgress } = {},
+    {
+      signal,
+      onProgress: emitProgress = onProgress,
+      manualImportSessionId,
+    } = {},
   ) {
     const { id: requestId, method, params: incomingParams = {} } = message;
     let params = incomingParams;
@@ -636,8 +769,12 @@ export function createMCP({
       "localapi_import_project",
       "localapi_export_project",
     ].includes(params?.name);
+    const manualImport = [
+      "localapi_preview_import",
+      "localapi_apply_import",
+    ].includes(params?.name);
     if (
-      (projectInterchange || definitionHistory) &&
+      (projectInterchange || definitionHistory || manualImport) &&
       !(
         (typeof requestId === "string" &&
           Buffer.byteLength(requestId) <= 256) ||
@@ -648,9 +785,11 @@ export function createMCP({
         jsonrpc: "2.0",
         error: {
           code: -32600,
-          message: projectInterchange
-            ? "项目导入导出请求ID必须为安全整数或最多256字节的字符串"
-            : "接口定义历史请求ID必须为安全整数或最多256字节的字符串",
+          message: manualImport
+            ? "手动导入请求ID必须为安全整数或最多256字节的字符串"
+            : projectInterchange
+              ? "项目导入导出请求ID必须为安全整数或最多256字节的字符串"
+              : "接口定义历史请求ID必须为安全整数或最多256字节的字符串",
         },
       };
     let importedChunkRequest = false;
@@ -658,6 +797,20 @@ export function createMCP({
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
+      if (manualImport) {
+        args = manualImportMCPArguments(
+          args,
+          params.name === "localapi_apply_import",
+        );
+        // This identity is injected by the transport, never by client arguments.
+        if (
+          typeof manualImportSessionId !== "string" ||
+          !manualImportSessionId ||
+          Buffer.byteLength(manualImportSessionId) > 1024
+        )
+          throw Error("手动导入需要有效 MCP 会话");
+        signal?.throwIfAborted();
+      }
       if (params.name === "localapi_get_execution_result_chunk")
         args = executionResultChunkArguments(args);
       if (tool.name === "localapi_get_imported_execution_run") {
@@ -781,6 +934,24 @@ export function createMCP({
             ).variables;
         } else
           switch (params.name) {
+            case "localapi_preview_import":
+              output = await store.previewManualImport(
+                args.projectId,
+                args.input,
+                {
+                  sessionId: manualImportSessionId,
+                  signal,
+                },
+              );
+              break;
+            case "localapi_apply_import":
+              if (!write) throw Error("手动导入写入未授权");
+              output = await store.applyManualImport(
+                args.projectId,
+                { token: args.token, input: args.input },
+                { sessionId: manualImportSessionId, signal },
+              );
+              break;
             case "localapi_list_api_definition_history":
             case "localapi_get_api_definition_version": {
               const { projectId, ...input } = args;
@@ -1362,11 +1533,15 @@ export function createMCP({
         outcome.project_ids = outcome.project_ids.filter((id) =>
           allowed.has(id),
         );
-      const message = projectInterchange
-        ? typeof e.message === "string"
-          ? e.message.slice(0, 2048)
-          : "项目导入导出失败"
-        : e.message;
+      const message = manualImport
+        ? Object.keys(outcome).length
+          ? "手动导入提交结果不确定；请恢复并读取现有项目，不要自动重试"
+          : "手动导入失败；请检查当前授权、有效会话与输入，并重新预览"
+        : projectInterchange
+          ? typeof e.message === "string"
+            ? e.message.slice(0, 2048)
+            : "项目导入导出失败"
+          : e.message;
       return result({
         isError: true,
         content: [
@@ -1375,9 +1550,20 @@ export function createMCP({
             text:
               params.name === "localapi_get_execution_result_chunk"
                 ? executionResultChunkError(e)
-                : Object.keys(outcome).length
-                  ? JSON.stringify({ error: message, ...outcome })
-                  : message,
+                : manualImport
+                  ? JSON.stringify({
+                      error: message,
+                      ...(Object.keys(outcome).length
+                        ? outcome
+                        : {
+                            code: manualImportErrorCodes.has(e?.code)
+                              ? e.code
+                              : "MANUAL_IMPORT_INVALID",
+                          }),
+                    })
+                  : Object.keys(outcome).length
+                    ? JSON.stringify({ error: message, ...outcome })
+                    : message,
           },
         ],
       });
