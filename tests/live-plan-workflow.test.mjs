@@ -530,3 +530,85 @@ test(
     ]);
   },
 );
+test(
+  "pre-cancelled MCP live plan saves cancelled evidence without sending HTTP",
+  { timeout: 10000 },
+  async (t) => {
+    const { createMCP } = await import("../src/mcp.mjs");
+    const { Store } = await import("../src/runtime.mjs");
+    const { snapshotPlan } = await import("../src/core.mjs");
+    let hits = 0;
+    const peer = createServer((_req, res) => {
+      hits++;
+      res.end("ok");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "live-mcp-precancel-"));
+    t.after(async () => {
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const store = new Store(root);
+    const project = await store.create("Pre-cancelled live plan");
+    const url = `http://127.0.0.1:${peer.address().port}`;
+    project.requests = [{ id: "api", url: url + "/current" }];
+    const plan = snapshotPlan({
+      id: "plan",
+      steps: [
+        {
+          id: "step",
+          liveRequestId: "api",
+          request: {
+            id: "api",
+            url: url + "/old",
+            beforeScript: "pm.environment.set('mustNotExecute', true);",
+          },
+        },
+      ],
+    });
+    project.plans = [plan];
+    await store.save(project);
+    const dispatch = createMCP({
+      store,
+      projects: [project.id],
+      write: true,
+      execute: true,
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const response = await dispatch(
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "localapi_run_plan",
+          arguments: { projectId: project.id, planId: plan.id },
+        },
+      },
+      { signal: controller.signal },
+    );
+    assert.notEqual(response.result.isError, true, JSON.stringify(response));
+    const run = JSON.parse(response.result.content[0].text);
+    assert.equal(run.status, "cancelled");
+    assert.equal(run.recordSaved, true);
+    assert.equal(run.recordId, run.id);
+    assert.deepEqual(run.results, []);
+    assert.deepEqual(run.liveBindings, [{ stepId: "step", requestId: "api" }]);
+    assert.equal(run.snapshot.steps[0].request.url, url + "/current");
+    assert.equal(Object.hasOwn(run.snapshot.steps[0], "liveRequestId"), false);
+    assert.equal(run.variables.mustNotExecute, undefined);
+    assert.equal(hits, 0);
+    const reopened = await new Store(root).get(project.id);
+    assert.equal(reopened.runs.length, 1);
+    const saved = reopened.runs[0];
+    assert.equal(saved.id, run.id);
+    assert.equal(saved.status, "cancelled");
+    assert.equal(saved.planHash, run.planHash);
+    assert.deepEqual(saved.snapshot, run.snapshot);
+    assert.deepEqual(saved.results, []);
+    assert.deepEqual(saved.liveBindings, run.liveBindings);
+    assert.equal(hits, 0);
+  },
+);
