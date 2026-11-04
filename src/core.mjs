@@ -867,7 +867,11 @@ export async function runPlan(
         status: "passed",
       };
       try {
-        decision.matched = evaluatePlanCondition(step.condition, scopes);
+        decision.matched = evaluatePlanCondition(
+          step.condition,
+          scopes,
+          dataContext?.iterationData,
+        );
       } catch (error) {
         decision.status = "failed";
         decision.error = error.message;
