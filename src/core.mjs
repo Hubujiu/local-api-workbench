@@ -90,7 +90,11 @@ import {
   readHttpRedirectFailure,
   assertRedirectExportable,
 } from "./http-redirect.mjs";
-import { throwIfInactive } from "./request-control.mjs";
+import {
+  delayForControl,
+  interruptionKind,
+  throwIfInactive,
+} from "./request-control.mjs";
 import {
   httpFinalizationFailure,
   readHttpFinalizationFailure,
@@ -684,6 +688,9 @@ export function snapshotPlan(plan) {
               ...(step.type === "repeat"
                 ? {
                     count: step.count,
+                    ...(step.intervalMs === undefined
+                      ? {}
+                      : { intervalMs: step.intervalMs }),
                     ...(step.rows === undefined
                       ? {}
                       : { rows: structuredClone(step.rows) }),
@@ -807,7 +814,7 @@ export async function runPlan(
     scopeCommitStopped = false;
   const conditionResults = [];
   const occurrences = planOccurrences(snapshot.steps, { controls: true });
-  if (!occurrences.length) {
+  if (!occurrences.some((occurrence) => !occurrence.wait)) {
     throw Error("计划没有可执行步骤");
   }
   let evidenceBytes = 0,
@@ -823,8 +830,16 @@ export async function runPlan(
       : {}),
   });
   for (; cursor < occurrences.length; cursor++) {
-    const { step, repeat, condition, occurrenceId, skipTo, dataContext } =
-      occurrences[cursor];
+    const {
+      step,
+      repeat,
+      condition,
+      occurrenceId,
+      skipTo,
+      dataContext,
+      wait,
+      milliseconds,
+    } = occurrences[cursor];
     const stepExecutionContext =
       dataContext === undefined
         ? executionContext
@@ -833,6 +848,15 @@ export async function runPlan(
     if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
       evidenceStopped = true;
       break;
+    }
+    if (wait) {
+      try {
+        await delayForControl(milliseconds, { signal });
+      } catch (error) {
+        if (interruptionKind(error) === "cancelled") break;
+        throw error;
+      }
+      continue;
     }
     if (step.enabled === false) continue;
     if (condition) {
@@ -1563,10 +1587,13 @@ export async function runPlan(
             limitBytes: REPEAT_EVIDENCE_BYTES,
             recordedBytes: evidenceBytes,
             executed: results.length,
-            remaining: occurrences.slice(cursor).filter((o) => !o.condition)
-              .length,
+            remaining: occurrences
+              .slice(cursor)
+              .filter((o) => !o.condition && !o.wait).length,
             last: lastEvidence,
-            next: evidenceIdentity(occurrences[cursor]),
+            next: evidenceIdentity(
+              occurrences.slice(cursor).find((o) => !o.wait),
+            ),
             ...(conditional
               ? {
                   decisions: conditionResults.length,
