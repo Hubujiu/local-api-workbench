@@ -402,7 +402,6 @@ exact-head feature CI and then integrated root CI remain required; historical
 failed/cancelled runs are retained. A later green run would verify that revision,
 not prove the historical cancellation's sole cause or guarantee future capacity.
 
-
 ## Six-shard capacity revision, 2026-10-30
 
 Root run 41058923393 at 7a2fb03b completed 18 jobs successfully but the final
@@ -538,3 +537,69 @@ the frozen weights, all original tests, within-test concurrency, job deadlines,
 application/VM/security budgets, non-core jobs and workflow triggers are unchanged.
 There is no rerun/skip/filter/timeout-as-pass path. New pure contract files join
 the same exhaustive discovery and conservative unknown-weight policy.
+
+## Refresh complete-file weights for the 688-file candidate, 2026-11-04
+
+Run [41822086219](https://github.com/Hubujiu/local-api-workbench/actions/runs/41822086219)
+checked out `5f7ebe26d125d969f1058f6b77c2b020556472e3`, tree
+`3af686c893f4d4d27500fd237c915995f0f22e1d`. Its first attempt remains
+**cancelled**, with 24 successful jobs and one cancelled Windows core shard 5.
+That job began at 11:35:05 UTC; tests started at 11:35:35 and received SIGINT at
+11:45:07. The log reports only "The operation was canceled." The ten-minute
+boundary and continuing progress strongly support exhaustion of the job budget,
+but no readable cancellation annotation establishes the unique cause.
+
+The interrupted shard had completed 111 of 114 files. Its final reported test
+completion preceded cancellation by about two seconds; the next wire-plan test
+had dequeued, while two later files had not run. No complete test aggregate was
+produced. This is not a pass, a reason to omit those files, or proof of a hung
+application operation. The same full wire-plan contract passed in the other two
+OS jobs. The new binary/scoped interchange contracts passed on all three OS.
+
+The prior green base was run
+[41812614057](https://github.com/Hubujiu/local-api-workbench/actions/runs/41812614057),
+head `6e193775b5a84aed34b82bc47b777f37d1602c68`. Its Windows shard 5 completed
+in 272.353 seconds, but shard numbers do not identify the same workload: the
+base had 680 files, the candidate 688, and the two shard-5 selections shared only
+21 files. Eight additions caused global LPT reassignment, with 92 old members
+moving out and 93 others moving in. The failing shard contained only existing
+files. Node 24.22.2, CPU count and Windows image matched; neither that comparison
+nor regional differences establish a unique environment or application cause.
+
+This change refreshes only the checked-in scheduling observations, their pinned
+digest, exact provenance validation, and pure contracts. All 36 progress streams
+from the two runs and three OS are named and SHA-256-pinned in the JSON. Select
+only `test:complete` events whose `name`, with backslashes normalized to `/`,
+equals `file`; use the complete file-process `durationMs`, including startup and
+exit. Do not use `test:summary` durations or filter by passing status. The 4,101
+available complete observations happen to be passed. The interrupted file and
+two unstarted files contribute no completed duration from that Windows shard;
+their earlier completed observations remain available. The cancelled run itself
+is not reclassified as successful.
+
+For each of 688 observed paths, take the maximum across these sources and round
+up to integer microseconds. Unknown future paths retain the largest observed
+weight, now 43,791,747 microseconds. No historical weight can add or remove a
+discovered test. The current 688-file candidate has zero fallback paths; the
+smaller standalone PR still selects only its own actual files. Parsing remains
+closed, digest-pinned and bounded to 256 KiB. Provenance now requires these two
+run IDs and 36 unique six-shard stream records. LF enforcement remains unchanged.
+
+Replaying these frozen whole-file observations through the unchanged six-way
+LPT allocator gives scores of 506.320008, 506.320844, 506.319684, 506.244058,
+506.244033 and 506.320011 seconds. The old membership scored as high as
+593.480666 seconds against the same observations. The new maximum leaves
+93.679156 seconds of the existing 600-second job cap for setup, inter-file gaps,
+upload and variation; reserving 60 seconds leaves only 33.679156 seconds of
+additional historical headroom. These are retrospective scores, not guarantees
+or proof that the next environment will fit. A slower runner may still time out.
+
+Six shards, file concurrency one, all original assertions and within-file
+concurrency, ten-minute job budgets, application limits, failure propagation,
+reporters, workflow triggers and non-core jobs are unchanged. No retry, skip,
+filter, list-only CI or timeout-as-success path is introduced. Pure contracts
+check exact source identity, exhaustive 688-file membership, deterministic
+future-file fallback, strict malformed inputs and real synthetic child failure
+handling. They do not run the application suite. Fresh standalone and exact
+combined-tree CI remain required; neither the historical green base nor this
+weight refresh establishes acceptance of the new candidate.

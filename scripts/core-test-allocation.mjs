@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 
 export const WEIGHTS_SHA256 =
-  "82c06deba0d73e1c58813ee66d1fc57902c37acfb999152e742968ba19125e10";
+  "7b600545af81b6168e3aea9c5d72f878730e461f442ae40570fbe964f3a08319";
 export const MAX_WEIGHT_BYTES = 256 * 1024;
 const policy = "frozen-prior-whole-file-max-lpt-v1";
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -39,17 +39,17 @@ export function parseWeights(bytes, expectedHash = WEIGHTS_SHA256) {
     data.unit !== "microseconds" ||
     !validWeight(data.fallbackUs) ||
     !Array.isArray(data.sources) ||
-    data.sources.length !== 24
+    data.sources.length !== 36
   )
     throw Error("Malformed core weights metadata");
   const sources = new Set();
   for (const source of data.sources) {
     if (
       !exactKeys(source, ["runId", "headSha", "file", "sha256"]) ||
-      ![41017678554, 41030008398].includes(source.runId) ||
+      ![41812614057, 41822086219].includes(source.runId) ||
       !/^[a-f0-9]{40}$/.test(source.headSha) ||
       !/^[a-f0-9]{64}$/.test(source.sha256) ||
-      !/^core-(ubuntu|macos|windows)-latest-shard-[1-4]-of-4\.progress\.jsonl$/.test(
+      !/^core-(ubuntu|macos|windows)-latest-shard-[1-6]-of-6\.progress\.jsonl$/.test(
         source.file,
       )
     )
