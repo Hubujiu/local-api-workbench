@@ -1,3 +1,8 @@
+import {
+  validateDatabaseOperationHeader,
+  validateDatabaseOperationBinding,
+} from "./plan-database-operation.mjs";
+import { analyzePlanRequirements } from "./plan-requirements.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
@@ -746,6 +751,7 @@ export async function runPlan(
     onScopeChanges,
     cookieSession,
     databaseQuery,
+    databasePreflight,
     nativeWrite,
     executionContext,
     executeGrpc,
@@ -890,6 +896,55 @@ export async function runPlan(
       ? { kind: "condition", occurrenceId: occurrence.occurrenceId }
       : {}),
   });
+  if (runtimeRowsEnabled && !signal?.aborted) {
+    // Admit all potential work before any script, transport or scope commit.
+    // Runtime row counts and false IF branches cannot narrow authorization.
+    for (const leaf of activePlanLeaves(snapshot.steps, {
+      allowRuntimeRows: true,
+    })) {
+      if (leaf.type !== undefined && leaf.type !== "http") continue;
+      for (const phase of ["before", "after"]) {
+        let databases = 0;
+        for (const operation of leaf.request[phase] || []) {
+          if (operation.type !== "database") continue;
+          if (!validateDatabaseOperationHeader(operation)) continue;
+          if (++databases > 5) throw Error("每阶段数据库操作最多5项、累计10秒");
+          validateDatabaseOperationBinding(operation);
+          // This syntax is independent of query results and never interpolated.
+          jsonPathSegments(operation.path || "$");
+        }
+      }
+    }
+    const requirements = analyzePlanRequirements(snapshot, {
+      allowRuntimeRows: true,
+    });
+    const executors = {
+      http: execute,
+      grpc: executeGrpc,
+      socketio: executeSocketIO,
+      protocol: executeProtocol,
+      database: databaseQuery,
+    };
+    for (const type of requirements.executorTypes)
+      if (typeof executors[type] !== "function")
+        throw Error(`此执行入口未授权${type}调用`);
+    if (requirements.databaseConnectionIds.length) {
+      if (typeof databasePreflight !== "function")
+        throw Error("此执行入口未授权数据库执行前检查");
+      try {
+        const accepted = await databasePreflight(
+          Object.freeze([...requirements.databaseConnectionIds]),
+          signal,
+        );
+        if (!signal?.aborted && accepted === false)
+          throw Error("数据库执行前授权检查未通过");
+      } catch (error) {
+        // Preserve the existing cancelled-result contract, including a callback
+        // that fails as cancellation arrives. Never start work after awaiting it.
+        if (!signal?.aborted) throw error;
+      }
+    }
+  }
   for (; cursor < occurrences.length; cursor++) {
     const {
       step,
@@ -1261,36 +1316,11 @@ export async function runPlan(
         const executeOperation = async (operation, budget) => {
           if (operation.type !== "database")
             return applyOperation(operation, vars);
-          if (
-            operation.enabled !== undefined &&
-            typeof operation.enabled !== "boolean"
-          )
-            throw Error("数据库操作启用标识必须为布尔值");
-          if (operation.enabled === false) return;
-          if (
-            operation.path !== undefined &&
-            (typeof operation.path !== "string" || operation.path.length > 1000)
-          )
-            throw Error("数据库提取路径无效");
-          if ((operation.parameters || []).length > 1000)
-            throw Error("数据库绑定参数最多1000项");
+          if (!validateDatabaseOperationHeader(operation)) return;
           if (++budget.count > 5 || performance.now() > budget.deadline)
             throw Error("每阶段数据库操作最多5项、累计10秒");
           if (!databaseQuery) throw Error("此执行入口未授权数据库前后置操作");
-          if (
-            !operation.name ||
-            typeof operation.name !== "string" ||
-            operation.name.length > 100 ||
-            ["__proto__", "constructor", "prototype"].includes(operation.name)
-          )
-            throw Error("数据库结果变量名无效");
-          if (
-            typeof operation.connectionId !== "string" ||
-            typeof operation.sql !== "string" ||
-            operation.sql.length > 50000 ||
-            !Array.isArray(operation.parameters ?? [])
-          )
-            throw Error("数据库操作配置无效");
+          validateDatabaseOperationBinding(operation);
           const result = await databaseQuery(
             {
               connectionId: operation.connectionId,

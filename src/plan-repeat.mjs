@@ -290,11 +290,13 @@ export function validateRepeatGraph(
   steps,
   { requireIds = false, allowRuntimeRows = false } = {},
 ) {
-  // The new opt-in entry must reject proxies/accessors before the historical
-  // shallow detector performs reflection. Keep the legacy path unchanged.
-  if (allowRuntimeRows) dataOnly(steps);
+  // Safely inspect only graph fields before the historical shallow detector.
+  // Do not apply the control-graph JSON/depth contract to unused linear metadata.
+  // This descriptor-only traversal rejects graph proxies/accessors without
+  // touching request payloads; genuine control graphs still get full admission.
+  if (allowRuntimeRows) hasRuntimeRows(steps);
   if (!hasRepeatSteps(steps)) return false;
-  if (!allowRuntimeRows) dataOnly(steps);
+  dataOnly(steps);
   array(steps, "步骤");
   const ids = new Set();
   let expanded = 0,

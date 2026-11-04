@@ -621,6 +621,8 @@ export async function createApp({
             ...mcp,
             sessionProjects: mcpSessionProjects,
             debugEnvironments,
+            databasePreflight: (projectId, ids, signal) =>
+              mcpDatabaseGrants.preflight(mcpEpoch, projectId, ids, signal),
             databaseExecutor: (projectId, operation, signal) =>
               mcpDatabaseGrants.query(mcpEpoch, projectId, operation, signal),
             grpcExecutor: executePlanGrpc,
@@ -2367,6 +2369,7 @@ export async function createApp({
               const { plan, bindings } = materializeLivePlan(
                 executionProject,
                 definition,
+                { allowRuntimeRows: true },
               );
               controller.signal.throwIfAborted();
               const environmentId = selectedEnvironment(
@@ -2375,6 +2378,7 @@ export async function createApp({
               ).id;
               const env = environmentVariables(executionProject, environmentId);
               const run = await runPlan(plan, env, executeRequest, {
+                allowRuntimeRows: true,
                 executeGrpc: executePlanGrpc,
                 grpcCredentials: b.grpcCredentials,
                 executeProtocol: executePlanWire,
@@ -2386,6 +2390,10 @@ export async function createApp({
                   }),
                 socketioCredentials: b.socketioCredentials,
                 ...scopedExecution(store, executionProject, environmentId),
+                // Manual sessions authorize all potential declarative reads.
+                // This checks grants only; each actual query checks them again.
+                databasePreflight: (ids, signal) =>
+                  databaseSessions.assertAuthorizedMany(p.id, ids, signal),
                 databaseQuery: (operation, signal) =>
                   databaseSessions.query(p.id, operation, signal),
                 cookieSession: projectCookieSession(

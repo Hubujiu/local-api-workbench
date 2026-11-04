@@ -32,6 +32,7 @@ export function prepareCLIDatabaseGrants(
   plan,
   connections,
   sourceCatalog = [],
+  { allowRuntimeRows = false } = {},
 ) {
   validatePlanStepTypes(plan.steps);
   if (!Array.isArray(sourceCatalog) || sourceCatalog.length > 100)
@@ -66,7 +67,7 @@ export function prepareCLIDatabaseGrants(
   if (!plain(connections) || Object.keys(connections).length > 20)
     throw Error("CLI 数据库连接映射无效或超过20项");
   const required = new Set();
-  const leaves = activePlanLeaves(plan.steps);
+  const leaves = activePlanLeaves(plan.steps, { allowRuntimeRows });
   const repeated = hasRepeatSteps(plan.steps);
   for (const step of leaves) {
     if (step.enabled === false || !step.request) continue;
@@ -222,6 +223,18 @@ export function prepareCLIDatabaseGrants(
   }
   let closed = false;
   return {
+    async preflight(connectionIds, signal) {
+      if (closed) throw Error("CLI 数据库连接未获本次授权或已关闭");
+      const ids = [];
+      for (const id of connectionIds) {
+        if (closed || !bindings.has(id))
+          throw Error("CLI 数据库连接未获本次授权或已关闭");
+        ids.push(bindings.get(id));
+      }
+      await sessions.assertAuthorizedMany(projectId, ids, signal);
+      if (closed) throw Error("CLI 数据库连接未获本次授权或已关闭");
+      signal?.throwIfAborted();
+    },
     query(operation, signal) {
       if (closed || !bindings.has(operation.connectionId))
         return Promise.reject(Error("CLI 数据库连接未获本次授权或已关闭"));

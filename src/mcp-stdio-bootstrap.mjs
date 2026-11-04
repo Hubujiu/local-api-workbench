@@ -60,6 +60,9 @@ export async function createMCPStdioContext(argv, root) {
       ? (projectId, operation, signal) =>
           grants.query(projectId, operation, signal)
       : undefined,
+    databasePreflight: grants
+      ? (projectId, ids, signal) => grants.preflight(projectId, ids, signal)
+      : undefined,
     close: () => grants?.close(),
   };
 }

@@ -53,7 +53,11 @@ export function hasLiveReferences(plan) {
 
 // All lookups happen against one already loaded project snapshot before any
 // execution. A missing/deleted reference never falls back to the saved template.
-export function materializeLivePlan(project, plan) {
+export function materializeLivePlan(
+  project,
+  plan,
+  { allowRuntimeRows = false } = {},
+) {
   const refs = planLeaves(plan.steps || [])
     .map((step) => ({ step, id: liveRequestId(step) }))
     .filter((item) => item.id !== undefined);
@@ -96,7 +100,7 @@ export function materializeLivePlan(project, plan) {
     bindings.push({ stepId: step.id, requestId: id });
     return result;
   });
-  const frozen = snapshotPlan({ ...plan, steps });
+  const frozen = snapshotPlan({ ...plan, steps }, { allowRuntimeRows });
   if (Buffer.byteLength(JSON.stringify(frozen)) > maxLiveBytes)
     throw Error("实时计划冻结快照超过 4 MiB");
   return { plan: frozen, bindings };

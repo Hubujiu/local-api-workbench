@@ -2,7 +2,11 @@ import {
   hasLiveReferences,
   materializeLivePlan,
 } from "../src/live-plan-materialize.mjs";
-import { activePlanLeaves, hasPlanConditions } from "../src/plan-repeat.mjs";
+import {
+  activePlanLeaves,
+  hasPlanConditions,
+  hasRuntimeRows,
+} from "../src/plan-repeat.mjs";
 import { validatePlanStepTypes } from "../src/plan-step-types.mjs";
 import { prepareCLIDatabaseGrants } from "../src/cli-database-grants.mjs";
 import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
@@ -55,32 +59,37 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       definition = project.plans.find((p) => p.id === option("--plan"));
       if (!definition) throw Error("Plan not found");
     }
-    const { plan, bindings } = materializeLivePlan(project, definition);
+    const { plan, bindings } = materializeLivePlan(project, definition, {
+      allowRuntimeRows: true,
+    });
     controller.signal.throwIfAborted();
-    // Canonical IF has a conservative declaration-level grant contract: an
+    // Canonical IF and runtime rows have a declaration-level grant contract: an
     // enabled potential DB leaf needs an explicit invocation grant even if its
-    // condition later evaluates false. Dynamic script calls retain runtime checks.
+    // condition is false or rows are empty. Script calls retain query-time checks.
     // Do not inspect unrelated DB catalogues for ordinary HTTP-only IF plans.
-    const conditionalDatabase =
-      hasPlanConditions(plan.steps) &&
-      activePlanLeaves(plan.steps).some(({ request }) =>
-        ["before", "after"].some(
-          (phase) =>
-            (request?.[phase] || []).some(
-              (operation) =>
-                operation.type === "database" && operation.enabled !== false,
-            ) ||
-            (request?.nativeTasks?.[phase] || []).some(
-              (task) => task.type === "database" && task.enabled === 1,
-            ),
-        ),
+    const potentialDatabase =
+      (hasPlanConditions(plan.steps) ||
+        hasRuntimeRows(plan.steps, { activeOnly: true })) &&
+      activePlanLeaves(plan.steps, { allowRuntimeRows: true }).some(
+        ({ request }) =>
+          ["before", "after"].some(
+            (phase) =>
+              (request?.[phase] || []).some(
+                (operation) =>
+                  operation.type === "database" && operation.enabled !== false,
+              ) ||
+              (request?.nativeTasks?.[phase] || []).some(
+                (task) => task.type === "database" && task.enabled === 1,
+              ),
+          ),
       );
-    if (databaseEnabled || conditionalDatabase)
+    if (databaseEnabled || potentialDatabase)
       databaseGrants = prepareCLIDatabaseGrants(
         project.id,
         plan,
         credentials.databaseConnections || {},
         project.settings?.apipostDatabases || [],
+        { allowRuntimeRows: true },
       );
     delete credentials.databaseConnections;
     const environmentId = selectedEnvironment(
@@ -96,6 +105,11 @@ if (!args.includes("--project") || !args.includes("--plan")) {
       {
         ...scopedExecution(store, project, environmentId),
         ...credentials,
+        allowRuntimeRows: true,
+        databasePreflight: databaseGrants
+          ? (connectionIds, signal) =>
+              databaseGrants.preflight(connectionIds, signal)
+          : undefined,
         databaseQuery: databaseGrants
           ? (operation, signal) => databaseGrants.query(operation, signal)
           : undefined,
