@@ -6,7 +6,7 @@ After invocation input and authorization are ready, execution reads a consistent
 
 The current API supplies request configuration and inherited service/auth/parameter settings. The plan step retains its own scripts, assertions, extraction and native task definitions; API-page scripts are not imported into the plan. Postman collection scope and dynamic processing functions are not supported for a live reference and fail explicitly. Existing authorization, credential preflight and execution limits remain in force.
 
-Execution history records the frozen snapshot and its usual hash; `liveBindings` records step and request IDs separately. No reference is resolved when reading history or restoring a backup. Complete project restore preserves request IDs within the new project; selective import treats live references as typed API dependencies and must remap them with the target API. Native flow and directory adapters reject this canonical-only feature rather than silently exporting a frozen approximation.
+Execution history records the frozen snapshot and its usual hash; `liveBindings` records step and request IDs separately. No reference is resolved when reading history or restoring a backup. Complete project restore preserves request IDs within the new project; selective import currently rejects a selected live plan because service and environment bindings cannot yet be remapped safely. Native flow and directory adapters reject this canonical-only feature rather than silently exporting a frozen approximation.
 
 This first version is backend only. It does not implement native automated-testing import, live references to non-HTTP resources, or direct row-data template interpolation.
 

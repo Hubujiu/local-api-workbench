@@ -452,3 +452,30 @@ test("global values and component records are atomic, not recursively merged com
   assert.deepEqual(positive.project.globalVariables.old, { a: 1 });
   assert.equal(positive.project.globalVariables.shared, "value");
 });
+
+test("selective import rejects live plans but permits unrelated API selection", () => {
+  const source = manualImportCanonicalFixture();
+  source.plans[0].steps[0].liveRequestId = "generated-api";
+  const g = buildManualImportSourceGraph(source, context);
+  const planKey = firstKey(g, "plan-bundle");
+  const apiKey = firstKey(g, "api");
+  const selectedPlan = buildManualImportPlan(
+    target(),
+    g,
+    input({ selection: { mode: "explicit", keys: [planKey] } }),
+    context,
+  );
+  assert(
+    selectedPlan.blockers.some(
+      (item) => item.code === "live_plan_import_unsupported",
+    ),
+  );
+  const selectedAPI = buildManualImportPlan(
+    target(),
+    g,
+    input({ selection: { mode: "explicit", keys: [apiKey] } }),
+    context,
+  );
+  assert.deepEqual(selectedAPI.blockers, []);
+  assert.equal(selectedAPI.project.plans.length, 0);
+});
