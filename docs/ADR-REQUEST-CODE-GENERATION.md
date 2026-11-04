@@ -1,0 +1,9 @@
+# Request code examples
+
+This backend feature reuses `@scalar/snippetz` 0.10.14 (MIT) to generate text locally. It does not execute generated code or connect to the request's target. The original application's static HAR-to-code path establishes a feature goal, not output or behavior parity.
+
+`POST /api/projects/:id/code-generation` accepts the same `request` and optional `environmentId` as cURL, plus `target` and `client`. The first supported pairs are `node/fetch`, `python/python3`, and `go/native`. The owner authentication and Origin checks remain in force. Project inheritance, environment and service resolution reuse the cURL path. Dynamic-value evaluation may run configured local transformation functions; before/after request scripts and operations are not run. The result includes code and explicit warnings, including that credentials may be present. Do not log generated code or submit it to a third-party service.
+
+Examples are not guaranteed to reproduce the runtime transport: timeout, redirect, proxy, TLS and implicit client headers differ. This initial adapter rejects configured proxies, strict HTTP/2, URL userinfo, digest and dynamic signatures, multipart/files, binary bodies, duplicate headers, unsafe transport headers and values the selected generator cannot faithfully express. It also rejects GET/HEAD bodies and non-ASCII/control-character Python payloads. It preserves pre-serialized query text and feeds raw payloads as text or bytes to avoid JSON reserialization and repeated-key loss. Input and output are bounded at 1 MiB. Later support needs target-specific proof, not silent coercion.
+
+Tests cover environment and authorization boundaries, no project mutation, dangerous text and unsupported values, and local loopback execution of generated Node, Python and Go programs. Go/Python tests report a skip if the respective toolchain is unavailable. No production code executes generated snippets.
