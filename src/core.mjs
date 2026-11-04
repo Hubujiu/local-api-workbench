@@ -1426,6 +1426,8 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     const r = sdkOpenAPIDefinition(project, source);
+    if (r.auth?.type === "oauth1" && Object.hasOwn(r.auth, "parameterPolicy"))
+      throw Error("OpenAPI不能无损表达OAuth1签名参数策略，请使用项目备份");
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),

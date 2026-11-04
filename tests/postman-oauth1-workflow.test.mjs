@@ -7,7 +7,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createApp } from "../src/server.mjs";
-import { importDocument } from "../src/core.mjs";
+import { importDocument, exportOpenAPI, toCurl } from "../src/core.mjs";
 import { Store } from "../src/runtime.mjs";
 import { verifyOAuth1Policy } from "./fixtures/oauth1-policy-oracle.mjs";
 
@@ -118,10 +118,10 @@ function collection(url) {
         ],
       },
       item(
-        "empty-raw-header",
+        "empty-query",
         "GET",
         sourceAuth("", {
-          addParamsToHeader: true,
+          addParamsToHeader: false,
           includeBodyHash: false,
           addEmptyParamsToSign: true,
           disableHeaderEncoding: true,
@@ -174,14 +174,14 @@ const specs = new Map([
     },
   ],
   [
-    "/empty-raw-header",
+    "/empty-query",
     {
       method: "GET",
       bodyType: "none",
       auth: expectedAuth(
         "",
         {
-          placement: "header",
+          placement: "auto",
           includeEmptyParams: true,
           headerEncoding: "raw",
         },
@@ -330,6 +330,17 @@ test(
     await f.call(`projects/${project.id}/import`, { document });
     const saved = await f.call(`projects/${project.id}`, undefined, "GET");
     assert.equal(saved.requests.length, specs.size);
+    const exportError = await f.call(
+      `projects/${project.id}/export?format=openapi`,
+      undefined,
+      "GET",
+      400,
+    );
+    assert.match(JSON.stringify(exportError), /OAuth1/);
+    assert.equal(
+      JSON.stringify(exportError).includes("fictional-consumer-secret"),
+      false,
+    );
     const plan = await f.call(`projects/${project.id}/plans`, {
       name: "Frozen imported OAuth1",
       statusPolicy: "strict200",
@@ -351,7 +362,7 @@ test(
     assert.deepEqual(first.snapshot, frozen);
     assert.deepEqual(
       f.seen.map((row) => row.placement),
-      ["query", "form", "query", "header", "header", "header"],
+      ["query", "form", "query", "header", "query", "header"],
     );
     const disk = await new Store(f.root).get(project.id);
     assert.deepEqual(disk.plans[0], frozen);
@@ -423,4 +434,101 @@ test("Postman unrelated bearer and explicit noauth source overrides remain indep
   assert.equal(imported[1].auth.type, "none");
   assert.equal(Object.hasOwn(imported[1].auth, "parameterPolicy"), false);
   assert.equal(Object.hasOwn(imported[1].auth, "accessToken"), false);
+});
+
+test(
+  "invalid OAuth1 in a mixed import leaves project and other project unchanged",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t);
+    const project = await f.call(
+      "projects",
+      { name: "atomic import" },
+      "POST",
+      201,
+    );
+    const other = await f.call("projects", { name: "unrelated" }, "POST", 201);
+    const before = await f.call(`projects/${project.id}`, undefined, "GET");
+    const otherBefore = await f.call(`projects/${other.id}`, undefined, "GET");
+    const document = collection(f.url);
+    document.item.push({
+      name: "invalid late item",
+      request: {
+        method: "GET",
+        url: `${f.url}/never`,
+        auth: sourceAuth("DO-NOT-LEAK", { addParamsToHeader: "false" }),
+      },
+    });
+    const failed = await f.call(
+      `projects/${project.id}/import`,
+      { document },
+      "POST",
+      400,
+    );
+    assert.equal(JSON.stringify(failed).includes("DO-NOT-LEAK"), false);
+    assert.deepEqual(
+      await f.call(`projects/${project.id}`, undefined, "GET"),
+      before,
+    );
+    await f.restart();
+    assert.deepEqual(
+      await f.call(`projects/${project.id}`, undefined, "GET"),
+      before,
+    );
+    assert.deepEqual(
+      await f.call(`projects/${other.id}`, undefined, "GET"),
+      otherBefore,
+    );
+    assert.deepEqual(f.seen, []);
+  },
+);
+
+test("null and absent auth inherit while folder noauth cuts source inheritance", () => {
+  const leaf = (name, auth) => ({
+    name,
+    request: {
+      method: "GET",
+      url: "http://127.0.0.1:1/never",
+      ...(auth === undefined ? {} : { auth }),
+    },
+  });
+  const requests = importDocument({
+    info: { name: "inheritance", schema },
+    auth: sourceAuth("root-token"),
+    item: [
+      leaf("absent"),
+      leaf("null", null),
+      {
+        name: "cut",
+        auth: { type: "noauth" },
+        item: [leaf("none"), leaf("null-none", null)],
+      },
+    ],
+  });
+  assert.deepEqual(
+    requests.map((r) => r.auth.type),
+    ["oauth1", "oauth1", "none", "none"],
+  );
+  assert.deepEqual(
+    requests.slice(0, 2).map((r) => r.auth.accessToken),
+    ["root-token", "root-token"],
+  );
+});
+
+test("imported OAuth1 policy cannot silently disappear through definition exports", () => {
+  const [request] = importDocument({
+    info: { name: "export guard", schema },
+    auth: sourceAuth("fictional-token"),
+    item: [
+      {
+        name: "signed",
+        request: { method: "GET", url: "http://127.0.0.1:1/never" },
+      },
+    ],
+  });
+  assert.throws(
+    () => exportOpenAPI({ name: "guard", requests: [request] }),
+    /OAuth1/,
+  );
+  assert.throws(() => toCurl(request), /OAuth1/);
 });

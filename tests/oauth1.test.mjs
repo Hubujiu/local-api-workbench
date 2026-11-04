@@ -120,7 +120,10 @@ test("OAuth1 import retains credentials and unsupported cURL export fails explic
           url: "https://example.test",
           auth: {
             type: "oauth1",
-            oauth1: Object.entries(auth).map(([key, value]) => ({
+            oauth1: Object.entries({
+              ...auth,
+              signatureMethod: "HMAC-SHA1",
+            }).map(([key, value]) => ({
               key,
               value,
             })),
