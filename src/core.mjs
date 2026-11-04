@@ -1,3 +1,8 @@
+import {
+  evaluatePlanCondition,
+  validateConditionScopeInput,
+} from "./plan-condition.mjs";
+import { hasIfSteps } from "./plan-repeat.mjs";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   linearPlanStepIds,
@@ -531,13 +536,15 @@ export function snapshotPlan(plan) {
   if (repeated) {
     const normalizeGroups = (nodes) =>
       nodes.map((step) =>
-        step.type === "repeat"
+        ["repeat", "if"].includes(step.type)
           ? {
-              type: "repeat",
+              type: step.type,
               id: step.id || id(),
-              name: step.name ?? "循环组",
+              name: step.name ?? (step.type === "if" ? "条件组" : "循环组"),
               enabled: step.enabled !== false,
-              count: step.count,
+              ...(step.type === "repeat"
+                ? { count: step.count }
+                : { condition: structuredClone(step.condition) }),
               steps: normalizeGroups(step.steps),
             }
           : step,
@@ -604,22 +611,59 @@ export async function runPlan(
   for (const step of planLeaves(snapshot.steps))
     if (step.request?.nativeTasks !== undefined)
       step.request.nativeTasks = normalizeNativeTaskRequest(step.request);
+  const conditional = hasIfSteps(snapshot.steps);
+  if (conditional) validateConditionScopeInput(variables, variableScopes);
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
-  const occurrences = planOccurrences(snapshot.steps);
+  const conditionResults = [];
+  const occurrences = planOccurrences(snapshot.steps, { controls: true });
   if (!occurrences.length) {
     throw Error("计划没有可执行步骤");
   }
   let evidenceBytes = 0,
-    evidenceStopped = false;
-  for (const { step, repeat } of occurrences) {
+    evidenceStopped = false,
+    conditionStopped = false,
+    cursor = 0,
+    lastEvidence;
+  const evidenceIdentity = (occurrence) => ({
+    stepId: occurrence.step.id,
+    ...(occurrence.repeat ? { repeat: occurrence.repeat } : {}),
+    ...(occurrence.condition
+      ? { kind: "condition", occurrenceId: occurrence.occurrenceId }
+      : {}),
+  });
+  for (; cursor < occurrences.length; cursor++) {
+    const { step, repeat, condition, occurrenceId, skipTo } =
+      occurrences[cursor];
     if (signal?.aborted) break;
     if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
       evidenceStopped = true;
       break;
     }
     if (step.enabled === false) continue;
+    if (condition) {
+      const decision = {
+        stepId: step.id,
+        groupId: step.id,
+        occurrenceId,
+        status: "passed",
+      };
+      try {
+        decision.matched = evaluatePlanCondition(step.condition, scopes);
+      } catch (error) {
+        decision.status = "failed";
+        decision.error = error.message;
+        decision.code = "PLAN_CONDITION_INVALID";
+        conditionStopped = true;
+      }
+      conditionResults.push(decision);
+      lastEvidence = evidenceIdentity(occurrences[cursor]);
+      evidenceBytes += Buffer.byteLength(JSON.stringify(decision));
+      if (conditionStopped) break;
+      if (!decision.matched) cursor = skipTo - 1;
+      continue;
+    }
     const record = {
       stepId: step.id,
       ...(repeat ? { repeat: { ...repeat } } : {}),
@@ -1137,6 +1181,7 @@ export async function runPlan(
     }
     replaceVariables(vars, effectiveScopes(scopes));
     results.push(record);
+    lastEvidence = evidenceIdentity(occurrences[cursor]);
     if (repeated) evidenceBytes += Buffer.byteLength(JSON.stringify(record));
     await onStep?.(record);
     if (stopAfterExtractionFailure) break;
@@ -1153,9 +1198,13 @@ export async function runPlan(
     createdAt: new Date().toISOString(),
     status: signal?.aborted
       ? "cancelled"
-      : !evidenceStopped && results.every((r) => r.status === "passed")
+      : !evidenceStopped &&
+          !conditionStopped &&
+          results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
+    ...(conditional ? { conditionResults } : {}),
+    ...(conditionStopped ? { stopReason: "condition-error" } : {}),
     ...(evidenceStopped
       ? {
           stopReason: "evidence-limit",
@@ -1163,19 +1212,16 @@ export async function runPlan(
             limitBytes: REPEAT_EVIDENCE_BYTES,
             recordedBytes: evidenceBytes,
             executed: results.length,
-            remaining: occurrences.length - results.length,
-            last: {
-              stepId: results.at(-1).stepId,
-              ...(results.at(-1).repeat
-                ? { repeat: results.at(-1).repeat }
-                : {}),
-            },
-            next: {
-              stepId: occurrences[results.length].step.id,
-              ...(occurrences[results.length].repeat
-                ? { repeat: occurrences[results.length].repeat }
-                : {}),
-            },
+            remaining: occurrences.slice(cursor).filter((o) => !o.condition)
+              .length,
+            last: lastEvidence,
+            next: evidenceIdentity(occurrences[cursor]),
+            ...(conditional
+              ? {
+                  decisions: conditionResults.length,
+                  remainingIsPotential: true,
+                }
+              : {}),
           },
         }
       : {}),

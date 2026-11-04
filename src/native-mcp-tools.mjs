@@ -355,9 +355,12 @@ export function nativeAPIDetail(project, apiId) {
 export function assertNativeLinearResult(run) {
   if (
     hasRepeatSteps(run.snapshot?.steps) ||
+    run.conditionResults !== undefined ||
     run.results?.some((result) => result.repeat)
   )
-    throw Error("原版兼容结果不支持canonical循环组；请使用canonical结果工具");
+    throw Error(
+      "原版兼容结果不支持canonical循环组或条件组；请使用canonical结果工具",
+    );
 }
 export function nativeRunResult(projectId, run, scope = "flow") {
   assertNativeLinearResult(run);
