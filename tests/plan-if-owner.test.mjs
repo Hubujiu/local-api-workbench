@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, rename, readFile, writeFile } from "node:fs/promises";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { findExecutionResult } from "../src/execution-history.mjs";
@@ -470,3 +470,117 @@ test(
     assert.deepEqual(await f.get(f.other.id), f.other);
   },
 );
+
+for (const failure of [false, true]) {
+  test(
+    "IF " +
+      (failure ? "condition failure" : "completed run") +
+      " survives real post-journal uncertainty and restart recovery without replay",
+    { timeout: 20000 },
+    async (t) => {
+      const f = await fixture(t);
+      const plan = await savePlan(f, [
+        condition("false", literal(1), "eq", literal(2), [
+          leaf("skip", f.request("skip-api", "/never")),
+        ]),
+        condition("true", literal(1), "eq", literal(1), [
+          leaf("child", f.request("child-api", "/child")),
+        ]),
+        condition(
+          "last",
+          failure ? variable("missing") : literal(1),
+          "eq",
+          literal(1),
+          [leaf("last-child", f.request("last-api", "/last"))],
+        ),
+      ]);
+      const store = f.app.store,
+        save = store.save,
+        read = store.readUnlocked;
+      const directory = store.directory(f.project.id);
+      const history = path.join(directory, "history"),
+        kept = path.join(directory, "owned-history-backup");
+      const journal = path.join(directory, ".transaction.json");
+      let attempts = 0,
+        blocked = false;
+      store.save = async function (project, options) {
+        if (project.id !== f.project.id || !options?.activity)
+          return save.call(this, project, options);
+        attempts++;
+        this.readUnlocked = async function (id) {
+          const state = await read.call(this, id);
+          this.readUnlocked = read;
+          await rename(history, kept);
+          await writeFile(history, "private-if-storage-obstacle");
+          blocked = true;
+          return state;
+        };
+        try {
+          return await save.call(this, project, options);
+        } finally {
+          this.readUnlocked = read;
+        }
+      };
+      t.after(() => {
+        store.save = save;
+        store.readUnlocked = read;
+      });
+      const response = await f.call("projects/" + f.project.id + "/run", {
+        planId: plan.id,
+      });
+      assert.equal(response.status, 200);
+      const run = response.value;
+      assert.equal(run.status, failure ? "failed" : "passed");
+      assert.equal(run.recordSaved, false);
+      assert.equal(run.recordId, null);
+      assert.equal(run.attemptedRecordId, run.id);
+      assert.equal(run.persistenceOutcome.code, "PROJECT_COMMIT_UNCERTAIN");
+      assert.equal(run.persistenceOutcome.commit_outcome, "unknown");
+      assert.equal(run.persistenceOutcome.retry_safe, false);
+      assert.equal(run.persistenceOutcome.project_id, f.project.id);
+      assert.equal(attempts, 1);
+      assert.equal(blocked, true);
+      assert.equal(run.conditionResults.length, 3);
+      assert.deepEqual(
+        f.seen.map((row) => row.url),
+        failure ? ["/child"] : ["/child", "/last"],
+      );
+      assert.equal(run.results.length, failure ? 1 : 2);
+      if (failure) assert.equal(run.stopReason, "condition-error");
+      const receipt = JSON.stringify({
+        error: run.persistenceError,
+        outcome: run.persistenceOutcome,
+      });
+      assert.ok(!receipt.includes(f.root));
+      assert.ok(!receipt.includes("private-if-storage-obstacle"));
+      const transaction = JSON.parse(await readFile(journal, "utf8"));
+      const pending = transaction.runs.find((row) => row.id === run.id);
+      assert.deepEqual(pending.conditionResults, run.conditionResults);
+      assert.deepEqual(pending.results, run.results);
+      store.save = save;
+      store.readUnlocked = read;
+      await rm(history);
+      await rename(kept, history);
+      const recovered = await new Store(f.root).get(f.project.id);
+      assert.equal(recovered.runs.filter((row) => row.id === run.id).length, 1);
+      const stored = recovered.runs.find((row) => row.id === run.id);
+      assert.deepEqual(stored.conditionResults, run.conditionResults);
+      assert.deepEqual(stored.results, run.results);
+      assert.deepEqual(stored.snapshot, run.snapshot);
+      assert.equal(stored.planHash, run.planHash);
+      await assert.rejects(readFile(journal), { code: "ENOENT" });
+      await f.restart();
+      const restarted = await f.get(f.project.id);
+      assert.equal(restarted.runs.filter((row) => row.id === run.id).length, 1);
+      assert.deepEqual(
+        restarted.runs.find((row) => row.id === run.id),
+        stored,
+      );
+      assert.deepEqual(
+        f.seen.map((row) => row.url),
+        failure ? ["/child"] : ["/child", "/last"],
+      );
+      assert.deepEqual(await f.get(f.other.id), f.other);
+    },
+  );
+}

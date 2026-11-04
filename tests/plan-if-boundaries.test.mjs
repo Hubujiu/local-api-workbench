@@ -252,3 +252,38 @@ test("native result projection rejects decision evidence even when the historica
   );
   assert.doesNotThrow(() => assertNativeLinearResult({ results: [] }));
 });
+
+test("a false decision crossing the shared quota is the terminal evidence and cannot revive its skipped subtree", async () => {
+  const plan = snapshotPlan({
+    steps: [
+      leaf("large"),
+      group("g".repeat(200), [leaf("skipped")], condition(1, "eq", 2)),
+      leaf("tail"),
+    ],
+  });
+  const execute = (body) => async () => ({
+    status: 200,
+    headers: {},
+    body,
+    durationMs: 0,
+  });
+  const baseline = await runPlan(plan, {}, execute(""));
+  const bytes = Buffer.byteLength(JSON.stringify(baseline.results[0]));
+  let calls = 0;
+  const result = await runPlan(plan, {}, async () => {
+    calls++;
+    return execute("x".repeat(REPEAT_EVIDENCE_BYTES - bytes - 100))();
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.stopReason, "evidence-limit");
+  assert.equal(result.conditionResults.length, 1);
+  assert.equal(result.conditionResults[0].matched, false);
+  assert.equal(result.evidenceBudget.last.kind, "condition");
+  assert.equal(
+    result.evidenceBudget.last.occurrenceId,
+    result.conditionResults[0].occurrenceId,
+  );
+  assert.equal(result.evidenceBudget.next.stepId, "tail");
+  assert.equal(result.evidenceBudget.remaining, 1);
+  assert.equal(result.evidenceBudget.executed, 1);
+});
