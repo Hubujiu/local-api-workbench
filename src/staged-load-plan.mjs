@@ -1,5 +1,6 @@
 import { performance } from "node:perf_hooks";
 import { snapshotPlan, runPlan } from "./core.mjs";
+import { activePlanLeaves, planOccurrences } from "./plan-repeat.mjs";
 import {
   selectedEnvironment,
   environmentVariables,
@@ -96,27 +97,28 @@ export function prepareStagedLoad(project, plan, input, options = {}) {
   const snapshot = snapshotPlan(plan);
   if (Buffer.byteLength(JSON.stringify(snapshot)) > 1024 * 1024)
     throw Error("阶段压测计划快照超过 1 MiB");
+  const leaves = activePlanLeaves(snapshot.steps);
+  const worstCaseSteps = planOccurrences(snapshot.steps).length;
   if (
-    !snapshot.steps.length ||
-    snapshot.steps.length > 10 ||
-    snapshot.steps.some(
+    !leaves.length ||
+    worstCaseSteps < 1 ||
+    worstCaseSteps > 10 ||
+    leaves.some(
       (step) =>
-        step.enabled === false ||
-        (step.type !== undefined && step.type !== "http") ||
-        !step.request,
+        (step.type !== undefined && step.type !== "http") || !step.request,
     )
   )
-    throw Error("阶段压测首版仅支持 1–10 个启用的线性 HTTP 步骤");
-  if (snapshot.steps.length * schedule.maxIterations > 100)
-    throw Error("步骤数乘迭代上限不得超过 100");
-  for (const { request } of snapshot.steps) {
+    throw Error("阶段压测仅支持至多 10 个展开后的启用 HTTP 步骤");
+  if (worstCaseSteps * schedule.maxIterations > 100)
+    throw Error("最大展开步骤数乘迭代上限不得超过 100");
+  for (const { request } of leaves) {
     if (
       request.postmanCollectionId !== undefined ||
       normalizeRedirect(request.redirect)
     )
       throw Error("阶段压测暂不支持 collection 作用域或重定向策略");
   }
-  denyNativeWrites(snapshot.steps.map((step) => step.request));
+  denyNativeWrites(leaves.map((step) => step.request));
   const selected = selectedEnvironment(
     project,
     options.environmentId || snapshot.environmentId,
@@ -137,7 +139,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const timers = [];
   let deadlineTimer, reportTimer;
   const samples = new Map(
-    snapshot.steps.map((step) => [
+    activePlanLeaves(snapshot.steps).map((step) => [
       step.id,
       { count: 0, failed: 0, durations: [], receivedBytes: 0 },
     ]),

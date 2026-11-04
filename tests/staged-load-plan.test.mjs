@@ -681,3 +681,46 @@ test("an accidental async observer cannot escape as an unhandled rejection", asy
   assert.equal(result.stopReason, "observer-failed");
   assert.equal(result.runningIterations, 0);
 });
+
+test("repeat and conditional HTTP plans use worst-case expanded admission and aggregate by step ID", async (t) => {
+  const seen = [];
+  const { project, url } = await fixture(t, (req, res) => {
+    seen.push(req.url);
+    res.end("ok");
+  });
+  const leaf = (id) => ({ id, request: { url: url + "/" + id } });
+  const condition = (id, left, right, child) => ({
+    type: "if",
+    id,
+    condition: { left: { literal: left }, op: "eq", right: { literal: right } },
+    steps: [leaf(child)],
+  });
+  const plan = {
+    steps: [
+      { type: "repeat", id: "repeat", count: 2, steps: [leaf("a")] },
+      condition("yes", 1, 1, "b"),
+      condition("no", 1, 2, "c"),
+      { ...leaf("disabled"), enabled: false },
+    ],
+  };
+  const prepared = prepareStagedLoad(project, plan, input);
+  const result = await runStagedLoad(project, prepared);
+  assert.equal(result.failed, 0);
+  assert.equal(result.mainRequests, 6);
+  assert.deepEqual(
+    result.steps.map(({ stepId, count }) => ({ stepId, count })),
+    [
+      { stepId: "a", count: 4 },
+      { stepId: "b", count: 2 },
+      { stepId: "c", count: 0 },
+    ],
+  );
+  assert.equal(seen.filter((x) => x === "/a").length, 4);
+  assert.equal(seen.filter((x) => x === "/b").length, 2);
+  assert(!seen.includes("/c"));
+  assert(!seen.includes("/disabled"));
+  assert.throws(
+    () => prepareStagedLoad(project, plan, { ...input, maxIterations: 26 }),
+    /100/,
+  );
+});
