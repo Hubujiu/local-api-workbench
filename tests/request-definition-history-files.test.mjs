@@ -258,3 +258,44 @@ test("published history journal remains recoverable after later cancellation, wi
   );
   assert.deepEqual(await readProject(root, project.id), recovered);
 });
+
+test("post-publication builtin rename barrier injects a real apply failure only after journal is readable", async (t) => {
+  const { default: fs } = await import("node:fs");
+  const { syncBuiltinESMExports } = await import("node:module");
+  const root = await directory(t),
+    project = fixture();
+  await writeProject(root, project);
+  const journalFile = path.join(root, ".transaction.json"),
+    apis = path.join(root, "apis");
+  const originalRename = fs.promises.rename;
+  let published = 0;
+  fs.promises.rename = async (source, destination) => {
+    await originalRename(source, destination);
+    if (destination === journalFile) {
+      const actual = JSON.parse(await readFile(journalFile, "utf8"));
+      assert.equal(actual.name, "after barrier");
+      published++;
+      await rm(apis, { recursive: true });
+      await writeFile(apis, "physical failure after publication");
+    }
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      writeProject(root, { ...project, name: "after barrier" }),
+      { code: "PROJECT_COMMIT_UNCERTAIN" },
+    );
+    assert.equal(published, 1);
+  } finally {
+    fs.promises.rename = originalRename;
+    syncBuiltinESMExports();
+  }
+  await rm(apis);
+  const recovered = await readProject(root, project.id);
+  assert.equal(recovered.name, "after barrier");
+  assert.deepEqual(
+    recovered.requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  assert.deepEqual(await readProject(root, project.id), recovered);
+});

@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { fork } from "node:child_process";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { fileURLToPath } from "node:url";
 import { Store } from "../src/runtime.mjs";
 import { normalizeRequest, importIntoProject } from "../src/core.mjs";
@@ -315,10 +317,32 @@ test("missing declared history fails closed and valid interrupted journal recove
   await noJournal(store, p);
   await writeFile(file, bytes);
   const apis = path.join(store.directory(p.id), "apis");
-  await rm(apis, { recursive: true });
-  await writeFile(apis, "block apply after journal");
-  p.requests[0].name = "v3";
-  await assert.rejects(store.save(p), { code: "PROJECT_COMMIT_UNCERTAIN" });
+  const journalFile = path.join(store.directory(p.id), ".transaction.json");
+  const originalRename = fs.promises.rename;
+  let injected = 0;
+  // Test-only barrier on the actual builtin rename: publish the real journal
+  // first, then damage this temporary project's API directory before returning
+  // to writeProject's apply phase. Reads and commits are never stubbed.
+  fs.promises.rename = async (source, destination) => {
+    await originalRename(source, destination);
+    if (destination === journalFile) {
+      injected++;
+      await rm(apis, { recursive: true });
+      await writeFile(
+        apis,
+        "block apply only after actual journal publication",
+      );
+    }
+  };
+  syncBuiltinESMExports();
+  try {
+    p.requests[0].name = "v3";
+    await assert.rejects(store.save(p), { code: "PROJECT_COMMIT_UNCERTAIN" });
+    assert.equal(injected, 1);
+  } finally {
+    fs.promises.rename = originalRename;
+    syncBuiltinESMExports();
+  }
   const journal = JSON.parse(
     await readFile(
       path.join(store.directory(p.id), ".transaction.json"),

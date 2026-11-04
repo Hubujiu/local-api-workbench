@@ -149,3 +149,11 @@ and application transport/SDK cases remain 0-executed due to module-load
 failures, not behavioral passes. MCP history results are explicitly limited to
 2 MiB of JSON; an oversized current definition returns a tool error instead of
 silently exceeding the stdio frame budget.
+
+A subsequent review corrected the Store fault fixture: damaging `apis/` before
+`Store.save` makes the lock-held read fail with `ENOTDIR`, not an uncertain
+published commit. The corrected test wraps the actual builtin journal rename,
+waits for publication, then injects a real temporary-directory failure before
+apply. A separate stdlib file test executes this same barrier and recovery;
+Store remains unexecuted locally. This is a test correction, not a production
+change or weakening of the uncertain-outcome assertion.
