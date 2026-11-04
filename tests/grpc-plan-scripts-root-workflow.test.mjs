@@ -571,6 +571,18 @@ test(
         for (let cycle = 0; cycle < 4; cycle++) {
           const rows = run.results.slice(cycle * 4, cycle * 4 + 4),
             rpc = rows[1];
+          withExecutionResultDiagnostics(rows[0], () => {
+            assert.equal(
+              rows[0].status,
+              "passed",
+              `cycle ${cycle + 1} a-start`,
+            );
+            assert.equal(
+              JSON.parse(rows[0].response.body).query.counter,
+              String(cycle * 2 + 1),
+              `cycle ${cycle + 1} a-start fixture counter`,
+            );
+          });
           assert.equal(rpc.status, "failed");
           assert.equal(rpc.grpcResult.status.code, 0);
           assert.equal(rpc.grpcResult.messages[0].text, "reply-" + (cycle + 1));
@@ -582,8 +594,16 @@ test(
             ),
           );
           for (const row of [rows[2], rows[3]]) {
+            const label = row === rows[2] ? "b-consume" : "a-consume";
+            withExecutionResultDiagnostics(row, () => {
+              assert.equal(row.status, "passed", `cycle ${cycle + 1} ${label}`);
+              assert.equal(
+                JSON.parse(row.response.body).query.counter,
+                String(row === rows[2] ? cycle + 1 : cycle * 2 + 2),
+                `cycle ${cycle + 1} ${label} fixture counter`,
+              );
+            });
             const value = JSON.parse(row.response.body).query;
-            assert.equal(row.status, "passed", JSON.stringify(row));
             assert.equal(value.env, "seed");
             assert.equal(value.global, "seed");
             assert.equal(value.runtime, "old-runtime");
