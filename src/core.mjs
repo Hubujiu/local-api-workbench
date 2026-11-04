@@ -1,3 +1,5 @@
+import { applySharedAuth } from "./shared-auth.mjs";
+import { importPostmanOAuth1 } from "./postman-oauth1-import.mjs";
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   evaluatePlanCondition,
@@ -1716,6 +1718,7 @@ export function importDocument(doc) {
       )
         throw Error("Postman AWS Query认证开关重复");
       if (config.type === "oauth2") return importPostmanOAuth2(config.oauth2);
+      if (config.type === "oauth1") return importPostmanOAuth1(config.oauth1);
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1776,29 +1779,6 @@ export function importDocument(doc) {
               "region",
               "service",
               "addAuthDataToQuery",
-            ]
-              .filter((key) => values[key] !== undefined)
-              .map((key) => [key, values[key]]),
-          ),
-        };
-      if (config.type === "oauth1")
-        return {
-          type: "oauth1",
-          ...Object.fromEntries(
-            [
-              "consumerKey",
-              "consumerSecret",
-              "accessToken",
-              "tokenSecret",
-              "signatureMethod",
-              "privateKey",
-              "privateKeyPassphrase",
-              "nonce",
-              "timestamp",
-              "realm",
-              "version",
-              "callback",
-              "verifier",
             ]
               .filter((key) => values[key] !== undefined)
               .map((key) => [key, values[key]]),
@@ -2167,6 +2147,17 @@ export function exportOpenAPI(project) {
     assertRedirectExportable(source);
     validatePathSerialization(source);
     const r = sdkOpenAPIDefinition(project, source);
+    const policyAuth = (auth) =>
+      auth?.type === "oauth1" && Object.hasOwn(auth, "parameterPolicy");
+    if (
+      [
+        r.auth,
+        project.settings?.globalAuth,
+        ...Object.values(project.settings?.folderAuth || {}),
+      ].some(policyAuth) &&
+      policyAuth(applySharedAuth(project, r).auth)
+    )
+      throw Error("OpenAPI不能无损表达OAuth1签名参数策略，请使用项目备份");
     if (postmanOAuth2Definition(r.auth) !== undefined)
       throw Error(
         "OpenAPI不能无损表达Postman OAuth2令牌策略，请使用项目备份或cURL",
