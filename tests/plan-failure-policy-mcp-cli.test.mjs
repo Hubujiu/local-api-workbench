@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -245,6 +246,52 @@ for (const transport of ["http", "stdio"]) {
       assert.deepEqual(detail.failureStop, run.failureStop);
       assert.deepEqual(detail.snapshot, run.snapshot);
       assert.deepEqual(detail.results, run.results);
+      // Root's chunk consumer must retain the complete stored policy evidence,
+      // not only the small inline SDK summary. Pin every continuation to bytes.
+      const stored = (await f.app.store.get(f.allowed.id)).runs.find(
+        (row) => row.id === run.id,
+      );
+      const expectedBytes = Buffer.from(JSON.stringify(stored));
+      const expectedSha256 = createHash("sha256")
+        .update(expectedBytes)
+        .digest("hex");
+      const chunks = [];
+      for (let offsetBytes = 0; offsetBytes < expectedBytes.length; ) {
+        const chunk = decode(
+          await f.call(client, "localapi_get_execution_result_chunk", {
+            projectId: f.allowed.id,
+            runId: run.id,
+            offsetBytes,
+            maxBytes: 257,
+            ...(offsetBytes ? { expectedSha256 } : {}),
+          }),
+        );
+        assert.equal(chunk.sha256, expectedSha256);
+        assert.equal(chunk.totalBytes, expectedBytes.length);
+        const bytes = Buffer.from(chunk.data, "base64");
+        assert.equal(chunk.chunkBytes, bytes.length);
+        assert.ok(bytes.length > 0 && bytes.length <= 257);
+        assert.equal(chunk.nextOffsetBytes, offsetBytes + bytes.length);
+        assert.equal(chunk.eof, chunk.nextOffsetBytes === expectedBytes.length);
+        chunks.push(bytes);
+        offsetBytes = chunk.nextOffsetBytes;
+      }
+      assert.deepEqual(Buffer.concat(chunks), expectedBytes);
+      const complete = JSON.parse(Buffer.concat(chunks));
+      assert.deepEqual(complete.failureStop, run.failureStop);
+      assert.equal(complete.planHash, run.planHash);
+      const deniedChunk = await f.call(
+        client,
+        "localapi_get_execution_result_chunk",
+        {
+          projectId: f.denied.id,
+          runId: run.id,
+          offsetBytes: 0,
+        },
+      );
+      assert.equal(deniedChunk.isError, true);
+      assert.match(deniedChunk.content[0].text, /项目未授权/);
+      assert.deepEqual(f.seen, ["/effect", "/failure"]);
       const summaries = decode(
         await f.call(client, "localapi_list_execution_runs", {
           projectId: f.allowed.id,

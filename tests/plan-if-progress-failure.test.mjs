@@ -23,6 +23,9 @@ for (const asynchronous of [false, true]) {
     "terminal-cancel-resolve",
     "terminal-cancel-condition-error",
     "evidence-limit",
+    "step-failure",
+    "terminal-cancel-step-failure-reject",
+    "terminal-cancel-step-failure-resolve",
   ]) {
     test(
       (asynchronous ? "async" : "sync") +
@@ -36,9 +39,11 @@ for (const asynchronous of [false, true]) {
           mode === "evidence-limit"
             ? "x".repeat(3 * 1024 * 1024)
             : '{"receipt":"one-actual-effect"}';
+        const stepFailure = mode.includes("step-failure");
         let hits = 0;
         const peer = http.createServer((_req, res) => {
           hits++;
+          if (stepFailure) res.statusCode = 401;
           res.end(body);
         });
         await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
@@ -50,7 +55,9 @@ for (const asynchronous of [false, true]) {
         const controller = new AbortController();
         const abortInReporter = mode.startsWith("terminal-cancel");
         const conditionError = mode.includes("condition-error");
-        const resolves = mode === "terminal-cancel-resolve";
+        const resolves =
+          mode === "terminal-cancel-resolve" ||
+          mode === "terminal-cancel-step-failure-resolve";
         const store = new Store(root),
           project = await store.create("IF terminal reporting");
         const leaf = (id) => ({
@@ -66,6 +73,7 @@ for (const asynchronous of [false, true]) {
           steps,
         });
         const plan = snapshotPlan({
+          ...(stepFailure ? { failurePolicy: "stop" } : {}),
           steps: [
             gate(
               "first",
@@ -79,7 +87,7 @@ for (const asynchronous of [false, true]) {
                       steps: [leaf("completed")],
                     },
                   ]
-                : [leaf("completed")],
+                : [leaf("completed"), ...(stepFailure ? [leaf("never")] : [])],
             ),
             ...(mode === "evidence-limit"
               ? [gate("pending", { literal: true }, [leaf("never")])]
@@ -143,13 +151,15 @@ for (const asynchronous of [false, true]) {
         );
         assert.equal(
           run.stopReason,
-          mode === "evidence-limit"
-            ? "evidence-limit"
-            : conditionError
-              ? "condition-error"
-              : resolves
-                ? undefined
-                : "progress-failure",
+          stepFailure
+            ? "step-failure"
+            : mode === "evidence-limit"
+              ? "evidence-limit"
+              : conditionError
+                ? "condition-error"
+                : resolves
+                  ? undefined
+                  : "progress-failure",
         );
         assert.deepEqual(
           run.progressFailure,
@@ -171,9 +181,14 @@ for (const asynchronous of [false, true]) {
           assert.equal(run.evidenceBudget.next.stepId, "pending");
         }
         for (const record of run.results) {
-          assert.equal(record.status, "passed");
+          assert.equal(record.status, stepFailure ? "failed" : "passed");
           assert.equal(record.response.body, body);
           assert.equal(Object.hasOwn(record, "progressFailure"), false);
+        }
+        if (stepFailure) {
+          assert.equal(run.snapshot.failurePolicy, "stop");
+          assert.deepEqual(run.failureStop, { stepId: "completed" });
+          assert.equal(run.results[0].response.status, 401);
         }
         assert.equal(
           run.conditionResults.length,
@@ -191,6 +206,7 @@ for (const asynchronous of [false, true]) {
         assert.equal(saved.status, run.status);
         assert.equal(saved.stopReason, run.stopReason);
         assert.deepEqual(saved.progressFailure, run.progressFailure);
+        assert.deepEqual(saved.failureStop, run.failureStop);
         assert.deepEqual(saved.results, run.results);
         assert.deepEqual(saved.conditionResults, run.conditionResults);
         assert.equal(saved.planHash, run.planHash);

@@ -56,10 +56,13 @@ const gate = (id, steps) => ({
   steps,
 });
 
-for (const action of ["sdk-cancel", "owner-revoke"])
+for (const { action, failurePolicy } of ["sdk-cancel", "owner-revoke"].flatMap(
+  (action) =>
+    [undefined, "stop"].map((failurePolicy) => ({ action, failurePolicy })),
+))
   for (const missingFile of [false, true])
     test(
-      `official SDK IF ${action} retains completed effects with ${missingFile ? "actual missing-file save refusal" : "durable terminal history"}`,
+      `official SDK IF ${action} with ${failurePolicy || "default continue"} retains completed effects with ${missingFile ? "actual missing-file save refusal" : "durable terminal history"}`,
       { timeout: 20000 },
       async (t) => {
         const root = await mkdtemp(path.join(tmpdir(), "if-revoke-sdk-"));
@@ -219,6 +222,7 @@ for (const action of ["sdk-cancel", "owner-revoke"])
           snapshotPlan({
             id: "conditional",
             name: "cancel within IF",
+            ...(failurePolicy ? { failurePolicy } : {}),
             steps: [
               gate("outer", [
                 {
@@ -384,6 +388,13 @@ for (const action of ["sdk-cancel", "owner-revoke"])
         assert.equal(attempted.length, 1);
         const run = attempted[0];
         assert.equal(run.status, "cancelled");
+        assert.equal(run.snapshot.failurePolicy, failurePolicy);
+        assert.equal(
+          Object.hasOwn(run.snapshot, "failurePolicy"),
+          failurePolicy === "stop",
+        );
+        assert.equal(run.stopReason, undefined);
+        assert.equal(Object.hasOwn(run, "failureStop"), false);
         assert.deepEqual(
           run.conditionResults.map((entry) => [entry.stepId, entry.matched]),
           [["outer", true]],
