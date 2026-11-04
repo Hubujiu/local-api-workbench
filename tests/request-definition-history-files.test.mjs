@@ -299,3 +299,49 @@ test("post-publication builtin rename barrier injects a real apply failure only 
   );
   assert.deepEqual(await readProject(root, project.id), recovered);
 });
+
+test("definition history preserves existing environment-before-history partial apply and exact unknown recovery", async (t) => {
+  const { rename } = await import("node:fs/promises");
+  const root = await directory(t),
+    project = fixture();
+  const environmentId = "840bc32c-3583-4ea7-810c-7d0179027655";
+  project.environments = [{ id: environmentId, variables: { token: "old" } }];
+  project.revision = 1;
+  await writeProject(root, project);
+  const history = path.join(root, "history"),
+    kept = path.join(root, "history-kept");
+  await rename(history, kept);
+  await writeFile(history, "real obstacle after committed project was read");
+  const next = structuredClone(project);
+  next.revision = 2;
+  next.environments[0].variables.token = "new";
+  await assert.rejects(writeProject(root, next), {
+    code: "PROJECT_COMMIT_UNCERTAIN",
+  });
+  const journal = JSON.parse(
+    await readFile(path.join(root, ".transaction.json"), "utf8"),
+  );
+  assert.equal(journal.environments[0].variables.token, "new");
+  const applied = JSON.parse(
+    await readFile(path.join(root, "envs", environmentId + ".json"), "utf8"),
+  );
+  assert.equal(applied.variables.token, "new");
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, "project.json"), "utf8"))
+      .revision,
+    1,
+  );
+  await assert.rejects(readProject(root, project.id), {
+    code: "PROJECT_COMMIT_UNCERTAIN",
+  });
+  await rm(history);
+  await rename(kept, history);
+  const recovered = await readProject(root, project.id);
+  assert.equal(recovered.environments[0].variables.token, "new");
+  assert.equal(recovered.revision, 2);
+  assert.deepEqual(
+    recovered.requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  assert.deepEqual(await readProject(root, project.id), recovered);
+});

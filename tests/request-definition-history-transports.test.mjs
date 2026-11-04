@@ -14,6 +14,7 @@ import { createMCP } from "../src/mcp.mjs";
 import { Store } from "../src/runtime.mjs";
 import { readMCPActivities } from "../src/mcp-activity.mjs";
 import { writeProject } from "../src/project-files.mjs";
+import { acquireFileLock } from "../src/file-lock.mjs";
 import { listRequestDefinitionHistory } from "../src/request-definition-history.mjs";
 
 const waitFor = async (predicate) => {
@@ -423,39 +424,101 @@ async function configure(app, headers, projectId, write = true) {
       projects: [projectId],
       write,
       execute: false,
+      // Revocation must take the immediate reduction path while a real project
+      // lock is held; the full reconfiguration path also reads this project.
+      remember: false,
     }),
   });
   assert.equal(response.status, 200);
   return response.json();
 }
-function holdMutation(store) {
-  const original = store.changeRequestDefinitionHistory.bind(store);
-  let release, entered, signal, finished;
-  const ready = new Promise((resolve) => {
+function holdQueuedHistorySave(store) {
+  const originalSave = store.save;
+  let releaseLock,
+    releasePromise,
+    entered,
+    rejectReady,
+    signal,
+    finished,
+    started = false,
+    releaseRequested = false,
+    failure;
+  const ready = new Promise((resolve, reject) => {
     entered = resolve;
+    rejectReady = reject;
   });
-  const gate = new Promise((resolve) => {
-    release = resolve;
-  });
+  ready.catch(() => {});
   const settled = new Promise((resolve) => {
     finished = resolve;
   });
-  store.changeRequestDefinitionHistory = async (projectId, input, options) => {
+  const release = async () => {
+    releaseRequested = true;
+    if (releaseLock) releasePromise ??= releaseLock();
+    await releasePromise;
+  };
+  const wrappedSave = async function (project, options = {}) {
+    if (options.definitionHistoryOperation === undefined)
+      return originalSave.call(this, project, options);
+    assert.equal(started, false, "fixture holds exactly one history save");
+    started = true;
     signal = options.signal;
-    entered();
+    let saving;
     try {
-      await gate;
-      return await original(projectId, input, options);
+      releaseLock = await acquireFileLock(store.lockFile(project.id));
+      if (releaseRequested) throw Error("history save hold already released");
+      assert(signal instanceof AbortSignal);
+      assert.equal(
+        signal.aborted,
+        false,
+        "real save starts before cancellation",
+      );
+      const previousQueue = store.pending;
+      // Start the unmodified Store save while the actual project lock is held.
+      // Its synchronous input validation and signal admission have already run
+      // when pending changes, so cancellation tests the later commit gate.
+      saving = originalSave.call(this, project, options);
+      saving.catch(() => {});
+      assert.notEqual(
+        store.pending,
+        previousQueue,
+        "real save entered its queue",
+      );
+      entered();
+      return await saving;
+    } catch (error) {
+      failure = error;
+      rejectReady(error);
+      throw error;
     } finally {
-      finished();
+      try {
+        await release();
+      } finally {
+        // Even an assertion/cleanup failure after queue admission must wait for
+        // the genuine Store operation rather than leaving a late writer alive.
+        await saving?.catch(() => {});
+        finished();
+      }
+    }
+  };
+  store.save = wrappedSave;
+  const dispose = async () => {
+    if (store.save === wrappedSave) store.save = originalSave;
+    try {
+      await release();
+    } finally {
+      if (started) await settled;
     }
   };
   return {
     ready,
     release,
     settled,
+    dispose,
     get signal() {
       return signal;
+    },
+    get failure() {
+      return failure;
     },
   };
 }
@@ -481,48 +544,53 @@ test(
       );
       t.after(() => client.close().catch(() => {}));
       await client.connect(transport);
-      const original = app.store.changeRequestDefinitionHistory;
-      const held = holdMutation(app.store);
-      t.after(held.release);
-      const controller = new AbortController();
-      const pending = client
-        .callTool(
-          {
-            name: "localapi_tag_api_definition_version",
-            arguments: {
-              projectId: p.id,
-              requestId: "api",
-              lineageId,
-              historyId,
-              configRevision: p.configRevision,
-              tag: action,
+      const held = holdQueuedHistorySave(app.store);
+      t.after(held.dispose);
+      try {
+        const controller = new AbortController();
+        const pending = client
+          .callTool(
+            {
+              name: "localapi_tag_api_definition_version",
+              arguments: {
+                projectId: p.id,
+                requestId: "api",
+                lineageId,
+                historyId,
+                configRevision: p.configRevision,
+                tag: action,
+              },
             },
-          },
-          undefined,
-          { signal: controller.signal },
-        )
-        .then(
-          (value) => ({ value }),
-          (error) => ({ error }),
+            undefined,
+            { signal: controller.signal },
+          )
+          .then(
+            (value) => ({ value }),
+            (error) => ({ error }),
+          );
+        await held.ready;
+        assert(held.signal instanceof AbortSignal);
+        assert.equal(held.signal.aborted, false);
+        if (action === "cancel") controller.abort();
+        else if (action === "revoke")
+          await configure(app, headers, p.id, false);
+        else await transport.terminateSession();
+        await waitFor(() => held.signal.aborted);
+        await held.release();
+        const outcome = await pending;
+        await held.settled;
+        assert.equal(held.failure?.code, "STORE_SAVE_ABORTED");
+        if (action === "cancel" || action === "revoke")
+          assert(outcome.error || outcome.value?.isError);
+        else assert(outcome.value?.isError || outcome.error);
+        assert.deepEqual(
+          await app.store.get(p.id),
+          p,
+          action + " must not commit",
         );
-      await held.ready;
-      assert(held.signal instanceof AbortSignal);
-      if (action === "cancel") controller.abort();
-      else if (action === "revoke") await configure(app, headers, p.id, false);
-      else await transport.terminateSession();
-      await waitFor(() => held.signal.aborted);
-      held.release();
-      const outcome = await pending;
-      await held.settled;
-      if (action === "cancel" || action === "revoke")
-        assert(outcome.error || outcome.value?.isError);
-      else assert(outcome.value?.isError || outcome.error);
-      app.store.changeRequestDefinitionHistory = original;
-      assert.deepEqual(
-        await app.store.get(p.id),
-        p,
-        action + " must not commit",
-      );
+      } finally {
+        await held.dispose();
+      }
       await client.close();
     }
   },
@@ -541,46 +609,57 @@ test(
       configRevision: p.configRevision,
       tag: "must-not-commit",
     };
-    const original = app.store.changeRequestDefinitionHistory;
-    const heldOwner = holdMutation(app.store);
-    t.after(heldOwner.release);
+    const heldOwner = holdQueuedHistorySave(app.store);
+    t.after(heldOwner.dispose);
     const req = http.request(route, { method: "POST", headers });
     req.on("error", () => {});
-    req.end(JSON.stringify(input));
-    await heldOwner.ready;
-    req.destroy();
-    await waitFor(() => heldOwner.signal.aborted);
-    heldOwner.release();
-    await heldOwner.settled;
-    app.store.changeRequestDefinitionHistory = original;
+    try {
+      req.end(JSON.stringify(input));
+      await heldOwner.ready;
+      assert.equal(heldOwner.signal.aborted, false);
+      req.destroy();
+      await waitFor(() => heldOwner.signal.aborted);
+      await heldOwner.release();
+      await heldOwner.settled;
+      assert.equal(heldOwner.failure?.code, "STORE_SAVE_ABORTED");
+    } finally {
+      req.destroy();
+      await heldOwner.dispose();
+    }
     const config = await configure(app, headers, p.id);
-    const heldMCP = holdMutation(app.store);
-    t.after(heldMCP.release);
-    const { kind, ...args } = input;
-    const pending = fetch(app.url + "/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: "Bearer " + config.token,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 7,
-        method: "tools/call",
-        params: {
-          name: "localapi_tag_api_definition_version",
-          arguments: { ...args, projectId: p.id },
+    const heldMCP = holdQueuedHistorySave(app.store);
+    t.after(heldMCP.dispose);
+    try {
+      const { kind, ...args } = input;
+      const pending = fetch(app.url + "/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: "Bearer " + config.token,
         },
-      }),
-    });
-    await heldMCP.ready;
-    await configure(app, headers, p.id, false);
-    await waitFor(() => heldMCP.signal.aborted);
-    heldMCP.release();
-    const result = await pending.then((r) => r.json());
-    await heldMCP.settled;
-    assert.equal(result.error?.code, -32000);
-    app.store.changeRequestDefinitionHistory = original;
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 7,
+          method: "tools/call",
+          params: {
+            name: "localapi_tag_api_definition_version",
+            arguments: { ...args, projectId: p.id },
+          },
+        }),
+      });
+      pending.catch(() => {});
+      await heldMCP.ready;
+      assert.equal(heldMCP.signal.aborted, false);
+      await configure(app, headers, p.id, false);
+      await waitFor(() => heldMCP.signal.aborted);
+      await heldMCP.release();
+      const result = await pending.then((r) => r.json());
+      await heldMCP.settled;
+      assert.equal(heldMCP.failure?.code, "STORE_SAVE_ABORTED");
+      assert.equal(result.error?.code, -32000);
+    } finally {
+      await heldMCP.dispose();
+    }
     assert.deepEqual(await new Store(app.store.root).get(p.id), p);
   },
 );

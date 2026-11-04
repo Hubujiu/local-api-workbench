@@ -157,3 +157,20 @@ waits for publication, then injects a real temporary-directory failure before
 apply. A separate stdlib file test executes this same barrier and recovery;
 Store remains unexecuted locally. This is a test correction, not a production
 change or weakening of the uncertain-outcome assertion.
+
+Exact CI on `b20a232` found three existing scope-commit fault contracts failing
+at the physical environment-file assertion, before their repair/recovery step.
+The new definition-history write had been placed before the established
+collection/environment apply sequence, so a deliberately obstructed history
+directory failed earlier than before. The journal still contained the correct
+new variables and reported unknown outcome. The fix moves only the definitions
+file write after the existing files and before the final manifest. A matching
+real-files regression first reproduced old-versus-new scope bytes (RED), then
+passed with exact roll-forward/idempotence; the original assertions remain
+unchanged. Local application cases still require exact CI.
+
+The SDK cancellation fixtures additionally start the real Store.save while a
+real project file lock is held, then cancel/revoke before releasing that lock.
+They assert the genuine later `STORE_SAVE_ABORTED` result and wait for cleanup.
+The explicit `remember: false` revocation uses the existing immediate reduction
+path; it is not a change to persistent grant-update semantics.

@@ -73,13 +73,8 @@ async function apply(directory, project) {
   delete metadata._diskFingerprint;
   delete metadata.requestDefinitionHistory;
   delete metadata.requestDefinitionHistoryFormat;
-  if (project.requestDefinitionHistory !== undefined) {
+  if (project.requestDefinitionHistory !== undefined)
     metadata.requestDefinitionHistoryFormat = 1;
-    await writeJSON(
-      path.join(directory, "history/definitions.json"),
-      project.requestDefinitionHistory,
-    );
-  }
   for (const [key, folder] of Object.entries(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -119,6 +114,14 @@ async function apply(directory, project) {
     );
     delete metadata[key];
   }
+  // Keep the established collection/environment-before-history apply order.
+  // A history-directory fault still leaves the same partial-apply evidence;
+  // the complete journal remains the sole authority for roll-forward.
+  if (project.requestDefinitionHistory !== undefined)
+    await writeJSON(
+      path.join(directory, "history/definitions.json"),
+      project.requestDefinitionHistory,
+    );
   await writeJSON(path.join(directory, "project.json"), metadata);
   try {
     await writeFile(
