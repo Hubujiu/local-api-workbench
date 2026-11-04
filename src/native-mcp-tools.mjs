@@ -364,6 +364,8 @@ export function assertNativeLinearResult(run) {
     );
   if (
     hasRepeatSteps(run.snapshot?.steps) ||
+    run.stopReason === "repeat-condition-exhausted" ||
+    run.untilLimit !== undefined ||
     run.conditionResults !== undefined ||
     run.results?.some((result) => result.repeat)
   )

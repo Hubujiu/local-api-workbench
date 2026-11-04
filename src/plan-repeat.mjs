@@ -307,6 +307,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         "enabled",
         "count",
         "intervalMs",
+        "untilCondition",
         "rows",
         "steps",
       ]);
@@ -344,13 +345,28 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
           });
         }
       }
+      if (Object.hasOwn(step, "untilCondition")) {
+        if (step.rows !== undefined)
+          throw Error("条件提前结束循环暂不支持同组数据行");
+        validatePlanCondition(step.untilCondition);
+        validateIterationDataCondition(
+          step.untilCondition,
+          step.rows === undefined ? rowContext : step.rows,
+        );
+        decisions += multiplier * step.count;
+        bytes +=
+          Buffer.byteLength(JSON.stringify(step.untilCondition)) *
+          multiplier *
+          step.count;
+        if (decisions > 200) throw Error("条件计划展开最多200次判断");
+      }
       array(step.steps, "循环子步骤");
       for (const child of step.steps)
         visit(
           child,
           depth + 1,
           multiplier * step.count,
-          conditional,
+          conditional || Object.hasOwn(step, "untilCondition"),
           dataDepth + (step.rows === undefined ? 0 : 1),
           nestedRowBytes,
           step.rows === undefined ? rowContext : step.rows,
@@ -423,6 +439,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
       }
       if (step.type === "repeat") {
         let previousHasWork = false;
+        const untilControls = [];
         for (let iteration = 0; iteration < step.count; iteration++) {
           if (controls && iteration && previousHasWork && step.intervalMs)
             occurrences.push({ wait: true, milliseconds: step.intervalMs });
@@ -439,7 +456,38 @@ export function planOccurrences(steps, { controls = false } = {}) {
                 },
           );
           previousHasWork = occurrences.length > before;
+          if (controls && Object.hasOwn(step, "untilCondition")) {
+            const iterationContext =
+              step.rows === undefined
+                ? dataContext
+                : {
+                    iteration,
+                    iterationCount: step.count,
+                    iterationData: step.rows[iteration],
+                  };
+            const control = {
+              step,
+              condition: true,
+              until: true,
+              iteration,
+              lastIteration: iteration === step.count - 1,
+              ...(iterationContext === undefined
+                ? {}
+                : { dataContext: iterationContext }),
+              occurrenceId: JSON.stringify([
+                "repeat-until",
+                path.map(({ groupId, iteration }) => [groupId, iteration]),
+                step.id,
+                iteration,
+              ]),
+            };
+            occurrences.push(control);
+            untilControls.push(control);
+            previousHasWork = true;
+          }
         }
+        for (const control of untilControls)
+          control.skipTo = occurrences.length;
         continue;
       }
       if (!path.length) {
@@ -486,5 +534,27 @@ export function hasIfSteps(steps) {
   return steps.some(
     (step) =>
       step.type === "if" || (step.type === "repeat" && hasIfSteps(step.steps)),
+  );
+}
+// Conditional safety, authorization, and progress must include repeat tails.
+export function hasPlanConditions(steps) {
+  return steps.some(
+    (step) =>
+      step.type === "if" ||
+      (step.type === "repeat" &&
+        (Object.hasOwn(step, "untilCondition") ||
+          hasPlanConditions(step.steps))),
+  );
+}
+
+// Runtime safety checks apply to enabled groups only; disabled definitions are
+// still validated and counted by validateRepeatGraph.
+export function hasRepeatUntil(steps) {
+  return steps.some(
+    (step) =>
+      step.enabled !== false &&
+      ["repeat", "if"].includes(step.type) &&
+      ((step.type === "repeat" && Object.hasOwn(step, "untilCondition")) ||
+        hasRepeatUntil(step.steps)),
   );
 }
