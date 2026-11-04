@@ -357,3 +357,19 @@ empty-text semantics. One test-only correction selects a failure record by the
 returned recordId instead of assuming chronological storage order; no execution
 or evidence behavior was changed to satisfy it. These are Workbench loopback
 observations, not new original-application wire evidence or exact-commit CI.
+
+### Independent CI and isolated dependency correction
+
+CI 41818144153 for head45602955/treece2a802b completed with nine of ten jobs
+passing. All 66 new binary cases passed on all three operating systems. macOS
+alone failed the unchanged old Base64 expansion test: it expected the 64 KiB
+error but received a script timeout. This does not identify scheduling, CPU or
+another precise cause, and the failed run remains historical evidence.
+
+The old feature dependency lacked already verified PR32's deterministic
+pre-encoding expansion guard. A new dependency-only base now carries that exact
+four-file PR32 delta from 2d5f3902, without changing the original oversize test,
+its assertion or any script budget. The binary feature implementation and tests
+are unchanged. No local full-suite retry is performed; the composed tree needs
+its own exact CI. A separate PR14 full-suite output retrieval was denied and is
+not worked around through this dependency update.
