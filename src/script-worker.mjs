@@ -1,3 +1,4 @@
+import { nativeAssertionsInstallerSource } from "./native-response-assertions.mjs";
 import { pickVarsInstallerSource } from "./native-response-extraction.mjs";
 import { nativeResponseTextReaderSource } from "./native-response-text.mjs";
 import { finalBodySource } from "./script-final-body.mjs";
@@ -107,14 +108,18 @@ try {
     new URL("./vendor/schema-library.js", import.meta.url),
     "utf8",
   );
-  const nativeXMLLibrary = workerData.responseExtractions?.some(
-    (operation) => operation.source === "responseXml",
-  )
-    ? await readFile(
-        new URL("./vendor/native-xml-library.js", import.meta.url),
-        "utf8",
-      )
-    : "";
+  const nativeXMLLibrary =
+    workerData.responseExtractions?.some(
+      (operation) => operation.source === "responseXml",
+    ) ||
+    workerData.responseAssertions?.some(
+      (operation) => operation.type === "responseXml",
+    )
+      ? await readFile(
+          new URL("./vendor/native-xml-library.js", import.meta.url),
+          "utf8",
+        )
+      : "";
   const tracked = await trackedQuickJS(workerData.compiledEngine);
   const engine = tracked.engine;
   runtime = engine.newRuntime();
@@ -575,31 +580,43 @@ try {
         ? "const __readURLFacade=__urlFacadeFactory({pm,apt,initial:request.scriptURLRuntime,dialect:request.scriptDialect});"
         : "const __readURLFacade=null;",
     );
-    if (workerData.responseExtractions?.length) {
+    if (
+      workerData.responseAssertions?.length ||
+      workerData.responseExtractions?.length
+    ) {
       const data = context.newString(
         JSON.stringify({
-          operations: workerData.responseExtractions,
+          assertions: workerData.responseAssertions || [],
+          extractions: workerData.responseExtractions || [],
           evidence: workerData.responseHeaderEvidence,
+          cookieEvidence: workerData.responseCookieEvidence,
         }),
       );
-      context.setProp(context.global, "__nativePickVarsDataJSON", data);
+      context.setProp(context.global, "__nativeResponseDataJSON", data);
       data.dispose();
+      // One XML bundle/factory per phase. Only this IIFE sees the parser; neither
+      // a public global nor a global lexical binding can become an XML entrypoint.
       install(
-        "const __readNativePickVarsCompletion=(()=>{const data=JSON.parse(globalThis.__nativePickVarsDataJSON);const readXML=" +
+        "const [__readNativeAssertionCompletion,__readNativeAssertionEvidence,__readNativePickVarsCompletion]=(()=>{const data=JSON.parse(globalThis.__nativeResponseDataJSON);const readXML=" +
           (nativeXMLLibrary
             ? "(()=>{" +
               nativeXMLLibrary +
               ";return NativeXMLLibrary.createNativeXMLExtractor(response);})()"
             : "null") +
           ";const readText=" +
-          (workerData.responseExtractions.some(
+          (workerData.responseExtractions?.some(
             (operation) => operation.source === "responseText",
+          ) ||
+          workerData.responseAssertions?.some(
+            (operation) => operation.type === "responseText",
           )
             ? "(" + nativeResponseTextReaderSource + ")(response)"
             : "null") +
-          ";const state=(" +
+          ";let assertionState=null,pickState=null;if(data.assertions.length){assertionState=(" +
+          nativeAssertionsInstallerSource +
+          ")(JSON.stringify(data.assertions),((facade)=>()=>({body:response.body,status:facade.code}))(pm.response),pm.test,tests,response?.headers,JSON.stringify(data.evidence),readXML,readText,pm.response,{local:localVariables,effective:variables,environment:scopeState.environment,globals:scopeState.globals},response?.cookies,JSON.stringify(data.cookieEvidence));globalThis.__nativeAssertionTask=assertionState.run;}if(data.extractions.length){pickState=(" +
           pickVarsInstallerSource +
-          ")(JSON.stringify(data.operations),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=state.run;return state.assertComplete;})();delete globalThis.__nativePickVarsDataJSON;",
+          ")(JSON.stringify(data.extractions),()=>response.body,response.headers,JSON.stringify(data.evidence),pm.environment.set.bind(pm.environment),pm.globals.set.bind(pm.globals),pm.variables.set.bind(pm.variables),readXML,readText);globalThis.__nativePickVarsTask=pickState.run;}return [assertionState?.assertComplete,assertionState?.readEvidence,pickState?.assertComplete];})();delete globalThis.__nativeResponseDataJSON;",
       );
     }
     if (workerData.databaseTaskCount)
@@ -755,6 +772,24 @@ try {
     measuredBounded("pick-vars-completion", "promiseStateMs", () =>
       run("__readNativePickVarsCompletion();"),
     );
+  if (workerData.responseAssertions?.length)
+    measuredBounded("native-assertion-completion", "promiseStateMs", () =>
+      run("__readNativeAssertionCompletion();"),
+    );
+  let nativeAssertionEvidence = [];
+  if (workerData.responseAssertions?.length) {
+    const result = measuredBounded(
+      "native-assertion-evidence",
+      "promiseStateMs",
+      () => context.evalCode("__readNativeAssertionEvidence()"),
+    );
+    if (result.error) {
+      result.error.dispose();
+      throw Error("原生断言证据不可读取");
+    }
+    nativeAssertionEvidence = JSON.parse(context.getString(result.value));
+    result.value.dispose();
+  }
   const serializationStart = Date.now();
   deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
@@ -775,9 +810,32 @@ try {
     throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
   if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
     throw Error("脚本输出超过 1 MiB");
+  const serializedResult = JSON.parse(json);
+  if (nativeAssertionEvidence.length) {
+    if (!Array.isArray(serializedResult.tests))
+      throw Error("脚本断言输出格式无效");
+    const claimed = new Set();
+    for (const entry of nativeAssertionEvidence) {
+      const target =
+        entry.index >= 0 &&
+        entry.index < serializedResult.tests.length &&
+        !claimed.has(entry.index)
+          ? entry.index
+          : serializedResult.tests.length;
+      serializedResult.tests[target] = entry.record;
+      claimed.add(target);
+    }
+    if (serializedResult.tests.length > workerData.assertionLimit)
+      throw Error("脚本断言输出超过本次共享断言预算");
+    if (
+      Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
+      1024 * 1024
+    )
+      throw Error("脚本输出超过 1 MiB");
+  }
   outcome = {
     result: {
-      ...JSON.parse(json),
+      ...serializedResult,
       usage: { timers: timerCount, fakerCalls, jobs: jobCount },
       activityCPUTimeUs: { ...activityCPUTimeUs },
       activityMetrics: {

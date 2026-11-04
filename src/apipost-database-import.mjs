@@ -1,3 +1,4 @@
+import { normalizeNativeAssertionData } from "./native-response-assertions.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -145,6 +146,8 @@ export function nativeDatabaseTasks(
       (!translated && task.origin !== undefined)
     )
       throw Error("Apipost任务无效");
+    if (task.type === "assert")
+      normalizeNativeAssertionData(task.data, { enabled: task.enabled === 1 });
     if (task.type === "pickVars")
       normalizePickVarsData(task.data, { enabled: task.enabled === 1 });
     const next = structuredClone(task);
