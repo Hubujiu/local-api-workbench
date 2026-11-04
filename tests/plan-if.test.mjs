@@ -1,0 +1,240 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { once } from "node:events";
+import { snapshotPlan, runPlan, restoreProject } from "../src/core.mjs";
+import { executeRequest } from "../src/runtime.mjs";
+
+const literal = (value) => ({ literal: value });
+const variable = (name, scope = "runtime") => ({ scope, name });
+const leaf = (id, url, extract = []) => ({
+  id,
+  request: { method: "GET", url, extract },
+});
+const conditional = (id, left, op, right, steps) => ({
+  type: "if",
+  id,
+  condition: { left, op, right },
+  steps,
+});
+async function fixture(t) {
+  const seen = [];
+  let entered;
+  const held = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const server = http.createServer((req, res) => {
+    seen.push(req.url);
+    if (req.url === "/hold") {
+      entered();
+      return;
+    }
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        count: req.url === "/setup" ? 1 : 0,
+        token: "committed",
+      }),
+    );
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  return { seen, held, url: `http://127.0.0.1:${server.address().port}` };
+}
+
+test("IF reads committed extraction when reached and false children produce no network or fake successes", async (t) => {
+  const f = await fixture(t);
+  const plan = snapshotPlan({
+    steps: [
+      leaf("setup", f.url + "/setup", [
+        { name: "count", source: "json", path: "$.count" },
+      ]),
+      conditional("yes", variable("count"), "eq", literal(1), [
+        leaf("yes-child", f.url + "/yes"),
+      ]),
+      conditional("no", variable("count"), "gt", literal(1), [
+        leaf("no-child", f.url + "/never"),
+      ]),
+      leaf("last", f.url + "/last"),
+    ],
+  });
+  const before = structuredClone(plan);
+  const result = await runPlan(plan, {}, executeRequest);
+  assert.equal(result.status, "passed");
+  assert.deepEqual(f.seen, ["/setup", "/yes", "/last"]);
+  assert.deepEqual(
+    result.results.map((r) => r.stepId),
+    ["setup", "yes-child", "last"],
+  );
+  assert.deepEqual(
+    result.conditionResults.map((r) => [r.stepId, r.matched]),
+    [
+      ["yes", true],
+      ["no", false],
+    ],
+  );
+  assert.deepEqual(plan, before);
+  assert.deepEqual(result.snapshot, before);
+  assert.ok(
+    result.conditionResults.every(
+      (r) => !Object.hasOwn(r, "left") && !Object.hasOwn(r, "right"),
+    ),
+  );
+});
+
+test("false-only IF succeeds as a decision with no HTTP result and missing inputs fail instead of becoming false", async (t) => {
+  const f = await fixture(t);
+  const plan = snapshotPlan({
+    steps: [
+      conditional("if", literal(1), "eq", literal(2), [
+        leaf("never", f.url + "/never"),
+      ]),
+    ],
+  });
+  const result = await runPlan(plan, {}, executeRequest);
+  assert.equal(result.status, "passed");
+  assert.deepEqual(result.results, []);
+  assert.equal(result.conditionResults[0].matched, false);
+  plan.steps[0].condition.left = variable("absent");
+  const failure = await runPlan(plan, {}, executeRequest);
+  assert.equal(failure.status, "failed");
+  assert.equal(failure.stopReason, "condition-error");
+  assert.equal(failure.conditionResults[0].status, "failed");
+  assert.equal(Object.hasOwn(failure.conditionResults[0], "matched"), false);
+  assert.deepEqual(f.seen, []);
+});
+
+test("IF nested in repeat reevaluates scopes per iteration and enclosing IF gates a complete repeat", async (t) => {
+  const f = await fixture(t);
+  const plan = snapshotPlan({
+    steps: [
+      leaf("setup", f.url + "/setup", [
+        { name: "count", source: "json", path: "$.count" },
+      ]),
+      {
+        type: "repeat",
+        id: "repeat",
+        count: 2,
+        steps: [
+          conditional("once", variable("count"), "eq", literal(1), [
+            leaf("consume", f.url + "/consume", [
+              { name: "count", source: "json", path: "$.count" },
+            ]),
+          ]),
+        ],
+      },
+      conditional("gate", literal(false), "eq", literal(true), [
+        {
+          type: "repeat",
+          id: "blocked-repeat",
+          count: 2,
+          steps: [leaf("blocked", f.url + "/blocked")],
+        },
+      ]),
+    ],
+  });
+  const result = await runPlan(plan, {}, executeRequest);
+  assert.equal(result.status, "passed");
+  assert.deepEqual(f.seen, ["/setup", "/consume"]);
+  assert.deepEqual(
+    result.conditionResults.map((r) => r.matched),
+    [true, false, false],
+  );
+  assert.notEqual(
+    result.conditionResults[0].occurrenceId,
+    result.conditionResults[1].occurrenceId,
+  );
+  assert.deepEqual(result.results[1].repeat.path, undefined);
+  assert.equal(result.results[1].repeat.iteration, 0);
+});
+
+test("cancelling a held true child starts no later child, IF or sibling", async (t) => {
+  const f = await fixture(t),
+    controller = new AbortController();
+  const plan = snapshotPlan({
+    steps: [
+      conditional("if", literal(true), "eq", literal(true), [
+        leaf("hold", f.url + "/hold"),
+        leaf("later", f.url + "/later"),
+      ]),
+      leaf("tail", f.url + "/tail"),
+    ],
+  });
+  const running = runPlan(plan, {}, executeRequest, {
+    signal: controller.signal,
+  });
+  await f.held;
+  controller.abort();
+  const result = await running;
+  assert.equal(result.status, "cancelled");
+  assert.deepEqual(f.seen, ["/hold"]);
+  assert.equal(result.conditionResults.length, 1);
+  assert.equal(result.results.length, 1);
+});
+
+test("IF full-tree admission rejects invalid disabled children before an earlier real request", async (t) => {
+  const f = await fixture(t);
+  for (const mutate of [
+    (g) => (g.condition.op = "eval"),
+    (g) => (g.steps[0].type = "unknown"),
+    (g) => (g.condition.left = literal("")),
+    (g) => (g.condition.left = literal(Infinity)),
+  ]) {
+    const group = conditional("if", literal(1), "eq", literal(1), [
+      leaf("child", f.url + "/never"),
+    ]);
+    group.enabled = false;
+    mutate(group);
+    const plan = { steps: [leaf("first", f.url + "/first"), group] };
+    assert.throws(() => snapshotPlan(plan));
+    await assert.rejects(runPlan(plan, {}, executeRequest));
+  }
+  assert.deepEqual(f.seen, []);
+});
+
+test("IF rejects scope getters, proxies, custom serialization and nonfinite values before cloning or wire", async (t) => {
+  const f = await fixture(t),
+    plan = snapshotPlan({
+      steps: [
+        conditional("if", variable("count", "environment"), "eq", literal(1), [
+          leaf("child", f.url + "/never"),
+        ]),
+      ],
+    });
+  let calls = 0;
+  for (const values of [
+    Object.defineProperty({}, "count", {
+      enumerable: true,
+      get() {
+        calls++;
+        return 1;
+      },
+    }),
+    new Proxy(
+      { count: 1 },
+      {
+        ownKeys() {
+          calls++;
+          return ["count"];
+        },
+      },
+    ),
+    {
+      count: {
+        toJSON() {
+          calls++;
+          return 1;
+        },
+      },
+    },
+    { count: NaN },
+    { count: Infinity },
+  ])
+    await assert.rejects(runPlan(plan, values, executeRequest));
+  assert.equal(calls, 0);
+  assert.deepEqual(f.seen, []);
+});
