@@ -158,6 +158,65 @@ function installScriptCompatibility({
       return request.body || "";
     },
     update(value) {
+      if (request.postmanRawBody) {
+        let raw, language;
+        if (typeof value === "string") {
+          raw = value;
+          language = "default";
+        } else {
+          if (
+            !value ||
+            value.mode !== "raw" ||
+            typeof value.raw !== "string" ||
+            (value.disabled !== undefined && value.disabled !== false)
+          )
+            throw Error("Postman raw媒体脚本更新仅支持活动raw正文");
+          raw = value.raw;
+          const options = value.options;
+          if (
+            options !== undefined &&
+            (!options ||
+              typeof options !== "object" ||
+              Array.isArray(options) ||
+              Object.keys(options).some((k) => k !== "raw"))
+          )
+            throw Error("Postman raw媒体options无效");
+          const spec = options?.raw;
+          if (
+            spec !== undefined &&
+            (!spec ||
+              typeof spec !== "object" ||
+              Array.isArray(spec) ||
+              Object.keys(spec).some((k) => k !== "language"))
+          )
+            throw Error("Postman raw媒体language无效");
+          language = spec?.language;
+          if (
+            language !== undefined &&
+            (typeof language !== "string" ||
+              language.length > 1024 ||
+              /[{}]/.test(language))
+          )
+            throw Error("Postman raw媒体language无效");
+          language = !language
+            ? "default"
+            : ["json", "text", "xml", "html", "javascript"].includes(language)
+              ? language
+              : "text";
+        }
+        if (language === "json") {
+          if (!raw.trim()) throw Error("Postman raw媒体不接受空JSON切换");
+          try {
+            JSON.parse(raw);
+          } catch {
+            throw Error("Postman raw媒体JSON切换无效");
+          }
+        }
+        request.body = raw;
+        request.bodyType = language === "json" ? "json" : "raw";
+        request.postmanRawBody = { version: 1, language };
+        return;
+      }
       if (typeof value === "string") {
         request.body = value;
         request.bodyType = request.bodyType === "json" ? "json" : "raw";

@@ -1,3 +1,4 @@
+import { postmanRawBodyPolicy } from "./postman-raw-body.mjs";
 import {
   preflightApipostAttributes,
   prepareApipostAttributeExport,
@@ -146,6 +147,10 @@ export function exportApipostDirectory(project, options = {}) {
         throw Error("原生目录步骤标识重复或缺失");
       stepIds.add(step.id);
       const request = step.request;
+      if (postmanRawBodyPolicy(request))
+        throw Error(
+          "原生目录不能保留冻结步骤Postman raw媒体策略；请使用项目备份",
+        );
       // Native flow snapshots do not execute API task lists. Exporting a live
       // pipeline here would either erase it below or turn it into inert source.
       if (request.nativeTasks !== undefined)

@@ -1,3 +1,4 @@
+import { postmanRawExportDefinition } from "./postman-raw-body.mjs";
 import { nativeOAuth2GrantInput } from "./native-oauth2-grant.mjs";
 import {
   writeDebugVariables,
@@ -1925,10 +1926,16 @@ export async function createApp({
             const data = await body(req);
             const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
-              inheritedRequest?.scriptURLMode === "sdk"
+              inheritedRequest?.scriptURLMode === "sdk" ||
+              inheritedRequest?.postmanRawBody !== undefined
                 ? applySharedScripts(p, inheritedRequest)
                 : inheritedRequest;
             assertSDKCurlDefinition(exportRequest);
+            postmanRawExportDefinition(
+              exportRequest?.postmanRawBody !== undefined
+                ? applyGlobalParameters(p, exportRequest)
+                : exportRequest,
+            );
             const context = debugEnvironment(
               p,
               data.environmentId,

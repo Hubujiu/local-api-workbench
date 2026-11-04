@@ -1,3 +1,4 @@
+import { postmanRawBodyPolicy } from "./postman-raw-body.mjs";
 import {
   preflightApipostAttributes,
   prepareApipostAttributeExport,
@@ -354,6 +355,8 @@ export function exportApipost(project, options = {}) {
   for (const name of project.folders || []) folder(name);
   const requestIds = new Set();
   function requestNode(input) {
+    if (postmanRawBodyPolicy(input))
+      throw Error("Apipost导出不能保留Postman raw媒体策略；请使用项目备份");
     assertRedirectExportable(input);
     if (!input.id || requestIds.has(input.id))
       throw Error("Apipost导出接口ID缺失或重复");

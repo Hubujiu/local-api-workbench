@@ -1,3 +1,7 @@
+import {
+  applyPostmanRawMedia,
+  validatePostmanRawBodyRequest,
+} from "./postman-raw-body.mjs";
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import { isProxy } from "node:util/types";
 import {
@@ -950,6 +954,7 @@ async function executeRequestWithinDeadline(
 ) {
   const controls = { signal, deadline };
   throwIfInactive(controls);
+  validatePostmanRawBodyRequest(r);
   // Detach the admitted policy before any connection/cookie await.
   const digestPolicy =
     r.auth.type === "digest" ? digestChallengePolicy(r.auth) : undefined;
@@ -1050,6 +1055,7 @@ async function executeRequestWithinDeadline(
   } else if (r.bodyType === "binary") {
     body = Buffer.from(r.body, "base64");
   } else if (r.bodyType !== "none") body = r.body;
+  applyPostmanRawMedia(r, headers, body);
   if (body && Buffer.byteLength(body) > 8 * 1024 * 1024)
     throw Error("请求体超过 8 MiB");
   if (body) headers["content-length"] = Buffer.byteLength(body);
