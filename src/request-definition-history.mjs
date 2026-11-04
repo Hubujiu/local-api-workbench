@@ -131,6 +131,17 @@ function identifier(value, label) {
   if (typeof value !== "string" || !/^[a-zA-Z0-9_.-]{1,200}$/.test(value))
     fail(label + "无效");
 }
+function requestIdentifier(value) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.length > 200 ||
+    !value.isWellFormed() ||
+    value === "0" ||
+    value.startsWith("folder:")
+  )
+    fail("接口ID无效或占用保留名称");
+}
 function recordId(value, label) {
   identifier(value, label);
   if (value === "current") fail(label + "占用当前版本保留名称");
@@ -160,7 +171,7 @@ function requestMap(project) {
   const result = new Map();
   for (const request of project.requests) {
     if (!object(request)) fail("接口定义必须为对象");
-    identifier(request.id, "接口ID");
+    requestIdentifier(request.id);
     if (request.id === "0" || result.has(request.id))
       fail("接口ID重复或占用保留名称");
     result.set(request.id, request);
@@ -195,7 +206,7 @@ function validateHistory(project, { checkTargets = true } = {}) {
       "retired",
       "versions",
     ]);
-    identifier(entry.requestId, "接口ID");
+    requestIdentifier(entry.requestId);
     if (entry.requestId === "0") fail("接口ID占用保留名称");
     recordId(entry.lineageId, "血缘ID");
     if (lineages.has(entry.lineageId)) fail("血缘ID重复");
@@ -246,7 +257,29 @@ function validateHistory(project, { checkTargets = true } = {}) {
   }
 }
 export function validateRequestDefinitionHistory(project) {
-  validateHistory(projectProjection(project));
+  if (types.isProxy(project) || !object(project)) fail("项目必须为无代理对象");
+  const descriptor = Object.getOwnPropertyDescriptor(
+    project,
+    "requestDefinitionHistory",
+  );
+  if (descriptor && (!own(descriptor, "value") || !descriptor.enumerable))
+    fail("历史字段访问器或不可序列化属性");
+  // Legacy reads do not acquire a history, inspect unrelated project data or
+  // inherit the new history feature's byte budget.
+  if (descriptor?.value === undefined) return;
+  function field(key) {
+    const item = Object.getOwnPropertyDescriptor(project, key);
+    if (!item || !own(item, "value") || !item.enumerable)
+      fail("项目身份或接口字段访问器、缺失或不可序列化");
+    return item.value;
+  }
+  validateHistory(
+    projectProjection({
+      id: field("id"),
+      requests: field("requests"),
+      requestDefinitionHistory: descriptor.value,
+    }),
+  );
 }
 function projectProjection(project) {
   return projectHistoryProjection(project, { maxBytes: PROJECT_MAX_BYTES });
@@ -277,9 +310,7 @@ function saveSnapshot(entry, request, makeId, used) {
     version: entry.currentVersion,
     createdAt: entry.currentCreatedAt,
     tag: entry.currentTag,
-    definition: projectHistoryProjection(request, {
-      maxBytes: REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
-    }),
+    definition: definition(request),
   });
   // Inputs were validated in full before retention is applied.
   if (entry.versions.length > REQUEST_DEFINITION_HISTORY_LIMIT)
@@ -384,8 +415,13 @@ export function reconcileRequestDefinitionHistory(
   return history;
 }
 
-function findTarget(project, requestId, lineageId) {
-  identifier(requestId, "接口ID");
+function findTarget(
+  project,
+  requestId,
+  lineageId,
+  { allowUnselected = false } = {},
+) {
+  requestIdentifier(requestId);
   if (lineageId !== undefined) recordId(lineageId, "血缘ID");
   const request = project.requests.find((item) => item.id === requestId);
   const candidates = (project.requestDefinitionHistory?.entries || []).filter(
@@ -398,10 +434,11 @@ function findTarget(project, requestId, lineageId) {
   } else {
     entry = candidates.find((item) => !item.retired);
     if (!entry && candidates.length === 1 && !request) entry = candidates[0];
-    if (!entry && candidates.length && !request) fail("必须指定退役接口血缘");
+    if (!entry && candidates.length && !request && !allowUnselected)
+      fail("必须指定退役接口血缘");
   }
-  if (!entry && !request) fail("接口不存在");
-  return { entry, request };
+  if (!entry && !request && !candidates.length) fail("接口不存在");
+  return { entry, request, candidates, selectionRequired: !entry && !request };
 }
 function metadata(entry, version, current = false) {
   return {
@@ -416,23 +453,60 @@ export function listRequestDefinitionHistory(project, input) {
   const copy = projectProjection(project);
   validateHistory(copy);
   const options = projectHistoryProjection(input);
-  exactKeys(options, ["requestId"], ["lineageId", "offset", "limit"]);
-  const { requestId, lineageId, offset = 0, limit = 20 } = options;
+  exactKeys(
+    options,
+    ["requestId"],
+    ["lineageId", "offset", "limit", "lineageOffset", "lineageLimit"],
+  );
+  const {
+    requestId,
+    lineageId,
+    offset = 0,
+    limit = 20,
+    lineageOffset = 0,
+    lineageLimit = 20,
+  } = options;
   if (
     !Number.isSafeInteger(offset) ||
     offset < 0 ||
     offset > 10000 ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
-    limit > 100
+    limit > 100 ||
+    !Number.isSafeInteger(lineageOffset) ||
+    lineageOffset < 0 ||
+    lineageOffset > 10000 ||
+    !Number.isSafeInteger(lineageLimit) ||
+    lineageLimit < 1 ||
+    lineageLimit > 100
   )
     fail("分页参数无效");
-  const { entry, request } = findTarget(copy, requestId, lineageId);
+  const { entry, request, candidates, selectionRequired } = findTarget(
+    copy,
+    requestId,
+    lineageId,
+    { allowUnselected: true },
+  );
   const versions = entry?.versions || [];
   return {
     requestId,
     lineageId: entry?.lineageId ?? null,
     tracked: Boolean(entry),
+    selectionRequired,
+    lineages: {
+      total: candidates.length,
+      offset: lineageOffset,
+      limit: lineageLimit,
+      items: candidates
+        .toReversed()
+        .slice(lineageOffset, lineageOffset + lineageLimit)
+        .map((lineage) => ({
+          lineageId: lineage.lineageId,
+          retired: lineage.retired,
+          currentVersion: lineage.currentVersion,
+          total: lineage.versions.length,
+        })),
+    },
     retired: entry?.retired ?? false,
     current:
       request && !entry?.retired ? metadata(entry, undefined, true) : null,

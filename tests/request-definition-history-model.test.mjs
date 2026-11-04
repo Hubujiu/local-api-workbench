@@ -308,7 +308,7 @@ test("soft deletion changes only lifecycle; simultaneous body edit archives, leg
   assert.equal(entry(project).currentVersion, 1);
   project = edited(project);
   assert.equal(entry(project).currentVersion, 2);
-  assert.equal(entry(project).versions[0].definition.deletedAt, now);
+  assert.equal(entry(project).versions[0].definition.deletedAt, undefined);
   unchangedFailure(
     project,
     () =>
@@ -377,9 +377,9 @@ test("hard remove retires and captures current; repeated ID reuse gets new linea
   next = clone(project);
   next.requests = next.requests.filter((request) => request.id !== "a");
   project = save(project, next);
-  assert.throws(
-    () => listRequestDefinitionHistory(project, { requestId: "a" }),
-    /指定/,
+  assert.equal(
+    listRequestDefinitionHistory(project, { requestId: "a" }).selectionRequired,
+    true,
   );
   const cleared = applyRequestDefinitionHistoryOperation(project, {
     kind: "clear",
@@ -814,4 +814,83 @@ test("new snapshots exclude lifecycle deletedAt while preserving all definition 
     entry(changed).versions[0].definition.auth.token,
     "static-fixture",
   );
+});
+
+test("retired lineages are discoverable through bounded independent metadata pagination", () => {
+  let project = initial();
+  const ids = [];
+  for (let index = 0; index < 4; index++) {
+    ids.push(entry(project).lineageId);
+    let next = clone(project);
+    next.requests = next.requests.filter((request) => request.id !== "a");
+    project = save(project, next);
+    if (index < 3) {
+      next = clone(project);
+      next.requests.push({
+        ...fixture().requests[0],
+        body: "replacement-" + index,
+      });
+      project = save(project, next);
+    }
+  }
+  const listed = listRequestDefinitionHistory(project, {
+    requestId: "a",
+    lineageOffset: 1,
+    lineageLimit: 2,
+  });
+  assert.equal(listed.selectionRequired, true);
+  assert.equal(listed.lineageId, null);
+  assert.equal(listed.current, null);
+  assert.deepEqual(listed.versions, []);
+  assert.equal(listed.lineages.total, 4);
+  assert.equal(listed.lineages.offset, 1);
+  assert.equal(listed.lineages.limit, 2);
+  assert.deepEqual(
+    listed.lineages.items.map((lineage) => lineage.lineageId),
+    ids.toReversed().slice(1, 3),
+  );
+  assert.ok(
+    listed.lineages.items.every(
+      (lineage) =>
+        lineage.retired &&
+        lineage.currentVersion === 1 &&
+        lineage.total === 1 &&
+        !Object.hasOwn(lineage, "definition"),
+    ),
+  );
+  const selected = listRequestDefinitionHistory(project, {
+    requestId: "a",
+    lineageId: ids[0],
+    lineageLimit: 1,
+    limit: 1,
+  });
+  assert.equal(selected.selectionRequired, false);
+  assert.equal(selected.lineageId, ids[0]);
+  assert.equal(selected.versions.length, 1);
+  assert.equal(selected.lineages.items.length, 1);
+  assert.throws(
+    () =>
+      getRequestDefinitionVersion(project, {
+        requestId: "a",
+        historyId: selected.versions[0].id,
+      }),
+    /指定/,
+  );
+  const version = getRequestDefinitionVersion(project, {
+    requestId: "a",
+    lineageId: ids[0],
+    historyId: selected.versions[0].id,
+  });
+  assert.equal(version.definition.body, "first");
+  for (const query of [
+    { lineageOffset: -1 },
+    { lineageOffset: 10001 },
+    { lineageOffset: 0.5 },
+    { lineageLimit: 0 },
+    { lineageLimit: 101 },
+    { lineageLimit: "20" },
+  ])
+    assert.throws(() =>
+      listRequestDefinitionHistory(project, { requestId: "a", ...query }),
+    );
 });
