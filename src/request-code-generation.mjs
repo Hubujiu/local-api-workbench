@@ -1,4 +1,5 @@
 import { snippetz } from "@scalar/snippetz";
+import { validateHeaderName, validateHeaderValue } from "node:http";
 import { prepareLiteralHTTPExport } from "./core.mjs";
 
 const supported = new Set(["node/fetch", "python/python3", "go/native"]);
@@ -54,7 +55,13 @@ export function generateRequestCode(input, target, client, options = {}) {
       throw Error("代码示例暂不支持控制传输的请求头");
     if (Array.isArray(value) && value.length !== 1)
       throw Error("代码示例暂不支持重复请求头");
-    rows.push({ name, value: Array.isArray(value) ? value[0] : value });
+    const rendered = String(Array.isArray(value) ? value[0] : value);
+    validateHeaderName(name);
+    validateHeaderValue(name, rendered);
+    if (!rendered.isWellFormed()) throw Error("请求头包含无效 Unicode");
+    if (target === "python" && /: (?:true|false|null)(?=,|\n)/u.test(rendered))
+      throw Error("Python 生成器无法保真表达此请求头");
+    rows.push({ name, value: rendered });
   }
   let text;
   if (request.bodyType === "urlencoded")
@@ -64,6 +71,8 @@ export function generateRequestCode(input, target, client, options = {}) {
         .map((v) => [v.key, v.value]),
     ).toString();
   else if (request.bodyType !== "none") text = request.body;
+  if (text !== undefined && !text.isWellFormed())
+    throw Error("代码示例正文包含无效 Unicode");
   if (text !== undefined && ["GET", "HEAD"].includes(request.method))
     throw Error("代码示例暂不支持 GET 或 HEAD 正文");
   if (
@@ -72,6 +81,11 @@ export function generateRequestCode(input, target, client, options = {}) {
     /[^\x20-\x7e\t\n\r]/u.test(text)
   )
     throw Error("Python 标准库示例暂不支持非 ASCII 或特殊控制字符正文");
+  if (
+    Buffer.byteLength(JSON.stringify({ url: url.href, headers: rows, text })) >
+    1024 * 1024
+  )
+    throw Error("代码生成输入超过 1 MiB");
   const code = snippetz().print(target, client, {
     method: request.method,
     url: url.href,

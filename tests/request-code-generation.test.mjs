@@ -73,6 +73,43 @@ test("Node generated example sends the intended query, headers and literal body 
 test("rejects unsupported or unsafe inputs instead of silently changing them", () => {
   assert.throws(() => generateRequestCode(base, "node", "missing"), /不支持/);
   assert.throws(
+    () => generateRequestCode({ ...base, body: "\ud800" }, "go", "native"),
+    /Unicode/,
+  );
+  assert.throws(
+    () =>
+      generateRequestCode(
+        {
+          ...base,
+          headers: [{ key: "x-context", value: '{"enabled": true,"n": 1}' }],
+        },
+        "python",
+        "python3",
+      ),
+    /保真/,
+  );
+  for (const [key, value] of [
+    ["x-\ud800", "v"],
+    ["x-key", "v\r\nInjected: x"],
+  ]) {
+    assert.throws(() =>
+      generateRequestCode(
+        { ...base, auth: { type: "apiKey", in: "header", key, value } },
+        "go",
+        "native",
+      ),
+    );
+  }
+  const code = generateRequestCode(
+    {
+      ...base,
+      auth: { type: "apiKey", in: "header", key: "x-key", value: 123 },
+    },
+    "go",
+    "native",
+  ).code;
+  assert(code.includes('req.Header.Add("x-key", "123")'));
+  assert.throws(
     () =>
       generateRequestCode(
         { ...base, url: "http://alice:secret@example.test/a" },
@@ -199,4 +236,64 @@ test("HTTP generation resolves the project environment without mutating the proj
     403,
   );
   assert.equal((await call({ ...input, client: "other" })).status, 400);
+});
+
+test("Go example sends the intended literal request on the local wire", async (t) => {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const version = spawnSync("go", ["version"], { encoding: "utf8" });
+  if (
+    version.error ||
+    version.status !== 0 ||
+    !/^go version go/.test(version.stdout)
+  )
+    return t.skip("Go toolchain is not available on this host");
+  const dir = await mkdtemp(join(tmpdir(), "codegen-go-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  let resolveSeen;
+  const seen = new Promise((resolve) => {
+    resolveSeen = resolve;
+  });
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (x) => chunks.push(x));
+    req.on("end", () => {
+      resolveSeen({
+        url: req.url,
+        body: Buffer.concat(chunks).toString(),
+        header: req.headers["x-key"],
+      });
+      res.end("ok");
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { code } = generateRequestCode(
+    {
+      ...base,
+      url: `http://127.0.0.1:${server.address().port}/a?flag&x=%2f&x=2`,
+      auth: { type: "apiKey", in: "header", key: "x-key", value: 123 },
+    },
+    "go",
+    "native",
+  );
+  const source = join(dir, "main.go");
+  await writeFile(source, code);
+  const child = spawn("go", ["run", source], {
+    env: { ...process.env, GO111MODULE: "off" },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (x) => {
+    stderr += x;
+  });
+  const status = await new Promise((resolve) => child.once("close", resolve));
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(await seen, {
+    url: "/a?flag&x=%2f&x=2",
+    body: base.body,
+    header: "123",
+  });
 });
