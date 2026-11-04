@@ -433,6 +433,7 @@ export function validateRepeatGraph(
     dataDepth = 0,
     rowBytes = 0,
     rowContext,
+    until = false,
   ) => {
     object(step, "步骤");
     if (step.type === "if") {
@@ -462,6 +463,7 @@ export function validateRepeatGraph(
           dataDepth,
           rowBytes,
           rowContext,
+          until,
         );
     } else if (step.type === "repeat") {
       if (depth >= 4) throw Error("循环组嵌套最多4层");
@@ -556,7 +558,7 @@ export function validateRepeatGraph(
           child,
           depth + 1,
           multiplier * iterationLimit,
-          conditional || Object.hasOwn(step, "untilCondition"),
+          conditional,
           dataDepth + (step.rows === undefined && !runtimeRows ? 0 : 1),
           nestedRowBytes,
           runtimeRows
@@ -564,6 +566,7 @@ export function validateRepeatGraph(
             : step.rows === undefined
               ? rowContext
               : step.rows,
+          until || Object.hasOwn(step, "untilCondition"),
         );
     } else {
       if (
@@ -572,8 +575,22 @@ export function validateRepeatGraph(
         step.type !== "http"
       )
         throw Error("运行时数据行循环首版仅支持HTTP叶子");
-      if (conditional && step.type !== undefined && step.type !== "http")
-        throw Error("条件组首版仅支持HTTP叶子");
+      // IF and repeat-until have separate transport contracts. Carry the
+      // until restriction through nested IF/repeat nodes; a false/disabled branch
+      // must not hide an unsupported leaf. References are checked again frozen.
+      if (until && step.type !== undefined && step.type !== "http")
+        throw Error("条件提前结束循环首版仅支持HTTP叶子");
+      if (
+        conditional &&
+        step.type !== undefined &&
+        step.type !== "http" &&
+        !(
+          step.type === "protocol" &&
+          (step.protocol?.definition?.type === "tcp" ||
+            (!requireIds && step.protocol?.definitionId !== undefined))
+        )
+      )
+        throw Error("条件组仅支持HTTP或TCP叶子");
       leaf(step, depth > 0);
       expanded += multiplier;
       bytes = Math.min(
