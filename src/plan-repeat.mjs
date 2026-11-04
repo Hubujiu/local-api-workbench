@@ -1,3 +1,4 @@
+import { validatePlanCondition } from "./plan-condition.mjs";
 // Canonical definition traversal only. No transport, interpolation, or execution.
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 function object(value, label, keys) {
@@ -35,6 +36,7 @@ function array(value, label) {
       throw Error("循环计划数组不能含空洞或访问器");
   }
 }
+// Historical API name: all canonical control groups require the same non-linear consumers.
 export function hasRepeatSteps(steps) {
   if (!Array.isArray(steps)) return false;
   for (let i = 0; i < steps.length; i++) {
@@ -42,7 +44,7 @@ export function hasRepeatSteps(steps) {
     if (!item || !Object.hasOwn(item, "value")) continue;
     const type =
       item.value && Object.getOwnPropertyDescriptor(item.value, "type");
-    if (type?.value === "repeat") return true;
+    if (["repeat", "if"].includes(type?.value)) return true;
   }
   return false;
 }
@@ -87,7 +89,8 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
   array(steps, "步骤");
   const ids = new Set();
   let expanded = 0,
-    bytes = 0;
+    bytes = 0,
+    decisions = 0;
   const identity = (step) => {
     if (step.id === undefined && !requireIds) return;
     if (
@@ -201,9 +204,26 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
     )
       throw Error("循环计划HTTP预期状态无效");
   };
-  const visit = (step, depth, multiplier) => {
+  const visit = (step, depth, multiplier, conditional = false) => {
     object(step, "步骤");
-    if (step.type === "repeat") {
+    if (step.type === "if") {
+      if (depth >= 4) throw Error("条件/循环组嵌套最多4层");
+      object(step, "条件组", [
+        "type",
+        "id",
+        "name",
+        "enabled",
+        "condition",
+        "steps",
+      ]);
+      metadata(step);
+      validatePlanCondition(step.condition);
+      array(step.steps, "条件子步骤");
+      decisions += multiplier;
+      bytes += Buffer.byteLength(JSON.stringify(step.condition)) * multiplier;
+      if (decisions > 200) throw Error("条件计划展开最多200次判断");
+      for (const child of step.steps) visit(child, depth + 1, multiplier, true);
+    } else if (step.type === "repeat") {
       if (depth >= 4) throw Error("循环组嵌套最多4层");
       object(step, "循环组", [
         "type",
@@ -218,8 +238,10 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         throw Error("循环次数须为1至100的整数");
       array(step.steps, "循环子步骤");
       for (const child of step.steps)
-        visit(child, depth + 1, multiplier * step.count);
+        visit(child, depth + 1, multiplier * step.count, conditional);
     } else {
+      if (conditional && step.type !== undefined && step.type !== "http")
+        throw Error("条件组首版仅支持HTTP叶子");
       leaf(step, depth > 0);
       expanded += multiplier;
       bytes += Buffer.byteLength(JSON.stringify(step)) * multiplier;
@@ -234,7 +256,7 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
 }
 export function planLeaves(steps) {
   return steps.flatMap((step) =>
-    step.type === "repeat" ? planLeaves(step.steps) : [step],
+    ["repeat", "if"].includes(step.type) ? planLeaves(step.steps) : [step],
   );
 }
 // Active definitions, once each: grants are not duplicated per iteration.
@@ -244,7 +266,7 @@ export function activePlanLeaves(steps) {
     nodes.flatMap((step) =>
       step.enabled === false
         ? []
-        : step.type === "repeat"
+        : ["repeat", "if"].includes(step.type)
           ? visit(step.steps)
           : [step],
     );
@@ -256,16 +278,31 @@ export function repeatEvidenceExceeded(bytes) {
 }
 export function mapPlanLeaves(steps, map) {
   return steps.map((step) =>
-    step.type === "repeat"
+    ["repeat", "if"].includes(step.type)
       ? { ...step, steps: mapPlanLeaves(step.steps, map) }
       : map(step),
   );
 }
-export function planOccurrences(steps) {
+export function planOccurrences(steps, { controls = false } = {}) {
   const occurrences = [];
   const visit = (nodes, path) => {
     for (const step of nodes) {
       if (step.enabled === false) continue;
+      if (step.type === "if") {
+        const control = {
+          step,
+          condition: true,
+          occurrenceId: JSON.stringify([
+            "if",
+            path.map(({ groupId, iteration }) => [groupId, iteration]),
+            step.id,
+          ]),
+        };
+        if (controls) occurrences.push(control);
+        visit(step.steps, path);
+        control.skipTo = occurrences.length;
+        continue;
+      }
       if (step.type === "repeat") {
         for (let iteration = 0; iteration < step.count; iteration++)
           visit(step.steps, [...path, { groupId: step.id, iteration }]);
@@ -305,4 +342,11 @@ export function planOccurrences(steps) {
 export function activePlanStepCount(plan) {
   validateRepeatGraph(plan.steps, { requireIds: true });
   return planOccurrences(plan.steps).length;
+}
+
+export function hasIfSteps(steps) {
+  return steps.some(
+    (step) =>
+      step.type === "if" || (step.type === "repeat" && hasIfSteps(step.steps)),
+  );
 }

@@ -556,7 +556,14 @@ export async function createApp({
             onProgress: (progress) => {
               const activity = mcpActivities.get(activityId);
               if (activity)
-                Object.assign(activity, { ...progress, status: "running" });
+                Object.assign(activity, {
+                  ...progress,
+                  ...(progress.finished === true &&
+                  ["passed", "failed", "cancelled"].includes(progress.status)
+                    ? { executionStatus: progress.status }
+                    : {}),
+                  status: "running",
+                });
             },
           });
           result = await dispatch(message, { signal: execution.signal });

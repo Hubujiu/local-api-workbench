@@ -1,5 +1,6 @@
 import { publishDebugVariables } from "./debug-publication.mjs";
-import { activePlanStepCount } from "./plan-repeat.mjs";
+import { conditionSummary } from "./execution-history.mjs";
+import { activePlanStepCount, hasIfSteps } from "./plan-repeat.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
   listImportedExecutionRuns,
@@ -182,7 +183,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存独立快照计划；支持最多4层HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE repeat组，count为1至100整数，含禁用节点的潜在展开最多200步",
+            "保存独立快照计划；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte，operand为{literal}或{scope:globals/environment/runtime,name}，不隐式转换。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
@@ -760,12 +761,22 @@ export function createMCP({
               output = {
                 plans: p.plans,
                 runs: p.runs.map(
-                  ({ id, planName, status, createdAt, planHash }) => ({
+                  ({
                     id,
                     planName,
                     status,
                     createdAt,
                     planHash,
+                    stopReason,
+                    conditionResults,
+                  }) => ({
+                    id,
+                    planName,
+                    status,
+                    createdAt,
+                    planHash,
+                    ...(stopReason ? { stopReason } : {}),
+                    ...conditionSummary({ conditionResults, stopReason }),
                   }),
                 ),
               };
@@ -1038,6 +1049,9 @@ export function createMCP({
                     emitProgress({
                       completed: ++completed,
                       total: totalSteps,
+                      ...(hasIfSteps(plan.steps)
+                        ? { totalIsPotential: true }
+                        : {}),
                       ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,
@@ -1048,6 +1062,15 @@ export function createMCP({
                   ),
                 },
               );
+              if (output.conditionResults)
+                emitProgress({
+                  completed: output.results.length,
+                  total: totalSteps,
+                  totalIsPotential: true,
+                  finished: true,
+                  status: output.status,
+                  conditions: output.conditionResults.length,
+                });
               output.environmentId = environmentId;
               output = await recordPlanRun(store, p.id, output, "mcp");
               break;

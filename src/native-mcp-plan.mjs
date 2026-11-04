@@ -2,7 +2,9 @@ import { assertNativeHTTPPlan } from "./native-mcp-http-shape.mjs";
 import { hasRepeatSteps } from "./plan-repeat.mjs";
 export function assertNativeLinearPlan(plan) {
   if (hasRepeatSteps(plan?.steps))
-    throw Error("原版兼容流程不支持canonical循环组；请使用canonical计划工具");
+    throw Error(
+      "原版兼容流程不支持canonical循环组或条件组；请使用canonical计划工具",
+    );
   if (plan !== undefined) assertNativeHTTPPlan(plan);
 }
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
