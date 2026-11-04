@@ -389,15 +389,32 @@ export function prepareNativeProtocols(source, resource) {
         if (typeof message.param_id !== "string" || seen.has(message.param_id))
           fail("WebSocket消息ID");
         seen.add(message.param_id);
-        const payload = rawBody(message.request, "WebSocket正文", true);
-        if (message.request.mode !== "text") fail("WebSocket消息模式");
+        const binary = ["base64", "hexadecimal"].includes(
+          message.request?.mode,
+        );
+        let payload;
+        if (binary) {
+          // Native binary sends have a narrower literal-only contract than text.
+          keys(message.request, ["mode", "raw"], "WebSocket二进制正文");
+          payload = {
+            encoding: message.request.mode === "base64" ? "base64" : "hex",
+            data: text(message.request.raw, "WebSocket二进制正文"),
+          };
+          // add() runs normalizeProtocol, sharing the canonical strict codec and
+          // decoded-size limit with every saved definition and transport.
+        } else {
+          payload = rawBody(message.request, "WebSocket正文", true);
+          if (message.request.mode !== "text") fail("WebSocket消息模式");
+        }
         add(node.target_id + ":" + message.param_id, {
           type: "websocket",
           ...(handshake ? { handshake } : {}),
           url: urlQuery(node),
           message: payload ?? "",
-          ...((payload ?? "") === "" ? { sendEmptyMessage: true } : {}),
-          ...textTemplateMode(payload, "WebSocket正文"),
+          ...(!binary && (payload ?? "") === ""
+            ? { sendEmptyMessage: true }
+            : {}),
+          ...(!binary ? textTemplateMode(payload, "WebSocket正文") : {}),
           name: name + " / " + text(message.name, "消息名称", 200),
         });
       }
