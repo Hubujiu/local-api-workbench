@@ -11,3 +11,11 @@ Existing cancellation, full-definition credential preflight, native strict extra
 Freeze/version/provenance/hash, owner saves, CLI, MCP, history/chunk reads and backup/restart must retain the option. Omitted update preserves an existing stop option; explicit continue clears it. Native definition/result projections must reject the unrepresentable policy rather than silently erase it. Old policies/hashes and old imported history must not be rewritten.
 
 Initial real HTTP tests are intentionally RED and do not establish acceptance. Required workflows include owner/CLI/official MCP, isolation, nested repeat/IF, disabled nodes, expected errors, pre/post script failures, cancellation, no downstream effects, unchanged default, complete stored/reopened evidence and genuine unknown journal recovery. Source audit uses a real loopback peer and runPlan's public injected executor; that audit is not owner/CLI/MCP acceptance. Exact-head CI and later root composition are separate requirements.
+
+## Implementation checkpoint, not full acceptance
+
+The initial six behavioral RED failures now pass. A separate golden-fixture mistake (unfixed request IDs) was corrected before the published RED checkpoint, not counted as a product defect. Current focused core/version/boundary batch passes 17 tests. Real owner/SDK/CLI/recovery tests and independent review are in progress; no whole-project acceptance is claimed.
+
+For an opt-in stop plan, an uncertain scope persistence result stops with `scope-commit-unknown`, retaining the leaf's typed scopeCommit and completed response, without ordinary failureStop attribution. Default/continue semantics remain unchanged. This fixed feature base does not contain newer root-only per-step progress catch, protocol-script unknown-commit or HTTP finalization guards; composition must retain those stronger root guards before the optional ordinary stop. Native strict extraction and existing cancellation on this base remain higher priority.
+
+History summaries whitelist bounded leaf/repeat identity rather than copying arbitrary imported failureStop fields. Full canonical records retain complete evidence. Invalid policy rejects before execution; omitted policy is never added to existing snapshots, and explicit continue serializes as omission. CLI and grants keep their existing authority and preflight boundaries.

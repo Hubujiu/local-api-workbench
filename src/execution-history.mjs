@@ -1,3 +1,4 @@
+import { failureStopSummary } from "./plan-failure-policy.mjs";
 // A summary never contains requests, responses, assertions, variables, or logs.
 export function filteredExecutionHistory(project, options = {}) {
   const { scope, source, status, planId, limit = 20 } = options;
@@ -53,6 +54,7 @@ export function listExecutionHistory(project, options = {}) {
         planHash: scope === "flow" ? record.planHash : undefined,
         status: record.status,
         ...conditionSummary(record),
+        ...failureStopSummary(record),
         ...(record.stopReason === "evidence-limit"
           ? {
               stopReason: record.stopReason,

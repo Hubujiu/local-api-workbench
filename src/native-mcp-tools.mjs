@@ -354,6 +354,14 @@ export function nativeAPIDetail(project, apiId) {
 }
 export function assertNativeLinearResult(run) {
   if (
+    run.snapshot?.failurePolicy === "stop" ||
+    run.failureStop !== undefined ||
+    ["step-failure", "scope-commit-unknown"].includes(run.stopReason)
+  )
+    throw Error(
+      "原版兼容结果不支持canonical失败停止策略；请使用canonical结果工具",
+    );
+  if (
     hasRepeatSteps(run.snapshot?.steps) ||
     run.conditionResults !== undefined ||
     run.results?.some((result) => result.repeat)
