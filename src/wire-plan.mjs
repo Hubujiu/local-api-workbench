@@ -256,7 +256,11 @@ function headers(input = {}) {
   }
   return input;
 }
-export function wirePlanCredentials(plan, input = {}) {
+export function wirePlanCredentials(
+  plan,
+  input = {},
+  { allowRuntimeRows = false } = {},
+) {
   if (
     !plain(input) ||
     Object.getPrototypeOf(input) !== Object.prototype ||
@@ -291,7 +295,7 @@ export function wirePlanCredentials(plan, input = {}) {
       websocketConfiguration({ url: definition.url, ...value });
     bindings.set(stepId, structuredClone(value));
   }
-  for (const step of activePlanLeaves(plan.steps))
+  for (const step of activePlanLeaves(plan.steps, { allowRuntimeRows }))
     if (step.type === "protocol" && step.protocol.definition.type !== "tcp")
       resolveHandshake(
         step.protocol.definition,

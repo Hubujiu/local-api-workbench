@@ -49,6 +49,8 @@ import {
   planLeaves,
   activePlanLeaves,
   planOccurrences,
+  hasRuntimeRows,
+  validateRuntimeRows,
 } from "./plan-repeat.mjs";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
@@ -572,12 +574,12 @@ export function evaluateAssertions(response, assertions = []) {
     return { ...a, actual, passed };
   });
 }
-export function snapshotPlan(plan) {
+export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
   const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
   for (const step of planLeaves(plan.steps || [])) liveRequestId(step);
   validatePostmanOAuth2Project({ plans: [plan] });
-  const repeated = validateRepeatGraph(plan.steps);
+  const repeated = validateRepeatGraph(plan.steps, { allowRuntimeRows });
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
     const auth = step.request?.auth;
@@ -687,7 +689,15 @@ export function snapshotPlan(plan) {
               enabled: step.enabled !== false,
               ...(step.type === "repeat"
                 ? {
-                    count: step.count,
+                    ...(Object.hasOwn(step, "rowsFrom")
+                      ? {
+                          rowsFrom: structuredClone(step.rowsFrom),
+                          maxRows: step.maxRows,
+                          ...(step.maxRowBytes === undefined
+                            ? {}
+                            : { maxRowBytes: step.maxRowBytes }),
+                        }
+                      : { count: step.count }),
                     ...(step.untilCondition === undefined
                       ? {}
                       : {
@@ -706,7 +716,7 @@ export function snapshotPlan(plan) {
           : step,
       );
     snapshot.steps = normalizeGroups(snapshot.steps);
-    validateRepeatGraph(snapshot.steps, { requireIds: true });
+    validateRepeatGraph(snapshot.steps, { requireIds: true, allowRuntimeRows });
     if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
       throw Error("循环计划冻结定义最多4MiB");
   }
@@ -743,6 +753,7 @@ export async function runPlan(
     socketioCredentials,
     executeProtocol,
     protocolCredentials,
+    allowRuntimeRows = false,
   } = {},
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
@@ -753,7 +764,13 @@ export async function runPlan(
   validatePostmanOAuth2Project({ plans: [plan] });
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
-  const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  const repeated = validateRepeatGraph(plan.steps, {
+    requireIds: true,
+    allowRuntimeRows,
+  });
+  const runtimeRowsEnabled = hasRuntimeRows(plan.steps, { activeOnly: true });
+  if (runtimeRowsEnabled && nativeWrite)
+    throw Error("运行时数据行循环尚不支持原生写入执行");
   validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
@@ -771,7 +788,7 @@ export async function runPlan(
 
   // Validate new static constraints on active leaves before cloning, interpolation
   // or before scripts; disabled repeat ancestors do not activate child work.
-  for (const step of activePlanLeaves(plan.steps)) {
+  for (const step of activePlanLeaves(plan.steps, { allowRuntimeRows })) {
     const auth = step.request?.auth;
     if (auth && typeof auth === "object" && "challengePolicy" in auth)
       validateAuth(auth);
@@ -779,7 +796,9 @@ export async function runPlan(
   const stepIds = repeated
     ? undefined
     : allocateLinearPlanStepIds(plan.steps, id);
-  const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
+  const snapshot = repeated
+    ? snapshotPlan(plan, { allowRuntimeRows })
+    : structuredClone(plan);
   if (!failurePolicy) delete snapshot.failurePolicy;
   if (stepIds)
     snapshot.steps.forEach((step, index) => {
@@ -790,11 +809,16 @@ export async function runPlan(
     collections.select(step.request?.postmanCollectionId);
   validatePlanGrpcScripts(snapshot.steps);
   const requiresWireExecutor = validatePlanProtocolScripts(snapshot.steps);
-  const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
-  const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
+  const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials, {
+    allowRuntimeRows,
+  });
+  const credentials = grpcPlanCredentials(snapshot, grpcCredentials, {
+    allowRuntimeRows,
+  });
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
+    { allowRuntimeRows },
   );
   if (requiresWireExecutor && typeof executeProtocol !== "function")
     throw Error("此执行入口未授权protocol调用");
@@ -807,11 +831,32 @@ export async function runPlan(
   if (nativeWrite) assertNativeWritePlan(nativeWrite, snapshot);
   else
     denyNativeWrites(
-      activePlanLeaves(snapshot.steps).map((step) => step.request || {}),
+      activePlanLeaves(snapshot.steps, { allowRuntimeRows }).map(
+        (step) => step.request || {},
+      ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
   const untilEnabled = hasRepeatUntil(snapshot.steps);
-  if (conditional) validateConditionScopeInput(variables, variableScopes);
+  if (conditional || runtimeRowsEnabled)
+    validateConditionScopeInput(variables, variableScopes);
+  if (runtimeRowsEnabled) {
+    // Input admission, not source resolution: this opt-in runtime map must be
+    // losslessly JSON-copyable. Shape/row/condition validation happens only on
+    // group entry, so skipped groups and sources overwritten earlier stay legal.
+    // The no-hook validator above already rejects proxies/accessors/cycles.
+    const admitRuntimeJSON = (value) => {
+      if (value === undefined || Object.is(value, -0))
+        throw Error("运行时数据行计划初始runtime变量须为严格JSON");
+      if (value && typeof value === "object") {
+        for (const key of Object.keys(value)) {
+          if (["__proto__", "prototype", "constructor"].includes(key))
+            throw Error("运行时数据行计划初始runtime变量字段不安全");
+          admitRuntimeJSON(value[key]);
+        }
+      }
+    };
+    admitRuntimeJSON(variableScopes?.runtime || {});
+  }
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -819,7 +864,12 @@ export async function runPlan(
     failureStop,
     scopeCommitStopped = false;
   const conditionResults = [];
-  const occurrences = planOccurrences(snapshot.steps, { controls: true });
+  const occurrences = planOccurrences(snapshot.steps, {
+    controls: true,
+    runtimeRows: allowRuntimeRows,
+  });
+  const runtimeFrames = new Map();
+  let runtimeRowsFailure;
   if (!occurrences.some((occurrence) => !occurrence.wait)) {
     throw Error("计划没有可执行步骤");
   }
@@ -832,6 +882,9 @@ export async function runPlan(
   const evidenceIdentity = (occurrence) => ({
     stepId: occurrence.step.id,
     ...(occurrence.repeat ? { repeat: occurrence.repeat } : {}),
+    ...(occurrence.runtimeRows
+      ? { kind: occurrence.kind, occurrenceId: occurrence.occurrenceId }
+      : {}),
     ...(occurrence.condition
       ? { kind: "condition", occurrenceId: occurrence.occurrenceId }
       : {}),
@@ -846,19 +899,72 @@ export async function runPlan(
       lastIteration,
       occurrenceId,
       skipTo,
-      dataContext,
+      dataContext: staticDataContext,
+      runtimeRows,
+      kind,
+      frameId,
+      exitTo,
+      runtimeFrameId,
+      runtimeIteration,
       wait,
       milliseconds,
     } = occurrences[cursor];
+    if (signal?.aborted) break;
+    // Gates only trim reserved work and exits release frames. Neither is an
+    // evidence-bearing event: let them finish after the final actual request.
+    // ENTER remains a safety boundary, as do waits, decisions and requests.
+    const administrativeRuntimeControl =
+      runtimeRows && ["runtime-rows-gate", "runtime-rows-exit"].includes(kind);
+    if (
+      repeated &&
+      !administrativeRuntimeControl &&
+      repeatEvidenceExceeded(evidenceBytes)
+    ) {
+      evidenceStopped = true;
+      break;
+    }
+    if (runtimeRows) {
+      if (kind === "runtime-rows-enter") {
+        try {
+          const name = step.rowsFrom.name;
+          const source = Object.getOwnPropertyDescriptor(scopes.runtime, name);
+          if (
+            scopes.hidden.includes(name) ||
+            !source ||
+            !Object.hasOwn(source, "value")
+          )
+            throw Error("运行时数据行来源不存在或已隐藏");
+          runtimeFrames.set(frameId, validateRuntimeRows(step, source.value));
+        } catch (error) {
+          runtimeRowsFailure = {
+            code: "PLAN_RUNTIME_ROWS_INVALID",
+            stepId: step.id,
+            occurrenceId,
+            message: error.message,
+          };
+          break;
+        }
+      } else if (kind === "runtime-rows-gate") {
+        if (iteration >= runtimeFrames.get(frameId).length) cursor = exitTo - 1;
+      } else if (kind === "runtime-rows-exit") runtimeFrames.delete(frameId);
+      continue;
+    }
+    const rows =
+      runtimeFrameId === undefined
+        ? undefined
+        : runtimeFrames.get(runtimeFrameId);
+    const dataContext =
+      rows === undefined
+        ? staticDataContext
+        : {
+            iteration: runtimeIteration,
+            iterationCount: rows.length,
+            iterationData: rows[runtimeIteration],
+          };
     const stepExecutionContext =
       dataContext === undefined
         ? executionContext
         : { ...executionContext, ...dataContext };
-    if (signal?.aborted) break;
-    if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
-      evidenceStopped = true;
-      break;
-    }
     if (wait) {
       try {
         await delayForControl(milliseconds, { signal });
@@ -1553,7 +1659,10 @@ export async function runPlan(
     }
     // A completion condition must never continue on a possibly committed scope.
     // Preserve the prior behavior for plans that do not opt into this feature.
-    if (untilEnabled && record.scopeCommit?.outcome === "unknown") {
+    if (
+      (untilEnabled || runtimeRowsEnabled) &&
+      record.scopeCommit?.outcome === "unknown"
+    ) {
       scopeCommitStopped = true;
       break;
     }
@@ -1605,11 +1714,15 @@ export async function runPlan(
       : !progressFailure &&
           !evidenceStopped &&
           !conditionStopped &&
+          !runtimeRowsFailure &&
           !untilLimit &&
           results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
     ...(conditional ? { conditionResults } : {}),
+    ...(runtimeRowsFailure
+      ? { stopReason: "runtime-rows-error", runtimeRowsFailure }
+      : {}),
     ...(failureStop ? { stopReason: "step-failure", failureStop } : {}),
     ...(scopeCommitStopped ? { stopReason: "scope-commit-unknown" } : {}),
     ...(conditionStopped ? { stopReason: "condition-error" } : {}),
@@ -1625,14 +1738,16 @@ export async function runPlan(
             executed: results.length,
             remaining: occurrences
               .slice(cursor)
-              .filter((o) => !o.condition && !o.wait).length,
+              .filter((o) => !o.condition && !o.wait && !o.runtimeRows).length,
             last: lastEvidence,
             next: evidenceIdentity(
               occurrences.slice(cursor).find((o) => !o.wait),
             ),
-            ...(conditional
+            ...(conditional || runtimeRowsEnabled
               ? {
-                  decisions: conditionResults.length,
+                  ...(conditional
+                    ? { decisions: conditionResults.length }
+                    : {}),
                   remainingIsPotential: true,
                 }
               : {}),

@@ -129,7 +129,11 @@ export function grpcPlanRequest(step, messages) {
   };
 }
 
-export function grpcPlanCredentials(plan, input = {}) {
+export function grpcPlanCredentials(
+  plan,
+  input = {},
+  { allowRuntimeRows = false } = {},
+) {
   if (
     !plain(input) ||
     Object.getPrototypeOf(input) !== Object.prototype ||
@@ -156,7 +160,7 @@ export function grpcPlanCredentials(plan, input = {}) {
     });
     bindings.set(stepId, structuredClone(value));
   }
-  for (const step of activePlanLeaves(plan.steps))
+  for (const step of activePlanLeaves(plan.steps, { allowRuntimeRows }))
     if (step.type === "grpc")
       grpcTransport(step.grpc.definition.target, {
         ...bindings.get(step.id),

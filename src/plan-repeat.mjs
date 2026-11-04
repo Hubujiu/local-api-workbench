@@ -1,3 +1,5 @@
+import { types } from "node:util";
+import { variableName } from "./variable-scopes.mjs";
 import {
   validatePlanCondition,
   validateIterationDataCondition,
@@ -10,6 +12,7 @@ function object(value, label, keys) {
     !value ||
     typeof value !== "object" ||
     Array.isArray(value) ||
+    types.isProxy(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
     throw Error("循环计划" + label + "须为普通对象");
@@ -65,7 +68,7 @@ function dataOnly(root) {
       (typeof value === "number" && Number.isFinite(value))
     )
       return;
-    if (typeof value !== "object" || seen.has(value))
+    if (typeof value !== "object" || types.isProxy(value) || seen.has(value))
       throw Error("循环计划须为无循环的普通数据");
     seen.add(value);
     if (Array.isArray(value)) {
@@ -90,6 +93,7 @@ function dataOnly(root) {
 function validateRowsJSON(value) {
   let nodes = 0;
   const walk = (item, depth) => {
+    if (types.isProxy(item)) throw Error("数据行不能包含代理");
     if (++nodes > 100000 || depth > 32) throw Error("数据行结构超限");
     if (item === null || typeof item === "string" || typeof item === "boolean")
       return;
@@ -131,15 +135,173 @@ function validateRowsJSON(value) {
   walk(value, 0);
 }
 
-export function validateRepeatGraph(steps, { requireIds = false } = {}) {
+const RUNTIME_ROWS_CONTEXT = Symbol("runtime rows context");
+export const RUNTIME_ROWS_CONTROL_LIMIT = 200;
+export const RUNTIME_ROWS_DEFAULT_MAX_ROW_BYTES = 16 * 1024;
+export function runtimeRowsMaxRowBytes(step) {
+  object(step, "运行时数据行定义");
+  return step.maxRowBytes ?? RUNTIME_ROWS_DEFAULT_MAX_ROW_BYTES;
+}
+
+// The dynamic source is an exact runtime key, never a template or a fallback scope.
+export function validateRuntimeRowsDefinition(step) {
+  object(step, "运行时数据行定义");
+  object(step.rowsFrom, "运行时数据行来源", ["scope", "name"]);
+  if (step.rowsFrom.scope !== "runtime")
+    throw Error("运行时数据行来源须显式指定runtime作用域");
+  variableName(step.rowsFrom.name);
+  if (!step.rowsFrom.name.isWellFormed())
+    throw Error("运行时数据行变量名称无效");
+  if (
+    ["count", "rows", "untilCondition"].some((key) => Object.hasOwn(step, key))
+  )
+    throw Error("运行时数据行循环不能混合count、rows或untilCondition");
+  if (
+    Object.hasOwn(step, "maxRowBytes") &&
+    (!Number.isInteger(step.maxRowBytes) ||
+      step.maxRowBytes < 1 ||
+      step.maxRowBytes > 512 * 1024)
+  )
+    throw Error("运行时数据行maxRowBytes须为1至524288的整数");
+  if (!Number.isInteger(step.maxRows) || step.maxRows < 1 || step.maxRows > 100)
+    throw Error("运行时数据行maxRows须为1至100的整数");
+}
+
+// Resolve the source separately in the executor, then snapshot the entire array
+// before any child runs. No truncation, JSON coercion, or lazy row validation.
+export function validateRuntimeRows(step, value) {
+  validateRepeatGraph([step], { requireIds: true, allowRuntimeRows: true });
+  if (
+    types.isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > step.maxRows
+  )
+    throw Error("运行时数据行须为不超过maxRows的普通数组");
+  validateRowsJSON(value);
+  let totalBytes = 2;
+  const rows = [];
+  for (let iteration = 0; iteration < value.length; iteration++) {
+    const row = value[iteration];
+    object(row, "运行时数据行");
+    const json = JSON.stringify(row);
+    const bytes = Buffer.byteLength(json);
+    totalBytes += bytes + (iteration ? 1 : 0);
+    if (bytes > runtimeRowsMaxRowBytes(step))
+      throw Error("运行时数据行超过maxRowBytes");
+    if (totalBytes > 4 * 1024 * 1024) throw Error("运行时数据行快照最多4MiB");
+    rows.push(
+      normalizeExecutionContext({
+        iteration,
+        iterationCount: value.length,
+        iterationData: row,
+      }).iterationData,
+    );
+  }
+  // The inline validator checks every condition (including disabled branches),
+  // and charges actual row bytes against potential descendant multiplicity.
+  if (rows.length) {
+    const { rowsFrom, maxRows, maxRowBytes, ...fixed } = step;
+    validateRepeatGraph([{ ...fixed, count: rows.length, rows }], {
+      requireIds: true,
+    });
+  }
+  const freeze = (item) => {
+    if (item && typeof item === "object") {
+      for (const child of Object.values(item)) freeze(child);
+      Object.freeze(item);
+    }
+    return item;
+  };
+  return freeze(rows);
+}
+
+export function repeatIterationLimit(step) {
+  object(step, "循环定义");
+  return Object.hasOwn(step, "rowsFrom") ? step.maxRows : step.count;
+}
+
+export function hasRuntimeRows(steps, { activeOnly = false } = {}) {
+  const ancestors = new Set();
+  let nodes = 0;
+  // This detector runs before graph validation. Never use direct property reads,
+  // array methods, or reflection on proxies while deciding which path to take.
+  const field = (value, key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && !Object.hasOwn(descriptor, "value"))
+      throw Error("循环计划不能包含访问器");
+    return descriptor?.value;
+  };
+  const visit = (items, depth) => {
+    if (types.isProxy(items) || !Array.isArray(items))
+      throw Error("循环计划步骤须为普通数组");
+    if (depth > 32 || ancestors.has(items))
+      throw Error("循环计划数据结构超限或循环引用");
+    ancestors.add(items);
+    let found = false;
+    const length = field(items, "length");
+    for (let i = 0; i < length; i++) {
+      if (++nodes > 100000) throw Error("循环计划数据结构超限");
+      const step = field(items, String(i));
+      if (types.isProxy(step) || !step || typeof step !== "object")
+        throw Error("循环计划步骤须为普通对象");
+      object(step, "步骤");
+      const type = field(step, "type");
+      const enabled = field(step, "enabled");
+      if (activeOnly && enabled === false) continue;
+      if (!["repeat", "if"].includes(type)) continue;
+      // Check even a matched group's children, so an early match cannot hide a
+      // getter/proxy which the compiler would otherwise subsequently traverse.
+      if (type === "repeat" && Object.hasOwn(step, "rowsFrom")) found = true;
+      found = visit(field(step, "steps"), depth + 1) || found;
+    }
+    ancestors.delete(items);
+    return found;
+  };
+  return visit(steps, 0);
+}
+
+// Worst-case HTTP/request count, excluding controls and disabled definitions.
+// This is a budget/progress ceiling, not the eventual number of runtime rows.
+export function potentialPlanStepCount(
+  plan,
+  { allowRuntimeRows = false } = {},
+) {
+  object(plan, "计划");
+  dataOnly(plan.steps);
+  validateRepeatGraph(plan.steps, { requireIds: true, allowRuntimeRows });
+  const count = (steps) =>
+    steps.reduce(
+      (total, step) =>
+        total +
+        (step.enabled === false
+          ? 0
+          : step.type === "repeat"
+            ? repeatIterationLimit(step) * count(step.steps)
+            : step.type === "if"
+              ? count(step.steps)
+              : 1),
+      0,
+    );
+  return count(plan.steps);
+}
+
+export function validateRepeatGraph(
+  steps,
+  { requireIds = false, allowRuntimeRows = false } = {},
+) {
+  // The new opt-in entry must reject proxies/accessors before the historical
+  // shallow detector performs reflection. Keep the legacy path unchanged.
+  if (allowRuntimeRows) dataOnly(steps);
   if (!hasRepeatSteps(steps)) return false;
-  dataOnly(steps);
+  if (!allowRuntimeRows) dataOnly(steps);
   array(steps, "步骤");
   const ids = new Set();
   let expanded = 0,
     bytes = 0,
     decisions = 0,
-    waitMs = 0;
+    waitMs = 0,
+    runtimeControls = 0;
   const identity = (step) => {
     if (step.id === undefined && !requireIds) return;
     if (
@@ -283,7 +445,8 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       ]);
       metadata(step);
       validatePlanCondition(step.condition);
-      validateIterationDataCondition(step.condition, rowContext);
+      if (rowContext !== RUNTIME_ROWS_CONTEXT)
+        validateIterationDataCondition(step.condition, rowContext);
       array(step.steps, "条件子步骤");
       decisions += multiplier;
       bytes += Buffer.byteLength(JSON.stringify(step.condition)) * multiplier;
@@ -309,11 +472,33 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         "intervalMs",
         "untilCondition",
         "rows",
+        "rowsFrom",
+        "maxRows",
+        "maxRowBytes",
         "steps",
       ]);
       metadata(step);
-      if (!Number.isInteger(step.count) || step.count < 1 || step.count > 100)
-        throw Error("循环次数须为1至100的整数");
+      const runtimeRows = Object.hasOwn(step, "rowsFrom");
+      if (runtimeRows) {
+        if (!allowRuntimeRows) throw Error("当前入口尚未启用运行时数据行循环");
+        validateRuntimeRowsDefinition(step);
+        if (dataDepth) throw Error("数据行循环暂不支持嵌套数据行循环");
+        runtimeControls = Math.min(
+          RUNTIME_ROWS_CONTROL_LIMIT + 1,
+          runtimeControls + multiplier * (step.maxRows + 2),
+        );
+        if (runtimeControls > RUNTIME_ROWS_CONTROL_LIMIT)
+          throw Error("运行时数据行控制预算最多200项");
+      } else {
+        if (
+          Object.hasOwn(step, "maxRows") ||
+          Object.hasOwn(step, "maxRowBytes")
+        )
+          throw Error("maxRows仅用于运行时数据行循环");
+        if (!Number.isInteger(step.count) || step.count < 1 || step.count > 100)
+          throw Error("循环次数须为1至100的整数");
+      }
+      const iterationLimit = repeatIterationLimit(step);
       if (
         step.intervalMs !== undefined &&
         (!Number.isInteger(step.intervalMs) ||
@@ -322,9 +507,11 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
           step.intervalMs > 10000)
       )
         throw Error("循环间隔须为0至10000毫秒的整数");
-      waitMs += multiplier * (step.count - 1) * (step.intervalMs || 0);
+      waitMs += multiplier * (iterationLimit - 1) * (step.intervalMs || 0);
       if (waitMs > 60000) throw Error("循环计划最多等待60000毫秒");
-      let nestedRowBytes = rowBytes;
+      let nestedRowBytes = runtimeRows
+        ? runtimeRowsMaxRowBytes(step)
+        : rowBytes;
       if (step.rows !== undefined) {
         if (dataDepth) throw Error("数据行循环暂不支持嵌套数据行循环");
         array(step.rows, "数据行");
@@ -349,10 +536,11 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         if (step.rows !== undefined)
           throw Error("条件提前结束循环暂不支持同组数据行");
         validatePlanCondition(step.untilCondition);
-        validateIterationDataCondition(
-          step.untilCondition,
-          step.rows === undefined ? rowContext : step.rows,
-        );
+        if (rowContext !== RUNTIME_ROWS_CONTEXT)
+          validateIterationDataCondition(
+            step.untilCondition,
+            step.rows === undefined ? rowContext : step.rows,
+          );
         decisions += multiplier * step.count;
         bytes +=
           Buffer.byteLength(JSON.stringify(step.untilCondition)) *
@@ -365,19 +553,32 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         visit(
           child,
           depth + 1,
-          multiplier * step.count,
+          multiplier * iterationLimit,
           conditional || Object.hasOwn(step, "untilCondition"),
-          dataDepth + (step.rows === undefined ? 0 : 1),
+          dataDepth + (step.rows === undefined && !runtimeRows ? 0 : 1),
           nestedRowBytes,
-          step.rows === undefined ? rowContext : step.rows,
+          runtimeRows
+            ? RUNTIME_ROWS_CONTEXT
+            : step.rows === undefined
+              ? rowContext
+              : step.rows,
         );
     } else {
+      if (
+        rowContext === RUNTIME_ROWS_CONTEXT &&
+        step.type !== undefined &&
+        step.type !== "http"
+      )
+        throw Error("运行时数据行循环首版仅支持HTTP叶子");
       if (conditional && step.type !== undefined && step.type !== "http")
         throw Error("条件组首版仅支持HTTP叶子");
       leaf(step, depth > 0);
       expanded += multiplier;
-      bytes +=
-        (Buffer.byteLength(JSON.stringify(step)) + rowBytes) * multiplier;
+      bytes = Math.min(
+        4 * 1024 * 1024 + 1,
+        bytes +
+          (Buffer.byteLength(JSON.stringify(step)) + rowBytes) * multiplier,
+      );
     }
     // Disabled definitions are deliberately included, so toggling enabled cannot
     // bypass the same potential-work budget.
@@ -393,8 +594,8 @@ export function planLeaves(steps) {
   );
 }
 // Active definitions, once each: grants are not duplicated per iteration.
-export function activePlanLeaves(steps) {
-  validateRepeatGraph(steps, { requireIds: true });
+export function activePlanLeaves(steps, { allowRuntimeRows = false } = {}) {
+  validateRepeatGraph(steps, { requireIds: true, allowRuntimeRows });
   const visit = (nodes) =>
     nodes.flatMap((step) =>
       step.enabled === false
@@ -416,14 +617,24 @@ export function mapPlanLeaves(steps, map) {
       : map(step),
   );
 }
-export function planOccurrences(steps, { controls = false } = {}) {
+export function planOccurrences(
+  steps,
+  { controls = false, runtimeRows = false } = {},
+) {
+  if (hasRuntimeRows(steps)) {
+    if (!runtimeRows || !controls)
+      throw Error("运行时数据行循环须由显式启用控制图的执行入口处理");
+    // Validate all potential work before allocating the bounded program.
+    validateRepeatGraph(steps, { requireIds: true, allowRuntimeRows: true });
+  }
   const occurrences = [];
-  const visit = (nodes, path, dataContext) => {
+  const visit = (nodes, path, dataContext, runtimeContext) => {
     for (const step of nodes) {
       if (step.enabled === false) continue;
       if (step.type === "if") {
         const control = {
           step,
+          ...runtimeContext,
           condition: true,
           ...(dataContext === undefined ? {} : { dataContext }),
           occurrenceId: JSON.stringify([
@@ -433,16 +644,70 @@ export function planOccurrences(steps, { controls = false } = {}) {
           ]),
         };
         if (controls) occurrences.push(control);
-        visit(step.steps, path, dataContext);
+        visit(step.steps, path, dataContext, runtimeContext);
         control.skipTo = occurrences.length;
         continue;
       }
       if (step.type === "repeat") {
+        if (Object.hasOwn(step, "rowsFrom")) {
+          const frameId = JSON.stringify([
+            "runtime-rows",
+            path.map(({ groupId, iteration }) => [groupId, iteration]),
+            step.id,
+          ]);
+          const control = (phase, extra = {}) => ({
+            kind: `runtime-rows-${phase}`,
+            runtimeRows: true,
+            step,
+            frameId,
+            occurrenceId: JSON.stringify([
+              frameId,
+              phase,
+              extra.iteration ?? null,
+            ]),
+            ...extra,
+          });
+          const entry = control("enter");
+          occurrences.push(entry);
+          const gates = [];
+          let previousHasWork = false;
+          for (let iteration = 0; iteration < step.maxRows; iteration++) {
+            const context = {
+              runtimeFrameId: frameId,
+              runtimeIteration: iteration,
+            };
+            const gate = control("gate", { iteration, ...context });
+            gates.push(gate);
+            occurrences.push(gate);
+            if (iteration && previousHasWork && step.intervalMs)
+              occurrences.push({
+                wait: true,
+                milliseconds: step.intervalMs,
+                ...context,
+              });
+            const before = occurrences.length;
+            visit(
+              step.steps,
+              [...path, { groupId: step.id, iteration }],
+              undefined,
+              context,
+            );
+            previousHasWork = occurrences.length > before;
+          }
+          entry.exitTo = occurrences.length;
+          for (const gate of gates) gate.exitTo = occurrences.length;
+          occurrences.push(control("exit"));
+          continue;
+        }
         let previousHasWork = false;
         const untilControls = [];
         for (let iteration = 0; iteration < step.count; iteration++) {
           if (controls && iteration && previousHasWork && step.intervalMs)
-            occurrences.push({ wait: true, milliseconds: step.intervalMs });
+            occurrences.push({
+              wait: true,
+              milliseconds: step.intervalMs,
+              ...runtimeContext,
+            });
           const before = occurrences.length;
           visit(
             step.steps,
@@ -454,6 +719,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
                   iterationCount: step.count,
                   iterationData: step.rows[iteration],
                 },
+            runtimeContext,
           );
           previousHasWork = occurrences.length > before;
           if (controls && Object.hasOwn(step, "untilCondition")) {
@@ -467,6 +733,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
                   };
             const control = {
               step,
+              ...runtimeContext,
               condition: true,
               until: true,
               iteration,
@@ -493,6 +760,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
       if (!path.length) {
         occurrences.push({
           step,
+          ...runtimeContext,
           ...(dataContext === undefined ? {} : { dataContext }),
         });
         continue;
@@ -500,6 +768,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
       const { groupId, iteration } = path.at(-1);
       occurrences.push({
         step,
+        ...runtimeContext,
         ...(dataContext === undefined ? {} : { dataContext }),
         repeat: {
           groupId,
