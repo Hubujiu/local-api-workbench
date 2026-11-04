@@ -1,0 +1,153 @@
+name: One-off macOS gRPC counter diagnosis
+on:
+  push:
+    branches: [diagnostic/macos-grpc-counter-20261104]
+permissions:
+  contents: read
+concurrency:
+  group: one-off-macos-grpc-counter-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: macos-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Initialize incomplete evidence before setup
+        shell: bash
+        run: |
+          mkdir -p test-results/macos-grpc-counter
+          printf '%s\n' '{"status":"incomplete","completedRounds":0,"reason":"setup-or-sampling-not-completed"}' > test-results/macos-grpc-counter/summary.json
+      - name: Require the exact diagnosed baseline and workflow-only delta
+        shell: bash
+        run: |
+          expected=22efe52c618e92f855470ba279dd08de42fefced
+          parents="$(git show -s --format=%P HEAD)"
+          head="$(git rev-parse HEAD)"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          printf '{"commit":"%s","tree":"%s","parents":"%s","expectedParent":"%s"}\n' "$head" "$tree" "$parents" "$expected" > test-results/macos-grpc-counter/version.json
+          if [ "$parents" != "$expected" ] || [ "$(git diff --name-only "$expected" HEAD --)" != ".github/workflows/macos-grpc-counter-diagnostic.yml" ]; then
+            printf '%s\n' '{"status":"incomplete","completedRounds":0,"reason":"baseline-or-delta-mismatch"}' > test-results/macos-grpc-counter/summary.json
+            echo "Incomplete: the exact baseline or workflow-only delta did not match."
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts --no-audit
+        timeout-minutes: 2
+        env:
+          NPM_CONFIG_FETCH_RETRIES: "0"
+          NPM_CONFIG_FETCH_TIMEOUT: "30000"
+      - name: Observe exact original parent test, without retries
+        timeout-minutes: 7
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/grpc-counter-reporter.mjs" <<'NODE'
+          import path from 'node:path';
+          import {pathToFileURL} from 'node:url';
+          const {executionResultMetadata, EXECUTION_RESULT_PREFIX} = await import(pathToFileURL(path.resolve('tests/helpers/execution-result-diagnostics.mjs')));
+          const names = new Set(['missing-extraction', 'post-test', 'nested collection consumers see confirmed PRE but never rejected gRPC POST or partial extraction candidates']);
+          const number = x => Number.isFinite(x) && x >= 0 ? x : null;
+          function metadata(error) {
+            const message = error?.message;
+            if (typeof message !== 'string') return {availability:'unavailable'};
+            const position = message.indexOf(EXECUTION_RESULT_PREFIX);
+            if (position < 0) return {availability:'unavailable'};
+            try {
+              const suffix = message.slice(position + EXECUTION_RESULT_PREFIX.length);
+              if (Buffer.byteLength(suffix) > 2048) return {availability:'unavailable'};
+              const observed = JSON.parse(suffix);
+              return executionResultMetadata({
+                status: observed.status, scriptStage: observed.scriptStage,
+                ...(observed.scriptDiagnostics === undefined ? {} : {scriptDiagnostics: observed.scriptDiagnostics}),
+                ...(observed.errorClass === 'none' ? {} : {error: observed.errorClass === 'script-timeout' ? '脚本执行超时' : 'redacted'}),
+              });
+            } catch { return {availability:'unavailable'}; }
+          }
+          function assertionLabel(error) {
+            const match = typeof error?.message === 'string' && /^cycle ([1-4]) (a-start|b-consume|a-consume)( fixture counter)?(?:\n|$)/.exec(error.message);
+            return match ? `cycle ${match[1]} ${match[2]}${match[3] ? ' fixture counter' : ''}` : 'unlabelled';
+          }
+          export default async function* (source) {
+            for await (const {type, data} of source) {
+              if (type === 'test:pass' || type === 'test:fail') {
+                yield JSON.stringify({type, name: names.has(data.name) ? data.name : 'unexpected-test', nesting:number(data.nesting), skip:!!data.skip, todo:!!data.todo,
+                  durationMs:number(data.details?.duration_ms), ...(type === 'test:fail' ? {label:assertionLabel(data.details?.error),metadata:metadata(data.details?.error)} : {})})+'\n';
+              } else if (type === 'test:summary') {
+                const counts = {};
+                for (const key of ['tests','passed','failed','cancelled','skipped','todo','topLevel','suites']) counts[key] = number(data.counts?.[key]);
+                yield JSON.stringify({type, counts})+'\n';
+              }
+              // Never relay stdout/stderr, assertion values, error text, stacks or bodies.
+            }
+          }
+          NODE
+          cat > "$RUNNER_TEMP/grpc-counter-runner.mjs" <<'NODE'
+          import {spawn, execFileSync} from 'node:child_process';
+          import {mkdir, writeFile, readFile} from 'node:fs/promises';
+          import {createHash} from 'node:crypto';
+          import os from 'node:os';
+          import path from 'node:path';
+          const directory = 'test-results/macos-grpc-counter';
+          await mkdir(directory, {recursive:true});
+          const parent = 'nested collection consumers see confirmed PRE but never rejected gRPC POST or partial extraction candidates';
+          const expected = [parent, 'missing-extraction', 'post-test'];
+          const hashes = {};
+          for (const file of ['package-lock.json','src/core.mjs','src/scripts.mjs','src/script-worker.mjs','tests/grpc-plan-scripts-root-workflow.test.mjs','tests/helpers/execution-result-diagnostics.mjs'])
+            hashes[file] = createHash('sha256').update(await readFile(file)).digest('hex');
+          const git = arg => execFileSync('git', ['rev-parse', arg], {encoding:'utf8'}).trim();
+          await writeFile(`${directory}/environment.json`, JSON.stringify({commit:git('HEAD'), tree:git('HEAD^{tree}'), node:process.version, platform:process.platform, arch:process.arch, osRelease:os.release(), hashes, maxRounds:20, roundTimeoutMs:60000, samplingTimeoutMs:300000,
+            historicalFailure:'https://github.com/Hubujiu/local-api-workbench/actions/runs/41913564795/job/126867186233', historicalObservation:'post-test collection counters [7,4], expected [8,4]; cause unknown', interpretation:'20 successful rounds mean not reproduced, not fixed'}, null, 2));
+          const summary = {status:'incomplete', completedRounds:0, rounds:[]};
+          const save = () => writeFile(`${directory}/summary.json`, JSON.stringify(summary,null,2));
+          await save();
+          const deadline = Date.now()+300000;
+          for (let round=1; round<=20; round++) {
+            if (deadline-Date.now() <= 2000) break;
+            const label = String(round).padStart(2,'0');
+            const budget = Math.min(60000, deadline-Date.now()-2000);
+            let timedOut=false, output='', outputOverflow=false, stderrBytes=0, spawnFailed=false;
+            const started = Date.now();
+            const child = spawn(process.execPath, ['--test','--test-concurrency=1',`--test-name-pattern=^${parent}$`, `--test-reporter=${path.join(process.env.RUNNER_TEMP,'grpc-counter-reporter.mjs')}`, 'tests/grpc-plan-scripts-root-workflow.test.mjs'], {stdio:['ignore','pipe','pipe'], detached:true});
+            const kill = signal => {try {process.kill(-child.pid,signal);} catch {}};
+            let force;
+            const timer = setTimeout(() => {timedOut=true;kill('SIGTERM');force=setTimeout(()=>kill('SIGKILL'),1000);}, budget);
+            child.stdout.on('data', chunk => {if (output.length+chunk.length<=65536) output+=chunk; else {outputOverflow=true;kill('SIGTERM');}});
+            child.stderr.on('data', chunk => {stderrBytes+=chunk.length;});
+            child.on('error',()=>{spawnFailed=true;});
+            const ended = await new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal:signal === null ? null : 'terminated'})));
+            clearTimeout(timer);clearTimeout(force);
+            let events=[], valid=true;
+            try {events=output.trim().split('\n').filter(Boolean).map(JSON.parse);} catch {valid=false;}
+            await writeFile(`${directory}/round-${label}.jsonl`, output);
+            const results=events.filter(e=>e.type==='test:pass'||e.type==='test:fail');
+            const summaries=events.filter(e=>e.type==='test:summary');
+            const completeness=valid && !spawnFailed && !timedOut && !outputOverflow && results.length===3 && expected.every(name=>results.filter(e=>e.name===name && e.nesting===(name===parent?0:1)).length===1) && results.every(e=>!e.skip&&!e.todo) && summaries.length>0 && summaries.every(e=>e.counts.tests===3&&e.counts.skipped===0&&e.counts.cancelled===0&&e.counts.todo===0&&e.counts.topLevel===1);
+            const failed=results.some(e=>e.type==='test:fail');
+            const passed=completeness && ended.code===0 && !failed && summaries.every(e=>e.counts.passed===3&&e.counts.failed===0);
+            const result={round,status:passed?'passed':!completeness?'incomplete':'failed',failureObserved:failed,complete:completeness,durationMs:Date.now()-started,...ended,timedOut,outputOverflow,stderrBytes,spawnFailed};
+            summary.rounds.push(result);
+            if (passed) summary.completedRounds++;
+            else summary.status=result.status;
+            await writeFile(`${directory}/round-${label}.json`,JSON.stringify(result,null,2));
+            await save();
+            console.log(`round ${label}: ${result.status}`);
+            if (!passed) break;
+          }
+          if (summary.completedRounds===20) summary.status='not-reproduced';
+          await save();
+          console.log(summary.status==='not-reproduced'?'20 complete rounds did not reproduce the failure; cause remains unknown, not fixed.':'Sampling stopped without a complete 20-round result; inspect safe artifacts.');
+          process.exitCode=summary.status==='not-reproduced'?0:1;
+          NODE
+          node "$RUNNER_TEMP/grpc-counter-runner.mjs"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: one-off-macos-grpc-counter-${{ github.sha }}
+          path: test-results/macos-grpc-counter/
+          if-no-files-found: warn
+          retention-days: 7
