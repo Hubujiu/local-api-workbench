@@ -38,7 +38,11 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
-- IF descendants in this first scope are HTTP leaves and IF/repeat groups.
+- IF descendants support HTTP and TCP leaves and IF/fixed-repeat groups.
+  TCP uses the existing canonical protocol wrapper, frozen definitions, bounded
+  scripts, extraction and result evidence. WebSocket, SSE, gRPC and Socket.IO
+  remain unsupported inside IF. Repeat-until and runtime-row descendants remain
+  HTTP-only, including nested IF/fixed repeats and disabled definitions.
   Existing protocol siblings and existing protocol repeat groups are unchanged.
 - All definitions, including disabled and false descendants, undergo complete
   static validation before any request. Enabled potential protocol leaves retain
@@ -208,3 +212,31 @@ call. Owner grant changes advance the global HTTP authorization epoch; this is
 not a promise that another old in-flight session survives. Persisted remembered
 revocation is checked after restart. These four SDK cases require exact combined
 CI; the local dependency-load failure is retained rather than skipped.
+
+## Canonical IF TCP extension
+
+No native format is inferred and no original application is executed. Protocol
+references are admitted provisionally, resolved at snapshot creation, and checked
+again as specifically TCP before the frozen plan is accepted. Saved snapshots
+survive live edits/deletion, project backup/restore and restart.
+
+Potential active TCP leaves inside IF require an executor before any earlier HTTP request
+or script runs, even when their IF will be false. Existing credential validation
+still precedes all network work. TCP does not gain header/TLS credentials; a later
+active sibling transport with a required runtime credential still blocks the
+entire run when that credential is missing. Disabled ancestors need no executor,
+but their definitions and script envelopes are validated.
+
+False IF produces decision evidence but no child script, socket or synthetic
+success. TCP extraction remains atomic across runtime/environment/global scopes.
+An uncertain TCP scope commit in a conditional plan stops before further work,
+retains transport evidence and marks retry unsafe. Cancellation, the shared 8 MiB
+evidence stop, failed record append and genuine journal uncertainty retain the
+existing no-replay contract. Ordinary HTTP IF and fixed-repeat behavior remain
+unchanged; native projections and staged load do not gain TCP support.
+
+`plan-if-tcp-model.test.mjs` covers the control/transport admission matrix.
+`plan-if-tcp-workflow.test.mjs` uses local HTTP/TCP peers, owner routes, official
+MCP HTTP/stdio clients and the real CLI to verify execution and persistence. Its
+oversized evidence check explicitly uses an injected executor, not a claim of
+transport-limit acceptance.

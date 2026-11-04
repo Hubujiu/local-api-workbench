@@ -843,6 +843,21 @@ export async function runPlan(
       ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
+  // IF may skip a TCP leaf dynamically, but cannot defer its authority check
+  // until after an earlier HTTP request or script has already run.
+  const hasActiveIFTCP = (steps, insideIF = false) =>
+    steps.some(
+      (step) =>
+        step.enabled !== false &&
+        (["if", "repeat"].includes(step.type)
+          ? hasActiveIFTCP(step.steps, insideIF || step.type === "if")
+          : insideIF &&
+            step.type === "protocol" &&
+            step.protocol.definition.type === "tcp"),
+    );
+  const conditionalTCP = hasActiveIFTCP(snapshot.steps);
+  if (conditionalTCP && typeof executeProtocol !== "function")
+    throw Error("此执行入口未授权protocol调用");
   const untilEnabled = hasRepeatUntil(snapshot.steps);
   if (conditional || runtimeRowsEnabled)
     validateConditionScopeInput(variables, variableScopes);
@@ -1691,7 +1706,11 @@ export async function runPlan(
     // A completion condition must never continue on a possibly committed scope.
     // Preserve the prior behavior for plans that do not opt into this feature.
     if (
-      (untilEnabled || runtimeRowsEnabled) &&
+      (untilEnabled ||
+        runtimeRowsEnabled ||
+        (conditionalTCP &&
+          step.type === "protocol" &&
+          step.protocol.definition.type === "tcp")) &&
       record.scopeCommit?.outcome === "unknown"
     ) {
       scopeCommitStopped = true;
