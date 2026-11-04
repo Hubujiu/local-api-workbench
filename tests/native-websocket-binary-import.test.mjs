@@ -375,7 +375,9 @@ test(
     const cancelled = await pending;
     assert.equal(cancelled.value.recordSaved, true, JSON.stringify(cancelled));
     assert.equal(
-      (await f.store().get(f.owner.id)).protocolRuns.at(-1).status,
+      (await f.store().get(f.owner.id)).protocolRuns.find(
+        (r) => r.id === cancelled.value.recordId,
+      ).status,
       "cancelled",
     );
     const closed = http.createServer();
@@ -391,9 +393,88 @@ test(
     });
     assert.equal(failed.value.recordSaved, true, JSON.stringify(failed));
     assert.equal(
-      (await f.store().get(f.owner.id)).protocolRuns.at(-1).status,
+      (await f.store().get(f.owner.id)).protocolRuns.find(
+        (r) => r.id === failed.value.recordId,
+      ).status,
       "failed",
     );
     assert.deepEqual(await f.store().get(f.peer.id), peerBefore);
   },
 );
+
+test("binary identity tuples reject same-batch and persisted colon aliases atomically", async (t) => {
+  const f = await integration(t),
+    route = `/api/projects/${f.owner.id}`;
+  const source = fixture("base64", "AP8BgA==", f.url),
+    a = source.apis[0],
+    b = structuredClone(a);
+  a.target_id = "a:b";
+  a.message[0].param_id = "c";
+  b.target_id = "a";
+  b.message[0].param_id = "b:c";
+  b.message[0].request = { mode: "hexadecimal", raw: "00ff0180" };
+  const empty = await f.store().get(f.owner.id);
+  assert.equal(
+    (
+      await f.request(route + "/import", {
+        document: { ...source, apis: [a, b] },
+      })
+    ).status,
+    400,
+  );
+  assert.deepEqual(await f.store().get(f.owner.id), empty);
+  assert.equal(
+    (await f.request(route + "/import", { document: source })).status,
+    200,
+  );
+  const saved = await f.store().get(f.owner.id);
+  await f.reopen();
+  assert.equal(
+    (await f.request(route + "/import", { document: { ...source, apis: [b] } }))
+      .status,
+    400,
+  );
+  assert.deepEqual(await f.store().get(f.owner.id), saved);
+  assert.equal(f.connections(), 0);
+});
+
+test("mixed native text, empty text and empty binary retain distinct wire types and flags", async (t) => {
+  const f = await integration(t),
+    route = `/api/projects/${f.owner.id}`;
+  const source = fixture("text", "", f.url);
+  source.apis[0].message = [
+    ["text", "text-雪"],
+    ["text", ""],
+    ["base64", ""],
+    ["hexadecimal", "00FF0180"],
+  ].map(([mode, raw], i) => ({
+    param_id: `mixed${i}`,
+    name: `Mixed ${i}`,
+    request: { mode, raw },
+  }));
+  assert.equal(
+    (await f.request(route + "/import", { document: source })).status,
+    200,
+  );
+  const saved = await f.store().get(f.owner.id);
+  for (const [i, definition] of saved.protocols.entries()) {
+    assert.equal(Object.hasOwn(definition, "sendEmptyMessage"), i === 1);
+    assert.equal(Object.hasOwn(definition, "templateMode"), false);
+    assert.equal(
+      (
+        await f.request(route + "/protocol", {
+          definitionId: definition.id,
+          maxMessages: 1,
+          duration: 1000,
+        })
+      ).status,
+      200,
+    );
+  }
+  assert.deepEqual(f.frames, [
+    { bytes: Buffer.from("text-雪"), isBinary: false },
+    { bytes: Buffer.alloc(0), isBinary: false },
+    { bytes: Buffer.alloc(0), isBinary: true },
+    { bytes: Buffer.from([0, 255, 1, 128]), isBinary: true },
+  ]);
+});

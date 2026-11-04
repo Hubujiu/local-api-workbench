@@ -336,3 +336,24 @@ package work.asar SHA256 is
 `36c1f506f9dbee4eef487248874c1f2a061451eebfa9f6cad1735441cc8553fd`;
 the readable send index SHA256 is
 `5dabd6d0b85214084895a7044f9b045bb005cb010ecec156e98cf883a914ceff`.
+
+### Implemented literal binary mapping
+
+The subsequent implementation adds only the native mapper branch. `base64`
+and `hexadecimal` requests require exactly the allowed `mode` and `raw` keys,
+with a string raw payload; canonical `normalizeProtocol`/`protocolPayload`
+validation supplies strict round-trip base64, even hexadecimal and decoded-size
+checks. The existing transport remains unchanged. Binary imports preserve the
+raw source spelling, including uppercase hex, and carry neither text-only flag.
+
+The original RED checkpoint remains above. After implementation the new batch
+passes 66 tests, including actual owner HTTP import/save/reopen/export/restore,
+new restore identity, frozen-plan execution after live edits, exact binary frame
+bytes and evidence, malformed-input atomicity, auth/peer isolation, cancellation
+and failed transport records. Nine independent Buffer oracles include zero,
+non-UTF-8, Unicode, uppercase hex and the exact 64 KiB encoded boundary. Added
+binary tuple-collision and mixed text/empty-text/binary tests retain identity and
+empty-text semantics. One test-only correction selects a failure record by the
+returned recordId instead of assuming chronological storage order; no execution
+or evidence behavior was changed to satisfy it. These are Workbench loopback
+observations, not new original-application wire evidence or exact-commit CI.
