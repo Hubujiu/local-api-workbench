@@ -135,7 +135,8 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
   const ids = new Set();
   let expanded = 0,
     bytes = 0,
-    decisions = 0;
+    decisions = 0,
+    waitMs = 0;
   const identity = (step) => {
     if (step.id === undefined && !requireIds) return;
     if (
@@ -292,12 +293,23 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         "name",
         "enabled",
         "count",
+        "intervalMs",
         "rows",
         "steps",
       ]);
       metadata(step);
       if (!Number.isInteger(step.count) || step.count < 1 || step.count > 100)
         throw Error("循环次数须为1至100的整数");
+      if (
+        step.intervalMs !== undefined &&
+        (!Number.isInteger(step.intervalMs) ||
+          Object.is(step.intervalMs, -0) ||
+          step.intervalMs < 0 ||
+          step.intervalMs > 10000)
+      )
+        throw Error("循环间隔须为0至10000毫秒的整数");
+      waitMs += multiplier * (step.count - 1) * (step.intervalMs || 0);
+      if (waitMs > 60000) throw Error("循环计划最多等待60000毫秒");
       let nestedRowBytes = rowBytes;
       if (step.rows !== undefined) {
         if (dataDepth) throw Error("数据行循环暂不支持嵌套数据行循环");
@@ -395,7 +407,11 @@ export function planOccurrences(steps, { controls = false } = {}) {
         continue;
       }
       if (step.type === "repeat") {
-        for (let iteration = 0; iteration < step.count; iteration++)
+        let previousHasWork = false;
+        for (let iteration = 0; iteration < step.count; iteration++) {
+          if (controls && iteration && previousHasWork && step.intervalMs)
+            occurrences.push({ wait: true, milliseconds: step.intervalMs });
+          const before = occurrences.length;
           visit(
             step.steps,
             [...path, { groupId: step.id, iteration }],
@@ -407,6 +423,8 @@ export function planOccurrences(steps, { controls = false } = {}) {
                   iterationData: step.rows[iteration],
                 },
           );
+          previousHasWork = occurrences.length > before;
+        }
         continue;
       }
       if (!path.length) {
