@@ -479,3 +479,22 @@ test("selective import rejects live plans but permits unrelated API selection", 
   assert.deepEqual(selectedAPI.blockers, []);
   assert.equal(selectedAPI.project.plans.length, 0);
 });
+
+test("a frozen request attribute named liveRequestId is not a live API reference", () => {
+  const source = manualImportCanonicalFixture();
+  source.settings.attributes.push({ key: "liveRequestId", label: "x" });
+  source.plans[0].steps[0].request.attributes = { liveRequestId: "value" };
+  const g = buildManualImportSourceGraph(source, context);
+  const planKey = firstKey(g, "plan-bundle");
+  const result = buildManualImportPlan(
+    target(),
+    g,
+    input({ selection: { mode: "explicit", keys: [planKey] } }),
+    context,
+  );
+  assert(
+    !result.blockers.some(
+      (item) => item.code === "live_plan_import_unsupported",
+    ),
+  );
+});

@@ -191,3 +191,16 @@ test("restore rejects live reference accessors and hidden descriptors before clo
     assert.equal(calls, 0);
   }
 });
+
+test("live expansion is bounded before accumulating repeated large request snapshots", () => {
+  const p = project();
+  p.requests[0].body = "x".repeat(64 * 1024);
+  const definition = snapshotPlan({
+    steps: Array.from({ length: 100 }, (_, i) => ({
+      id: `s${i}`,
+      liveRequestId: "api",
+      request: source("api", "http://example.test"),
+    })),
+  });
+  assert.throws(() => materializeLivePlan(p, definition), /超过 4 MiB/);
+});

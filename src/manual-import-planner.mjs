@@ -266,7 +266,10 @@ export function buildManualImportPlan(
     // than create a plan that can point at the wrong service or fail later.
     if (
       node.kind === "plan-bundle" &&
-      node.references.some((ref) => ref.path.at(-1) === "liveRequestId")
+      node.references.some(
+        (ref) =>
+          ref.kind === "api" && !ref.key && ref.path.at(-1) === "liveRequestId",
+      )
     ) {
       block(node, "live_plan_import_unsupported");
       continue;

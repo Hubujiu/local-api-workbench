@@ -58,6 +58,12 @@ export function materializeLivePlan(project, plan) {
     .map((step) => ({ step, id: liveRequestId(step) }))
     .filter((item) => item.id !== undefined);
   if (!refs.length) return { plan, bindings: [] };
+  // Bound expansion before accumulating repeated live definitions. Count the
+  // original graph plus each replacement, conservatively retaining template
+  // bytes; this leaves old, non-live plans untouched.
+  const maxLiveBytes = 4 * 1024 * 1024;
+  let liveBytes = Buffer.byteLength(JSON.stringify(plan));
+  if (liveBytes > maxLiveBytes) throw Error("实时计划冻结快照超过 4 MiB");
   const detached = structuredClone(project);
   if (detached.archived) throw Error("项目已归档");
   const bindings = [];
@@ -83,10 +89,15 @@ export function materializeLivePlan(project, plan) {
         fresh[key] = structuredClone(template[key]);
     }
     if (fresh.scriptURLMode !== sourceURLMode) delete fresh.scriptURLRuntime;
+    liveBytes += Buffer.byteLength(JSON.stringify(fresh));
+    if (liveBytes > maxLiveBytes) throw Error("实时计划冻结快照超过 4 MiB");
     const result = { ...step, request: fresh };
     delete result.liveRequestId;
     bindings.push({ stepId: step.id, requestId: id });
     return result;
   });
-  return { plan: snapshotPlan({ ...plan, steps }), bindings };
+  const frozen = snapshotPlan({ ...plan, steps });
+  if (Buffer.byteLength(JSON.stringify(frozen)) > maxLiveBytes)
+    throw Error("实时计划冻结快照超过 4 MiB");
+  return { plan: frozen, bindings };
 }
