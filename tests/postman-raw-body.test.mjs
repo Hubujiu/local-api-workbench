@@ -240,3 +240,50 @@ test("JSON lineage cannot downgrade to raw to bypass final JSON validation", () 
     ),
   );
 });
+
+test("marked OpenAPI raw representation refuses media that changes mode or cannot reimport", () => {
+  for (const value of [
+    "application/json",
+    "application/problem+json; charset=utf-8",
+    "Application/JSON; charset=utf-8",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+    "application/octet-stream",
+    "application/custom",
+  ]) {
+    const r = request("xml", {
+      headers: [{ key: "Content-Type", value, enabled: true }],
+    });
+    const before = structuredClone(r);
+    assert.throws(() => postmanRawExportDefinition(r, { openapi: true }));
+    assert.deepEqual(
+      postmanRawExportDefinition(r),
+      r,
+      "cURL may retain literal wire media",
+    );
+    assert.deepEqual(r, before);
+  }
+});
+
+test("marked OpenAPI raw-compatible media preserves exact example bytes", async () => {
+  const { exportOpenAPIBody, importOpenAPIBody } = await import(
+    "../src/openapi-body.mjs"
+  );
+  for (const value of [
+    "text/plain",
+    "text/x-custom; charset=utf-8",
+    "application/xml",
+    "application/custom+xml",
+    "application/javascript",
+  ]) {
+    const r = request("xml", {
+      body: '<x>{"a":1}</x>',
+      headers: [{ key: "Content-Type", value, enabled: true }],
+    });
+    const out = postmanRawExportDefinition(r, { openapi: true });
+    const restored = importOpenAPIBody(exportOpenAPIBody(out));
+    assert.equal(restored.bodyType, "raw");
+    assert.equal(restored.body, r.body);
+    assert.equal(restored.contentType, value);
+  }
+});

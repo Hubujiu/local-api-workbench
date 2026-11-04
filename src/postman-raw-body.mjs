@@ -170,6 +170,23 @@ export function postmanRawExportDefinition(request, { openapi = false } = {}) {
     (!request.body || headers["content-type"] === "")
   )
     throw Error("OpenAPI不能无损表达空raw正文或显式空媒体头，请使用项目备份");
+  if (openapi && request.bodyType === "raw") {
+    const mime = String(headers["content-type"] || "text/plain")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    // Match the existing importer raw branch, not JSON/form coercion or unsupported media.
+    if (
+      !(
+        mime.startsWith("text/") ||
+        mime === "application/xml" ||
+        mime.endsWith("+xml") ||
+        mime === "application/javascript"
+      ) ||
+      mime.endsWith("+json")
+    )
+      throw Error("OpenAPI不能无损往返该raw媒体，请使用cURL或项目备份");
+  }
   if (
     Object.hasOwn(headers, "content-type") &&
     !(request.headers || []).some(

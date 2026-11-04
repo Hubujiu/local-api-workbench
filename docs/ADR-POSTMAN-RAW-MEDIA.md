@@ -26,7 +26,7 @@ Dependency-free RED tests exercise the extracted original conversion and fail on
 
 ## Current local evidence
 
-The extracted original projection produced four real RED assertions and one unchanged JSON control. The implemented pure helper suite currently passes 22/22. The authored owner/script workflows have only syntax/format verification locally (0 runtime executions); normal exact CI is required. No dependency bypass or original/VM/XML-parser execution occurred.
+The extracted original projection produced four real RED assertions and one unchanged JSON control. The implemented pure helper suite currently passes 26/26. The authored owner/script workflows have only syntax/format verification locally (0 runtime executions); normal exact CI is required. No dependency bypass or original/VM/XML-parser execution occurred.
 
 OpenAPI resolves only effective inherited Content-Type for marked requests (not unrelated global query/cookie/auth values). It represents that header once as requestBody media, excluding the redundant Content-Type header parameter so export→import cannot create a duplicate control header. Marker preflight runs before authentication/cookie/connection preparation, with a final body check retained; it does not weaken cancellation or existing duplicate-header rejection.
 
@@ -35,3 +35,5 @@ Marked static exports also reject active template Header names and dynamic Conte
 For marked raw object script updates, disabled is accepted only when absent or strictly false. true and truthy/coerced non-booleans explicitly reject instead of silently sending a body upstream would suppress; old unmarked script behavior is unchanged.
 
 Final-body resolution validates marked JSON after variable substitution, before its internal setter can downgrade invalid JSON to raw text. JSON lineage paired with raw mode is rejected; this prevents finalization from bypassing the bounded JSON contract. Valid JSON→string script updates explicitly reset the lineage to default and remain supported.
+
+The complete ordered transition matrix is in POSTMAN-RAW-BODY-STATE-MATRIX.md. Marked OpenAPI raw exports accept only media classified as raw by the existing importer (text/\* except +json, application/xml, +xml, application/javascript). JSON/+json overrides would quote raw examples; form and unsupported media would change mode or fail import, so these exports explicitly reject. Actual request media, cURL and backup remain unchanged. Shared media positive tests use a raw-compatible text/x-custom value and verify reimport bytes. Script disabled checks use the visible property, including inherited values; undefined/false are the only supported values. These batch additions need a new exact CI; earlier green checkpoints do not validate them.

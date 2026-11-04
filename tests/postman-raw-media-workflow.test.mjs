@@ -663,6 +663,10 @@ test("default language plus any Content-Type and invalid script JSON are explici
         "pm.getFinalRequestRawBody();",
       ].join("\n"),
     }),
+    rawItem(f.url + "/json-boundary/inherited-disabled", {
+      script:
+        'pm.request.body.update(Object.assign(Object.create({disabled:true}),{mode:"raw",raw:"must not send"}));',
+    }),
     ...[true, "false", 1].map((disabled, index) =>
       rawItem(f.url + "/json-boundary/disabled-" + index, {
         script:
@@ -835,7 +839,7 @@ test("static cURL/OpenAPI exports materialize effective media and bytes without 
       ...project.settings,
       globalParameters: {
         headers: [
-          { key: "Content-Type", value: "application/custom", enabled: true },
+          { key: "Content-Type", value: "text/x-custom", enabled: true },
         ],
       },
     },
@@ -844,8 +848,14 @@ test("static cURL/OpenAPI exports materialize effective media and bytes without 
     Object.values(path),
   ))
     assert.deepEqual(Object.keys(operation.requestBody.content), [
-      "application/custom",
+      "text/x-custom",
     ]);
+  for (const restored of importDocument(shared)) {
+    const original = project.requests.find((r) => r.url === restored.url);
+    assert.ok(original);
+    assert.equal(restored.bodyType, "raw");
+    assert.equal(restored.body, original.body);
+  }
   for (const [index, original] of project.requests.entries()) {
     const entry = cases[index];
     const { curl } = await f.api(f.route + "/curl", {
@@ -1000,4 +1010,48 @@ test("dynamic media export refuses before evaluation and leaves stored project u
     assert.deepEqual(await diskSnapshot(f.root), disk);
   }
   assert.equal(f.seen.length, 0);
+});
+
+test("marked raw media overrides preserve cURL and backup while refusing lossy OpenAPI projection", async (t) => {
+  const f = await fixture(t);
+  for (const value of [
+    "application/json",
+    "application/problem+json; charset=utf-8",
+    "Application/JSON; charset=utf-8",
+    "application/x-www-form-urlencoded",
+    "multipart/form-data",
+    "application/octet-stream",
+    "application/custom",
+  ]) {
+    const current = await f.api(f.route, undefined, "GET");
+    const [request] = importDocument(
+      collection([
+        rawItem(f.url + "/media-override", {
+          language: "xml",
+          body: "<x/>",
+          headers: [{ key: "Content-Type", value }],
+        }),
+      ]),
+    );
+    current.requests = [request];
+    await f.api(f.route, current, "PUT");
+    const before = await f.api(f.route, undefined, "GET"),
+      disk = await diskSnapshot(f.root);
+    const response = await f.response(
+      f.route + "/export?format=openapi",
+      undefined,
+      "GET",
+    );
+    assert.equal(response.status, 400, await response.text());
+    const { curl } = await f.api(f.route + "/curl", {
+      request: before.requests[0],
+      environmentId: "selected",
+    });
+    assert.equal(importCurl(curl).body, "<x/>");
+    const backup = await f.api(f.route + "/export", undefined, "GET");
+    assert.deepEqual(backup.requests, before.requests);
+    assert.deepEqual(await f.api(f.route, undefined, "GET"), before);
+    assert.deepEqual(await diskSnapshot(f.root), disk);
+  }
+  assert.equal(f.seen.length, 0, "static export never dispatches requests");
 });
