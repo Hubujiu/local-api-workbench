@@ -2341,7 +2341,10 @@ export function exportOpenAPI(project) {
     ...(Object.keys(components).length ? { components } : {}),
   });
 }
-export function toCurl(input, { collectionResolved = false } = {}) {
+export function prepareLiteralHTTPExport(
+  input,
+  { collectionResolved = false } = {},
+) {
   rejectHTTPProtocolScripts(input);
   validatePostmanOAuth2Project({ requests: [input] });
   if (input.postmanCollectionId !== undefined && !collectionResolved)
@@ -2392,7 +2395,6 @@ export function toCurl(input, { collectionResolved = false } = {}) {
     throw Error(
       "OAuth1需要每次生成签名，请使用原始请求/项目导出；不生成缺失签名的cURL。",
     );
-  const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   if (
     ["binary", "msgpack"].includes(r.bodyType) ||
     r.form.some((field) => field.type === "file") ||
@@ -2405,6 +2407,27 @@ export function toCurl(input, { collectionResolved = false } = {}) {
   const url = new URL(raw);
   appendRequestQuery(url, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
+  if (
+    !applyPostmanOAuth2(url, headers, r.auth) &&
+    !applyNativeOAuth2(url, headers, r.auth) &&
+    ["bearer", "oauth2"].includes(r.auth.type)
+  )
+    headers.authorization = "Bearer " + (r.auth.token || "");
+  if (r.auth.type === "apiKey") {
+    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
+    else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
+  }
+  const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
+  if (cookieHeader !== undefined) headers.cookie = cookieHeader;
+  if (r.bodyType === "json") headers["content-type"] ??= "application/json";
+  if (r.bodyType === "urlencoded")
+    headers["content-type"] ??= "application/x-www-form-urlencoded";
+  return { request: r, url, headers };
+}
+
+export function toCurl(input, options = {}) {
+  const { request: r, url, headers } = prepareLiteralHTTPExport(input, options);
+  const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
   const args = [
     "curl",
     "--disable",
@@ -2424,21 +2447,6 @@ export function toCurl(input, { collectionResolved = false } = {}) {
       quote((r.auth.username || "") + ":" + (r.auth.password || "")),
     );
   }
-  if (
-    !applyPostmanOAuth2(url, headers, r.auth) &&
-    !applyNativeOAuth2(url, headers, r.auth) &&
-    ["bearer", "oauth2"].includes(r.auth.type)
-  )
-    headers.authorization = "Bearer " + (r.auth.token || "");
-  if (r.auth.type === "apiKey") {
-    if (r.auth.in === "query") setAPIKeyQuery(url, r.auth);
-    else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
-  }
-  const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
-  if (cookieHeader !== undefined) headers.cookie = cookieHeader;
-  if (r.bodyType === "json") headers["content-type"] ??= "application/json";
-  if (r.bodyType === "urlencoded")
-    headers["content-type"] ??= "application/x-www-form-urlencoded";
   args.push(quote(url.href));
   if (!Object.hasOwn(headers, "accept")) args.push("-H", quote("accept:"));
   if (r.bodyType === "raw" && !Object.hasOwn(headers, "content-type"))

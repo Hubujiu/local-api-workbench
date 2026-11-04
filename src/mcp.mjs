@@ -56,6 +56,8 @@ import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { executeGrpc } from "./grpc.mjs";
+import { grpcSource } from "./grpc-schema.mjs";
+import { generateGrpcRequestExample } from "./grpc-request-example.mjs";
 import { syncMCPOpenAPI } from "./mcp-openapi-sync.mjs";
 import {
   importMCPProject,
@@ -657,6 +659,14 @@ export function createMCP({
     definitionId: str,
   });
   addTool(
+    "generate_grpc_request_example",
+    "从已授权项目的 gRPC 定义生成请求示例，不连接远端",
+    {
+      ...projectArg,
+      definitionId: str,
+    },
+  );
+  addTool(
     "list_socketio_definitions",
     "读取项目Socket.IO定义摘要，不连接远端",
     projectArg,
@@ -1169,6 +1179,18 @@ export function createMCP({
               );
               if (!output) throw Error("gRPC定义不存在");
               break;
+            case "localapi_generate_grpc_request_example": {
+              const definition = (p.settings?.grpcDefinitions || []).find(
+                (x) => x.id === args.definitionId,
+              );
+              if (!definition) throw Error("gRPC定义不存在");
+              output = generateGrpcRequestExample({
+                ...grpcSource(definition),
+                service: definition.service,
+                method: definition.method,
+              });
+              break;
+            }
             case "localapi_list_apis": {
               if (nativeName) {
                 output = nativeAPIList(p, args);

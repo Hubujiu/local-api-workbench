@@ -20,7 +20,7 @@ export const grpcSource = (input) =>
       .filter((key) => input[key] !== undefined)
       .map((key) => [key, input[key]]),
   );
-function jsonTree(value) {
+function jsonTree(value, trustedParsedTree = false) {
   let count = 0;
   const walk = (node, depth = 0) => {
     if (depth > 32 || ++count > 10000) throw Error("gRPC schema结构过大");
@@ -35,7 +35,8 @@ function jsonTree(value) {
       return node;
     }
     if (Array.isArray(node)) return node.map((item) => walk(item, depth + 1));
-    if (!plain(node)) throw Error("gRPC schema必须是JSON对象");
+    if (!(trustedParsedTree ? node && typeof node === "object" : plain(node)))
+      throw Error("gRPC schema必须是JSON对象");
     return Object.fromEntries(
       Object.keys(node)
         .sort()
@@ -183,7 +184,9 @@ export function compileGrpcSchema(input) {
       if (!visited.has(name)) unused.push(name);
   }
   root.resolveAll();
-  const json = jsonTree(root.toJSON());
+  // Enum maps in protobufjs carry a reverse-lookup prototype. Traverse only
+  // own properties of this trusted parsed tree, retaining finite-number checks.
+  const json = jsonTree(root.toJSON(), true);
   const definition = protoLoader.fromJSON(json, {
     keepCase: true,
     longs: String,

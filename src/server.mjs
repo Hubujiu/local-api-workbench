@@ -1,4 +1,8 @@
 import {
+  assertCodeTarget,
+  generateRequestCode,
+} from "./request-code-generation.mjs";
+import {
   previewDefinitionExport,
   exportDefinitionSelection,
 } from "./scoped-definition-export.mjs";
@@ -58,6 +62,7 @@ import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { reflectGrpc } from "./grpc-reflection.mjs";
+import { generateGrpcRequestExample } from "./grpc-request-example.mjs";
 import {
   inspectGrpcSchema,
   normalizeGrpcDefinition,
@@ -1538,6 +1543,8 @@ export async function createApp({
               json(res, 200, { ...(await reflectGrpc(input, signal)), runId }),
             );
           }
+          if (action === "grpc-request-example" && req.method === "POST")
+            return json(res, 200, generateGrpcRequestExample(await body(req)));
           if (action === "grpc-schema" && req.method === "POST")
             return json(res, 200, inspectGrpcSchema(await body(req)));
           if (action === "grpc-definitions") {
@@ -2139,8 +2146,13 @@ export async function createApp({
             const b = await body(req);
             return json(res, 200, await previewFunction(b.function, b.value));
           }
-          if (action === "curl" && req.method === "POST") {
+          if (
+            ["curl", "code-generation"].includes(action) &&
+            req.method === "POST"
+          ) {
             const data = await body(req);
+            if (action === "code-generation")
+              assertCodeTarget(data.target, data.client);
             const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
               inheritedRequest?.scriptURLMode === "sdk" ||
@@ -2159,26 +2171,27 @@ export async function createApp({
               debugEnvironments,
               data.request?.postmanCollectionId,
             );
-            return json(res, 200, {
-              curl: toCurl(
-                resolveServiceRequest(
-                  p,
-                  sdkCurlDefinition(
-                    await resolveDynamicRequest(
-                      applySharedAuth(
-                        p,
-                        applyGlobalParameters(p, exportRequest),
-                      ),
-                      context.variables,
-                      p.settings?.functions || [],
-                      interpolate,
-                    ),
-                  ),
-                  context.environment.id,
+            const resolved = resolveServiceRequest(
+              p,
+              sdkCurlDefinition(
+                await resolveDynamicRequest(
+                  applySharedAuth(p, applyGlobalParameters(p, exportRequest)),
+                  context.variables,
+                  p.settings?.functions || [],
+                  interpolate,
                 ),
-                { collectionResolved: true },
               ),
-            });
+              context.environment.id,
+            );
+            return json(
+              res,
+              200,
+              action === "curl"
+                ? { curl: toCurl(resolved, { collectionResolved: true }) }
+                : generateRequestCode(resolved, data.target, data.client, {
+                    collectionResolved: true,
+                  }),
+            );
           }
           if (action === "execute" && req.method === "POST") {
             const b = await body(req),
@@ -2390,27 +2403,33 @@ export async function createApp({
               debugEnvironments,
             );
             const { controller, runId } = claimRun(b.runId);
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
             try {
-              return json(
-                res,
-                200,
-                await runLoad(p, b.request, {
-                  cookieState: await projectCookieSession(
-                    store,
-                    p,
-                    context.environment.id,
-                  ).inspect(),
-                  mode: b.mode,
-                  durationSeconds: b.durationSeconds,
-                  dataCSV: b.dataCSV,
-                  count: b.count,
-                  concurrency: b.concurrency,
-                  environmentId: context.environment.id,
-                  variables: context.variables,
-                  signal: controller.signal,
-                }),
-              );
+              const result = await runLoad(p, b.request, {
+                cookieState: await projectCookieSession(
+                  store,
+                  p,
+                  context.environment.id,
+                ).inspect(),
+                mode: b.mode,
+                durationSeconds: b.durationSeconds,
+                dataCSV: b.dataCSV,
+                count: b.count,
+                concurrency: b.concurrency,
+                environmentId: context.environment.id,
+                variables: context.variables,
+                signal: controller.signal,
+              });
+              if (!res.destroyed) return json(res, 200, result);
+              return;
             } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
               controllers.delete(runId);
             }
           }

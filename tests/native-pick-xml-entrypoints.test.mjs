@@ -22,6 +22,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 import { Store } from "../src/runtime.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
@@ -522,7 +523,9 @@ for (const failure of ["late-row", "missing", "multiple", "malformed"])
       assert.equal(run.recordSaved, true);
       assert.equal(run.recordId, run.attemptedRecordId);
       assert.equal(run.results.length, 1);
-      assert.match(run.results[0].error, /XML/);
+      withExecutionResultDiagnostics(run.results[0], () =>
+        assert.match(run.results[0].error, /XML/),
+      );
       assert.equal(run.results[0].response.body, f.responses[0]);
       assert.equal(run.variables.token, "stale-token");
       assert.equal(run.variables.derived, "old-derived");
