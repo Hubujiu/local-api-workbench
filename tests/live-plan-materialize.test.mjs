@@ -204,3 +204,37 @@ test("live expansion is bounded before accumulating repeated large request snaps
   });
   assert.throws(() => materializeLivePlan(p, definition), /超过 4 MiB/);
 });
+
+test("budget counts UTF-8 and frozen siblings, and does not change oversized legacy plans", () => {
+  const p = project();
+  p.requests[0].body = "😀".repeat(16384);
+  const repeated = snapshotPlan({
+    steps: Array.from({ length: 100 }, (_, i) => ({
+      id: `s${i}`,
+      liveRequestId: "api",
+      request: source("api", "http://example.test"),
+    })),
+  });
+  assert.throws(() => materializeLivePlan(p, repeated), /4 MiB/);
+  const mixed = plan();
+  mixed.steps.push({
+    id: "frozen",
+    request: {
+      ...source("f", "http://example.test"),
+      body: "x".repeat(4 * 1024 * 1024),
+    },
+  });
+  assert.throws(() => materializeLivePlan(project(), mixed), /4 MiB/);
+  const legacy = snapshotPlan({
+    steps: [
+      {
+        id: "old",
+        request: {
+          ...source("f", "http://example.test"),
+          body: "x".repeat(5 * 1024 * 1024),
+        },
+      },
+    ],
+  });
+  assert.equal(materializeLivePlan(project(), legacy).plan, legacy);
+});
