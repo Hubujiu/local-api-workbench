@@ -28,12 +28,14 @@ This does not make native automated_testings imports executable.
 
 A group is { type: "if", id, name?, enabled?, condition, steps }. Its condition is
 { op, left, right }. Each operand is exactly { literal: value } or
-{ scope: "globals" | "environment" | "runtime", name }. No interpolation, expression,
+{ scope: "globals" | "environment" | "runtime" | "iterationData", name }. No interpolation, expression,
 function, regex, implicit variable source, alternate branch or fallback is added.
 
 - eq/neq compare same-type primitives: null, boolean, finite number, nonempty
   well-formed text of at most 8192 UTF-8 bytes.
 - gt/gte/lt/lte require two finite numbers.
+- contains/notContains compare two bounded nonempty strings, in left-to-right order. Matching is case-sensitive, does not normalize Unicode, and treats regex-like characters literally. These are canonical Workbench rules and do not imply native comparator equivalence.
+- iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
 - IF descendants in this first scope are HTTP leaves and IF/repeat groups.
@@ -42,7 +44,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   static validation before any request. Enabled potential protocol leaves retain
   existing credential preflight; false is not a way to evade admission or grants.
 
-The six primitive comparisons need no new dependency or third-party source.
+The canonical comparisons need no new dependency or third-party source.
 They are independently implemented using JavaScript primitive operations under
 the repository MIT license.
 
@@ -119,7 +121,6 @@ linear projection is allowed. Definition-only native export policies are otherwi
 unchanged. No UI feature, saved-native bridge, else group or automatic replay is
 included.
 
-
 ### CLI declaration-level grant preflight
 
 For IF plans only, enabled potential declarative before/after database operations
@@ -134,7 +135,6 @@ an unrelated legacy DB catalogue. Existing non-IF linear/repeat behavior is
 unchanged. This is static declaration recognition only; arbitrary script-driven
 database calls retain their existing runtime authorization checks, not a claim of
 complete static discovery. No connection is persisted or borrowed across runs.
-
 
 ### Terminal reporting failures
 
