@@ -193,25 +193,29 @@ async function fixture(t, transport) {
     const entry = { client };
     clients.push(entry);
     if (transport === "stdio") {
-      const connection = new StdioClientTransport({
-        command: process.execPath,
-        args: [
-          ...(gated
-            ? [
-                "--import",
-                fileURLToPath(
-                  new URL(
-                    "./fixtures/mcp-missing-file-save-gate.mjs",
-                    import.meta.url,
-                  ),
-                ),
-              ]
-            : []),
+      const preload = new URL(
+          "./fixtures/mcp-missing-file-save-gate.mjs",
+          import.meta.url,
+        ),
+        args = [
+          // --import is an ESM specifier. A native Windows D:\\ path is parsed
+          // as a d: URL scheme, so keep this as a portable file: URL.
+          ...(gated ? ["--import", preload.href] : []),
           fileURLToPath(new URL("../src/mcp.mjs", import.meta.url)),
           "--project",
           projectId,
           "--write",
-        ],
+        ];
+      if (gated) {
+        // Check the actual SDK argv on each running platform, then let the real
+        // child load it and reach the save handshake. Do not substitute a stub.
+        const actualImport = new URL(args[args.indexOf("--import") + 1]);
+        assert.equal(actualImport.protocol, "file:");
+        assert.equal(fileURLToPath(actualImport), fileURLToPath(preload));
+      }
+      const connection = new StdioClientTransport({
+        command: process.execPath,
+        args,
         env: {
           LOCAL_API_DATA: root,
           ...(gated
