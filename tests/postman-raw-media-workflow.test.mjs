@@ -6,7 +6,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
-import { importCurl, importDocument } from "../src/core.mjs";
+import { importCurl, importDocument, exportOpenAPI } from "../src/core.mjs";
 
 // XML/HTML/JavaScript here is opaque fixture text, never parsed or evaluated.
 // These loopback workflows are intended for CI; authoring checks do not run them.
@@ -797,6 +797,39 @@ test("static cURL/OpenAPI exports materialize effective media and bytes without 
     "GET",
   );
   const fromOpenAPI = importDocument(openapi);
+  for (const operation of Object.values(openapi.paths).flatMap((path) =>
+    Object.values(path),
+  ))
+    assert.equal(
+      (operation.parameters || []).some(
+        (p) => p.in === "header" && p.name.toLowerCase() === "content-type",
+      ),
+      false,
+    );
+  for (const request of fromOpenAPI)
+    assert.equal(
+      request.headers.filter(
+        (h) => h.enabled !== false && h.key.toLowerCase() === "content-type",
+      ).length,
+      1,
+    );
+  const shared = exportOpenAPI({
+    ...project,
+    settings: {
+      ...project.settings,
+      globalParameters: {
+        headers: [
+          { key: "Content-Type", value: "application/custom", enabled: true },
+        ],
+      },
+    },
+  });
+  for (const operation of Object.values(shared.paths).flatMap((path) =>
+    Object.values(path),
+  ))
+    assert.deepEqual(Object.keys(operation.requestBody.content), [
+      "application/custom",
+    ]);
   for (const [index, original] of project.requests.entries()) {
     const entry = cases[index];
     const { curl } = await f.api(f.route + "/curl", {

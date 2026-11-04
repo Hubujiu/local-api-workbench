@@ -93,6 +93,14 @@ export function validatePostmanRawBodyRequest(request) {
   const policy = postmanRawBodyPolicy(request);
   if (!policy) return;
   if (
+    ["GET", "HEAD"].includes(String(request.method).toUpperCase()) &&
+    (request.body ||
+      ["form-data", "urlencoded", "binary", "msgpack"].includes(
+        request.bodyType,
+      ))
+  )
+    throw Error("Postman raw媒体子集不发送GET/HEAD正文");
+  if (
     request.bodyType === "json" &&
     (typeof request.body !== "string" || !request.body.trim())
   )

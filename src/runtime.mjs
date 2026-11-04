@@ -319,6 +319,7 @@ export class Store {
 }
 export async function executeRequest(input, signal, { cookieSession } = {}) {
   const r = normalizeRequest(input);
+  validatePostmanRawBodyRequest(r);
   let raw = r.url;
   for (const p of r.path.filter((p) => p.enabled !== false && p.key))
     raw = raw.replaceAll("{" + p.key + "}", encodeURIComponent(p.value));
@@ -358,7 +359,6 @@ export async function executeRequest(input, signal, { cookieSession } = {}) {
       else delete headers.cookie;
     }
   }
-  validatePostmanRawBodyRequest(r);
   let body;
   if (r.bodyType === "msgpack") {
     const { encode } = await import("@msgpack/msgpack");

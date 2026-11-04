@@ -27,3 +27,5 @@ Dependency-free RED tests exercise the extracted original conversion and fail on
 ## Current local evidence
 
 The extracted original projection produced four real RED assertions and one unchanged JSON control. The implemented pure helper suite currently passes 22/22. The authored owner/script workflows have only syntax/format verification locally (0 runtime executions); normal exact CI is required. No dependency bypass or original/VM/XML-parser execution occurred.
+
+OpenAPI resolves only effective inherited Content-Type for marked requests (not unrelated global query/cookie/auth values). It represents that header once as requestBody media, excluding the redundant Content-Type header parameter so export→import cannot create a duplicate control header. Marker preflight runs before authentication/cookie/connection preparation, with a final body check retained; it does not weaken cancellation or existing duplicate-header rejection.

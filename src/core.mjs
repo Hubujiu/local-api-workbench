@@ -1,3 +1,4 @@
+import { applyGlobalParameters } from "./global-parameters.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
 import {
   importPostmanRawBody,
@@ -1486,13 +1487,22 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    let definition = source;
+    if (postmanRawBodyPolicy(source)) {
+      definition = applySharedScripts(project, source);
+      const effective = applyGlobalParameters(project, source).headers || [];
+      // Only resolve the media control here; do not newly export unrelated shared fields.
+      definition.headers = [
+        ...(source.headers || []).filter(
+          (h) => String(h.key).toLowerCase() !== "content-type",
+        ),
+        ...effective.filter(
+          (h) => String(h.key).toLowerCase() === "content-type",
+        ),
+      ];
+    }
     const r = postmanRawExportDefinition(
-      sdkOpenAPIDefinition(
-        project,
-        postmanRawBodyPolicy(source)
-          ? applySharedScripts(project, source)
-          : source,
-      ),
+      sdkOpenAPIDefinition(project, definition),
       { openapi: true },
     );
     if (
@@ -1620,7 +1630,14 @@ export function exportOpenAPI(project) {
       parameters: [
         ["query", queryDefinition.query],
         ["path", r.path],
-        ["header", r.headers],
+        [
+          "header",
+          postmanRawBodyPolicy(r)
+            ? r.headers.filter(
+                (h) => String(h.key).toLowerCase() !== "content-type",
+              )
+            : r.headers,
+        ],
         ["cookie", r.cookies],
       ].flatMap(([location, parameters]) =>
         parameters
