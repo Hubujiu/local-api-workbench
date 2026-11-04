@@ -131,9 +131,17 @@ export class MCPActivity {
   }
   update(progress) {
     if (this.finished) return this.pending;
-    for (const key of ["completed", "total"])
+    for (const key of ["completed", "total", "conditions"])
       if (Number.isInteger(progress[key]) && progress[key] >= 0)
         this.record[key] = progress[key];
+    for (const key of ["totalIsPotential", "finished"])
+      if (typeof progress[key] === "boolean") this.record[key] = progress[key];
+    if (progress.finished === true) {
+      if (["passed", "failed", "cancelled"].includes(progress.status))
+        this.record.executionStatus = progress.status;
+      if (progress.status === "failed") this.failed = true;
+      return this.flush();
+    }
     if (typeof progress.stepId === "string") {
       if (validMetadata(progress.stepId)) {
         this.record.stepId = progress.stepId;

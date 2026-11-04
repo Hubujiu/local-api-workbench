@@ -29,6 +29,10 @@ async function fixture(t) {
       entered();
       return;
     }
+    if (req.url === "/large") {
+      res.end("x".repeat(3 * 1024 * 1024));
+      return;
+    }
     res.setHeader("content-type", "application/json");
     res.end(
       JSON.stringify({
@@ -428,5 +432,70 @@ test(
     assert.deepEqual(result.conditionResults, []);
     assert.deepEqual(result.results, []);
     assert.deepEqual(f.seen, []);
+  },
+);
+
+test(
+  "real large HTTP records plus IF decisions share one evidence ceiling after false skips",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t);
+    const plan = snapshotPlan({
+      steps: [
+        conditional("false", literal(1), "eq", literal(2), [
+          leaf("skipped", f.url + "/never"),
+        ]),
+        {
+          type: "repeat",
+          id: "repeat",
+          count: 3,
+          steps: [leaf("large", f.url + "/large")],
+        },
+        conditional("pending", literal(1), "eq", literal(1), [
+          leaf("pending-child", f.url + "/never"),
+        ]),
+        leaf("tail", f.url + "/never"),
+      ],
+    });
+    const run = await runPlan(plan, {}, executeRequest);
+    assert.equal(run.stopReason, "evidence-limit");
+    assert.equal(run.status, "failed");
+    assert.equal(run.results.length, 3);
+    assert.equal(run.conditionResults.length, 1);
+    assert.deepEqual(f.seen, ["/large", "/large", "/large"]);
+    assert.equal(run.evidenceBudget.last.repeat.iteration, 2);
+    assert.equal(run.evidenceBudget.next.kind, "condition");
+    assert.equal(run.evidenceBudget.next.stepId, "pending");
+    assert.equal(run.evidenceBudget.remaining, 2);
+  },
+);
+
+test(
+  "runtime deletion hides an existing global even after explicit environment script set",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t);
+    for (const scope of ["globals", "environment"]) {
+      const remove = leaf("remove", f.url + "/remove");
+      remove.request.before = [{ type: "delete", name: "x" }];
+      const write = leaf("write", f.url + "/write");
+      write.request.beforeScript = 'pm.environment.set("x",1);';
+      const plan = snapshotPlan({
+        steps: [
+          remove,
+          write,
+          conditional("hidden", { scope, name: "x" }, "eq", literal(1), [
+            leaf("never", f.url + "/never"),
+          ]),
+        ],
+      });
+      const run = await runPlan(plan, {}, executeRequest, {
+        variableScopes: { globals: { x: 1 }, environment: {}, runtime: {} },
+      });
+      assert.equal(run.stopReason, "condition-error");
+      assert.equal(run.results.length, 2);
+      assert.match(run.conditionResults[0].error, /隐藏/);
+    }
+    assert.deepEqual(f.seen, ["/remove", "/write", "/remove", "/write"]);
   },
 );

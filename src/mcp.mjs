@@ -1,4 +1,5 @@
-import { activePlanStepCount } from "./plan-repeat.mjs";
+import { conditionSummary } from "./execution-history.mjs";
+import { activePlanStepCount, hasIfSteps } from "./plan-repeat.mjs";
 import { appendExecutionRecord } from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
@@ -641,7 +642,7 @@ export function createMCP({
                     createdAt,
                     planHash,
                     ...(stopReason ? { stopReason } : {}),
-                    ...(conditionResults ? { conditionResults } : {}),
+                    ...conditionSummary({ conditionResults, stopReason }),
                   }),
                 ),
               };
@@ -818,15 +819,6 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              if (output.conditionResults)
-                emitProgress({
-                  completed: output.results.length,
-                  total: totalSteps,
-                  totalIsPotential: true,
-                  finished: true,
-                  status: output.status,
-                  conditions: output.conditionResults.length,
-                });
               output.environmentId = environmentId;
               const receipt = await appendExecutionRecord(
                 store,
@@ -877,7 +869,9 @@ export function createMCP({
                     emitProgress({
                       completed: ++completed,
                       total: totalSteps,
-                      totalIsPotential: true,
+                      ...(hasIfSteps(plan.steps)
+                        ? { totalIsPotential: true }
+                        : {}),
                       ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,

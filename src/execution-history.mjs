@@ -52,6 +52,7 @@ export function listExecutionHistory(project, options = {}) {
         planName: scope === "flow" ? record.planName : undefined,
         planHash: scope === "flow" ? record.planHash : undefined,
         status: record.status,
+        ...conditionSummary(record),
         ...(record.stopReason === "evidence-limit"
           ? {
               stopReason: record.stopReason,
@@ -80,4 +81,27 @@ export function findExecutionResult(project, runId) {
   if (found.length > 1) throw Error("记录 ID 不唯一");
   if (!found.length) throw Error("记录不存在");
   return found[0];
+}
+
+// Small history projection; complete decisions remain in the execution record.
+export function conditionSummary(record) {
+  if (!Array.isArray(record.conditionResults)) return {};
+  const decisions = record.conditionResults.slice(0, 200);
+  const failed = decisions.filter((item) => item?.status === "failed");
+  return {
+    ...(record.stopReason === "condition-error"
+      ? { stopReason: record.stopReason }
+      : {}),
+    conditionCount: record.conditionResults.length,
+    failedConditionCount: failed.length,
+    failedConditions: failed
+      .slice(0, 5)
+      .map(({ stepId, groupId, occurrenceId, status, code }) => ({
+        stepId,
+        groupId,
+        occurrenceId,
+        status,
+        code,
+      })),
+  };
 }
