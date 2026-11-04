@@ -128,6 +128,32 @@ export function workerFailureMetadata(error) {
     }
     if (Object.keys(values).length) result[key] = values;
   }
+  const breakdown = ownData(error, "compatibilityDiagnostics");
+  const version = ownData(breakdown, "version"),
+    phase = ownData(breakdown, "operation");
+  if (
+    version === 1 &&
+    [
+      "mock-asset",
+      "mock-install",
+      "source-build",
+      "compatibility-eval",
+    ].includes(phase)
+  ) {
+    const values = Object.create(null);
+    values.version = 1;
+    values.operation = phase;
+    for (const prefix of [
+      "mockAsset",
+      "mockInstall",
+      "sourceBuild",
+      "evaluation",
+    ]) {
+      copyNumber(values, breakdown, prefix + "Ms", 60000);
+      copyNumber(values, breakdown, prefix + "CPUUs", 60000000);
+    }
+    result.compatibilityDiagnostics = values;
+  }
   return result;
 }
 

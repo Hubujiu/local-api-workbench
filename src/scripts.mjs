@@ -498,6 +498,8 @@ export function runScript(code, input, options = {}) {
             ? Object.assign(Error(completedMessage.error), {
                 scriptStage: completedMessage.scriptStage,
                 scriptDiagnostics: completedMessage.scriptDiagnostics,
+                compatibilityDiagnostics:
+                  completedMessage.compatibilityDiagnostics,
                 activityOperation: completedMessage.activityOperation,
                 activityMetrics: completedMessage.activityMetrics,
                 activityCPUTimeUs: completedMessage.activityCPUTimeUs,

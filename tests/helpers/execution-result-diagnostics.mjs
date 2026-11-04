@@ -113,6 +113,12 @@ const bootstrapOperations = enumeration([
   "optional-facade",
   "lazy-installers",
 ]);
+const compatibilityOperations = enumeration([
+  "mock-asset",
+  "mock-install",
+  "source-build",
+  "compatibility-eval",
+]);
 const statuses = enumeration(["passed", "failed", "cancelled", "skipped"]);
 const numbers = [
   ["activityBudgetMs", 250, true],
@@ -129,6 +135,14 @@ const numbers = [
   ["callbackCPUUs", 60000000, false],
   ["promiseStateCPUUs", 60000000, false],
   ["serializationCPUUs", 60000000, false],
+  ["compatMockAssetMs", 60000, false],
+  ["compatMockAssetCPUUs", 60000000, false],
+  ["compatMockInstallMs", 60000, false],
+  ["compatMockInstallCPUUs", 60000000, false],
+  ["compatSourceBuildMs", 60000, false],
+  ["compatSourceBuildCPUUs", 60000000, false],
+  ["compatEvaluationMs", 60000, false],
+  ["compatEvaluationCPUUs", 60000000, false],
   ["compatibilityMs", 60000, false],
   ["fakerLoadMs", 60000, false],
   ["functionLibraryMs", 60000, false],
@@ -223,6 +237,12 @@ export function executionResultMetadata(input) {
       const diagnostics = create(null);
       copyNumbers(diagnostics, raw, numbers);
       copyEnum(diagnostics, raw, "activityOperation", operations);
+      copyEnum(
+        diagnostics,
+        raw,
+        "compatibilityOperation",
+        compatibilityOperations,
+      );
       copyEnum(diagnostics, raw, "lastWorkerStage", stages);
       if (result.scriptStage === "bootstrap") {
         copyEnum(diagnostics, raw, "bootstrapOperation", bootstrapOperations);
