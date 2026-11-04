@@ -25,6 +25,10 @@ const assertUnauthorized = (result) => {
 };
 const tool = (client, params) =>
   client.callTool(params, undefined, { timeout: 10000 });
+const recordFile = (id) =>
+  (/^[a-f0-9-]{36}$/i.test(id)
+    ? id
+    : "key-" + Buffer.from(id).toString("base64url")) + ".json";
 async function bounded(operation, milliseconds, label) {
   let timer;
   try {
@@ -393,7 +397,26 @@ for (const transport of ["http", "stdio"])
         if (result.isError !== true) {
           // Keep the pre-fix loss observable, not merely a missing error flag.
           // This branch is a diagnostic for RED controls; it never repairs data.
-          const overwritten = await new Store(f.root).get(latest.id);
+          // Store.get is deliberately not used here: it can roll a journal forward.
+          const overwritten = JSON.parse(
+              await readFile(path.join(directory, "project.json"), "utf8"),
+            ),
+            history = JSON.parse(
+              await readFile(
+                path.join(directory, "history", "requests.json"),
+                "utf8",
+              ),
+            ),
+            requests = await Promise.all(
+              overwritten.collections.requests.map(async (id) =>
+                JSON.parse(
+                  await readFile(
+                    path.join(directory, "apis", recordFile(id)),
+                    "utf8",
+                  ),
+                ),
+              ),
+            );
           t.diagnostic(
             "Unexpected SDK success after file loss: " +
               JSON.stringify({
@@ -402,9 +425,9 @@ for (const transport of ["http", "stdio"])
                 latestConfigRevision: latest.configRevision,
                 actualConfigRevision: overwritten.configRevision,
                 latestHistory: latest.history.length,
-                actualHistory: overwritten.history.length,
+                actualHistory: history.length,
                 actualArchived: overwritten.archived === true,
-                staleImportPublished: overwritten.requests.some((request) =>
+                staleImportPublished: requests.some((request) =>
                   request.url.endsWith("/late-import"),
                 ),
                 actualEffects: f.effects(),
