@@ -1,3 +1,5 @@
+import { applySharedAuth } from "./shared-auth.mjs";
+import { importPostmanOAuth1 } from "./postman-oauth1-import.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
   snapshotSocketIOStep,
@@ -1054,6 +1056,7 @@ export function importDocument(doc) {
         .join("\n");
     const auth = (config) => {
       if (!config || config.type === "noauth") return { type: "none" };
+      if (config.type === "oauth1") return importPostmanOAuth1(config.oauth1);
       const values = Object.fromEntries(
         (config[config.type] || []).map((item) => [item.key, item.value]),
       );
@@ -1108,29 +1111,6 @@ export function importDocument(doc) {
           type: "aws",
           ...Object.fromEntries(
             ["accessKey", "secretKey", "sessionToken", "region", "service"]
-              .filter((key) => values[key] !== undefined)
-              .map((key) => [key, values[key]]),
-          ),
-        };
-      if (config.type === "oauth1")
-        return {
-          type: "oauth1",
-          ...Object.fromEntries(
-            [
-              "consumerKey",
-              "consumerSecret",
-              "accessToken",
-              "tokenSecret",
-              "signatureMethod",
-              "privateKey",
-              "privateKeyPassphrase",
-              "nonce",
-              "timestamp",
-              "realm",
-              "version",
-              "callback",
-              "verifier",
-            ]
               .filter((key) => values[key] !== undefined)
               .map((key) => [key, values[key]]),
           ),
@@ -1447,6 +1427,17 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     const r = sdkOpenAPIDefinition(project, source);
+    const policyAuth = (auth) =>
+      auth?.type === "oauth1" && Object.hasOwn(auth, "parameterPolicy");
+    if (
+      [
+        r.auth,
+        project.settings?.globalAuth,
+        ...Object.values(project.settings?.folderAuth || {}),
+      ].some(policyAuth) &&
+      policyAuth(applySharedAuth(project, r).auth)
+    )
+      throw Error("OpenAPI不能无损表达OAuth1签名参数策略，请使用项目备份");
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>
         isApipostFunctionSource(spec?.source),
