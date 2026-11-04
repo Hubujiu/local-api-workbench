@@ -95,10 +95,15 @@ async function acquireDiskLock(directory, controls) {
     }
   };
   try {
+    let firstAttempt = true;
     while (
-      performance.now() < Math.min(budget.hardDeadline, budget.idleDeadline)
+      performance.now() < budget.hardDeadline &&
+      (firstAttempt || performance.now() < budget.idleDeadline)
     ) {
       throwIfInactive(controls);
+      const forcedAfterIdle =
+        firstAttempt && performance.now() >= budget.idleDeadline;
+      firstAttempt = false;
       try {
         database.exec("BEGIN IMMEDIATE");
         held = true;
@@ -112,6 +117,9 @@ async function acquireDiskLock(directory, controls) {
         )
           throw error;
       }
+      // An initial nonblocking try after the idle budget does not authorize
+      // extending the wait or inspecting/recovering an existing owner.
+      if (forcedAfterIdle) break;
       try {
         const owner = JSON.parse(
           await readFile(path.join(directory, "owner.json"), "utf8"),
@@ -162,11 +170,16 @@ function observeOwner(owner, budget) {
 async function acquireLegacyDiskLock(directory, controls, budget) {
   const ownerFile = path.join(directory, "owner.json"),
     nonce = randomUUID();
-  let lastTransient;
+  let lastTransient,
+    firstAttempt = true;
   while (
-    performance.now() < Math.min(budget.hardDeadline, budget.idleDeadline)
+    performance.now() < budget.hardDeadline &&
+    (firstAttempt || performance.now() < budget.idleDeadline)
   ) {
     throwIfInactive(controls);
+    const forcedAfterIdle =
+      firstAttempt && performance.now() >= budget.idleDeadline;
+    firstAttempt = false;
     try {
       await mkdir(directory);
       // Once mkdir succeeds, finish our ownership receipt before checking the
@@ -197,10 +210,12 @@ async function acquireLegacyDiskLock(directory, controls, budget) {
         // Windows can keep a deleted directory pending while another handle closes.
         // Retry only this same mkdir; never chmod, remove or override another owner.
         lastTransient = error;
+        if (forcedAfterIdle) break;
         await delayForControl(20, controls);
         continue;
       }
       if (error.code !== "EEXIST") throw error;
+      if (forcedAfterIdle) break;
       try {
         const owner = JSON.parse(await readFile(ownerFile, "utf8"));
         throwIfInactive(controls);
