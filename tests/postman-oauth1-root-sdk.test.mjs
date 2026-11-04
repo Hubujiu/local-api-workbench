@@ -87,7 +87,7 @@ const expectedAuth = (header) => ({
   signatureMethod: "HMAC-SHA1",
   nonce: "owned-fixed-nonce",
   timestamp: "1700000000",
-  version: "",
+  version: header ? "1.0" : "",
   parameterPolicy: {
     placement: header ? "header" : "auto",
     includeBodyHash: header,
@@ -98,6 +98,7 @@ const expectedAuth = (header) => ({
 function document(origin) {
   const auth = (header) =>
     sourceAuth(header ? literalToken : "folder/form+token%", {
+      version: header ? "1.0" : "",
       addParamsToHeader: header,
       includeBodyHash: header,
       addEmptyParamsToSign: header,
