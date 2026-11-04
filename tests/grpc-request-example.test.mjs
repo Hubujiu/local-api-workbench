@@ -162,3 +162,10 @@ test("generated boolean map keys survive a real protobuf wire round trip", () =>
   );
   assert.deepEqual(decoded.flags, result.example.flags);
 });
+
+test("enum normalization retains the existing non-finite default rejection", () => {
+  for (const value of ["inf", "-inf", "nan"]) {
+    const p = `syntax="proto2"; package x; enum E { A=0; } message Q { optional E e=1; optional double n=2 [default=${value}]; } service S {rpc M(Q) returns(Q);}`;
+    assert.throws(() => compileGrpcSchema({ proto: p }), /数值无效/);
+  }
+});
