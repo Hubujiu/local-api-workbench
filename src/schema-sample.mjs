@@ -1,5 +1,5 @@
 import { intersectSampleSchemas } from "./schema-intersection.mjs";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
 // Deterministic illustrative samples, not a general JSON Schema solver.
 export function sampleFromSchema(
   schema,
@@ -8,17 +8,23 @@ export function sampleFromSchema(
   options = {},
 ) {
   const budget = { nodes: 0 };
+  const uniqueSamples = createUniqueSampleSelector();
+  let uniqueTupleDepth = 0;
+  const literal = (value) =>
+    uniqueTupleDepth ? uniqueSamples.check(value) : structuredClone(value);
   function sample(schema, level, seen, fieldName = "") {
+    uniqueSamples.assertBudget();
+    if (uniqueTupleDepth) uniqueSamples.check(schema);
     if (++budget.nodes > 10000 || level > 12)
       throw Error("Schema 生成超过节点/深度上限");
     if (schema === false) throw Error("Schema 禁止任何值");
     if (schema === true) return null;
     if (!schema || typeof schema !== "object" || Array.isArray(schema))
       throw Error("Schema 必须为对象");
-    if (schema.const !== undefined) return structuredClone(schema.const);
-    if (schema.example !== undefined) return structuredClone(schema.example);
-    if (schema.default !== undefined) return structuredClone(schema.default);
-    if (schema.enum?.length) return structuredClone(schema.enum[0]);
+    if (schema.const !== undefined) return literal(schema.const);
+    if (schema.example !== undefined) return literal(schema.example);
+    if (schema.default !== undefined) return literal(schema.default);
+    if (schema.enum?.length) return literal(schema.enum[0]);
     if (schema.$ref) {
       let ref = schema.$ref;
       if (typeof ref !== "string" || !ref.startsWith("#"))
@@ -38,19 +44,28 @@ export function sampleFromSchema(
         .slice(2)
         .split("/")
         .map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+        if (uniqueTupleDepth && types.isProxy(target))
+          throw Error("唯一数组引用不支持 Proxy");
         if (
           ["__proto__", "prototype", "constructor"].includes(part) ||
           !target ||
           !Object.hasOwn(target, part)
         )
           throw Error("Schema 引用不存在");
-        target = target[part];
+        if (uniqueTupleDepth) {
+          if (types.isProxy(target)) throw Error("唯一数组引用不支持 Proxy");
+          const descriptor = Object.getOwnPropertyDescriptor(target, part);
+          if (!descriptor || !Object.hasOwn(descriptor, "value"))
+            throw Error("唯一数组引用不支持访问器");
+          target = descriptor.value;
+        } else target = target[part];
       }
       if (
         typeof target !== "boolean" &&
         (!target || typeof target !== "object" || Array.isArray(target))
       )
         throw Error("Schema 引用目标不是Schema");
+      if (uniqueTupleDepth) uniqueSamples.check(target);
       const overrides = { ...schema };
       delete overrides.$ref;
       const next =
@@ -85,7 +100,7 @@ export function sampleFromSchema(
       if (schema[key] !== undefined)
         throw Error("复杂约束 " + key + " 请提供 example");
     const mocked = options.valueForField?.(fieldName, schema);
-    if (mocked !== undefined) return structuredClone(mocked);
+    if (mocked !== undefined) return literal(mocked);
     if (schema.oneOf !== undefined || schema.anyOf !== undefined) {
       if (schema.oneOf !== undefined && schema.anyOf !== undefined)
         throw Error("多个组合关键字请提供 example");
@@ -166,6 +181,7 @@ export function sampleFromSchema(
             throw Error("oneOf分支样例标签不匹配");
           return value;
         } catch (error) {
+          uniqueSamples.assertBudget();
           failures.push(String(error.message).slice(0, 160));
         }
       }
@@ -275,36 +291,32 @@ export function sampleFromSchema(
       const count = Math.max(min, Math.min(prefix?.length ?? 1, limit));
       if (count > 100) throw Error("数组样例上限100项，请提供 example");
       if (prefix) {
-        const values = Array.from({ length: count }, (_, index) =>
-          sample(
-            index < prefix.length ? prefix[index] : tail,
-            level + 1,
-            seen,
-            fieldName,
-          ),
-        );
-        if (
-          schema.uniqueItems &&
-          values.some((value, index) =>
-            values
-              .slice(0, index)
-              .some((previous) => isDeepStrictEqual(previous, value)),
-          )
-        )
-          throw Error("唯一元组无法生成不同样例，请提供 example");
+        if (schema.uniqueItems) {
+          uniqueSamples.check(prefix);
+          uniqueSamples.check(tail);
+          uniqueTupleDepth++;
+        }
+        let values;
+        try {
+          values = Array.from({ length: count }, (_, index) =>
+            sample(
+              index < prefix.length ? prefix[index] : tail,
+              level + 1,
+              seen,
+              fieldName,
+            ),
+          );
+        } finally {
+          if (schema.uniqueItems) uniqueTupleDepth--;
+        }
+        if (schema.uniqueItems) uniqueSamples(values, values.length, true);
         return values;
       }
       if (schema.uniqueItems && count > 1) {
         const values = schema.items?.enum;
         if (!Array.isArray(values))
           throw Error("uniqueItems 请提供枚举或 example");
-        const unique = [
-          ...new Map(
-            values.map((value) => [JSON.stringify(value), value]),
-          ).values(),
-        ];
-        if (unique.length < count) throw Error("唯一数组约束无法满足");
-        return structuredClone(unique.slice(0, count));
+        return uniqueSamples(values, count);
       }
       return Array.from({ length: count }, () =>
         sample(schema.items ?? {}, level + 1, seen, fieldName),
@@ -525,4 +537,116 @@ function numberSample(schema, type) {
   )
     throw Error("无法生成满足数值约束的安全样例，请提供 example");
   return value;
+}
+
+// Compare only bounded, inert JSON values with Node's established structural
+// equality implementation. JSON objects are unordered; arrays are ordered and
+// JSON numbers do not distinguish negative zero. This is not JSON text equality.
+function createUniqueSampleSelector() {
+  let nodes = 0,
+    textUnits = 0,
+    comparisonWork = 0;
+  let exhausted;
+  const assertBudget = () => {
+    if (exhausted) throw exhausted;
+  };
+  const fail = () => {
+    exhausted ??= Error(
+      "唯一数组比较超过节点/深度/文本/计算预算，请提供 example",
+    );
+    throw exhausted;
+  };
+  const text = (value) => {
+    textUnits += value.length;
+    if (textUnits > 1048576) fail();
+    return value.length;
+  };
+  const inspect = (value, depth, ancestors) => {
+    assertBudget();
+    if (++nodes > 10000 || depth > 32) fail();
+    if (value === null || typeof value === "boolean") return { value, cost: 1 };
+    if (typeof value === "number") {
+      if (!Number.isFinite(value))
+        throw Error("唯一数组候选须为有限 JSON 数据");
+      return { value: value === 0 ? 0 : value, cost: 1 };
+    }
+    if (typeof value === "string") return { value, cost: 1 + text(value) };
+    if (typeof value !== "object" || types.isProxy(value))
+      throw Error("唯一数组候选须为普通 JSON 数据，不支持访问器或 Proxy");
+    const array = Array.isArray(value),
+      prototype = Object.getPrototypeOf(value);
+    if (
+      array
+        ? prototype !== Array.prototype
+        : ![Object.prototype, null].includes(prototype)
+    )
+      throw Error("唯一数组候选须为普通 JSON 数据");
+    if (ancestors.has(value)) throw Error("唯一数组候选不支持循环引用");
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > 10001 || (array && value.length > 10000)) fail();
+    if (array && keys.length !== value.length + 1)
+      throw Error("唯一数组候选不支持稀疏数组或额外字段");
+    ancestors.add(value);
+    let cost = 1;
+    const entries = [];
+    try {
+      for (const key of keys) {
+        if (array && key === "length") continue;
+        if (
+          typeof key !== "string" ||
+          (array &&
+            (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))
+        )
+          throw Error("唯一数组候选须为普通 JSON 数据");
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
+          throw Error("唯一数组候选不支持访问器或隐藏字段");
+        cost += text(key);
+        const child = inspect(descriptor.value, depth + 1, ancestors);
+        cost += child.cost;
+        entries.push([key, child.value, child.cost]);
+      }
+    } finally {
+      ancestors.delete(value);
+    }
+    return {
+      value: array
+        ? entries.map((entry) => entry[1])
+        : Object.fromEntries(entries),
+      cost,
+      costs: array ? entries.map((entry) => entry[2]) : undefined,
+    };
+  };
+  const select = (values, count, rejectDuplicates = false) => {
+    // Inspect the container too: direct JS callers cannot invoke getters while
+    // validating candidates. HTTP input is already JSON, but uses this same path.
+    const checked = inspect(values, 0, new Set());
+    const candidates = checked.value;
+    // Charge both candidate sizes before each comparison, even for repeated
+    // values. Inspecting/caching a value does not make comparisons free.
+    const selected = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i],
+        cost = checked.costs[i];
+      let duplicate = false;
+      for (const previous of selected) {
+        comparisonWork += cost + previous.cost;
+        if (comparisonWork > 16777216) fail();
+        if (isDeepStrictEqual(previous.value, candidate)) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (duplicate) {
+        if (rejectDuplicates)
+          throw Error("唯一元组无法生成不同样例，请提供 example");
+      } else selected.push({ value: candidate, cost });
+      if (!rejectDuplicates && selected.length === count) break;
+    }
+    if (selected.length < count) throw Error("唯一数组约束无法满足");
+    return selected.map((item) => item.value);
+  };
+  select.check = (value) => inspect(value, 0, new Set()).value;
+  select.assertBudget = assertBudget;
+  return select;
 }
