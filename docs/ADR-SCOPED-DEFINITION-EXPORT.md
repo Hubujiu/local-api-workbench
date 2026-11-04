@@ -168,3 +168,34 @@ explicit credential-free rebind policy; no requests, scripts or DB tasks execute
 These local checks do not replace exact combined CI, which remains pending. The
 candidate is WIP and separate from the accepted integration branch. No main merge,
 release or deployment is implied.
+
+## Composition with native websocket2 binary definitions
+
+A separate candidate now composes the verified PR13 literal binary importer and
+PR14 source-backed reverse exporter into this scoped/manual interchange tree.
+Only the two native adapter files change in production. The root already has
+PR32's Base64 expansion preflight; it is not applied again. Accepted integration
+and feature branch histories remain separate until exact combined CI verifies
+the candidate.
+
+Four real cross-workflow tests cover both native formats through owner routes,
+and official HTTP/stdio SDK sessions: mixed six-message groups, scoped export,
+two-step manual import, second-generation export, new-identity backup/restore,
+reopen and explicit frozen execution. Independent byte and binary-frame flags
+remain the oracle, including empty binary. Changing the live message to different
+bytes does not change the frozen execution. Existing HTTP definition history,
+raw policy, static auth, selected environment, frozen HTTP plan and source/peer
+file bytes remain unchanged where the operation does not own them. Stale previews,
+invalid encodings, incomplete/colliding graphs and insufficient or foreign
+session permissions reject without persistent changes. A native protocol plan
+still makes full native export fail; tests do not remove it to manufacture a pass.
+
+The initial test fixture added an unknown setting and correctly failed export;
+that fixture error was removed without changing production guards. The final
+new-file targeted batch passed 4/4 locally. Import/export/backup/reopen produced
+no HTTP/WebSocket execution, and explicit executions had exact counted frames.
+A separate loopback DB observer remained unused, but no actual database task or
+database executor was configured, so these are not database-execution tests.
+These tests do not promise rollback of bytes already sent before revocation.
+The previously denied local full-suite command is not retried or replaced by a
+full-suite alternative. Exact combined CI and independent review remain required.
