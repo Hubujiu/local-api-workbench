@@ -25,14 +25,14 @@ test("MCP covers project/environment/service/global lifecycle and plan CRUD with
   const list = await d({ id: 1, method: "tools/list" });
   assert.equal(
     list.result.tools.filter((t) => t.name.startsWith("localapi_")).length,
-    54,
+    55,
   );
   assert.equal(
     list.result.tools.filter((t) => t.name.startsWith("apipost_")).length,
     30,
   );
   const toolNames = new Set(list.result.tools.map((t) => t.name));
-  assert.equal(toolNames.size, 84);
+  assert.equal(toolNames.size, 85);
   assert(toolNames.has("localapi_preview_project_export"));
   assert(toolNames.has("localapi_export_project_selection"));
   for (const name of [
@@ -63,6 +63,7 @@ test("MCP covers project/environment/service/global lifecycle and plan CRUD with
   for (const name of [
     "localapi_list_grpc_definitions",
     "localapi_get_grpc_definition",
+    "localapi_generate_grpc_request_example",
     "localapi_list_socketio_definitions",
     "localapi_get_socketio_definition",
   ])

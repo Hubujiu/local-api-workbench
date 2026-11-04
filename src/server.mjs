@@ -58,6 +58,7 @@ import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
 import { recordPlanRun } from "./plan-evidence.mjs";
 import { reflectGrpc } from "./grpc-reflection.mjs";
+import { generateGrpcRequestExample } from "./grpc-request-example.mjs";
 import {
   inspectGrpcSchema,
   normalizeGrpcDefinition,
@@ -1538,6 +1539,8 @@ export async function createApp({
               json(res, 200, { ...(await reflectGrpc(input, signal)), runId }),
             );
           }
+          if (action === "grpc-request-example" && req.method === "POST")
+            return json(res, 200, generateGrpcRequestExample(await body(req)));
           if (action === "grpc-schema" && req.method === "POST")
             return json(res, 200, inspectGrpcSchema(await body(req)));
           if (action === "grpc-definitions") {
