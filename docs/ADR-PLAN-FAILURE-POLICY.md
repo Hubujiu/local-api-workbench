@@ -1,4 +1,4 @@
-# Bounded canonical plan failure policy (RED contract)
+# Bounded canonical plan failure policy
 
 This independent feature depends on fixed PR91 head b839507e7bdf9aa93f6eae1b2be919126eed256f (tree 03538bfd9f400ae037d9e6a144467cb217322906), containing the existing PR44 repeat and PR88 admission dependencies. It does not add the whole integration tree or modify PR91.
 
@@ -14,7 +14,7 @@ Initial real HTTP tests are intentionally RED and do not establish acceptance. R
 
 ## Implementation checkpoint, not full acceptance
 
-The initial six behavioral RED failures now pass. A separate golden-fixture mistake (unfixed request IDs) was corrected before the published RED checkpoint, not counted as a product defect. Current focused core/version/boundary batch passes 17 tests. Real owner/SDK/CLI/recovery tests and independent review are in progress; no whole-project acceptance is claimed.
+The initial six behavioral RED failures now pass. A separate golden-fixture mistake (unfixed request IDs) was corrected before the published RED checkpoint, not counted as a product defect. The full feature/core/version batch passes 26 tests, including real owner/official SDK HTTP+stdio/CLI, restored project isolation, held HTTP cancellation and both scope/final-record genuine journal uncertainty recovery. Related IF/repeat/credentials/history/type regression batch passes 87 tests. Independent checkpoint review passed 45 focused checks with no known code blocker. These overlapping counts are separate evidence, not a delivery percentage; exact-head CI and root composition remain pending.
 
 For an opt-in stop plan, an uncertain scope persistence result stops with `scope-commit-unknown`, retaining the leaf's typed scopeCommit and completed response, without ordinary failureStop attribution. Default/continue semantics remain unchanged. This fixed feature base does not contain newer root-only per-step progress catch, protocol-script unknown-commit or HTTP finalization guards; composition must retain those stronger root guards before the optional ordinary stop. Native strict extraction and existing cancellation on this base remain higher priority.
 

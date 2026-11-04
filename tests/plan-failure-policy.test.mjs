@@ -130,3 +130,79 @@ test("failure policy is closed, versioned, preserved on omission and explicitly 
       /failurePolicy|失败策略/,
     );
 });
+
+test(
+  "stop before-script failure starts neither primary nor trailing HTTP",
+  { timeout: 15000 },
+  async (t) => {
+    const f = await fixture(t);
+    const plan = snapshotPlan({
+      id: "before",
+      failurePolicy: "stop",
+      steps: [
+        leaf("a", f.url + "/primary", {
+          beforeScript: 'throw Error("controlled before failure");',
+        }),
+        leaf("b", f.url + "/tail"),
+      ],
+    });
+    const run = await runPlan(plan, {}, executeRequest);
+    assert.equal(run.status, "failed");
+    assert.equal(run.stopReason, "step-failure");
+    assert.equal(run.results.length, 1);
+    assert.equal(run.results[0].response, undefined);
+    assert.match(run.results[0].error, /controlled before failure/);
+    assert.deepEqual(f.seen, []);
+  },
+);
+
+test(
+  "external cancellation during held real HTTP wins over failure policy and sends no tail",
+  { timeout: 15000 },
+  async (t) => {
+    let entered;
+    const held = new Promise((resolve) => {
+      entered = resolve;
+    });
+    const seen = [];
+    const peer = http.createServer((req, res) => {
+      seen.push(req.url);
+      if (req.url === "/hold") {
+        entered();
+        return;
+      }
+      res.end("unexpected");
+    });
+    peer.listen(0, "127.0.0.1");
+    await once(peer, "listening");
+    t.after(async () => {
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+    });
+    const url = `http://127.0.0.1:${peer.address().port}`;
+    const controller = new AbortController();
+    const pending = runPlan(
+      snapshotPlan({
+        id: "cancel",
+        failurePolicy: "stop",
+        steps: [leaf("a", url + "/hold"), leaf("b", url + "/tail")],
+      }),
+      {},
+      executeRequest,
+      { signal: controller.signal },
+    );
+    await Promise.race([
+      held,
+      pending.then(() => {
+        throw Error("run ended before held request");
+      }),
+    ]);
+    controller.abort();
+    const run = await pending;
+    assert.equal(run.status, "cancelled");
+    assert.equal(run.results.length, 1);
+    assert.equal(run.stopReason, undefined);
+    assert.equal(run.failureStop, undefined);
+    assert.deepEqual(seen, ["/hold"]);
+  },
+);
