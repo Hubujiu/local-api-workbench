@@ -73,6 +73,15 @@ test("Node generated example sends the intended query, headers and literal body 
 test("rejects unsupported or unsafe inputs instead of silently changing them", () => {
   assert.throws(() => generateRequestCode(base, "node", "missing"), /不支持/);
   assert.throws(
+    () =>
+      generateRequestCode(
+        { ...base, url: "http://example.test/path?" },
+        "python",
+        "python3",
+      ),
+    /查询分隔符/,
+  );
+  assert.throws(
     () => generateRequestCode({ ...base, body: "\ud800" }, "go", "native"),
     /Unicode/,
   );

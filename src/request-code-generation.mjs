@@ -30,6 +30,8 @@ export function generateRequestCode(input, target, client, options = {}) {
   const { request, url, headers } = prepareLiteralHTTPExport(input, options);
   if (url.username || url.password)
     throw Error("代码示例暂不支持 URL 内的认证信息");
+  if (url.href.split("#", 1)[0].endsWith("?"))
+    throw Error("代码示例暂不支持保留空查询分隔符");
   if (request.proxy || request.httpVersion !== "1.1")
     throw Error("代码示例暂不支持代理或指定 HTTP/2");
   if (request.auth.type === "digest")
