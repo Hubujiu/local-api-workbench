@@ -1,4 +1,5 @@
 import { validatePlanCondition } from "./plan-condition.mjs";
+import { normalizeExecutionContext } from "./script-context.mjs";
 // Canonical definition traversal only. No transport, interpolation, or execution.
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 function object(value, label, keys) {
@@ -83,6 +84,50 @@ function dataOnly(root) {
   };
   visit(root, 0);
 }
+function validateRowsJSON(value) {
+  let nodes = 0;
+  const walk = (item, depth) => {
+    if (++nodes > 100000 || depth > 32) throw Error("数据行结构超限");
+    if (item === null || typeof item === "string" || typeof item === "boolean")
+      return;
+    if (
+      typeof item === "number" &&
+      Number.isFinite(item) &&
+      !Object.is(item, -0)
+    )
+      return;
+    if (!item || typeof item !== "object") throw Error("数据行必须是严格 JSON");
+    if (Array.isArray(item)) {
+      if (
+        Object.getPrototypeOf(item) !== Array.prototype ||
+        Reflect.ownKeys(item).length !== item.length + 1
+      )
+        throw Error("数据行数组必须稠密且没有额外属性");
+      for (let i = 0; i < item.length; i++) {
+        const descriptor = Object.getOwnPropertyDescriptor(item, String(i));
+        if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
+          throw Error("数据行数组必须稠密且没有访问器");
+        walk(descriptor.value, depth + 1);
+      }
+      return;
+    }
+    if (![Object.prototype, null].includes(Object.getPrototypeOf(item)))
+      throw Error("数据行对象原型无效");
+    for (const key of Reflect.ownKeys(item)) {
+      const descriptor = Object.getOwnPropertyDescriptor(item, key);
+      if (
+        typeof key !== "string" ||
+        forbidden.has(key) ||
+        !descriptor.enumerable ||
+        !Object.hasOwn(descriptor, "value")
+      )
+        throw Error("数据行字段不安全");
+      walk(descriptor.value, depth + 1);
+    }
+  };
+  walk(value, 0);
+}
+
 export function validateRepeatGraph(steps, { requireIds = false } = {}) {
   if (!hasRepeatSteps(steps)) return false;
   dataOnly(steps);
@@ -204,7 +249,14 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
     )
       throw Error("循环计划HTTP预期状态无效");
   };
-  const visit = (step, depth, multiplier, conditional = false) => {
+  const visit = (
+    step,
+    depth,
+    multiplier,
+    conditional = false,
+    dataDepth = 0,
+    rowBytes = 0,
+  ) => {
     object(step, "步骤");
     if (step.type === "if") {
       if (depth >= 4) throw Error("条件/循环组嵌套最多4层");
@@ -222,7 +274,8 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
       decisions += multiplier;
       bytes += Buffer.byteLength(JSON.stringify(step.condition)) * multiplier;
       if (decisions > 200) throw Error("条件计划展开最多200次判断");
-      for (const child of step.steps) visit(child, depth + 1, multiplier, true);
+      for (const child of step.steps)
+        visit(child, depth + 1, multiplier, true, dataDepth, rowBytes);
     } else if (step.type === "repeat") {
       if (depth >= 4) throw Error("循环组嵌套最多4层");
       object(step, "循环组", [
@@ -231,20 +284,50 @@ export function validateRepeatGraph(steps, { requireIds = false } = {}) {
         "name",
         "enabled",
         "count",
+        "rows",
         "steps",
       ]);
       metadata(step);
       if (!Number.isInteger(step.count) || step.count < 1 || step.count > 100)
         throw Error("循环次数须为1至100的整数");
+      let nestedRowBytes = rowBytes;
+      if (step.rows !== undefined) {
+        if (dataDepth) throw Error("数据行循环暂不支持嵌套数据行循环");
+        array(step.rows, "数据行");
+        if (step.rows.length !== step.count)
+          throw Error("数据行数量必须等于循环次数");
+        nestedRowBytes = 0;
+        for (let i = 0; i < step.rows.length; i++) {
+          object(step.rows[i], "数据行");
+          validateRowsJSON(step.rows[i]);
+          nestedRowBytes = Math.max(
+            nestedRowBytes,
+            Buffer.byteLength(JSON.stringify(step.rows[i])),
+          );
+          normalizeExecutionContext({
+            iteration: i,
+            iterationCount: step.count,
+            iterationData: step.rows[i],
+          });
+        }
+      }
       array(step.steps, "循环子步骤");
       for (const child of step.steps)
-        visit(child, depth + 1, multiplier * step.count, conditional);
+        visit(
+          child,
+          depth + 1,
+          multiplier * step.count,
+          conditional,
+          dataDepth + (step.rows === undefined ? 0 : 1),
+          nestedRowBytes,
+        );
     } else {
       if (conditional && step.type !== undefined && step.type !== "http")
         throw Error("条件组首版仅支持HTTP叶子");
       leaf(step, depth > 0);
       expanded += multiplier;
-      bytes += Buffer.byteLength(JSON.stringify(step)) * multiplier;
+      bytes +=
+        (Buffer.byteLength(JSON.stringify(step)) + rowBytes) * multiplier;
     }
     // Disabled definitions are deliberately included, so toggling enabled cannot
     // bypass the same potential-work budget.
@@ -285,7 +368,7 @@ export function mapPlanLeaves(steps, map) {
 }
 export function planOccurrences(steps, { controls = false } = {}) {
   const occurrences = [];
-  const visit = (nodes, path) => {
+  const visit = (nodes, path, dataContext) => {
     for (const step of nodes) {
       if (step.enabled === false) continue;
       if (step.type === "if") {
@@ -299,22 +382,36 @@ export function planOccurrences(steps, { controls = false } = {}) {
           ]),
         };
         if (controls) occurrences.push(control);
-        visit(step.steps, path);
+        visit(step.steps, path, dataContext);
         control.skipTo = occurrences.length;
         continue;
       }
       if (step.type === "repeat") {
         for (let iteration = 0; iteration < step.count; iteration++)
-          visit(step.steps, [...path, { groupId: step.id, iteration }]);
+          visit(
+            step.steps,
+            [...path, { groupId: step.id, iteration }],
+            step.rows === undefined
+              ? dataContext
+              : {
+                  iteration,
+                  iterationCount: step.count,
+                  iterationData: step.rows[iteration],
+                },
+          );
         continue;
       }
       if (!path.length) {
-        occurrences.push({ step });
+        occurrences.push({
+          step,
+          ...(dataContext === undefined ? {} : { dataContext }),
+        });
         continue;
       }
       const { groupId, iteration } = path.at(-1);
       occurrences.push({
         step,
+        ...(dataContext === undefined ? {} : { dataContext }),
         repeat: {
           groupId,
           childId: step.id,
@@ -336,7 +433,7 @@ export function planOccurrences(steps, { controls = false } = {}) {
       });
     }
   };
-  visit(steps, []);
+  visit(steps, [], undefined);
   return occurrences;
 }
 export function activePlanStepCount(plan) {
