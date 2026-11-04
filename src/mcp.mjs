@@ -626,12 +626,22 @@ export function createMCP({
               output = {
                 plans: p.plans,
                 runs: p.runs.map(
-                  ({ id, planName, status, createdAt, planHash }) => ({
+                  ({
                     id,
                     planName,
                     status,
                     createdAt,
                     planHash,
+                    stopReason,
+                    conditionResults,
+                  }) => ({
+                    id,
+                    planName,
+                    status,
+                    createdAt,
+                    planHash,
+                    ...(stopReason ? { stopReason } : {}),
+                    ...(conditionResults ? { conditionResults } : {}),
                   }),
                 ),
               };
@@ -808,6 +818,15 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
+              if (output.conditionResults)
+                emitProgress({
+                  completed: output.results.length,
+                  total: totalSteps,
+                  totalIsPotential: true,
+                  finished: true,
+                  status: output.status,
+                  conditions: output.conditionResults.length,
+                });
               output.environmentId = environmentId;
               const receipt = await appendExecutionRecord(
                 store,
@@ -858,6 +877,7 @@ export function createMCP({
                     emitProgress({
                       completed: ++completed,
                       total: totalSteps,
+                      totalIsPotential: true,
                       ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,
@@ -866,6 +886,15 @@ export function createMCP({
                     resolveServiceRequest(p, request, environmentId),
                 },
               );
+              if (output.conditionResults)
+                emitProgress({
+                  completed: output.results.length,
+                  total: totalSteps,
+                  totalIsPotential: true,
+                  finished: true,
+                  status: output.status,
+                  conditions: output.conditionResults.length,
+                });
               output.environmentId = environmentId;
               output = await recordPlanRun(store, p.id, output, "mcp");
               break;

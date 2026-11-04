@@ -58,7 +58,7 @@ export function validatePlanStepTypes(steps) {
       )
         throw fail(label + "不能包含访问器");
       const type = descriptor?.value;
-      if (type === "repeat") {
+      if (type === "repeat" || type === "if") {
         repeated = true;
         const children = Object.getOwnPropertyDescriptor(step, "steps");
         if (!children) throw fail("循环计划步骤类型缺少子步骤");
