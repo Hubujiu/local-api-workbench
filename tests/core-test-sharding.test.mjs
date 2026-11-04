@@ -68,7 +68,7 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
   const baseline = globSync("tests/*.test.mjs", { cwd: root })
     .map((file) => file.split(path.sep).join("/"))
     .sort();
-  for (const total of [1, 2, 3, 4, 5, 6, 7]) {
+  for (const total of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     const plans = await Promise.all(
       Array.from({ length: total }, (_, i) =>
         createPlan(root, { index: i + 1, total }),
@@ -386,7 +386,7 @@ test("glob-like filenames cannot be silently ignored by Node", async (t) => {
   assert.equal(result.status, 1);
 });
 
-for (const total of [4, 6, 7])
+for (const total of [4, 6, 7, 12])
   test(
     total === 4
       ? "real shards execute every file and nested concurrent test exactly once with separate TAP evidence"
@@ -403,6 +403,8 @@ for (const total of [4, 6, 7])
       ];
       if (total >= 6) names.push("sixth-capacity-fixture");
       if (total >= 7) names.push("seventh-capacity-fixture");
+      while (names.length <= total)
+        names.push(`capacity-fixture-${names.length}`);
       for (const name of names) {
         const source = `import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -518,17 +520,17 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
     "utf8",
   );
   const core = workflow.split("  core:")[1].split("  browser:")[0];
-  assert.match(core, /shard: \[1, 2, 3, 4, 5, 6, 7\]/);
+  assert.match(core, /shard: \[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12\]/);
   assert.match(core, /timeout-minutes: 10/);
   assert.match(core, /if: always\(\)/);
   assert.match(
     core,
-    /name: core-test-diagnostics-\$\{\{ matrix\.os \}\}-shard-\$\{\{ matrix\.shard \}\}-of-7/,
+    /name: core-test-diagnostics-\$\{\{ matrix\.os \}\}-shard-\$\{\{ matrix\.shard \}\}-of-12/,
   );
   for (const extension of ["json", "tap", "progress.jsonl"])
     assert(
       core.includes(
-        `test-results/core-\${{ matrix.os }}-shard-\${{ matrix.shard }}-of-7.${extension}`,
+        `test-results/core-\${{ matrix.os }}-shard-\${{ matrix.shard }}-of-12.${extension}`,
       ),
     );
   assert.match(core, /fail-fast: false/);
@@ -536,7 +538,7 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
   assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
   assert.match(
     core,
-    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/7 --label=\$\{\{ matrix\.os \}\}/,
+    /run-core-tests\.mjs --shard=\$\{\{ matrix\.shard \}\}\/12 --label=\$\{\{ matrix\.os \}\}/,
   );
   assert.doesNotMatch(
     core,
