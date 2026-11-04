@@ -2445,6 +2445,7 @@ export async function createApp({
               const { plan } = materializeLivePlan(
                 executionProject,
                 definition,
+                { allowRuntimeRows: true },
               );
               const prepared = prepareStagedLoad(
                 executionProject,

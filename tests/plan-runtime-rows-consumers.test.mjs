@@ -53,26 +53,18 @@ const schedule = {
   stages: [{ durationSeconds: 1, targetVUs: 1 }],
   maxIterations: 1,
 };
-const stagedError = /阶段压测尚不支持运行时数据行循环/;
 const response = () => ({ status: 200, headers: {}, body: "ok" });
 
 for (const enabled of [true, false]) {
   for (const canonical of [false, true]) {
-    test(`staged load refuses runtime rows definitions: enabled=${enabled}, canonical=${canonical}`, async () => {
-      let plan = { steps: [rows({ enabled })] };
+    test(`staged load admits bounded runtime rows definitions: enabled=${enabled}, canonical=${canonical}`, async () => {
+      let plan = { steps: [leaf("sibling"), rows({ enabled })] };
       if (canonical) plan = snapshotPlan(plan, { allowRuntimeRows: true });
-      // An empty source and an opt-in intended for canonical execution cannot
-      // change a restricted consumer's static admission contract.
-      const options = { allowRuntimeRows: canonical, variables: { items: [] } };
-      assert.throws(
-        () => prepareStagedLoad(project(), plan, schedule, options),
-        stagedError,
-      );
-      const prepared = {
-        snapshot: plan,
-        schedule,
-        selected: project().environments[0],
-      };
+      const prepared = prepareStagedLoad(project(), plan, schedule);
+      assert.deepEqual(prepared.snapshot.steps[1].rowsFrom, rows().rowsFrom);
+      // A caller cannot use the prepared entry point to evade the static cap.
+      prepared.snapshot.steps[1].enabled = true;
+      prepared.snapshot.steps[1].maxRows = 10;
       const noRead = new Proxy(
         {},
         {
@@ -81,15 +73,12 @@ for (const enabled of [true, false]) {
           },
         },
       );
-      await assert.rejects(
-        runStagedLoad(noRead, prepared, options),
-        stagedError,
-      );
+      await assert.rejects(runStagedLoad(noRead, prepared), /10/);
     });
   }
 }
 
-test("staged load refuses runtime rows under disabled or false parents", async () => {
+test("staged load admits disabled and false parents without resolving runtime sources", () => {
   for (const group of [
     condition([rows()]),
     { ...condition([rows()]), enabled: false },
@@ -99,14 +88,12 @@ test("staged load refuses runtime rows under disabled or false parents", async (
       { steps: [leaf("sibling"), group] },
       { allowRuntimeRows: true },
     );
-    assert.throws(
-      () => prepareStagedLoad(project(), plan, schedule),
-      stagedError,
-    );
-    await assert.rejects(
-      runStagedLoad(project(), { snapshot: plan }),
-      stagedError,
-    );
+    assert.doesNotThrow(() => prepareStagedLoad(project(), plan, schedule));
+    // Disabled definitions still undergo full model validation.
+    const invalid = structuredClone(plan);
+    const nested = invalid.steps[1].steps[0];
+    nested.maxRows = 0;
+    assert.throws(() => prepareStagedLoad(project(), invalid, schedule));
   }
 });
 
