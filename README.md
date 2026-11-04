@@ -1,14 +1,16 @@
 # Local API Workbench
 
-开发中，尚未通过完整复刻验收。当前完整逐项清单见 [PARITY-CURRENT](docs/PARITY-CURRENT.md)，差异与核验版本见 [CURRENT-PARITY](docs/CURRENT-PARITY.md)，逐轮实现与 CI 证据见 [迭代记录](docs/ITERATION-2026-10-18.md)。
+开发中，尚未完成 Apipost 全功能复刻验收。当前工作重点是六类后端流程，不新增前端或视觉打磨。2026-11-04 已核验的独立整合候选为 [`f11e4bbcb9d2b707a35893693ab6c8852a858847`](https://github.com/Hubujiu/local-api-workbench/commit/f11e4bbcb9d2b707a35893693ab6c8852a858847)，精确 CI [41774839917](https://github.com/Hubujiu/local-api-workbench/actions/runs/41774839917) 通过；三个实际 portable 包的来源、SHA256、到期时间与未覆盖范围见 [当前候选交付说明](docs/DELIVERY.md)。
+
+候选提交与本文件所在分支是不同概念：`develop`、单功能 PR 或本文后续文档提交均不自动包含或继承该候选的代码与验证。历史 [功能对照](docs/PARITY-CURRENT.md)、[核验摘要](docs/CURRENT-PARITY.md) 和 [迭代记录](docs/ITERATION-2026-10-18.md) 仅代表各自版本，不能作为当前完成率。
 
 本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
 
-**交付候选版 0.1.0。功能与可验证范围见 [交付清单](docs/DELIVERY.md)，不能将公开文档范围的独立实现等同于全部专有行为或像素级一致。**
+**当前提供可下载的 0.1.0 portable 候选，不是正式签名发行，也不代表全部专有行为、原生格式或像素级兼容。**
 
 ## 启动
 
-安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
+源码命令运行的是当前检出的代码；复验上述候选必须先确认检出精确候选提交，不能只按分支名称判断。安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
 
 ```
 npm ci
@@ -17,9 +19,13 @@ npm start
 
 浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。每个项目使用独立 ID 目录，apis/envs/settings/plans/cases 分文件保存；history 默认不纳入新建项目的 Git 跟踪。写入使用事务日志恢复、项目锁与冲突检测。旧版单个 JSON 在第一次保存时迁移，原文件保留为备份。不要把包含密钥、历史或响应的运行目录提交到 Git。
 
-桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。Windows 便携包在 PR 的最新成功 Actions 运行中下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
+桌面开发入口：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；默认数据保存在 Electron userData/projects。使用成品候选时，只从[已核验的精确运行与包入口](docs/DELIVERY.md#当前包下载与校验)选择匹配架构的包，不把任意 PR 的最新绿灯当成完整组合。Windows必须完整解压整个目录后运行 `LocalAPI.exe`，不能只复制 exe，也无需另装 Node.js；macOS/Linux须继续解开内部 tar.gz，保留执行权限和符号链接。
 
-## 已实现的核心
+升级前先备份项目，正常退出旧桌面程序及其后端，确认旧进程停止后再将新包解压到独立目录。第二实例可能只激活旧窗口，不能把旧窗口出现当作新版启动成功。不要覆盖正在运行的文件，也不要让新旧进程同时打开同一数据目录；首次验证优先使用独立数据目录。Windows未完成正式签名；macOS仅有CI ad-hoc签名，并非Developer ID签名或公证。核对来源、外层ZIP SHA256及 `build-manifest.json`；如果系统阻止运行，不绕过安全警告。详见[桌面验证边界](docs/DESKTOP-VALIDATION.md)。
+
+## 本分支的基础能力
+
+以下基础说明不替代独立整合候选的精确版本与[六模块边界](docs/DELIVERY.md#六类后端范围与未完成项)。
 
 - 多级目录树与整棵子树原子改名/移除；可明确开启祖先参数/认证/脚本继承，默认保持精确目录，旧快照不变。
 - 隔离脚本支持有界 Promise/await、HTTP、定时器、await $.ajax/异步回调、CSV/XML响应解析；所有作用域共享原运行配额。
@@ -61,16 +67,16 @@ node tests/ui-smoke.mjs
 
 最后一个命令需要 Playwright/Chromium。CI 重复这些固定步骤，并保留截图证据。测试只访问临时本地 fixture，不访问第三方业务服务。计划与边界见 `docs/PLAN.md`。
 
-## 当前差距（不隐藏）
+## 当前候选差距（不隐藏）
 
-- 无公开可操作的完整原版客户端；视觉仅依据官方截图，尚未完成像素级审查
-- 本地沙箱无法启动浏览器，但已在 GitHub Actions 完成基础 UI smoke；涵盖保存竞争、脚本、导入、目录/文档持久化、OAuth、SSE 与 MCP 开关
-- 已创建 PR #1，多个候选版本十项 CI 全绿；最新迭代以对应提交的 CI 结果为准
-- 支持本地循环 OpenAPI 引用保留，外部 OpenAPI 引用不自动拉取；文档分享采用离线 HTML/Markdown 文件。Git 入口打开本地项目位置/终端，不自动推送或合并
-- PostgreSQL/MySQL 仅提供只读查询；SQLite 可逐次明确允许单条 INSERT/UPDATE/DELETE，拒绝多语句/DDL/REPLACE。SSE/WebSocket/TCP 已实现有界采集与交互会话，最长 15 分钟、总计 8 MiB、最近 200 条消息
-- 不包含付款、License 激活、在线团队/账号协同、商业 AI 服务
+- 原生非空 `automated_testings` 当前明确拒绝；保存事件图/设置到执行器的完整装配桥，以及可信同源、同版本的往返验收证据仍未闭合。已知第三方非空平级样本不能补齐该链路；有界 canonical repeat/IF/failurePolicy 不能冒充原生自动化兼容。
+- SQL Server、Oracle、达梦尚非候选中可用的 provider；独立 WIP/设计不等于已启用。实际服务、许可及运行条件仍须分别确认，SQLite/PostgreSQL/MySQL的已支持能力不能抵消这些缺口。
+- 脚本 SDK、Faker/Mock 和 Schema生成器只有明确子集，不支持全目录、任意模块或通用求解；受支持的原生交换也不保证所有资源、所有版本和所有数据语义。
+- 官方 SDK HTTP/stdio 合同不等于所有外部 MCP 宿主都已实机验收；原版 GUI 当前完整流程、像素一致性和更多系统/架构仍未完整验证。本轮不新增前端。
+- 正式签名、公证与长期发行入口未完成。当前 Actions 包保留7天，不是永久下载地址；旧 XML/运行时专项与历史偶发失败按原证据保留，不因本次绿灯宣称旧根因已解决。
+- 不包含付款、License 激活、在线团队/账号协同或商业 AI 服务，不绕过原版授权。TLS及系统安全校验不因候选测试而放宽。
 
-源文件和文档将通过一个固定开发分支的 PR 迭代；未经批准不合入 main、不部署。
+上述状态仅指交付说明中固定的候选。历史失败见[保留记录](docs/DELIVERY.md#历史失败与证据边界)，测试数量不折算完成率；本文不宣布合并 main、发布 release 或部署。
 
 ## 脚本
 
