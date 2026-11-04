@@ -4,6 +4,7 @@ import {
   serializeMessage,
 } from "@modelcontextprotocol/sdk/shared/stdio.js";
 import { MCPHTTPSessions, requestKey } from "./mcp-http-sessions.mjs";
+import { randomUUID } from "node:crypto";
 
 const executionTools = new Set([
   "localapi_execute_api",
@@ -16,6 +17,10 @@ const definitionHistoryMutationTools = new Set([
   "localapi_tag_api_definition_version",
   "localapi_restore_api_definition",
   "localapi_clear_api_definition_history",
+]);
+const manualImportTools = new Set([
+  "localapi_preview_import",
+  "localapi_apply_import",
 ]);
 const rpcError = (id, message, code = -32603) => {
   let correlation = {};
@@ -147,6 +152,7 @@ export async function serveMCPStdio({
 }) {
   const registry = new MCPHTTPSessions({ maxSessions: 1, idleMs: Infinity });
   const session = registry.create();
+  const instanceEpoch = randomUUID();
   const buffer = new ReadBuffer({ maxBufferSize: maxInputBytes });
   const pending = new Set();
   let tools = 0,
@@ -210,6 +216,7 @@ export async function serveMCPStdio({
       answer = await dispatch(message, {
         signal: lease.signal,
         onProgress: (progress) => activity?.update(progress),
+        manualImportSessionId: `stdio:${instanceEpoch}:${session}:${registry.capture()}`,
       });
       let result;
       try {
@@ -267,7 +274,9 @@ export async function serveMCPStdio({
     const isExecution = isTool && executionTools.has(message.params?.name);
     const cancellable =
       isExecution ||
-      (isTool && definitionHistoryMutationTools.has(message.params?.name));
+      (isTool &&
+        (definitionHistoryMutationTools.has(message.params?.name) ||
+          manualImportTools.has(message.params?.name)));
     let lease;
     try {
       lease = registry.begin(session, message.id, cancellable);

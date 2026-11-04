@@ -2,6 +2,13 @@ import {
   applyPostmanRawMedia,
   validatePostmanRawBodyRequest,
 } from "./postman-raw-body.mjs";
+import {
+  previewManualImport,
+  materializeManualImport,
+  manualImportReceipt,
+  manualImportError,
+} from "./manual-import.mjs";
+import { manualImportID } from "./manual-import-token.mjs";
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   validateRequestDefinitionHistory,
@@ -632,6 +639,112 @@ export class Store {
       throw Error("项目已有其他修改，请重新加载");
     return this.save(current, { signal, definitionHistoryOperation });
   }
+  async previewManualImport(projectId, input, { sessionId, signal } = {}) {
+    try {
+      signal?.throwIfAborted();
+      const current = await this.get(projectId);
+      return await previewManualImport(current, input, {
+        sessionId,
+        signal,
+        validate: (candidate, context) => {
+          this.#validateProject(candidate);
+          const simulated = structuredClone(candidate);
+          simulated.revision = (current.revision || 0) + 1;
+          simulated.configRevision =
+            (current.configRevision ?? current.revision ?? 0) + 1;
+          simulated.updatedAt = new Date(context.issuedAt).toISOString();
+          let index = 0;
+          const history = reconcileRequestDefinitionHistory(
+            current,
+            simulated,
+            {
+              now: simulated.updatedAt,
+              makeId: () =>
+                manualImportID(context, `history-simulation:${index++}`),
+            },
+          );
+          const before = current.requestDefinitionHistory?.entries || [];
+          const after = history?.entries || [];
+          const oldVersions = new Set(
+            before.flatMap((entry) => entry.versions.map((v) => v.id)),
+          );
+          const newVersions = new Set(
+            after.flatMap((entry) => entry.versions.map((v) => v.id)),
+          );
+          const oldLineages = new Set(before.map((entry) => entry.lineageId));
+          return {
+            createdLineages: after.filter(
+              (entry) => !oldLineages.has(entry.lineageId),
+            ).length,
+            addedSnapshots: [...newVersions].filter(
+              (id) => !oldVersions.has(id),
+            ).length,
+            prunedSnapshots: [...oldVersions].filter(
+              (id) => !newVersions.has(id),
+            ).length,
+          };
+        },
+      });
+    } catch (error) {
+      throw manualImportError(error);
+    }
+  }
+  async applyManualImport(projectId, input, { sessionId, signal } = {}) {
+    // No detached preview candidate is accepted. The normal Store pending chain
+    // and SQLite project lock protect recovery, CAS, planning and publication.
+    const task = this.pending
+      .catch(() => {})
+      .then(async () => {
+        signal?.throwIfAborted();
+        await this.init();
+        const base = this.base(projectId);
+        if (Object.hasOwn(this.creationErrors, projectId))
+          throw this.creationErrors[projectId];
+        const release = await acquireFileLock(
+          path.join(base, projectId + ".json.lock"),
+          { signal },
+        );
+        let committed = false,
+          primaryError;
+        try {
+          signal?.throwIfAborted();
+          const current = await this.readUnlocked(projectId, base);
+          const result = await materializeManualImport(current, input, {
+            sessionId,
+            signal,
+          });
+          if (result.noOp) {
+            result.beforePublish();
+            return manualImportReceipt(current, result);
+          }
+          this.#validateProject(result.project);
+          await this.#saveLocked(
+            result.project,
+            { signal, beforePublish: result.beforePublish },
+            base,
+          );
+          committed = true;
+          return manualImportReceipt(result.project, result);
+        } catch (error) {
+          primaryError = error;
+          throw error;
+        } finally {
+          try {
+            await release();
+          } catch (error) {
+            throw (
+              primaryError ||
+              (committed ? new ProjectCommitUncertain(projectId, error) : error)
+            );
+          }
+        }
+      })
+      .catch((error) => {
+        throw manualImportError(error);
+      });
+    this.pending = task;
+    return task;
+  }
   #validateProject(p) {
     // History is opaque service-owned evidence, not user-supplied executable
     // objects. Inspect its descriptor before any clone/JSON operation.
@@ -853,6 +966,7 @@ export class Store {
     {
       activity = false,
       signal,
+      beforePublish,
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
       apiResourceRestore,
@@ -1033,7 +1147,7 @@ export class Store {
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
-    await writeProject(path.join(base, p.id), next, { signal });
+    await writeProject(path.join(base, p.id), next, { signal, beforePublish });
     try {
       const saved = await readProject(path.join(base, p.id), p.id);
       validateAPIResourceTrash(saved);
