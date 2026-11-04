@@ -5,6 +5,7 @@ import {
   collectNativeRedisWrites,
 } from "./native-redis-write-intent.mjs";
 import { databaseWriteReceipt } from "./database-write-receipts.mjs";
+import { hasRuntimeRows } from "./plan-repeat.mjs";
 
 const executions = new WeakMap();
 const denied = () =>
@@ -12,6 +13,10 @@ const denied = () =>
     code: "NATIVE_WRITE_AUTHORITY_REQUIRED",
   });
 export function createNativeWriteExecution(handle, target, { signal } = {}) {
+  // Capability creation is a separate consumer from canonical execution. Reject
+  // active dynamic definitions before inspecting requests or granting authority.
+  if (hasRuntimeRows(handle.snapshot.plan.steps, { activeOnly: true }))
+    throw Error("运行时数据行循环尚不支持原生写入执行");
   const writes = handle.snapshot.plan.steps
     .filter((step) => step.enabled !== false)
     .flatMap((step) => collectNativeRedisWrites(step.request));

@@ -1,6 +1,10 @@
 import { performance } from "node:perf_hooks";
 import { snapshotPlan, runPlan } from "./core.mjs";
-import { activePlanLeaves, planOccurrences } from "./plan-repeat.mjs";
+import {
+  activePlanLeaves,
+  hasRuntimeRows,
+  planOccurrences,
+} from "./plan-repeat.mjs";
 import {
   selectedEnvironment,
   environmentVariables,
@@ -92,7 +96,15 @@ export function buildLoadSchedule(input) {
   };
 }
 
+function assertStagedLoadRows(plan) {
+  // Admission is based on definitions, never on the eventual source value or
+  // enabled state. Canonical storage support must not enable this consumer.
+  if (hasRuntimeRows(plan?.steps || []))
+    throw Error("阶段压测尚不支持运行时数据行循环（包括禁用定义）");
+}
+
 export function prepareStagedLoad(project, plan, input, options = {}) {
+  assertStagedLoadRows(plan);
   const schedule = buildLoadSchedule(input);
   const snapshot = snapshotPlan(plan);
   if (Buffer.byteLength(JSON.stringify(snapshot)) > 1024 * 1024)
@@ -128,6 +140,9 @@ export function prepareStagedLoad(project, plan, input, options = {}) {
 
 export async function runStagedLoad(project, prepared, options = {}) {
   const { schedule, snapshot, selected } = prepared;
+  // Direct callers can supply or change a prepared snapshot. Reject before
+  // scopes, timers, scripts, credentials, or transports are touched.
+  assertStagedLoadRows(snapshot);
   const variables =
     options.variables || environmentVariables(project, selected.id);
   const scopes = projectScopes(project, selected.id, variables);

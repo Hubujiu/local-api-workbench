@@ -151,7 +151,11 @@ export function freezeSocketIOStep(project, step) {
     socketio: { ...rest, definition: structuredClone(definition) },
   };
 }
-export function socketioPlanCredentials(plan, input = {}) {
+export function socketioPlanCredentials(
+  plan,
+  input = {},
+  { allowRuntimeRows = false } = {},
+) {
   if (!plain(input) || Buffer.byteLength(JSON.stringify(input)) > 1024 * 1024)
     throw Error("Socket.IO临时凭据映射无效或超限");
   const result = new Map();
@@ -169,7 +173,7 @@ export function socketioPlanCredentials(plan, input = {}) {
     validateSocketIOConnection({ ...steps[0].socketio.definition, ...value });
     result.set(id, structuredClone(value));
   }
-  for (const step of activePlanLeaves(plan.steps))
+  for (const step of activePlanLeaves(plan.steps, { allowRuntimeRows }))
     if (step.type === "socketio")
       validateSocketIOConnection({
         ...step.socketio.definition,

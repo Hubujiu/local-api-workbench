@@ -7,6 +7,7 @@ import {
 } from "./plan-step-identities.mjs";
 import {
   validateRepeatGraph,
+  hasRepeatSteps,
   mapPlanLeaves,
   planLeaves,
 } from "./plan-repeat.mjs";
@@ -25,8 +26,18 @@ export function versionPlan(previous, input, source = "manual", project) {
     : oldPolicy;
   validatePlanStepTypes(input.steps);
   for (const step of planLeaves(input.steps || [])) liveRequestId(step);
-  if (!validateRepeatGraph(input.steps)) linearPlanStepIds(input.steps);
-  if (previous && !validateRepeatGraph(previous.steps))
+  if (
+    !validateRepeatGraph(input.steps, {
+      allowRuntimeRows: hasRepeatSteps(input.steps),
+    })
+  )
+    linearPlanStepIds(input.steps);
+  if (
+    previous &&
+    !validateRepeatGraph(previous.steps, {
+      allowRuntimeRows: hasRepeatSteps(previous.steps),
+    })
+  )
     linearPlanStepIds(previous.steps);
   const importedNativeFlowSource =
     readImportedNativeFlowSource(input) ??
@@ -95,20 +106,27 @@ export function versionPlan(previous, input, source = "manual", project) {
     };
   const nextInput = { ...input };
   delete nextInput.failurePolicy;
-  const next = snapshotPlan({
-    ...nextInput,
-    ...(selectedPolicy ? { failurePolicy: selectedPolicy } : {}),
-    ...(importedNativeFlowSource === undefined
-      ? {}
-      : { importedNativeFlowSource }),
-    statusPolicy:
-      input.statusPolicy ??
-      previous?.statusPolicy ??
-      (previous ? "assertions" : "strict200"),
-    source,
-    updatedAt: new Date().toISOString(),
-  });
-  const old = previous ? snapshotPlan(previous) : {};
+  const next = snapshotPlan(
+    {
+      ...nextInput,
+      ...(selectedPolicy ? { failurePolicy: selectedPolicy } : {}),
+      ...(importedNativeFlowSource === undefined
+        ? {}
+        : { importedNativeFlowSource }),
+      statusPolicy:
+        input.statusPolicy ??
+        previous?.statusPolicy ??
+        (previous ? "assertions" : "strict200"),
+      source,
+      updatedAt: new Date().toISOString(),
+    },
+    { allowRuntimeRows: hasRepeatSteps(input.steps) },
+  );
+  const old = previous
+    ? snapshotPlan(previous, {
+        allowRuntimeRows: hasRepeatSteps(previous.steps),
+      })
+    : {};
   if (
     previous &&
     [

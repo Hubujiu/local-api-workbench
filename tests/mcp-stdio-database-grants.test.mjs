@@ -86,7 +86,7 @@ test("startup grants reuse CLI connection maps with real SQLite, project isolati
   await f.write(envelope({ fixture: f.config }));
   const grants = await loadMCPStdioDatabaseGrants(f.filename, f.options);
   t.after(() => grants.close());
-  assert.deepEqual(Object.keys(grants), ["query", "close"]);
+  assert.deepEqual(Object.keys(grants), ["preflight", "query", "close"]);
   assert.equal(JSON.stringify(grants), "{}");
   assert.deepEqual((await grants.query("p", query)).rows, [{ value: 7 }]);
   await assert.rejects(grants.query("q", query), /未获本次授权/);

@@ -363,6 +363,18 @@ export async function loadMCPStdioDatabaseGrants(
     }
     let closed = false;
     return Object.freeze({
+      async preflight(projectId, ids, signal) {
+        if (closed || !Array.isArray(ids))
+          throw Error("MCP stdio 数据库连接未获本次授权或已关闭");
+        // Resolve the entire declared batch before asking the shared grant
+        // checker. Unknown aliases must not result in partial authorization.
+        const connectionIds = ids.map((alias) => {
+          const id = bindings.get(projectId)?.get(alias);
+          if (!id) throw Error("MCP stdio 数据库连接未获本次授权或已关闭");
+          return id;
+        });
+        return grants.preflight(epoch, projectId, connectionIds, signal);
+      },
       async query(projectId, operation, signal) {
         const connectionId = bindings
           .get(projectId)

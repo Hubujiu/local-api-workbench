@@ -14,7 +14,12 @@ import {
 import { failureStopSummary } from "./plan-failure-policy.mjs";
 import { publishDebugVariables } from "./debug-publication.mjs";
 import { conditionSummary } from "./execution-history.mjs";
-import { activePlanStepCount, hasPlanConditions } from "./plan-repeat.mjs";
+import {
+  activePlanStepCount,
+  hasPlanConditions,
+  hasRuntimeRows,
+  potentialPlanStepCount,
+} from "./plan-repeat.mjs";
 import { assertNativeInheritanceMCPInput } from "./native-inheritance.mjs";
 import {
   listImportedExecutionRuns,
@@ -222,6 +227,7 @@ export function createMCP({
   protocolExecutor = executeWireFlow,
   socketioExecutor,
   databaseExecutor,
+  databasePreflight,
 }) {
   const allowed = new Set([...projects, ...sessionProjects]);
   const socketioSessions = new SocketIOSessions();
@@ -1527,8 +1533,17 @@ export function createMCP({
               const definition = p.plans.find((r) => r.id === args.planId);
               if (!definition) throw Error("计划不存在");
               if (nativeName) assertNativeLinearPlan(definition);
-              const { plan, bindings } = materializeLivePlan(p, definition);
-              const totalSteps = activePlanStepCount(plan);
+              const { plan, bindings } = materializeLivePlan(p, definition, {
+                allowRuntimeRows: !nativeName,
+              });
+              // Even disabled runtime groups need the opt-in graph counter;
+              // activePlanStepCount intentionally rejects that definition shape.
+              const runtimeRows = hasRuntimeRows(plan.steps);
+              const totalIsPotential =
+                runtimeRows || hasPlanConditions(plan.steps);
+              const totalSteps = runtimeRows
+                ? potentialPlanStepCount(plan, { allowRuntimeRows: true })
+                : activePlanStepCount(plan);
               const environmentId = selectedEnvironment(
                 p,
                 args.environmentId || plan.environmentId,
@@ -1540,6 +1555,10 @@ export function createMCP({
                 executeRequest,
                 {
                   signal,
+                  allowRuntimeRows: !nativeName,
+                  databasePreflight: databasePreflight
+                    ? (ids, signal) => databasePreflight(p.id, ids, signal)
+                    : undefined,
                   ...scopedExecution(store, p, environmentId),
                   databaseQuery: databaseExecutor
                     ? (operation, signal) =>
@@ -1557,9 +1576,7 @@ export function createMCP({
                     emitProgress({
                       completed: ++completed,
                       total: totalSteps,
-                      ...(hasPlanConditions(plan.steps)
-                        ? { totalIsPotential: true }
-                        : {}),
+                      ...(totalIsPotential ? { totalIsPotential: true } : {}),
                       ...(step.repeat ? { repeat: step.repeat } : {}),
                       stepId: step.stepId,
                       stepStatus: step.status,
@@ -1570,7 +1587,7 @@ export function createMCP({
                   ),
                 },
               );
-              if (output.conditionResults) {
+              if (output.conditionResults || runtimeRows) {
                 try {
                   await emitProgress({
                     completed: output.results.length,
@@ -1578,7 +1595,9 @@ export function createMCP({
                     totalIsPotential: true,
                     finished: true,
                     status: output.status,
-                    conditions: output.conditionResults.length,
+                    ...(output.conditionResults
+                      ? { conditions: output.conditionResults.length }
+                      : {}),
                   });
                 } catch {
                   // Reporting is not execution. Preserve completed leaf/decision
@@ -1765,6 +1784,7 @@ if (isStdioEntrypoint()) {
       write,
       execute,
       databaseExecutor: context.databaseExecutor,
+      databasePreflight: context.databasePreflight,
     });
     const { serveMCPStdio } = await import("./mcp-stdio.mjs");
     await serveMCPStdio({

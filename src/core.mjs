@@ -1,3 +1,8 @@
+import {
+  validateDatabaseOperationHeader,
+  validateDatabaseOperationBinding,
+} from "./plan-database-operation.mjs";
+import { analyzePlanRequirements } from "./plan-requirements.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
 import { applySharedScripts } from "./shared-scripts.mjs";
@@ -49,6 +54,9 @@ import {
   planLeaves,
   activePlanLeaves,
   planOccurrences,
+  hasRuntimeRows,
+  hasRepeatSteps,
+  validateRuntimeRows,
 } from "./plan-repeat.mjs";
 import { validateResourceJSON } from "./api-resource-lifecycle.mjs";
 import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
@@ -572,12 +580,12 @@ export function evaluateAssertions(response, assertions = []) {
     return { ...a, actual, passed };
   });
 }
-export function snapshotPlan(plan) {
+export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
   const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
   for (const step of planLeaves(plan.steps || [])) liveRequestId(step);
   validatePostmanOAuth2Project({ plans: [plan] });
-  const repeated = validateRepeatGraph(plan.steps);
+  const repeated = validateRepeatGraph(plan.steps, { allowRuntimeRows });
   // All leaves are cloned, including disabled ones: admit the static model first.
   for (const step of planLeaves(plan.steps || [])) {
     const auth = step.request?.auth;
@@ -687,7 +695,15 @@ export function snapshotPlan(plan) {
               enabled: step.enabled !== false,
               ...(step.type === "repeat"
                 ? {
-                    count: step.count,
+                    ...(Object.hasOwn(step, "rowsFrom")
+                      ? {
+                          rowsFrom: structuredClone(step.rowsFrom),
+                          maxRows: step.maxRows,
+                          ...(step.maxRowBytes === undefined
+                            ? {}
+                            : { maxRowBytes: step.maxRowBytes }),
+                        }
+                      : { count: step.count }),
                     ...(step.untilCondition === undefined
                       ? {}
                       : {
@@ -706,7 +722,7 @@ export function snapshotPlan(plan) {
           : step,
       );
     snapshot.steps = normalizeGroups(snapshot.steps);
-    validateRepeatGraph(snapshot.steps, { requireIds: true });
+    validateRepeatGraph(snapshot.steps, { requireIds: true, allowRuntimeRows });
     if (Buffer.byteLength(JSON.stringify(snapshot)) > 4 * 1024 * 1024)
       throw Error("循环计划冻结定义最多4MiB");
   }
@@ -735,6 +751,7 @@ export async function runPlan(
     onScopeChanges,
     cookieSession,
     databaseQuery,
+    databasePreflight,
     nativeWrite,
     executionContext,
     executeGrpc,
@@ -743,6 +760,7 @@ export async function runPlan(
     socketioCredentials,
     executeProtocol,
     protocolCredentials,
+    allowRuntimeRows = false,
   } = {},
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
@@ -753,7 +771,13 @@ export async function runPlan(
   validatePostmanOAuth2Project({ plans: [plan] });
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
-  const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
+  const repeated = validateRepeatGraph(plan.steps, {
+    requireIds: true,
+    allowRuntimeRows,
+  });
+  const runtimeRowsEnabled = hasRuntimeRows(plan.steps, { activeOnly: true });
+  if (runtimeRowsEnabled && nativeWrite)
+    throw Error("运行时数据行循环尚不支持原生写入执行");
   validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   // All leaves are cloned, including disabled ones: admit the static model first.
@@ -771,7 +795,7 @@ export async function runPlan(
 
   // Validate new static constraints on active leaves before cloning, interpolation
   // or before scripts; disabled repeat ancestors do not activate child work.
-  for (const step of activePlanLeaves(plan.steps)) {
+  for (const step of activePlanLeaves(plan.steps, { allowRuntimeRows })) {
     const auth = step.request?.auth;
     if (auth && typeof auth === "object" && "challengePolicy" in auth)
       validateAuth(auth);
@@ -779,7 +803,9 @@ export async function runPlan(
   const stepIds = repeated
     ? undefined
     : allocateLinearPlanStepIds(plan.steps, id);
-  const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
+  const snapshot = repeated
+    ? snapshotPlan(plan, { allowRuntimeRows })
+    : structuredClone(plan);
   if (!failurePolicy) delete snapshot.failurePolicy;
   if (stepIds)
     snapshot.steps.forEach((step, index) => {
@@ -790,11 +816,16 @@ export async function runPlan(
     collections.select(step.request?.postmanCollectionId);
   validatePlanGrpcScripts(snapshot.steps);
   const requiresWireExecutor = validatePlanProtocolScripts(snapshot.steps);
-  const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials);
-  const credentials = grpcPlanCredentials(snapshot, grpcCredentials);
+  const wireCredentials = wirePlanCredentials(snapshot, protocolCredentials, {
+    allowRuntimeRows,
+  });
+  const credentials = grpcPlanCredentials(snapshot, grpcCredentials, {
+    allowRuntimeRows,
+  });
   const socketCredentials = socketioPlanCredentials(
     snapshot,
     socketioCredentials,
+    { allowRuntimeRows },
   );
   if (requiresWireExecutor && typeof executeProtocol !== "function")
     throw Error("此执行入口未授权protocol调用");
@@ -807,11 +838,32 @@ export async function runPlan(
   if (nativeWrite) assertNativeWritePlan(nativeWrite, snapshot);
   else
     denyNativeWrites(
-      activePlanLeaves(snapshot.steps).map((step) => step.request || {}),
+      activePlanLeaves(snapshot.steps, { allowRuntimeRows }).map(
+        (step) => step.request || {},
+      ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
   const untilEnabled = hasRepeatUntil(snapshot.steps);
-  if (conditional) validateConditionScopeInput(variables, variableScopes);
+  if (conditional || runtimeRowsEnabled)
+    validateConditionScopeInput(variables, variableScopes);
+  if (runtimeRowsEnabled) {
+    // Input admission, not source resolution: this opt-in runtime map must be
+    // losslessly JSON-copyable. Shape/row/condition validation happens only on
+    // group entry, so skipped groups and sources overwritten earlier stay legal.
+    // The no-hook validator above already rejects proxies/accessors/cycles.
+    const admitRuntimeJSON = (value) => {
+      if (value === undefined || Object.is(value, -0))
+        throw Error("运行时数据行计划初始runtime变量须为严格JSON");
+      if (value && typeof value === "object") {
+        for (const key of Object.keys(value)) {
+          if (["__proto__", "prototype", "constructor"].includes(key))
+            throw Error("运行时数据行计划初始runtime变量字段不安全");
+          admitRuntimeJSON(value[key]);
+        }
+      }
+    };
+    admitRuntimeJSON(variableScopes?.runtime || {});
+  }
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
@@ -819,7 +871,12 @@ export async function runPlan(
     failureStop,
     scopeCommitStopped = false;
   const conditionResults = [];
-  const occurrences = planOccurrences(snapshot.steps, { controls: true });
+  const occurrences = planOccurrences(snapshot.steps, {
+    controls: true,
+    runtimeRows: allowRuntimeRows,
+  });
+  const runtimeFrames = new Map();
+  let runtimeRowsFailure;
   if (!occurrences.some((occurrence) => !occurrence.wait)) {
     throw Error("计划没有可执行步骤");
   }
@@ -832,10 +889,62 @@ export async function runPlan(
   const evidenceIdentity = (occurrence) => ({
     stepId: occurrence.step.id,
     ...(occurrence.repeat ? { repeat: occurrence.repeat } : {}),
+    ...(occurrence.runtimeRows
+      ? { kind: occurrence.kind, occurrenceId: occurrence.occurrenceId }
+      : {}),
     ...(occurrence.condition
       ? { kind: "condition", occurrenceId: occurrence.occurrenceId }
       : {}),
   });
+  if (runtimeRowsEnabled && !signal?.aborted) {
+    // Admit all potential work before any script, transport or scope commit.
+    // Runtime row counts and false IF branches cannot narrow authorization.
+    for (const leaf of activePlanLeaves(snapshot.steps, {
+      allowRuntimeRows: true,
+    })) {
+      if (leaf.type !== undefined && leaf.type !== "http") continue;
+      for (const phase of ["before", "after"]) {
+        let databases = 0;
+        for (const operation of leaf.request[phase] || []) {
+          if (operation.type !== "database") continue;
+          if (!validateDatabaseOperationHeader(operation)) continue;
+          if (++databases > 5) throw Error("每阶段数据库操作最多5项、累计10秒");
+          validateDatabaseOperationBinding(operation);
+          // This syntax is independent of query results and never interpolated.
+          jsonPathSegments(operation.path || "$");
+        }
+      }
+    }
+    const requirements = analyzePlanRequirements(snapshot, {
+      allowRuntimeRows: true,
+    });
+    const executors = {
+      http: execute,
+      grpc: executeGrpc,
+      socketio: executeSocketIO,
+      protocol: executeProtocol,
+      database: databaseQuery,
+    };
+    for (const type of requirements.executorTypes)
+      if (typeof executors[type] !== "function")
+        throw Error(`此执行入口未授权${type}调用`);
+    if (requirements.databaseConnectionIds.length) {
+      if (typeof databasePreflight !== "function")
+        throw Error("此执行入口未授权数据库执行前检查");
+      try {
+        const accepted = await databasePreflight(
+          Object.freeze([...requirements.databaseConnectionIds]),
+          signal,
+        );
+        if (!signal?.aborted && accepted === false)
+          throw Error("数据库执行前授权检查未通过");
+      } catch (error) {
+        // Preserve the existing cancelled-result contract, including a callback
+        // that fails as cancellation arrives. Never start work after awaiting it.
+        if (!signal?.aborted) throw error;
+      }
+    }
+  }
   for (; cursor < occurrences.length; cursor++) {
     const {
       step,
@@ -846,19 +955,72 @@ export async function runPlan(
       lastIteration,
       occurrenceId,
       skipTo,
-      dataContext,
+      dataContext: staticDataContext,
+      runtimeRows,
+      kind,
+      frameId,
+      exitTo,
+      runtimeFrameId,
+      runtimeIteration,
       wait,
       milliseconds,
     } = occurrences[cursor];
+    if (signal?.aborted) break;
+    // Gates only trim reserved work and exits release frames. Neither is an
+    // evidence-bearing event: let them finish after the final actual request.
+    // ENTER remains a safety boundary, as do waits, decisions and requests.
+    const administrativeRuntimeControl =
+      runtimeRows && ["runtime-rows-gate", "runtime-rows-exit"].includes(kind);
+    if (
+      repeated &&
+      !administrativeRuntimeControl &&
+      repeatEvidenceExceeded(evidenceBytes)
+    ) {
+      evidenceStopped = true;
+      break;
+    }
+    if (runtimeRows) {
+      if (kind === "runtime-rows-enter") {
+        try {
+          const name = step.rowsFrom.name;
+          const source = Object.getOwnPropertyDescriptor(scopes.runtime, name);
+          if (
+            scopes.hidden.includes(name) ||
+            !source ||
+            !Object.hasOwn(source, "value")
+          )
+            throw Error("运行时数据行来源不存在或已隐藏");
+          runtimeFrames.set(frameId, validateRuntimeRows(step, source.value));
+        } catch (error) {
+          runtimeRowsFailure = {
+            code: "PLAN_RUNTIME_ROWS_INVALID",
+            stepId: step.id,
+            occurrenceId,
+            message: error.message,
+          };
+          break;
+        }
+      } else if (kind === "runtime-rows-gate") {
+        if (iteration >= runtimeFrames.get(frameId).length) cursor = exitTo - 1;
+      } else if (kind === "runtime-rows-exit") runtimeFrames.delete(frameId);
+      continue;
+    }
+    const rows =
+      runtimeFrameId === undefined
+        ? undefined
+        : runtimeFrames.get(runtimeFrameId);
+    const dataContext =
+      rows === undefined
+        ? staticDataContext
+        : {
+            iteration: runtimeIteration,
+            iterationCount: rows.length,
+            iterationData: rows[runtimeIteration],
+          };
     const stepExecutionContext =
       dataContext === undefined
         ? executionContext
         : { ...executionContext, ...dataContext };
-    if (signal?.aborted) break;
-    if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
-      evidenceStopped = true;
-      break;
-    }
     if (wait) {
       try {
         await delayForControl(milliseconds, { signal });
@@ -1154,36 +1316,11 @@ export async function runPlan(
         const executeOperation = async (operation, budget) => {
           if (operation.type !== "database")
             return applyOperation(operation, vars);
-          if (
-            operation.enabled !== undefined &&
-            typeof operation.enabled !== "boolean"
-          )
-            throw Error("数据库操作启用标识必须为布尔值");
-          if (operation.enabled === false) return;
-          if (
-            operation.path !== undefined &&
-            (typeof operation.path !== "string" || operation.path.length > 1000)
-          )
-            throw Error("数据库提取路径无效");
-          if ((operation.parameters || []).length > 1000)
-            throw Error("数据库绑定参数最多1000项");
+          if (!validateDatabaseOperationHeader(operation)) return;
           if (++budget.count > 5 || performance.now() > budget.deadline)
             throw Error("每阶段数据库操作最多5项、累计10秒");
           if (!databaseQuery) throw Error("此执行入口未授权数据库前后置操作");
-          if (
-            !operation.name ||
-            typeof operation.name !== "string" ||
-            operation.name.length > 100 ||
-            ["__proto__", "constructor", "prototype"].includes(operation.name)
-          )
-            throw Error("数据库结果变量名无效");
-          if (
-            typeof operation.connectionId !== "string" ||
-            typeof operation.sql !== "string" ||
-            operation.sql.length > 50000 ||
-            !Array.isArray(operation.parameters ?? [])
-          )
-            throw Error("数据库操作配置无效");
+          validateDatabaseOperationBinding(operation);
           const result = await databaseQuery(
             {
               connectionId: operation.connectionId,
@@ -1553,7 +1690,10 @@ export async function runPlan(
     }
     // A completion condition must never continue on a possibly committed scope.
     // Preserve the prior behavior for plans that do not opt into this feature.
-    if (untilEnabled && record.scopeCommit?.outcome === "unknown") {
+    if (
+      (untilEnabled || runtimeRowsEnabled) &&
+      record.scopeCommit?.outcome === "unknown"
+    ) {
       scopeCommitStopped = true;
       break;
     }
@@ -1605,11 +1745,15 @@ export async function runPlan(
       : !progressFailure &&
           !evidenceStopped &&
           !conditionStopped &&
+          !runtimeRowsFailure &&
           !untilLimit &&
           results.every((r) => r.status === "passed")
         ? "passed"
         : "failed",
     ...(conditional ? { conditionResults } : {}),
+    ...(runtimeRowsFailure
+      ? { stopReason: "runtime-rows-error", runtimeRowsFailure }
+      : {}),
     ...(failureStop ? { stopReason: "step-failure", failureStop } : {}),
     ...(scopeCommitStopped ? { stopReason: "scope-commit-unknown" } : {}),
     ...(conditionStopped ? { stopReason: "condition-error" } : {}),
@@ -1625,14 +1769,16 @@ export async function runPlan(
             executed: results.length,
             remaining: occurrences
               .slice(cursor)
-              .filter((o) => !o.condition && !o.wait).length,
+              .filter((o) => !o.condition && !o.wait && !o.runtimeRows).length,
             last: lastEvidence,
             next: evidenceIdentity(
               occurrences.slice(cursor).find((o) => !o.wait),
             ),
-            ...(conditional
+            ...(conditional || runtimeRowsEnabled
               ? {
-                  decisions: conditionResults.length,
+                  ...(conditional
+                    ? { decisions: conditionResults.length }
+                    : {}),
                   remainingIsPotential: true,
                 }
               : {}),
@@ -2599,8 +2745,15 @@ export function restoreProject(document) {
   validatePostmanOAuth2Project(document);
   validatePostmanCollections(document);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
+  // Keep linear legacy validation ordering; strict runtime data admission is
+  // needed only for control graphs, not unrelated frozen HTTP definitions.
   for (const plan of document.plans || [])
-    if (!validateRepeatGraph(plan.steps)) linearPlanStepIds(plan.steps);
+    if (
+      !validateRepeatGraph(plan.steps, {
+        allowRuntimeRows: hasRepeatSteps(plan.steps),
+      })
+    )
+      linearPlanStepIds(plan.steps);
   validateNativeInheritanceProject(document);
   validateAPIResourceTrash(document);
   for (const environment of document.environments) {
@@ -2667,7 +2820,9 @@ export function restoreProject(document) {
     validateRequestTaskSource(item.request);
   for (const plan of document.plans || []) {
     readPlanFailurePolicy(plan);
-    validateRepeatGraph(plan.steps);
+    validateRepeatGraph(plan.steps, {
+      allowRuntimeRows: hasRepeatSteps(plan.steps),
+    });
     readImportedNativeFlowSource(plan);
     for (const step of planLeaves(plan.steps || [])) {
       liveRequestId(step);
@@ -2677,7 +2832,20 @@ export function restoreProject(document) {
   for (const run of document.runs || [])
     if (run.snapshot) {
       readPlanFailurePolicy(run.snapshot);
-      if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
+      if (
+        hasRepeatSteps(run.snapshot.steps) &&
+        hasRuntimeRows(run.snapshot.steps)
+      )
+        validateRepeatGraph(run.snapshot.steps, {
+          requireIds: true,
+          allowRuntimeRows: true,
+        });
+      if (
+        validateRepeatGraph(run.snapshot.steps, {
+          allowRuntimeRows: hasRepeatSteps(run.snapshot.steps),
+        })
+      )
+        snapshotPlan(run.snapshot, { allowRuntimeRows: true });
       readImportedNativeFlowSource(run.snapshot);
       for (const step of planLeaves(run.snapshot.steps || [])) {
         liveRequestId(step);
@@ -2696,7 +2864,9 @@ export function restoreProject(document) {
       ? normalizeRequest
       : normalizeHistoricalRequest,
   );
-  copy.plans = (copy.plans || []).map(snapshotPlan);
+  copy.plans = (copy.plans || []).map((plan) =>
+    snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) }),
+  );
   copy.runs = (copy.runs || []).slice(0, 50);
   copy.history = (copy.history || []).slice(0, 50);
   validateGrpcSessionHistory(copy.protocolRuns ?? []);
