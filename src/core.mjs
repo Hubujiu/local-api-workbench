@@ -540,7 +540,7 @@ export function snapshotPlan(plan) {
           ? {
               type: step.type,
               id: step.id || id(),
-              name: step.name ?? "循环组",
+              name: step.name ?? (step.type === "if" ? "条件组" : "循环组"),
               enabled: step.enabled !== false,
               ...(step.type === "repeat"
                 ? { count: step.count }

@@ -118,3 +118,19 @@ also checks conditionResults when a historical record has no snapshot; no silent
 linear projection is allowed. Definition-only native export policies are otherwise
 unchanged. No UI feature, saved-native bridge, else group or automatic replay is
 included.
+
+
+### CLI declaration-level grant preflight
+
+For IF plans only, enabled potential declarative before/after database operations
+or nativeTasks database entries require an explicit invocation grant before any
+wire, even if a condition would be false. Without --database-stdin the existing
+grant validator sees an empty map and rejects those required bindings. This is a
+deliberately stricter new IF contract, not evidence of an earlier authorization
+bypass: an unexecuted false branch previously performed no database call.
+
+Disabled ancestors require no binding. Pure HTTP-only IF does not newly validate
+an unrelated legacy DB catalogue. Existing non-IF linear/repeat behavior is
+unchanged. This is static declaration recognition only; arbitrary script-driven
+database calls retain their existing runtime authorization checks, not a claim of
+complete static discovery. No connection is persisted or borrowed across runs.

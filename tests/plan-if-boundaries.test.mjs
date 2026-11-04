@@ -85,6 +85,7 @@ test("combined IF/repeat depth and leaf/decision/work budgets include disabled a
         ? { type: "repeat", id: "r" + i, count: 1, steps }
         : group("i" + i, steps),
     ];
+  assert.equal(snapshotPlan({ steps: [group()] }).steps[0].name, "条件组");
   const frozen = snapshotPlan({ steps });
   assert.equal(activePlanStepCount(frozen), 1);
   assert.throws(

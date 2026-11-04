@@ -162,7 +162,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存独立快照计划；支持最多4层HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE repeat组，count为1至100整数，含禁用节点的潜在展开最多200步",
+            "保存独立快照计划；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte，operand为{literal}或{scope:globals/environment/runtime,name}，不隐式转换。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [

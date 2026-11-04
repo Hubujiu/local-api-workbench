@@ -1,3 +1,4 @@
+import { activePlanLeaves, hasIfSteps } from "../src/plan-repeat.mjs";
 import { validatePlanStepTypes } from "../src/plan-step-types.mjs";
 import { prepareCLIDatabaseGrants } from "../src/cli-database-grants.mjs";
 import { readRuntimeCredentials } from "../src/cli-runtime-credentials.mjs";
@@ -43,7 +44,25 @@ if (!args.includes("--project") || !args.includes("--plan")) {
             allowDatabase: databaseEnabled,
           })
         : {};
-    if (databaseEnabled)
+    // Canonical IF has a conservative declaration-level grant contract: an
+    // enabled potential DB leaf needs an explicit invocation grant even if its
+    // condition later evaluates false. Dynamic script calls retain runtime checks.
+    // Do not inspect unrelated DB catalogues for ordinary HTTP-only IF plans.
+    const conditionalDatabase =
+      hasIfSteps(plan.steps) &&
+      activePlanLeaves(plan.steps).some(({ request }) =>
+        ["before", "after"].some(
+          (phase) =>
+            (request?.[phase] || []).some(
+              (operation) =>
+                operation.type === "database" && operation.enabled !== false,
+            ) ||
+            (request?.nativeTasks?.[phase] || []).some(
+              (task) => task.type === "database" && task.enabled === 1,
+            ),
+        ),
+      );
+    if (databaseEnabled || conditionalDatabase)
       databaseGrants = prepareCLIDatabaseGrants(
         project.id,
         plan,
