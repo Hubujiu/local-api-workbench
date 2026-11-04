@@ -24,6 +24,7 @@ import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 
 const task = (id, type, data, enabled = 1) => ({
   id,
@@ -358,12 +359,14 @@ const comparableTasks = (pipeline) =>
   );
 
 function xmlAssertions(run, passed) {
-  for (const name of ["XML eq", "XML uneq"])
-    assert.equal(
-      run.results[0].assertions.find((entry) => entry.name === name)?.passed,
-      passed,
-      JSON.stringify(run.results[0].assertions),
-    );
+  withExecutionResultDiagnostics(run.results[0], () => {
+    for (const name of ["XML eq", "XML uneq"])
+      assert.equal(
+        run.results[0].assertions.find((entry) => entry.name === name)?.passed,
+        passed,
+        JSON.stringify(run.results[0].assertions),
+      );
+  });
 }
 function actualXML(run, body) {
   assert.equal(run.results[0].response.status, 200);
