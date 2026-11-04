@@ -1,4 +1,8 @@
 import {
+  assertCodeTarget,
+  generateRequestCode,
+} from "./request-code-generation.mjs";
+import {
   previewDefinitionExport,
   exportDefinitionSelection,
 } from "./scoped-definition-export.mjs";
@@ -2139,8 +2143,13 @@ export async function createApp({
             const b = await body(req);
             return json(res, 200, await previewFunction(b.function, b.value));
           }
-          if (action === "curl" && req.method === "POST") {
+          if (
+            ["curl", "code-generation"].includes(action) &&
+            req.method === "POST"
+          ) {
             const data = await body(req);
+            if (action === "code-generation")
+              assertCodeTarget(data.target, data.client);
             const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
               inheritedRequest?.scriptURLMode === "sdk" ||
@@ -2159,26 +2168,27 @@ export async function createApp({
               debugEnvironments,
               data.request?.postmanCollectionId,
             );
-            return json(res, 200, {
-              curl: toCurl(
-                resolveServiceRequest(
-                  p,
-                  sdkCurlDefinition(
-                    await resolveDynamicRequest(
-                      applySharedAuth(
-                        p,
-                        applyGlobalParameters(p, exportRequest),
-                      ),
-                      context.variables,
-                      p.settings?.functions || [],
-                      interpolate,
-                    ),
-                  ),
-                  context.environment.id,
+            const resolved = resolveServiceRequest(
+              p,
+              sdkCurlDefinition(
+                await resolveDynamicRequest(
+                  applySharedAuth(p, applyGlobalParameters(p, exportRequest)),
+                  context.variables,
+                  p.settings?.functions || [],
+                  interpolate,
                 ),
-                { collectionResolved: true },
               ),
-            });
+              context.environment.id,
+            );
+            return json(
+              res,
+              200,
+              action === "curl"
+                ? { curl: toCurl(resolved, { collectionResolved: true }) }
+                : generateRequestCode(resolved, data.target, data.client, {
+                    collectionResolved: true,
+                  }),
+            );
           }
           if (action === "execute" && req.method === "POST") {
             const b = await body(req),
