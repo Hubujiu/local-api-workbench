@@ -14,7 +14,16 @@ const expectedFailure = {
   retry_safe: false,
 };
 for (const asynchronous of [false, true]) {
-  for (const mode of ["true", "false", "condition-error", "cancelled"]) {
+  for (const mode of [
+    "true",
+    "false",
+    "condition-error",
+    "cancelled",
+    "terminal-cancel-reject",
+    "terminal-cancel-resolve",
+    "terminal-cancel-condition-error",
+    "evidence-limit",
+  ]) {
     test(
       (asynchronous ? "async" : "sync") +
         " terminal IF progress failure preserves " +
@@ -23,10 +32,14 @@ for (const asynchronous of [false, true]) {
       { timeout: 15000 },
       async (t) => {
         const root = await mkdtemp(path.join(tmpdir(), "if-progress-failure-"));
+        const body =
+          mode === "evidence-limit"
+            ? "x".repeat(3 * 1024 * 1024)
+            : '{"receipt":"one-actual-effect"}';
         let hits = 0;
         const peer = http.createServer((_req, res) => {
           hits++;
-          res.end('{"receipt":"one-actual-effect"}');
+          res.end(body);
         });
         await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
         t.after(async () => {
@@ -34,6 +47,10 @@ for (const asynchronous of [false, true]) {
           await new Promise((resolve) => peer.close(resolve));
           await rm(root, { recursive: true, force: true });
         });
+        const controller = new AbortController();
+        const abortInReporter = mode.startsWith("terminal-cancel");
+        const conditionError = mode.includes("condition-error");
+        const resolves = mode === "terminal-cancel-resolve";
         const store = new Store(root),
           project = await store.create("IF terminal reporting");
         const leaf = (id) => ({
@@ -50,8 +67,24 @@ for (const asynchronous of [false, true]) {
         });
         const plan = snapshotPlan({
           steps: [
-            gate("first", { literal: mode !== "false" }, [leaf("completed")]),
-            ...(mode === "condition-error"
+            gate(
+              "first",
+              { literal: mode !== "false" },
+              mode === "evidence-limit"
+                ? [
+                    {
+                      type: "repeat",
+                      id: "repeat",
+                      count: 3,
+                      steps: [leaf("completed")],
+                    },
+                  ]
+                : [leaf("completed")],
+            ),
+            ...(mode === "evidence-limit"
+              ? [gate("pending", { literal: true }, [leaf("never")])]
+              : []),
+            ...(conditionError
               ? [
                   gate("missing", { scope: "runtime", name: "missing" }, [
                     leaf("never"),
@@ -74,11 +107,16 @@ for (const asynchronous of [false, true]) {
             if (!progress.finished) return;
             terminal++;
             const error = Error("private-reporter-secret:" + root);
-            if (asynchronous) return Promise.reject(error);
-            throw error;
+            const settle = () => {
+              if (abortInReporter) controller.abort();
+              if (!resolves) throw error;
+            };
+            if (asynchronous) return Promise.resolve().then(settle);
+            return settle();
           },
         });
-        const signal = mode === "cancelled" ? AbortSignal.abort() : undefined;
+        if (mode === "cancelled") controller.abort();
+        const signal = controller.signal;
         const response = await dispatch(
           {
             jsonrpc: "2.0",
@@ -99,29 +137,51 @@ for (const asynchronous of [false, true]) {
         const run = JSON.parse(response.result.content[0].text);
         assert.equal(run.recordSaved, true);
         assert.equal(run.recordId, run.id);
-        assert.equal(run.status, mode === "cancelled" ? "cancelled" : "failed");
+        assert.equal(
+          run.status,
+          mode === "cancelled" || abortInReporter ? "cancelled" : "failed",
+        );
         assert.equal(
           run.stopReason,
-          mode === "condition-error" ? "condition-error" : "progress-failure",
+          mode === "evidence-limit"
+            ? "evidence-limit"
+            : conditionError
+              ? "condition-error"
+              : resolves
+                ? undefined
+                : "progress-failure",
         );
-        assert.deepEqual(run.progressFailure, expectedFailure);
-        const expectedHits = ["false", "cancelled"].includes(mode) ? 0 : 1;
+        assert.deepEqual(
+          run.progressFailure,
+          resolves ? undefined : expectedFailure,
+        );
+        const expectedHits = ["false", "cancelled"].includes(mode)
+          ? 0
+          : mode === "evidence-limit"
+            ? 3
+            : 1;
         assert.equal(hits, expectedHits);
         assert.equal(terminal, 1);
         assert.equal(callbacks, expectedHits + 1);
         assert.equal(run.results.length, expectedHits);
+        if (mode === "evidence-limit") {
+          assert.equal(run.evidenceBudget.executed, 3);
+          assert.equal(run.evidenceBudget.last.repeat.iteration, 2);
+          assert.equal(run.evidenceBudget.next.kind, "condition");
+          assert.equal(run.evidenceBudget.next.stepId, "pending");
+        }
         for (const record of run.results) {
           assert.equal(record.status, "passed");
-          assert.equal(record.response.body, '{"receipt":"one-actual-effect"}');
+          assert.equal(record.response.body, body);
           assert.equal(Object.hasOwn(record, "progressFailure"), false);
         }
         assert.equal(
           run.conditionResults.length,
-          mode === "cancelled" ? 0 : mode === "condition-error" ? 2 : 1,
+          mode === "cancelled" ? 0 : conditionError ? 2 : 1,
         );
         if (mode === "false")
           assert.equal(run.conditionResults[0].matched, false);
-        if (mode === "condition-error")
+        if (conditionError)
           assert.equal(run.conditionResults[1].status, "failed");
         assert.ok(!JSON.stringify(run).includes("private-reporter-secret"));
         assert.ok(!JSON.stringify(run).includes(root));
@@ -134,6 +194,7 @@ for (const asynchronous of [false, true]) {
         assert.deepEqual(saved.results, run.results);
         assert.deepEqual(saved.conditionResults, run.conditionResults);
         assert.equal(saved.planHash, run.planHash);
+        assert.deepEqual(saved.evidenceBudget, run.evidenceBudget);
         assert.equal(hits, expectedHits);
       },
     );

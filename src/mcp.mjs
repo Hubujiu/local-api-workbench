@@ -1084,6 +1084,9 @@ export function createMCP({
                     retry_safe: false,
                   };
                 }
+                // Cancellation may arrive while the reporter settles, after
+                // runPlan has already returned its completed leaf evidence.
+                if (signal?.aborted) output.status = "cancelled";
               }
               output.environmentId = environmentId;
               output = await recordPlanRun(store, p.id, output, "mcp");
