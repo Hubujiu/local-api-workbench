@@ -235,6 +235,23 @@ export function interpolate(value, vars = {}) {
     );
   return value;
 }
+// Row template bindings are ephemeral; they never enter mutable runtime scopes.
+function rowInterpolator(dataContext) {
+  if (dataContext === undefined) return interpolate;
+  const row = dataContext.iterationData;
+  return (value, variables = {}) => {
+    const bindings = Object.assign(Object.create(null), variables);
+    for (const key of Object.keys(bindings))
+      if (key.startsWith("$data.")) delete bindings[key];
+    for (const [key, item] of Object.entries(row))
+      if (
+        item === null ||
+        ["string", "number", "boolean"].includes(typeof item)
+      )
+        bindings["$data." + key] = item;
+    return interpolate(value, bindings);
+  };
+}
 export function jsonPath(obj, path) {
   const parts = jsonPathSegments(path);
   for (const p of parts) {
@@ -821,6 +838,7 @@ export async function runPlan(
       dataContext === undefined
         ? executionContext
         : { ...executionContext, ...dataContext };
+    const stepInterpolate = rowInterpolator(dataContext);
     if (signal?.aborted) break;
     if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
       evidenceStopped = true;
@@ -932,7 +950,7 @@ export async function runPlan(
           credentials: credentials.get(step.id),
           signal,
           executeGrpc,
-          interpolate,
+          interpolate: stepInterpolate,
           evaluateAssertions,
           extractResponseValue,
           onScopeChanges,
@@ -957,7 +975,7 @@ export async function runPlan(
           credentials: wireCredentials.get(step.id),
           signal,
           executeProtocol,
-          interpolate,
+          interpolate: stepInterpolate,
           evaluateAssertions,
           extractResponseValue,
           onScopeChanges,
@@ -984,7 +1002,7 @@ export async function runPlan(
         record[step.type] = structuredClone(validated[step.type]);
         let request;
         if (isGrpc) {
-          const messages = interpolate(validated.grpc.messages, vars);
+          const messages = stepInterpolate(validated.grpc.messages, vars);
           record.grpc.messages = messages;
           request = {
             ...grpcPlanRequest(validated, messages),
@@ -994,7 +1012,7 @@ export async function runPlan(
           const protocol = resolveWirePlanPayload(
             validated.protocol,
             vars,
-            interpolate,
+            stepInterpolate,
           );
           record.protocol = structuredClone(protocol);
           request = {
@@ -1002,7 +1020,7 @@ export async function runPlan(
             ...wireCredentials.get(step.id),
           };
         } else {
-          const commands = interpolate(validated.socketio.commands, vars);
+          const commands = stepInterpolate(validated.socketio.commands, vars);
           record.socketio.commands = commands;
           request = {
             ...validated.socketio,
@@ -1130,7 +1148,7 @@ export async function runPlan(
             {
               connectionId: operation.connectionId,
               sql: operation.sql,
-              parameters: interpolate(operation.parameters || [], vars),
+              parameters: stepInterpolate(operation.parameters || [], vars),
             },
             signal,
           );
@@ -1267,7 +1285,7 @@ export async function runPlan(
             ...localVariables,
           },
           snapshot.functions || [],
-          interpolate,
+          stepInterpolate,
           finalizedBody,
         );
         if (prepareRequest) record.request = prepareRequest(record.request);

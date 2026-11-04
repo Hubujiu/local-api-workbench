@@ -134,3 +134,62 @@ test("fixed repeat occurrence identities stay unchanged", () => {
     ['["r","x",0]', '["r","x",1]'],
   );
 });
+
+test("row templates are ephemeral, take precedence only inside the group and never enter persisted scopes", async (t) => {
+  const seen = [];
+  const peer = createServer((req, res) => {
+    seen.push(req.url);
+    res.end("ok");
+  });
+  await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => peer.close(resolve)));
+  const url = `http://127.0.0.1:${peer.address().port}/`;
+  const plan = snapshotPlan({
+    steps: [
+      {
+        type: "repeat",
+        id: "r",
+        count: 2,
+        rows: [{ name: "alice" }, { name: "bob" }],
+        steps: [{ id: "x", request: { url: url + "?q={{$data.name}}" } }],
+      },
+      { id: "tail", request: { url: url + "?q={{$data.name}}" } },
+    ],
+  });
+  const run = await runPlan(plan, { "$data.name": "outer" }, executeRequest);
+  assert.equal(run.status, "passed");
+  assert.deepEqual(seen, ["/?q=alice", "/?q=bob", "/?q=outer"]);
+  assert.equal(run.variables["$data.name"], "outer");
+});
+
+test("missing or non-scalar row template fields fail rather than falling back to an unrelated variable", async () => {
+  for (const row of [{}, { name: { nested: true } }]) {
+    const plan = snapshotPlan({
+      steps: [
+        {
+          type: "repeat",
+          id: "r",
+          count: 1,
+          rows: [row],
+          steps: [
+            {
+              id: "x",
+              request: { url: "http://127.0.0.1:1/?q={{$data.name}}" },
+            },
+          ],
+        },
+      ],
+    });
+    let dispatched = 0;
+    const run = await runPlan(
+      plan,
+      { "$data.name": "must-not-use" },
+      async () => {
+        dispatched++;
+        throw Error("must not dispatch");
+      },
+    );
+    assert.equal(run.status, "failed");
+    assert.equal(dispatched, 0);
+  }
+});
