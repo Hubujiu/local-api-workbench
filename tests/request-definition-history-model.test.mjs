@@ -10,6 +10,7 @@ import {
   getRequestDefinitionVersion,
   applyRequestDefinitionHistoryOperation,
   REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+  REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
   REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
 } from "../src/request-definition-history.mjs";
 
@@ -1513,7 +1514,9 @@ test("32MiB total quota is exact, rejects the whole mutation, and permits explic
   }));
   const remaining =
     32 * 1024 * 1024 -
-    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory));
+    Buffer.byteLength(
+      JSON.stringify({ ...project.requestDefinitionHistory, projectId: "a" }),
+    );
   const first = Math.floor(remaining / 2);
   tracker.versions[0].definition.body = "q".repeat(first);
   const second = remaining - first;
@@ -1521,7 +1524,7 @@ test("32MiB total quota is exact, rejects the whole mutation, and permits explic
     "\\".repeat(Math.floor(second / 2)) + "x".repeat(second % 2);
   assert.equal(
     Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory)),
-    32 * 1024 * 1024,
+    32 * 1024 * 1024 + project.id.length - 1,
   );
   assert.ok(
     tracker.versions.every(
@@ -1612,4 +1615,185 @@ test("the 100-version retention crop happens before total quota enforcement with
   assert.equal(entry(cannotFit).versions.length, 100);
   assert.equal(entry(cannotFit).versions[0].version, 1);
   assert.equal(entry(cannotFit).currentVersion, 101);
+});
+
+function fullQuotaOwnerFixture() {
+  const project = initial();
+  project.id = "a";
+  project.requestDefinitionHistory.projectId = "a";
+  const tracker = entry(project);
+  tracker.currentVersion = 3;
+  tracker.versions = [1, 2].map((version) => ({
+    id: "owner-boundary-" + version,
+    version,
+    createdAt: now,
+    tag: "",
+    definition: { id: "a", body: "" },
+  }));
+  const remaining =
+    32 * 1024 * 1024 -
+    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory));
+  tracker.versions[0].definition.body = "x".repeat(Math.floor(remaining / 2));
+  tracker.versions[1].definition.body = "y".repeat(
+    remaining - Math.floor(remaining / 2),
+  );
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(project.requestDefinitionHistory)),
+    32 * 1024 * 1024,
+  );
+  return project;
+}
+
+test("a full 32MiB history remains valid when a short owner is rebound to a UUID", () => {
+  const project = fullQuotaOwnerFixture();
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+  const restored = {
+    ...project,
+    id: "12345678-1234-1234-1234-123456789012",
+    requestDefinitionHistory: {
+      ...project.requestDefinitionHistory,
+      projectId: "12345678-1234-1234-1234-123456789012",
+    },
+  };
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(restored.requestDefinitionHistory)),
+    32 * 1024 * 1024 + 35,
+  );
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(restored));
+});
+
+test("owner length changes neither full-quota reads nor operations or one-byte overflow rejection", () => {
+  const original = fullQuotaOwnerFixture();
+  const expected = entry(original);
+  const owners = [
+    "a",
+    "12345678-1234-1234-1234-123456789012",
+    "z".repeat(200),
+    "a",
+  ];
+  assert.equal(
+    REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+    REQUEST_DEFINITION_HISTORY_MAX_BYTES + 199,
+  );
+  for (const owner of owners) {
+    const project = {
+      ...original,
+      id: owner,
+      requestDefinitionHistory: {
+        ...original.requestDefinitionHistory,
+        projectId: owner,
+      },
+    };
+    const actual = Buffer.byteLength(
+      JSON.stringify(project.requestDefinitionHistory),
+    );
+    assert.equal(
+      actual,
+      REQUEST_DEFINITION_HISTORY_MAX_BYTES + owner.length - 1,
+    );
+    assert.ok(actual <= REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES);
+    assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+    const listed = listRequestDefinitionHistory(project, { requestId: "a" });
+    assert.equal(listed.total, 2);
+    assert.equal(listed.lineageId, expected.lineageId);
+    const selected = getRequestDefinitionVersion(project, {
+      requestId: "a",
+      lineageId: expected.lineageId,
+      historyId: expected.versions[0].id,
+    });
+    assert.equal(
+      selected.definition.body,
+      expected.versions[0].definition.body,
+    );
+    const tagged = operation(project, "tag", { historyId: "current", tag: "" });
+    assert.equal(tagged.requestDefinitionHistory.projectId, owner);
+    assert.deepEqual(entry(tagged), expected);
+    const over = {
+      ...project,
+      requestDefinitionHistory: {
+        ...project.requestDefinitionHistory,
+        entries: project.requestDefinitionHistory.entries.map((item) =>
+          item.requestId === "a" ? { ...item, currentTag: "x" } : item,
+        ),
+      },
+    };
+    assert.throws(
+      () => validateRequestDefinitionHistory(over),
+      /项目历史总容量超过 32 MiB/,
+    );
+    assert.throws(
+      () => operation(project, "tag", { historyId: "current", tag: "x" }),
+      /项目历史总容量超过 32 MiB/,
+    );
+    assert.equal(entry(project).currentTag, "");
+    if (owner.length === 200) {
+      assert.equal(actual, REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES);
+      assert.throws(
+        () => projectHistoryProjection(project.requestDefinitionHistory),
+        /体积/,
+      );
+      assert.doesNotThrow(() =>
+        projectHistoryProjection(project.requestDefinitionHistory, {
+          maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+        }),
+      );
+      assert.throws(
+        () =>
+          projectHistoryProjection(over.requestDefinitionHistory, {
+            maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
+          }),
+        /体积/,
+      );
+      const cleared = operation(project, "clear", {
+        historyIds: [expected.versions[0].id],
+      });
+      assert.equal(entry(cleared).versions.length, 1);
+      assert.equal(entry(cleared).currentVersion, 3);
+    }
+  }
+  assert.equal(original.id, "a");
+  assert.equal(original.requestDefinitionHistory.projectId, "a");
+  assert.equal(entry(original).versions.length, 2);
+});
+
+test("invalid or mismatched owners cannot use the history envelope allowance", () => {
+  const original = fullQuotaOwnerFixture();
+  for (const [projectId, owner] of [
+    ["a", "b"],
+    ["界", "界"],
+    ["x".repeat(201), "x".repeat(201)],
+    ["a", "x".repeat(201)],
+    ["a", "bad/id"],
+  ]) {
+    const project = {
+      ...original,
+      id: projectId,
+      requestDefinitionHistory: {
+        ...original.requestDefinitionHistory,
+        projectId: owner,
+      },
+    };
+    assert.throws(
+      () => validateRequestDefinitionHistory(project),
+      /项目ID|归属/,
+    );
+  }
+  let calls = 0;
+  const history = { ...original.requestDefinitionHistory };
+  Object.defineProperty(history, "projectId", {
+    enumerable: true,
+    get() {
+      calls++;
+      return "a";
+    },
+  });
+  assert.throws(
+    () =>
+      validateRequestDefinitionHistory({
+        ...original,
+        requestDefinitionHistory: history,
+      }),
+    /访问器/,
+  );
+  assert.equal(calls, 0);
 });

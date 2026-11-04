@@ -1,7 +1,7 @@
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   validateRequestDefinitionHistory,
-  REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+  REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
   projectHistoryProjection,
   sameHistoryJSON,
   reconcileRequestDefinitionHistory,
@@ -643,7 +643,7 @@ export class Store {
       )
         throw Error("接口定义历史不能包含访问器");
       projectHistoryProjection(historyDescriptor.value, {
-        maxBytes: REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+        maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES,
       });
     }
     if (
@@ -898,6 +898,7 @@ export class Store {
       !sameHistoryJSON(
         p.requestDefinitionHistory,
         previous.requestDefinitionHistory,
+        { maxBytes: REQUEST_DEFINITION_HISTORY_ENVELOPE_MAX_BYTES },
       )
     )
       throw Error("接口定义历史由服务端维护，不能随项目保存修改");

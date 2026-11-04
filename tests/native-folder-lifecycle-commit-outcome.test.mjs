@@ -165,7 +165,9 @@ for (const phase of ["before-journal", "after-journal"])
           operation: { type: "recycle-folder", sourceId: "folder" },
         });
       }
-      const before = structuredClone(p);
+      // Owner responses omit server-owned history; compare recovery against
+      // the complete committed Store state, not that editable response view.
+      const before = await app.store.get(p.id);
       const foreignBefore = await app.store.get(foreign.id);
       const operation =
         type === "recycle-folder"
