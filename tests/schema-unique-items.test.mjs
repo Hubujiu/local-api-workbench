@@ -368,3 +368,23 @@ test("unique tuple literal and reference candidates are checked before cloning w
     [1, 1],
   );
 });
+
+test("a unique comparison budget failure cannot be swallowed by union fallback", () => {
+  const values = Array.from({ length: 100 }, (_, i) => "x".repeat(4000) + i);
+  const expensive = { ...schemaFor(values), minItems: 100, maxItems: 100 };
+  assert.throws(
+    () => sampleFromSchema({ anyOf: [expensive, { const: "fallback" }] }),
+    /预算/,
+  );
+  let calls = 0;
+  const later = Object.defineProperty({}, "const", {
+    enumerable: true,
+    get() {
+      calls++;
+      return "later";
+    },
+  });
+  assert.throws(() => sampleFromSchema({ anyOf: [expensive, later] }), /预算/);
+  assert.equal(calls, 0);
+  assert.equal(sampleFromSchema({ const: "healthy" }), "healthy");
+});

@@ -13,6 +13,7 @@ export function sampleFromSchema(
   const literal = (value) =>
     uniqueTupleDepth ? uniqueSamples.check(value) : structuredClone(value);
   function sample(schema, level, seen, fieldName = "") {
+    uniqueSamples.assertBudget();
     if (uniqueTupleDepth) uniqueSamples.check(schema);
     if (++budget.nodes > 10000 || level > 12)
       throw Error("Schema 生成超过节点/深度上限");
@@ -180,6 +181,7 @@ export function sampleFromSchema(
             throw Error("oneOf分支样例标签不匹配");
           return value;
         } catch (error) {
+          uniqueSamples.assertBudget();
           failures.push(String(error.message).slice(0, 160));
         }
       }
@@ -544,8 +546,15 @@ function createUniqueSampleSelector() {
   let nodes = 0,
     textUnits = 0,
     comparisonWork = 0;
+  let exhausted;
+  const assertBudget = () => {
+    if (exhausted) throw exhausted;
+  };
   const fail = () => {
-    throw Error("唯一数组比较超过节点/深度/文本/计算预算，请提供 example");
+    exhausted ??= Error(
+      "唯一数组比较超过节点/深度/文本/计算预算，请提供 example",
+    );
+    throw exhausted;
   };
   const text = (value) => {
     textUnits += value.length;
@@ -553,6 +562,7 @@ function createUniqueSampleSelector() {
     return value.length;
   };
   const inspect = (value, depth, ancestors) => {
+    assertBudget();
     if (++nodes > 10000 || depth > 32) fail();
     if (value === null || typeof value === "boolean") return { value, cost: 1 };
     if (typeof value === "number") {
@@ -637,5 +647,6 @@ function createUniqueSampleSelector() {
     return selected.map((item) => item.value);
   };
   select.check = (value) => inspect(value, 0, new Set()).value;
+  select.assertBudget = assertBudget;
   return select;
 }
