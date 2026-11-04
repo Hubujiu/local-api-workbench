@@ -106,6 +106,11 @@ test("real two-step plans run within the aggregate limit and report per-step sta
       { stepId: "b", count: 2, failed: 0 },
     ],
   );
+  for (const stats of result.steps) {
+    assert.equal(stats.timingSamples, 2);
+    assert.equal(stats.receivedBytes, 4);
+    assert(stats.p50Ms >= 0 && stats.p99Ms >= stats.p50Ms);
+  }
   assert.equal(seen.filter((x) => x === "/a").length, 2);
   assert.equal(seen.filter((x) => x === "/b").length, 2);
   assert.throws(
@@ -250,5 +255,340 @@ test(
     assert.equal(events.at(-1).value.stopReason, "iteration-limit");
     assert.equal(seen.length, 4);
     assert.deepEqual(await app.store.get(p.id), before);
+  },
+);
+
+test(
+  "cancellation during cookie preflight produces a terminal event without sending a request",
+  { timeout: 10000 },
+  async (t) => {
+    const { createApp } = await import("../src/server.mjs");
+    const { versionPlan } = await import("../src/plan-version.mjs");
+    const { ProjectCookieJar } = await import("../src/cookie-jar.mjs");
+    let count = 0,
+      begin,
+      release;
+    const entered = new Promise((resolve) => {
+      begin = resolve;
+    });
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const peer = createServer((_req, res) => {
+      count++;
+      res.end("ok");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "staged-cancel-preflight-"));
+    const app = await createApp({ root, port: 0 });
+    const original = ProjectCookieJar.prototype.inspect;
+    t.after(async () => {
+      ProjectCookieJar.prototype.inspect = original;
+      release();
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("staged");
+    p.plans.push(
+      versionPlan(
+        undefined,
+        {
+          id: "p1",
+          steps: [
+            {
+              id: "a",
+              request: { url: `http://127.0.0.1:${peer.address().port}/` },
+            },
+          ],
+        },
+        "manual",
+        p,
+      ),
+    );
+    await app.store.save(p);
+    ProjectCookieJar.prototype.inspect = async function () {
+      begin();
+      await gate;
+      return original.call(this);
+    };
+    const headers = {
+      "x-local-token": app.token,
+      "content-type": "application/json",
+    };
+    const pending = fetch(`${app.url}/api/projects/${p.id}/staged-load`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        planId: "p1",
+        schedule: input,
+        runId: "preflight",
+      }),
+    });
+    await entered;
+    const cancel = await fetch(`${app.url}/api/cancel`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ id: "preflight" }),
+    });
+    assert.equal(cancel.status, 200);
+    release();
+    const response = await pending;
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, /event: reportEnd\ndata: .*"stopReason":"cancelled"/);
+    assert.match(body, /event: complete/);
+    assert.equal(count, 0);
+  },
+);
+
+test(
+  "running VUs ramp down and back up without exceeding the configured limit",
+  { timeout: 10000 },
+  async (t) => {
+    let inFlight = 0,
+      peak = 0;
+    const { project, url } = await fixture(t, (_req, res) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      setTimeout(() => {
+        inFlight--;
+        res.end("ok");
+      }, 250);
+    });
+    const prepared = prepareStagedLoad(
+      project,
+      { steps: [{ id: "a", request: { url } }] },
+      {
+        initialVUs: 2,
+        stages: [
+          { durationSeconds: 1, targetVUs: 0 },
+          { durationSeconds: 1, targetVUs: 2 },
+          { durationSeconds: 1, targetVUs: 2 },
+        ],
+        maxIterations: 50,
+      },
+    );
+    const counts = [];
+    const result = await runStagedLoad(project, prepared, {
+      onProgress: (report) => counts.push(report.activeVUs),
+    });
+    assert.equal(result.stopReason, "duration");
+    assert(counts.includes(0) && counts.includes(1) && counts.includes(2));
+    assert(peak <= 2 && peak >= 2);
+    assert.equal(result.runningIterations, 0);
+  },
+);
+
+test(
+  "explicit cancellation terminates an active SSE load and reports its cancelled outcome",
+  { timeout: 10000 },
+  async (t) => {
+    const { createApp } = await import("../src/server.mjs");
+    const { versionPlan } = await import("../src/plan-version.mjs");
+    let begin, close;
+    const started = new Promise((resolve) => {
+      begin = resolve;
+    });
+    const closed = new Promise((resolve) => {
+      close = resolve;
+    });
+    const peer = createServer((_req, res) => {
+      begin();
+      res.once("close", close);
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "staged-cancel-active-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("staged");
+    p.plans.push(
+      versionPlan(
+        undefined,
+        {
+          id: "p1",
+          steps: [
+            {
+              id: "a",
+              request: { url: `http://127.0.0.1:${peer.address().port}/` },
+            },
+          ],
+        },
+        "manual",
+        p,
+      ),
+    );
+    await app.store.save(p);
+    const headers = {
+      "x-local-token": app.token,
+      "content-type": "application/json",
+    };
+    const response = await fetch(
+      `${app.url}/api/projects/${p.id}/staged-load`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          planId: "p1",
+          schedule: {
+            initialVUs: 1,
+            stages: [{ durationSeconds: 5, targetVUs: 1 }],
+            maxIterations: 2,
+          },
+          runId: "active",
+        }),
+      },
+    );
+    assert.equal(response.status, 200);
+    await started;
+    assert.equal(
+      (
+        await fetch(`${app.url}/api/cancel`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ id: "active" }),
+        })
+      ).status,
+      200,
+    );
+    const text = await response.text();
+    await closed;
+    assert.match(text, /event: reportEnd\ndata: .*"stopReason":"cancelled"/);
+    assert.match(text, /event: complete\ndata: .*"stopReason":"cancelled"/);
+  },
+);
+
+test("steps share variables within one iteration while concurrent iterations stay isolated", async (t) => {
+  const tokens = [];
+  const { project, url } = await fixture(t, (req, res) => {
+    if (req.url === "/b") tokens.push(req.headers["x-sequence"]);
+    res.end("ok");
+  });
+  const plan = {
+    steps: [
+      {
+        id: "a",
+        request: {
+          url: url + "/a",
+          beforeScript:
+            "pm.environment.set('seq',(pm.environment.get('seq')||0)+1);",
+        },
+      },
+      {
+        id: "b",
+        request: {
+          url: url + "/b",
+          headers: [{ key: "x-sequence", value: "{{seq}}" }],
+        },
+      },
+    ],
+  };
+  const result = await runStagedLoad(
+    project,
+    prepareStagedLoad(project, plan, input),
+  );
+  assert.equal(result.failed, 0);
+  assert.deepEqual(tokens, ["1", "1"]);
+  assert.equal(project.environments[0].variables.seq, undefined);
+});
+
+test(
+  "disconnecting the SSE client aborts in-flight work and releases its run ID",
+  { timeout: 10000 },
+  async (t) => {
+    const { createApp } = await import("../src/server.mjs");
+    const { versionPlan } = await import("../src/plan-version.mjs");
+    let begin,
+      close,
+      calls = 0;
+    const started = new Promise((resolve) => {
+      begin = resolve;
+    });
+    const closed = new Promise((resolve) => {
+      close = resolve;
+    });
+    const peer = createServer((req, res) => {
+      calls++;
+      if (req.url === "/hold") {
+        begin();
+        res.once("close", close);
+      } else res.end("ok");
+    });
+    await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+    const root = await mkdtemp(join(tmpdir(), "staged-disconnect-"));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      app.server.closeAllConnections();
+      await new Promise((resolve) => app.server.close(resolve));
+      peer.closeAllConnections();
+      await new Promise((resolve) => peer.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const p = await app.store.create("staged");
+    const base = `http://127.0.0.1:${peer.address().port}`;
+    p.plans.push(
+      versionPlan(
+        undefined,
+        { id: "hold", steps: [{ id: "a", request: { url: base + "/hold" } }] },
+        "manual",
+        p,
+      ),
+    );
+    p.plans.push(
+      versionPlan(
+        undefined,
+        { id: "ok", steps: [{ id: "a", request: { url: base + "/ok" } }] },
+        "manual",
+        p,
+      ),
+    );
+    await app.store.save(p);
+    const endpoint = `${app.url}/api/projects/${p.id}/staged-load`;
+    const headers = {
+      "x-local-token": app.token,
+      "content-type": "application/json",
+    };
+    const schedule = {
+      initialVUs: 1,
+      stages: [{ durationSeconds: 5, targetVUs: 1 }],
+      maxIterations: 2,
+    };
+    const controller = new AbortController();
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ planId: "hold", schedule, runId: "drop" }),
+      signal: controller.signal,
+    });
+    assert.equal(response.status, 200);
+    await started;
+    controller.abort();
+    await closed;
+    const deadline = Date.now() + 3000;
+    let again;
+    do {
+      again = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          planId: "ok",
+          schedule: { ...schedule, maxIterations: 1 },
+          runId: "drop",
+        }),
+      });
+      if (again.status === 200) break;
+      assert(Date.now() < deadline, "run ID did not release after disconnect");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } while (true);
+    assert.match(await again.text(), /event: complete/);
+    assert.equal(calls, 2);
   },
 );

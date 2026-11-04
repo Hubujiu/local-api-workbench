@@ -2412,8 +2412,7 @@ export async function createApp({
             res.once("close", disconnected);
             if (req.aborted || res.destroyed) disconnected();
             const emit = (event, data) => {
-              if (res.destroyed || controller.signal.aborted)
-                throw Error("客户端已断开或运行已取消");
+              if (res.destroyed) throw Error("客户端已断开");
               res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
             };
             try {
@@ -2422,7 +2421,7 @@ export async function createApp({
                 p,
                 prepared.selected.id,
               ).inspect();
-              if (controller.signal.aborted) return;
+              if (res.destroyed) return;
               res.writeHead(200, {
                 "Content-Type": "text/event-stream; charset=utf-8",
                 "Cache-Control": "no-store",

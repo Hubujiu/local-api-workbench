@@ -74,6 +74,8 @@ export function buildLoadSchedule(input) {
 export function prepareStagedLoad(project, plan, input, options = {}) {
   const schedule = buildLoadSchedule(input);
   const snapshot = snapshotPlan(plan);
+  if (Buffer.byteLength(JSON.stringify(snapshot)) > 1024 * 1024)
+    throw Error("阶段压测计划快照超过 1 MiB");
   if (
     !snapshot.steps.length ||
     snapshot.steps.length > 10 ||
@@ -117,7 +119,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const samples = new Map(
     snapshot.steps.map((step) => [
       step.id,
-      { count: 0, failed: 0, durations: [] },
+      { count: 0, failed: 0, durations: [], receivedBytes: 0 },
     ]),
   );
   const start = performance.now();
@@ -135,23 +137,41 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const percentile = (values, p) => {
     if (!values.length) return null;
     const sorted = [...values].sort((a, b) => a - b);
-    return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+    return sorted[
+      Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)
+    ];
   };
-  const report = () => ({
-    elapsedMs: Math.max(0, Math.round(performance.now() - start)),
-    activeVUs: active,
-    runningIterations: running,
-    started,
-    completed,
-    failed,
-    mainRequests,
-    steps: [...samples].map(([stepId, s]) => ({
-      stepId,
-      count: s.count,
-      failed: s.failed,
-      p95Ms: percentile(s.durations, 0.95),
-    })),
-  });
+  const report = () => {
+    const elapsedMs = Math.max(0, Math.round(performance.now() - start));
+    const totalStepCompletions = [...samples.values()].reduce(
+      (sum, item) => sum + item.count,
+      0,
+    );
+    const rate = (count) =>
+      elapsedMs > 0 ? Math.round((count * 1000000) / elapsedMs) / 1000 : 0;
+    return {
+      elapsedMs,
+      activeVUs: active,
+      runningIterations: running,
+      started,
+      completed,
+      failed,
+      mainRequests,
+      stepCompletionsPerSecond: rate(totalStepCompletions),
+      iterationsCompletedPerSecond: rate(completed),
+      steps: [...samples].map(([stepId, item]) => ({
+        stepId,
+        count: item.count,
+        failed: item.failed,
+        timingSamples: item.durations.length,
+        p50Ms: percentile(item.durations, 0.5),
+        p90Ms: percentile(item.durations, 0.9),
+        p95Ms: percentile(item.durations, 0.95),
+        p99Ms: percentile(item.durations, 0.99),
+        receivedBytes: item.receivedBytes,
+      })),
+    };
+  };
   const finishIfDone = () => {
     if (stopReason && running === 0) resolveDone();
   };
@@ -221,6 +241,9 @@ export async function runStagedLoad(project, prepared, options = {}) {
                 if (!item) return;
                 item.count++;
                 if (record.status !== "passed") item.failed++;
+                const size = record.response?.size;
+                if (Number.isSafeInteger(size) && size >= 0)
+                  item.receivedBytes += size;
                 const duration = record.response?.duration;
                 if (
                   typeof duration === "number" &&
