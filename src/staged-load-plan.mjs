@@ -1,0 +1,286 @@
+import { performance } from "node:perf_hooks";
+import { snapshotPlan, runPlan } from "./core.mjs";
+import {
+  selectedEnvironment,
+  environmentVariables,
+  resolveServiceRequest,
+} from "./environments.mjs";
+import { projectScopes } from "./variable-scopes.mjs";
+import { memoryCookieSession } from "./cookie-jar.mjs";
+import { denyNativeWrites } from "./native-redis-write-intent.mjs";
+import { normalizeRedirect } from "./http-redirect.mjs";
+import { executeRequest } from "./runtime.mjs";
+
+// Bounded canonical contract. VU changes are linear, based on monotonic time.
+export function buildLoadSchedule(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(
+      (key) => !["initialVUs", "stages", "maxIterations"].includes(key),
+    )
+  )
+    throw Error("阶段压测参数无效");
+  const { initialVUs, stages, maxIterations } = input;
+  if (
+    !Number.isInteger(initialVUs) ||
+    initialVUs < 0 ||
+    initialVUs > 10 ||
+    !Number.isInteger(maxIterations) ||
+    maxIterations < 1 ||
+    maxIterations > 100 ||
+    !Array.isArray(stages) ||
+    !stages.length ||
+    stages.length > 10
+  )
+    throw Error("阶段压测须为 0–10 个初始 VU、1–100 次迭代及 1–10 个阶段");
+  let now = 0,
+    current = initialVUs,
+    maximum = initialVUs;
+  const changes = [];
+  for (const stage of stages) {
+    if (
+      !stage ||
+      typeof stage !== "object" ||
+      Array.isArray(stage) ||
+      Object.keys(stage).some(
+        (key) => !["durationSeconds", "targetVUs"].includes(key),
+      ) ||
+      !Number.isInteger(stage.durationSeconds) ||
+      stage.durationSeconds < 1 ||
+      !Number.isInteger(stage.targetVUs) ||
+      stage.targetVUs < 0 ||
+      stage.targetVUs > 10
+    )
+      throw Error("阶段持续时间和目标 VU 无效");
+    const length = stage.durationSeconds * 1000;
+    now += length;
+    if (now > 60000) throw Error("阶段压测总时长不能超过 60 秒");
+    const delta = stage.targetVUs - current;
+    maximum = Math.max(maximum, stage.targetVUs);
+    for (let i = 1; i <= Math.abs(delta); i++) {
+      const atMs = now - length + Math.ceil((length * i) / Math.abs(delta));
+      // The final endpoint is the overall deadline if it falls at 60 seconds;
+      // the host never launches work after the deadline.
+      changes.push({ atMs, vus: current + Math.sign(delta) * i });
+    }
+    current = stage.targetVUs;
+  }
+  if (!maximum) throw Error("阶段压测至少需要一个 VU");
+  return { initialVUs, maxIterations, durationMs: now, changes };
+}
+
+export function prepareStagedLoad(project, plan, input, options = {}) {
+  const schedule = buildLoadSchedule(input);
+  const snapshot = snapshotPlan(plan);
+  if (
+    !snapshot.steps.length ||
+    snapshot.steps.length > 10 ||
+    snapshot.steps.some(
+      (step) =>
+        step.enabled === false ||
+        (step.type !== undefined && step.type !== "http") ||
+        !step.request,
+    )
+  )
+    throw Error("阶段压测首版仅支持 1–10 个启用的线性 HTTP 步骤");
+  if (snapshot.steps.length * schedule.maxIterations > 100)
+    throw Error("步骤数乘迭代上限不得超过 100");
+  for (const { request } of snapshot.steps) {
+    if (
+      request.postmanCollectionId !== undefined ||
+      normalizeRedirect(request.redirect)
+    )
+      throw Error("阶段压测暂不支持 collection 作用域或重定向策略");
+  }
+  denyNativeWrites(snapshot.steps.map((step) => step.request));
+  const selected = selectedEnvironment(
+    project,
+    options.environmentId || snapshot.environmentId,
+  );
+  return { schedule, snapshot, selected };
+}
+
+export async function runStagedLoad(project, prepared, options = {}) {
+  const { schedule, snapshot, selected } = prepared;
+  const variables =
+    options.variables || environmentVariables(project, selected.id);
+  const scopes = projectScopes(project, selected.id, variables);
+  const controller = new AbortController();
+  const slots = Array.from({ length: 10 }, () => ({
+    active: false,
+    running: false,
+  }));
+  const timers = [];
+  let deadlineTimer;
+  const samples = new Map(
+    snapshot.steps.map((step) => [
+      step.id,
+      { count: 0, failed: 0, durations: [] },
+    ]),
+  );
+  const start = performance.now();
+  let started = 0,
+    completed = 0,
+    failed = 0,
+    active = 0,
+    running = 0,
+    mainRequests = 0;
+  let stopReason;
+  let resolveDone;
+  const done = new Promise((resolve) => {
+    resolveDone = resolve;
+  });
+  const percentile = (values, p) => {
+    if (!values.length) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+  };
+  const report = () => ({
+    elapsedMs: Math.max(0, Math.round(performance.now() - start)),
+    activeVUs: active,
+    runningIterations: running,
+    started,
+    completed,
+    failed,
+    mainRequests,
+    steps: [...samples].map(([stepId, s]) => ({
+      stepId,
+      count: s.count,
+      failed: s.failed,
+      p95Ms: percentile(s.durations, 0.95),
+    })),
+  });
+  const finishIfDone = () => {
+    if (stopReason && running === 0) resolveDone();
+  };
+  const stop = (reason, abort) => {
+    if (stopReason && !(abort && stopReason === "iteration-limit")) return;
+    stopReason = reason;
+    for (const timer of timers) clearTimeout(timer);
+    for (const slot of slots) slot.active = false;
+    active = 0;
+    if (abort) {
+      clearTimeout(deadlineTimer);
+      controller.abort();
+    }
+    finishIfDone();
+  };
+  const progress = () => {
+    if (!options.onProgress) return;
+    try {
+      options.onProgress(report());
+    } catch {
+      stop("observer-failed", true);
+    }
+  };
+  const loop = async (slot) => {
+    slot.running = true;
+    try {
+      while (slot.active && !stopReason) {
+        if (performance.now() - start >= schedule.durationMs) {
+          stop("duration", true);
+          break;
+        }
+        if (started >= schedule.maxIterations) {
+          stop("iteration-limit", false);
+          break;
+        }
+        const index = started++;
+        running++;
+        if (started === schedule.maxIterations) {
+          // Finish already admitted iterations, but do not admit a replacement.
+          stop("iteration-limit", false);
+        }
+        try {
+          const result = await runPlan(
+            snapshot,
+            variables,
+            async (definition, signal, transport) => {
+              mainRequests++;
+              return executeRequest(definition, signal, transport);
+            },
+            {
+              signal: controller.signal,
+              executionContext: {
+                environment: {
+                  id: String(selected.id),
+                  name: String(selected.name || ""),
+                },
+                iteration: index,
+                iterationCount: schedule.maxIterations,
+                iterationData: {},
+              },
+              cookieSession: memoryCookieSession(options.cookieState),
+              variableScopes: structuredClone(scopes),
+              prepareRequest: (definition) =>
+                resolveServiceRequest(project, definition, selected.id),
+              onStep: (record) => {
+                const item = samples.get(record.stepId);
+                if (!item) return;
+                item.count++;
+                if (record.status !== "passed") item.failed++;
+                const duration = record.response?.duration;
+                if (
+                  typeof duration === "number" &&
+                  Number.isFinite(duration) &&
+                  duration >= 0
+                )
+                  item.durations.push(duration);
+              },
+            },
+          );
+          completed++;
+          if (result.status !== "passed") failed++;
+        } catch {
+          completed++;
+          failed++;
+        } finally {
+          running--;
+          progress();
+          finishIfDone();
+        }
+      }
+    } finally {
+      slot.running = false;
+      finishIfDone();
+    }
+  };
+  const reconcile = (count) => {
+    if (stopReason) return;
+    active = count;
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
+      slot.active = i < count;
+      if (slot.active && !slot.running) void loop(slot);
+    }
+    progress();
+  };
+  const cancelled = () => stop("cancelled", true);
+  options.signal?.addEventListener("abort", cancelled, { once: true });
+  try {
+    if (options.signal?.aborted) cancelled();
+    if (!stopReason) {
+      for (const change of schedule.changes)
+        if (change.atMs < schedule.durationMs)
+          timers.push(setTimeout(() => reconcile(change.vus), change.atMs));
+      deadlineTimer = setTimeout(
+        () => stop("duration", true),
+        schedule.durationMs,
+      );
+      reconcile(schedule.initialVUs);
+    }
+    await done;
+    return {
+      ...report(),
+      stopReason,
+      cancelled: stopReason === "cancelled",
+      variableIsolation: "per-iteration",
+    };
+  } finally {
+    for (const timer of timers) clearTimeout(timer);
+    clearTimeout(deadlineTimer);
+    options.signal?.removeEventListener("abort", cancelled);
+  }
+}

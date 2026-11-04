@@ -1,3 +1,4 @@
+import { prepareStagedLoad, runStagedLoad } from "./staged-load-plan.mjs";
 import {
   assertCodeTarget,
   generateRequestCode,
@@ -2388,6 +2389,74 @@ export async function createApp({
                 await recordPlanRun(store, p.id, run, "manual"),
               );
             } finally {
+              controllers.delete(runId);
+            }
+          }
+          if (action === "staged-load" && req.method === "POST") {
+            const b = await body(req);
+            const plan = p.plans.find((item) => item.id === b.planId);
+            if (!plan) throw Error("计划不存在");
+            const prepared = prepareStagedLoad(p, plan, b.schedule, {
+              environmentId: b.environmentId,
+            });
+            const context = debugEnvironment(
+              p,
+              prepared.selected.id,
+              debugEnvironments,
+            );
+            const { controller, runId } = claimRun(b.runId);
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            const emit = (event, data) => {
+              if (res.destroyed || controller.signal.aborted)
+                throw Error("客户端已断开或运行已取消");
+              res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            };
+            try {
+              const cookieState = await projectCookieSession(
+                store,
+                p,
+                prepared.selected.id,
+              ).inspect();
+              if (controller.signal.aborted) return;
+              res.writeHead(200, {
+                "Content-Type": "text/event-stream; charset=utf-8",
+                "Cache-Control": "no-store",
+              });
+              emit("start", { runId });
+              const result = await runStagedLoad(p, prepared, {
+                signal: controller.signal,
+                variables: context.variables,
+                cookieState,
+                onProgress: (progress) => emit("report", progress),
+              });
+              if (!res.destroyed) {
+                // Explicit cancellation may happen while the caller remains connected.
+                res.write(
+                  `event: reportEnd\ndata: ${JSON.stringify(result)}\n\n`,
+                );
+                res.write(
+                  `event: complete\ndata: ${JSON.stringify({ stopReason: result.stopReason })}\n\n`,
+                );
+                res.end();
+              }
+              return;
+            } catch (error) {
+              if (!res.headersSent) throw error;
+              if (!res.destroyed) {
+                res.write(
+                  'event: error\ndata: {"code":"STAGED_LOAD_FAILED"}\n\n',
+                );
+                res.end();
+              }
+              return;
+            } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
               controllers.delete(runId);
             }
           }
