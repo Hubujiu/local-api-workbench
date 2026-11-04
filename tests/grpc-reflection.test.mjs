@@ -135,6 +135,30 @@ test("gRPC reflection HTTP flow saves its schema, executes it and restores the d
   assert.equal(reflectedResponse.status, 200);
   const reflected = await reflectedResponse.json();
   assert.equal(reflected.status.code, 0, JSON.stringify(reflected));
+  const revisionBeforeExample = (await app.store.get(project.id)).revision;
+  const exampleResponse = await post("grpc-request-example", {
+    schema: reflected.schema,
+    service: "fixture.Echo",
+    method: "Unary",
+  });
+  assert.equal(exampleResponse.status, 200);
+  const example = await exampleResponse.json();
+  assert.equal(example.requestType, "fixture.Payload");
+  assert.equal(typeof example.example.text, "string");
+  assert.equal(
+    (await app.store.get(project.id)).revision,
+    revisionBeforeExample,
+  );
+  assert.equal(
+    (
+      await post("grpc-request-example", {
+        schema: reflected.schema,
+        service: "fixture.Echo",
+        method: "Missing",
+      })
+    ).ok,
+    false,
+  );
   const created = await post("grpc-definitions", {
     target,
     schema: reflected.schema,

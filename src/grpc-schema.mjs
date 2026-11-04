@@ -183,7 +183,9 @@ export function compileGrpcSchema(input) {
       if (!visited.has(name)) unused.push(name);
   }
   root.resolveAll();
-  const json = jsonTree(root.toJSON());
+  // protobufjs enum value maps inherit a reverse-lookup prototype. Project the
+  // trusted, parsed tree to plain JSON before applying the existing limits.
+  const json = jsonTree(JSON.parse(JSON.stringify(root.toJSON())));
   const definition = protoLoader.fromJSON(json, {
     keepCase: true,
     longs: String,
