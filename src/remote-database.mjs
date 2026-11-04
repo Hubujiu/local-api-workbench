@@ -26,7 +26,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
     throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
   if (input.type === "clickhouse") return queryClickHouse(input, { signal });
   if (input.type === "redis") return queryRedis(input, { signal });
-  if (input.type === "mongodb") return queryMongo(input);
+  if (input.type === "mongodb") return queryMongo(input, { signal });
   const { type, sql } = input;
   const parameters = databaseParameters(
     input.parameters === undefined ? [] : input.parameters,

@@ -15,9 +15,8 @@ import { MCPActivity } from "./mcp-activity.mjs";
 import { scopedExecution } from "./variable-scopes.mjs";
 import { versionPlan } from "./plan-version.mjs";
 import readline from "node:readline";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Store, executeRequest } from "./runtime.mjs";
+import { executeRequest } from "./runtime.mjs";
 import { snapshotPlan, runPlan } from "./core.mjs";
 import {
   environmentVariables,
@@ -40,6 +39,7 @@ export function createMCP({
   grpcExecutor = executeGrpc,
   protocolExecutor = executeWireFlow,
   socketioExecutor,
+  databaseExecutor,
 }) {
   const allowed = new Set(projects);
   const socketioSessions = new SocketIOSessions();
@@ -606,6 +606,10 @@ export function createMCP({
                   .variables,
                 executeRequest,
                 {
+                  databaseQuery: databaseExecutor
+                    ? (operation, signal) =>
+                        databaseExecutor(p.id, operation, signal)
+                    : undefined,
                   cookieSession: projectCookieSession(
                     store,
                     p,
@@ -662,6 +666,10 @@ export function createMCP({
                 executeRequest,
                 {
                   ...scopedExecution(store, p, environmentId),
+                  databaseQuery: databaseExecutor
+                    ? (operation, signal) =>
+                        databaseExecutor(p.id, operation, signal)
+                    : undefined,
                   executeGrpc: executePlanGrpc,
                   grpcCredentials: args.grpcCredentials,
                   executeProtocol: executePlanProtocol,
@@ -700,62 +708,78 @@ export function createMCP({
   };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const argv = process.argv.slice(2),
-    projects = argv.flatMap((a, i) => (a === "--project" ? [argv[i + 1]] : [])),
-    store = new Store(path.resolve(process.env.LOCAL_API_DATA || ".local-api"));
-  await store.init();
-  let activity;
-  const dispatch = createMCP({
-    store,
-    projects,
-    write: argv.includes("--write"),
-    execute: argv.includes("--execute"),
-    onProgress: (progress) => activity?.update(progress),
-  });
-  const lines = readline.createInterface({
-    input: process.stdin,
-    crlfDelay: Infinity,
-  });
-  for await (const line of lines) {
-    let message;
-    try {
-      if (Buffer.byteLength(line) > 12 * 1024 * 1024)
-        throw Error("Input too large");
-      message = JSON.parse(line);
-      if (
-        message.method === "tools/call" &&
-        argv.includes("--execute") &&
-        argv.includes("--write") &&
-        projects.includes(message.params?.arguments?.projectId) &&
-        [
-          "localapi_run_plan",
-          "localapi_execute_flow",
-          "localapi_execute_api",
-        ].includes(message.params?.name)
-      ) {
-        activity = await new MCPActivity(store.root, {
-          tool: message.params.name,
-          projectId: message.params.arguments.projectId,
-          planId: message.params.arguments.planId,
-        }).start();
+  let context;
+  try {
+    const { createMCPStdioContext } = await import("./mcp-stdio-bootstrap.mjs");
+    context = await createMCPStdioContext(
+      process.argv.slice(2),
+      process.env.LOCAL_API_DATA,
+    );
+    const { store, projects, write, execute } = context;
+    let activity;
+    const dispatch = createMCP({
+      store,
+      projects,
+      write,
+      execute,
+      databaseExecutor: context.databaseExecutor,
+      onProgress: (progress) => activity?.update(progress),
+    });
+    const lines = readline.createInterface({
+      input: process.stdin,
+      crlfDelay: Infinity,
+    });
+    for await (const line of lines) {
+      let message;
+      try {
+        if (Buffer.byteLength(line) > 12 * 1024 * 1024)
+          throw Error("Input too large");
+        message = JSON.parse(line);
+        if (
+          message.method === "tools/call" &&
+          execute &&
+          write &&
+          projects.includes(message.params?.arguments?.projectId) &&
+          [
+            "localapi_run_plan",
+            "localapi_execute_flow",
+            "localapi_execute_api",
+          ].includes(message.params?.name)
+        ) {
+          activity = await new MCPActivity(store.root, {
+            tool: message.params.name,
+            projectId: message.params.arguments.projectId,
+            planId: message.params.arguments.planId,
+          }).start();
+        }
+        const answer = await dispatch(message);
+        await activity?.finish(Boolean(answer?.result?.isError));
+        activity = undefined;
+        if (answer) process.stdout.write(JSON.stringify(answer) + "\n");
+      } catch (error) {
+        await activity?.finish(true).catch(() => {});
+        activity = undefined;
+        process.stdout.write(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: message?.id ?? null,
+            error:
+              error instanceof SyntaxError
+                ? { code: -32700, message: "Parse error" }
+                : {
+                    code: -32603,
+                    message: "Execution/progress storage failed",
+                  },
+          }) + "\n",
+        );
       }
-      const answer = await dispatch(message);
-      await activity?.finish(Boolean(answer?.result?.isError));
-      activity = undefined;
-      if (answer) process.stdout.write(JSON.stringify(answer) + "\n");
-    } catch (error) {
-      await activity?.finish(true).catch(() => {});
-      activity = undefined;
-      process.stdout.write(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: message?.id ?? null,
-          error:
-            error instanceof SyntaxError
-              ? { code: -32700, message: "Parse error" }
-              : { code: -32603, message: "Execution/progress storage failed" },
-        }) + "\n",
-      );
     }
+  } catch {
+    process.stderr.write(
+      "MCP stdio startup/transport failed; no input or credentials echoed.\n",
+    );
+    process.exitCode = 1;
+  } finally {
+    context?.close();
   }
 }

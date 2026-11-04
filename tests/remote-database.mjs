@@ -288,3 +288,61 @@ await verifySSHDatabaseFlows(common);
 
 const { verifyMySQLWrites } = await import("./mysql-write-integration.mjs");
 await verifyMySQLWrites(common);
+
+// Same mixed script/database/real HTTP contract against both real SQL engines.
+const { verifyNativeDatabaseFlow } = await import(
+  "./native-database-integration.mjs"
+);
+await verifyNativeDatabaseFlow({ ...common, type: "postgres", port: 5432 });
+await verifyNativeDatabaseFlow({ ...common, type: "mysql", port: 3306 });
+const { verifyNativeImportHTTPFlow } = await import(
+  "./native-database-integration.mjs"
+);
+await verifyNativeImportHTTPFlow({ ...common, type: "postgres", port: 5432 });
+const { verifyNativeDatabaseScopes } = await import(
+  "./native-database-scopes.mjs"
+);
+await verifyNativeDatabaseScopes({ ...common, type: "postgres", port: 5432 });
+const { verifyMCPDatabaseFlow } = await import(
+  "./mcp-database-integration.mjs"
+);
+await verifyMCPDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  { nativeImport: true },
+);
+
+await verifyNativeImportHTTPFlow({ ...common, type: "mysql", port: 3306 });
+await verifyNativeDatabaseScopes({ ...common, type: "mysql", port: 3306 });
+
+await verifyMCPDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  { nativeImport: true },
+);
+
+const { verifyMCPStdioNativeDatabaseFlow } = await import(
+  "./mcp-stdio-native-database-integration.mjs"
+);
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "postgres",
+  port: 5432,
+});
+await verifyMCPStdioNativeDatabaseFlow({
+  ...common,
+  type: "mysql",
+  port: 3306,
+});
+// Reuse the actual CLI end-to-end contract against both disposable services.
+const { verifyCLIDatabaseFlow } = await import(
+  "./cli-database-integration.mjs"
+);
+await verifyCLIDatabaseFlow(
+  { ...common, type: "postgres", port: 5432 },
+  "SELECT $1::text AS value",
+  ["fixture-value"],
+);
+await verifyCLIDatabaseFlow(
+  { ...common, type: "mysql", port: 3306 },
+  "SELECT ? AS value",
+  ["fixture-value"],
+);
