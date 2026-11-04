@@ -235,22 +235,6 @@ export function interpolate(value, vars = {}) {
     );
   return value;
 }
-// Row template bindings are ephemeral; they never enter mutable runtime scopes.
-function rowBindings(variables, dataContext) {
-  if (dataContext === undefined) return variables;
-  const bindings = Object.assign(Object.create(null), variables);
-  for (const key of Object.keys(bindings))
-    if (key.startsWith("$data.")) delete bindings[key];
-  for (const [key, item] of Object.entries(dataContext.iterationData))
-    if (item === null || ["string", "number", "boolean"].includes(typeof item))
-      bindings["$data." + key] = item;
-  return bindings;
-}
-function rowInterpolator(dataContext) {
-  if (dataContext === undefined) return interpolate;
-  return (value, variables = {}) =>
-    interpolate(value, rowBindings(variables, dataContext));
-}
 export function jsonPath(obj, path) {
   const parts = jsonPathSegments(path);
   for (const p of parts) {
@@ -837,7 +821,6 @@ export async function runPlan(
       dataContext === undefined
         ? executionContext
         : { ...executionContext, ...dataContext };
-    const stepInterpolate = rowInterpolator(dataContext);
     if (signal?.aborted) break;
     if (repeated && repeatEvidenceExceeded(evidenceBytes)) {
       evidenceStopped = true;
@@ -949,7 +932,7 @@ export async function runPlan(
           credentials: credentials.get(step.id),
           signal,
           executeGrpc,
-          interpolate: stepInterpolate,
+          interpolate,
           evaluateAssertions,
           extractResponseValue,
           onScopeChanges,
@@ -974,8 +957,7 @@ export async function runPlan(
           credentials: wireCredentials.get(step.id),
           signal,
           executeProtocol,
-          interpolate: stepInterpolate,
-          resolveVariables: (variables) => rowBindings(variables, dataContext),
+          interpolate,
           evaluateAssertions,
           extractResponseValue,
           onScopeChanges,
@@ -1002,7 +984,7 @@ export async function runPlan(
         record[step.type] = structuredClone(validated[step.type]);
         let request;
         if (isGrpc) {
-          const messages = stepInterpolate(validated.grpc.messages, vars);
+          const messages = interpolate(validated.grpc.messages, vars);
           record.grpc.messages = messages;
           request = {
             ...grpcPlanRequest(validated, messages),
@@ -1011,8 +993,8 @@ export async function runPlan(
         } else if (step.type === "protocol") {
           const protocol = resolveWirePlanPayload(
             validated.protocol,
-            rowBindings(vars, dataContext),
-            stepInterpolate,
+            vars,
+            interpolate,
           );
           record.protocol = structuredClone(protocol);
           request = {
@@ -1020,7 +1002,7 @@ export async function runPlan(
             ...wireCredentials.get(step.id),
           };
         } else {
-          const commands = stepInterpolate(validated.socketio.commands, vars);
+          const commands = interpolate(validated.socketio.commands, vars);
           record.socketio.commands = commands;
           request = {
             ...validated.socketio,
@@ -1113,7 +1095,7 @@ export async function runPlan(
         validateApipostTemplateRequest(step.request);
         const executeOperation = async (operation, budget) => {
           if (operation.type !== "database")
-            return applyOperation(operation, vars, stepInterpolate);
+            return applyOperation(operation, vars);
           if (
             operation.enabled !== undefined &&
             typeof operation.enabled !== "boolean"
@@ -1148,7 +1130,7 @@ export async function runPlan(
             {
               connectionId: operation.connectionId,
               sql: operation.sql,
-              parameters: stepInterpolate(operation.parameters || [], vars),
+              parameters: interpolate(operation.parameters || [], vars),
             },
             signal,
           );
@@ -1280,9 +1262,12 @@ export async function runPlan(
         await commitScopes();
         record.request = await resolveDynamicRequest(
           configuredRequest,
-          rowBindings({ ...vars, ...localVariables }, dataContext),
+          {
+            ...vars,
+            ...localVariables,
+          },
           snapshot.functions || [],
-          stepInterpolate,
+          interpolate,
           finalizedBody,
         );
         if (prepareRequest) record.request = prepareRequest(record.request);
@@ -1591,12 +1576,12 @@ export async function runPlan(
     variables: vars,
   };
 }
-export function applyOperation(op, vars, resolve = interpolate) {
+export function applyOperation(op, vars) {
   if (!op.name || ["__proto__", "constructor", "prototype"].includes(op.name))
     throw Error("变量名无效");
   switch (op.type) {
     case "set":
-      vars[op.name] = resolve(op.value, vars);
+      vars[op.name] = interpolate(op.value, vars);
       break;
     case "uuid":
       vars[op.name] = id();
