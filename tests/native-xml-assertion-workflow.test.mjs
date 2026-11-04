@@ -8,6 +8,7 @@ import { createApp } from "../src/server.mjs";
 import { executeRequest, Store } from "../src/runtime.mjs";
 import { importIntoProject, runPlan, snapshotPlan } from "../src/core.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 
 const script = (id, data) => ({
   type: "customScript",
@@ -182,17 +183,19 @@ test("native XML assertions close real import, current body, soft failure, froze
     assert.equal(run.recordSaved, true);
     assert.equal(run.results.length, 2);
     assert.equal(run.results[1].status, "passed");
-    assert.deepEqual(
-      run.results[0].assertions.map((entry) => [entry.name, entry.passed]),
-      [
-        ["current XML view", passes],
-        ["attribute", true],
-        ["empty attribute", true],
-        ["empty element", true],
-        ["CDATA", true],
-        ["entities", true],
-        ["literal unequal", true],
-      ],
+    withExecutionResultDiagnostics(run.results[0], () =>
+      assert.deepEqual(
+        run.results[0].assertions.map((entry) => [entry.name, entry.passed]),
+        [
+          ["current XML view", passes],
+          ["attribute", true],
+          ["empty attribute", true],
+          ["empty element", true],
+          ["CDATA", true],
+          ["entities", true],
+          ["literal unequal", true],
+        ],
+      ),
     );
     assert.equal(seen.at(-1).authorization, `Bearer wire-${tenant}`);
     assert.equal(run.results[0].response.body, xmlFor(tenant, passes));
@@ -390,17 +393,19 @@ test("native XML assertion lookup errors remain stage errors and only active pic
       assert.equal(seen.length, sample.strict ? 1 : 2);
       if (!sample.strict)
         assert.equal(seen.at(-1).authorization, "Bearer stale");
-      if (sample.error) {
-        assert.match(run.results[0].error, /XML|节点|匹配|叶|唯一/);
-        assert(
-          !run.results[0].assertions.some((entry) => entry.name === "state"),
-        );
-      } else
-        assert.equal(
-          run.results[0].assertions.find((entry) => entry.name === "state")
-            .passed,
-          false,
-        );
+      withExecutionResultDiagnostics(run.results[0], () => {
+        if (sample.error) {
+          assert.match(run.results[0].error, /XML|节点|匹配|叶|唯一/);
+          assert(
+            !run.results[0].assertions.some((entry) => entry.name === "state"),
+          );
+        } else
+          assert.equal(
+            run.results[0].assertions.find((entry) => entry.name === "state")
+              .passed,
+            false,
+          );
+      });
       const saved = await new Store(app.root).get(p.id);
       assert.equal(saved.environments[0].variables.token, "stale");
       assert.equal(saved.environments[0].variables.beforeProof, "committed");
