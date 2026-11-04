@@ -129,11 +129,53 @@ const compatibilityFields = [
   ["evaluationMs", 60000],
   ["evaluationCPUUs", 60000000],
 ];
+const hostTerminalKinds = enumeration(["result", "error"]);
+const hostFinishReasons = enumeration([
+  "total-deadline",
+  "cancelled",
+  "worker-error",
+  "worker-exit",
+  "host-error",
+]);
+const hostLifecycleFields = [
+  ["version", 1],
+  ["terminalKind", hostTerminalKinds],
+  ["finishReason", hostFinishReasons],
+  ["exitCode", 255],
+  ["spawnMs", 60000],
+  ["timerArmMs", 60000],
+  ["timerTargetMs", 60000],
+  ["onlineMs", 60000],
+  ["librariesMs", 60000],
+  ["engineMs", 60000],
+  ["bootstrapMs", 60000],
+  ["compatibilityMs", 60000],
+  ["scriptMs", 60000],
+  ["asyncMs", 60000],
+  ["serializationMs", 60000],
+  ["terminalMs", 60000],
+  ["timerFireMs", 60000],
+  ["finishMs", 60000],
+  ["terminateMs", 60000],
+  ["exitMs", 60000],
+  ["settleMs", 60000],
+];
+const hostSequenceFields = [
+  ["version", 1],
+  ["stageIndex", 34],
+  ["completed", 34],
+  ["elapsedMs", 60000],
+  ["priorWorkerMs", 60000],
+  ["priorSpawnMs", 60000],
+  ["priorExitWaitMs", 60000],
+];
 const nestedFields = [
   ["scriptDiagnostics", counters],
   ["activityMetrics", milliseconds],
   ["activityCPUTimeUs", microseconds],
   ["compatibilityDiagnostics", compatibilityFields],
+  ["hostLifecycle", hostLifecycleFields],
+  ["hostSequence", hostSequenceFields],
 ];
 // Trusted schema tuples must not read inherited optional indices or iterators.
 for (const schema of [
@@ -143,6 +185,8 @@ for (const schema of [
   milliseconds,
   microseconds,
   compatibilityFields,
+  hostLifecycleFields,
+  hostSequenceFields,
   nestedFields,
 ]) {
   for (let i = 0; i < schema.length; i++) setPrototypeOf(schema[i], null);
@@ -191,6 +235,11 @@ function metadata(source, strict = false) {
     if (raw === undefined) continue;
     const projected = create(null);
     copyFields(projected, raw, schema);
+    if (
+      (key === "hostLifecycle" || key === "hostSequence") &&
+      own(projected, "version") !== 1
+    )
+      continue;
     if (
       key === "compatibilityDiagnostics" &&
       (own(projected, "version") !== 1 ||
