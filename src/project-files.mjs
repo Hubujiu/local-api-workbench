@@ -1,4 +1,5 @@
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
+import { validateRequestDefinitionHistory } from "./request-definition-history.mjs";
 import {
   mkdir,
   readFile,
@@ -43,8 +44,11 @@ function validateLayout(project) {
       diskNames.add(name);
     }
   }
+  // Preserve existing layout diagnostics, then validate history as part of the
+  // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
+  validateRequestDefinitionHistory(project);
 }
-async function writeJSON(file, value) {
+async function writeJSON(file, value, beforePublish) {
   const text = JSON.stringify(value, null, 2) + "\n";
   try {
     if ((await readFile(file, "utf8")) === text) return;
@@ -53,12 +57,24 @@ async function writeJSON(file, value) {
   }
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = file + "." + randomUUID() + ".tmp";
-  await writeFile(temporary, text, { mode: 0o600 });
-  await rename(temporary, file);
+  try {
+    await writeFile(temporary, text, { mode: 0o600 });
+    // No await between this gate and beginning the atomic journal rename.
+    // Cancellation after publication cannot promise rollback.
+    beforePublish?.();
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 async function apply(directory, project) {
   const metadata = { ...project, storageFormat: 2, collections: {} };
   delete metadata._diskFingerprint;
+  delete metadata.requestDefinitionHistory;
+  delete metadata.requestDefinitionHistoryFormat;
+  if (project.requestDefinitionHistory !== undefined)
+    metadata.requestDefinitionHistoryFormat = 1;
   for (const [key, folder] of Object.entries(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -98,6 +114,14 @@ async function apply(directory, project) {
     );
     delete metadata[key];
   }
+  // Keep the established collection/environment-before-history apply order.
+  // A history-directory fault still leaves the same partial-apply evidence;
+  // the complete journal remains the sole authority for roll-forward.
+  if (project.requestDefinitionHistory !== undefined)
+    await writeJSON(
+      path.join(directory, "history/definitions.json"),
+      project.requestDefinitionHistory,
+    );
   await writeJSON(path.join(directory, "project.json"), metadata);
   try {
     await writeFile(
@@ -128,12 +152,23 @@ export async function recoverProject(directory, expectedId) {
     throw new ProjectCommitUncertain(expectedId, error);
   }
 }
-export async function writeProject(directory, project) {
+export async function writeProject(directory, project, { signal } = {}) {
+  const assertNotAborted = () => {
+    if (signal?.aborted)
+      throw Object.assign(Error("项目保存已取消"), {
+        code: "STORE_SAVE_ABORTED",
+      });
+  };
+  assertNotAborted();
   validateLayout(project);
   await mkdir(directory, { recursive: true });
   // The complete journal is written before separate files. Reads recover it under the same lock.
   // This covers process interruption, not a promise of power-loss durability.
-  await writeJSON(path.join(directory, ".transaction.json"), project);
+  await writeJSON(
+    path.join(directory, ".transaction.json"),
+    project,
+    assertNotAborted,
+  );
   try {
     await apply(directory, project);
     await rm(path.join(directory, ".transaction.json"));
@@ -149,6 +184,16 @@ export async function readProject(directory, expectedId) {
   if (metadata.id !== expectedId || metadata.storageFormat !== 2)
     throw Error("项目清单格式或ID无效");
   const project = { ...metadata };
+  if (
+    Object.hasOwn(metadata, "requestDefinitionHistory") ||
+    (metadata.requestDefinitionHistoryFormat !== undefined &&
+      metadata.requestDefinitionHistoryFormat !== 1)
+  )
+    throw Error("接口定义历史清单格式无效");
+  if (metadata.requestDefinitionHistoryFormat === 1)
+    project.requestDefinitionHistory = JSON.parse(
+      await readFile(path.join(directory, "history/definitions.json"), "utf8"),
+    );
   for (const [key, folder] of Object.entries(groups)) {
     const ids = metadata.collections?.[key] || [];
     if (!Array.isArray(ids) || ids.length > 10000)
@@ -190,6 +235,8 @@ export async function readProject(directory, expectedId) {
   }
   delete project.storageFormat;
   delete project.collections;
+  delete project.requestDefinitionHistoryFormat;
+  validateRequestDefinitionHistory(project);
   project._diskFingerprint = projectFingerprint(project);
   return project;
 }
