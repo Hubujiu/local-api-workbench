@@ -168,9 +168,9 @@ function mysqlPeer(socket, records, stage) {
         sql = packet.subarray(1).toString();
       if (command === 3) {
         records.push(sql);
-        peer.phase = "setup";
+        peer.phase = sql === "START TRANSACTION" ? "start" : "setup";
         peer.release = () => ok(1);
-        if (stage !== "setup") ok(1);
+        if (stage !== peer.phase) ok(1);
       }
       if (command === 22) {
         records.push(sql);
@@ -213,7 +213,9 @@ async function fixture(t, type, stage = "handshake") {
   return { input, peers, closed, records };
 }
 for (const type of ["postgres", "mysql"]) {
-  for (const stage of ["handshake", "setup", "query"]) {
+  for (const stage of type === "mysql"
+    ? ["handshake", "setup", "start", "query"]
+    : ["handshake", "setup", "query"]) {
     test(
       `${type} session revoke at ${stage} closes only captured grant and sends no later command`,
       { timeout: 8000 },
@@ -221,7 +223,7 @@ for (const type of ["postgres", "mysql"]) {
         const f = await fixture(t, type, stage),
           sessions = new DatabaseSessions();
         const a = sessions.register("a", { ...f.input, name: "a" }),
-          b = sessions.register("a", { ...f.input, name: "b" });
+          b = sessions.register("b", { ...f.input, name: "b" });
         const cleanup = new AbortController();
         t.after(() => {
           cleanup.abort();
@@ -237,7 +239,7 @@ for (const type of ["postgres", "mysql"]) {
         await until(() => f.peers[0]?.phase === stage, "first held phase");
         const qb = settle(
           sessions.query(
-            "a",
+            "b",
             { connectionId: b.id, sql: "SELECT 1" },
             cleanup.signal,
           ),
@@ -262,73 +264,185 @@ for (const type of ["postgres", "mysql"]) {
     );
   }
 }
-for (const action of ["revoke", "close"]) {
+for (const held of ["AUTH", "SELECT"]) {
+  for (const action of ["revoke", "close"]) {
+    test(
+      `Redis ${action} during ${held} closes both same-grant reads without GET`,
+      { timeout: 5000 },
+      async (t) => {
+        const sockets = [],
+          closed = new Set(),
+          commands = [];
+        const server = net.createServer((socket) => {
+          sockets.push(socket);
+          socket.on("error", () => {});
+          socket.on("close", () => closed.add(socket));
+          let pending = Buffer.alloc(0);
+          socket.on("data", (bytes) => {
+            pending = Buffer.concat([pending, bytes]);
+            for (;;) {
+              const item = parseRESP(pending);
+              if (!item) break;
+              pending = pending.subarray(item.bytes);
+              commands.push(item.value[0].toString());
+              if (held === "SELECT" && item.value[0].toString() === "AUTH")
+                socket.write("+OK\r\n");
+            }
+          });
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const sessions = new DatabaseSessions(),
+          cleanup = new AbortController();
+        t.after(async () => {
+          cleanup.abort();
+          sessions.close();
+          for (const socket of sockets) socket.destroy();
+          await new Promise((r) => server.close(r));
+        });
+        const config = {
+          name: "fictional",
+          type: "redis",
+          host: "127.0.0.1",
+          port: server.address().port,
+          user: "fictional",
+          password: "fictional",
+          database: "1",
+        };
+        const a = sessions.register("p", config);
+        const reads = [0, 1].map(() =>
+          settle(
+            sessions.query(
+              "p",
+              { connectionId: a.id, sql: '["GET","fixture"]' },
+              cleanup.signal,
+            ),
+          ),
+        );
+        await until(
+          () => commands.filter((x) => x === held).length === 2,
+          "two held real frames",
+        );
+        if (action === "close") sessions.close();
+        else sessions.revoke("p", a.id);
+        await until(
+          () => reads.every((r) => r.done) && closed.size === 2,
+          "both revoked reads must close",
+          750,
+        );
+        for (const r of reads) assert.match(r.error?.message || "", /撤销/);
+        for (const socket of sockets)
+          if (!socket.destroyed) socket.write("+OK\r\n");
+        await delay(25);
+        assert.equal(commands.filter((x) => x === held).length, 2);
+        assert.equal(commands.includes("GET"), false);
+        const fresh = sessions.register("p", config);
+        assert.notEqual(fresh.id, a.id);
+        assert.equal(sessions.list("p").length, 1);
+      },
+    );
+  }
+}
+
+for (const heldStage of ["authentication", "forwarding"]) {
   test(
-    `Redis ${action} during AUTH closes both same-grant reads without GET`,
-    { timeout: 5000 },
+    `session revoke during SSH ${heldStage} returns owned capacity without direct fallback`,
+    { timeout: 15000 },
     async (t) => {
-      const sockets = [],
-        closed = new Set(),
-        commands = [];
-      const server = net.createServer((socket) => {
-        sockets.push(socket);
-        socket.on("error", () => {});
-        socket.on("close", () => closed.add(socket));
-        let pending = Buffer.alloc(0);
-        socket.on("data", (bytes) => {
-          pending = Buffer.concat([pending, bytes]);
-          for (;;) {
-            const item = parseRESP(pending);
-            if (!item) break;
-            pending = pending.subarray(item.bytes);
-            commands.push(item.value[0].toString());
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs1", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      });
+      const pin =
+        "SHA256:" +
+        createHash("sha256")
+          .update(ssh2.utils.parseKey(privateKey).getPublicSSH())
+          .digest("base64")
+          .replace(/=$/, "");
+      const clients = new Set(),
+        held = [],
+        forwarded = [];
+      const server = new ssh2.Server({ hostKeys: [privateKey] }, (client) => {
+        clients.add(client);
+        client.on("error", () => {});
+        client.once("close", () => clients.delete(client));
+        client.on("authentication", (ctx) => {
+          if (ctx.method !== "password") {
+            ctx.reject();
+            return;
           }
+          if (heldStage === "authentication") held.push(ctx);
+          else ctx.accept();
+        });
+        client.on("tcpip", (accept, reject) => {
+          forwarded.push({ accept, reject });
+          if (heldStage === "forwarding") held.push({ accept, reject });
+          else reject();
         });
       });
       server.listen(0, "127.0.0.1");
       await once(server, "listening");
-      const sessions = new DatabaseSessions(),
-        cleanup = new AbortController();
+      const sessions = new DatabaseSessions();
       t.after(async () => {
-        cleanup.abort();
         sessions.close();
-        for (const socket of sockets) socket.destroy();
+        for (const c of clients) c.end();
         await new Promise((r) => server.close(r));
       });
       const config = {
         name: "fictional",
-        type: "redis",
+        type: "postgres",
         host: "127.0.0.1",
-        port: server.address().port,
+        port: 5432,
         user: "fictional",
-        password: "fictional",
+        password: "",
+        database: "fixture",
+        ssh: {
+          host: "127.0.0.1",
+          port: server.address().port,
+          username: "fictional",
+          password: "fictional",
+          hostKeySHA256: pin,
+        },
       };
-      const a = sessions.register("p", config);
-      const reads = [0, 1].map(() =>
-        settle(
-          sessions.query(
-            "p",
-            { connectionId: a.id, sql: '["GET","fixture"]' },
-            cleanup.signal,
-          ),
-        ),
+      const ids = Array.from(
+        { length: 6 },
+        () => sessions.register("p", config).id,
       );
-      await until(() => commands.length === 2, "two real AUTH frames");
-      if (action === "close") sessions.close();
-      else sessions.revoke("p", a.id);
+      const reads = ids
+        .slice(0, 5)
+        .map((id) =>
+          settle(sessions.query("p", { connectionId: id, sql: "SELECT 1" })),
+        );
+      await until(() => held.length === 5, "five held SSH operations", 4000);
+      await assert.rejects(
+        sessions.query("p", { connectionId: ids[5], sql: "SELECT 1" }),
+        /最多5/,
+      );
+      sessions.revoke("p", ids[0]);
       await until(
-        () => reads.every((r) => r.done) && closed.size === 2,
-        "both revoked reads must close",
-        750,
+        () => reads[0].done && clients.size === 4,
+        "revoked SSH resource closed",
+        1500,
       );
-      for (const r of reads) assert.match(r.error?.message || "", /撤销/);
-      for (const socket of sockets)
-        if (!socket.destroyed) socket.write("+OK\r\n");
-      await delay(25);
-      assert.deepEqual(commands, ["AUTH", "AUTH"]);
-      const fresh = sessions.register("p", config);
-      assert.notEqual(fresh.id, a.id);
-      assert.equal(sessions.list("p").length, 1);
+      assert.match(reads[0].error.message, /撤销/);
+      assert(reads.slice(1).every((r) => !r.done));
+      const fresh = settle(
+        sessions.query("p", { connectionId: ids[5], sql: "SELECT 1" }),
+      );
+      await until(
+        () => held.length === 6,
+        "closed SSH capacity reusable",
+        1500,
+      );
+      sessions.close();
+      await Promise.all([...reads, fresh].map((r) => r.promise));
+      await until(
+        () => clients.size === 0,
+        "all revoked SSH transports closed",
+      );
+      for (const r of [...reads, fresh]) assert.match(r.error.message, /撤销/);
+      if (heldStage === "authentication") assert.equal(forwarded.length, 0);
     },
   );
 }

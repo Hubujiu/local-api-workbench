@@ -128,3 +128,99 @@ test(
     assert.equal(f.seen.length, 1);
   },
 );
+
+for (const order of ["caller-first", "session-first"]) {
+  test(
+    `${order} simultaneous cancellation keeps original driver error and does not expose reasons`,
+    { timeout: 5000 },
+    async (t) => {
+      let enter;
+      const entered = new Promise((r) => (enter = r));
+      const sockets = [];
+      const server = net.createServer((s) => {
+        sockets.push(s);
+        s.on("error", () => {});
+        s.on("data", () => enter());
+      });
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const sessions = new DatabaseSessions(),
+        controller = new AbortController();
+      t.after(async () => {
+        controller.abort();
+        sessions.close();
+        for (const s of sockets) s.destroy();
+        await new Promise((r) => server.close(r));
+      });
+      const id = sessions.register("p", {
+        name: "fictional",
+        type: "redis",
+        host: "127.0.0.1",
+        port: server.address().port,
+        password: "fictional",
+      }).id;
+      const pending = sessions
+        .query(
+          "p",
+          { connectionId: id, sql: '["GET","fixture"]' },
+          controller.signal,
+        )
+        .then(
+          () => null,
+          (e) => e,
+        );
+      await entered;
+      if (order === "caller-first") {
+        controller.abort(new Error("private reason"));
+        sessions.revoke("p", id);
+      } else {
+        sessions.revoke("p", id);
+        controller.abort(new Error("private reason"));
+      }
+      const error = await pending;
+      assert.equal(error.name, "AbortError");
+      assert.equal(error.code, "DATABASE_QUERY_CANCELLED");
+      assert.doesNotMatch(error.message, /private/);
+    },
+  );
+}
+
+// Public driver seam is only an error-precedence control, not wire evidence.
+test("a PostgreSQL query failure preceding cleanup-time caller abort retains its original error", async () => {
+  const { queryRemoteDatabase } = await import("../src/remote-database.mjs");
+  const controller = new AbortController();
+  class Client {
+    constructor(config) {
+      this.stream = config.stream;
+      this.stream.once("close", () =>
+        controller.abort(new Error("private cleanup reason")),
+      );
+    }
+    on() {}
+    async connect() {}
+    async query(sql) {
+      if (sql === "BEGIN READ ONLY") return;
+      throw Object.assign(Error("fixture undefined column"), { code: "42703" });
+    }
+  }
+  await assert.rejects(
+    queryRemoteDatabase(
+      {
+        type: "postgres",
+        host: "127.0.0.1",
+        port: 5432,
+        user: "fixture",
+        password: "",
+        database: "fixture",
+        ssl: false,
+        sql: "SELECT 1",
+      },
+      { signal: controller.signal, Client },
+    ),
+    (error) =>
+      error.code === "42703" &&
+      error.name === "Error" &&
+      !error.message.includes("private"),
+  );
+  assert.equal(controller.signal.aborted, true);
+});

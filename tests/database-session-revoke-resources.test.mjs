@@ -236,3 +236,73 @@ test(
     assert(closed.has(children[2]));
   },
 );
+
+test(
+  "Mongo caller cancellation retains driver Error and leaves grant reusable",
+  { timeout: 8000 },
+  async (t) => {
+    const sockets = [],
+      closed = new Set(),
+      received = new Set();
+    const endpoint = net.createServer((socket) => {
+      sockets.push(socket);
+      socket.on("error", () => {});
+      socket.on("data", () => received.add(socket));
+      socket.once("close", () => closed.add(socket));
+    });
+    endpoint.listen(0, "127.0.0.1");
+    await once(endpoint, "listening");
+    const sessions = new DatabaseSessions();
+    t.after(async () => {
+      sessions.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => endpoint.close(resolve));
+    });
+    const grant = sessions.register("project", {
+      type: "mongodb",
+      name: "caller cancellation",
+      host: "127.0.0.1",
+      port: endpoint.address().port,
+      database: "fixture",
+    });
+    const operation = {
+      connectionId: grant.id,
+      sql: '{"collection":"items","limit":1}',
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const caller = new AbortController();
+      const query = observe(
+        sessions.query("project", operation, caller.signal),
+      );
+      await until(
+        () => sockets.length === attempt + 1 && received.has(sockets[attempt]),
+        "actual Mongo driver request before caller abort",
+        2500,
+      );
+      caller.abort();
+      await until(
+        () => query.done,
+        "caller cancellation settles before driver timeout",
+      );
+      await query.promise;
+      assert.equal(Object.getPrototypeOf(query.error), Error.prototype);
+      assert.equal(query.error.message, "MongoDB查询已取消");
+      assert.equal(Object.hasOwn(query.error, "code"), false);
+      assert.equal(query.error.code, undefined);
+      assert.equal(query.value, undefined);
+      await until(
+        () => closed.has(sockets[attempt]),
+        "caller abort closes actual Mongo peer",
+      );
+      assert.deepEqual(
+        sessions.list("project").map((entry) => entry.id),
+        [grant.id],
+      );
+    }
+    assert.equal(
+      sockets.length,
+      2,
+      "the same grant starts a fresh real driver after caller abort",
+    );
+  },
+);
