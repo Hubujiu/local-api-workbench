@@ -95,13 +95,13 @@ test("core shards exhaust the unchanged npm-test glob exactly once", async () =>
 
 test("frozen weights preserve exact provenance, worst-known fallback and bounded parsing", async () => {
   const data = await loadWeights();
-  assert.equal(data.sources.length, 24);
+  assert.equal(data.sources.length, 36);
   assert.deepEqual(
     [...new Set(data.sources.map((source) => source.runId))],
-    [41017678554, 41030008398],
+    [41812614057, 41822086219],
   );
-  assert.equal(Object.keys(data.weights).length, 520);
-  assert.equal(data.fallbackUs, 36754549);
+  assert.equal(Object.keys(data.weights).length, 688);
+  assert.equal(data.fallbackUs, 43791747);
   const attributes = await readFile(path.join(root, ".gitattributes"), "utf8");
   assert.match(attributes, /^\/scripts\/core-test-weights\.json text eol=lf$/m);
   const bytes = await readFile(
@@ -173,20 +173,29 @@ test("frozen weights preserve exact provenance, worst-known fallback and bounded
   );
 });
 
-test("refreshed 523-file root selection remains exhaustive with three conservative unknowns", async () => {
+test("refreshed 688-file allocation and future unknowns retain exhaustive six-way coverage", async () => {
   const data = await loadWeights();
+  const known = Object.keys(data.weights).sort();
+  const actual = allocateWeighted(known, 6, data);
+  assert.deepEqual(actual.shards.flat().sort(), known);
+  assert.equal(new Set(actual.shards.flat()).size, 688);
+  assert.deepEqual(actual.allocation.fallbackFiles, []);
+  assert.deepEqual(
+    actual.allocation.estimatedUs,
+    [506320008, 506320844, 506319684, 506244058, 506244033, 506320011],
+  );
   const unknown = [
-    "tests/native-jwt-definition-export.test.mjs",
-    "tests/native-jwt-inheritance-roundtrip.test.mjs",
-    "tests/native-jwt-owner-roundtrip.test.mjs",
+    "tests/future-weight-fixture-a.test.mjs",
+    "tests/future-weight-fixture-b.test.mjs",
+    "tests/future-weight-fixture-c.test.mjs",
   ];
   for (const file of unknown)
     assert.equal(Object.hasOwn(data.weights, file), false);
-  const files = [...Object.keys(data.weights), ...unknown].sort();
-  assert.equal(files.length, 523);
-  const result = allocateWeighted(files, 4, data);
+  const files = [...known, ...unknown].sort();
+  assert.equal(files.length, 691);
+  const result = allocateWeighted(files, 6, data);
   assert.deepEqual(result.shards.flat().sort(), files);
-  assert.equal(new Set(result.shards.flat()).size, 523);
+  assert.equal(new Set(result.shards.flat()).size, 691);
   assert.deepEqual(result.allocation.fallbackFiles, unknown);
   for (const file of unknown)
     assert.equal(
@@ -194,23 +203,28 @@ test("refreshed 523-file root selection remains exhaustive with three conservati
       Math.max(...Object.values(data.weights)),
     );
   assert.deepEqual(
-    allocateWeighted([...files].reverse(), 4, data).shards,
+    allocateWeighted([...files].reverse(), 6, data).shards,
     result.shards,
   );
-  assert.deepEqual(
-    result.allocation.estimatedUs,
-    [553782237, 553779988, 553709754, 553783326],
-  );
   const heads = new Map([
-    [41017678554, "106984276c4db3f757f2b44f4f9e490f024b2bf8"],
-    [41030008398, "faa36606ca5d5c8487720e738f8f54e6a40f7c27"],
+    [41812614057, "6e193775b5a84aed34b82bc47b777f37d1602c68"],
+    [41822086219, "5f7ebe26d125d969f1058f6b77c2b020556472e3"],
   ]);
   for (const source of data.sources)
     assert.equal(source.headSha, heads.get(source.runId));
   for (const run of heads.keys()) {
     const streams = data.sources.filter((source) => source.runId === run);
-    assert.equal(streams.length, 12);
-    assert.equal(new Set(streams.map((source) => source.file)).size, 12);
+    assert.equal(streams.length, 18);
+    assert.equal(new Set(streams.map((source) => source.file)).size, 18);
+    for (const os of ["ubuntu", "windows", "macos"])
+      for (let shard = 1; shard <= 6; shard++)
+        assert(
+          streams.some(
+            (source) =>
+              source.file ===
+              `core-${os}-latest-shard-${shard}-of-6.progress.jsonl`,
+          ),
+        );
   }
 });
 
