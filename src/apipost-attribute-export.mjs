@@ -43,7 +43,7 @@ function own(value, key) {
     typeof value !== "object" ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
-    fail("普通对象原型");
+    fail("继承属性或非普通对象原型");
   const d = Object.getOwnPropertyDescriptor(value, key);
   if (d && (!Object.hasOwn(d, "value") || !d.enumerable))
     fail("访问器或非数据字段");
