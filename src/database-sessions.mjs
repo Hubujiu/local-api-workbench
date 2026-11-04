@@ -234,27 +234,41 @@ export class DatabaseSessions {
     const item = this.#connections.get(resolvedId);
     if (!item || item.projectId !== projectId)
       throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
+    // Capture this grant, never a later registration with the same binding ID.
+    const readSignal = signal
+      ? AbortSignal.any([signal, item.controller.signal])
+      : item.controller.signal;
     await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
     if (this.#connections.get(resolvedId) !== item)
       throw Error("数据库会话连接已撤销");
     const config = structuredClone(item.config);
-    const result =
-      config.type === "sqlite"
-        ? await querySQLiteBounded(
-            config.filename,
-            operation.sql,
-            operation.parameters,
-            { signal },
-          )
-        : await queryRemoteDatabase(
-            {
-              ...config,
-              sql: operation.sql,
-              parameters: operation.parameters,
-            },
-            { signal },
-          );
+    let result;
+    try {
+      result =
+        config.type === "sqlite"
+          ? await querySQLiteBounded(
+              config.filename,
+              operation.sql,
+              operation.parameters,
+              { signal: readSignal },
+            )
+          : await queryRemoteDatabase(
+              {
+                ...config,
+                sql: operation.sql,
+                parameters: operation.parameters,
+              },
+              { signal: readSignal },
+            );
+    } catch (error) {
+      // The driver's merged signal is transport-only. Preserve the caller's
+      // cancellation identity and distinguish a revoked grant from a query fault.
+      if (signal?.aborted) throw error;
+      if (this.#connections.get(resolvedId) !== item)
+        throw Error("数据库会话连接已撤销，结果未应用");
+      throw error;
+    }
     await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
     if (this.#connections.get(resolvedId) !== item)
