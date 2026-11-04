@@ -15,6 +15,7 @@ export async function runScriptedWireStep({
   signal,
   executeProtocol,
   interpolate,
+  resolveVariables = (variables) => variables,
   evaluateAssertions,
   extractResponseValue,
   onScopeChanges,
@@ -51,10 +52,10 @@ export async function runScriptedWireStep({
   phases.cancelled();
   const protocol = resolveWirePlanPayload(
     validated.protocol,
-    {
+    resolveVariables({
       ...effectiveScopes(phases.scopes),
       ...phases.localVariables,
-    },
+    }),
     interpolate,
   );
   // Recheck the exact resolved envelope/bytes before starting the frozen target.

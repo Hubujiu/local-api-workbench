@@ -236,21 +236,20 @@ export function interpolate(value, vars = {}) {
   return value;
 }
 // Row template bindings are ephemeral; they never enter mutable runtime scopes.
+function rowBindings(variables, dataContext) {
+  if (dataContext === undefined) return variables;
+  const bindings = Object.assign(Object.create(null), variables);
+  for (const key of Object.keys(bindings))
+    if (key.startsWith("$data.")) delete bindings[key];
+  for (const [key, item] of Object.entries(dataContext.iterationData))
+    if (item === null || ["string", "number", "boolean"].includes(typeof item))
+      bindings["$data." + key] = item;
+  return bindings;
+}
 function rowInterpolator(dataContext) {
   if (dataContext === undefined) return interpolate;
-  const row = dataContext.iterationData;
-  return (value, variables = {}) => {
-    const bindings = Object.assign(Object.create(null), variables);
-    for (const key of Object.keys(bindings))
-      if (key.startsWith("$data.")) delete bindings[key];
-    for (const [key, item] of Object.entries(row))
-      if (
-        item === null ||
-        ["string", "number", "boolean"].includes(typeof item)
-      )
-        bindings["$data." + key] = item;
-    return interpolate(value, bindings);
-  };
+  return (value, variables = {}) =>
+    interpolate(value, rowBindings(variables, dataContext));
 }
 export function jsonPath(obj, path) {
   const parts = jsonPathSegments(path);
@@ -976,6 +975,7 @@ export async function runPlan(
           signal,
           executeProtocol,
           interpolate: stepInterpolate,
+          resolveVariables: (variables) => rowBindings(variables, dataContext),
           evaluateAssertions,
           extractResponseValue,
           onScopeChanges,
@@ -1011,7 +1011,7 @@ export async function runPlan(
         } else if (step.type === "protocol") {
           const protocol = resolveWirePlanPayload(
             validated.protocol,
-            vars,
+            rowBindings(vars, dataContext),
             stepInterpolate,
           );
           record.protocol = structuredClone(protocol);
@@ -1113,7 +1113,7 @@ export async function runPlan(
         validateApipostTemplateRequest(step.request);
         const executeOperation = async (operation, budget) => {
           if (operation.type !== "database")
-            return applyOperation(operation, vars);
+            return applyOperation(operation, vars, stepInterpolate);
           if (
             operation.enabled !== undefined &&
             typeof operation.enabled !== "boolean"
@@ -1280,10 +1280,7 @@ export async function runPlan(
         await commitScopes();
         record.request = await resolveDynamicRequest(
           configuredRequest,
-          {
-            ...vars,
-            ...localVariables,
-          },
+          rowBindings({ ...vars, ...localVariables }, dataContext),
           snapshot.functions || [],
           stepInterpolate,
           finalizedBody,
@@ -1594,12 +1591,12 @@ export async function runPlan(
     variables: vars,
   };
 }
-export function applyOperation(op, vars) {
+export function applyOperation(op, vars, resolve = interpolate) {
   if (!op.name || ["__proto__", "constructor", "prototype"].includes(op.name))
     throw Error("变量名无效");
   switch (op.type) {
     case "set":
-      vars[op.name] = interpolate(op.value, vars);
+      vars[op.name] = resolve(op.value, vars);
       break;
     case "uuid":
       vars[op.name] = id();

@@ -193,3 +193,88 @@ test("missing or non-scalar row template fields fail rather than falling back to
     assert.equal(dispatched, 0);
   }
 });
+
+test("row bindings reach typed path, declarative operations and protocol variable templates", async (t) => {
+  const seen = [];
+  const peer = createServer((req, res) => {
+    seen.push(req.url);
+    res.end("ok");
+  });
+  await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => peer.close(resolve)));
+  const make = (row, step) =>
+    snapshotPlan({
+      steps: [
+        { id: "r", type: "repeat", count: 1, rows: [row], steps: [step] },
+      ],
+    });
+  const url = `http://127.0.0.1:${peer.address().port}/items/{id}`;
+  const path = {
+    id: "http",
+    request: {
+      url,
+      path: [
+        {
+          key: "id",
+          required: true,
+          enabled: true,
+          schema: { type: "integer" },
+          value: "{{$data.id}}",
+          pathSerialization: { version: 1, style: "simple", explode: false },
+        },
+      ],
+      before: [{ type: "set", name: "selected", value: "{{$data.name}}" }],
+    },
+  };
+  const http = await runPlan(
+    make({ id: 7, name: "row" }, path),
+    { "$data.id": 999, "$data.name": "outer" },
+    executeRequest,
+  );
+  assert.equal(http.status, "passed");
+  assert.equal(http.variables.selected, "row");
+  assert.deepEqual(seen, ["/items/7"]);
+  for (const row of [{ name: "row" }, { id: { bad: true }, name: "row" }]) {
+    const result = await runPlan(
+      make(row, path),
+      { "$data.id": 999 },
+      executeRequest,
+    );
+    assert.equal(result.status, "failed");
+    assert.equal(seen.length, 1);
+  }
+  const wire = {
+    id: "tcp",
+    type: "protocol",
+    protocol: {
+      definition: {
+        type: "tcp",
+        url: "127.0.0.1",
+        port: 1234,
+        templateMode: "variables",
+      },
+      message: "{{$data.name}}",
+    },
+  };
+  for (const row of [{ name: "row" }, {}, { name: { bad: true } }]) {
+    let sent;
+    const result = await runPlan(
+      make(row, wire),
+      { "$data.name": "outer" },
+      async () => {
+        throw Error("not HTTP");
+      },
+      {
+        executeProtocol: async (request) => {
+          sent = request.message;
+          return { status: "completed", durationMs: 1, result: { body: "ok" } };
+        },
+      },
+    );
+    assert.equal(
+      result.status,
+      typeof row.name === "string" ? "passed" : "failed",
+    );
+    assert.equal(sent, typeof row.name === "string" ? "row" : undefined);
+  }
+});
