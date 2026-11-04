@@ -894,3 +894,371 @@ test("retired lineages are discoverable through bounded independent metadata pag
       listRequestDefinitionHistory(project, { requestId: "a", ...query }),
     );
 });
+
+test("history reads ignore unrelated execution bytes and descriptors", () => {
+  const project = edited(initial());
+  project.history = [
+    { id: "large-execution", body: "x".repeat(13 * 1024 * 1024) },
+  ];
+  const oldId = entry(project).versions[0].id;
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+  assert.equal(
+    listRequestDefinitionHistory(project, { requestId: "a" }).total,
+    1,
+  );
+  assert.equal(
+    getRequestDefinitionVersion(project, { requestId: "a", historyId: oldId })
+      .definition.body,
+    "first",
+  );
+  assert.equal(
+    getRequestDefinitionVersion(project, {
+      requestId: "a",
+      historyId: "current",
+    }).definition.body,
+    "second",
+  );
+  let reads = 0;
+  Object.defineProperty(project, "runs", {
+    enumerable: true,
+    get() {
+      reads++;
+      throw Error("unrelated execution getter");
+    },
+  });
+  assert.doesNotThrow(() => validateRequestDefinitionHistory(project));
+  assert.equal(
+    listRequestDefinitionHistory(project, { requestId: "a" }).total,
+    1,
+  );
+  assert.equal(
+    getRequestDefinitionVersion(project, { requestId: "a", historyId: oldId })
+      .definition.body,
+    "first",
+  );
+  assert.equal(reads, 0);
+});
+
+test("activity may add execution evidence beyond 12MiB but cannot change definitions or history", () => {
+  const project = edited(initial());
+  project.history = [
+    { id: "large-execution", body: "x".repeat(13 * 1024 * 1024) },
+  ];
+  const next = clone(project);
+  next.runs.push({ id: "new-run", outcome: "preserved" });
+  next.protocolRuns = [{ id: "protocol-run", response: "preserved" }];
+  assert.equal(
+    reconcileRequestDefinitionHistory(project, next, { activity: true }),
+    project.requestDefinitionHistory,
+  );
+  const editedDefinition = clone(next);
+  editedDefinition.requests[0].body = "must not bypass";
+  assert.throws(
+    () =>
+      reconcileRequestDefinitionHistory(project, editedDefinition, {
+        activity: true,
+      }),
+    /运行活动/,
+  );
+  const editedHistory = clone(next);
+  entry(editedHistory).currentTag = "must not bypass";
+  assert.throws(
+    () =>
+      reconcileRequestDefinitionHistory(project, editedHistory, {
+        activity: true,
+      }),
+    /运行活动/,
+  );
+  let reads = 0;
+  Object.defineProperty(next, "unrelatedExecution", {
+    enumerable: true,
+    get() {
+      reads++;
+      throw Error("not definition data");
+    },
+  });
+  assert.equal(
+    reconcileRequestDefinitionHistory(project, next, { activity: true }),
+    project.requestDefinitionHistory,
+  );
+  assert.equal(reads, 0);
+});
+
+test("clearing retained definitions may bring an existing over-budget project back below 12MiB", () => {
+  let project = initial();
+  project.requests[0].body = "old-body-" + "x".repeat(900000);
+  project = edited(project, "current-small-body");
+  project.history = [
+    { id: "execution", body: "x".repeat(12 * 1024 * 1024 - 400000) },
+  ];
+  assert.ok(
+    Buffer.byteLength(JSON.stringify({ document: project })) > 12 * 1024 * 1024,
+  );
+  const cleared = operation(project, "clear", { all: true });
+  assert.equal(entry(cleared).versions.length, 0);
+  assert.deepEqual(cleared.history, project.history);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify({ document: cleared })) < 12 * 1024 * 1024,
+  );
+  const saved = save(project, cleared);
+  assert.equal(entry(saved).currentVersion, entry(project).currentVersion);
+  assert.equal(entry(saved).lineageId, entry(project).lineageId);
+  assert.equal(entry(saved).versions.length, 0);
+  assert.equal(entry(project).versions.length, 1);
+});
+
+test("configuration saves enforce only the final complete 12MiB backup envelope", () => {
+  const project = edited(initial());
+  project.history = [
+    { id: "large-execution", body: "x".repeat(13 * 1024 * 1024) },
+  ];
+  const next = clone(project);
+  next.name = "configuration change";
+  unchangedFailure(project, () => save(project, next), /体积超过12582912/);
+  const reduced = clone(next);
+  reduced.history = [];
+  assert.doesNotThrow(() => save(project, reduced));
+  assert.throws(() => save(undefined, next), /体积超过12582912/);
+});
+
+test("history operations reject top-level getters and leave borrowed unrelated proxies untouched", () => {
+  const project = edited(initial());
+  let reads = 0;
+  Object.defineProperty(project, "executionGetter", {
+    enumerable: true,
+    get() {
+      reads++;
+      throw Error("must not execute");
+    },
+  });
+  assert.throws(() => operation(project, "clear", { all: true }), /访问器/);
+  assert.equal(reads, 0);
+  const proxyProject = edited(initial());
+  proxyProject.runs = new Proxy([], {
+    ownKeys() {
+      reads++;
+      throw Error("must not execute");
+    },
+  });
+  const cleared = operation(proxyProject, "clear", { all: true });
+  assert.equal(cleared.runs, proxyProject.runs);
+  assert.equal(reads, 0);
+});
+
+test("JSON comparison accepts an explicit budget for valid definition collections larger than 8MiB", () => {
+  const definitions = Array.from({ length: 10 }, (_, index) => ({
+    id: "request-" + index,
+    body: "x".repeat(900000),
+  }));
+  const project = {
+    id: "large-definitions-project",
+    requests: definitions,
+    requestDefinitionHistory: {
+      version: 1,
+      projectId: "large-definitions-project",
+      entries: [],
+    },
+  };
+  const persisted = clone(project);
+  assert.throws(() => sameHistoryJSON(definitions, persisted.requests), /体积/);
+  assert.equal(
+    sameHistoryJSON(definitions, persisted.requests, {
+      maxBytes: 12 * 1024 * 1024,
+    }),
+    true,
+  );
+  assert.equal(
+    reconcileRequestDefinitionHistory(project, persisted, { activity: true }),
+    project.requestDefinitionHistory,
+  );
+});
+
+test("an explicit restore of an identical old definition still archives current and advances version", () => {
+  let project = initial();
+  project = save(
+    project,
+    operation(project, "tag", { historyId: "current", tag: "original A" }),
+  );
+  project = edited(project);
+  const originalId = entry(project).versions[0].id;
+  project = save(
+    project,
+    operation(project, "restore", { historyId: originalId }),
+    { restoredRequestId: "a" },
+  );
+  project = save(
+    project,
+    operation(project, "tag", {
+      historyId: "current",
+      tag: "before repeated restore",
+    }),
+  );
+  const before = clone(project);
+  const draft = operation(project, "restore", { historyId: originalId });
+  assert.deepEqual(draft.requests[0], project.requests[0]);
+  const ordinary = save(project, draft);
+  assert.equal(entry(ordinary).currentVersion, 3);
+  const restored = save(project, draft, { restoredRequestId: "a" });
+  assert.equal(entry(restored).currentVersion, 4);
+  assert.equal(entry(restored).versions.length, 3);
+  assert.equal(entry(restored).versions.at(-1).version, 3);
+  assert.equal(entry(restored).versions.at(-1).tag, "before repeated restore");
+  assert.equal(entry(restored).versions[0].tag, "original A");
+  assert.deepEqual(
+    entry(restored).versions.slice(0, 2),
+    entry(before).versions,
+  );
+  assert.deepEqual(restored.requests, before.requests);
+  assert.deepEqual(entry(restored, "b"), entry(before, "b"));
+  assert.deepEqual(project, before);
+});
+
+test("forced restore context cannot create, revive, retarget or run as activity", () => {
+  const project = edited(initial());
+  assert.throws(
+    () => save(undefined, project, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  assert.throws(
+    () => save(project, project, { restoredRequestId: "missing" }),
+    /恢复/,
+  );
+  assert.throws(
+    () =>
+      reconcileRequestDefinitionHistory(project, project, {
+        activity: true,
+        restoredRequestId: "a",
+      }),
+    /恢复/,
+  );
+  const removed = clone(project);
+  removed.requests = removed.requests.filter((request) => request.id !== "a");
+  assert.throws(
+    () => save(project, removed, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  const retired = save(project, removed);
+  assert.throws(
+    () => save(retired, project, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  const deleted = clone(project);
+  deleted.requests[0].deletedAt = now;
+  assert.throws(
+    () => save(deleted, project, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  assert.throws(
+    () => save(project, deleted, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  const archived = clone(project);
+  archived.archived = true;
+  assert.throws(
+    () => save(archived, project, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+  assert.throws(
+    () => save(project, archived, { restoredRequestId: "a" }),
+    /恢复/,
+  );
+});
+
+test("newly admitted and materially changed current definitions must fit future snapshot budget", () => {
+  const tooLarge = fixture();
+  tooLarge.requests[0].body = "x".repeat(2 * 1024 * 1024);
+  unchangedFailure(
+    tooLarge,
+    () => save(undefined, tooLarge),
+    /体积超过1048576/,
+  );
+  const project = initial();
+  const added = clone(project);
+  added.requests.push({ id: "new-large", body: tooLarge.requests[0].body });
+  unchangedFailure(project, () => save(project, added), /体积超过1048576/);
+  const changed = clone(project);
+  changed.requests[0].body = tooLarge.requests[0].body;
+  unchangedFailure(project, () => save(project, changed), /体积超过1048576/);
+});
+
+test("oversized preexisting current remains readable and permits activity, no-op, tag and clear", () => {
+  const legacy = fixture();
+  legacy.requests[0].body = "x".repeat(2 * 1024 * 1024);
+  assert.equal(
+    listRequestDefinitionHistory(legacy, { requestId: "a" }).tracked,
+    false,
+  );
+  assert.equal(
+    getRequestDefinitionVersion(legacy, {
+      requestId: "a",
+      historyId: "current",
+    }).definition.body,
+    legacy.requests[0].body,
+  );
+  assert.equal(
+    reconcileRequestDefinitionHistory(legacy, legacy, { activity: true }),
+    undefined,
+  );
+  let project = save(legacy, legacy);
+  assert.equal(entry(project).versions.length, 0);
+  assert.equal(entry(project).currentVersion, 1);
+  project = save(
+    project,
+    operation(project, "tag", {
+      historyId: "current",
+      tag: "existing large definition",
+    }),
+  );
+  assert.equal(entry(project).currentTag, "existing large definition");
+  project = save(project, operation(project, "clear", { all: true }));
+  assert.equal(entry(project).currentVersion, 1);
+  assert.equal(entry(project).versions.length, 0);
+  assert.equal(project.requests[0].body, legacy.requests[0].body);
+  assert.equal(
+    reconcileRequestDefinitionHistory(project, project, { activity: true }),
+    project.requestDefinitionHistory,
+  );
+});
+
+test("oversized preexisting current cannot be edited or hard-removed without its history", () => {
+  const legacy = fixture();
+  legacy.requests[0].body = "x".repeat(2 * 1024 * 1024);
+  const changed = clone(legacy);
+  changed.requests[0].body = "small replacement";
+  unchangedFailure(legacy, () => save(legacy, changed), /体积超过1048576/);
+  const removed = clone(legacy);
+  removed.requests = removed.requests.filter((request) => request.id !== "a");
+  unchangedFailure(legacy, () => save(legacy, removed), /体积超过1048576/);
+});
+
+test("history operations borrow unrelated committed evidence without new depth or node gates", () => {
+  const project = edited(initial());
+  let deep = { value: "execution evidence" };
+  for (let index = 0; index < 100; index++) deep = { nested: deep };
+  project.history = [{ id: "deep-execution", response: deep }];
+  project.runs = Array.from({ length: 100001 }, (_, index) => ({
+    id: "run-" + index,
+  }));
+  let reads = 0;
+  const unrelated = {};
+  Object.defineProperty(unrelated, "nestedGetter", {
+    enumerable: true,
+    get() {
+      reads++;
+      throw Error("must not execute");
+    },
+  });
+  project.protocolRuns = [unrelated];
+  const cleared = operation(project, "clear", { all: true });
+  assert.equal(cleared.history, project.history);
+  assert.equal(cleared.runs, project.runs);
+  assert.equal(cleared.protocolRuns, project.protocolRuns);
+  assert.notEqual(cleared.requests, project.requests);
+  assert.notEqual(
+    cleared.requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  assert.equal(entry(cleared).versions.length, 0);
+  assert.equal(entry(project).versions.length, 1);
+  assert.equal(reads, 0);
+});

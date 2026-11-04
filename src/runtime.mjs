@@ -1,4 +1,11 @@
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
+import {
+  validateRequestDefinitionHistory,
+  projectHistoryProjection,
+  sameHistoryJSON,
+  reconcileRequestDefinitionHistory,
+  applyRequestDefinitionHistoryOperation,
+} from "./request-definition-history.mjs";
 import { isProxy } from "node:util/types";
 import {
   validatePlanDefinitionTypes,
@@ -54,6 +61,8 @@ import { multipartPartMedia } from "./multipart-part-media.mjs";
 import { applyNativeOAuth2 } from "./native-oauth2-token.mjs";
 import { normalizeGrpcDefinitions } from "./grpc.mjs";
 import {
+  activeAPIFolders,
+  apiResourceTargets,
   validateAPIResourceTrash,
   validateResourceJSON,
 } from "./api-resource-lifecycle.mjs";
@@ -120,7 +129,13 @@ import {
   lstat,
 } from "node:fs/promises";
 import path from "node:path";
-import { id, normalizeRequest, snapshotPlan, restoreProject } from "./core.mjs";
+import {
+  id,
+  normalizeRequest,
+  normalizeHistoricalRequest,
+  snapshotPlan,
+  restoreProject,
+} from "./core.mjs";
 export class Store {
   constructor(root) {
     this.root = root;
@@ -336,6 +351,7 @@ export class Store {
         validateAPIResourceTrash(project);
         validatePostmanOAuth2Project(project);
         validateGrpcSessionHistory(project.protocolRuns ?? []);
+        validateRequestDefinitionHistory(project);
         return project;
       }
     }
@@ -346,6 +362,7 @@ export class Store {
     validateAPIResourceTrash(project);
     validatePostmanOAuth2Project(project);
     validateGrpcSessionHistory(project.protocolRuns ?? []);
+    validateRequestDefinitionHistory(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
   }
@@ -410,6 +427,7 @@ export class Store {
   }
   #queueCreation(p, directory, restoring = false) {
     this.#validateProject(p);
+    validateRequestDefinitionHistory(p);
     const task = this.pending
       .catch(() => {})
       .then(() => this.#createProject(p, directory, restoring));
@@ -595,7 +613,38 @@ export class Store {
     ).project;
     return this.save(next, { apiResourceRestore });
   }
+  async changeRequestDefinitionHistory(projectId, input, { signal } = {}) {
+    const value = projectHistoryProjection(input, { maxBytes: 32768 });
+    if (
+      !value ||
+      !Number.isSafeInteger(value.configRevision) ||
+      value.configRevision < 0
+    )
+      throw Error("定义历史操作须提供有效configRevision");
+    const { configRevision, ...definitionHistoryOperation } = value;
+    const current = await this.get(projectId);
+    if (configRevision !== (current.configRevision ?? current.revision ?? 0))
+      throw Error("项目已有其他修改，请重新加载");
+    return this.save(current, { signal, definitionHistoryOperation });
+  }
   #validateProject(p) {
+    // History is opaque service-owned evidence, not user-supplied executable
+    // objects. Inspect its descriptor before any clone/JSON operation.
+    if (isProxy(p)) throw Error("项目不能为代理对象");
+    const historyDescriptor = Object.getOwnPropertyDescriptor(
+      p,
+      "requestDefinitionHistory",
+    );
+    if (historyDescriptor) {
+      if (
+        !Object.hasOwn(historyDescriptor, "value") ||
+        !historyDescriptor.enumerable
+      )
+        throw Error("接口定义历史不能包含访问器");
+      projectHistoryProjection(historyDescriptor.value, {
+        maxBytes: 8 * 1024 * 1024,
+      });
+    }
     if (
       !Array.isArray(p.plans) ||
       isProxy(p.plans) ||
@@ -731,10 +780,20 @@ export class Store {
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
       apiResourceRestore,
+      definitionHistoryOperation,
     } = {},
   ) {
     if (apiResourceRestore !== undefined && activity)
       throw Error("资源恢复不能伪装为活动记录更新");
+    if (definitionHistoryOperation !== undefined && activity)
+      throw Error("定义历史操作不能伪装为活动记录更新");
+    if (definitionHistoryOperation !== undefined)
+      definitionHistoryOperation = projectHistoryProjection(
+        definitionHistoryOperation,
+        {
+          maxBytes: 32768,
+        },
+      );
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
@@ -761,6 +820,7 @@ export class Store {
               nativeInheritanceEdit,
               nativeInheritanceEditContext,
               apiResourceRestore,
+              definitionHistoryOperation,
             },
             base,
           );
@@ -791,6 +851,7 @@ export class Store {
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
       apiResourceRestore,
+      definitionHistoryOperation,
     },
     base,
     creating = false,
@@ -830,6 +891,56 @@ export class Store {
       throw Error("项目已被其他窗口或 MCP 修改，请重新加载后再保存");
     if (activity && previous && !sameStoredPlan(p.plans, previous.plans))
       throw Error("活动记录保存不能修改计划定义或步骤类型");
+    if (
+      previous &&
+      Object.hasOwn(p, "requestDefinitionHistory") &&
+      !sameHistoryJSON(
+        p.requestDefinitionHistory,
+        previous.requestDefinitionHistory,
+      )
+    )
+      throw Error("接口定义历史由服务端维护，不能随项目保存修改");
+    if (previous) {
+      if (previous.requestDefinitionHistory === undefined)
+        delete p.requestDefinitionHistory;
+      else
+        p.requestDefinitionHistory = structuredClone(
+          previous.requestDefinitionHistory,
+        );
+    }
+    if (
+      activity &&
+      previous &&
+      !sameHistoryJSON(p.requests, previous.requests, {
+        maxBytes: Number.MAX_SAFE_INTEGER,
+      })
+    )
+      throw Error("活动记录保存不能修改接口定义");
+    if (definitionHistoryOperation !== undefined) {
+      if (!previous || projectFingerprint(p) !== projectFingerprint(previous))
+        throw Error("定义历史操作不能同时修改其他项目配置");
+      if (previous.archived) throw Error("归档项目不可修改定义历史");
+      apiResourceTargets(previous);
+      const changed = applyRequestDefinitionHistoryOperation(
+        previous,
+        definitionHistoryOperation,
+      );
+      if (definitionHistoryOperation.kind === "restore") {
+        const index = changed.requests.findIndex(
+          (request) => request.id === definitionHistoryOperation.requestId,
+        );
+        const selected = changed.requests[index];
+        const normalized = normalizeHistoricalRequest(selected);
+        if (
+          normalized.folder &&
+          !activeAPIFolders(previous).includes(normalized.folder)
+        )
+          throw Error("历史定义的目录已不存在；请先恢复目录");
+        changed.requests[index] = normalized;
+      }
+      this.#validateProject(changed);
+      Object.assign(p, changed);
+    }
     // Only exact existing disk definitions may remain inert. Never use
     // activity:true or a matching ID as authority to admit edited types.
     const opaquePlans = new Set();
@@ -901,11 +1012,27 @@ export class Store {
       next.protocolRuns = previous.protocolRuns || [];
     }
     next.updatedAt = new Date().toISOString();
+    const definitions = reconcileRequestDefinitionHistory(previous, next, {
+      activity,
+      now: next.updatedAt,
+      restoredRequestId:
+        definitionHistoryOperation?.kind === "restore"
+          ? definitionHistoryOperation.requestId
+          : undefined,
+    });
+    if (definitions === undefined) delete next.requestDefinitionHistory;
+    else next.requestDefinitionHistory = definitions;
+    validateRequestDefinitionHistory(next);
+    if (!activity && next.requestDefinitionHistory !== undefined)
+      projectHistoryProjection(
+        { document: next },
+        { maxBytes: 12 * 1024 * 1024 },
+      );
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
-    await writeProject(path.join(base, p.id), next);
+    await writeProject(path.join(base, p.id), next, { signal });
     try {
       const saved = await readProject(path.join(base, p.id), p.id);
       validateAPIResourceTrash(saved);

@@ -7,18 +7,19 @@ This independent backend module starts at the reviewed integration commit
 `d42d96193a697f16d26f8756032a4aaf10ddb4d7`. It does not accumulate unrelated
 features into this PR, modify the frontend, merge main, or deploy.
 
-The first checkpoint adds only the pure history model and required-file/journal
+The first checkpoint added only the pure history model and required-file/journal
 storage contract. Store capture, owner routes, MCP permissions/cancellation,
-backup identity rebinding and end-to-end acceptance remain unfinished. It is
+backup identity rebinding and end-to-end acceptance were unfinished there. That checkpoint is
 not a usable history feature or a completed delivery candidate.
 
 Five real temporary-directory file contracts ran against the unchanged base:
 three failed (no required-file marker, accepting another project's history,
 and applying an invalid history journal) and two existing behaviors passed.
 After the file-layer implementation the five passed. The separate pure model
-suite initially passed 22 cases; three added review regressions currently fail
+suite initially passed 22 cases; three added review regressions failed at that checkpoint
 (legacy read budget, Unicode request IDs and lifecycle metadata in a snapshot).
-These known checkpoint defects are being fixed, not hidden or counted as passes.
+Those three known checkpoint defects were retained in the first published tree,
+then fixed in a second checkpoint with 31/31 model/file tests passing.
 The initial 22 passes are not claimed as a behavioral RED. Store, owner HTTP
 and official-SDK workflows have not run locally because
 the fixed application dependencies are unavailable. No dependency installation
@@ -59,9 +60,12 @@ are separate capabilities. They are not an API definition version store.
 - History and the new current definition share the existing complete project
   journal and lock. Recovery validates history before applying any journal
   bytes. This is process-interruption roll-forward, not a power-loss or rollback
-  guarantee.
-- Individual snapshots and total history are bounded. Final configuration must
-  remain transportable in the existing 12 MiB compact backup restore envelope;
+  guarantee. Cancellation is checked immediately before beginning the atomic
+  journal rename. Once publication begins, interruption cannot promise rollback;
+  existing `PROJECT_COMMIT_UNCERTAIN` recovery semantics still apply.
+- Individual snapshots are at most 1 MiB, total history at most 8 MiB, and
+  there are at most 10,000 lineage records. A configuration/history commit must
+  fit the existing 12 MiB **compact object** `{document: project}` restore body;
   full input is validated before retention. No silent truncation of malformed
   data, legal JSON Schema keys, unsupported metadata, or privileges is allowed.
 - Ordinary clients cannot forge, replace or delete the history field. Activity
@@ -74,7 +78,9 @@ are separate capabilities. They are not an API definition version store.
 - Full backup restoration receives a new project identity and rebinds the
   history owner. Historical snapshots remain inert data. They may contain old
   static credentials, so export and authorized reads are private data operations,
-  not globally redacted output.
+  not globally redacted output. The existing `history/` Git ignore remains in
+  effect: a Git-only directory copy is not a complete backup. Do not publish
+  credential-bearing definition history to make that copy work.
 
 ## Required remaining acceptance
 
@@ -86,3 +92,60 @@ lock-held commit gate. Preserve execution history and frozen in-flight plans;
 prove no replay with real loopback counters. Bind all results to the final tree.
 The original definition-history directory is not thereby added to the native
 directory importer, and native definition export is not a full backup.
+
+## Transport and compatibility boundaries
+
+Owner routes are `GET /api/projects/:id/definition-history`,
+`GET /api/projects/:id/definition-history/version`, and `POST` to the first
+route. Mutations require the current `configRevision`, `requestId`, exact
+`lineageId`, and the relevant version/metadata. Clear additionally requires
+`confirm: true`, and never removes the current definition. Retired lineages
+are separately discoverable through bounded pagination; a reused API ID is
+not permission to restore an earlier generation.
+
+MCP exposes five `localapi_*` tools for list, detail, tag, restore and clear.
+Reads require current project scope; writes additionally require a write grant.
+HTTP/stdio mutation requests participate in cancellation/session ownership but
+are not executions and do not create execution activity or replay requests.
+The existing stdio entrypoint is `src/mcp.mjs`; no separate CLI subcommand or
+frontend history screen is added.
+
+History changes use current validators. An old definition incompatible with
+current folder/collection/native identity constraints is rejected explicitly,
+not partially restored. Explicit restoration to an identical old definition
+still archives the current value and advances the persistent version number.
+Ordinary no-op saves do not create versions. New/current edited definitions
+must remain snapshotable within the feature's budget. Oversize legacy current
+values can remain unchanged, but an edit/deletion requiring an oversized old
+snapshot is rejected rather than silently discarding that history.
+
+The compact-object restore bound is not a promise that the existing GUI's
+pretty-printed JSON **string** upload has the same size: quoting that string
+adds escaping and whitespace. Later execution evidence may also grow beyond
+12 MiB under the existing execution rules. Activity saves and history reads
+must not acquire a new whole-project budget because of this feature; such
+oversize restore bodies remain explicitly rejected by the existing endpoint.
+This PR does not redesign large-backup transport or execution retention.
+
+## Current implementation checkpoint
+
+Store capture, controlled history mutations, backup owner rebinding, owner and
+MCP transport code are now added as a WIP candidate. The production Store
+suite, owner and official SDK workflows are written but **not locally
+executed**: module loading fails on unavailable fixed dependencies (including
+`postman-url-encoder` and the MCP SDK; the unavailable locked `node-oauth1`
+package is not substituted). No install or alternate dependency version is
+used to claim a pass. Exact CI on the published candidate is still required.
+
+Real stdlib-only file tests cover prepared-journal cancellation, post-publication
+uncertainty, two concurrent Node processes using the existing filesystem lock,
+and a child exiting with a published journal and held lock before restart
+roll-forward. These prove the file/lock path, not that unexecuted Store or SDK
+cases passed. Historical red and blocked outputs remain recorded separately.
+
+At the Store/transport checkpoint, 38 pure-model tests and 9 real file/lock/
+process tests passed locally (47 total, no skipped tests). The 13 Store cases
+and application transport/SDK cases remain 0-executed due to module-load
+failures, not behavioral passes. MCP history results are explicitly limited to
+2 MiB of JSON; an oversized current definition returns a tool error instead of
+silently exceeding the stdio frame budget.

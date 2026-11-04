@@ -183,3 +183,78 @@ test("valid interrupted journal applies the exact history once without inventing
     code: "ENOENT",
   });
 });
+
+test("cancellation after temporary journal bytes but before publication preserves all committed files", async (t) => {
+  const root = await directory(t),
+    project = fixture();
+  await writeProject(root, project);
+  const before = await readProject(root, project.id);
+  const controller = new AbortController();
+  const nativeAborted = Object.getOwnPropertyDescriptor(
+    AbortSignal.prototype,
+    "aborted",
+  ).get;
+  const { readdirSync } = await import("node:fs");
+  let observedPreparedJournal = false;
+  // The real AbortController fires only when the production gate has already
+  // written its temporary journal. No filesystem or Store method is replaced.
+  Object.defineProperty(controller.signal, "aborted", {
+    get() {
+      if (
+        readdirSync(root).some(
+          (name) =>
+            name.startsWith(".transaction.json.") && name.endsWith(".tmp"),
+        )
+      ) {
+        observedPreparedJournal = true;
+        controller.abort();
+      }
+      return nativeAborted.call(controller.signal);
+    },
+  });
+  const changed = structuredClone(project);
+  changed.name = "must not publish";
+  await assert.rejects(
+    writeProject(root, changed, { signal: controller.signal }),
+    { code: "STORE_SAVE_ABORTED" },
+  );
+  assert.equal(observedPreparedJournal, true);
+  assert.deepEqual(await readProject(root, project.id), before);
+  assert.equal(
+    readdirSync(root).some((name) => name.startsWith(".transaction.json")),
+    false,
+  );
+});
+
+test("published history journal remains recoverable after later cancellation, without rollback or replay", async (t) => {
+  const root = await directory(t),
+    project = fixture();
+  await writeProject(root, project);
+  const target = path.join(root, "apis");
+  await rm(target, { recursive: true });
+  await writeFile(target, "real apply fault");
+  const controller = new AbortController();
+  const changed = structuredClone(project);
+  changed.name = "published";
+  await assert.rejects(
+    writeProject(root, changed, { signal: controller.signal }),
+    { code: "PROJECT_COMMIT_UNCERTAIN" },
+  );
+  controller.abort();
+  const journal = JSON.parse(
+    await readFile(path.join(root, ".transaction.json"), "utf8"),
+  );
+  assert.equal(journal.name, "published");
+  assert.deepEqual(
+    journal.requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  await rm(target);
+  const recovered = await readProject(root, project.id);
+  assert.equal(recovered.name, "published");
+  assert.deepEqual(
+    recovered.requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  assert.deepEqual(await readProject(root, project.id), recovered);
+});

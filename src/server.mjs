@@ -101,7 +101,15 @@ import {
   debugEnvironmentFingerprint,
   manageEnvironment,
 } from "./environments.mjs";
-import { createMCP } from "./mcp.mjs";
+import {
+  createMCP,
+  requestDefinitionHistoryChangeInput,
+  requestDefinitionHistoryChangeResult,
+} from "./mcp.mjs";
+import {
+  listRequestDefinitionHistory,
+  getRequestDefinitionVersion,
+} from "./request-definition-history.mjs";
 import { OAuthManager } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
@@ -498,7 +506,7 @@ export async function createApp({
           res.writeHead(202);
           return res.end();
         }
-        const cancellable =
+        const isExecution =
           message.method === "tools/call" &&
           [
             "localapi_execute_api",
@@ -507,6 +515,14 @@ export async function createApp({
             "apipost_execute_api",
             "apipost_execute_flow",
           ].includes(message.params?.name);
+        const isDefinitionHistoryMutation =
+          message.method === "tools/call" &&
+          [
+            "localapi_tag_api_definition_version",
+            "localapi_restore_api_definition",
+            "localapi_clear_api_definition_history",
+          ].includes(message.params?.name);
+        const cancellable = isExecution || isDefinitionHistoryMutation;
         const execution =
           sessionId !== undefined && message.id !== undefined
             ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
@@ -536,6 +552,24 @@ export async function createApp({
             completed: 0,
           });
         }
+        // History writes belong to both the MCP grant/session and the incoming
+        // HTTP caller. Existing execution tools retain their evidence lifecycle.
+        const callerController = isDefinitionHistoryMutation
+          ? new AbortController()
+          : undefined;
+        const disconnected = () => {
+          if (!res.writableFinished) callerController?.abort();
+        };
+        if (callerController) {
+          req.once("aborted", disconnected);
+          res.once("close", disconnected);
+          if (req.aborted || res.destroyed) disconnected();
+        }
+        const signal = callerController
+          ? AbortSignal.any(
+              [execution.signal, callerController.signal].filter(Boolean),
+            )
+          : execution.signal;
         const dispatchPolicy = mcp;
         let result;
         try {
@@ -566,7 +600,7 @@ export async function createApp({
                 });
             },
           });
-          result = await dispatch(message, { signal: execution.signal });
+          result = await dispatch(message, { signal });
         } catch {
           result = {
             jsonrpc: "2.0",
@@ -582,6 +616,8 @@ export async function createApp({
             },
           };
         } finally {
+          req.off("aborted", disconnected);
+          res.off("close", disconnected);
           execution.finish();
         }
         if (message.method === "tools/call") {
@@ -590,8 +626,8 @@ export async function createApp({
           try {
             output = JSON.parse(result?.result?.content?.[0]?.text);
           } catch {}
-          const outcome = cancellable ? output?.status : undefined;
-          const recordSaved = cancellable
+          const outcome = isExecution ? output?.status : undefined;
+          const recordSaved = isExecution
             ? (output?.recordSaved ?? output?.record_saved)
             : undefined;
           Object.assign(activity, {
@@ -1008,6 +1044,85 @@ export async function createApp({
               200,
               await store.editNativeInheritance(p.id, await body(req)),
             );
+          }
+          if (action === "definition-history") {
+            const version = parts.length === 5 && parts[4] === "version";
+            if (parts.length !== 4 && !version)
+              return json(res, 404, { error: "接口定义历史路径无效" });
+            if (req.method === "GET") {
+              try {
+                decodeURIComponent(u.search.replace(/\+/g, " "));
+              } catch {
+                throw Error("接口定义历史查询编码无效");
+              }
+              const options = {};
+              const fields = version
+                ? ["requestId", "lineageId", "historyId"]
+                : [
+                    "requestId",
+                    "lineageId",
+                    "offset",
+                    "limit",
+                    "lineageOffset",
+                    "lineageLimit",
+                  ];
+              for (const [key, value] of u.searchParams) {
+                if (!fields.includes(key) || Object.hasOwn(options, key))
+                  throw Error("接口定义历史查询参数无效或重复");
+                if (
+                  ["offset", "limit", "lineageOffset", "lineageLimit"].includes(
+                    key,
+                  )
+                ) {
+                  if (!/^(0|[1-9][0-9]*)$/.test(value))
+                    throw Error("接口定义历史分页参数无效");
+                  options[key] = Number(value);
+                } else options[key] = value;
+              }
+              return json(res, 200, {
+                projectId: p.id,
+                revision: p.revision,
+                configRevision: p.configRevision,
+                ...(version
+                  ? getRequestDefinitionVersion(p, options)
+                  : listRequestDefinitionHistory(p, options)),
+              });
+            }
+            if (req.method !== "POST" || version) {
+              res.setHeader("Allow", version ? "GET" : "GET, POST");
+              return json(res, 405, { error: "接口定义历史方法无效" });
+            }
+            if (u.searchParams.size)
+              throw Error("接口定义历史操作不接受查询参数");
+            const { runId, controller } = claimRun();
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            try {
+              const input = requestDefinitionHistoryChangeInput(
+                await body(req),
+              );
+              controller.signal.throwIfAborted();
+              const saved = await store.changeRequestDefinitionHistory(
+                p.id,
+                input,
+                {
+                  signal: controller.signal,
+                },
+              );
+              return json(
+                res,
+                200,
+                requestDefinitionHistoryChangeResult(saved, input),
+              );
+            } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+            }
           }
           if (action === "imported-execution-runs") {
             if (req.method !== "GET")

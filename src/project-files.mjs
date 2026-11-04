@@ -48,7 +48,7 @@ function validateLayout(project) {
     }
   }
 }
-async function writeJSON(file, value) {
+async function writeJSON(file, value, beforePublish) {
   const text = JSON.stringify(value, null, 2) + "\n";
   try {
     if ((await readFile(file, "utf8")) === text) return;
@@ -57,8 +57,16 @@ async function writeJSON(file, value) {
   }
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = file + "." + randomUUID() + ".tmp";
-  await writeFile(temporary, text, { mode: 0o600 });
-  await rename(temporary, file);
+  try {
+    await writeFile(temporary, text, { mode: 0o600 });
+    // No await between this gate and beginning the atomic journal rename.
+    // Cancellation after publication cannot promise rollback.
+    beforePublish?.();
+    await rename(temporary, file);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 async function apply(directory, project) {
   const metadata = { ...project, storageFormat: 2, collections: {} };
@@ -141,12 +149,23 @@ export async function recoverProject(directory, expectedId) {
     throw new ProjectCommitUncertain(expectedId, error);
   }
 }
-export async function writeProject(directory, project) {
+export async function writeProject(directory, project, { signal } = {}) {
+  const assertNotAborted = () => {
+    if (signal?.aborted)
+      throw Object.assign(Error("项目保存已取消"), {
+        code: "STORE_SAVE_ABORTED",
+      });
+  };
+  assertNotAborted();
   validateLayout(project);
   await mkdir(directory, { recursive: true });
   // The complete journal is written before separate files. Reads recover it under the same lock.
   // This covers process interruption, not a promise of power-loss durability.
-  await writeJSON(path.join(directory, ".transaction.json"), project);
+  await writeJSON(
+    path.join(directory, ".transaction.json"),
+    project,
+    assertNotAborted,
+  );
   try {
     await apply(directory, project);
     await rm(path.join(directory, ".transaction.json"));

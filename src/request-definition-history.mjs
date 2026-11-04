@@ -111,10 +111,10 @@ export function projectHistoryProjection(
   return visit(value, 0, true);
 }
 
-export function sameHistoryJSON(a, b) {
+export function sameHistoryJSON(a, b, projectionOptions) {
   return isDeepStrictEqual(
-    projectHistoryProjection(a),
-    projectHistoryProjection(b),
+    projectHistoryProjection(a, projectionOptions),
+    projectHistoryProjection(b, projectionOptions),
   );
 }
 function exactKeys(value, required, optional = []) {
@@ -256,39 +256,62 @@ function validateHistory(project, { checkTargets = true } = {}) {
     }
   }
 }
+function projectField(project, key, { required = false } = {}) {
+  const descriptor = Object.getOwnPropertyDescriptor(project, key);
+  if (
+    (!descriptor && required) ||
+    (descriptor && (!own(descriptor, "value") || !descriptor.enumerable))
+  )
+    fail("项目字段缺失、含访问器或不可序列化：" + key);
+  return descriptor?.value;
+}
+function inspectProject(project) {
+  if (
+    types.isProxy(project) ||
+    !object(project) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(project))
+  )
+    fail("项目必须为无代理普通对象");
+}
+function historyProjectProjection(project) {
+  inspectProject(project);
+  // Reads and activity comparisons do not inspect execution evidence. Its
+  // independent retention can legitimately grow a project beyond backup size.
+  return projectHistoryProjection(
+    {
+      id: projectField(project, "id", { required: true }),
+      requests: projectField(project, "requests", { required: true }),
+      requestDefinitionHistory: projectField(
+        project,
+        "requestDefinitionHistory",
+      ),
+    },
+    { maxBytes: Number.MAX_SAFE_INTEGER },
+  );
+}
 export function validateRequestDefinitionHistory(project) {
-  if (types.isProxy(project) || !object(project)) fail("项目必须为无代理对象");
-  const descriptor = Object.getOwnPropertyDescriptor(
-    project,
-    "requestDefinitionHistory",
-  );
-  if (descriptor && (!own(descriptor, "value") || !descriptor.enumerable))
-    fail("历史字段访问器或不可序列化属性");
-  // Legacy reads do not acquire a history, inspect unrelated project data or
-  // inherit the new history feature's byte budget.
-  if (descriptor?.value === undefined) return;
-  function field(key) {
-    const item = Object.getOwnPropertyDescriptor(project, key);
-    if (!item || !own(item, "value") || !item.enumerable)
-      fail("项目身份或接口字段访问器、缺失或不可序列化");
-    return item.value;
-  }
-  validateHistory(
-    projectProjection({
-      id: field("id"),
-      requests: field("requests"),
-      requestDefinitionHistory: descriptor.value,
-    }),
-  );
+  inspectProject(project);
+  // Legacy reads neither acquire history nor impose new feature budgets.
+  if (projectField(project, "requestDefinitionHistory") === undefined) return;
+  validateHistory(historyProjectProjection(project));
 }
 function projectProjection(project) {
-  return projectHistoryProjection(project, { maxBytes: PROJECT_MAX_BYTES });
+  // A configuration operation may need to clear history from a project that
+  // is already too large. Keep descriptor/depth/node checks while deferring
+  // the complete byte budget until the final configuration-save envelope.
+  return projectHistoryProjection(project, {
+    maxBytes: Number.MAX_SAFE_INTEGER,
+  });
 }
-function definition(request) {
+function definition(request, maxBytes = Number.MAX_SAFE_INTEGER) {
   const result = projectHistoryProjection(request, {
-    maxBytes: REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
+    maxBytes: Number.MAX_SAFE_INTEGER,
   });
   delete result.deletedAt;
+  // Equality has no snapshot admission budget: an unchanged preexisting large
+  // definition must not prevent reads, activity or metadata-only saves.
+  if (maxBytes !== Number.MAX_SAFE_INTEGER)
+    projectHistoryProjection(result, { maxBytes });
   return result;
 }
 function sameDefinition(a, b) {
@@ -310,7 +333,7 @@ function saveSnapshot(entry, request, makeId, used) {
     version: entry.currentVersion,
     createdAt: entry.currentCreatedAt,
     tag: entry.currentTag,
-    definition: definition(request),
+    definition: definition(request, REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES),
   });
   // Inputs were validated in full before retention is applied.
   if (entry.versions.length > REQUEST_DEFINITION_HISTORY_LIMIT)
@@ -324,22 +347,51 @@ export function reconcileRequestDefinitionHistory(
     now = new Date().toISOString(),
     makeId = randomUUID,
     activity = false,
+    restoredRequestId,
   } = {},
 ) {
   const before =
-    previous === undefined ? undefined : projectProjection(previous);
-  const after = projectProjection(next);
+    previous === undefined ? undefined : historyProjectProjection(previous);
+  const after = activity
+    ? historyProjectProjection(next)
+    : projectProjection(next);
   if (before !== undefined) validateHistory(before);
   validateHistory(after, { checkTargets: before === undefined });
   const nextRequests = requestMap(after);
   const previousRequests =
     before === undefined ? new Map() : requestMap(before);
   if (before !== undefined && before.id !== after.id) fail("项目归属不能改变");
+  if (restoredRequestId !== undefined) {
+    requestIdentifier(restoredRequestId);
+    const oldRequest = previousRequests.get(restoredRequestId);
+    const currentRequest = nextRequests.get(restoredRequestId);
+    const priorEntry = before?.requestDefinitionHistory?.entries.find(
+      (entry) => entry.requestId === restoredRequestId && !entry.retired,
+    );
+    const nextEntry = (
+      after.requestDefinitionHistory ?? before?.requestDefinitionHistory
+    )?.entries.find(
+      (entry) => entry.requestId === restoredRequestId && !entry.retired,
+    );
+    if (
+      activity ||
+      !oldRequest ||
+      !currentRequest ||
+      !priorEntry ||
+      !nextEntry ||
+      priorEntry.lineageId !== nextEntry.lineageId ||
+      oldRequest.deletedAt ||
+      currentRequest.deletedAt ||
+      projectField(previous, "archived") ||
+      after.archived
+    )
+      fail("显式恢复必须属于同一活动项目、接口和当前血缘，不能创建或复活资源");
+  }
   if (activity) {
     if (
       before === undefined ||
-      !sameHistoryJSON(before.requests, after.requests) ||
-      !sameHistoryJSON(
+      !isDeepStrictEqual(before.requests, after.requests) ||
+      !isDeepStrictEqual(
         before.requestDefinitionHistory,
         after.requestDefinitionHistory,
       )
@@ -349,6 +401,16 @@ export function reconcileRequestDefinitionHistory(
   }
   timestamp(now);
   if (typeof makeId !== "function") fail("ID生成器无效");
+  const changedRequestIds = new Set();
+  for (const [requestId, request] of nextRequests) {
+    const oldRequest = previousRequests.get(requestId);
+    if (!oldRequest || !sameDefinition(oldRequest, request)) {
+      // Admit new/changed current definitions only when their future snapshot
+      // is representable. Existing unchanged oversized definitions stay inert.
+      definition(request, REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES);
+      changedRequestIds.add(requestId);
+    }
+  }
   // The Store, under its project lock, enforces owner equality or authorizes
   // an explicit tag/clear operation before providing a replacement history.
   const history =
@@ -388,7 +450,10 @@ export function reconcileRequestDefinitionHistory(
     if (!newRequest) {
       if (oldRequest) saveSnapshot(entry, oldRequest, makeId, used);
       entry.retired = true;
-    } else if (oldRequest && !sameDefinition(oldRequest, newRequest)) {
+    } else if (
+      oldRequest &&
+      (requestId === restoredRequestId || changedRequestIds.has(requestId))
+    ) {
       if (entry.currentVersion === Number.MAX_SAFE_INTEGER)
         fail("版本序号已耗尽");
       saveSnapshot(entry, oldRequest, makeId, used);
@@ -411,7 +476,10 @@ export function reconcileRequestDefinitionHistory(
   }
   after.requestDefinitionHistory = history;
   validateHistory(after);
-  projectProjection({ document: after });
+  projectHistoryProjection(
+    { document: after },
+    { maxBytes: PROJECT_MAX_BYTES },
+  );
   return history;
 }
 
@@ -450,7 +518,7 @@ function metadata(entry, version, current = false) {
   };
 }
 export function listRequestDefinitionHistory(project, input) {
-  const copy = projectProjection(project);
+  const copy = historyProjectProjection(project);
   validateHistory(copy);
   const options = projectHistoryProjection(input);
   exactKeys(
@@ -520,7 +588,7 @@ export function listRequestDefinitionHistory(project, input) {
   };
 }
 export function getRequestDefinitionVersion(project, input) {
-  const copy = projectProjection(project);
+  const copy = historyProjectProjection(project);
   validateHistory(copy);
   const options = projectHistoryProjection(input);
   exactKeys(options, ["requestId", "historyId"], ["lineageId"]);
@@ -545,12 +613,44 @@ export function getRequestDefinitionVersion(project, input) {
     definition: version.definition,
   };
 }
+function historyOperationProject(project) {
+  inspectProject(project);
+  const descriptors = Object.getOwnPropertyDescriptors(project);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (
+      typeof key !== "string" ||
+      !own(descriptor, "value") ||
+      !descriptor.enumerable
+    )
+      fail("项目顶层含访问器、符号或不可序列化字段");
+  }
+  const feature = historyProjectProjection(project);
+  const result = {};
+  // Called with the Store's committed JSON project. Unrelated data is borrowed
+  // unchanged, not recursively validated or cloned. This is not an untrusted
+  // full-project sanitizer; the caller must not mutate the borrowed fields.
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    const value = own(feature, key)
+      ? feature[key]
+      : key === "archived"
+        ? projectHistoryProjection(descriptor.value)
+        : descriptor.value;
+    Object.defineProperty(result, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return result;
+}
 export function applyRequestDefinitionHistoryOperation(
   project,
   input,
   { now } = {},
 ) {
-  const copy = projectProjection(project);
+  const copy = historyOperationProject(project);
   validateHistory(copy);
   const options = projectHistoryProjection(input);
   if (!object(options)) fail("操作必须为对象");
