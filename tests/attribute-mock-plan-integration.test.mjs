@@ -275,3 +275,76 @@ for (const [dialect, makeSchema, validator] of contracts) {
     },
   );
 }
+
+test("three catalogue unique tuples reject container hooks and exhausted budgets without poisoning later generation", () => {
+  for (const dialect of ["modern", "legacy"]) {
+    const p = fixture(),
+      expected = catalogueSemantics(p);
+    for (const hook of ["proxy", "index", "indexOf"]) {
+      let calls = 0;
+      const requestSchema = tupleSchema(dialect, true);
+      const key = dialect === "modern" ? "prefixItems" : "items";
+      let slots = requestSchema[key];
+      if (hook === "proxy")
+        slots = new Proxy(slots, {
+          get() {
+            calls++;
+            throw Error("unexpected get");
+          },
+          has() {
+            calls++;
+            throw Error("unexpected has");
+          },
+          ownKeys() {
+            calls++;
+            throw Error("unexpected keys");
+          },
+          getOwnPropertyDescriptor() {
+            calls++;
+            throw Error("unexpected descriptor");
+          },
+          getPrototypeOf() {
+            calls++;
+            throw Error("unexpected prototype");
+          },
+        });
+      else
+        Object.defineProperty(slots, hook === "index" ? "0" : "indexOf", {
+          enumerable: true,
+          get() {
+            calls++;
+            throw Error("unexpected getter");
+          },
+        });
+      requestSchema[key] = slots;
+      p.requests[0].schema = requestSchema;
+      assert.throws(
+        () => sampleFromSchema(p.requests[0].schema),
+        /JSON|访问器|Proxy|稀疏/,
+      );
+      assert.equal(calls, 0);
+      assert.deepEqual(catalogueSemantics(p), expected);
+    }
+    const expensive = tupleSchema(dialect, true);
+    expensive[dialect === "modern" ? "prefixItems" : "items"][0].const =
+      "x".repeat(1048577);
+    p.requests[0].schema = expensive;
+    assert.throws(() => sampleFromSchema(p.requests[0].schema), /预算/);
+    assert.deepEqual(catalogueSemantics(p), expected);
+    p.requests[0].schema = tupleSchema(dialect, true);
+    const sample = sampleFromSchema(p.requests[0].schema);
+    const validator =
+      dialect === "modern"
+        ? new Ajv2020({ strict: false })
+        : new Ajv({ strict: false });
+    assert.equal(validator.compile(p.requests[0].schema)(sample), true);
+    for (const encode of [exportApipost, exportApipostDirectory]) {
+      const restored = blankAttributeProject(
+        "healthy-after-rejection-" + dialect,
+      );
+      importIntoProject(restored, JSON.parse(JSON.stringify(encode(p))));
+      assert.deepEqual(catalogueSemantics(restored), expected);
+      assert.deepEqual(sampleFromSchema(restored.requests[0].schema), sample);
+    }
+  }
+});
