@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import { activePlanLeaves, hasRepeatSteps } from "./plan-repeat.mjs";
 import { normalizeNativeTaskRequest } from "./script-database-tasks.mjs";
 import { DatabaseSessions } from "./database-sessions.mjs";
@@ -26,6 +27,7 @@ export function prepareCLIDatabaseGrants(
   connections,
   sourceCatalog = [],
 ) {
+  validatePlanStepTypes(plan.steps);
   if (!Array.isArray(sourceCatalog) || sourceCatalog.length > 100)
     throw Error("CLI 数据库来源目录无效");
   const sourceTypes = new Map(),

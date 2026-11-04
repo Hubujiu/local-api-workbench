@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   linearPlanStepIds,
   allocateLinearPlanStepIds,
@@ -446,6 +447,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  validatePlanStepTypes(plan.steps);
   const repeated = validateRepeatGraph(plan.steps);
   const stepIds = repeated
     ? undefined
@@ -578,6 +580,7 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  validatePlanStepTypes(plan.steps);
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
   const repeated = validateRepeatGraph(plan.steps, { requireIds: true });
@@ -2048,6 +2051,18 @@ export function restoreProject(document) {
     !Array.isArray(document.environments)
   )
     throw Error("不是有效的本地项目备份");
+  if (
+    document.runs !== undefined &&
+    (!Array.isArray(document.runs) ||
+      document.runs.some(
+        (item) => !item || typeof item !== "object" || Array.isArray(item),
+      ))
+  )
+    throw Error("备份中的 runs 格式无效");
+  for (const plan of document.plans || []) validatePlanStepTypes(plan.steps);
+  for (const run of document.runs || [])
+    if (run.snapshot?.steps !== undefined)
+      validatePlanStepTypes(run.snapshot.steps);
   if (document.requests.length > 5000) throw Error("项目接口超过 5000 个");
   for (const plan of document.plans || [])
     if (!validateRepeatGraph(plan.steps)) linearPlanStepIds(plan.steps);

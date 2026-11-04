@@ -1,3 +1,4 @@
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   linearPlanStepIds,
   ownStepProvenance,
@@ -15,6 +16,7 @@ import { freezeGrpcStep } from "./grpc-plan.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { snapshotPlan } from "./core.mjs";
 export function versionPlan(previous, input, source = "manual", project) {
+  validatePlanStepTypes(input.steps);
   if (!validateRepeatGraph(input.steps)) linearPlanStepIds(input.steps);
   if (previous && !validateRepeatGraph(previous.steps))
     linearPlanStepIds(previous.steps);
