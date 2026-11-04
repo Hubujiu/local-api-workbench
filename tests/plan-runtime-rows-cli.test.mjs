@@ -209,6 +209,7 @@ test("runtime rows CLI preflights potential ordinary and native database declara
           connectionId: "fixture",
           sql: "SELECT * FROM must_not_exist",
           parameters: [],
+          name: "dbRows",
         },
       ];
     const plan = await f.save(kind, [
@@ -247,7 +248,14 @@ test("runtime rows CLI preflights potential ordinary and native database declara
 test("runtime rows CLI disabled ancestor excludes grants and runtime source never falls back to environment", async (t) => {
   const f = await fixture(t);
   const body = f.leaf("db", "/never", {
-    before: [{ type: "database", connectionId: "fixture", sql: "SELECT 1" }],
+    before: [
+      {
+        type: "database",
+        connectionId: "fixture",
+        sql: "SELECT 1",
+        name: "dbRows",
+      },
+    ],
   });
   const disabled = await f.save("disabled", [
     group([body], { enabled: false }),
@@ -366,8 +374,18 @@ test("CLI database preflight checks aliases, cancellation and closure without op
             request: {
               url: "http://example.test",
               before: [
-                { type: "database", connectionId: "fixture", sql: "SELECT 1" },
-                { type: "database", connectionId: "second", sql: "SELECT 2" },
+                {
+                  type: "database",
+                  connectionId: "fixture",
+                  sql: "SELECT 1",
+                  name: "dbRows",
+                },
+                {
+                  type: "database",
+                  connectionId: "second",
+                  sql: "SELECT 2",
+                  name: "secondRows",
+                },
               ],
             },
           },
@@ -526,4 +544,49 @@ test("real CLI keeps deep legacy linear schemas executable with and without live
     "/deep-live",
     "/deep-live",
   ]);
+});
+
+test("real CLI rejects missing database result names before any HTTP, scope commit or evidence even for empty rows and false IF", async (t) => {
+  const f = await fixture(t);
+  const filename = path.join(
+    f.root,
+    "must-not-open-for-invalid-declaration.db",
+  );
+  for (const mode of ["empty", "false-if"]) {
+    for (const phase of ["before", "after"]) {
+      const child = f.leaf("invalid-database", "/must-not-run", {
+        [phase]: [
+          {
+            type: "database",
+            connectionId: "fixture",
+            sql: "SELECT 1",
+            parameters: [],
+          },
+        ],
+      });
+      const producer = f.producer(mode === "empty" ? "/empty" : "/produce");
+      producer.request.beforeScript =
+        "pm.environment.set('mustNotCommit','executed');";
+      const plan = await f.save(`invalid-name-${mode}-${phase}`, [
+        producer,
+        group(mode === "false-if" ? [gate([child])] : [child]),
+        f.leaf("tail", "/must-not-run"),
+      ]);
+      const before = await f.store.get(f.project.id);
+      const output = path.join(f.root, `must-not-write-${mode}-${phase}.json`);
+      const result = await f.invoke(
+        plan,
+        { fixture: { type: "sqlite", filename } },
+        output,
+      );
+      assert.equal(result.signal, null);
+      assert.equal(result.code, 2, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, /数据库结果变量名无效/);
+      assert.deepEqual(f.seen, []);
+      assert.deepEqual(await f.store.get(f.project.id), before);
+      await assert.rejects(readFile(output), { code: "ENOENT" });
+      await assert.rejects(readFile(filename), { code: "ENOENT" });
+    }
+  }
 });
