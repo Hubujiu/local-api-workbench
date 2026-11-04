@@ -5,7 +5,7 @@ import {
 import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   validateRequestDefinitionHistory,
-  assertRequestDefinitionProjectBudget,
+  REQUEST_DEFINITION_HISTORY_MAX_BYTES,
   projectHistoryProjection,
   sameHistoryJSON,
   reconcileRequestDefinitionHistory,
@@ -647,7 +647,7 @@ export class Store {
       )
         throw Error("接口定义历史不能包含访问器");
       projectHistoryProjection(historyDescriptor.value, {
-        maxBytes: 8 * 1024 * 1024,
+        maxBytes: REQUEST_DEFINITION_HISTORY_MAX_BYTES,
       });
     }
     if (
@@ -1028,8 +1028,6 @@ export class Store {
     if (definitions === undefined) delete next.requestDefinitionHistory;
     else next.requestDefinitionHistory = definitions;
     validateRequestDefinitionHistory(next);
-    if (!activity && next.requestDefinitionHistory !== undefined)
-      assertRequestDefinitionProjectBudget(next);
     if (signal?.aborted)
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",

@@ -1,40 +1,71 @@
 # API definition history and restore (WIP)
 
-## Validated feature and newer integration candidate (2026-11-04)
+## Large-definition compatibility correction (WIP, 2026-11-04)
 
-The isolated feature head `250a2b0c81e72a60057435d46eb75ad46d28332a`,
-tree `38cd3f267b9649ae63e52e21d61dd8de0f01fbf8`, passed
+Feature head `250a2b0c81e72a60057435d46eb75ad46d28332a`, tree
+`38cd3f267b9649ae63e52e21d61dd8de0f01fbf8`, passed exact
 [CI 41798142616](https://github.com/Hubujiu/local-api-workbench/actions/runs/41798142616)
-on its first attempt: all 25 jobs succeeded. The actual PR merge checkout
-`dfb23b7fa6a024a367add0cb52b0c337d45dd56e` has that same tree. This includes
-the Store/owner/official-SDK cases and the prior failure cases on all three
-platforms. The earlier failed run remains documented below; it is not relabeled.
-The fixed feature tree also passed 60 available local model/file/process/session
-contracts, independently repeated. Application dependencies remained unavailable
-locally; those application results are CI evidence, not local executions.
+with all 25 jobs. Subsequent composition review nevertheless found a real
+compatibility defect: its new 1 MiB current/snapshot gate and 12 MiB whole-project
+save gate rejected previously admissible large raw definitions. A green run did
+not cover that boundary. The correction below is new WIP and needs its own CI.
 
-This separate integration candidate starts from public
-`81398a4fc23df5409e27b2aa12d2a72ae322d1c2`, tree
-`3b7b205e0a8fc204afdafbb8e12dd1caea4bfd3f` (exact local source tree at
-`5bc5254b2db8a50feb6f9dfb9166d70756366f53`). Only the feature delta from its
-fixed `8f426533` base is applied. Its sole textual conflict was additive imports
-in `core.mjs`; both raw-media normalization/export and history normalization/
-restore are retained. Runtime media/signing order, controller/generation gates,
-IF/repeat, native write authorization and existing cancellation remain intact.
-No previously verified integration branch is moved by preparing this candidate.
+The limits below are Workbench implementation quotas, not original Apipost facts.
+Ordinary owner input remains 12 MiB. Current definitions are not pre-admitted
+against a history snapshot quota, and project persistence is not capped by the
+restore HTTP envelope. Complete encoded historical records have a 16 MiB limit;
+all definition history, including metadata, has a 32 MiB project quota. Reaching
+that byte quota rejects the whole change before journal publication, preserving
+the previous definition and history. Export the complete project first, then
+explicitly clear selected versions through the definition-history endpoint/tool
+before retrying. No byte-limit eviction or silent truncation occurs. Separately,
+the established count-retention rule keeps the latest 100 old versions plus
+current; the oldest is removed when recording the 101st old version.
 
-Combination acceptance is still pending: marked raw definitions, static OAuth
-policy and scripts must survive history/restore/backup without executing during
-restoration; actual subsequent requests must retain the final-body/media/signing
-contract; scoped cancellation/revocation must preserve both current and history
-before commit; native exports must continue to reject unsupported raw markers.
-The history module's 1 MiB current/snapshot limit is narrower than the raw
-executor's 8 MiB body allowance. A newly managed oversized raw definition is
-rejected, not silently truncated or admitted into an unrestorable history.
-The compact-object 12 MiB backup boundary does not promise GUI string-encoded or
-arbitrarily growing execution-evidence backups will always restore. No frontend
-history UI, proprietary bytecode execution or full original-product parity is
-claimed. The independent candidate requires its own exact-tree CI.
+Normal owner project and result.project responses omit the server-owned history
+field so existing configuration PUTs do not resend an ever-growing archive. The
+Store preserves omitted history, still checks revision/fingerprint and captures
+real client definition edits. Dedicated history endpoints retain scoped access,
+and explicit project backup export includes all history. Only owner POST
+/api/restore accepts up to 64 MiB; every normal endpoint retains its old limit.
+The existing GUI parses a selected backup JSON text into an object before that
+request, avoiding a second round of string escaping. This is a transport fix,
+not a new history screen or visual feature. Legacy string backups are still
+accepted within the same 64 MiB wire bound. An existing project or execution
+archive above that bound is not guaranteed to round-trip; no oversized backup
+may be silently truncated or partially registered.
+
+The fixed lockfile was installed using npm ci --ignore-scripts, with the same
+registry.npmjs.org package integrity and no version/lock changes. This combined
+workspace installed the identical lockfile offline from that verified cache.
+Actual application tests are now enabled. The separate feature's first quota
+batch had 25 passes and one obsolete 12 MiB configuration rejection assertion;
+that test now checks successful config/evidence/history preservation and fresh
+backup identity instead. Combined-tree acceptance is still pending, and no
+original application, main merge or deployment is involved.
+
+## Independent raw-media integration candidate
+
+This candidate applies only the PR97 feature delta from its fixed 8f426533 base
+onto public `81398a4fc23df5409e27b2aa12d2a72ae322d1c2`, tree
+`3b7b205e0a8fc204afdafbb8e12dd1caea4bfd3f`. The initial saved WIP was public
+`731ee9e7349d74cf8ea6b8c10faa3e0f96543ecd`, tree
+`bb1c6eec45aa6ef397e87640a6558c665a105588`. Its large-current admission defect
+is preserved as a historical checkpoint, not declared compatible.
+
+Only additive imports conflict between raw-media and history production code.
+Both raw-policy normalization and history lossless normalization remain; root
+media/signing, controller/generation, IF/repeat, native-write authorization and
+cancellation paths are retained. New composition tests cover real raw/OAuth wire,
+restoration without replay, official SDK queued cancellation/revocation, peer
+isolation, 2 MiB/exact 8 MiB import/edit/backup/restart, and retained export refusal.
+A separate pure/real-files regression observed 3 REDs for the old current/history
+budget; the later correction must turn those exact contracts green.
+
+The fixed lockfile was installed with npm ci --ignore-scripts, without substitute
+packages, in the feature workspace. App tests are now being attempted for the
+first time locally; no completed result is implied here. This combined tree still
+requires its own exact testing and CI, not the isolated feature's older green.
 
 ## Fixed dependency and first checkpoint
 
@@ -99,11 +130,12 @@ are separate capabilities. They are not an API definition version store.
   guarantee. Cancellation is checked immediately before beginning the atomic
   journal rename. Once publication begins, interruption cannot promise rollback;
   existing `PROJECT_COMMIT_UNCERTAIN` recovery semantics still apply.
-- Individual snapshots are at most 1 MiB, total history at most 8 MiB, and
-  there are at most 10,000 lineage records. A configuration/history commit must
-  fit the existing 12 MiB **compact object** `{document: project}` restore body;
-  full input is validated before retention. No silent truncation of malformed
-  data, legal JSON Schema keys, unsupported metadata, or privileges is allowed.
+- Complete encoded historical records are at most 16 MiB, total history at
+  most 32 MiB, with at most 10,000 lineage records. These are independent storage
+  quotas, not a cap on current definitions or the whole project. Full input is
+  validated before the explicit latest-100 retention rule; byte-quota failures
+  reject rather than silently evict. No truncation of malformed data, legal JSON
+  Schema keys, unsupported metadata, or privileges is allowed.
 - Ordinary clients cannot forge, replace or delete the history field. Activity
   saves cannot edit definitions/history. Explicit restore/tag/clear operations
   require current configuration revision and exact resource lineage.
@@ -150,18 +182,13 @@ History changes use current validators. An old definition incompatible with
 current folder/collection/native identity constraints is rejected explicitly,
 not partially restored. Explicit restoration to an identical old definition
 still archives the current value and advances the persistent version number.
-Ordinary no-op saves do not create versions. New/current edited definitions
-must remain snapshotable within the feature's budget. Oversize legacy current
-values can remain unchanged, but an edit/deletion requiring an oversized old
-snapshot is rejected rather than silently discarding that history.
-
-The compact-object restore bound is not a promise that the existing GUI's
-pretty-printed JSON **string** upload has the same size: quoting that string
-adds escaping and whitespace. Later execution evidence may also grow beyond
-12 MiB under the existing execution rules. Activity saves and history reads
-must not acquire a new whole-project budget because of this feature; such
-oversize restore bodies remain explicitly rejected by the existing endpoint.
-This PR does not redesign large-backup transport or execution retention.
+Ordinary no-op saves do not create versions. Current definitions retain their
+existing request/input limits rather than a new future-snapshot admission gate.
+An edit/deletion that cannot fit the encoded old version or project history
+quota fails atomically with an explicit export/clear path, without silently
+losing the prior state. Reads and activity saves remain independent of the
+backup envelope. The 16/32 MiB storage quotas and 64 MiB owner backup transport
+are bounded, not promises of arbitrary-size backups or unlimited retention.
 
 ## Current implementation checkpoint
 

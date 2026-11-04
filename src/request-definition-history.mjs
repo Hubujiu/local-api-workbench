@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual, types } from "node:util";
 
 export const REQUEST_DEFINITION_HISTORY_LIMIT = 100;
-export const REQUEST_DEFINITION_HISTORY_MAX_BYTES = 8 * 1024 * 1024;
-export const REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES = 1024 * 1024;
+export const REQUEST_DEFINITION_HISTORY_MAX_BYTES = 32 * 1024 * 1024;
+// The per-version quota includes the entire encoded record, not only definition.
+export const REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES = 16 * 1024 * 1024;
 const PROJECT_MAX_BYTES = 12 * 1024 * 1024;
 const TRACKER_LIMIT = 10000;
 const own = (value, key) => Object.hasOwn(value, key);
@@ -12,6 +13,36 @@ const object = (value) =>
 const fail = (reason) => {
   throw Error("接口定义历史无效：" + reason);
 };
+
+class HistoryProjectionByteLimitError extends Error {
+  constructor(maxBytes) {
+    super("接口定义历史无效：JSON体积超过" + maxBytes + "字节限制");
+  }
+}
+function validateHistoryQuota(value, maxBytes, projectId, single = false) {
+  try {
+    projectHistoryProjection(value, { maxBytes });
+  } catch (error) {
+    if (!(error instanceof HistoryProjectionByteLimitError)) throw error;
+    const base = "/api/projects/" + encodeURIComponent(projectId);
+    const scope = single ? "单条历史" : "项目历史总";
+    const capacity = new Error(
+      "接口定义历史无效：" +
+        scope +
+        "容量超过 " +
+        maxBytes / (1024 * 1024) +
+        " MiB（完整记录的 UTF-8 编码 JSON）；本次修改未保存。请先通过 GET " +
+        base +
+        "/export 导出完整项目；再通过 POST " +
+        base +
+        '/definition-history（kind: "clear", confirm: true，携带 requestId、lineageId、configRevision）或 localapi_clear_api_definition_history 显式清理已有历史。' +
+        (single ? "清理不会提高单条历史上限。" : ""),
+    );
+    capacity.code = "REQUEST_DEFINITION_HISTORY_CAPACITY";
+    capacity.limitBytes = maxBytes;
+    throw capacity;
+  }
+}
 
 // Inspect descriptors before reading data. In particular, neither Proxy traps,
 // getters nor toJSON methods are part of this persistence projection.
@@ -34,7 +65,7 @@ export function projectHistoryProjection(
   let nodes = 0;
   function charge(count) {
     bytes += count;
-    if (bytes > maxBytes) fail("JSON体积超过" + maxBytes + "字节限制");
+    if (bytes > maxBytes) throw new HistoryProjectionByteLimitError(maxBytes);
   }
   function visit(item, depth, root = false) {
     if (++nodes > maxNodes || depth > maxDepth) fail("JSON结构超限");
@@ -111,9 +142,9 @@ export function projectHistoryProjection(
   return visit(value, 0, true);
 }
 
-// The final backup envelope has a byte budget, not the history feature's
-// depth/node/array limits. Walk it iteratively without invoking user methods
-// or recursively cloning unrelated, already-persisted project collections.
+// Optional backup-size utility, independent of definition-history save quotas.
+// Walk iteratively without invoking user methods or applying history structure
+// limits to unrelated, already-persisted project collections.
 export function assertRequestDefinitionProjectBudget(project) {
   inspectProject(project);
   let bytes = 0;
@@ -275,9 +306,11 @@ function validateHistory(project, { checkTargets = true } = {}) {
   const requests = requestMap(project);
   const history = project.requestDefinitionHistory;
   if (history === undefined) return;
-  projectHistoryProjection(history, {
-    maxBytes: REQUEST_DEFINITION_HISTORY_MAX_BYTES,
-  });
+  validateHistoryQuota(
+    history,
+    REQUEST_DEFINITION_HISTORY_MAX_BYTES,
+    project.id,
+  );
   exactKeys(history, ["version", "projectId", "entries"]);
   if (
     history.version !== 1 ||
@@ -343,9 +376,12 @@ function validateHistory(project, { checkTargets = true } = {}) {
         version.definition.id !== entry.requestId
       )
         fail("历史快照接口归属不一致");
-      projectHistoryProjection(version.definition, {
-        maxBytes: REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
-      });
+      validateHistoryQuota(
+        version,
+        REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
+        project.id,
+        true,
+      );
     }
   }
 }
@@ -388,15 +424,13 @@ export function validateRequestDefinitionHistory(project) {
   if (projectField(project, "requestDefinitionHistory") === undefined) return;
   validateHistory(historyProjectProjection(project));
 }
-function definition(request, maxBytes = Number.MAX_SAFE_INTEGER) {
+function definition(request) {
   const result = projectHistoryProjection(request, {
     maxBytes: Number.MAX_SAFE_INTEGER,
   });
   delete result.deletedAt;
   // Equality has no snapshot admission budget: an unchanged preexisting large
   // definition must not prevent reads, activity or metadata-only saves.
-  if (maxBytes !== Number.MAX_SAFE_INTEGER)
-    projectHistoryProjection(result, { maxBytes });
   return result;
 }
 function sameDefinition(a, b) {
@@ -412,14 +446,21 @@ function allocateId(makeId, used) {
   used.add(id);
   return id;
 }
-function saveSnapshot(entry, request, makeId, used) {
-  entry.versions.push({
+function saveSnapshot(entry, request, makeId, used, projectId) {
+  const version = {
     id: allocateId(makeId, used),
     version: entry.currentVersion,
     createdAt: entry.currentCreatedAt,
     tag: entry.currentTag,
-    definition: definition(request, REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES),
-  });
+    definition: definition(request),
+  };
+  validateHistoryQuota(
+    version,
+    REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES,
+    projectId,
+    true,
+  );
+  entry.versions.push(version);
   // Inputs were validated in full before retention is applied.
   if (entry.versions.length > REQUEST_DEFINITION_HISTORY_LIMIT)
     entry.versions.shift();
@@ -490,9 +531,6 @@ export function reconcileRequestDefinitionHistory(
   for (const [requestId, request] of nextRequests) {
     const oldRequest = previousRequests.get(requestId);
     if (!oldRequest || !sameDefinition(oldRequest, request)) {
-      // Admit new/changed current definitions only when their future snapshot
-      // is representable. Existing unchanged oversized definitions stay inert.
-      definition(request, REQUEST_DEFINITION_SNAPSHOT_MAX_BYTES);
       changedRequestIds.add(requestId);
     }
   }
@@ -533,7 +571,7 @@ export function reconcileRequestDefinitionHistory(
     const oldRequest = previousRequests.get(requestId);
     const newRequest = nextRequests.get(requestId);
     if (!newRequest) {
-      if (oldRequest) saveSnapshot(entry, oldRequest, makeId, used);
+      if (oldRequest) saveSnapshot(entry, oldRequest, makeId, used, after.id);
       entry.retired = true;
     } else if (
       oldRequest &&
@@ -541,7 +579,7 @@ export function reconcileRequestDefinitionHistory(
     ) {
       if (entry.currentVersion === Number.MAX_SAFE_INTEGER)
         fail("版本序号已耗尽");
-      saveSnapshot(entry, oldRequest, makeId, used);
+      saveSnapshot(entry, oldRequest, makeId, used, after.id);
       entry.currentVersion++;
       entry.currentCreatedAt = now;
       entry.currentTag = "";
@@ -561,7 +599,6 @@ export function reconcileRequestDefinitionHistory(
   }
   after.requestDefinitionHistory = history;
   validateHistory(after);
-  assertRequestDefinitionProjectBudget(after);
   return history;
 }
 
