@@ -1,4 +1,5 @@
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
+import { validateRequestDefinitionHistory } from "./request-definition-history.mjs";
 import {
   mkdir,
   readFile,
@@ -30,6 +31,9 @@ const filename = (id) => {
   return name;
 };
 function validateLayout(project) {
+  // A malformed history journal must fail before roll-forward touches any
+  // current definition, not only when Store later inspects the reconstructed data.
+  validateRequestDefinitionHistory(project);
   for (const key of Object.keys(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -59,6 +63,15 @@ async function writeJSON(file, value) {
 async function apply(directory, project) {
   const metadata = { ...project, storageFormat: 2, collections: {} };
   delete metadata._diskFingerprint;
+  delete metadata.requestDefinitionHistory;
+  delete metadata.requestDefinitionHistoryFormat;
+  if (project.requestDefinitionHistory !== undefined) {
+    metadata.requestDefinitionHistoryFormat = 1;
+    await writeJSON(
+      path.join(directory, "history/definitions.json"),
+      project.requestDefinitionHistory,
+    );
+  }
   for (const [key, folder] of Object.entries(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -149,6 +162,16 @@ export async function readProject(directory, expectedId) {
   if (metadata.id !== expectedId || metadata.storageFormat !== 2)
     throw Error("项目清单格式或ID无效");
   const project = { ...metadata };
+  if (
+    Object.hasOwn(metadata, "requestDefinitionHistory") ||
+    (metadata.requestDefinitionHistoryFormat !== undefined &&
+      metadata.requestDefinitionHistoryFormat !== 1)
+  )
+    throw Error("接口定义历史清单格式无效");
+  if (metadata.requestDefinitionHistoryFormat === 1)
+    project.requestDefinitionHistory = JSON.parse(
+      await readFile(path.join(directory, "history/definitions.json"), "utf8"),
+    );
   for (const [key, folder] of Object.entries(groups)) {
     const ids = metadata.collections?.[key] || [];
     if (!Array.isArray(ids) || ids.length > 10000)
@@ -190,6 +213,8 @@ export async function readProject(directory, expectedId) {
   }
   delete project.storageFormat;
   delete project.collections;
+  delete project.requestDefinitionHistoryFormat;
+  validateRequestDefinitionHistory(project);
   project._diskFingerprint = projectFingerprint(project);
   return project;
 }
