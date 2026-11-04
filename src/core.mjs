@@ -1,3 +1,4 @@
+import { applySharedAuth } from "./shared-auth.mjs";
 import { importPostmanOAuth1 } from "./postman-oauth1-import.mjs";
 import { snapshotWireStep, wirePlanCredentials } from "./wire-plan.mjs";
 import {
@@ -1426,7 +1427,16 @@ export function exportOpenAPI(project) {
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     const r = sdkOpenAPIDefinition(project, source);
-    if (r.auth?.type === "oauth1" && Object.hasOwn(r.auth, "parameterPolicy"))
+    const policyAuth = (auth) =>
+      auth?.type === "oauth1" && Object.hasOwn(auth, "parameterPolicy");
+    if (
+      [
+        r.auth,
+        project.settings?.globalAuth,
+        ...Object.values(project.settings?.folderAuth || {}),
+      ].some(policyAuth) &&
+      policyAuth(applySharedAuth(project, r).auth)
+    )
       throw Error("OpenAPI不能无损表达OAuth1签名参数策略，请使用项目备份");
     if (
       Object.values(r.bodyDynamic || {}).some((spec) =>

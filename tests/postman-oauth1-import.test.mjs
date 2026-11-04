@@ -168,3 +168,25 @@ test("failed conversion does not mutate the source", () => {
   assert.throws(() => importPostmanOAuth1(a));
   assert.deepEqual(a, before);
 });
+test("array accessor and oversize arrays reject before value hooks", () => {
+  let hooks = 0;
+  const a = attrs();
+  Object.defineProperty(a, "0", {
+    enumerable: true,
+    get() {
+      hooks++;
+      throw Error("hook");
+    },
+  });
+  assert.throws(() => importPostmanOAuth1(a));
+  const huge = new Array(100000);
+  Object.defineProperty(huge, "0", {
+    enumerable: true,
+    get() {
+      hooks++;
+      throw Error("hook");
+    },
+  });
+  assert.throws(() => importPostmanOAuth1(huge));
+  assert.equal(hooks, 0);
+});

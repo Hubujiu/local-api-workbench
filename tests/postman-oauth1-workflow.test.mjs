@@ -532,3 +532,54 @@ test("imported OAuth1 policy cannot silently disappear through definition export
   );
   assert.throws(() => toCurl(request), /OAuth1/);
 });
+
+test(
+  "OpenAPI refuses effective shared OAuth1 policy but preserves explicit auth overrides",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t);
+    const project = await f.call(
+      "projects",
+      { name: "shared export" },
+      "POST",
+      201,
+    );
+    const [request] = importDocument({
+      info: { name: "shared", schema },
+      item: [
+        { name: "plain", request: { method: "GET", url: `${f.url}/never` } },
+      ],
+    });
+    const policy = expectedAuth("shared-token");
+    for (const settings of [
+      { globalAuth: policy },
+      { folderAuth: { Folder: policy } },
+    ]) {
+      const before = await f.call(`projects/${project.id}`, undefined, "GET");
+      const next = {
+        ...before,
+        settings: { ...before.settings, ...settings },
+        requests: [{ ...request, folder: "Folder", auth: { type: "none" } }],
+      };
+      await f.call(`projects/${project.id}`, next, "PUT");
+      await f.call(
+        `projects/${project.id}/export?format=openapi`,
+        undefined,
+        "GET",
+        400,
+      );
+      for (const override of [
+        { auth: { type: "bearer", token: "fictional" } },
+        { auth: { type: "none" }, inheritAuth: false },
+      ]) {
+        assert.doesNotThrow(() =>
+          exportOpenAPI({
+            ...next,
+            requests: [{ ...next.requests[0], ...override }],
+          }),
+        );
+      }
+    }
+    assert.deepEqual(f.seen, []);
+  },
+);

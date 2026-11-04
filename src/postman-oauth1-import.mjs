@@ -47,6 +47,9 @@ function ownData(value, array = false) {
   return descriptors;
 }
 export function importPostmanOAuth1(attributes) {
+  if (!Array.isArray(attributes) || types.isProxy(attributes)) throw invalid();
+  const size = Object.getOwnPropertyDescriptor(attributes, "length");
+  if (!size || size.value > 32) throw invalid();
   const list = ownData(attributes, true);
   const length = list.length.value;
   if (length > 32 || Reflect.ownKeys(list).length !== length + 1)
