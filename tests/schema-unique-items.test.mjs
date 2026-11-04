@@ -388,3 +388,62 @@ test("a unique comparison budget failure cannot be swallowed by union fallback",
   assert.equal(calls, 0);
   assert.equal(sampleFromSchema({ const: "healthy" }), "healthy");
 });
+
+for (const dialect of ["prefixItems", "items"]) {
+  for (const hook of ["Proxy", "index getter", "indexOf getter"]) {
+    test(`unique ${dialect} tuple rejects ${hook} before container access`, () => {
+      let calls = 0;
+      let prefix = [{ const: 0 }, { const: 1 }];
+      if (hook === "Proxy") {
+        prefix = new Proxy(prefix, {
+          get(target, key, receiver) {
+            calls++;
+            return Reflect.get(target, key, receiver);
+          },
+          has(target, key) {
+            calls++;
+            return Reflect.has(target, key);
+          },
+          ownKeys(target) {
+            calls++;
+            return Reflect.ownKeys(target);
+          },
+          getOwnPropertyDescriptor(target, key) {
+            calls++;
+            return Reflect.getOwnPropertyDescriptor(target, key);
+          },
+          getPrototypeOf(target) {
+            calls++;
+            return Reflect.getPrototypeOf(target);
+          },
+        });
+      } else {
+        Object.defineProperty(
+          prefix,
+          hook === "index getter" ? "0" : "indexOf",
+          {
+            enumerable: true,
+            get() {
+              calls++;
+              return hook === "index getter"
+                ? { const: 0 }
+                : Array.prototype.indexOf;
+            },
+          },
+        );
+      }
+      const schema = {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        uniqueItems: true,
+        [dialect]: prefix,
+      };
+      if (dialect === "prefixItems") schema.items = false;
+      else schema.additionalItems = false;
+      assert.throws(() => sampleFromSchema(schema), /JSON|访问器|Proxy|稀疏/);
+      assert.equal(calls, 0);
+      assert.deepEqual(sampleFromSchema(schemaFor([0, 1])), [0, 1]);
+    });
+  }
+}
