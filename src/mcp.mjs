@@ -1,3 +1,4 @@
+import { appendExecutionRecord } from "./execution-evidence.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
@@ -638,14 +639,21 @@ export function createMCP({
                   fingerprint: context.fingerprint,
                   variables: output.variables,
                 });
-              await store.append(p.id, "history", {
-                id: output.id,
-                createdAt: output.createdAt,
-                name: request.name,
-                ...output.results[0],
-                source: "mcp",
-                durationMs: output.durationMs,
-              });
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  id: output.id,
+                  runId: output.id,
+                  createdAt: output.createdAt,
+                  name: request.name,
+                  ...output.results[0],
+                  source: "mcp",
+                  durationMs: output.durationMs,
+                },
+              );
+              output = { ...output, ...receipt };
               break;
             }
             case "localapi_execute_flow":
