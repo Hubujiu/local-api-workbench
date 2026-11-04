@@ -11,6 +11,8 @@ test(
   { timeout: 10000 },
   async (t) => {
     let received = 0,
+      held = 0,
+      closedCount = 0,
       started,
       stopped;
     const first = new Promise((resolve) => {
@@ -22,8 +24,10 @@ test(
     const peer = createServer((req, res) => {
       received++;
       if (req.url === "/hold") {
-        started();
-        res.once("close", stopped);
+        if (++held === 4) started();
+        res.once("close", () => {
+          if (++closedCount === 4) stopped();
+        });
       } else res.end("ok");
     });
     await new Promise((resolve) => peer.listen(0, "127.0.0.1", resolve));
@@ -48,7 +52,7 @@ test(
         method: "GET",
       },
       count: 8,
-      concurrency: 1,
+      concurrency: 4,
       runId: "same-run",
     });
     const abort = new AbortController();
@@ -76,7 +80,7 @@ test(
       await new Promise((resolve) => setTimeout(resolve, 20));
     } while (true);
     assert.equal((await response.json()).count, 1);
-    assert.equal(received, 2);
+    assert.equal(received, 5);
   },
 );
 
