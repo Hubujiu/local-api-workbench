@@ -1,3 +1,4 @@
+import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
 import {
   evaluatePlanCondition,
   validateConditionScopeInput,
@@ -452,6 +453,7 @@ export function evaluateAssertions(response, assertions = []) {
   });
 }
 export function snapshotPlan(plan) {
+  const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
   const repeated = validateRepeatGraph(plan.steps);
   const stepIds = repeated
@@ -480,6 +482,7 @@ export function snapshotPlan(plan) {
     name: plan.name || "新执行计划",
     description: String(plan.description || ""),
     statusPolicy: plan.statusPolicy || "assertions",
+    ...(failurePolicy ? { failurePolicy } : {}),
     functions: structuredClone(plan.functions || []),
     updatedAt: plan.updatedAt || new Date().toISOString(),
     source: plan.source === "ai" ? "ai" : "manual",
@@ -587,6 +590,7 @@ export async function runPlan(
     protocolCredentials,
   } = {},
 ) {
+  const failurePolicy = readPlanFailurePolicy(plan);
   validatePlanStepTypes(plan.steps);
   const runStarted = performance.now();
   readImportedNativeFlowSource(plan);
@@ -595,6 +599,7 @@ export async function runPlan(
     ? undefined
     : allocateLinearPlanStepIds(plan.steps, id);
   const snapshot = repeated ? snapshotPlan(plan) : structuredClone(plan);
+  if (!failurePolicy) delete snapshot.failurePolicy;
   if (stepIds)
     snapshot.steps.forEach((step, index) => {
       step.id = stepIds[index];
@@ -616,6 +621,8 @@ export async function runPlan(
   let scopes = createScopes(variables, variableScopes);
   const vars = { ...effectiveScopes(scopes) };
   const results = [];
+  let failureStop,
+    scopeCommitStopped = false;
   const conditionResults = [];
   const occurrences = planOccurrences(snapshot.steps, { controls: true });
   if (!occurrences.length) {
@@ -1185,6 +1192,21 @@ export async function runPlan(
     if (repeated) evidenceBytes += Buffer.byteLength(JSON.stringify(record));
     await onStep?.(record);
     if (stopAfterExtractionFailure) break;
+    if (
+      !signal?.aborted &&
+      failurePolicy === "stop" &&
+      record.status === "failed"
+    ) {
+      if (record.scopeCommit?.outcome === "unknown") {
+        scopeCommitStopped = true;
+        break;
+      }
+      failureStop = {
+        stepId: record.stepId,
+        ...(record.repeat ? { repeat: structuredClone(record.repeat) } : {}),
+      };
+      break;
+    }
   }
   return {
     id: id(),
@@ -1204,6 +1226,8 @@ export async function runPlan(
         ? "passed"
         : "failed",
     ...(conditional ? { conditionResults } : {}),
+    ...(failureStop ? { stopReason: "step-failure", failureStop } : {}),
+    ...(scopeCommitStopped ? { stopReason: "scope-commit-unknown" } : {}),
     ...(conditionStopped ? { stopReason: "condition-error" } : {}),
     ...(evidenceStopped
       ? {
@@ -2167,6 +2191,7 @@ export function restoreProject(document) {
   for (const item of document.cases || [])
     validateRequestTaskSource(item.request);
   for (const plan of document.plans || []) {
+    readPlanFailurePolicy(plan);
     validateRepeatGraph(plan.steps);
     readImportedNativeFlowSource(plan);
     for (const step of planLeaves(plan.steps || []))
@@ -2174,6 +2199,7 @@ export function restoreProject(document) {
   }
   for (const run of document.runs || [])
     if (run.snapshot) {
+      readPlanFailurePolicy(run.snapshot);
       if (validateRepeatGraph(run.snapshot.steps)) snapshotPlan(run.snapshot);
       readImportedNativeFlowSource(run.snapshot);
       for (const step of planLeaves(run.snapshot.steps || []))

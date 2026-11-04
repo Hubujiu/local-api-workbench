@@ -97,6 +97,8 @@ export function exportApipostDirectory(project, options = {}) {
     )
       throw Error("原生目录计划仅支持HTTP步骤");
     const plan = snapshotPlan(input);
+    if (plan.failurePolicy)
+      throw Error("原生目录计划不支持canonical失败停止策略");
     if (!plan.id || flowIds.has(plan.id))
       throw Error("原生目录计划标识重复或缺失");
     flowIds.add(plan.id);

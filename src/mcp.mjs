@@ -1,3 +1,4 @@
+import { failureStopSummary } from "./plan-failure-policy.mjs";
 import { conditionSummary } from "./execution-history.mjs";
 import { activePlanStepCount, hasIfSteps } from "./plan-repeat.mjs";
 import { appendExecutionRecord } from "./execution-evidence.mjs";
@@ -162,7 +163,7 @@ export function createMCP({
           ],
           [
             "localapi_save_plan",
-            "保存独立快照计划；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte，operand为{literal}或{scope:globals/environment/runtime,name}，不隐式转换。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
+            "保存独立快照计划；failurePolicy可选stop以在普通失败后停止整计划，默认continue且不回滚副作用；repeat支持HTTP/gRPC/Socket.IO/TCP/WebSocket/SSE且count为1至100。if仅支持HTTP及if/repeat子组，condition为{op,left,right}，op限eq/neq/gt/gte/lt/lte，operand为{literal}或{scope:globals/environment/runtime,name}，不隐式转换。共同最多4层、含禁用节点最多200潜在请求及200次条件判断",
             { projectId: { type: "string" }, plan: { type: "object" } },
           ],
           [
@@ -635,6 +636,7 @@ export function createMCP({
                     planHash,
                     stopReason,
                     conditionResults,
+                    failureStop,
                   }) => ({
                     id,
                     planName,
@@ -643,6 +645,7 @@ export function createMCP({
                     planHash,
                     ...(stopReason ? { stopReason } : {}),
                     ...conditionSummary({ conditionResults, stopReason }),
+                    ...failureStopSummary({ stopReason, failureStop }),
                   }),
                 ),
               };
