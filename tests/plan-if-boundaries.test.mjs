@@ -144,7 +144,8 @@ test("combined IF/repeat depth and leaf/decision/work budgets include disabled a
   );
   const invalid = group();
   invalid.steps[0].type = "socketio";
-  assert.throws(() => snapshotPlan({ steps: [invalid] }), /HTTP/);
+  // A Socket.IO discriminator cannot turn an HTTP payload into a Socket.IO leaf.
+  assert.throws(() => snapshotPlan({ steps: [invalid] }), /未知字段/);
   const disabled = snapshotPlan({
     steps: [{ ...group(), enabled: false }, leaf("tail")],
   });
