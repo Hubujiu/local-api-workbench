@@ -843,9 +843,10 @@ export async function runPlan(
       ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
-  // IF may skip a wire leaf dynamically, but cannot defer its authority check
+  // IF may skip a protocol or gRPC leaf dynamically, but cannot defer authority
   // until after an earlier HTTP request or script has already run.
   const conditionalProtocolTypes = new Set();
+  const conditionalGrpcIds = new Set();
   const collectIFProtocols = (steps, insideIF = false) => {
     for (const step of steps) {
       if (step.enabled === false) continue;
@@ -853,6 +854,8 @@ export async function runPlan(
         collectIFProtocols(step.steps, insideIF || step.type === "if");
       else if (insideIF && step.type === "protocol")
         conditionalProtocolTypes.add(step.protocol.definition.type);
+      else if (insideIF && step.type === "grpc")
+        conditionalGrpcIds.add(step.id);
     }
   };
   // The frozen graph's capability validation is authoritative: do not repeat
@@ -860,6 +863,8 @@ export async function runPlan(
   collectIFProtocols(snapshot.steps);
   if (conditionalProtocolTypes.size && typeof executeProtocol !== "function")
     throw Error("此执行入口未授权protocol调用");
+  if (conditionalGrpcIds.size && typeof executeGrpc !== "function")
+    throw Error("此执行入口未授权grpc调用");
   const untilEnabled = hasRepeatUntil(snapshot.steps);
   if (conditional || runtimeRowsEnabled)
     validateConditionScopeInput(variables, variableScopes);
@@ -1303,7 +1308,11 @@ export async function runPlan(
                 nextScopes.environment = accepted.environment;
               }
             } catch (error) {
-              if (error instanceof ProjectCommitUncertain) {
+              if (
+                error instanceof ProjectCommitUncertain ||
+                (conditionalGrpcIds.has(step.id) &&
+                  error?.code === "PROJECT_COMMIT_UNCERTAIN")
+              ) {
                 record.scopeCommit = { outcome: "unknown", retrySafe: false };
                 throw Error(
                   "协议变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
@@ -1710,6 +1719,7 @@ export async function runPlan(
     if (
       (untilEnabled ||
         runtimeRowsEnabled ||
+        conditionalGrpcIds.has(step.id) ||
         (step.type === "protocol" &&
           conditionalProtocolTypes.has(step.protocol.definition.type))) &&
       record.scopeCommit?.outcome === "unknown"
