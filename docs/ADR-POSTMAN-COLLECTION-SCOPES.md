@@ -269,3 +269,14 @@ precedence, separate collections, pre/post failures, identity forgery, missing
 bindings, cancellation of main and script-child HTTP, duration, and unchanged
 saved project and debug context. Local fixture results are recorded separately;
 exact published-source CI remains required before acceptance.
+
+## Canonical staged HTTP plan isolation (2026-11-05)
+
+Staged plans now also accept isolated collection layers under
+`ADR-STAGED-PLAN-LOAD.md`. This supersedes the staged-load exclusion above. Both
+entry points validate bound identities on all leaves, including disabled ones,
+before runtime effects. Only referenced layers are captured at execution start;
+each iteration gets an independent session, supporting A → B → unbound → A
+without exposing B to A or persisting either collection. Existing environment-wide
+debug precedence is preserved. No native format, exporter or scope-persistence
+capability is added, and existing staged HTTP and resource limits remain intact.
