@@ -851,6 +851,16 @@ export function hasPlanConditions(steps) {
   );
 }
 
+// Potential active IF includes false conditions, but excludes disabled ancestors.
+export function hasActiveIfSteps(steps) {
+  return steps.some(
+    (step) =>
+      step.enabled !== false &&
+      (step.type === "if" ||
+        (step.type === "repeat" && hasActiveIfSteps(step.steps))),
+  );
+}
+
 // Runtime safety checks apply to enabled groups only; disabled definitions are
 // still validated and counted by validateRepeatGraph.
 export function hasRepeatUntil(steps) {

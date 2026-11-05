@@ -802,7 +802,7 @@ test("IF Socket.IO retains no-script contract and unknown scope fails before any
   assert.equal(f.consumed.length, 0);
 });
 
-test("non-IF Socket.IO sibling retains legacy unknown-commit continuation", async (t) => {
+test("active HTTP-only IF fail-stops non-IF Socket.IO sibling on unknown commit", async (t) => {
   const f = await fixture(t),
     input = f.definition();
   const repeat = input.steps[0].steps[0];
@@ -821,11 +821,11 @@ test("non-IF Socket.IO sibling retains legacy unknown-commit continuation", asyn
       throw new ProjectCommitUncertain("fixture", Error("unknown"));
     },
   });
-  assert.equal(run.results.length, 4);
-  assert.notEqual(run.stopReason, "scope-commit-unknown");
+  assert.equal(run.results.length, 1);
+  assert.equal(run.stopReason, "scope-commit-unknown");
   assert.equal(run.variables.token, "initial");
-  assert.equal(f.received.length, 2);
-  assert.equal(f.consumed.length, 2);
+  assert.equal(f.received.length, 1);
+  assert.equal(f.consumed.length, 0);
 });
 
 test("IF Socket.IO condition with an unknown scope is rejected statically", async (t) => {

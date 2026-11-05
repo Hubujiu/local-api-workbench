@@ -24,7 +24,11 @@ import {
   evaluatePlanCondition,
   validateConditionScopeInput,
 } from "./plan-condition.mjs";
-import { hasPlanConditions, hasRepeatUntil } from "./plan-repeat.mjs";
+import {
+  hasPlanConditions,
+  hasRepeatUntil,
+  hasActiveIfSteps,
+} from "./plan-repeat.mjs";
 import { validatePlanStepTypes } from "./plan-step-types.mjs";
 import {
   postmanVariableMode,
@@ -843,6 +847,7 @@ export async function runPlan(
       ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
+  const activeIF = hasActiveIfSteps(snapshot.steps);
   // IF may skip a protocol, gRPC or Socket.IO leaf dynamically, but cannot defer authority
   // until after an earlier HTTP request or script has already run.
   const conditionalProtocolTypes = new Set();
@@ -1143,7 +1148,10 @@ export async function runPlan(
             }
           }
         } catch (error) {
-          if (error?.code === "PROJECT_COMMIT_UNCERTAIN") {
+          if (
+            error instanceof ProjectCommitUncertain ||
+            error?.code === "PROJECT_COMMIT_UNCERTAIN"
+          ) {
             record.scopeCommit = { outcome: "unknown", retrySafe: false };
             throw Error(
               "变量持久化提交未确认；请重新读取项目，勿自动重试已完成请求",
@@ -1315,7 +1323,8 @@ export async function runPlan(
             } catch (error) {
               if (
                 error instanceof ProjectCommitUncertain ||
-                ((conditionalGrpcIds.has(step.id) ||
+                ((activeIF ||
+                  conditionalGrpcIds.has(step.id) ||
                   conditionalSocketIOIds.has(step.id)) &&
                   error?.code === "PROJECT_COMMIT_UNCERTAIN")
               ) {
@@ -1723,7 +1732,8 @@ export async function runPlan(
     // A completion condition must never continue on a possibly committed scope.
     // Preserve the prior behavior for plans that do not opt into this feature.
     if (
-      (untilEnabled ||
+      (activeIF ||
+        untilEnabled ||
         runtimeRowsEnabled ||
         conditionalGrpcIds.has(step.id) ||
         conditionalSocketIOIds.has(step.id) ||
