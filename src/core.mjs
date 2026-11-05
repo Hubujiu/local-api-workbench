@@ -843,20 +843,22 @@ export async function runPlan(
       ),
     );
   const conditional = hasPlanConditions(snapshot.steps);
-  // IF may skip a TCP leaf dynamically, but cannot defer its authority check
+  // IF may skip a wire leaf dynamically, but cannot defer its authority check
   // until after an earlier HTTP request or script has already run.
-  const hasActiveIFTCP = (steps, insideIF = false) =>
-    steps.some(
-      (step) =>
-        step.enabled !== false &&
-        (["if", "repeat"].includes(step.type)
-          ? hasActiveIFTCP(step.steps, insideIF || step.type === "if")
-          : insideIF &&
-            step.type === "protocol" &&
-            step.protocol.definition.type === "tcp"),
-    );
-  const conditionalTCP = hasActiveIFTCP(snapshot.steps);
-  if (conditionalTCP && typeof executeProtocol !== "function")
+  const conditionalProtocolTypes = new Set();
+  const collectIFProtocols = (steps, insideIF = false) => {
+    for (const step of steps) {
+      if (step.enabled === false) continue;
+      if (["if", "repeat"].includes(step.type))
+        collectIFProtocols(step.steps, insideIF || step.type === "if");
+      else if (insideIF && step.type === "protocol")
+        conditionalProtocolTypes.add(step.protocol.definition.type);
+    }
+  };
+  // The frozen graph's capability validation is authoritative: do not repeat
+  // its transport allowlist here or broaden unrelated sibling transport rules.
+  collectIFProtocols(snapshot.steps);
+  if (conditionalProtocolTypes.size && typeof executeProtocol !== "function")
     throw Error("此执行入口未授权protocol调用");
   const untilEnabled = hasRepeatUntil(snapshot.steps);
   if (conditional || runtimeRowsEnabled)
@@ -1708,9 +1710,8 @@ export async function runPlan(
     if (
       (untilEnabled ||
         runtimeRowsEnabled ||
-        (conditionalTCP &&
-          step.type === "protocol" &&
-          step.protocol.definition.type === "tcp")) &&
+        (step.type === "protocol" &&
+          conditionalProtocolTypes.has(step.protocol.definition.type))) &&
       record.scopeCommit?.outcome === "unknown"
     ) {
       scopeCommitStopped = true;

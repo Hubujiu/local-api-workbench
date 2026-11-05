@@ -38,7 +38,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
-- IF descendants support HTTP and TCP leaves and IF/fixed-repeat groups.
+- IF descendants support HTTP, TCP and WebSocket leaves and IF/fixed-repeat groups.
   TCP uses the existing canonical protocol wrapper, frozen definitions, bounded
   scripts, extraction and result evidence. WebSocket, SSE, gRPC and Socket.IO
   remain unsupported inside IF. Repeat-until and runtime-row descendants remain
@@ -240,3 +240,31 @@ unchanged; native projections and staged load do not gain TCP support.
 MCP HTTP/stdio clients and the real CLI to verify execution and persistence. Its
 oversized evidence check explicitly uses an injected executor, not a claim of
 transport-limit acceptance.
+
+
+## Canonical IF WebSocket extension
+
+Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
+matrix intersects every enclosing control policy: fixed repeats retain their
+existing transports, while repeat-until and runtime-row subtrees remain HTTP-only
+even beneath false or disabled IF nodes. No native automation format is inferred;
+staged load and native projections retain their existing rejection boundaries.
+
+Saved protocol references are provisional until snapshot resolution; frozen
+snapshots are checked again against the IF capability set. All definitions,
+including disabled nodes, retain static payload, script and structure validation.
+Potential active leaves under a false IF still require the protocol executor and
+any required per-run handshake credentials before an earlier HTTP request or
+script may run. Credentials are neither persisted nor inherited by later runs.
+
+WebSocket uses the existing bounded wire executor, extraction, cancellation and
+scope-commit paths. A false IF opens no connection. Extraction can feed later
+HTTP leaves, with existing atomic scope behavior. Uncertain scope commits retain
+observed transport evidence and stop further work with retry unsafe; they must
+not cause automatic replay. No new reconnect or retry behavior is introduced.
+
+`plan-if-websocket-model.test.mjs` covers capability intersections, frozen
+references and false/disabled graph validation. The companion workflow tests use
+real loopback WebSocket and HTTP peers across owner, official MCP and CLI paths,
+with persistence, cancellation and uncertainty checks. Synthetic executor tests
+remain explicitly identified where used to exercise evidence size boundaries.
