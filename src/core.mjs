@@ -2642,6 +2642,9 @@ export function prepareLiteralHTTPExport(
   const r = normalizeRequest(
     postmanRawExportDefinition(sdkCurlDefinition(input)),
   );
+  // Match ordinary JSON execution without parsing or rewriting literal text.
+  // This normalized export copy must not change the saved request definition.
+  if (r.bodyType === "json" && r.body === "") r.body = "{}";
   if (r.auth.type === "asap")
     throw Error(
       "ASAP需要逐次签名，请使用原始请求/项目导出，不生成缺失认证的cURL。",
