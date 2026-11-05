@@ -12,6 +12,7 @@ import {
   nativeAssertionsInstallerSource,
 } from "../src/native-response-assertions.mjs";
 import { readResponseHeaderEvidence } from "../src/response-header-evidence.mjs";
+import { withWorkerPhaseDiagnostics } from "./helpers/worker-phase-diagnostics.mjs";
 const data = (path, compareValue, compareType = "eq") => ({
   type: "responseHeader",
   expression: { path, compareType, compareValue },
@@ -322,21 +323,37 @@ test("native Header assertion rejects absent/cloned/serialized proof and user-ad
 
 test("native Header assertion rejects current accessors, nonstrings, malformed Unicode and overlarge UTF8 values", async (t) => {
   const response = await fixture(t);
-  for (const code of [
-    "response.headers['x-token']=undefined;",
-    "response.headers['x-token']=null;",
-    "response.headers['x-token']=1;",
-    "response.headers['x-token']=['only'];",
-    "response.headers['x-token']={toString(){throw Error('coercion');}};",
-    "Object.defineProperty(response.headers,'x-token',{get(){throw Error('getter invoked');}});Object.prototype.value='forged';",
-    "response.headers['x-token']='x'.repeat(65537);",
-    "response.headers['x-token']='雪'.repeat(21846);",
-    "response.headers['x-token']='\\ud800';",
-    "response.headers['x-token']='\\udc00';",
+  for (const [label, code] of [
+    ["header-current-undefined", "response.headers['x-token']=undefined;"],
+    ["header-current-null", "response.headers['x-token']=null;"],
+    ["header-current-number", "response.headers['x-token']=1;"],
+    ["header-current-array", "response.headers['x-token']=['only'];"],
+    [
+      "header-current-object",
+      "response.headers['x-token']={toString(){throw Error('coercion');}};",
+    ],
+    [
+      "header-current-accessor",
+      "Object.defineProperty(response.headers,'x-token',{get(){throw Error('getter invoked');}});Object.prototype.value='forged';",
+    ],
+    [
+      "header-overlarge-ascii",
+      "response.headers['x-token']='x'.repeat(65537);",
+    ],
+    [
+      "header-overlarge-utf8",
+      "response.headers['x-token']='雪'.repeat(21846);",
+    ],
+    ["header-lone-high-surrogate", "response.headers['x-token']='\\ud800';"],
+    ["header-lone-low-surrogate", "response.headers['x-token']='\\udc00';"],
   ])
-    await assert.rejects(
-      phase(response, [script(code), assertion("x-token", "ignored")]),
-      /字符串|64KiB|Unicode/,
+    await withWorkerPhaseDiagnostics(label, (capture) =>
+      assert.rejects(
+        phase(response, [script(code), assertion("x-token", "ignored")]).catch(
+          capture,
+        ),
+        /字符串|64KiB|Unicode/,
+      ),
     );
   const result = await phase(response, [
     script("response.headers['x-token']='雪'.repeat(21845)+'x';"),

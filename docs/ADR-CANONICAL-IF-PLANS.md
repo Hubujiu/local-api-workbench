@@ -38,9 +38,9 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
-- IF descendants support HTTP, TCP and WebSocket leaves and IF/fixed-repeat groups.
-  TCP and WebSocket use the existing canonical protocol wrapper, frozen
-  definitions, bounded scripts, extraction and result evidence. SSE, gRPC and
+- IF descendants support HTTP, TCP, WebSocket and SSE leaves and IF/fixed-repeat groups.
+  TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
+  definitions, bounded scripts, extraction and result evidence. gRPC and
   Socket.IO remain unsupported inside IF. Repeat-until and runtime-row descendants remain
   HTTP-only, including nested IF/fixed repeats and disabled definitions.
   Existing protocol siblings and existing protocol repeat groups are unchanged.
@@ -217,7 +217,7 @@ CI; the local dependency-load failure is retained rather than skipped.
 
 No native format is inferred and no original application is executed. Protocol
 references are admitted provisionally, resolved at snapshot creation, and checked
-again against the IF protocol capability set (TCP and WebSocket) before the
+again against the IF protocol capability set (TCP, WebSocket and SSE) before the
 frozen plan is accepted. Saved snapshots
 survive live edits/deletion, project backup/restore and restart.
 
@@ -269,3 +269,23 @@ references and false/disabled graph validation. The companion workflow tests use
 real loopback WebSocket and HTTP peers across owner, official MCP and CLI paths,
 with persistence, cancellation and uncertainty checks. Synthetic executor tests
 remain explicitly identified where used to exercise evidence size boundaries.
+
+## Canonical IF SSE extension
+
+The conditional capability matrix also admits SSE; execution still uses the
+existing bounded captureSSE executor and dynamic conditional protocol set.
+This is canonical support only, not a claim about original application automation
+SSE formats. Repeat-until, runtime rows, staged load and native projections keep
+their existing restrictions.
+
+EOF completes a capture. maxEvents and duration produce partial results, with
+extraction only when that status is explicitly expected. Cancellation retains the
+executed step and its cancelled outcome, but the existing error path does not
+return buffered events. No automatic reconnection or retry is added. False IF
+opens no stream, while potential active SSE leaves still need executor authority
+and required handshake credentials before preceding HTTP runs. Unknown scope
+commits stop further work without replay.
+
+The SSE model and loopback workflow tests cover these contracts, nested fixed
+repeat occurrences, owner/CLI/official MCP HTTP and stdio execution, frozen
+snapshot backup/restore/restart, and scope-commit uncertainty.

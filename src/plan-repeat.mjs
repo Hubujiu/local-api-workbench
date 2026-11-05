@@ -21,8 +21,8 @@ const controlCapabilities = {
   },
   conditional: {
     leaves: ["http", "protocol"],
-    protocols: ["tcp", "websocket"],
-    error: "条件组仅支持HTTP或TCP/WebSocket叶子",
+    protocols: ["tcp", "websocket", "sse"],
+    error: "条件组仅支持HTTP或TCP/WebSocket/SSE叶子",
   },
   fixedWire: {
     leaves: ["protocol"],
