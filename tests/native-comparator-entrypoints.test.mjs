@@ -990,7 +990,10 @@ for (const [version, transport] of [
         true,
       );
       const again = await cli(f.root, restored.value.id, plan.id);
-      assert.equal(again.code, 0, again.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(again.code, 0, again.stderr),
+        again.stdout,
+      );
       successfulRun(JSON.parse(again.stdout), names);
       assert.deepEqual(f.wire, [
         ...expectedWire,
