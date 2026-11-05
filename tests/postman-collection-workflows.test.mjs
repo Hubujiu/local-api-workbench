@@ -224,7 +224,7 @@ for (const mode of ["http", "stdio"])
       await owner(
         `/api/projects/${p.id}/load`,
         "POST",
-        { request: a, count: 1 },
+        { request: { ...a, postmanCollectionId: "missing" }, count: 1 },
         400,
       );
       assert.deepEqual(await bytes(app.store.directory(p.id)), before);
