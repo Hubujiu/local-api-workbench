@@ -314,3 +314,28 @@ gRPC outside IF retains its prior behavior. Repeat-until and runtime-row ancesto
 restrictions remain HTTP-only; staged load and native projections stay restricted.
 
 Targeted tests: plan-if-grpc-model.test.mjs and plan-if-grpc-workflow.test.mjs.
+
+## Canonical IF Socket.IO extension
+
+Canonical IF admits Socket.IO as a separate leaf and executor, not a WebSocket
+wire alias. Existing v2/v4 connections, namespaces and bounded emit/wait/ack
+commands retain their contracts. No Socket.IO scripts, reconnect or replay are
+introduced. Active IF descendants require an executeSocketIO function and
+required per-run credentials before preceding HTTP or scripts, including false
+conditions. Disabled descendants still validate definitions but do not require
+an executor or credentials.
+
+Unknown scope commits, whether reported as ProjectCommitUncertain or its error
+code, stop IF Socket.IO execution even under continue, preserving completed ACK
+evidence without publishing unconfirmed extraction. Non-IF Socket.IO siblings
+retain their historical continuation behavior. Repeat-until, runtime-row,
+staged-load and native restrictions are unchanged; this does not claim an
+original-application automation save format.
+
+The IF-specific model and workflow tests cover capability intersections, real
+v2/v4 websocket/polling/auto, private namespace, binary and multiple ACK arguments,
+false and disabled conditions, independent executor and credential preflight,
+unknown scopes, cancellation, scope and journal uncertainty, and no replay.
+Owner, CLI and official MCP HTTP/stdio runs verify frozen definitions across
+backup, restore and restart; per-run credentials do not enter saved project data.
+Existing repeat tests are retained as regression coverage, not IF acceptance.
