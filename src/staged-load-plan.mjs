@@ -14,6 +14,11 @@ import {
   resolveServiceRequest,
 } from "./environments.mjs";
 import { projectScopes } from "./variable-scopes.mjs";
+import {
+  collectionIdentifier,
+  collectionScope,
+  validatePostmanCollections,
+} from "./postman-collection-scopes.mjs";
 import { memoryCookieSession } from "./cookie-jar.mjs";
 import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { normalizeRedirect } from "./http-redirect.mjs";
@@ -218,11 +223,8 @@ function admitPlan(plan, schedule) {
   if (worstCaseSteps * schedule.maxIterations > 100)
     throw Error("最大展开步骤数乘迭代上限不得超过 100");
   for (const { request } of leaves) {
-    if (
-      request.postmanCollectionId !== undefined ||
-      normalizeRedirect(request.redirect)
-    )
-      throw Error("阶段压测暂不支持 collection 作用域或重定向策略");
+    if (normalizeRedirect(request.redirect))
+      throw Error("阶段压测暂不支持重定向策略");
   }
   denyNativeWrites(leaves.map((step) => step.request));
   // Runtime rows must admit all potential work before their producer runs.
@@ -237,9 +239,31 @@ function admitPlan(plan, schedule) {
   return snapshot;
 }
 
+// Bindings on disabled leaves still belong to the admitted graph. Prepared
+// objects confer no authority: check again against the execution project before
+// reading environment/debug scopes, creating timers or running any iteration.
+function admitCollections(project, snapshot) {
+  const ids = new Set();
+  for (const step of planLeaves(snapshot.steps)) {
+    const id = step.request?.postmanCollectionId;
+    if (id !== undefined) ids.add(collectionIdentifier(id));
+  }
+  if (ids.size) {
+    validatePostmanCollections(project);
+    const available = new Set(
+      project.postmanCollections?.items.map((item) => item.id),
+    );
+    for (const id of ids)
+      if (!available.has(id))
+        throw Error("Postman collection 引用不存在于当前项目");
+  }
+  return [...ids];
+}
+
 export function prepareStagedLoad(project, plan, input, options = {}) {
   const schedule = buildLoadSchedule(input);
   const snapshot = admitPlan(plan, schedule);
+  admitCollections(project, snapshot);
   const selected = selectedEnvironment(
     project,
     options.environmentId || snapshot.environmentId,
@@ -250,6 +274,11 @@ export function prepareStagedLoad(project, plan, input, options = {}) {
 export async function runStagedLoad(project, prepared, options = {}) {
   const schedule = admitSchedule(prepared.schedule);
   const snapshot = admitPlan(prepared.snapshot, schedule);
+  // Capture only referenced collections once at run start. runPlan deep-copies
+  // these into a private session for each iteration; no persistence hook exists.
+  const collectionScopes = admitCollections(project, snapshot).map((id) =>
+    collectionScope(project, id),
+  );
   const runtimeRowsEnabled = hasRuntimeRows(snapshot.steps, {
     activeOnly: true,
   });
@@ -399,6 +428,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
                 iterationData: {},
               },
               cookieSession: memoryCookieSession(options.cookieState),
+              collectionScopes,
               variableScopes: structuredClone(scopes),
               prepareRequest: (definition) =>
                 resolveServiceRequest(project, definition, selected.id),
