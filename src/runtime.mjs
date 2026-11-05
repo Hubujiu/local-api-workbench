@@ -1,3 +1,4 @@
+import { isMessagePackResponseType } from "./response-media.mjs";
 import {
   applyPostmanRawMedia,
   validatePostmanRawBodyRequest,
@@ -1455,7 +1456,7 @@ async function executeRequestWithinDeadline(
             let displayBody = raw.toString("utf8"),
               rawBodyBase64,
               codecError;
-            if (/msgpack/i.test(res.headers["content-type"] || "")) {
+            if (isMessagePackResponseType(res.headers["content-type"])) {
               rawBodyBase64 = raw.toString("base64");
               try {
                 const { decode } = await import("@msgpack/msgpack");
