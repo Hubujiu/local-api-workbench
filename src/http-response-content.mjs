@@ -14,6 +14,8 @@ export function responseContentDecoder(method, status, encoding) {
   // 205 is not a no-message-body framing exception. Do not hide malformed
   // encoded content there or on ordinary zero-length responses. CONNECT is
   // rejected by request normalization; this helper does not add tunnel support.
+  // RFC 9110 section 8.4: content-coding names are case-insensitive.
+  encoding = encoding?.toLowerCase();
   return encoding === "gzip"
     ? createGunzip()
     : encoding === "deflate"
