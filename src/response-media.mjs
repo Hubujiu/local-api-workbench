@@ -35,3 +35,12 @@ export function selectJsonResponseMedia(content, predicate = () => true) {
     ) || entries[0]
   );
 }
+
+// Select the representation format from the media subtype, never parameters
+// (for example, text/plain; note="msgpack" is still plain text).
+export function isMessagePackResponseType(type) {
+  if (!isResponseMediaType(type)) return false;
+  return /^[!#$%&'*+.^_`|~0-9a-z-]+\/(?:msgpack|vnd\.msgpack|x-msgpack|[!#$%&'*+.^_`|~0-9a-z-]+\+msgpack)$/i.test(
+    type.split(";")[0].trim(),
+  );
+}

@@ -1,3 +1,4 @@
+import { isMessagePackResponseType } from "./response-media.mjs";
 import { responseContentDecoder } from "./http-response-content.mjs";
 import { prepareConnection } from "./connection.mjs";
 import {
@@ -125,7 +126,7 @@ export async function executePreparedRedirect(
       latest.cookieError = "Cookie保存失败";
     }
     if (!decision) {
-      if (/msgpack/i.test(latest.headers["content-type"] || "")) {
+      if (isMessagePackResponseType(latest.headers["content-type"])) {
         latest.rawBodyBase64 = latest._redirectRaw.toString("base64");
         try {
           const { decode } = await import("@msgpack/msgpack");
