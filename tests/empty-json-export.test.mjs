@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +14,12 @@ import {
 } from "../src/core.mjs";
 import { generateRequestCode } from "../src/request-code-generation.mjs";
 import { executeRequest } from "../src/runtime.mjs";
+import {
+  runFixtureProcess,
+  buildGoFixtures,
+  createWireObservations,
+  fixtureToolAvailable,
+} from "./helpers/codegen-fixture-process.mjs";
 
 const targets = [
   ["node", "fetch"],
@@ -81,34 +86,26 @@ test("empty JSON fallback belongs only to the ephemeral literal export copy", ()
   }
 });
 
-function run(binary, args, env = process.env) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, {
-      env,
-      stdio: ["ignore", "ignore", "pipe"],
-    });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => (stderr += chunk));
-    const timer = setTimeout(() => child.kill("SIGKILL"), 60000);
-    child.once("error", reject);
-    child.once("close", (status) => {
-      clearTimeout(timer);
-      if (status === 0) resolve();
-      else reject(Error(`${binary}: ${status}: ${stderr}`));
-    });
-  });
-}
-
 test(
   "ordinary JSON and empty-body controls match runtime bytes on loopback",
   { timeout: 180000 },
   async (t) => {
-    const seen = [];
+    const observations = createWireObservations();
+    const active = new Set();
+    const runOwned = (...args) => {
+      const promise = runFixtureProcess(...args);
+      active.add(promise);
+      promise.then(
+        () => active.delete(promise),
+        () => active.delete(promise),
+      );
+      return promise;
+    };
     const server = createServer((req, res) => {
       const chunks = [];
       req.on("data", (chunk) => chunks.push(chunk));
       req.on("end", () => {
-        seen.push({
+        observations.record(req.url, {
           method: req.method,
           body: Buffer.concat(chunks).toString("hex"),
           type: req.headers["content-type"],
@@ -120,6 +117,7 @@ test(
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const dir = await mkdtemp(join(tmpdir(), "empty-json-export-"));
     t.after(async () => {
+      await Promise.allSettled([...active]);
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       await rm(dir, { recursive: true, force: true });
@@ -151,13 +149,50 @@ test(
       { method: "POST", bodyType: "none", body: "" },
       { method: "POST", bodyType: "urlencoded", body: "", form: [] },
     ];
-    for (const fixture of fixtures) {
-      const request = { ...fixture, url };
+    // Version probes are bounded and timeout/error is failure, never a skip.
+    const available = {
+      go: fixtureToolAvailable("go", ["version"], {
+        fixture: "tool-go",
+        pattern: /^go version go/,
+      }),
+      python: fixtureToolAvailable("python3", ["--version"], {
+        fixture: "tool-python",
+        pattern: /^Python 3/,
+      }),
+      curl: fixtureToolAvailable("curl", ["--version"], {
+        fixture: "tool-curl",
+        pattern: /^curl /,
+      }),
+      shell: fixtureToolAvailable("/bin/sh", ["-c", "exit 0"], {
+        fixture: "tool-shell",
+      }),
+    };
+    const goAvailable = available.go;
+    const goSources = fixtures.map((fixture, index) => {
+      const request = { ...fixture, url: `${url}go/fixture-${index}` };
       const before = structuredClone(request);
+      const code = generateRequestCode(request, "go", "native").code;
+      assert.deepEqual(request, before);
+      return code;
+    });
+    assert.equal(observations.count, 0, "generation must not send requests");
+    const binaries = goAvailable
+      ? await buildGoFixtures(dir, goSources, {
+          signal: t.signal,
+          run: runOwned,
+        })
+      : [];
+    assert.equal(
+      observations.count,
+      0,
+      "build must not execute generated programs",
+    );
+    for (const [index, fixture] of fixtures.entries()) {
+      const runtimePath = `/runtime/fixture-${index}`;
       const expectedText =
         fixture.bodyType === "json" ? fixture.body || "{}" : "";
-      await executeRequest(request);
-      const expected = seen.pop();
+      await executeRequest({ ...fixture, url: url + runtimePath.slice(1) });
+      const expected = observations.takeOnly(runtimePath);
       assert.equal(expected.body, Buffer.from(expectedText).toString("hex"));
       assert.equal(expected.length, String(Buffer.byteLength(expectedText)));
       for (const target of ["curl", "node", "python", "go"]) {
@@ -170,50 +205,59 @@ test(
               python: "python3",
               go: "go",
             }[target];
-            if (
-              target !== "node" &&
-              spawnSync(binary, [target === "go" ? "version" : "--version"])
-                .status !== 0
-            )
-              return st.skip(`${target} unavailable`);
-            if (
-              target === "curl" &&
-              spawnSync("/bin/sh", ["-c", "exit 0"]).status !== 0
-            )
+            if (target !== "node" && !available[target])
+              return st.skip(
+                `${target} unavailable (version probe did not identify the tool)`,
+              );
+            if (target === "curl" && !available.shell)
               return st.skip(
                 "POSIX /bin/sh unavailable; cURL wire execution requires it",
               );
-            const count = seen.length;
-            let code;
-            if (target === "curl") code = toCurl(request);
-            else
-              code = generateRequestCode(
-                request,
-                target,
-                { node: "fetch", python: "python3", go: "native" }[target],
-              ).code;
+            const path = `/${target}/fixture-${index}`;
+            const request = { ...fixture, url: url + path.slice(1) };
+            const before = structuredClone(request);
+            const count = observations.count;
+            const code =
+              target === "curl"
+                ? toCurl(request)
+                : generateRequestCode(
+                    request,
+                    target,
+                    { node: "fetch", python: "python3", go: "native" }[target],
+                  ).code;
             assert.equal(
-              seen.length,
+              observations.count,
               count,
               "generation must not send requests",
             );
             assert.deepEqual(request, before);
-            // Only code generated from these fixed local fixtures is executed.
-            if (target === "curl") await run("/bin/sh", ["-c", code]);
+            observations.assertUnseen(path);
+            const options = {
+              phase: "execute",
+              fixture: `fixture-${index}-${target}`,
+              timeoutMs: 60000,
+              signal: st.signal,
+            };
+            if (target === "curl")
+              await runOwned("/bin/sh", ["-c", code], options);
             else if (target === "node")
-              await run(binary, ["--input-type=module", "-e", `await ${code}`]);
-            else if (target === "python") await run(binary, ["-c", code]);
+              await runOwned(
+                binary,
+                ["--input-type=module", "-e", `await ${code}`],
+                options,
+              );
+            else if (target === "python")
+              await runOwned(binary, ["-c", code], options);
             else {
-              const source = join(dir, "main.go");
-              await writeFile(source, code);
-              await run(binary, ["run", source], {
-                ...process.env,
-                GO111MODULE: "off",
-                GOPROXY: "off",
-              });
+              assert.equal(
+                code,
+                goSources[index],
+                "execute the binary built from this exact generated source",
+              );
+              await runOwned(binaries[index], [], options);
             }
-            const actual = seen.pop();
-            // A body-less cURL POST omits Content-Length; other clients send zero.
+            const actual = observations.takeOnly(path);
+            // Body-less cURL POST omits Content-Length; other clients send zero.
             assert.deepEqual(
               actual,
               fixture.bodyType === "none" && target === "curl"
@@ -224,16 +268,17 @@ test(
         );
       }
     }
-    const count = seen.length;
+    const count = observations.count;
     await assert.rejects(
       executeRequest({ ...base, url, body: " \r\n\t" }),
       SyntaxError,
     );
     assert.equal(
-      seen.length,
+      observations.count,
       count,
       "whitespace JSON remains invalid at runtime",
     );
+    observations.assertSingleArrivals();
   },
 );
 
