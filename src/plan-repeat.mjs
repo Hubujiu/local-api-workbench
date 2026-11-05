@@ -6,6 +6,40 @@ import {
 } from "./plan-condition.mjs";
 import { normalizeExecutionContext } from "./script-context.mjs";
 // Canonical definition traversal only. No transport, interpolation, or execution.
+// Control capabilities are intersected, never inherited as a wider child policy.
+// Inspect only admitted plain data (dataOnly runs before graph traversal).
+const controlCapabilities = {
+  runtimeRows: {
+    leaves: ["http"],
+    protocols: [],
+    error: "运行时数据行循环首版仅支持HTTP叶子",
+  },
+  until: {
+    leaves: ["http"],
+    protocols: [],
+    error: "条件提前结束循环首版仅支持HTTP叶子",
+  },
+  conditional: {
+    leaves: ["http", "protocol"],
+    protocols: ["tcp", "websocket"],
+    error: "条件组仅支持HTTP或TCP/WebSocket叶子",
+  },
+  fixedWire: {
+    leaves: ["protocol"],
+    protocols: ["tcp", "websocket", "sse"],
+    error: "循环组协议叶子仅支持TCP、WebSocket或SSE",
+  },
+};
+function requireControlCapability(step, context, requireIds) {
+  const capability = controlCapabilities[context];
+  const type = step.type ?? "http";
+  const supported =
+    capability.leaves.includes(type) &&
+    (type !== "protocol" ||
+      capability.protocols.includes(step.protocol?.definition?.type) ||
+      (!requireIds && step.protocol?.definitionId !== undefined));
+  if (!supported) throw Error(capability.error);
+}
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 function object(value, label, keys) {
   if (
@@ -400,10 +434,7 @@ export function validateRepeatGraph(
           throw Error("循环协议引用须在冻结前解析且不能混合定义");
       } else {
         object(step.protocol.definition, "协议定义");
-        if (
-          !["tcp", "websocket", "sse"].includes(step.protocol.definition.type)
-        )
-          throw Error("循环组协议叶子仅支持TCP、WebSocket或SSE");
+        requireControlCapability(step, "fixedWire", requireIds);
       }
       return;
     }
@@ -569,28 +600,13 @@ export function validateRepeatGraph(
           until || Object.hasOwn(step, "untilCondition"),
         );
     } else {
-      if (
-        rowContext === RUNTIME_ROWS_CONTEXT &&
-        step.type !== undefined &&
-        step.type !== "http"
-      )
-        throw Error("运行时数据行循环首版仅支持HTTP叶子");
-      // IF and repeat-until have separate transport contracts. Carry the
-      // until restriction through nested IF/repeat nodes; a false/disabled branch
-      // must not hide an unsupported leaf. References are checked again frozen.
-      if (until && step.type !== undefined && step.type !== "http")
-        throw Error("条件提前结束循环首版仅支持HTTP叶子");
-      if (
-        conditional &&
-        step.type !== undefined &&
-        step.type !== "http" &&
-        !(
-          step.type === "protocol" &&
-          (step.protocol?.definition?.type === "tcp" ||
-            (!requireIds && step.protocol?.definitionId !== undefined))
-        )
-      )
-        throw Error("条件组仅支持HTTP或TCP叶子");
+      // Every ancestor constrains the leaf, including false/disabled branches.
+      // References remain provisional until resolved and rechecked when frozen.
+      if (rowContext === RUNTIME_ROWS_CONTEXT)
+        requireControlCapability(step, "runtimeRows", requireIds);
+      if (until) requireControlCapability(step, "until", requireIds);
+      if (conditional)
+        requireControlCapability(step, "conditional", requireIds);
       leaf(step, depth > 0);
       expanded += multiplier;
       bytes = Math.min(
