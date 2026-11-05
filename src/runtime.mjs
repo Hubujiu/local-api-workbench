@@ -133,7 +133,7 @@ import {
 } from "./http-finalization.mjs";
 import { prepareConnection } from "./connection.mjs";
 import { digestAuthorization, digestChallengePolicy } from "./digest.mjs";
-import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
+import { responseContentDecoder } from "./http-response-content.mjs";
 import { performance } from "node:perf_hooks";
 import {
   mkdir,
@@ -1430,15 +1430,11 @@ async function executeRequestWithinDeadline(
         (res) => {
           const chunks = [];
           let size = 0;
-          const encoding = res.headers["content-encoding"];
-          const decoder =
-            encoding === "gzip"
-              ? createGunzip()
-              : encoding === "deflate"
-                ? createInflate()
-                : encoding === "br"
-                  ? createBrotliDecompress()
-                  : null;
+          const decoder = responseContentDecoder(
+            r.method,
+            res.statusCode,
+            res.headers["content-encoding"],
+          );
           const stream = decoder ? res.pipe(decoder) : res;
           if (decoder) res.on("error", (e) => decoder.destroy(e));
           stream.on("data", (c) => {
