@@ -19,6 +19,15 @@ const own = (value, key) =>
     ? value[key]
     : undefined;
 
+// Exact persisted error strings only; this is an observation, not a root-cause
+// claim: user scripts can throw the same text. Never use this label for security
+// or result decisions, coerce values, inspect objects or infer from phase timings.
+export function cliReportedErrorKind(error) {
+  if (error === "脚本执行超时") return "script-timeout";
+  if (error === "interrupted") return "interrupted";
+  return "other";
+}
+
 // Input is JSON text, never a runtime object. Reuse the worker whitelist after
 // translating persisted flattened diagnostics back to its numeric field names.
 function stepMetadata(step, index) {
@@ -26,6 +35,7 @@ function stepMetadata(step, index) {
   result.stepIndex = index;
   const status = own(step, "status");
   result.status = statuses.has(status) ? status : "unknown";
+  result.reportedErrorKind = cliReportedErrorKind(own(step, "error"));
   const source = own(step, "scriptDiagnostics");
   const raw = object();
   raw.scriptStage = own(step, "scriptStage");
