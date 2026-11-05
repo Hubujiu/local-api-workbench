@@ -13,6 +13,8 @@ The generated payload is bytes, not a Python Unicode string or a parsed JSON
 object. JSON whitespace, duplicate keys and large numbers remain untouched.
 Raw, JSON, XML and already serialized URL-encoded text use the same byte path.
 Empty explicit text uses `b""`; absent bodies still omit the body argument.
+The later [empty JSON fallback](ADR-EMPTY-JSON-EXPORT.md) prepares `{}` for
+exactly empty ordinary JSON definitions before this byte renderer.
 
 The renderer retains the previous connection scheme/host/port, pathname and
 query behavior. Fragments are not transmitted. Existing URL, method, header,
