@@ -64,7 +64,7 @@ export function intrinsicGuard() {
   const visit = (object) => {
     if (
       object === null ||
-      !["object", "function"].includes(typeof object) ||
+      (typeof object !== "object" && typeof object !== "function") ||
       visited.has(object)
     )
       return;
@@ -76,10 +76,10 @@ export function intrinsicGuard() {
     for (let at = 0; at < own.length; at++) {
       const property = descriptor(object, own[at]);
       entries.push(property);
-      for (const field of ["value", "get", "set"]) {
-        const part = descriptor(property, field);
-        if (part) visit(part.value);
-      }
+      // Native descriptor records have own data fields. Test ownership before
+      // reading so inherited properties never participate in the snapshot.
+      for (const field of ["value", "get", "set"])
+        if (hasOwn(property, field)) visit(property[field]);
     }
   };
   visit(rootParent);
@@ -93,10 +93,10 @@ export function intrinsicGuard() {
     bindings.push(property);
     // Do not traverse globalThis's arbitrary application state.
     if (property && name !== "globalThis") {
-      for (const field of ["value", "get", "set"]) {
-        const part = descriptor(property, field);
-        if (part) visit(part.value);
-      }
+      // Native descriptor records have own data fields. Test ownership before
+      // reading so inherited properties never participate in the snapshot.
+      for (const field of ["value", "get", "set"])
+        if (hasOwn(property, field)) visit(property[field]);
     }
   }
   const equal = (current, initial) => {
