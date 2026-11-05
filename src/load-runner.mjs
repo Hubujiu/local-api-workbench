@@ -12,14 +12,16 @@ import {
   environmentVariables,
 } from "./environments.mjs";
 import { projectScopes } from "./variable-scopes.mjs";
+import {
+  collectionScope,
+  validatePostmanCollections,
+} from "./postman-collection-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
 
 // Elapsed execution budgets must not follow civil-clock adjustments.
 const monotonicNow = performance.now.bind(performance);
 
 export async function runLoad(project, request, options = {}) {
-  if (request?.postmanCollectionId !== undefined)
-    throw Error("压测暂不支持Postman collection作用域，请使用普通请求或计划");
   if (normalizeRedirect(request.redirect))
     throw Error("压测暂不支持 HTTP 重定向策略，请使用普通执行");
   const timing = loadTiming(options);
@@ -34,9 +36,16 @@ export async function runLoad(project, request, options = {}) {
   );
   const selected = selectedEnvironment(project, options.environmentId);
   const environmentId = selected.id;
+  const collectionId = request?.postmanCollectionId;
+  if (collectionId !== undefined) validatePostmanCollections(project);
+  // Admission happens before any script or network effect. Only the bound layer
+  // is provided; runPlan creates a fresh, private collection session each time.
+  const collectionScopes =
+    collectionId === undefined ? [] : [collectionScope(project, collectionId)];
   const variables =
-    options.variables || environmentVariables(project, environmentId);
-  const scopes = projectScopes(project, environmentId, variables);
+    options.variables ||
+    environmentVariables(project, environmentId, collectionId);
+  const scopes = projectScopes(project, environmentId, variables, collectionId);
   const plan = snapshotPlan({
     name: "压测请求",
     functions: project.settings?.functions || [],
@@ -102,6 +111,7 @@ export async function runLoad(project, request, options = {}) {
                     : {},
                 },
                 cookieSession: memoryCookieSession(options.cookieState),
+                collectionScopes,
                 variableScopes: {
                   ...scopes,
                   runtime: {

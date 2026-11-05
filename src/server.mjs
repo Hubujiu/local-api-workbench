@@ -2507,14 +2507,11 @@ export async function createApp({
           }
           if (action === "load" && req.method === "POST") {
             const b = await body(req);
-            if (b.request?.postmanCollectionId !== undefined)
-              throw Error(
-                "压测暂不支持Postman collection作用域，请使用普通请求或计划",
-              );
             const context = debugEnvironment(
               p,
               b.environmentId,
               debugEnvironments,
+              b.request?.postmanCollectionId,
             );
             const { controller, runId } = claimRun(b.runId);
             const disconnected = () => {

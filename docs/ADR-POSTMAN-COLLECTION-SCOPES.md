@@ -242,3 +242,30 @@ retains its real typed `recordId` contract and the new repeat case also checks
 `attemptedRecordId`; no production field is added to satisfy a test. Both that
 feature failure and the older root script-final-body timeout remain retained.
 This test-only composition is not a repair or causal explanation of the timeout.
+
+## Ordinary HTTP load isolation (2026-11-05)
+
+Ordinary request load now takes the isolated-copy option of this contract instead
+of rejecting all bound requests. This supersedes the historical load-refusal
+checkpoints above, not their other unsupported boundaries. The owner `/load`
+entry selects the existing collection-aware debug context. Direct `runLoad` uses
+the selected environment and bound collection baseline; debug/CSV overrides retain
+their existing precedence. Registry and bound-identity validation occurs before
+scripts or HTTP. Only the requested collection is passed to `runPlan`, which
+creates a private deep-copied session for every iteration, including iterations
+reusing a concurrency worker. No Store scope-commit callback is supplied. Globals,
+environment, collection variables/types, cookies and debug overrides are never
+published by load; pre-stage changes remain visible to that iteration's request
+and post-stage only.
+
+The existing request/concurrency caps, duration deadline, cancellation signals,
+script engine and budgets, and redirect/native-write guards are unchanged. This
+is ordinary HTTP request load only, not a new staged-plan collection capability,
+proprietary format mapping, export feature or persistence mode.
+
+Regression fixtures exercise real overlapping HTTP requests and sequential reuse,
+all seven collection APIs, typed/falsy/nested values, CSV/environment/debug scope
+precedence, separate collections, pre/post failures, identity forgery, missing
+bindings, cancellation of main and script-child HTTP, duration, and unchanged
+saved project and debug context. Local fixture results are recorded separately;
+exact published-source CI remains required before acceptance.
