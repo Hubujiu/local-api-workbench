@@ -65,14 +65,31 @@ test("canonical IF accepts HTTP and TCP through nested IF and fixed repeats with
   }
 });
 
-test("canonical IF rejects unsupported protocols and non-HTTP leaf through fixed repeats", () => {
+test("canonical IF rejects unsupported wire aliases and leaf types through fixed repeats", () => {
   for (const nest of nestings) {
-    for (const type of ["sse", "grpc", "socketio", "unknown"]) {
+    for (const type of ["grpc", "socketio", "unknown"]) {
       const child = tcp();
       child.protocol.definition.type = type;
       assert.throws(() => check([nest(child)]), /条件组仅支持HTTP或TCP/);
     }
-    for (const type of ["grpc", "socketio", "database", "unknown"]) {
+    // Socket.IO is now admitted only as its independent leaf, never as a
+    // protocol alias. Its wrapper remains strict even under disabled/false IF.
+    assert.equal(
+      check([
+        nest({ id: "socket", type: "socketio", socketio: { definition: {} } }),
+      ]),
+      true,
+    );
+    for (const definition of [null, [], "invalid"]) {
+      assert.throws(
+        () =>
+          check([
+            nest({ id: "socket", type: "socketio", socketio: { definition } }),
+          ]),
+        /Socket.IO定义须为普通对象/,
+      );
+    }
+    for (const type of ["database", "unknown"]) {
       assert.throws(
         () => check([nest({ id: "other", type, [type]: { definition: {} } })]),
         /条件组仅支持HTTP或TCP/,
@@ -97,7 +114,7 @@ test("false and disabled IF graphs still validate leaf types and TCP structure",
       assert.deepEqual(activePlanLeaves(valid), []);
     for (const mutate of [
       (child) => {
-        child.protocol.definition.type = "sse";
+        child.protocol.definition.type = "unknown";
       },
       (child) => {
         child.extra = true;
@@ -117,7 +134,7 @@ test("false and disabled IF graphs still validate leaf types and TCP structure",
   }
 });
 
-test("IF protocol references are provisional and frozen graphs must resolve to TCP or WebSocket", () => {
+test("IF protocol references are provisional and frozen graphs must resolve to TCP, WebSocket or SSE", () => {
   for (const nest of nestings) {
     const child = tcp();
     child.protocol = { definitionId: "saved-protocol" };
@@ -128,10 +145,10 @@ test("IF protocol references are provisional and frozen graphs must resolve to T
         validateRepeatGraph([nest({ ...child, protocol: { definitionId } })]),
       );
     }
-    for (const type of ["tcp", "websocket", "sse"]) {
+    for (const type of ["tcp", "websocket", "sse", "unknown"]) {
       const resolved = tcp();
       resolved.protocol.definition.type = type;
-      if (["tcp", "websocket"].includes(type))
+      if (["tcp", "websocket", "sse"].includes(type))
         assert.equal(check([nest(resolved)]), true);
       else
         assert.throws(() => check([nest(resolved)]), /条件组仅支持HTTP或TCP/);

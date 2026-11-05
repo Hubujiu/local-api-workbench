@@ -38,12 +38,14 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
-- IF descendants support HTTP, TCP and WebSocket leaves and IF/fixed-repeat groups.
-  TCP and WebSocket use the existing canonical protocol wrapper, frozen
-  definitions, bounded scripts, extraction and result evidence. SSE, gRPC and
-  Socket.IO remain unsupported inside IF. Repeat-until and runtime-row descendants remain
-  HTTP-only, including nested IF/fixed repeats and disabled definitions.
-  Existing protocol siblings and existing protocol repeat groups are unchanged.
+- IF descendants support HTTP, gRPC, Socket.IO, TCP, WebSocket and SSE leaves and IF/fixed-repeat groups.
+  TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
+  definitions, bounded scripts, extraction and result evidence. gRPC uses its
+  independent leaf, executor and temporary credentials; Socket.IO likewise uses
+  its independent leaf and executor. Repeat-until and runtime-row descendants
+  remain HTTP-only, including nested IF/fixed repeats and disabled definitions.
+  Protocol execution and repeat admission remain unchanged. Scope-commit
+  uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
 - All definitions, including disabled and false descendants, undergo complete
   static validation before any request. Enabled potential protocol leaves retain
   existing credential preflight; false is not a way to evade admission or grants.
@@ -217,7 +219,7 @@ CI; the local dependency-load failure is retained rather than skipped.
 
 No native format is inferred and no original application is executed. Protocol
 references are admitted provisionally, resolved at snapshot creation, and checked
-again against the IF protocol capability set (TCP and WebSocket) before the
+again against the IF protocol capability set (TCP, WebSocket and SSE) before the
 frozen plan is accepted. Saved snapshots
 survive live edits/deletion, project backup/restore and restart.
 
@@ -269,3 +271,108 @@ references and false/disabled graph validation. The companion workflow tests use
 real loopback WebSocket and HTTP peers across owner, official MCP and CLI paths,
 with persistence, cancellation and uncertainty checks. Synthetic executor tests
 remain explicitly identified where used to exercise evidence size boundaries.
+
+## Canonical IF SSE extension
+
+The conditional capability matrix also admits SSE; execution still uses the
+existing bounded captureSSE executor and dynamic conditional protocol set.
+This is canonical support only, not a claim about original application automation
+SSE formats. Repeat-until, runtime rows, staged load and native projections keep
+their existing restrictions.
+
+EOF completes a capture. maxEvents and duration produce partial results, with
+extraction only when that status is explicitly expected. Cancellation retains the
+executed step and its cancelled outcome, but the existing error path does not
+return buffered events. No automatic reconnection or retry is added. False IF
+opens no stream, while potential active SSE leaves still need executor authority
+and required handshake credentials before preceding HTTP runs. Unknown scope
+commits stop further work without replay.
+
+The SSE model and loopback workflow tests cover these contracts, nested fixed
+repeat occurrences, owner/CLI/official MCP HTTP and stdio execution, frozen
+snapshot backup/restore/restart, and scope-commit uncertainty.
+
+
+## Canonical IF gRPC extension
+
+Canonical IF admits gRPC as a distinct leaf, not a wire protocol name. Nested
+fixed repeats use the existing frozen gRPC definitions, temporary credential
+bindings and executor. Potential enabled IF descendants require an executeGrpc
+function and complete required credentials before any earlier HTTP request or
+script, even when the condition will be false. Disabled groups still validate
+definitions and grpcScripts recursively, but require no executor or credentials.
+
+The existing unary, server-streaming, client-streaming and bidi implementations
+retain their RPC deadline, bounded messages and cancellation behavior. No new
+retry, reconnection, native mapping or streaming session format is introduced.
+Response metadata and trailers remain excluded from saved plan evidence.
+
+Scripts and extraction publish values through the existing scope commit path
+before later conditions evaluate. An uncertain scope commit from an IF gRPC leaf
+stops execution under continue as well as stop, preserves completed RPC evidence,
+and never publishes an unconfirmed extraction or replays the RPC. Plain legacy
+gRPC retains its prior behavior only when no active IF is present. Repeat-until
+and runtime-row ancestor restrictions remain HTTP-only; staged load and native projections stay restricted.
+
+Targeted tests: plan-if-grpc-model.test.mjs and plan-if-grpc-workflow.test.mjs.
+
+## Canonical IF Socket.IO extension
+
+Canonical IF admits Socket.IO as a separate leaf and executor, not a WebSocket
+wire alias. Existing v2/v4 connections, namespaces and bounded emit/wait/ack
+commands retain their contracts. No Socket.IO scripts, reconnect or replay are
+introduced. Active IF descendants require an executeSocketIO function and
+required per-run credentials before preceding HTTP or scripts, including false
+conditions. Disabled descendants still validate definitions but do not require
+an executor or credentials.
+
+Unknown scope commits, whether reported as ProjectCommitUncertain or its error
+code, stop IF Socket.IO execution even under continue, preserving completed ACK
+evidence without publishing unconfirmed extraction. Non-IF Socket.IO siblings in
+an active-IF plan now also stop on unknown commits; plans without active IF retain
+their historical continuation behavior. Repeat-until, runtime-row,
+staged-load and native restrictions are unchanged; this does not claim an
+original-application automation save format.
+
+The IF-specific model and workflow tests cover capability intersections, real
+v2/v4 websocket/polling/auto, private namespace, binary and multiple ACK arguments,
+false and disabled conditions, independent executor and credential preflight,
+unknown scopes, cancellation, scope and journal uncertainty, and no replay.
+Owner, CLI and official MCP HTTP/stdio runs verify frozen definitions across
+backup, restore and restart; per-run credentials do not enter saved project data.
+Existing repeat tests are retained as regression coverage, not IF acceptance.
+
+## Active IF scope-commit safety upgrade
+
+This is an intentional safety-semantic change, including existing HTTP-only IF
+plans and non-IF siblings. If the frozen graph contains an enabled IF reached
+through enabled ancestors, any leaf with an unknown scope commit stops the
+entire run, even under failurePolicy=continue. Both ProjectCommitUncertain
+instances and PROJECT_COMMIT_UNCERTAIN error codes are recognized in this scope.
+A false IF remains potentially active for this rule; disabled IF and disabled
+ancestors do not independently opt in. The rule is conservative even when the
+IF already completed or later work would not read the affected variable.
+
+A commit can reach disk while its acknowledgement is lost. Restoring the old
+in-memory scopes is not a storage rollback: continuing could evaluate a later
+IF against stale values and repeat a business effect. The runner preserves the
+completed response/script evidence, marks retrySafe=false, reports
+stopReason=scope-commit-unknown, and does not start further occurrences,
+conditions or requests. It neither retries the write nor replays the request.
+Read/recover durable project state before deciding on any new execution.
+
+This replaces the former mixed behavior: wire leaves were stopped according to
+IF protocol types, gRPC/Socket.IO according to IF leaf IDs, and some HTTP or
+unrelated siblings could continue. It can therefore stop older plans earlier.
+No protocol execution authority, credential preflight, admission restriction,
+occurrence identity, evidence limit or execution budget is broadened. Plans
+without active IF retain their existing legacy behavior; repeat-until,
+runtime-row and scripted-protocol mandatory stops remain authoritative.
+
+The protocol-chain integration tests perform real Store writes and then throw
+an uncertain acknowledgement, verifying that disk has the new value while the
+run retains its old value and stops without replay. They cover true/false IF,
+disabled ancestors, HTTP and all five protocol sibling types, fixed-repeat
+occurrences, HTTP until/runtime rows, and scripted wire/gRPC phases. HTTP uses a
+loopback peer; protocol executors in this cross-feature fixture are injected.
+These checks do not simulate a journal crash or establish wire conformance.

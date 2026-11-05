@@ -886,7 +886,7 @@ test("true IF WebSocket uses per-run handshake credentials without persisting th
   assert.equal(f.consumed.length, 2);
 });
 
-test("legacy IF TCP does not change unrelated SSE and WebSocket siblings's unknown scope handling", async (t) => {
+test("active IF TCP fail-stops unrelated SSE and WebSocket siblings on unknown scope commit", async (t) => {
   for (const type of ["sse", "websocket"])
     await t.test(type, async (t) => {
       const f = await fixture(t),
@@ -952,18 +952,17 @@ test("legacy IF TCP does not change unrelated SSE and WebSocket siblings's unkno
       assert.equal(dispatches, 1);
       assert.equal(commits, 1);
       assert.equal(run.status, "failed");
-      assert.equal(run.stopReason, undefined);
+      assert.equal(run.stopReason, "scope-commit-unknown");
       assert.deepEqual(
         run.results.map((r) => r.stepId),
-        ["setup", "sibling", "consume"],
+        ["setup", "sibling"],
       );
       assert.deepEqual(run.results[1].scopeCommit, {
         outcome: "unknown",
         retrySafe: false,
       });
       assert.equal(run.variables.token, "initial");
-      assert.equal(f.consumed.length, 2);
-      assert.equal(f.consumed[1].token, "initial");
+      assert.equal(f.consumed.length, 1);
       assert.equal(f.connections, 0);
     });
 });

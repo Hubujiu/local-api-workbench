@@ -20,9 +20,9 @@ const controlCapabilities = {
     error: "条件提前结束循环首版仅支持HTTP叶子",
   },
   conditional: {
-    leaves: ["http", "protocol"],
-    protocols: ["tcp", "websocket"],
-    error: "条件组仅支持HTTP或TCP/WebSocket叶子",
+    leaves: ["http", "protocol", "grpc", "socketio"],
+    protocols: ["tcp", "websocket", "sse"],
+    error: "条件组仅支持HTTP或TCP/WebSocket/SSE/gRPC/Socket.IO叶子",
   },
   fixedWire: {
     leaves: ["protocol"],
@@ -848,6 +848,16 @@ export function hasPlanConditions(steps) {
       (step.type === "repeat" &&
         (Object.hasOwn(step, "untilCondition") ||
           hasPlanConditions(step.steps))),
+  );
+}
+
+// Potential active IF includes false conditions, but excludes disabled ancestors.
+export function hasActiveIfSteps(steps) {
+  return steps.some(
+    (step) =>
+      step.enabled !== false &&
+      (step.type === "if" ||
+        (step.type === "repeat" && hasActiveIfSteps(step.steps))),
   );
 }
 
