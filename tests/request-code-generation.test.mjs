@@ -406,7 +406,7 @@ test(
         child.once("close", resolve);
       });
       assert.equal(status, 0, stderr);
-      assert.equal(stdout, "ok\n");
+      assert.match(stdout, /^ok\r?\n$/);
       assert.equal(stderr, "");
       const seen = received[count];
       assert.deepEqual(seen.body, Buffer.from(body, "utf8"));
