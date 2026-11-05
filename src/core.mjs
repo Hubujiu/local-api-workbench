@@ -2701,6 +2701,37 @@ export function prepareLiteralHTTPExport(
 export function toCurl(input, options = {}) {
   const { request: r, url, headers } = prepareLiteralHTTPExport(input, options);
   const quote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'";
+  const emptyMultipart =
+    r.bodyType === "form-data" &&
+    !r.form.some((field) => field.enabled !== false);
+  let multipartBody;
+  if (emptyMultipart) {
+    // Runtime API-key injection retains its key spelling, so differently cased
+    // entity headers can override generated framing at the transport boundary.
+    if (
+      r.auth.type === "apiKey" &&
+      r.auth.in !== "query" &&
+      ["content-type", "content-length"].includes(
+        String(r.auth.key).toLowerCase(),
+      )
+    )
+      throw Error(
+        "空 multipart cURL 暂不支持 API-key 注入 Content-Type 或 Content-Length",
+      );
+    if (
+      Object.hasOwn(headers, "transfer-encoding") ||
+      Object.hasOwn(headers, "trailer")
+    )
+      throw Error(
+        "空 multipart cURL 暂不支持 Transfer-Encoding 或 Trailer 请求头",
+      );
+    // A fixed boundary is safe only when there are no parts. Match runtime
+    // framing and byte length, not its per-execution random boundary identity.
+    const boundary = "----localapi00000000-0000-0000-0000-000000000000";
+    multipartBody = `--${boundary}--\r\n`;
+    headers["content-type"] = "multipart/form-data; boundary=" + boundary;
+    headers["content-length"] = String(Buffer.byteLength(multipartBody));
+  }
   const args = [
     "curl",
     "--disable",
@@ -2729,7 +2760,8 @@ export function toCurl(input, options = {}) {
       args.push("-H", quote(value === "" ? key + ";" : key + ": " + value));
   if (r.proxy) args.push("--proxy", quote(r.proxy));
   args.push("--max-time", String(r.timeout / 1000));
-  if (r.bodyType === "form-data")
+  if (emptyMultipart) args.push("--data-binary", quote(multipartBody));
+  else if (r.bodyType === "form-data")
     for (const field of r.form.filter((item) => item.enabled !== false))
       args.push("--form-string", quote(field.key + "=" + field.value));
   else if (r.bodyType === "urlencoded")
