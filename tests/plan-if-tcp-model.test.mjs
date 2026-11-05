@@ -72,7 +72,7 @@ test("canonical IF rejects unsupported protocols and non-HTTP leaf through fixed
       child.protocol.definition.type = type;
       assert.throws(() => check([nest(child)]), /条件组仅支持HTTP或TCP/);
     }
-    for (const type of ["grpc", "socketio", "database", "unknown"]) {
+    for (const type of ["socketio", "database", "unknown"]) {
       assert.throws(
         () => check([nest({ id: "other", type, [type]: { definition: {} } })]),
         /条件组仅支持HTTP或TCP/,

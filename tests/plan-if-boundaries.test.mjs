@@ -143,7 +143,7 @@ test("combined IF/repeat depth and leaf/decision/work budgets include disabled a
     /4MiB/,
   );
   const invalid = group();
-  invalid.steps[0].type = "grpc";
+  invalid.steps[0].type = "socketio";
   assert.throws(() => snapshotPlan({ steps: [invalid] }), /HTTP/);
   const disabled = snapshotPlan({
     steps: [{ ...group(), enabled: false }, leaf("tail")],

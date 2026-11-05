@@ -9,7 +9,7 @@ import { createPlanScriptPhases } from "./plan-script-phases.mjs";
 
 export function validatePlanGrpcScripts(steps) {
   for (const step of steps) {
-    if (step.type === "repeat") {
+    if (step.type === "repeat" || step.type === "if") {
       if (Object.hasOwn(step, "grpcScripts"))
         throw Error("grpcScripts仅可用于gRPC计划步骤");
       validatePlanGrpcScripts(step.steps);

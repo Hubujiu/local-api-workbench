@@ -38,10 +38,11 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - iterationData is available only inside a canonical inline-data repeat and reads a top-level own field. All potential rows are checked before execution, including disabled or false branches.
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
-- IF descendants support HTTP, TCP, WebSocket and SSE leaves and IF/fixed-repeat groups.
+- IF descendants support HTTP, gRPC, TCP, WebSocket and SSE leaves and IF/fixed-repeat groups.
   TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
-  definitions, bounded scripts, extraction and result evidence. gRPC and
-  Socket.IO remain unsupported inside IF. Repeat-until and runtime-row descendants remain
+  definitions, bounded scripts, extraction and result evidence. gRPC uses its
+  independent leaf, executor and temporary credentials; Socket.IO remains
+  unsupported inside IF. Repeat-until and runtime-row descendants remain
   HTTP-only, including nested IF/fixed repeats and disabled definitions.
   Existing protocol siblings and existing protocol repeat groups are unchanged.
 - All definitions, including disabled and false descendants, undergo complete
@@ -289,3 +290,27 @@ commits stop further work without replay.
 The SSE model and loopback workflow tests cover these contracts, nested fixed
 repeat occurrences, owner/CLI/official MCP HTTP and stdio execution, frozen
 snapshot backup/restore/restart, and scope-commit uncertainty.
+
+
+## Canonical IF gRPC extension
+
+Canonical IF admits gRPC as a distinct leaf, not a wire protocol name. Nested
+fixed repeats use the existing frozen gRPC definitions, temporary credential
+bindings and executor. Potential enabled IF descendants require an executeGrpc
+function and complete required credentials before any earlier HTTP request or
+script, even when the condition will be false. Disabled groups still validate
+definitions and grpcScripts recursively, but require no executor or credentials.
+
+The existing unary, server-streaming, client-streaming and bidi implementations
+retain their RPC deadline, bounded messages and cancellation behavior. No new
+retry, reconnection, native mapping or streaming session format is introduced.
+Response metadata and trailers remain excluded from saved plan evidence.
+
+Scripts and extraction publish values through the existing scope commit path
+before later conditions evaluate. An uncertain scope commit from an IF gRPC leaf
+stops execution under continue as well as stop, preserves completed RPC evidence,
+and never publishes an unconfirmed extraction or replays the RPC. Plain legacy
+gRPC outside IF retains its prior behavior. Repeat-until and runtime-row ancestor
+restrictions remain HTTP-only; staged load and native projections stay restricted.
+
+Targeted tests: plan-if-grpc-model.test.mjs and plan-if-grpc-workflow.test.mjs.
