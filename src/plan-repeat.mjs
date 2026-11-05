@@ -20,9 +20,9 @@ const controlCapabilities = {
     error: "条件提前结束循环首版仅支持HTTP叶子",
   },
   conditional: {
-    leaves: ["http", "protocol", "grpc"],
+    leaves: ["http", "protocol", "grpc", "socketio"],
     protocols: ["tcp", "websocket", "sse"],
-    error: "条件组仅支持HTTP或TCP/WebSocket/SSE/gRPC叶子",
+    error: "条件组仅支持HTTP或TCP/WebSocket/SSE/gRPC/Socket.IO叶子",
   },
   fixedWire: {
     leaves: ["protocol"],
