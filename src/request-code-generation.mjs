@@ -15,6 +15,38 @@ const unsafeHeaders = new Set([
   "upgrade",
 ]);
 
+// Encode the literal body, never parse JSON or interpolate it as Python source.
+function pythonCode(request, url, rows, text) {
+  const body = text === undefined ? undefined : Buffer.from(text, "utf8");
+  const literal =
+    body === undefined
+      ? undefined
+      : 'b"' +
+        Array.from(body, (byte) =>
+          byte >= 0x20 && byte <= 0x7e && byte !== 0x22 && byte !== 0x5c
+            ? String.fromCharCode(byte)
+            : "\\x" + byte.toString(16).padStart(2, "0"),
+        ).join("") +
+        '"';
+  const headers = Object.fromEntries(
+    rows.map(({ name, value }) => [name, value]),
+  );
+  return [
+    "import http.client",
+    "",
+    `conn = http.client.${url.protocol === "https:" ? "HTTPSConnection" : "HTTPConnection"}(${JSON.stringify(url.host)})`,
+    ...(literal === undefined ? [] : ["", `payload = ${literal}`]),
+    ...(rows.length ? ["", `headers = ${JSON.stringify(headers)}`] : []),
+    "",
+    `conn.request(${JSON.stringify(request.method)}, ${JSON.stringify(url.pathname + url.search)}${literal === undefined ? "" : ", body=payload"}${rows.length ? ", headers=headers" : ""})`,
+    "",
+    "response = conn.getresponse()",
+    "print(response.read().decode())",
+    "",
+    "conn.close()",
+  ].join("\n");
+}
+
 export function assertCodeTarget(target, client) {
   if (
     typeof target !== "string" ||
@@ -78,31 +110,27 @@ export function generateRequestCode(input, target, client, options = {}) {
   if (text !== undefined && ["GET", "HEAD"].includes(request.method))
     throw Error("代码示例暂不支持 GET 或 HEAD 正文");
   if (
-    target === "python" &&
-    text !== undefined &&
-    /[^\x20-\x7e\t\n\r]/u.test(text)
-  )
-    throw Error("Python 标准库示例暂不支持非 ASCII 或特殊控制字符正文");
-  if (
     Buffer.byteLength(JSON.stringify({ url: url.href, headers: rows, text })) >
     1024 * 1024
   )
     throw Error("代码生成输入超过 1 MiB");
-  const code = snippetz().print(target, client, {
-    method: request.method,
-    url: url.href,
-    headers: rows,
-    queryString: [],
-    ...(text === undefined
-      ? {}
-      : {
-          postData: {
-            mimeType:
-              target === "python" ? "application/octet-stream" : "text/plain",
-            text,
-          },
-        }),
-  });
+  const code =
+    target === "python"
+      ? pythonCode(request, url, rows, text)
+      : snippetz().print(target, client, {
+          method: request.method,
+          url: url.href,
+          headers: rows,
+          queryString: [],
+          ...(text === undefined
+            ? {}
+            : {
+                postData: {
+                  mimeType: "text/plain",
+                  text,
+                },
+              }),
+        });
   if (typeof code !== "string" || Buffer.byteLength(code) > 1024 * 1024)
     throw Error("生成的代码无效或超过 1 MiB");
   return {

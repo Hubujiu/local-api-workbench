@@ -161,8 +161,8 @@ test("rejects unsupported or unsafe inputs instead of silently changing them", (
     /HTTP\/2/,
   );
   assert.throws(
-    () => generateRequestCode({ ...base, body: "你好" }, "python", "python3"),
-    /ASCII/,
+    () => generateRequestCode({ ...base, body: "\ud800" }, "python", "python3"),
+    /Unicode/,
   );
 });
 
@@ -240,6 +240,30 @@ test("HTTP generation resolves the project environment without mutating the proj
   assert.equal(response.status, 200);
   assert((await response.json()).code.includes("http://example.test/abc"));
   assert.deepEqual(await app.store.get(project.id), before);
+  const pythonInput = {
+    request: {
+      ...base,
+      body: "中文😀 {{value}}",
+      preScript: 'throw new Error("SCRIPT_MUST_NOT_EXECUTE")',
+      postScript: 'throw new Error("SCRIPT_MUST_NOT_EXECUTE")',
+    },
+    target: "python",
+    client: "python3",
+  };
+  const pythonResponse = await call(pythonInput);
+  assert.equal(pythonResponse.status, 200);
+  const generated = await pythonResponse.json();
+  assert(generated.code.includes("abc"));
+  assert(!JSON.stringify(generated).includes("SCRIPT_MUST_NOT_EXECUTE"));
+  assert.deepEqual(await app.store.get(project.id), before);
+  const rejected = await call({
+    ...pythonInput,
+    request: { ...base, body: "private-body-secret\ud800" },
+  });
+  assert.equal(rejected.status, 400);
+  assert(!(await rejected.text()).includes("private-body-secret"));
+  assert.deepEqual(await app.store.get(project.id), before);
+
   assert.equal(
     (await call(input, { Origin: "https://untrusted.example" })).status,
     403,
@@ -305,4 +329,138 @@ test("Go example sends the intended literal request on the local wire", async (t
     body: base.body,
     header: "123",
   });
+});
+
+test(
+  "Python UTF-8 bodies execute as exact bytes, not JSON or Python source",
+  { timeout: 30000 },
+  async (t) => {
+    const { spawnSync } = await import("node:child_process");
+    const binary = process.platform === "win32" ? "python" : "python3";
+    const version = spawnSync(binary, ["--version"], { encoding: "utf8" });
+    // This regression must actually execute Python; missing Python is a failure.
+    assert.equal(version.status, 0, version.error?.message);
+    assert.match(version.stdout, /^Python 3\./);
+    const received = [];
+    const server = createServer((req, res) => {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        received.push({
+          body: Buffer.concat(chunks),
+          headers: req.headers,
+          url: req.url,
+          method: req.method,
+        });
+        res.end("ok");
+      });
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const samples = [
+      ["raw", '中文😀 e\u0301 é "quote" \\path\r\n\0\b\f\t\x7f\u2028\u2029'],
+      ["json", '  {"中文":"😀","n":900719925474099312345,"x":1,"x":2} \r\n'],
+      ["xml", '<根 属性="😀">e\u0301 &amp; 中文</根>\r\n'],
+      ["raw", '\"); __import__("sys").stdout.write("EXECUTED"); #\\\n\0'],
+      ["raw", ""],
+      ["raw", "ASCII true false null 123"],
+    ];
+    for (const [bodyType, body] of samples) {
+      const request = {
+        ...base,
+        bodyType,
+        body,
+        url: `http://127.0.0.1:${server.address().port}/a?flag&x=%2f&x=2#ignored`,
+        headers: [{ key: "x-check", value: 'quote" slash\\ true false null' }],
+        auth: { type: "basic", username: "user", password: "secret" },
+      };
+      const before = structuredClone(request);
+      const count = received.length;
+      const { code, warnings } = generateRequestCode(
+        request,
+        "python",
+        "python3",
+      );
+      assert.deepEqual(request, before);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      assert.equal(
+        received.length,
+        count,
+        "generation must not send a request",
+      );
+      assert(!warnings.join().includes("secret"));
+      assert(!code.includes("json.loads") && !code.includes("json.dumps"));
+      const child = spawn(binary, ["-c", code], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "",
+        stderr = "";
+      child.stdout.on("data", (data) => {
+        stdout += data;
+      });
+      child.stderr.on("data", (data) => {
+        stderr += data;
+      });
+      const status = await new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("close", resolve);
+      });
+      assert.equal(status, 0, stderr);
+      assert.equal(stdout, "ok\n");
+      assert.equal(stderr, "");
+      const seen = received[count];
+      assert.deepEqual(seen.body, Buffer.from(body, "utf8"));
+      assert.equal(
+        seen.headers["content-length"],
+        String(Buffer.byteLength(body)),
+      );
+      assert.equal(
+        seen.headers.authorization,
+        "Basic " + Buffer.from("user:secret").toString("base64"),
+      );
+      assert.equal(seen.headers["x-check"], request.headers[0].value);
+      assert.equal(seen.url, "/a?flag&x=%2f&x=2");
+      assert.equal(seen.method, "POST");
+    }
+  },
+);
+
+test("Python Unicode support retains transport boundaries and source budgets", () => {
+  for (const body of ["\ud800", "\udfff", "ok\ud800end"]) {
+    assert.throws(
+      () => generateRequestCode({ ...base, body }, "python", "python3"),
+      /Unicode/,
+    );
+  }
+  for (const change of [
+    { bodyType: "binary" },
+    { protocolScripts: { pre: 'throw new Error("must not execute")' } },
+    { bodyType: "form-data" },
+    { form: [{ key: "upload", value: "secret-file", type: "file" }] },
+    { method: "GET" },
+    { method: "HEAD" },
+    { headers: [{ key: "content-length", value: "1" }] },
+    { headers: [{ key: "transfer-encoding", value: "chunked" }] },
+    { auth: { type: "digest", username: "u", password: "private-secret" } },
+  ]) {
+    assert.throws(() =>
+      generateRequestCode({ ...base, ...change }, "python", "python3"),
+    );
+  }
+  for (const body of ["a".repeat(1024 * 1024), "中".repeat(100000)]) {
+    assert.throws(
+      () => generateRequestCode({ ...base, body }, "python", "python3"),
+      /1 MiB/,
+    );
+  }
+  for (const method of ["GET", "HEAD"]) {
+    const { code } = generateRequestCode(
+      { url: "https://[::1]:8443/a?x=%2f&x=2", method, bodyType: "none" },
+      "python",
+      "python3",
+    );
+    assert(code.includes('HTTPSConnection("[::1]:8443")'));
+    assert(code.includes(`conn.request("${method}", "/a?x=%2f&x=2")`));
+    assert(!code.includes("payload"));
+  }
 });
