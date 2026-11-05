@@ -39,9 +39,9 @@ function, regex, implicit variable source, alternate branch or fallback is added
 - Mixed types, empty text, nonfinite numbers, objects, unknown operators/fields and
   missing variables are errors, not coerced values or false.
 - IF descendants support HTTP, TCP and WebSocket leaves and IF/fixed-repeat groups.
-  TCP uses the existing canonical protocol wrapper, frozen definitions, bounded
-  scripts, extraction and result evidence. WebSocket, SSE, gRPC and Socket.IO
-  remain unsupported inside IF. Repeat-until and runtime-row descendants remain
+  TCP and WebSocket use the existing canonical protocol wrapper, frozen
+  definitions, bounded scripts, extraction and result evidence. SSE, gRPC and
+  Socket.IO remain unsupported inside IF. Repeat-until and runtime-row descendants remain
   HTTP-only, including nested IF/fixed repeats and disabled definitions.
   Existing protocol siblings and existing protocol repeat groups are unchanged.
 - All definitions, including disabled and false descendants, undergo complete
@@ -217,7 +217,8 @@ CI; the local dependency-load failure is retained rather than skipped.
 
 No native format is inferred and no original application is executed. Protocol
 references are admitted provisionally, resolved at snapshot creation, and checked
-again as specifically TCP before the frozen plan is accepted. Saved snapshots
+again against the IF protocol capability set (TCP and WebSocket) before the
+frozen plan is accepted. Saved snapshots
 survive live edits/deletion, project backup/restore and restart.
 
 Potential active TCP leaves inside IF require an executor before any earlier HTTP request
