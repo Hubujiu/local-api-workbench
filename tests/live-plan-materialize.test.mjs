@@ -238,3 +238,91 @@ test("budget counts UTF-8 and frozen siblings, and does not change oversized leg
   });
   assert.equal(materializeLivePlan(project(), legacy).plan, legacy);
 });
+
+function boundFixture() {
+  const p = project(),
+    definition = plan();
+  p.postmanCollections = {
+    version: 1,
+    items: ["a", "b"].map((id) => ({
+      id,
+      name: id,
+      variables: {},
+      definitions: {},
+    })),
+  };
+  p.requests[0].postmanCollectionId = "a";
+  definition.steps[0].request.postmanCollectionId = "a";
+  return { p, definition };
+}
+
+test("live collections require exact unchanged identity including disabled nested leaves", () => {
+  for (const [sourceId, templateId] of [
+    ["a", "b"],
+    ["a", undefined],
+    [undefined, "a"],
+    [null, null],
+    ["", ""],
+    ["missing", "missing"],
+  ]) {
+    const { p, definition } = boundFixture();
+    p.requests[0].postmanCollectionId = sourceId;
+    definition.steps[0].request.postmanCollectionId = templateId;
+    definition.steps = [
+      {
+        id: "group",
+        type: "repeat",
+        count: 1,
+        enabled: false,
+        steps: definition.steps,
+      },
+    ];
+    assert.throws(() => materializeLivePlan(p, definition), /collection/);
+  }
+});
+
+test("live collections validate frozen disabled siblings and malformed registries", () => {
+  for (const corrupt of [
+    (p, plan) =>
+      plan.steps.push({
+        id: "disabled",
+        enabled: false,
+        request: { url: "http://example.test", postmanCollectionId: "missing" },
+      }),
+    (p) =>
+      p.postmanCollections.items.push(
+        structuredClone(p.postmanCollections.items[0]),
+      ),
+    (p) => (p.postmanCollections.items[0].variables.bad = 1),
+    (p) => (p.postmanCollections.items = []),
+  ]) {
+    const { p, definition } = boundFixture();
+    corrupt(p, definition);
+    assert.throws(() => materializeLivePlan(p, definition), /collection/);
+  }
+});
+
+test("matching collections refresh HTTP configuration but preserve template task ownership and detached output", () => {
+  const { p, definition } = boundFixture();
+  Object.assign(p.requests[0], {
+    method: "POST",
+    body: "current",
+    headers: [{ key: "x-current", value: "yes" }],
+    beforeScript: 'throw Error("source");',
+  });
+  const original = structuredClone({ p, definition });
+  const result = materializeLivePlan(p, definition);
+  const request = result.plan.steps[0].request;
+  assert.equal(request.postmanCollectionId, "a");
+  assert.equal(request.method, "POST");
+  assert.equal(request.body, "current");
+  assert.equal(request.headers[0].value, "yes");
+  assert.equal(request.beforeScript, definition.steps[0].request.beforeScript);
+  p.requests[0].headers[0].value = "changed";
+  definition.steps[0].request.beforeScript = "changed";
+  assert.equal(request.headers[0].value, "yes");
+  assert.equal(
+    request.beforeScript,
+    original.definition.steps[0].request.beforeScript,
+  );
+});
