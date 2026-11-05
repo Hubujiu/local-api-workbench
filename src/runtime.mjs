@@ -1276,7 +1276,9 @@ async function executeRequestWithinDeadline(
       );
   if (r.auth.type === "apiKey") {
     if (r.auth.in === "query") setAPIKeyQuery(u, r.auth);
-    else headers[r.auth.key] = r.auth.value;
+    // Keep auth overrides in the same case-insensitive map as request rows
+    // before body defaults, computed framing and signing inspect it.
+    else headers[String(r.auth.key).toLowerCase()] = r.auth.value;
   }
   if (r.auth.type === "asap")
     headers.authorization = (await asapAuthorization(r.auth)).value;
