@@ -61,3 +61,26 @@ its heartbeat stops. Non-running Linux zombies awaiting host reaping are reporte
 as non-running, not as nonexistent PIDs. Active cleanup is awaited before removing
 temporary files. Unique per-fixture/target request identities prevent late or
 duplicate requests from being consumed as another fixture's evidence.
+
+## Windows cancellation receipts
+
+The first Job Object CI attempt passed normal parent-exit descendant cleanup but
+failed cancellation assertions at childClosed=false. The assertion output did
+not include the owner receipt, so it cannot establish whether that run hit an OS
+receipt race or another failure. Separate deterministic tests now exercise the
+actual cleanup function's AST with fake WinAPI responses: job accounting can
+reach zero before the process handle signals. Cleanup now requires both receipts
+within the same existing two-second deadline. WAIT_FAILED, unknown wait status,
+nonzero job membership and deadline exhaustion remain failures.
+
+The assertions include only a fixed, bounded status schema: phase/fixture,
+exit/signal/timeout, owner/control state, active job count, final wait status and
+numeric wait error. No command, source, environment or stderr is included. These
+fake API tests establish the logic's behavior, not Windows OS behavior or the
+cause of the earlier CI cancellation failures.
+
+A separate Windows CI Go-version probe exceeded its unchanged five-second budget
+before build or wire execution. Probe and build now share the same local/offline
+Go settings. That failure is retained and its cause remains unconfirmed; a probe
+timeout still fails and is never skipped or retried. Build/execution budgets and
+the full wire-test deadline are unchanged.

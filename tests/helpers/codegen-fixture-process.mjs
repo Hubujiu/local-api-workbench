@@ -191,13 +191,7 @@ export async function buildGoFixtures(
     ["build", "-o", output, ...sources.map((_, index) => `./fixture-${index}`)],
     {
       cwd: dir,
-      env: {
-        ...process.env,
-        GO111MODULE: "off",
-        GOPROXY: "off",
-        GOTOOLCHAIN: "local",
-        GOWORK: "off",
-      },
+      env: goFixtureEnvironment(),
       phase: "build",
       fixture: "all-fixtures",
       timeoutMs: 60000,
@@ -210,10 +204,11 @@ export async function buildGoFixtures(
 export function fixtureToolAvailable(
   binary,
   args,
-  { fixture, pattern, timeoutMs = 5000 } = {},
+  { fixture, pattern, timeoutMs = 5000, env = process.env } = {},
 ) {
   const result = spawnSync(binary, args, {
     encoding: "utf8",
+    env,
     timeout: timeoutMs,
     killSignal: "SIGKILL",
     maxBuffer: 8192,
@@ -232,4 +227,14 @@ export function fixtureToolAvailable(
     throw Object.assign(Error(JSON.stringify(receipt)), { receipt });
   }
   return result.status === 0 && (!pattern || pattern.test(result.stdout));
+}
+
+export function goFixtureEnvironment() {
+  return {
+    ...process.env,
+    GO111MODULE: "off",
+    GOPROXY: "off",
+    GOTOOLCHAIN: "local",
+    GOWORK: "off",
+  };
 }

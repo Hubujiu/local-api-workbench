@@ -13,6 +13,8 @@ export async function runWindowsFixtureProcess(
     wrapperFailed = false;
   let wrapperClosed = false,
     wrapperSignal = null,
+    wrapperExitCode = null,
+    controlWriteFailed = false,
     output = "";
   let killTimer, closeTimer;
   const child = spawn(
@@ -31,7 +33,9 @@ export async function runWindowsFixtureProcess(
       stdio: ["pipe", "pipe", "ignore"],
     },
   );
-  child.stdin.on("error", () => {});
+  child.stdin.on("error", () => {
+    controlWriteFailed = true;
+  });
   child.stdout.on("data", (chunk) => {
     if (output.length + chunk.length <= 8192) output += chunk;
     else wrapperFailed = true;
@@ -42,6 +46,7 @@ export async function runWindowsFixtureProcess(
     });
     child.once("close", (code, receivedSignal) => {
       wrapperClosed = true;
+      wrapperExitCode = code;
       wrapperSignal = receivedSignal;
       if (code !== 0) wrapperFailed = true;
       resolve();
@@ -105,12 +110,27 @@ export async function runWindowsFixtureProcess(
     "job-terminate",
     "job-cleanup-receipt",
   ]);
+  const uint = (value) =>
+    Number.isInteger(value) && value >= 0 && value <= 0xffffffff ? value : null;
+  const boolean = (value) => (typeof value === "boolean" ? value : null);
   const receipt = {
     phase,
     fixture,
     exitCode: valid ? owner.exitCode : null,
     signal: null,
     wrapperSignal,
+    wrapperExitCode,
+    wrapperClosed,
+    controlWriteFailed,
+    ownerReceiptValid: Boolean(valid),
+    ownerReceiptBytes: Buffer.byteLength(output),
+    jobActiveProcesses: uint(owner?.jobActiveProcesses),
+    finalWaitStatus: [0, 258, 0xffffffff].includes(owner?.finalWaitStatus)
+      ? owner.finalWaitStatus
+      : null,
+    finalWaitError: uint(owner?.finalWaitError),
+    terminateJobAccepted: boolean(owner?.terminateJobAccepted),
+    stopObserved: boolean(owner?.stopObserved),
     timedOut,
     aborted,
     spawnFailed: wrapperFailed,

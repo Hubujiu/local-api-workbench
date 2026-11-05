@@ -19,6 +19,7 @@ import {
   buildGoFixtures,
   createWireObservations,
   fixtureToolAvailable,
+  goFixtureEnvironment,
 } from "./helpers/codegen-fixture-process.mjs";
 
 const targets = [
@@ -154,6 +155,7 @@ test(
       go: fixtureToolAvailable("go", ["version"], {
         fixture: "tool-go",
         pattern: /^go version go/,
+        env: goFixtureEnvironment(),
       }),
       python: fixtureToolAvailable("python3", ["--version"], {
         fixture: "tool-python",

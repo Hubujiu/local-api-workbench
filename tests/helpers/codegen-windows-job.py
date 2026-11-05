@@ -75,6 +75,25 @@ close = bind("CloseHandle", [HANDLE])
 set_inherit = bind("SetHandleInformation", [HANDLE, w.DWORD, w.DWORD])
 get_standard = bind("GetStdHandle", [w.DWORD], HANDLE)
 
+def wait_job_cleanup(query_active, wait_parent, deadline, receipt, monotonic, pause):
+    """Require both OS receipts inside one existing cleanup deadline."""
+    while monotonic() < deadline:
+        receipt["jobActiveProcesses"] = query_active()
+        status, error = wait_parent()
+        receipt["finalWaitStatus"] = status
+        receipt["finalWaitError"] = error if status == 0xffffffff else None
+        receipt["childClosed"] = status == 0
+        if status not in (0, 258):
+            return False
+        if receipt["jobActiveProcesses"] == 0 and status == 0:
+            return monotonic() < deadline
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
+        pause(min(0.02, remaining))
+    return False
+
+
 job = None
 process = Process()
 null_fd = None
@@ -82,7 +101,7 @@ attributes = None
 attributes_initialized = False
 resumed = False
 stage = "admission"
-result = {"exitCode": None, "childClosed": False, "cleanupConfirmed": False, "admissionFailed": False, "stage": None}
+result = {"exitCode": None, "childClosed": False, "cleanupConfirmed": False, "admissionFailed": False, "stage": None, "jobActiveProcesses": None, "finalWaitStatus": None, "finalWaitError": None, "terminateJobAccepted": None, "stopObserved": None}
 try:
     config = json.loads(sys.stdin.readline())
     binary = shutil.which(config["binary"])
@@ -149,21 +168,25 @@ try:
     # Parent exit alone is insufficient: kill any remaining job members, then
     # demand the OS job's zero-active-process receipt before reporting cleanup.
     stage = "job-terminate"
-    if not terminate_job(job, 1):
+    result["stopObserved"] = stopped.is_set()
+    result["terminateJobAccepted"] = bool(terminate_job(job, 1))
+    if not result["terminateJobAccepted"]:
         raise RuntimeError()
     stage = "job-cleanup-receipt"
     deadline = time.monotonic() + 2
-    while True:
+    def query_active():
         accounting = Accounting()
         if not query_job(job, 1, c.byref(accounting), c.sizeof(accounting), None):
             raise RuntimeError()
-        if accounting.ActiveProcesses == 0:
-            break
-        if time.monotonic() >= deadline:
-            raise RuntimeError()
-        time.sleep(0.02)
-    result["childClosed"] = wait(process.hProcess, 0) == 0
-    result["cleanupConfirmed"] = result["childClosed"]
+        return accounting.ActiveProcesses
+    def wait_parent():
+        status = wait(process.hProcess, 0)
+        return status, c.get_last_error() if status == 0xffffffff else None
+    result["cleanupConfirmed"] = wait_job_cleanup(
+        query_active, wait_parent, deadline, result, time.monotonic, time.sleep)
+    if not result["cleanupConfirmed"]:
+        raise RuntimeError()
+
 except BaseException:
     result["admissionFailed"] = not resumed
     result["stage"] = stage

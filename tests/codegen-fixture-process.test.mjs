@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runFixtureProcess } from "./helpers/codegen-fixture-process.mjs";
+import { formatFixtureReceipt } from "./helpers/codegen-fixture-receipt.mjs";
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("fixture launcher reports safe build/execute failures and never treats timeout as success", async () => {
@@ -18,8 +19,16 @@ test("fixture launcher reports safe build/execute failures and never treats time
         assert.equal(error.receipt.phase, phase);
         assert.equal(error.receipt.exitCode, 7);
         assert.equal(error.receipt.timedOut, false);
-        assert.equal(error.receipt.childClosed, true);
-        assert.equal(error.receipt.cleanupConfirmed, true);
+        assert.equal(
+          error.receipt.childClosed,
+          true,
+          formatFixtureReceipt(error.receipt),
+        );
+        assert.equal(
+          error.receipt.cleanupConfirmed,
+          true,
+          formatFixtureReceipt(error.receipt),
+        );
         assert(!error.message.includes("PRIVATE"));
         return true;
       },
@@ -77,8 +86,16 @@ for (const mode of ["timeout", "abort"])
       assert(error instanceof Error);
       assert.equal(error.receipt.timedOut, mode === "timeout");
       assert.equal(error.receipt.aborted, mode === "abort");
-      assert.equal(error.receipt.childClosed, true);
-      assert.equal(error.receipt.cleanupConfirmed, true);
+      assert.equal(
+        error.receipt.childClosed,
+        true,
+        formatFixtureReceipt(error.receipt),
+      );
+      assert.equal(
+        error.receipt.cleanupConfirmed,
+        true,
+        formatFixtureReceipt(error.receipt),
+      );
       if (process.platform !== "win32")
         assert.equal(error.receipt.signal, "SIGKILL");
       const before = await readFile(marker, "utf8");
@@ -182,8 +199,16 @@ test("build timeout remains a build failure with the original bounded budget", a
     (error) => {
       assert.equal(error.receipt.phase, "build");
       assert.equal(error.receipt.timedOut, true);
-      assert.equal(error.receipt.childClosed, true);
-      assert.equal(error.receipt.cleanupConfirmed, true);
+      assert.equal(
+        error.receipt.childClosed,
+        true,
+        formatFixtureReceipt(error.receipt),
+      );
+      assert.equal(
+        error.receipt.cleanupConfirmed,
+        true,
+        formatFixtureReceipt(error.receipt),
+      );
       return true;
     },
   );
@@ -252,4 +277,50 @@ test("bounded version probe timeout is failure rather than unavailable-tool skip
       return true;
     },
   );
+});
+
+test("fixture receipt diagnostics retain only bounded allowlisted status fields", () => {
+  const text = formatFixtureReceipt({
+    phase: "execute",
+    fixture: "fixture-tree",
+    childClosed: false,
+    cleanupConfirmed: false,
+    jobActiveProcesses: 0,
+    finalWaitStatus: 258,
+    finalWaitError: null,
+    stopObserved: true,
+    terminateJobAccepted: true,
+    ownerReceiptValid: true,
+    ownerReceiptBytes: 256,
+    wrapperExitCode: 0,
+    wrapperClosed: true,
+    source: "PRIVATE-SOURCE",
+    argv: ["PRIVATE-ARG"],
+    env: { TOKEN: "PRIVATE-TOKEN" },
+    stderr: "PRIVATE-STDERR",
+    signal: "PRIVATE-SIGNAL",
+    cleanupStage: "PRIVATE-STAGE",
+  });
+  assert(!text.includes("PRIVATE"));
+  const receipt = JSON.parse(text);
+  assert.equal(receipt.finalWaitStatus, 258);
+  assert.equal(receipt.jobActiveProcesses, 0);
+  assert.equal(receipt.childClosed, false);
+  assert.equal(receipt.cleanupStage, null);
+  assert.equal(receipt.signal, null);
+  assert(text.length < 1200);
+  const malformed = JSON.parse(
+    formatFixtureReceipt({
+      fixture: "secret " + "x".repeat(1000),
+      jobActiveProcesses: Infinity,
+      finalWaitStatus: "private",
+      ownerReceiptBytes: 99999999,
+      childClosed: "private",
+    }),
+  );
+  assert.equal(malformed.fixture, null);
+  assert.equal(malformed.jobActiveProcesses, null);
+  assert.equal(malformed.finalWaitStatus, null);
+  assert.equal(malformed.ownerReceiptBytes, null);
+  assert.equal(malformed.childClosed, null);
 });
