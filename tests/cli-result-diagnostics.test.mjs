@@ -2,6 +2,7 @@ import assert, { AssertionError } from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  cliReportedErrorKind,
   cliResultMetadata,
   withCLIResultDiagnostics,
   workflowFailureObservations,
@@ -539,5 +540,116 @@ test("successful assertions never inspect optional workflow observations and old
       "original\nCLI_RESULT_METADATA ".length,
     );
     assert.deepEqual(JSON.parse(suffix), { input: "invalid-shape" });
+  }
+});
+
+test("error kinds use only exact persisted strings, never fragments or error objects", () => {
+  const cases = [
+    ["脚本执行超时", "script-timeout"],
+    ["interrupted", "interrupted"],
+    ["脚本微任务执行失败或超时", "other"],
+    ["script-timeout", "other"],
+    ["Interrupted", "other"],
+    [" interrupted", "other"],
+    ["interrupted\n", "other"],
+    ["脚本执行超时 " + secret, "other"],
+    [secret + "interrupted", "other"],
+    [{ message: "interrupted", code: "脚本执行超时", secret }, "other"],
+    [null, "other"],
+    [undefined, "other"],
+    [0, "other"],
+    [false, "other"],
+    [["interrupted"], "other"],
+  ];
+  for (const [error, expected] of cases) {
+    assert.equal(cliReportedErrorKind(error), expected);
+    const run = fixture();
+    run.results[1].error = error;
+    // Matching or missing timing observations never determine the error kind.
+    run.results[1].scriptDiagnostics = {
+      activityBudgetMs: 250,
+      userScriptMs: 0,
+      compatibilityMs: 268,
+      compatibilityCPUUs: 57505,
+    };
+    const metadata = cliResultMetadata(JSON.stringify(run));
+    assert.equal(metadata.steps[0].reportedErrorKind, expected);
+    assert.ok(!JSON.stringify(metadata).includes(secret));
+  }
+});
+
+test("error classification does not read getters, proxies or coercion hooks", () => {
+  let reads = 0;
+  const fail = () => {
+    reads++;
+    throw Error(secret);
+  };
+  const hostile = Object.defineProperties(
+    {},
+    {
+      message: { get: fail },
+      code: { get: fail },
+      toJSON: { value: fail },
+      toString: { value: fail },
+      [Symbol.toPrimitive]: { value: fail },
+    },
+  );
+  const proxy = new Proxy(hostile, {
+    get: fail,
+    getOwnPropertyDescriptor: fail,
+    getPrototypeOf: fail,
+    ownKeys: fail,
+  });
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  for (const value of [hostile, proxy, revoked.proxy, Symbol(secret), 1n]) {
+    assert.equal(cliReportedErrorKind(value), "other");
+    assert.equal(cliResultMetadata(value).input, "not-text");
+  }
+  assert.equal(reads, 0);
+});
+
+test("classified evidence preserves the original exit assertion and failure identity", () => {
+  for (const [error, kind] of [
+    ["脚本执行超时", "script-timeout"],
+    ["interrupted", "interrupted"],
+    [secret, "other"],
+  ]) {
+    const run = fixture();
+    run.results[1].error = error;
+    const stdout = JSON.stringify(run);
+    let failure,
+      originalMessage,
+      calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(() => {
+          calls++;
+          try {
+            assert.equal(1, 0, "original exit assertion");
+          } catch (caught) {
+            failure = caught;
+            originalMessage = caught.message;
+            throw caught;
+          }
+        }, stdout),
+      (caught) => {
+        assert.equal(caught, failure);
+        assert.equal(caught.actual, 1);
+        assert.equal(caught.expected, 0);
+        assert.equal(caught.operator, "strictEqual");
+        assert.ok(caught.message.startsWith(originalMessage));
+        const suffix = caught.message.slice(originalMessage.length);
+        assert.ok(Buffer.byteLength(suffix) <= 4096);
+        const metadata = JSON.parse(
+          suffix.slice("\nCLI_RESULT_METADATA ".length),
+        );
+        assert.equal(metadata.steps[0].reportedErrorKind, kind);
+        assert.ok(!suffix.includes(secret));
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(run), stdout);
   }
 });
