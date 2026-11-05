@@ -80,13 +80,16 @@ test("all restrictive ancestors intersect through IF and repeat, including unres
         }
     }
 });
-test("unrelated restricted siblings do not narrow WebSocket IF or broaden SSE IF", () => {
+test("unrelated restricted siblings do not narrow WebSocket IF or broaden unsupported IF", () => {
   const until = {
     ...repeat([{ id: "http", request: { url: "http://localhost" } }]),
     untilCondition: condition,
   };
   assert.equal(check([until, gate([wire()])]), true);
-  assert.throws(() => check([until, gate([wire("sse")])]), /条件组仅支持HTTP/);
+  assert.throws(
+    () => check([until, gate([wire("unknown")])]),
+    /条件组仅支持HTTP/,
+  );
 });
 test("false/disabled WebSocket nodes still reject malformed graph envelopes and frozen references", () => {
   for (const mutate of [
@@ -106,7 +109,7 @@ test("false/disabled WebSocket nodes still reject malformed graph envelopes and 
       s.id = "gate";
     },
     (s) => {
-      s.protocol.definition.type = "sse";
+      s.protocol.definition.type = "unknown";
     },
   ]) {
     const child = wire();
