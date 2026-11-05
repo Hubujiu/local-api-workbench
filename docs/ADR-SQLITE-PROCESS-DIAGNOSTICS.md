@@ -124,3 +124,31 @@ errors and throwing-observer commit/rollback behavior. Existing native tests,
 success assertions and deadlines remain required. This is evidence gathering,
 not a performance/root-cause fix; a later green run cannot establish why the
 historical write failed. No recovery write or failure-time readback was added.
+
+## Disposable COMMIT-boundary evidence
+
+PR137 Windows CI42123430996/job127581399836 rejected the first HTTP fixture
+INSERT with `SQLITE_WRITE_OUTCOME_UNKNOWN`: parent timeout, SIGKILL close at
+2014ms, no result received, last operation observation `commit` at worker-local
+515ms. This is not evidence of rollback or a measured COMMIT duration. The
+operation observation is sent before COMMIT, and its delivery is best-effort.
+
+`tests/sqlite-commit-boundary.test.mjs` demonstrates the ambiguity using three
+fresh private fixture databases. It copies unchanged production mutation,
+parent, supervisor and diagnostic modules, substituting only a test worker.
+That worker blocks immediately before COMMIT, immediately after COMMIT before
+forwarding `commit-complete`, or after producing a result but before exiting.
+The original two-second deadlines terminate each owned process. The first two
+cases deliberately retain identical `commit`/`worker-ready` observations, but
+independent fixture readback yields zero and one respectively. The third has a
+worker result and `close-complete`, but no supervisor result receipt or worker
+exit, so its committed fixture still correctly reports unknown outcome.
+
+Each case executes its increment exactly once, with a separate execution marker
+and a new database. Readback occurs only after actual child close and uses a
+normal SQLite connection, which may recover the pre-commit fixture journal.
+There is no mutation replay, user database inspection, production fault switch,
+deadline extension, or change to result admission. The fixture does not prove
+which boundary the historical Windows failure reached, and does not clear it.
+It adds about six seconds of intentional deadline tests and requires exact-head
+cross-platform CI before claiming Windows/macOS verification.
