@@ -200,27 +200,82 @@ for (const mode of ["abort", "deadline"]) {
   );
 }
 
-test(
-  "Cookie header wait consumes network budget instead of granting a fresh timeout",
-  { timeout: 5000 },
-  async (t) => {
-    const f = await fixture(t),
-      release = await f.hold();
-    f.setHandler(async (_req, res) => {
-      await sleep(160);
-      res.end("too late for remaining budget");
-    });
-    const running = executeRequest({ url: f.url, timeout: 220 }, undefined, {
-      cookieSession: f.jar,
-    });
-    const assertion = assert.rejects(running, /超时/);
-    await sleep(130);
-    await release();
-    await assertion;
-    assert.equal(f.requests.length, 1);
-    await f.healthy();
-  },
-);
+for (const consumed of [130, 220]) {
+  test(
+    `Cookie header consumes ${consumed}ms of the original 220ms request budget`,
+    { timeout: 5000 },
+    async (t) => {
+      const f = await fixture(t),
+        release = await f.hold(),
+        entered = deferred(),
+        received = deferred();
+      let now = performance.now();
+      t.mock.method(performance, "now", () => now);
+      const header = f.jar.header;
+      f.jar.header = async function (...args) {
+        entered.resolve();
+        const value = await Reflect.apply(header, this, args);
+        // Model elapsed Cookie work without relying on filesystem/scheduler speed.
+        now += consumed;
+        return value;
+      };
+      f.setHandler((_req, _res) => {
+        // Real loopback HTTP, deliberately held until the total deadline fires.
+        received.resolve();
+      });
+
+      const request = http.request,
+        schedule = globalThis.setTimeout;
+      let dispatches = 0,
+        captureTotalTimer = false,
+        totalTimer,
+        socketBudget;
+      t.mock.method(globalThis, "setTimeout", (callback, delay, ...args) => {
+        if (!captureTotalTimer) return schedule(callback, delay, ...args);
+        captureTotalTimer = false;
+        totalTimer = { callback, delay };
+        // Keep a normal clearable handle; the test advances this specific timer
+        // only after the real server has received the request.
+        const handle = schedule(() => {}, 2147483647);
+        t.after(() => clearTimeout(handle));
+        return handle;
+      });
+      t.mock.method(http, "request", function (...args) {
+        dispatches++;
+        const req = Reflect.apply(request, this, args);
+        t.mock.method(req, "setTimeout", (milliseconds) => {
+          socketBudget = milliseconds;
+          return req;
+        });
+        captureTotalTimer = true;
+        return req;
+      });
+      const running = executeRequest({ url: f.url, timeout: 220 }, undefined, {
+        cookieSession: f.jar,
+      });
+      const assertion = assert.rejects(running, { code: "REQUEST_TIMEOUT" });
+      await entered.promise;
+      await release();
+      if (consumed < 220) {
+        await received.promise;
+        assert.equal(dispatches, 1);
+        assert.equal(f.requests.length, 1);
+        assert.equal(f.requests[0].cookie, "seed=before");
+        assert.equal(totalTimer.delay, 90);
+        assert.equal(socketBudget, 90);
+        now += 90;
+        totalTimer.callback();
+      }
+      await assertion;
+      assert.equal(dispatches, consumed < 220 ? 1 : 0);
+      assert.equal(f.requests.length, consumed < 220 ? 1 : 0);
+      assert.deepEqual(await readFile(f.jar.file), f.before);
+      t.mock.restoreAll();
+      f.jar.header = header;
+      await f.healthy();
+    },
+  );
+}
 
 test(
   "trusted failure preserves the same response and header objects; arbitrary error.response is ignored",
