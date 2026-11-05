@@ -2,6 +2,7 @@ import { snapshotPlan } from "./core.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { mapPlanLeaves, planLeaves } from "./plan-repeat.mjs";
+import { validatePostmanCollections } from "./postman-collection-scopes.mjs";
 import { isApipostFunctionSource } from "../public/apipost-function-template.js";
 
 const taskFields = [
@@ -22,8 +23,6 @@ const taskFields = [
   "sharedScriptsSnapshot",
 ];
 function assertSupportedLiveSource(request) {
-  if (request.postmanCollectionId !== undefined)
-    throw Error("实时计划暂不支持 Postman collection 作用域");
   const specs = [
     ...Object.values(request.bodyDynamic || {}),
     ...["query", "headers", "path", "cookies", "form"].flatMap((key) =>
@@ -70,6 +69,9 @@ export function materializeLivePlan(
   if (liveBytes > maxLiveBytes) throw Error("实时计划冻结快照超过 4 MiB");
   const detached = structuredClone(project);
   if (detached.archived) throw Error("项目已归档");
+  // Admit every collection reference, including disabled/frozen siblings and
+  // caller-supplied plans not yet saved in the project, before service resolution.
+  validatePostmanCollections({ ...detached, plans: [plan] });
   const bindings = [];
   const steps = mapPlanLeaves(plan.steps, (step) => {
     const id = liveRequestId(step);
@@ -78,14 +80,14 @@ export function materializeLivePlan(
     if (matches.length !== 1 || matches[0].deletedAt)
       throw Error("实时计划引用的接口不存在、已删除或不唯一");
     const source = structuredClone(matches[0]);
+    const template = step.request;
+    if (source.postmanCollectionId !== template.postmanCollectionId)
+      throw Error("实时计划 Postman collection 身份已变化，须重新创建任务模板");
     assertSupportedLiveSource(source);
     const fresh = freezeServiceBinding(detached, source, {
       includeSharedScripts: false,
     });
     assertSupportedLiveSource(fresh);
-    const template = step.request;
-    if (template.postmanCollectionId !== undefined)
-      throw Error("实时计划暂不支持 Postman collection 任务作用域");
     const sourceURLMode = fresh.scriptURLMode;
     for (const key of taskFields) {
       delete fresh[key];
