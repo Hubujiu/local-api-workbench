@@ -1,4 +1,4 @@
-import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
+import { responseContentDecoder } from "./http-response-content.mjs";
 import { prepareConnection } from "./connection.mjs";
 import {
   throwIfInactive,
@@ -288,15 +288,11 @@ function exchange(
             finish(error);
             return;
           }
-          const encoding = res.headers["content-encoding"];
-          const decoder =
-            encoding === "gzip"
-              ? createGunzip()
-              : encoding === "deflate"
-                ? createInflate()
-                : encoding === "br"
-                  ? createBrotliDecompress()
-                  : null;
+          const decoder = responseContentDecoder(
+            method,
+            res.statusCode,
+            res.headers["content-encoding"],
+          );
           stream = decoder || res;
           res.on("data", (chunk) => {
             budget.encoded += chunk.length;
