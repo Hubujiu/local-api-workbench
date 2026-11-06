@@ -1,3 +1,7 @@
+import {
+  observeDesktopProcess,
+  observeDesktopElectron,
+} from "./fixtures/desktop-lifecycle-observer.mjs";
 import { createDesktopCleanupObserver } from "./fixtures/desktop-cleanup-observer.mjs";
 import { sqliteProcessFailureDetails } from "../src/sqlite-process-diagnostics.mjs";
 import { desktopScriptProbes } from "./fixtures/desktop-script-probes.mjs";
@@ -93,6 +97,7 @@ const jwtFixture = http.createServer(async (request, response) => {
 await new Promise((resolve) => jwtFixture.listen(0, "127.0.0.1", resolve));
 
 let capturedScriptFailure = false;
+let observeProcess;
 let application,
   phase = "launch";
 const watchdog = setTimeout(() => {
@@ -106,6 +111,7 @@ try {
     env: { ...process.env, LOCAL_API_DESKTOP_DATA: root },
     timeout: 30000,
   });
+  observeProcess = observeDesktopProcess(application.process());
   application.process().stderr?.on("data", (chunk) => {
     const text = String(chunk).replace(
       /([?&#](?:token|key|code|state)=)[^\s&#]+/gi,
@@ -114,6 +120,9 @@ try {
     console.error("DESKTOP_STDERR", text.slice(0, 4000));
   });
   const window = await application.firstWindow();
+  await application.evaluate(observeDesktopElectron).catch(() => {
+    observeProcess("electron-observer-unavailable");
+  });
   window.on("pageerror", (error) =>
     console.error("DESKTOP_PAGE_ERROR", error.message),
   );
@@ -619,7 +628,8 @@ try {
   // Test-owned process only. Never let a failed test's unsaved dialog hang CI indefinitely.
   if (application) {
     const killed = observeCleanup("application-kill");
-    application.process().kill();
+    const sent = application.process().kill();
+    observeProcess?.("cleanup-signal", sent);
     killed();
     const closed = observeCleanup("application-close");
     await application.close().then(
