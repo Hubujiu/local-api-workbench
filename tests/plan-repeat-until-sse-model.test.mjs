@@ -69,7 +69,8 @@ test("SSE until intersects runtime-row ancestors and descendants with frozen ref
           if (reference) child.protocol = { definitionId: "saved" };
           const steps = nest(child);
           steps[0].enabled = enabled;
-          if (reference && !requireIds) assert.equal(check(steps, false), true);
+          if (!reference || !requireIds)
+            assert.equal(check(steps, requireIds), true);
           else
             assert.throws(
               () => check(steps, requireIds),

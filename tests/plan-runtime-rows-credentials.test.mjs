@@ -113,10 +113,10 @@ for (const { name, helper, leaf, credential } of fixtures) {
     assert.throws(() => helper(plan, input()), /尚未启用/);
   });
 
-  test(`${name} runtime rows credential opt-in admits only HTTP/TCP/WebSocket/gRPC/Socket.IO dynamic bodies`, () => {
+  test(`${name} runtime rows credential opt-in admits only HTTP/TCP/WebSocket/SSE/gRPC/Socket.IO dynamic bodies`, () => {
     const plan = { steps: [rows()] };
     plan.steps[0].steps = [{ ...structuredClone(leaf), enabled: false }];
-    if (["websocket", "gRPC", "Socket.IO"].includes(name)) {
+    if (["websocket", "sse", "gRPC", "Socket.IO"].includes(name)) {
       assert.equal(helper(plan, input(), optIn).size, 1);
       plan.steps[0].steps[0].enabled = true;
       assert.throws(() => helper(plan, {}, optIn), /Header|metadata/);
