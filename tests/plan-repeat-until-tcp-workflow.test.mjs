@@ -617,9 +617,10 @@ test("TCP repeat malformed wrappers, disabled invalid wire options and invalid c
     input.steps[0].enabled = false;
     input.steps[0].steps[0].protocol.definitionId = reference;
     // WebSocket is admitted by until, but even disabled WS rejects maxEvents.
-    // SSE remains unsupported after reference resolution.
+    // SSE is admitted too, but rejects maxMessages even while disabled.
     if (reference === "saved-ws")
       input.steps[0].steps[0].protocol.maxEvents = 1;
+    else input.steps[0].steps[0].protocol.maxMessages = 1;
     assert.notEqual(
       (await f.post(`projects/${p.id}/plans`, input)).status,
       200,

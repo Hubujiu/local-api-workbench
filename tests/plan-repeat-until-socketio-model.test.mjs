@@ -88,7 +88,11 @@ test("Socket.IO until saved references remain provisional until freezing and rej
 
 test("Socket.IO until rejects other protocols, aliases, malformed envelopes and scripts even when disabled", () => {
   for (const child of [
-    { id: "sse", type: "protocol", protocol: { definition: { type: "sse" } } },
+    {
+      id: "unknown",
+      type: "protocol",
+      protocol: { definition: { type: "unknown" } },
+    },
     {
       id: "alias",
       type: "protocol",

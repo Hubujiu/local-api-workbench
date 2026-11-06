@@ -16,8 +16,8 @@ const controlCapabilities = {
   },
   until: {
     leaves: ["http", "protocol", "grpc", "socketio"],
-    protocols: ["tcp", "websocket"],
-    error: "条件提前结束循环仅支持HTTP或TCP/WebSocket/gRPC/Socket.IO叶子",
+    protocols: ["tcp", "websocket", "sse"],
+    error: "条件提前结束循环仅支持HTTP或TCP/WebSocket/SSE/gRPC/Socket.IO叶子",
   },
   conditional: {
     leaves: ["http", "protocol", "grpc", "socketio"],
