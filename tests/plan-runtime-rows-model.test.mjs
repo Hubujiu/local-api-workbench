@@ -102,7 +102,7 @@ test("all data-repeat ancestry combinations reject, canonical subtree restrictio
     [{ ...inline, steps: [rows()] }],
   ])
     assert.throws(() => check(steps), /嵌套数据行/);
-  for (const type of ["protocol", "socketio", "database"])
+  for (const type of ["protocol", "database"])
     assert.throws(
       () => check([rows({ steps: [{ id: "other", type, enabled: false }] })]),
       /仅支持HTTP/,

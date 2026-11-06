@@ -1,11 +1,11 @@
 # Canonical runtime-row gRPC execution
 
-The runtime-row capability now admits independent `grpc` leaves alongside HTTP,
+At the gRPC milestone the runtime-row capability admitted independent `grpc` leaves alongside HTTP,
 TCP and WebSocket. It reuses the existing frozen graph, runtime row frames,
 per-occurrence gRPC executor and variable-scope commit machinery. There is no
 new transport, proprietary/native format interpretation, retry or session replay.
-SSE, Socket.IO and database leaves remain excluded beneath runtime-row controls,
-including disabled leaves and false IF branches. Every enclosing IF, fixed-repeat
+SSE, Socket.IO and database leaves were excluded beneath runtime-row controls,
+including disabled leaves and false IF branches. The later [Socket.IO extension](ADR-PLAN-RUNTIME-ROWS-SOCKETIO.md) supersedes only the Socket.IO exclusion. Every enclosing IF, fixed-repeat
 and repeat-until policy intersects; gRPC may appear inside rows/until in either
 order. Saved references are provisional only until snapshot resolution.
 

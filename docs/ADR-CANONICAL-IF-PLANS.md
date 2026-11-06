@@ -43,7 +43,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
   its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC/Socket.IO, while runtime-row descendants
-  admit HTTP/TCP/WebSocket/gRPC, including nested IF/fixed repeats and disabled definitions.
+  admit HTTP/TCP/WebSocket/gRPC/Socket.IO, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
 - All definitions, including disabled and false descendants, undergo complete
@@ -250,7 +250,7 @@ transport-limit acceptance.
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
 existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC/Socket.IO and
-runtime-row subtrees admit HTTP/TCP/WebSocket/gRPC even beneath false or disabled IF nodes. No native automation format is inferred;
+runtime-row subtrees admit HTTP/TCP/WebSocket/gRPC/Socket.IO even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
 Saved protocol references are provisional until snapshot resolution; frozen
@@ -466,9 +466,9 @@ capability or transport implementation change is part of this extension.
 
 ### gRPC runtime-row extension
 
-Canonical runtime rows now also admit independent `grpc` leaves through the same
+At the gRPC milestone canonical runtime rows also admitted independent `grpc` leaves through the same
 control capability intersection. See [the runtime-row gRPC contract](ADR-PLAN-RUNTIME-ROWS-GRPC.md).
-SSE, Socket.IO, database leaves and `protocol` aliases remain rejected inside
+At that milestone SSE, Socket.IO, database leaves and `protocol` aliases remained rejected inside
 rows, even under disabled or false branches. This extension supersedes only the
 gRPC row exclusions above; historical evidence remains scoped to its milestone.
 
@@ -477,8 +477,8 @@ gRPC row exclusions above; historical evidence remains scoped to its milestone.
 
 Canonical `repeat.untilCondition` also admits independent `socketio` leaves. This
 is not a `protocol` alias or native-format compatibility claim. SSE and database
-leaves remain excluded. Runtime-row ancestors still reject Socket.IO in either
-nesting direction, including false IF branches and disabled definitions. Native
+leaves remain excluded. At this repeat-until milestone runtime-row ancestors still rejected Socket.IO in either
+nesting direction, including false IF branches and disabled definitions; the runtime-row extension below supersedes that exclusion. Native
 projection, staged load and all count, depth, request, decision and wait budgets
 remain unchanged. Saved definition references resolve before frozen validation.
 
@@ -512,3 +512,13 @@ transport evidence, not a claim of proprietary-format or external-service
 interoperability. The integration base is PR #149 head
 `cd7f9649789022d5bc58823b5bafea3a41cdcfea`, preserving the Socket.IO peer-diagnostic
 safety fix on top of the PR #148 capability foundation.
+
+
+### Socket.IO runtime-row extension
+
+Canonical runtime rows now admit independent `socketio` leaves in either nesting
+order with until and IF. See [the Socket.IO runtime-row contract](ADR-PLAN-RUNTIME-ROWS-SOCKETIO.md)
+for row freezing, persistent scopes, transient credential preflight, partial ACK
+outcomes, cancellation and unknown-commit fail-stop. SSE and database descendants
+remain excluded. This changes admission only and retains PR #149 diagnostic safety;
+legitimate event and ACK payloads may echo sensitive data and are not redacted.

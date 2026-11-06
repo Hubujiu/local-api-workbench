@@ -10,9 +10,9 @@ import { normalizeExecutionContext } from "./script-context.mjs";
 // Inspect only admitted plain data (dataOnly runs before graph traversal).
 const controlCapabilities = {
   runtimeRows: {
-    leaves: ["http", "protocol", "grpc"],
+    leaves: ["http", "protocol", "grpc", "socketio"],
     protocols: ["tcp", "websocket"],
-    error: "运行时数据行循环仅支持HTTP或TCP/WebSocket/gRPC叶子",
+    error: "运行时数据行循环仅支持HTTP或TCP/WebSocket/gRPC/Socket.IO叶子",
   },
   until: {
     leaves: ["http", "protocol", "grpc", "socketio"],
