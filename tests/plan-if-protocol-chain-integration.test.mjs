@@ -154,7 +154,7 @@ for (const type of types) {
           maxRows: 2,
           steps: [gate([child], matched)],
         };
-        if (["tcp", "websocket", "grpc"].includes(type)) {
+        if (["tcp", "websocket", "grpc", "socketio"].includes(type)) {
           assert.equal(
             validateRepeatGraph([rows], {
               requireIds: true,
@@ -177,6 +177,10 @@ for (const type of types) {
             executeProtocol: async () => {
               dispatched++;
               return { status: "completed", result: { token: "ok" } };
+            },
+            executeSocketIO: async () => {
+              dispatched++;
+              return { status: "passed", results: [{ token: "ok" }] };
             },
           });
           assert.equal(run.status, "passed");

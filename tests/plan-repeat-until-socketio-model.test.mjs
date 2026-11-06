@@ -56,7 +56,7 @@ test("Socket.IO until admits independent leaves under fixed, IF and until ancest
   }
 });
 
-test("Socket.IO until cannot broaden runtime-row ancestors or descendants, including disabled and provisional leaves", () => {
+test("Socket.IO until intersects runtime-row ancestors and descendants with frozen reference checks", () => {
   for (const nest of [
     (x) => [rows([until("until", [x])])],
     (x) => [until("until", [rows([x])])],
@@ -69,7 +69,9 @@ test("Socket.IO until cannot broaden runtime-row ancestors or descendants, inclu
           if (reference) child.socketio = { definitionId: "saved" };
           const steps = nest(child);
           steps[0].enabled = enabled;
-          assert.throws(() => check(steps, requireIds), /运行时数据行循环/);
+          if (reference && requireIds)
+            assert.throws(() => check(steps, requireIds), /冻结前/);
+          else assert.equal(check(steps, requireIds), true);
         }
   }
 });

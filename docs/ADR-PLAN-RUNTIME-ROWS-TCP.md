@@ -34,7 +34,7 @@ At the WebSocket milestone runtime rows admitted HTTP, TCP and canonical
 WebSocket leaves. Its capability intersection admitted WS repeat-until nested
 under rows and rejected SSE, gRPC, Socket.IO and database siblings, including
 false and disabled branches. The later [gRPC extension](ADR-PLAN-RUNTIME-ROWS-GRPC.md)
-supersedes only that gRPC exclusion.
+supersedes only that gRPC exclusion, and the subsequent [Socket.IO extension](ADR-PLAN-RUNTIME-ROWS-SOCKETIO.md) supersedes only the Socket.IO exclusion.
 There is no new transport, reconnect, retry, native format or deployment behavior.
 
 Each occurrence opens a fresh bounded connection. Frozen leaf IDs identify the

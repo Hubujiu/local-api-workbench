@@ -75,7 +75,7 @@ test("canonical gRPC rows opt in and intersect symmetrically with IF, fixed and 
       assert.throws(() => snapshotPlan(plan), /尚未启用/);
       assert.doesNotThrow(() => snapshotPlan(plan, { allowRuntimeRows: true }));
     }
-  for (const type of ["sse", "grpc", "socketio", "database"])
+  for (const type of ["sse", "grpc", "database"])
     for (const enabled of [true, false]) {
       const child = ["sse", "grpc"].includes(type)
         ? {
