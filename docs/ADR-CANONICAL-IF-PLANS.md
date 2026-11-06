@@ -43,7 +43,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
   its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC, while runtime-row descendants
-  admit HTTP/TCP/WebSocket, including nested IF/fixed repeats and disabled definitions.
+  admit HTTP/TCP/WebSocket/gRPC, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
 - All definitions, including disabled and false descendants, undergo complete
@@ -250,7 +250,7 @@ transport-limit acceptance.
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
 existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC and
-runtime-row subtrees admit HTTP/TCP/WebSocket even beneath false or disabled IF nodes. No native automation format is inferred;
+runtime-row subtrees admit HTTP/TCP/WebSocket/gRPC even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
 Saved protocol references are provisional until snapshot resolution; frozen
@@ -403,7 +403,7 @@ protocol support, or load-run protocol support were introduced by that milestone
 
 At the WebSocket milestone, canonical `repeat.untilCondition` admitted HTTP, TCP
 and WebSocket descendants. SSE, gRPC and Socket.IO remained rejected, including false and disabled branches.
-Every enclosing policy still intersects: runtime rows now admit HTTP/TCP/WebSocket,
+Every enclosing policy still intersects: runtime rows at that milestone admitted HTTP/TCP/WebSocket,
 including a WebSocket leaf inside nested repeat-until. Staged load
 and native projections keep their existing restrictions; this is canonical
 Workbench execution, not native automation-format equivalence.
@@ -432,7 +432,7 @@ identified separately and do not establish external interoperability.
 
 Canonical `repeat.untilCondition` now additionally admits independent `grpc`
 leaves. SSE and Socket.IO remain excluded. Capabilities intersect at every
-ancestor: runtime rows still exclude gRPC, even beneath false IF conditions,
+ancestor: at this repeat-until milestone runtime rows still excluded gRPC, even beneath false IF conditions,
 disabled nodes, nested until or fixed-repeat groups. Saved references remain
 provisional during authoring and must resolve before frozen validation. This is
 not a native-format inference; native projections and staged load restrictions
@@ -462,3 +462,12 @@ entrypoint evidence. Loopback evidence is not a claim of external-service
 interoperability. The admission RED baseline is the exact PR #146 head
 `2021566bc780d0b1c3e95b8dbc9dac8bc5f3001d`; no native format, runtime-row
 capability or transport implementation change is part of this extension.
+
+
+### gRPC runtime-row extension
+
+Canonical runtime rows now also admit independent `grpc` leaves through the same
+control capability intersection. See [the runtime-row gRPC contract](ADR-PLAN-RUNTIME-ROWS-GRPC.md).
+SSE, Socket.IO, database leaves and `protocol` aliases remain rejected inside
+rows, even under disabled or false branches. This extension supersedes only the
+gRPC row exclusions above; historical evidence remains scoped to its milestone.

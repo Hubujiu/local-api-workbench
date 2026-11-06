@@ -28,7 +28,7 @@ const rows = (steps) => ({
 });
 const check = (steps, requireIds = true) =>
   validateRepeatGraph(steps, { requireIds, allowRuntimeRows: true });
-test("canonical gRPC until admits nested fixed, IF and until ancestry without widening rows", () => {
+test("canonical gRPC until admits nested fixed, IF and until ancestry and runtime-row intersections", () => {
   for (const nest of [
     (x) => x,
     (x) => gate([x]),
@@ -48,7 +48,7 @@ test("canonical gRPC until admits nested fixed, IF and until ancestry without wi
         (x) => [rows(x)],
         (x) => [until("outside", [rows(x)])],
       ]) {
-        assert.throws(() => check(placement(steps)), /运行时数据行循环/);
+        assert.equal(check(placement(steps)), true);
       }
     }
   }

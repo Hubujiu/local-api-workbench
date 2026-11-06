@@ -414,7 +414,7 @@ test("WS rows enforce unsupported sibling intersections, bounded-work quotas, st
   const { validateRepeatGraph } = await import("../src/plan-repeat.mjs");
   const { prepareStagedLoad } = await import("../src/staged-load-plan.mjs");
   const { assertNativeLinearPlan } = await import("../src/native-mcp-plan.mjs");
-  for (const type of ["sse", "grpc", "socketio", "database"])
+  for (const type of ["sse", "socketio", "database"])
     for (const enabled of [true, false]) {
       const child = type === "sse" ? wire(1, type) : { id: type, type };
       assert.throws(
@@ -559,14 +559,20 @@ test("rows and until intersect symmetrically for enabled and disabled mixed prot
     for (const enabled of [true, false])
       for (const type of ["tcp", "websocket", "sse", "grpc", "socketio"]) {
         const child = ["grpc", "socketio"].includes(type)
-          ? { id: type, type, enabled }
+          ? {
+              id: type,
+              type,
+              enabled,
+              ...(type === "grpc" ? { grpc: { definition: {} } } : {}),
+            }
           : { ...wire(12345, type), enabled };
         const check = () =>
           validateRepeatGraph([wrap(child)], {
             allowRuntimeRows: true,
             requireIds: true,
           });
-        if (["tcp", "websocket"].includes(type)) assert.equal(check(), true);
+        if (["tcp", "websocket", "grpc"].includes(type))
+          assert.equal(check(), true);
         else assert.throws(check, /仅支持HTTP/);
       }
 });
