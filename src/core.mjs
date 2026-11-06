@@ -1330,6 +1330,7 @@ export async function runPlan(
                 error instanceof ProjectCommitUncertain ||
                 ((activeIF ||
                   untilEnabled ||
+                  runtimeRowsEnabled ||
                   conditionalGrpcIds.has(step.id) ||
                   conditionalSocketIOIds.has(step.id)) &&
                   error?.code === "PROJECT_COMMIT_UNCERTAIN")
