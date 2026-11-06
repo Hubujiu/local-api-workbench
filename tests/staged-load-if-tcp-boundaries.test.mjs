@@ -68,29 +68,42 @@ for (const enabled of [true, false])
       ["rows/IF", (x) => rows([gate([x], matched)])],
       ["IF/rows/fixed", (x) => gate([rows([fixed([x])])], matched)],
     ]) {
-      test(`runtime rows never gains IF TCP, enabled=${enabled}, condition=${matched}, nesting=${nesting}`, async () => {
+      test(`runtime rows admit canonical IF TCP but preserve staged boundaries, enabled=${enabled}, condition=${matched}, nesting=${nesting}`, async () => {
         const child = tcp();
         child.enabled = enabled;
         const snapshot = { steps: [http(), nest(child)] };
-        assert.throws(
-          () =>
-            validateRepeatGraph(snapshot.steps, {
-              requireIds: true,
-              allowRuntimeRows: true,
-            }),
-          /运行时数据行循环.*仅支持HTTP/,
-        );
-        assert.throws(
-          () => prepareStagedLoad(noRead, snapshot, input),
-          /运行时数据行循环.*仅支持HTTP/,
-        );
-        await assert.rejects(
-          runStagedLoad(noRead, {
-            snapshot,
-            schedule: buildLoadSchedule(input),
+        assert.equal(
+          validateRepeatGraph(snapshot.steps, {
+            requireIds: true,
+            allowRuntimeRows: true,
           }),
-          /运行时数据行循环.*仅支持HTTP/,
+          true,
         );
+        if (enabled) {
+          assert.throws(
+            () => prepareStagedLoad(noRead, snapshot, input),
+            /HTTP/,
+          );
+          await assert.rejects(
+            runStagedLoad(noRead, {
+              snapshot,
+              schedule: buildLoadSchedule(input),
+            }),
+            /HTTP/,
+          );
+        } else {
+          const project = {
+            environments: [{ id: "env", name: "env", variables: {} }],
+            settings: {},
+          };
+          const prepared = prepareStagedLoad(project, snapshot, input);
+          assert.deepEqual(
+            activePlanLeaves(prepared.snapshot.steps, {
+              allowRuntimeRows: true,
+            }).map((step) => step.id),
+            ["http"],
+          );
+        }
       });
     }
 test("disabled standalone IF TCP retains staged admission compatibility alongside HTTP", () => {

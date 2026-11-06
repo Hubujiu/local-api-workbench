@@ -64,21 +64,20 @@ test("until TCP admission intersects IF, fixed repeats and runtime-row policies,
         );
     }
   }
-  assert.throws(
-    () =>
-      validateRepeatGraph(
-        [
-          {
-            id: "rows",
-            type: "repeat",
-            rowsFrom: { scope: "runtime", name: "rows" },
-            maxRows: 2,
-            steps: [loop()],
-          },
-        ],
-        { requireIds: true, allowRuntimeRows: true },
-      ),
-    /运行时数据行循环首版仅支持HTTP/,
+  assert.equal(
+    validateRepeatGraph(
+      [
+        {
+          id: "rows",
+          type: "repeat",
+          rowsFrom: { scope: "runtime", name: "rows" },
+          maxRows: 2,
+          steps: [loop()],
+        },
+      ],
+      { requireIds: true, allowRuntimeRows: true },
+    ),
+    true,
   );
   assert.throws(
     () =>

@@ -71,8 +71,8 @@ test("all restrictive ancestors intersect through IF and repeat, including unres
           child.enabled = false;
           if (reference) child.protocol = { definitionId: "saved-wire" };
           // Unresolved wire references are provisional; frozen validation must
-          // still reject a resolved non-TCP definition under until.
-          if (restriction === "until" && reference && !requireIds) {
+          // still reject a resolved non-TCP definition under either restriction.
+          if (reference && !requireIds) {
             assert.equal(check([copy], { requireIds }), true);
             child.protocol = structuredClone(wire().protocol);
           }

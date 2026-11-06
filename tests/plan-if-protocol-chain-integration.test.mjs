@@ -154,6 +154,27 @@ for (const type of types) {
           maxRows: 2,
           steps: [gate([child], matched)],
         };
+        if (type === "tcp") {
+          assert.equal(
+            validateRepeatGraph([rows], {
+              requireIds: true,
+              allowRuntimeRows: true,
+            }),
+            true,
+          );
+          let dispatched = 0;
+          const run = await runPlan({ steps: [rows] }, {}, noHTTP, {
+            allowRuntimeRows: true,
+            variableScopes: { runtime: { items: [{}] } },
+            executeProtocol: async () => {
+              dispatched++;
+              return { status: "completed", result: { token: "ok" } };
+            },
+          });
+          assert.equal(run.status, "passed");
+          assert.equal(dispatched, matched && enabled ? 1 : 0);
+          continue;
+        }
         assert.throws(
           () =>
             validateRepeatGraph([rows], {
