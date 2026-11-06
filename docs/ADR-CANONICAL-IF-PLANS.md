@@ -42,7 +42,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
-  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC, while runtime-row descendants
+  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC/Socket.IO, while runtime-row descendants
   admit HTTP/TCP/WebSocket/gRPC, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
@@ -249,7 +249,7 @@ transport-limit acceptance.
 
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
-existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC and
+existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC/Socket.IO and
 runtime-row subtrees admit HTTP/TCP/WebSocket/gRPC even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
@@ -430,8 +430,8 @@ identified separately and do not establish external interoperability.
 
 ### gRPC repeat-until extension
 
-Canonical `repeat.untilCondition` now additionally admits independent `grpc`
-leaves. SSE and Socket.IO remain excluded. Capabilities intersect at every
+At the gRPC repeat-until milestone, canonical `repeat.untilCondition` additionally
+admitted independent `grpc` leaves. SSE and Socket.IO remained excluded. Capabilities intersect at every
 ancestor: at this repeat-until milestone runtime rows still excluded gRPC, even beneath false IF conditions,
 disabled nodes, nested until or fixed-repeat groups. Saved references remain
 provisional during authoring and must resolve before frozen validation. This is
@@ -471,3 +471,44 @@ control capability intersection. See [the runtime-row gRPC contract](ADR-PLAN-RU
 SSE, Socket.IO, database leaves and `protocol` aliases remain rejected inside
 rows, even under disabled or false branches. This extension supersedes only the
 gRPC row exclusions above; historical evidence remains scoped to its milestone.
+
+
+### Socket.IO repeat-until extension
+
+Canonical `repeat.untilCondition` also admits independent `socketio` leaves. This
+is not a `protocol` alias or native-format compatibility claim. SSE and database
+leaves remain excluded. Runtime-row ancestors still reject Socket.IO in either
+nesting direction, including false IF branches and disabled definitions. Native
+projection, staged load and all count, depth, request, decision and wait budgets
+remain unchanged. Saved definition references resolve before frozen validation.
+
+Each occurrence uses a fresh bounded Socket.IO flow with the existing v2/v4,
+WebSocket/polling/auto transport and emit/wait/ack contracts. ACK success retains
+all arguments; sent and ack-sent mean only local completion with unknown remote
+business outcome. Timeout or disconnect retains bounded partial command/event
+evidence without automatically replaying an emit or ACK. No synthetic HTTP
+status or Socket.IO script dialect is introduced. Whole-step deadlines,
+truncation, cancellation and terminal session cleanup retain their contracts.
+HTTP steps can use their existing scripts to consume extracted values.
+
+The independent executor and ephemeral auth/query/header/TLS bindings are
+preflighted for potentially enabled leaves before earlier work, including false
+IF branches. Bindings use stable frozen leaf IDs, not occurrence IDs, and are not
+stored as credential configuration in snapshots or receipts. Peer response data
+remains untrusted and may itself contain sensitive content. Disabled ancestry retains static validation but
+does not require live credentials. Extraction and assertions use completed
+accepted results; tail conditions run after the body, observing committed scopes.
+An uncertain scope commit fail-stops before another condition or occurrence and
+preserves completed transport evidence without claiming an acknowledged commit.
+
+The focused Socket.IO model suite checks capability intersections, references,
+script rejection and unchanged budgets. Real loopback workflows cover v2/v4 WebSocket,
+polling and auto through owner HTTP, MCP HTTP/stdio, CLI and restore; distinct
+occurrence/session identities, early exit, internal timeout/disconnect partial
+evidence under stop and continue, explicit expected failure, cancellation,
+preflight, HTTP scripts, durable extraction, scope/journal uncertainty and no replay.
+These workflows are separate
+transport evidence, not a claim of proprietary-format or external-service
+interoperability. The integration base is PR #149 head
+`cd7f9649789022d5bc58823b5bafea3a41cdcfea`, preserving the Socket.IO peer-diagnostic
+safety fix on top of the PR #148 capability foundation.

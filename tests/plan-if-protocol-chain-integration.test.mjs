@@ -326,7 +326,7 @@ test("active IF fail-stops after durable scope write with lost acknowledgement",
         if (
           !["until", "rows"].includes(mode) ||
           type === "http" ||
-          (mode === "until" && ["tcp", "websocket"].includes(type))
+          (mode === "until" && ["tcp", "websocket", "socketio"].includes(type))
         )
           await t.test(`${type}/${mode}/${kind}`, async () => {
             const project = await store.create(
