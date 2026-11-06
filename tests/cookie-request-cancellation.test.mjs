@@ -209,7 +209,8 @@ for (const consumed of [130, 220]) {
         release = await f.hold(),
         entered = deferred(),
         received = deferred();
-      let now = performance.now();
+      // Use an integer origin so exact budget assertions avoid floating-point drift.
+      let now = 1000;
       t.mock.method(performance, "now", () => now);
       const header = f.jar.header;
       f.jar.header = async function (...args) {
