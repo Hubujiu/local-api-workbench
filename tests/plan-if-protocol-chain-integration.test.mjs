@@ -129,7 +129,7 @@ for (const selected of [types.slice(0, 4), types]) {
   });
 }
 for (const type of types) {
-  test(`${type} retains staged and runtimeRows restrictions inside mixed IF`, async () => {
+  test(`${type} retains staged restrictions and runtimeRows capability intersections inside mixed IF`, async () => {
     const noRead = new Proxy(
       {},
       {
@@ -154,7 +154,7 @@ for (const type of types) {
           maxRows: 2,
           steps: [gate([child], matched)],
         };
-        if (["tcp", "websocket"].includes(type)) {
+        if (["tcp", "websocket", "grpc"].includes(type)) {
           assert.equal(
             validateRepeatGraph([rows], {
               requireIds: true,
@@ -166,6 +166,14 @@ for (const type of types) {
           const run = await runPlan({ steps: [rows] }, {}, noHTTP, {
             allowRuntimeRows: true,
             variableScopes: { runtime: { items: [{}] } },
+            executeGrpc: async () => {
+              dispatched++;
+              return {
+                status: { code: 0, details: "OK" },
+                messages: [{ token: "ok" }],
+                durationMs: 0,
+              };
+            },
             executeProtocol: async () => {
               dispatched++;
               return { status: "completed", result: { token: "ok" } };

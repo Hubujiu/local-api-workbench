@@ -52,7 +52,7 @@ test("IF gRPC admits all supported nesting with false/disabled static definition
       assert.deepEqual(activePlanLeaves(steps), []);
     }
 });
-test("runtime-row restrictions intersect through IF and repeat, including unresolved and disabled leaves", () => {
+test("runtime-row gRPC admission intersects through IF and repeat with resolved disabled leaves", () => {
   for (const nest of nestings.slice(0, 3)) {
     const group = repeat([nest(rpc())]);
     group.id = "outer";
@@ -66,10 +66,9 @@ test("runtime-row restrictions intersect through IF and repeat, including unreso
         const child = planLeaves([copy])[0];
         child.enabled = false;
         if (reference) child.grpc = { definitionId: "saved-grpc" };
-        assert.throws(
-          () => check([copy], { requireIds }),
-          /运行时数据行循环.*仅支持HTTP/,
-        );
+        if (reference && requireIds)
+          assert.throws(() => check([copy], { requireIds }), /冻结前/);
+        else assert.equal(check([copy], { requireIds }), true);
       }
   }
 });

@@ -94,7 +94,7 @@ test("canonical runtime source, max bounds and mutually exclusive fields are str
   assert.equal(runtimeRowsMaxRowBytes(rows()), 16384);
 });
 
-test("all data-repeat ancestry combinations reject, HTTP/TCP subtree restriction includes disabled leaves", () => {
+test("all data-repeat ancestry combinations reject, canonical subtree restriction includes disabled leaves", () => {
   const inline = { ...fixed("inline", [leaf()]), rows: [{}, {}] };
   for (const steps of [
     [rows({ steps: [inline] })],
@@ -102,7 +102,7 @@ test("all data-repeat ancestry combinations reject, HTTP/TCP subtree restriction
     [{ ...inline, steps: [rows()] }],
   ])
     assert.throws(() => check(steps), /嵌套数据行/);
-  for (const type of ["grpc", "protocol", "socketio", "database"])
+  for (const type of ["protocol", "socketio", "database"])
     assert.throws(
       () => check([rows({ steps: [{ id: "other", type, enabled: false }] })]),
       /仅支持HTTP/,

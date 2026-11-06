@@ -30,9 +30,11 @@ Existing runtime-row suites retain unsupported-consumer and native-format checks
 
 ## Canonical WebSocket extension
 
-Runtime rows now admit only HTTP, TCP and canonical WebSocket leaves. The same
-capability intersection admits WS repeat-until nested under rows and rejects SSE,
-gRPC, Socket.IO and database siblings, including false and disabled branches.
+At the WebSocket milestone runtime rows admitted HTTP, TCP and canonical
+WebSocket leaves. Its capability intersection admitted WS repeat-until nested
+under rows and rejected SSE, gRPC, Socket.IO and database siblings, including
+false and disabled branches. The later [gRPC extension](ADR-PLAN-RUNTIME-ROWS-GRPC.md)
+supersedes only that gRPC exclusion.
 There is no new transport, reconnect, retry, native format or deployment behavior.
 
 Each occurrence opens a fresh bounded connection. Frozen leaf IDs identify the
