@@ -158,7 +158,7 @@ test("IF protocol references are provisional and frozen graphs must resolve to T
   }
 });
 
-test("repeat-until remains HTTP-only across IF and fixed-repeat ancestry, even false or disabled", () => {
+test("repeat-until admits TCP across IF and fixed-repeat ancestry, even false or disabled", () => {
   const wrappers = [
     (child) => fixed([gate([child])], { untilCondition: condition() }),
     (child) => gate([fixed([child], { untilCondition: condition() })]),
@@ -182,10 +182,12 @@ test("repeat-until remains HTTP-only across IF and fixed-repeat ancestry, even f
       const group = wrap(child);
       group.enabled = false;
       for (const requireIds of [false, true]) {
-        assert.throws(
-          () => check([group], { requireIds }),
-          /提前结束循环.*仅支持HTTP/,
-        );
+        if (requireIds && child.protocol.definitionId)
+          assert.throws(
+            () => check([group], { requireIds }),
+            /提前结束循环.*HTTP或TCP/,
+          );
+        else assert.equal(check([group], { requireIds }), true);
       }
     }
   }
