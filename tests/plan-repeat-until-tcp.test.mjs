@@ -54,7 +54,7 @@ test("until TCP admission intersects IF, fixed repeats and runtime-row policies,
         }),
         true,
       );
-      for (const type of ["websocket", "sse", "unknown"])
+      for (const type of ["sse", "unknown"])
         assert.throws(
           () =>
             validateRepeatGraph([loop([nest(wire(type))], { enabled })], {

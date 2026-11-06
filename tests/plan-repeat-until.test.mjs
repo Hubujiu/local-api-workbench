@@ -134,7 +134,7 @@ test("all disabled body still produces bounded decisions, disabled group produce
   );
 });
 
-test("until rejects same-group rows, protocol children, undefined conditions and excessive decisions", () => {
+test("until rejects same-group rows, unresolved protocol types, undefined conditions and excessive decisions", () => {
   assert.throws(
     () => snapshotPlan({ steps: [loop({ count: 1, rows: [{}] })] }),
     /同组数据行/,

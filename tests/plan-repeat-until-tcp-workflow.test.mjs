@@ -616,8 +616,8 @@ test("TCP repeat malformed wrappers, disabled invalid wire options and invalid c
     const input = f.definition();
     input.steps[0].enabled = false;
     input.steps[0].steps[0].protocol.definitionId = reference;
-    // A valid reference is allowed now, but disabled leaves still validate
-    // protocol-specific options: WS rejects maxEvents, SSE rejects message.
+    // WebSocket is admitted by until, but even disabled WS rejects maxEvents.
+    // SSE remains unsupported after reference resolution.
     if (reference === "saved-ws")
       input.steps[0].steps[0].protocol.maxEvents = 1;
     assert.notEqual(
