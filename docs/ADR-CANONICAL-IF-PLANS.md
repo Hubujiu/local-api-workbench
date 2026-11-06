@@ -375,7 +375,7 @@ The protocol-chain integration tests perform real Store writes and then throw
 an uncertain acknowledgement, verifying that disk has the new value while the
 run retains its old value and stops without replay. They cover true/false IF,
 disabled ancestors, HTTP and all five protocol sibling types, fixed-repeat
-occurrences, HTTP/TCP/WebSocket/gRPC until, HTTP/TCP/WebSocket runtime rows, and scripted wire/gRPC phases. HTTP uses a
+occurrences, HTTP/TCP/WebSocket until, HTTP runtime rows, and scripted wire/gRPC phases. HTTP uses a
 loopback peer; protocol executors in this cross-feature fixture are injected.
 These checks do not simulate a journal crash or establish wire conformance.
 
