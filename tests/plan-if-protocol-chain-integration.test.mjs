@@ -315,7 +315,11 @@ test("active IF fail-stops after durable scope write with lost acknowledgement",
       "rows",
     ])
       for (const kind of ["instance", "code"])
-        if (!["until", "rows"].includes(mode) || type === "http")
+        if (
+          !["until", "rows"].includes(mode) ||
+          type === "http" ||
+          (mode === "until" && ["tcp", "websocket"].includes(type))
+        )
           await t.test(`${type}/${mode}/${kind}`, async () => {
             const project = await store.create(
               "durable acknowledgement fixture",
