@@ -42,7 +42,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
-  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC/Socket.IO, while runtime-row descendants
+  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/SSE/gRPC/Socket.IO, while runtime-row descendants
   admit HTTP/TCP/WebSocket/gRPC/Socket.IO, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
@@ -249,7 +249,7 @@ transport-limit acceptance.
 
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
-existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC/Socket.IO and
+existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/SSE/gRPC/Socket.IO and
 runtime-row subtrees admit HTTP/TCP/WebSocket/gRPC/Socket.IO even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
@@ -277,8 +277,8 @@ remain explicitly identified where used to exercise evidence size boundaries.
 The conditional capability matrix also admits SSE; execution still uses the
 existing bounded captureSSE executor and dynamic conditional protocol set.
 This is canonical support only, not a claim about original application automation
-SSE formats. Repeat-until, runtime rows, staged load and native projections keep
-their existing restrictions.
+SSE formats. Repeat-until is admitted by the extension below; runtime rows,
+staged load and native projections keep their existing restrictions.
 
 EOF completes a capture. maxEvents and duration produce partial results, with
 extraction only when that status is explicitly expected. Cancellation retains the
@@ -476,8 +476,8 @@ gRPC row exclusions above; historical evidence remains scoped to its milestone.
 ### Socket.IO repeat-until extension
 
 Canonical `repeat.untilCondition` also admits independent `socketio` leaves. This
-is not a `protocol` alias or native-format compatibility claim. SSE and database
-leaves remain excluded. At this repeat-until milestone runtime-row ancestors still rejected Socket.IO in either
+is not a `protocol` alias or native-format compatibility claim. At that milestone SSE and database
+leaves remained excluded; the SSE extension below supersedes only the SSE until exclusion. At this repeat-until milestone runtime-row ancestors still rejected Socket.IO in either
 nesting direction, including false IF branches and disabled definitions; the runtime-row extension below supersedes that exclusion. Native
 projection, staged load and all count, depth, request, decision and wait budgets
 remain unchanged. Saved definition references resolve before frozen validation.
@@ -522,3 +522,49 @@ for row freezing, persistent scopes, transient credential preflight, partial ACK
 outcomes, cancellation and unknown-commit fail-stop. SSE and database descendants
 remain excluded. This changes admission only and retains PR #149 diagnostic safety;
 legitimate event and ACK payloads may echo sensitive data and are not redacted.
+
+
+### SSE repeat-until extension
+
+Canonical `repeat.untilCondition` admits `protocol` leaves with frozen `sse`
+definitions, including nested IF, fixed-repeat and until groups. This narrowly
+extends the exact PR #151 head `f981d31555a71b7891e846f8ca5d2f5d4ae99c4b`.
+Runtime-row ancestors or descendants still reject SSE, including disabled and
+false branches. Staged load and native projections remain rejected. Count,
+depth, expanded request/decision, delay and evidence limits are unchanged.
+Saved references remain provisional until resolved and checked as frozen data.
+
+Each occurrence performs one fresh bounded capture through the existing SSE
+transport. EOF is `completed`; duration and event-count boundaries are `partial`.
+`expectedStatus` defaults to `completed`, so accepting partial results requires
+an explicit `expectedStatus: "partial"`. Only matching status and passing
+assertions allow extraction. The transport HTTP handshake status is not the
+capture completion status. Incomplete final events are discarded. Cancellation
+rejects and closes the stream; failure/cancellation do not promise to retain
+buffered events. No parser state, event ID, retry field, or connection is reused
+between occurrences, and no reconnect or automatic retry is introduced.
+
+GET and POST retain their existing wire contract. **A repeated POST can repeat
+remote side effects**; reaching a capture boundary or failing an assertion does
+not prove the remote operation did not occur. This is a bounded control loop,
+not an idempotent retry facility. Tail conditions observe confirmed scopes after
+the body; continue policy can reach a tail decision after a failed capture, but
+failed extraction never publishes a partial batch or promotes a previous result
+into new event evidence. Stop policy stops before that decision. Unknown scope
+commit always fail-stops before another body leaf, tail decision, wait or sibling,
+with retry unsafe and completed transport evidence retained.
+
+Potential active leaves preflight executor authority and all required temporary
+header credentials before earlier HTTP work, including false IF branches.
+Disabled ancestry still validates definitions but does not require live bindings.
+Credentials remain keyed by stable leaf IDs, not occurrence IDs, and are not
+saved as configuration in snapshots, receipts or backups. Event data can itself
+contain sensitive content and is not claimed to be redacted. Existing append
+failure/unknown-commit receipts preserve no-replay and no-stale-data behavior.
+
+The SSE graph and injected-control tests cover intersections, references,
+unchanged limits and explicit evidence-budget/commit boundaries. The dedicated
+loopback workflow suite covers owner HTTP, official MCP HTTP/stdio and CLI,
+EOF/timeout/caps, expected status, stop/continue, preflight, cancellation, nested
+occurrences, restore/restart and persistence receipts. Loopback tests do not
+claim external-service interoperability or proprietary-format parity.
