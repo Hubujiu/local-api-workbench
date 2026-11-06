@@ -74,13 +74,12 @@ test("WS until capability intersects every ancestor and keeps all bounded-work l
         maxRows: 2,
         steps,
       };
-      assert.throws(
-        () =>
-          validateRepeatGraph([rows], {
-            requireIds: true,
-            allowRuntimeRows: true,
-          }),
-        /运行时数据行循环仅支持HTTP或TCP/,
+      assert.equal(
+        validateRepeatGraph([rows], {
+          requireIds: true,
+          allowRuntimeRows: true,
+        }),
+        true,
       );
     }
   for (const extra of [

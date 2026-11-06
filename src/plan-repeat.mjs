@@ -11,8 +11,8 @@ import { normalizeExecutionContext } from "./script-context.mjs";
 const controlCapabilities = {
   runtimeRows: {
     leaves: ["http", "protocol"],
-    protocols: ["tcp"],
-    error: "运行时数据行循环仅支持HTTP或TCP叶子",
+    protocols: ["tcp", "websocket"],
+    error: "运行时数据行循环仅支持HTTP或TCP/WebSocket叶子",
   },
   until: {
     leaves: ["http", "protocol"],

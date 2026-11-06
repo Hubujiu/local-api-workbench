@@ -53,7 +53,7 @@ test("IF WebSocket admits all supported nesting with false/disabled static defin
       assert.deepEqual(activePlanLeaves(steps), []);
     }
 });
-test("until admits WebSocket while runtime-row ancestors still reject it, including unresolved and disabled leaves", () => {
+test("until and runtime rows admit WebSocket with frozen-reference checks, including disabled leaves", () => {
   for (const restriction of ["until", "rows"])
     for (const nest of nestings.slice(0, 3)) {
       const group = repeat([nest(wire())]);
@@ -72,12 +72,12 @@ test("until admits WebSocket while runtime-row ancestors still reject it, includ
           child.enabled = false;
           if (reference) child.protocol = { definitionId: "saved-wire" };
           // Unresolved references are provisional; frozen snapshots must resolve
-          // them. Resolved WebSocket is admitted by until, but not runtime rows.
+          // them. Both enclosing capabilities admit resolved WebSocket.
           if (reference && !requireIds) {
             assert.equal(check([copy], { requireIds }), true);
             child.protocol = structuredClone(wire().protocol);
           }
-          if (restriction === "until" && !(reference && requireIds)) {
+          if (!(reference && requireIds)) {
             assert.equal(check([copy], { requireIds }), true);
             continue;
           }
