@@ -153,7 +153,7 @@ test("canonical TCP admission keeps other protocols, default gate and credential
       ),
     /TCP/,
   );
-  for (const type of ["sse"])
+  for (const type of ["unknown"])
     for (const enabled of [true, false])
       assert.throws(
         () =>

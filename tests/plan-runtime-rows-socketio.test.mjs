@@ -71,9 +71,9 @@ test("canonical Socket.IO rows opt in and intersect symmetrically with IF, fixed
       assert.throws(() => snapshotPlan(plan), /尚未启用/);
       assert.doesNotThrow(() => snapshotPlan(plan, { allowRuntimeRows: true }));
     }
-  for (const type of ["sse", "socketio", "database"])
+  for (const type of ["unknown", "socketio", "database"])
     for (const enabled of [true, false]) {
-      const child = ["sse", "socketio"].includes(type)
+      const child = ["unknown", "socketio"].includes(type)
         ? {
             id: "other",
             type: "protocol",

@@ -43,7 +43,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
   its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/SSE/gRPC/Socket.IO, while runtime-row descendants
-  admit HTTP/TCP/WebSocket/gRPC/Socket.IO, including nested IF/fixed repeats and disabled definitions.
+  admit HTTP/TCP/WebSocket/SSE/gRPC/Socket.IO, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
 - All definitions, including disabled and false descendants, undergo complete
@@ -277,7 +277,7 @@ remain explicitly identified where used to exercise evidence size boundaries.
 The conditional capability matrix also admits SSE; execution still uses the
 existing bounded captureSSE executor and dynamic conditional protocol set.
 This is canonical support only, not a claim about original application automation
-SSE formats. Repeat-until is admitted by the extension below; runtime rows,
+SSE formats. Repeat-until and runtime rows are admitted by the extensions below;
 staged load and native projections keep their existing restrictions.
 
 EOF completes a capture. maxEvents and duration produce partial results, with
@@ -519,8 +519,8 @@ safety fix on top of the PR #148 capability foundation.
 Canonical runtime rows now admit independent `socketio` leaves in either nesting
 order with until and IF. See [the Socket.IO runtime-row contract](ADR-PLAN-RUNTIME-ROWS-SOCKETIO.md)
 for row freezing, persistent scopes, transient credential preflight, partial ACK
-outcomes, cancellation and unknown-commit fail-stop. SSE and database descendants
-remain excluded. This changes admission only and retains PR #149 diagnostic safety;
+outcomes, cancellation and unknown-commit fail-stop. At that milestone SSE and database
+descendants remained excluded; the SSE runtime-row extension below supersedes the SSE exclusion. This changes admission only and retains PR #149 diagnostic safety;
 legitimate event and ACK payloads may echo sensitive data and are not redacted.
 
 
@@ -529,8 +529,8 @@ legitimate event and ACK payloads may echo sensitive data and are not redacted.
 Canonical `repeat.untilCondition` admits `protocol` leaves with frozen `sse`
 definitions, including nested IF, fixed-repeat and until groups. This narrowly
 extends the exact PR #151 head `f981d31555a71b7891e846f8ca5d2f5d4ae99c4b`.
-Runtime-row ancestors or descendants still reject SSE, including disabled and
-false branches. Staged load and native projections remain rejected. Count,
+At that milestone runtime-row ancestors or descendants rejected SSE, including disabled
+and false branches; the runtime-row extension below supersedes that exclusion. Staged load and native projections remain rejected. Count,
 depth, expanded request/decision, delay and evidence limits are unchanged.
 Saved references remain provisional until resolved and checked as frozen data.
 
@@ -568,3 +568,10 @@ loopback workflow suite covers owner HTTP, official MCP HTTP/stdio and CLI,
 EOF/timeout/caps, expected status, stop/continue, preflight, cancellation, nested
 occurrences, restore/restart and persistence receipts. Loopback tests do not
 claim external-service interoperability or proprietary-format parity.
+
+### SSE runtime-row extension
+
+Canonical runtime rows now admit SSE descendants under nested IF, fixed and until
+controls. See [the SSE runtime-row contract](ADR-PLAN-RUNTIME-ROWS-SSE.md). This
+extends admission only, with frozen rows, persistent committed scopes, preflight
+and all transport boundaries unchanged. Database and noncanonical aliases remain excluded.

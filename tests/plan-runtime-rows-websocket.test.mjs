@@ -152,7 +152,7 @@ test("canonical WebSocket admission keeps other protocols and default gate close
     wirePlanCredentials(plan, {}, { allowRuntimeRows: true }).size,
     0,
   );
-  for (const type of ["sse"])
+  for (const type of ["unknown"])
     for (const enabled of [true, false])
       assert.throws(
         () =>
@@ -414,9 +414,9 @@ test("WS rows enforce unsupported sibling intersections, bounded-work quotas, st
   const { validateRepeatGraph } = await import("../src/plan-repeat.mjs");
   const { prepareStagedLoad } = await import("../src/staged-load-plan.mjs");
   const { assertNativeLinearPlan } = await import("../src/native-mcp-plan.mjs");
-  for (const type of ["sse", "database"])
+  for (const type of ["unknown", "database"])
     for (const enabled of [true, false]) {
-      const child = type === "sse" ? wire(1, type) : { id: type, type };
+      const child = type === "unknown" ? wire(1, type) : { id: type, type };
       assert.throws(
         () =>
           snapshotPlan(
@@ -571,7 +571,7 @@ test("rows and until intersect symmetrically for enabled and disabled mixed prot
             allowRuntimeRows: true,
             requireIds: true,
           });
-        if (["tcp", "websocket", "grpc", "socketio"].includes(type))
+        if (["tcp", "websocket", "sse", "grpc", "socketio"].includes(type))
           assert.equal(check(), true);
         else assert.throws(check, /仅支持HTTP/);
       }

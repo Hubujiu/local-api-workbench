@@ -71,12 +71,12 @@ test("all restrictive ancestors intersect through IF and repeat, including unres
           child.enabled = false;
           if (reference) child.protocol = { definitionId: "saved-wire" };
           // Unresolved wire references are provisional; frozen validation must
-          // still reject resolved SSE under runtime rows only.
+          // reject unresolved references at freeze time.
           if (reference && !requireIds) {
             assert.equal(check([copy], { requireIds }), true);
             child.protocol = structuredClone(wire().protocol);
           }
-          if (restriction === "until" && (!reference || !requireIds)) {
+          if (!reference || !requireIds) {
             assert.equal(check([copy], { requireIds }), true);
             continue;
           }

@@ -11,8 +11,8 @@ import { normalizeExecutionContext } from "./script-context.mjs";
 const controlCapabilities = {
   runtimeRows: {
     leaves: ["http", "protocol", "grpc", "socketio"],
-    protocols: ["tcp", "websocket"],
-    error: "运行时数据行循环仅支持HTTP或TCP/WebSocket/gRPC/Socket.IO叶子",
+    protocols: ["tcp", "websocket", "sse"],
+    error: "运行时数据行循环仅支持HTTP或TCP/WebSocket/SSE/gRPC/Socket.IO叶子",
   },
   until: {
     leaves: ["http", "protocol", "grpc", "socketio"],

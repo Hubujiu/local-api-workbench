@@ -3,7 +3,8 @@
 Canonical runtime rows (`rowsFrom`, `maxRows`) admit independent `socketio` leaves
 alongside HTTP, TCP, WebSocket and gRPC. The capability intersects every enclosing
 IF, fixed-repeat and repeat-until control, including disabled definitions and
-false branches. SSE, database and `protocol` aliases for Socket.IO remain excluded.
+false branches. At that milestone SSE, database and `protocol` aliases for Socket.IO
+were excluded. The later [SSE extension](ADR-PLAN-RUNTIME-ROWS-SSE.md) admits only SSE.
 Saved references must resolve before frozen validation. This extends admission
 on exact PR #150 head `bd57ba40cc88d9f6472c700804a10480d4fc3c27`; it does not add a
 transport, native format, script dialect, retry, reconnect or session replay.
