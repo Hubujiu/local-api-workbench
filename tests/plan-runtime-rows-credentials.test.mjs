@@ -113,7 +113,7 @@ for (const { name, helper, leaf, credential } of fixtures) {
     assert.throws(() => helper(plan, input()), /尚未启用/);
   });
 
-  test(`${name} runtime rows credential opt-in does not admit non-HTTP dynamic bodies`, () => {
+  test(`${name} runtime rows credential opt-in does not admit non-HTTP/TCP dynamic bodies`, () => {
     const plan = { steps: [rows()] };
     plan.steps[0].steps = [{ ...structuredClone(leaf), enabled: false }];
     assert.throws(() => helper(plan, input(), optIn), /仅支持HTTP/);

@@ -94,7 +94,7 @@ test("canonical runtime source, max bounds and mutually exclusive fields are str
   assert.equal(runtimeRowsMaxRowBytes(rows()), 16384);
 });
 
-test("all data-repeat ancestry combinations reject, HTTP subtree restriction includes disabled leaves", () => {
+test("all data-repeat ancestry combinations reject, HTTP/TCP subtree restriction includes disabled leaves", () => {
   const inline = { ...fixed("inline", [leaf()]), rows: [{}, {}] };
   for (const steps of [
     [rows({ steps: [inline] })],

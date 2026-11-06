@@ -10,9 +10,9 @@ import { normalizeExecutionContext } from "./script-context.mjs";
 // Inspect only admitted plain data (dataOnly runs before graph traversal).
 const controlCapabilities = {
   runtimeRows: {
-    leaves: ["http"],
-    protocols: [],
-    error: "运行时数据行循环首版仅支持HTTP叶子",
+    leaves: ["http", "protocol"],
+    protocols: ["tcp"],
+    error: "运行时数据行循环仅支持HTTP或TCP叶子",
   },
   until: {
     leaves: ["http", "protocol"],
