@@ -1,3 +1,7 @@
+import {
+  appendNativeInheritance,
+  assertNativeAppendInput,
+} from "./native-inheritance-append.mjs";
 import { createManualImportTokens } from "./manual-import-token.mjs";
 import {
   normalizeManualImportInput,
@@ -49,11 +53,15 @@ function binding(project, input, sessionId) {
 }
 async function plan(project, input, context, signal) {
   active(signal);
+  const native = project.settings?.nativeInheritance !== undefined;
+  if (native) assertNativeAppendInput(input);
   const source = await prepareManualImportSource(
     { format: input.format, document: input.document, options: input.options },
     context,
+    { preserveNative: native },
   );
   active(signal);
+  if (native) return appendNativeInheritance(project, source, context);
   return buildManualImportPlan(project, source, input, context);
 }
 export async function previewManualImport(

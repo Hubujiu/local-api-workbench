@@ -964,7 +964,11 @@ export function collectManualImportModelReferences(project) {
   return result;
 }
 
-export async function prepareManualImportSource(input, context) {
+export async function prepareManualImportSource(
+  input,
+  context,
+  { preserveNative = false } = {},
+) {
   const checked = ordinaryCopy(input);
   exact(checked, ["format", "document", "options"]);
   if (
@@ -1062,6 +1066,22 @@ export async function prepareManualImportSource(input, context) {
     globalVariables: {},
     settings: {},
   };
-  importIntoProject(source, document, options);
+  if (preserveNative && !directory && !modern)
+    fail("原生追加仅支持现代JSON和目录");
+  importIntoProject(
+    source,
+    document,
+    preserveNative ? { ...options, inheritanceMode: "preserve" } : options,
+  );
+  if (preserveNative) {
+    for (const request of source.requests) {
+      const binding = source.settings.nativeInheritance.bindings.find(
+        (b) => b.requestId === request.id,
+      );
+      request.id = manualImportID(context, "native-api:" + binding.sourceId);
+      binding.requestId = request.id;
+    }
+    return converterCopy(source);
+  }
   return buildManualImportSourceGraph(source, context);
 }
