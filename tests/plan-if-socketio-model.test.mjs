@@ -52,7 +52,7 @@ test("IF Socket.IO admits all supported nesting with false/disabled static defin
       assert.deepEqual(activePlanLeaves(steps), []);
     }
 });
-test("all restrictive ancestors intersect through IF and repeat, including unresolved and disabled leaves", () => {
+test("until admits Socket.IO while runtime-row ancestors still restrict false and disabled definitions", () => {
   for (const restriction of ["until", "rows"])
     for (const nest of nestings.slice(0, 3)) {
       const group = repeat([nest(rpc())]);
@@ -70,11 +70,13 @@ test("all restrictive ancestors intersect through IF and repeat, including unres
           const child = planLeaves([copy])[0];
           child.enabled = false;
           if (reference) child.socketio = { definitionId: "saved-socketio" };
+          if (restriction === "until" && !(reference && requireIds)) {
+            assert.equal(check([copy], { requireIds }), true);
+            continue;
+          }
           assert.throws(
             () => check([copy], { requireIds }),
-            restriction === "until"
-              ? /提前结束循环.*仅支持HTTP/
-              : /运行时数据行循环.*仅支持HTTP/,
+            restriction === "until" ? /冻结前/ : /运行时数据行循环.*仅支持HTTP/,
           );
         }
     }

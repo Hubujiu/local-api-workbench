@@ -62,7 +62,7 @@ test("until saved gRPC references remain provisional and frozen definitions are 
   steps[0].steps[0].grpc = { definition: {}, definitionId: "saved" };
   assert.throws(() => check(steps, false), /混合/);
 });
-test("until still rejects SSE, Socket.IO, malformed gRPC and wire aliases even when disabled", () => {
+test("until still rejects SSE, malformed gRPC and wire aliases even when disabled", () => {
   for (const child of [
     { id: "sse", type: "protocol", protocol: { definition: { type: "sse" } } },
     {
@@ -70,7 +70,6 @@ test("until still rejects SSE, Socket.IO, malformed gRPC and wire aliases even w
       type: "protocol",
       protocol: { definition: { type: "grpc" } },
     },
-    { id: "socket", type: "socketio", socketio: { definition: {} } },
     { ...leaf(), grpc: null },
   ])
     assert.throws(() =>
