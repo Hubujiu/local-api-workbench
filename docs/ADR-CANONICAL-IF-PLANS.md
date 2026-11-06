@@ -42,7 +42,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
-  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket, while runtime-row descendants
+  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket/gRPC, while runtime-row descendants
   admit HTTP/TCP/WebSocket, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
@@ -249,7 +249,7 @@ transport-limit acceptance.
 
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
-existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket and
+existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket/gRPC and
 runtime-row subtrees admit HTTP/TCP/WebSocket even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
@@ -401,8 +401,8 @@ protocol support, or load-run protocol support were introduced by that milestone
 
 ### WebSocket repeat-until extension
 
-Canonical `repeat.untilCondition` now admits HTTP, TCP and WebSocket descendants.
-SSE, gRPC and Socket.IO remain rejected, including false and disabled branches.
+At the WebSocket milestone, canonical `repeat.untilCondition` admitted HTTP, TCP
+and WebSocket descendants. SSE, gRPC and Socket.IO remained rejected, including false and disabled branches.
 Every enclosing policy still intersects: runtime rows now admit HTTP/TCP/WebSocket,
 including a WebSocket leaf inside nested repeat-until. Staged load
 and native projections keep their existing restrictions; this is canonical
@@ -426,3 +426,39 @@ The WebSocket repeat-until model and workflow suites cover admission boundaries
 and canonical execution through owner, official MCP HTTP/stdio and CLI entrypoints,
 using loopback peers for transport evidence. Synthetic executor checks are
 identified separately and do not establish external interoperability.
+
+
+### gRPC repeat-until extension
+
+Canonical `repeat.untilCondition` now additionally admits independent `grpc`
+leaves. SSE and Socket.IO remain excluded. Capabilities intersect at every
+ancestor: runtime rows still exclude gRPC, even beneath false IF conditions,
+disabled nodes, nested until or fixed-repeat groups. Saved references remain
+provisional during authoring and must resolve before frozen validation. This is
+not a native-format inference; native projections and staged load restrictions
+remain unchanged.
+
+Every occurrence reuses the bounded gRPC executor for unary, server-streaming,
+client-streaming and bidirectional calls. The complete response and terminal
+status are observed before extraction, assertion and the iteration's tail
+condition. Existing stream status behavior (including expected non-OK status),
+message limits, deadlines and cancellation remain intact; no retries or live
+session replay are introduced. Conditions read committed scopes only after the
+whole iteration. Extraction publishes only a complete accepted batch; ordinary
+failures retain existing failurePolicy semantics, while an uncertain commit
+stops before a tail decision or another RPC and never replays the completed
+response.
+
+Executor and per-run metadata/TLS credentials are checked for every potentially
+enabled leaf before earlier HTTP work or scripts, including leaves under false
+IF conditions. Disabled ancestry does not require per-run credentials but still
+undergoes static validation. Credentials stay keyed by frozen leaf IDs and are
+not persisted in receipts or backups. Owner, canonical MCP HTTP/stdio and CLI
+continue to share the frozen graph and receipts.
+
+The pure `plan-repeat-until-grpc-model` suite covers admission intersections;
+`plan-repeat-until-grpc-workflow` uses loopback gRPC/HTTP peers for execution and
+entrypoint evidence. Loopback evidence is not a claim of external-service
+interoperability. The admission RED baseline is the exact PR #146 head
+`2021566bc780d0b1c3e95b8dbc9dac8bc5f3001d`; no native format, runtime-row
+capability or transport implementation change is part of this extension.

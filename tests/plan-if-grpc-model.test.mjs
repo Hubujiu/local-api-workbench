@@ -52,32 +52,26 @@ test("IF gRPC admits all supported nesting with false/disabled static definition
       assert.deepEqual(activePlanLeaves(steps), []);
     }
 });
-test("all restrictive ancestors intersect through IF and repeat, including unresolved and disabled leaves", () => {
-  for (const restriction of ["until", "rows"])
-    for (const nest of nestings.slice(0, 3)) {
-      const group = repeat([nest(rpc())]);
-      group.id = "outer";
-      if (restriction === "until") group.untilCondition = condition;
-      else {
-        delete group.count;
-        group.rowsFrom = { scope: "runtime", name: "items" };
-        group.maxRows = 2;
+test("runtime-row restrictions intersect through IF and repeat, including unresolved and disabled leaves", () => {
+  for (const nest of nestings.slice(0, 3)) {
+    const group = repeat([nest(rpc())]);
+    group.id = "outer";
+    delete group.count;
+    group.rowsFrom = { scope: "runtime", name: "items" };
+    group.maxRows = 2;
+    for (const requireIds of [true, false])
+      for (const reference of [true, false]) {
+        const copy = structuredClone(group);
+        copy.enabled = false;
+        const child = planLeaves([copy])[0];
+        child.enabled = false;
+        if (reference) child.grpc = { definitionId: "saved-grpc" };
+        assert.throws(
+          () => check([copy], { requireIds }),
+          /运行时数据行循环.*仅支持HTTP/,
+        );
       }
-      for (const requireIds of [true, false])
-        for (const reference of [true, false]) {
-          const copy = structuredClone(group);
-          copy.enabled = false;
-          const child = planLeaves([copy])[0];
-          child.enabled = false;
-          if (reference) child.grpc = { definitionId: "saved-grpc" };
-          assert.throws(
-            () => check([copy], { requireIds }),
-            restriction === "until"
-              ? /提前结束循环.*仅支持HTTP/
-              : /运行时数据行循环.*仅支持HTTP/,
-          );
-        }
-    }
+  }
 });
 
 test("gRPC is not a wire protocol alias", () => {
