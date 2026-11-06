@@ -1,3 +1,4 @@
+import { createDesktopCleanupObserver } from "./fixtures/desktop-cleanup-observer.mjs";
 import { sqliteProcessFailureDetails } from "../src/sqlite-process-diagnostics.mjs";
 import { desktopScriptProbes } from "./fixtures/desktop-script-probes.mjs";
 import http from "node:http";
@@ -614,19 +615,36 @@ try {
   throw error;
 } finally {
   phase = "shutdown";
+  const observeCleanup = createDesktopCleanupObserver();
   // Test-owned process only. Never let a failed test's unsaved dialog hang CI indefinitely.
   if (application) {
+    const killed = observeCleanup("application-kill");
     application.process().kill();
-    await application.close().catch(() => {});
+    killed();
+    const closed = observeCleanup("application-close");
+    await application.close().then(
+      () => closed(),
+      () => closed("failed"),
+    );
   }
+  const ntlmClosed = observeCleanup("ntlm-close");
   await ntlmFixture.close();
+  ntlmClosed();
+  const connectionsClosed = observeCleanup("jwt-close-connections");
   jwtFixture.closeAllConnections();
+  connectionsClosed();
+  const jwtClosed = observeCleanup("jwt-close");
   await new Promise((resolve) => jwtFixture.close(resolve));
+  jwtClosed();
+  const watchdogCleared = observeCleanup("watchdog-clear");
   clearTimeout(watchdog);
+  watchdogCleared();
+  const directoryRemoved = observeCleanup("temporary-directory-remove");
   await rm(root, {
     recursive: true,
     force: true,
     maxRetries: 5,
     retryDelay: 100,
   });
+  directoryRemoved();
 }
