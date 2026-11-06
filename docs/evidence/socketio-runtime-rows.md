@@ -25,6 +25,12 @@ Socket.IO leaves; the transport and peer-diagnostic sanitizer are unchanged.
 - Broad command:
   `node --test --test-concurrency=2 tests/plan-*model.test.mjs tests/plan-runtime-rows-*.test.mjs tests/plan-repeat-until-socketio*.test.mjs tests/socketio*.test.mjs tests/staged-load-runtime-rows.test.mjs`
   passed 539/539.
+- CI exposed one additional obsolete Socket.IO exclusion in the mixed-IF protocol
+  chain matrix. The follow-up adds Socket.IO admission and an injected executor,
+  preserving true/false, enabled/disabled dispatch checks and SSE rejection.
+  Independent matrix verification passes 131/131; matrix plus the new row suites
+  pass 187/187. Expanding the broad command above with
+  `tests/plan-if-protocol-chain-integration.test.mjs` passes 670/670.
 - `npm run check`, `npm run format:check` and `git diff --check` passed.
 
 The full local aggregate and remote CI are reported separately with the PR; this
