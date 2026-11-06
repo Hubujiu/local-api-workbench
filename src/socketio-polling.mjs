@@ -1,3 +1,4 @@
+import { socketIOError } from "./socketio-errors.mjs";
 import http from "node:http";
 import https from "node:https";
 import { Fetch, NodeWebSocket } from "engine.io-client";
@@ -17,16 +18,19 @@ export class BoundedPolling extends Fetch {
     const post = data !== undefined,
       closing = post && this.closing;
     if (this.readyState === "closed" && !closing)
-      return Promise.reject(Error("Socket.IO polling transport closed"));
+      return Promise.reject(
+        socketIOError("Socket.IO polling transport closed"),
+      );
     if (active.size >= 20)
-      return Promise.reject(Error("Socket.IO polling请求达到20项上限"));
+      return Promise.reject(socketIOError("Socket.IO polling请求达到20项上限"));
     if (
       post &&
       (typeof data !== "string" || Buffer.byteLength(data) > MAX_BYTES)
     )
-      return Promise.reject(Error("Socket.IO polling请求超过1MiB"));
+      return Promise.reject(socketIOError("Socket.IO polling请求超过1MiB"));
     const uri = this.uri();
-    if (uri.length > 16384) throw Error("Socket.IO polling请求地址超过16KiB");
+    if (uri.length > 16384)
+      throw socketIOError("Socket.IO polling请求地址超过16KiB");
     const target = new URL(uri);
     const headers = Object.fromEntries(
       Object.entries(this.opts.extraHeaders || {}).map(([k, v]) => [
@@ -77,28 +81,30 @@ export class BoundedPolling extends Fetch {
             };
             const status = response.statusCode || 0;
             if (status < 200 || status >= 300)
-              return fail(Error("Socket.IO polling HTTP " + status));
+              return fail(socketIOError("Socket.IO polling HTTP " + status));
             const encoding = response.headers["content-encoding"];
             if (encoding && String(encoding).toLowerCase() !== "identity")
-              return fail(Error("Socket.IO polling拒绝未经协商的压缩响应"));
+              return fail(
+                socketIOError("Socket.IO polling拒绝未经协商的压缩响应"),
+              );
             const length = response.headers["content-length"];
             if (
               length !== undefined &&
               (!/^\d+$/.test(length) || Number(length) > MAX_BYTES)
             )
-              return fail(Error("Socket.IO polling响应超过1MiB"));
+              return fail(socketIOError("Socket.IO polling响应超过1MiB"));
             const chunks = [];
             let bytes = 0;
             response.on("data", (chunk) => {
               bytes += chunk.length;
               if (bytes > MAX_BYTES) {
-                fail(Error("Socket.IO polling响应超过1MiB"));
+                fail(socketIOError("Socket.IO polling响应超过1MiB"));
                 return;
               }
               chunks.push(chunk);
             });
             response.on("aborted", () =>
-              finish(Error("Socket.IO polling响应中断")),
+              finish(socketIOError("Socket.IO polling响应中断")),
             );
             response.on("error", (error) => finish(error));
             response.on("end", () => {
@@ -124,15 +130,15 @@ export class BoundedPolling extends Fetch {
         this.requests.set(request, closing);
         request.on("error", (error) => finish(error));
         request.on("close", () => {
-          if (!settled) finish(Error("Socket.IO polling请求已关闭"));
+          if (!settled) finish(socketIOError("Socket.IO polling请求已关闭"));
         });
         request.on("upgrade", (_response, socket) => {
           socket.destroy();
-          finish(Error("Socket.IO polling拒绝意外协议升级"));
+          finish(socketIOError("Socket.IO polling拒绝意外协议升级"));
           request.destroy();
         });
         timer = setTimeout(
-          () => request.destroy(Error("Socket.IO polling请求超时")),
+          () => request.destroy(socketIOError("Socket.IO polling请求超时")),
           closing ? 2000 : 30000,
         );
         timer.unref?.();
@@ -160,7 +166,7 @@ export class BoundedPolling extends Fetch {
   onClose(details) {
     for (const [request, closing] of this.requests)
       if (!closing)
-        request.destroy(Error("Socket.IO polling transport closed"));
+        request.destroy(socketIOError("Socket.IO polling transport closed"));
     super.onClose(details);
   }
   onData(data) {

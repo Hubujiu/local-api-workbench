@@ -1,3 +1,4 @@
+import { socketIOError, socketIODiagnostic } from "./socketio-errors.mjs";
 import { performance } from "node:perf_hooks";
 import { normalizeHandshake, resolveHandshake } from "./protocol-handshake.mjs";
 import { legacySocket } from "./socketio-legacy.mjs";
@@ -30,52 +31,53 @@ function eventName(value) {
     /[\x00-\x1f\x7f]/.test(value) ||
     reserved.has(value)
   )
-    throw Error("Socket.IO事件名称无效或属于保留事件");
+    throw socketIOError("Socket.IO事件名称无效或属于保留事件");
   return value;
 }
 function eventFilter(value) {
   if (value === undefined || value === null) return null;
   if (!Array.isArray(value) || value.length > 100)
-    throw Error("Socket.IO监听事件最多100项");
+    throw socketIOError("Socket.IO监听事件最多100项");
   return [...new Set(value.map(eventName))];
 }
 function jsonData(value, decode = false) {
   let nodes = 0;
   const walk = (x, depth) => {
-    if (++nodes > 10000 || depth > 32) throw Error("Socket.IO消息结构超限");
+    if (++nodes > 10000 || depth > 32)
+      throw socketIOError("Socket.IO消息结构超限");
     if (
       Buffer.isBuffer(x) ||
       x instanceof Uint8Array ||
       x instanceof ArrayBuffer
     ) {
       const b = x instanceof ArrayBuffer ? Buffer.from(x) : Buffer.from(x);
-      if (b.length > MAX) throw Error("Socket.IO二进制消息超限");
+      if (b.length > MAX) throw socketIOError("Socket.IO二进制消息超限");
       return decode ? b : { $binary: b.toString("base64") };
     }
     if (x === null || typeof x === "boolean") return x;
     if (typeof x === "number" && Number.isFinite(x)) return x;
     if (typeof x === "string" && x.isWellFormed()) return x;
     if (Array.isArray(x)) return x.map((v) => walk(v, depth + 1));
-    if (!plain(x)) throw Error("Socket.IO消息须为有限JSON数据");
+    if (!plain(x)) throw socketIOError("Socket.IO消息须为有限JSON数据");
     if (decode && Object.hasOwn(x, "$binary")) {
       if (Object.keys(x).length !== 1 || typeof x.$binary !== "string")
-        throw Error("Socket.IO二进制格式无效");
+        throw socketIOError("Socket.IO二进制格式无效");
       const b = Buffer.from(x.$binary, "base64");
       if (b.toString("base64") !== x.$binary || b.length > MAX)
-        throw Error("Socket.IO二进制编码无效或超限");
+        throw socketIOError("Socket.IO二进制编码无效或超限");
       return b;
     }
     return Object.fromEntries(
       Object.entries(x).map(([k, v]) => {
         if (["__proto__", "prototype", "constructor"].includes(k))
-          throw Error("Socket.IO消息包含保留字段");
+          throw socketIOError("Socket.IO消息包含保留字段");
         return [k, walk(v, depth + 1)];
       }),
     );
   };
   const result = walk(value, 0);
   if (Buffer.byteLength(JSON.stringify(result)) > MAX)
-    throw Error("Socket.IO消息超过1MiB");
+    throw socketIOError("Socket.IO消息超过1MiB");
   return result;
 }
 function urlDefinition(input) {
@@ -305,7 +307,7 @@ export class SocketIOSessions {
   get(projectId, id) {
     const s = this.sessions.get(id);
     if (!s || s.projectId !== projectId)
-      throw Error("Socket.IO会话不存在或不属于此项目");
+      throw socketIOError("Socket.IO会话不存在或不属于此项目");
     return s;
   }
   snapshot(projectId, id) {
@@ -325,11 +327,13 @@ export class SocketIOSessions {
     });
   }
   record(s, direction, event, args, extra = {}) {
-    if (s.sequence >= 10000) throw Error("Socket.IO会话事件总数超过10000项");
+    if (s.sequence >= 10000)
+      throw socketIOError("Socket.IO会话事件总数超过10000项");
     const data = jsonData(args);
     const bytes =
       Buffer.byteLength(JSON.stringify(data)) + Buffer.byteLength(event);
-    if (s.bytes + bytes > 8 * MAX) throw Error("Socket.IO会话数据超过8MiB");
+    if (s.bytes + bytes > 8 * MAX)
+      throw socketIOError("Socket.IO会话数据超过8MiB");
     s.bytes += bytes;
     s.events.push({
       id: randomUUID(),
@@ -364,10 +368,7 @@ export class SocketIOSessions {
   }
   fail(s, error) {
     if (["closed", "error"].includes(s.state)) return;
-    s.error = (
-      String(error.message || error) +
-      (error.description?.message ? ": " + error.description.message : "")
-    ).slice(0, 1000);
+    s.error = socketIODiagnostic(error);
     s.state = "error";
     s.pending.clear();
     clearTimeout(s.deadline);
@@ -375,7 +376,7 @@ export class SocketIOSessions {
   }
   start(projectId, input) {
     if (typeof projectId !== "string" || !projectId || projectId.length > 200)
-      throw Error("Socket.IO项目标识无效");
+      throw socketIOError("Socket.IO项目标识无效");
     const { definition, options } = connection(input);
     for (const s of this.sessions.values())
       if (
@@ -390,7 +391,7 @@ export class SocketIOSessions {
         ["open", "connecting"].includes(s.state),
       ).length >= 5
     )
-      throw Error("最多同时打开5个Socket.IO会话，保留50个会话记录");
+      throw socketIOError("最多同时打开5个Socket.IO会话，保留50个会话记录");
     const socket =
       definition.version === 2
         ? legacySocket(definition.url, options)
@@ -422,7 +423,7 @@ export class SocketIOSessions {
     socket.on("disconnect", (reason) => {
       if (!["closed", "error"].includes(s.state)) {
         s.state = reason === "io server disconnect" ? "closed" : "error";
-        if (s.state === "error") s.error = String(reason).slice(0, 1000);
+        if (s.state === "error") s.error = socketIODiagnostic(reason);
       }
       s.pending.clear();
       clearTimeout(s.deadline);
@@ -439,7 +440,7 @@ export class SocketIOSessions {
           for (const [id, p] of s.pending)
             if (p.deadline <= monotonicNow()) s.pending.delete(id);
           if (s.pending.size >= 100)
-            throw Error("Socket.IO待确认事件超过100项");
+            throw socketIOError("Socket.IO待确认事件超过100项");
           extra.ackId = randomUUID();
           s.pending.set(extra.ackId, {
             callback,
@@ -462,24 +463,24 @@ export class SocketIOSessions {
   async send(projectId, id, input) {
     const s = this.get(projectId, id);
     if (s.state !== "open" || !s.socket.connected)
-      throw Error("Socket.IO会话当前不可发送");
+      throw socketIOError("Socket.IO会话当前不可发送");
     if (
       !plain(input) ||
       Object.keys(input).some(
         (k) => !["event", "args", "ackTimeoutMs"].includes(k),
       )
     )
-      throw Error("Socket.IO发送字段无效");
+      throw socketIOError("Socket.IO发送字段无效");
     const event = eventName(input.event);
     if (!Array.isArray(input.args) || input.args.length > 100)
-      throw Error("Socket.IO参数必须为至多100项的数组");
+      throw socketIOError("Socket.IO参数必须为至多100项的数组");
     const args = jsonData(input.args, true);
     const timeout = input.ackTimeoutMs;
     if (
       timeout !== undefined &&
       (!Number.isInteger(timeout) || timeout < 50 || timeout > 30000)
     )
-      throw Error("Socket.IO确认超时须为50至30000毫秒");
+      throw socketIOError("Socket.IO确认超时须为50至30000毫秒");
     try {
       this.record(s, "sent", event, input.args);
     } catch (error) {
@@ -530,10 +531,10 @@ export class SocketIOSessions {
       !Array.isArray(input.args) ||
       input.args.length > 100
     )
-      throw Error("Socket.IO确认参数无效");
+      throw socketIOError("Socket.IO确认参数无效");
     const pending = s.pending.get(input.ackId);
     if (!pending || pending.deadline <= monotonicNow())
-      throw Error("Socket.IO确认标识不存在或已过期");
+      throw socketIOError("Socket.IO确认标识不存在或已过期");
     const args = jsonData(input.args, true);
     this.record(s, "ack-sent", "ack", input.args, { ackId: input.ackId });
     s.pending.delete(input.ackId);

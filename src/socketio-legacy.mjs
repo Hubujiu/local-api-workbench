@@ -1,3 +1,4 @@
+import { socketIOError } from "./socketio-errors.mjs";
 import { boundLegacyPolling } from "./socketio-legacy-polling.mjs";
 import { createRequire } from "node:module";
 import WebSocket from "ws";
@@ -18,7 +19,7 @@ function legacyManager() {
   const originalCreate = Engine.Socket.prototype.createTransport;
   Engine.Socket.prototype.createTransport = function (name) {
     if (!["websocket", "polling"].includes(name))
-      throw Error("Unsupported legacy transport");
+      throw socketIOError("Unsupported legacy transport");
     const transport = originalCreate.call(this, name),
       owner = this;
     const packet = transport.onPacket,
@@ -26,7 +27,9 @@ function legacyManager() {
     const budget = (owner[WIRE_BUDGET] ||= { bytes: 0, frames: 0, packets: 0 });
     transport.onPacket = function (value) {
       if (this.readyState === "closed" || ++budget.packets > 10000)
-        throw Error("Legacy packet budget exceeded or transport closed");
+        throw socketIOError(
+          "Legacy packet budget exceeded or transport closed",
+        );
       try {
         if (value.type === "open") {
           const handshake = JSON.parse(value.data);
@@ -55,7 +58,7 @@ function legacyManager() {
           budget.bytes > 8 * MAX ||
           ++budget.frames > 10000
         )
-          throw Error("Socket.IO v2 wire budget exceeded");
+          throw socketIOError("Socket.IO v2 wire budget exceeded");
         return data.call(this, value);
       } catch (error) {
         this.onError("Invalid Engine.IO 3 data", error);
@@ -144,7 +147,7 @@ export function legacySocket(url, options) {
     if (!this.connected) {
       this.emit(
         "connect_error",
-        Error("Socket.IO v2 event before namespace connect"),
+        socketIOError("Socket.IO v2 event before namespace connect"),
       );
       return;
     }
@@ -166,9 +169,10 @@ export function legacySocket(url, options) {
         delete socket.acks[id];
         callback(error, ...values);
       };
-      const disconnected = () => finish(Error("Socket.IO v2 disconnected"));
+      const disconnected = () =>
+        finish(socketIOError("Socket.IO v2 disconnected"));
       const timer = setTimeout(
-        () => finish(Error("Socket.IO v2 acknowledgement timed out")),
+        () => finish(socketIOError("Socket.IO v2 acknowledgement timed out")),
         milliseconds,
       );
       socket.once("disconnect", disconnected);

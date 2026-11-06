@@ -1,15 +1,16 @@
+import { socketIOError } from "./socketio-errors.mjs";
 // Validate decoded Engine.IO metadata before handing it to the upstream state machine.
 // Message framing and Socket.IO parsing remain owned by the official libraries.
 export function checkedEngineIOPacket(packet, establishedId) {
   if (packet.type !== "open") return packet;
-  if (establishedId) throw Error("Engine.IO重复握手");
+  if (establishedId) throw socketIOError("Engine.IO重复握手");
   if (typeof packet.data !== "string")
-    throw Error("Engine.IO握手必须是JSON文本");
+    throw socketIOError("Engine.IO握手必须是JSON文本");
   let data;
   try {
     data = JSON.parse(packet.data);
   } catch {
-    throw Error("Engine.IO握手JSON无效");
+    throw socketIOError("Engine.IO握手JSON无效");
   }
   if (
     !data ||
@@ -24,12 +25,12 @@ export function checkedEngineIOPacket(packet, establishedId) {
     data.upgrades.length > 8 ||
     data.upgrades.some((v) => typeof v !== "string" || !v || v.length > 32)
   )
-    throw Error("Engine.IO握手会话或升级列表无效");
+    throw socketIOError("Engine.IO握手会话或升级列表无效");
   for (const key of ["pingInterval", "pingTimeout"])
     if (!Number.isInteger(data[key]) || data[key] < 1 || data[key] > 300000)
-      throw Error("Engine.IO握手心跳期限无效");
+      throw socketIOError("Engine.IO握手心跳期限无效");
   if (!Number.isSafeInteger(data.maxPayload) || data.maxPayload < 1)
-    throw Error("Engine.IO握手载荷上限无效");
+    throw socketIOError("Engine.IO握手载荷上限无效");
   // A client may send less than the server accepts; never exceed our own acquisition budget.
   return {
     ...packet,
