@@ -43,7 +43,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
   its independent leaf and executor. Repeat-until descendants admit HTTP/TCP/WebSocket, while runtime-row descendants
-  admit HTTP/TCP, including nested IF/fixed repeats and disabled definitions.
+  admit HTTP/TCP/WebSocket, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
 - All definitions, including disabled and false descendants, undergo complete
@@ -250,7 +250,7 @@ transport-limit acceptance.
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
 existing transports, while repeat-until subtrees now admit HTTP/TCP/WebSocket and
-runtime-row subtrees admit HTTP/TCP even beneath false or disabled IF nodes. No native automation format is inferred;
+runtime-row subtrees admit HTTP/TCP/WebSocket even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
 Saved protocol references are provisional until snapshot resolution; frozen
@@ -313,7 +313,7 @@ stops execution under continue as well as stop, preserves completed RPC evidence
 and never publishes an unconfirmed extraction or replays the RPC. Plain legacy
 gRPC retains its prior behavior only when no active IF is present. Repeat-until
 ancestor restrictions now admit HTTP/TCP/WebSocket and runtime-row restrictions
-admit HTTP/TCP;
+admit HTTP/TCP/WebSocket;
 staged load and native projections stay restricted.
 
 Targeted tests: plan-if-grpc-model.test.mjs and plan-if-grpc-workflow.test.mjs.
@@ -384,7 +384,7 @@ These checks do not simulate a journal crash or establish wire conformance.
 At the TCP extension milestone, canonical `repeat.untilCondition` admitted HTTP
 and TCP descendants, while WebSocket, SSE, gRPC, and Socket.IO descendants were
 rejected even under false or disabled branches. Runtime rows were HTTP-only at
-that milestone; their current boundary is HTTP/TCP. The WebSocket restriction is
+that milestone; their current boundary is HTTP/TCP/WebSocket. The WebSocket restriction is
 superseded by the extension below. Unresolved protocol references
 are provisional during authoring and are revalidated after snapshot resolution.
 
@@ -403,8 +403,8 @@ protocol support, or load-run protocol support were introduced by that milestone
 
 Canonical `repeat.untilCondition` now admits HTTP, TCP and WebSocket descendants.
 SSE, gRPC and Socket.IO remain rejected, including false and disabled branches.
-Every enclosing policy still intersects: runtime rows remain HTTP/TCP, so a
-WebSocket leaf inside both runtime rows and repeat-until is rejected. Staged load
+Every enclosing policy still intersects: runtime rows now admit HTTP/TCP/WebSocket,
+including a WebSocket leaf inside nested repeat-until. Staged load
 and native projections keep their existing restrictions; this is canonical
 Workbench execution, not native automation-format equivalence.
 

@@ -154,7 +154,7 @@ for (const type of types) {
           maxRows: 2,
           steps: [gate([child], matched)],
         };
-        if (type === "tcp") {
+        if (["tcp", "websocket"].includes(type)) {
           assert.equal(
             validateRepeatGraph([rows], {
               requireIds: true,
