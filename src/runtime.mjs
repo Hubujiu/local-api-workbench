@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import { appendNativeInheritance } from "./native-inheritance-append.mjs";
 import { isMessagePackResponseType } from "./response-media.mjs";
 import {
   applyPostmanRawMedia,
@@ -706,6 +708,11 @@ export class Store {
             after.flatMap((entry) => entry.versions.map((v) => v.id)),
           );
           const oldLineages = new Set(before.map((entry) => entry.lineageId));
+          if (
+            current.settings?.nativeInheritance &&
+            [...oldVersions].some((id) => !newVersions.has(id))
+          )
+            throw Error("原生追加不能裁剪已有历史");
           return {
             createdLineages: after.filter(
               (entry) => !oldLineages.has(entry.lineageId),
@@ -754,7 +761,11 @@ export class Store {
           this.#validateProject(result.project);
           await this.#saveLocked(
             result.project,
-            { signal, beforePublish: result.beforePublish },
+            {
+              signal,
+              beforePublish: result.beforePublish,
+              nativeAppend: result.nativeAppend,
+            },
             base,
           );
           committed = true;
@@ -1011,6 +1022,7 @@ export class Store {
       activity = false,
       signal,
       beforePublish,
+      nativeAppend,
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
       apiResourceRestore,
@@ -1149,8 +1161,23 @@ export class Store {
             cases: previous.cases?.map(snapshotCase),
           }
         : previous;
+    if (nativeAppend) {
+      const expected = appendNativeInheritance(
+        previous,
+        nativeAppend.source,
+        nativeAppend.context,
+      ).project;
+      this.#validateProject(expected);
+      expected.plans = expected.plans.map((plan) =>
+        snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) }),
+      );
+      // The sole private import path must match the entire replayed project,
+      // not merely graph identity or a caller-controlled append flag.
+      if (!isDeepStrictEqual(expected, p))
+        throw Error("原生追加不能夹带其他修改");
+    }
     assertNativeInheritanceIdentity(
-      identityPrevious,
+      nativeAppend ? p : identityPrevious,
       p,
       nativeInheritanceEdit,
       nativeInheritanceEditContext,
@@ -1190,6 +1217,18 @@ export class Store {
           ? definitionHistoryOperation.requestId
           : undefined,
     });
+    if (nativeAppend) {
+      for (const entry of previous.requestDefinitionHistory?.entries || [])
+        if (
+          !isDeepStrictEqual(
+            entry,
+            definitions?.entries.find(
+              (item) => item.requestId === entry.requestId,
+            ),
+          )
+        )
+          throw Error("原生追加不能修改已有定义历史");
+    }
     if (definitions === undefined) delete next.requestDefinitionHistory;
     else next.requestDefinitionHistory = definitions;
     validateRequestDefinitionHistory(next);

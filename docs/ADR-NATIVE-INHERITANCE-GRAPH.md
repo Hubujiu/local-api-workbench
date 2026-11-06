@@ -14,6 +14,7 @@ models, protocols, history, custom settings or global/environment values. A sole
 pristine default environment created by Store is replaceable by imported source
 environments. Existing project identity and authorization do not change.
 Neither preserve nor ordinary import may append to an already preserved graph.
+The separate signed create-only append profile below is the sole exception.
 Old flattened projects cannot recover discarded parent values and are not
 automatically upgraded. Imports never execute requests.
 
@@ -294,8 +295,9 @@ revisions reject before disk writes. Existing source IDs may happen to coincide
 in independent projects; they select only within the authenticated URL project,
 not an external registry.
 
-Deletion, recycling/restoration, detach, folder creation and append-import remain
-unsupported for preserved graphs. Ordinary API tombstones and batch trash do
+At this structural-edit checkpoint, deletion, recycling/restoration, detach,
+folder creation and append-import remained unsupported for preserved graphs.
+Later bounded lifecycle and signed append sections below supersede that boundary. Ordinary API tombstones and batch trash do
 not encode a saved graph parent/layer contract; weakening graph validation or
 silently deleting dependent cases/plans is not an acceptable implementation.
 Backups remain the complete snapshot/history format. Native exports retain their
@@ -394,3 +396,52 @@ its restoration. Each execution sends exactly one request using the previously
 frozen parent headers/auth, reports a saved run, and a separate Store verifies
 the exact CLI run ID while the cases/plans stay unchanged. This does not grant
 live execution to the recycled API and does not automatically replay anything.
+
+## Narrow signed create-only append
+
+The signed manual import preview/apply entrypoints now admit a deliberately
+separate append profile for an existing preserved graph. Ordinary
+`importIntoProject` and generic Store.save still reject append; no public
+identity bypass or caller-supplied graph candidate is introduced.
+
+Only modern native JSON/directory HTTP definitions, all-selection and default
+create-only policies are accepted. Explicit selection, mappings, bindings,
+clear/update policies, conversion options, imported plans/cases/models/protocols
+and unsupported native resources reject. Existing target plans/cases, history,
+trash, settings, credentials and resource IDs remain unchanged. Unrecognized
+legacy opaque plan definitions may conservatively block append.
+
+The source namespace, project layer, complete environments/services and
+initial/current global definitions must match. Existing source folders can only
+be reused with identical identity, ancestry, path and layer. Absent legacy form
+arrays mean empty arrays for comparison only; existing objects are not rewritten.
+New HTTP APIs must have new source identities, including against recycled APIs
+and folder identities. Existing API IDs never mean update or restore. Recycled
+folders cannot be reused; new folder paths cannot collide with retained graphs.
+The combined graph must still satisfy its original bounded closure validator.
+No format or native inheritance semantics are guessed or reconstructed from
+flattened data. Conservative comparisons may reject otherwise equivalent
+reordered catalogs rather than silently mutate the target.
+
+The supported preserve-mode converter validates own/effective fidelity before
+planning. Random converter API IDs are replaced with context-derived IDs before
+the source and plan commitments are computed. Preview exposes positional source
+keys, counts, target identities and opaque keyed commitments, not source values.
+Apply re-parses and rebuilds under the existing project lock. A private Store
+parameter, inaccessible through generic save options, replays the append against
+the latest stored project and checks the entire normalized candidate exactly.
+Existing definition-history entries cannot be edited or pruned by this path.
+Configuration/session/source/option commitments, cancellation before publication,
+uncertain-commit recovery and existing journal semantics remain authoritative.
+
+Local evidence: the initial positive Store test was RED with
+MANUAL_IMPORT_TARGET_UNSUPPORTED before implementation; its recoverable source
+and output are in docs/evidence/native-inheritance-append. Eight focused tests
+cover signed JSON append, independent-Store race and newer activity, rejection
+matrix, directory nested-folder append with frozen case/plan and restart,
+generic-save forgery, cancellation and uncertain publication recovery, recycled
+and cross-kind identities, stale/tampered commitments, and real owner HTTP
+preview/apply followed by inherited loopback execution. No import emits network
+traffic. The first directory/frozen-plan stage exposed strict equality against
+unnormalized plans; both candidates now undergo the same snapshot normalizer,
+without ignoring fields. Exact remote CI and full acceptance remain pending.
