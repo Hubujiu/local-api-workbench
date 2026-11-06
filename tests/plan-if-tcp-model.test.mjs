@@ -193,7 +193,7 @@ test("repeat-until admits TCP across IF and fixed-repeat ancestry, even false or
   }
 });
 
-test("runtime rows remain HTTP-only through false IF and fixed repeats before and after freezing", () => {
+test("runtime rows admit HTTP/TCP through false IF and fixed repeats with frozen reference checks", () => {
   const rows = (steps) => ({
     id: "rows",
     type: "repeat",
@@ -215,10 +215,16 @@ test("runtime rows remain HTTP-only through false IF and fixed repeats before an
       const group = wrap({ ...child, enabled: false });
       group.enabled = false;
       for (const requireIds of [false, true]) {
-        assert.throws(
-          () => check([group], { requireIds, allowRuntimeRows: true }),
-          /运行时数据行循环.*仅支持HTTP/,
-        );
+        if (requireIds && child.protocol?.definitionId)
+          assert.throws(
+            () => check([group], { requireIds, allowRuntimeRows: true }),
+            /运行时数据行循环.*仅支持HTTP或TCP/,
+          );
+        else
+          assert.equal(
+            check([group], { requireIds, allowRuntimeRows: true }),
+            true,
+          );
       }
     }
   }
