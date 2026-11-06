@@ -848,7 +848,7 @@ export async function runPlan(
     );
   const conditional = hasPlanConditions(snapshot.steps);
   const activeIF = hasActiveIfSteps(snapshot.steps);
-  // IF may skip a protocol, gRPC or Socket.IO leaf dynamically, but cannot defer authority
+  // IF and repeat-until may skip a leaf dynamically, but cannot defer authority
   // until after an earlier HTTP request or script has already run.
   const conditionalProtocolTypes = new Set();
   const conditionalGrpcIds = new Set();
@@ -857,7 +857,12 @@ export async function runPlan(
     for (const step of steps) {
       if (step.enabled === false) continue;
       if (["if", "repeat"].includes(step.type))
-        collectIFProtocols(step.steps, insideIF || step.type === "if");
+        collectIFProtocols(
+          step.steps,
+          insideIF ||
+            step.type === "if" ||
+            Object.hasOwn(step, "untilCondition"),
+        );
       else if (insideIF && step.type === "protocol")
         conditionalProtocolTypes.add(step.protocol.definition.type);
       else if (insideIF && step.type === "grpc")
@@ -1324,6 +1329,7 @@ export async function runPlan(
               if (
                 error instanceof ProjectCommitUncertain ||
                 ((activeIF ||
+                  untilEnabled ||
                   conditionalGrpcIds.has(step.id) ||
                   conditionalSocketIOIds.has(step.id)) &&
                   error?.code === "PROJECT_COMMIT_UNCERTAIN")

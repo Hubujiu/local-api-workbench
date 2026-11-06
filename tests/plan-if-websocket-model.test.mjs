@@ -71,6 +71,12 @@ test("all restrictive ancestors intersect through IF and repeat, including unres
           const child = planLeaves([copy])[0];
           child.enabled = false;
           if (reference) child.protocol = { definitionId: "saved-wire" };
+          // Unresolved wire references are provisional; frozen validation must
+          // still reject a resolved non-TCP definition under until.
+          if (restriction === "until" && reference && !requireIds) {
+            assert.equal(check([copy], { requireIds }), true);
+            child.protocol = structuredClone(wire().protocol);
+          }
           assert.throws(
             () => check([copy], { requireIds }),
             restriction === "until"

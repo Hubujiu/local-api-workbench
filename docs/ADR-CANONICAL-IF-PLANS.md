@@ -42,7 +42,7 @@ function, regex, implicit variable source, alternate branch or fallback is added
   TCP, WebSocket and SSE use the existing canonical protocol wrapper, frozen
   definitions, bounded scripts, extraction and result evidence. gRPC uses its
   independent leaf, executor and temporary credentials; Socket.IO likewise uses
-  its independent leaf and executor. Repeat-until and runtime-row descendants
+  its independent leaf and executor. Repeat-until descendants admit HTTP/TCP, while runtime-row descendants
   remain HTTP-only, including nested IF/fixed repeats and disabled definitions.
   Protocol execution and repeat admission remain unchanged. Scope-commit
   uncertainty in any active-IF plan follows the plan-wide safety upgrade below.
@@ -249,8 +249,8 @@ transport-limit acceptance.
 
 Canonical IF now accepts WebSocket leaves alongside HTTP and TCP. One capability
 matrix intersects every enclosing control policy: fixed repeats retain their
-existing transports, while repeat-until and runtime-row subtrees remain HTTP-only
-even beneath false or disabled IF nodes. No native automation format is inferred;
+existing transports, while repeat-until subtrees admit HTTP/TCP and runtime-row
+subtrees remain HTTP-only even beneath false or disabled IF nodes. No native automation format is inferred;
 staged load and native projections retain their existing rejection boundaries.
 
 Saved protocol references are provisional until snapshot resolution; frozen
@@ -312,7 +312,8 @@ before later conditions evaluate. An uncertain scope commit from an IF gRPC leaf
 stops execution under continue as well as stop, preserves completed RPC evidence,
 and never publishes an unconfirmed extraction or replays the RPC. Plain legacy
 gRPC retains its prior behavior only when no active IF is present. Repeat-until
-and runtime-row ancestor restrictions remain HTTP-only; staged load and native projections stay restricted.
+ancestor restrictions admit HTTP/TCP and runtime-row restrictions remain HTTP-only;
+staged load and native projections stay restricted.
 
 Targeted tests: plan-if-grpc-model.test.mjs and plan-if-grpc-workflow.test.mjs.
 
@@ -373,6 +374,24 @@ The protocol-chain integration tests perform real Store writes and then throw
 an uncertain acknowledgement, verifying that disk has the new value while the
 run retains its old value and stops without replay. They cover true/false IF,
 disabled ancestors, HTTP and all five protocol sibling types, fixed-repeat
-occurrences, HTTP until/runtime rows, and scripted wire/gRPC phases. HTTP uses a
+occurrences, HTTP/TCP until, HTTP runtime rows, and scripted wire/gRPC phases. HTTP uses a
 loopback peer; protocol executors in this cross-feature fixture are injected.
 These checks do not simulate a journal crash or establish wire conformance.
+
+### TCP repeat-until extension
+
+Canonical `repeat.untilCondition` now admits HTTP and TCP descendants. It still
+rejects WebSocket, SSE, gRPC, and Socket.IO descendants, even under false or
+disabled branches. Runtime rows remain HTTP-only. Unresolved protocol references
+are provisional during authoring and are revalidated after snapshot resolution.
+
+TCP uses the existing per-occurrence wire executor, framing, extraction, scripts,
+and cleanup. Tail conditions run after the whole iteration, use committed scopes,
+and retain the existing count exhaustion, decision/request/evidence budgets and
+cancellation semantics. Executor authorization covers every potential enabled TCP
+leaf before any earlier HTTP work. A possibly committed extraction stops before
+another exchange or condition; the completed response is never replayed.
+
+Owner, canonical MCP HTTP/stdio, and CLI share the frozen execution graph and
+receipt format. No native import formats, new transport options, runtime-row
+protocol support, or load-run protocol support are introduced.
