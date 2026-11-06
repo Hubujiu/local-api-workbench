@@ -15,9 +15,9 @@ const controlCapabilities = {
     error: "运行时数据行循环仅支持HTTP或TCP/WebSocket叶子",
   },
   until: {
-    leaves: ["http", "protocol"],
+    leaves: ["http", "protocol", "grpc"],
     protocols: ["tcp", "websocket"],
-    error: "条件提前结束循环仅支持HTTP或TCP/WebSocket叶子",
+    error: "条件提前结束循环仅支持HTTP或TCP/WebSocket/gRPC叶子",
   },
   conditional: {
     leaves: ["http", "protocol", "grpc", "socketio"],
