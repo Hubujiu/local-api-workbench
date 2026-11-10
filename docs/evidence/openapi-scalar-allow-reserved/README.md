@@ -38,6 +38,16 @@ fixture requests during import, and unchanged data after Store reopen. Accepted
 absent/false values for all three formats must still produce exactly
 `/search?filter=a%2Fb%3Ac` on a real loopback receiver and through cURL export.
 
+The first CI commit (`e02face`) exposed a test comparison error after all the
+negative admission and disk checks: the final complete Store value was compared
+with the HTTP owner projection, which deliberately omits definition history.
+The original run is retained, not rerun. The corrected test captures a complete
+Store baseline before the rejected imports, checks its owner projection against
+the HTTP baseline, and compares the complete reopened Store with that original
+Store value. It explicitly checks that the baseline has a definition-history
+entry; no production behavior or history assertion is removed. Corrected local
+pure and owner-projection checks pass 34/34. Runtime results remain CI-only.
+
 Complete cross-platform workflow results and source/artifact provenance must be
 verified for this commit independently. No full local suite, original Apipost,
 restricted export integration, cancelled multipart publication, merge or

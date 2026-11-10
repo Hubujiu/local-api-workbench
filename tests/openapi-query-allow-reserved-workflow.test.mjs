@@ -9,6 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
+import { projectOwnerResponse } from "../src/project-owner-projection.mjs";
 import {
   invalidReservedValues,
   versions,
@@ -113,6 +114,11 @@ for (const version of ["3.0.3", "3.1.0"])
         });
         const client = route === "SDK" ? await f.connect(project.id) : null;
         const before = await f.call(url);
+        // HTTP omits private definition history; compare reopened Store data
+        // with the complete Store baseline, not with that public projection.
+        const beforeStore = await f.app.store.get(project.id);
+        assert.equal(beforeStore.requestDefinitionHistory.entries.length, 1);
+        assert.deepEqual(projectOwnerResponse(beforeStore), before);
         const otherBefore = await f.call(`/api/projects/${other.id}`);
         const disk = await files(f.app.store.directory(project.id));
         for (const value of invalidReservedValues) {
@@ -158,7 +164,7 @@ for (const version of ["3.0.3", "3.1.0"])
           );
           assert.equal(f.seen.length, 0);
         }
-        assert.deepEqual(await new Store(f.root).get(project.id), before);
+        assert.deepEqual(await new Store(f.root).get(project.id), beforeStore);
         assert.equal(before.requests.length, 1);
       },
     );
