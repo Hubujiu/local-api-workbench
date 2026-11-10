@@ -11,7 +11,7 @@ import {
 } from "./native-response-extraction.mjs";
 import { normalizeNativeRedisSetQuery } from "./native-redis-write-intent.mjs";
 import { mongoQuery } from "./mongodb.mjs";
-import { redisCommand } from "./redis.mjs";
+import { redisCommand } from "./redis-commands.mjs";
 import { jsonPathSegments } from "./json-path.mjs";
 
 const object = (value) =>

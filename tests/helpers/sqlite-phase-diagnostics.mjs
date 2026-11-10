@@ -7,6 +7,7 @@ export const sqliteTestPhases = Object.freeze({
   postRecoveryRead: "post-recovery-read",
   independentWrite: "independent-write",
   finalRead: "final-read",
+  triggerWriteRollback: "trigger-write-rollback",
 });
 const phases = new Set(Object.values(sqliteTestPhases));
 const diagnosticKeys = [
@@ -55,6 +56,22 @@ function failureDetails(error) {
   return sqliteProcessFailureDetails(snapshot);
 }
 
+function phaseSuffix(error, phase) {
+  if (!phases.has(phase) || types.isProxy(error) || !types.isNativeError(error))
+    return;
+  const metadata = Object.create(null);
+  metadata.phase = phase;
+  const details = failureDetails(error);
+  if (Object.hasOwn(details, "code")) {
+    metadata.code = details.code;
+    metadata.diagnostics = Object.create(null);
+    for (const key of diagnosticKeys)
+      metadata.diagnostics[key] = details.diagnostics[key];
+  }
+  const suffix = `\nSQLITE_PHASE_METADATA ${JSON.stringify(metadata)}`;
+  return Buffer.byteLength(suffix, "utf8") <= 2048 ? suffix : undefined;
+}
+
 function appendPhase(error, phase) {
   try {
     if (
@@ -71,33 +88,32 @@ function appendPhase(error, phase) {
       message.writable !== true
     )
       return;
-    const metadata = Object.create(null);
-    metadata.phase = phase;
-    const details = failureDetails(error);
-    if (Object.hasOwn(details, "code")) {
-      metadata.code = details.code;
-      metadata.diagnostics = Object.create(null);
-      for (const key of diagnosticKeys)
-        metadata.diagnostics[key] = details.diagnostics[key];
-    }
-    const suffix = `\nSQLITE_PHASE_METADATA ${JSON.stringify(metadata)}`;
-    if (Buffer.byteLength(suffix, "utf8") > 2048) return;
+    const suffix = phaseSuffix(error, phase);
+    if (!suffix) return;
     // Retain the original message (which is NOT claimed to be redacted).
     // Leave stack/cause/code/assertion fields untouched; never read stack's
     // lazy accessor just to annotate a failure. Unsupported errors pass through.
-    Object.defineProperty(error, "message", {
-      value: message.value + suffix,
-    });
+    Object.defineProperty(error, "message", { value: message.value + suffix });
   } catch {
     // Diagnostics must never replace the original thrown value or failure.
   }
 }
 
-export async function withSQLitePhase(phase, operation) {
+export async function withSQLitePhase(phase, operation, reporter) {
   try {
     return await operation();
   } catch (error) {
-    appendPhase(error, phase);
+    if (reporter === undefined) appendPhase(error, phase);
+    else {
+      // Rejection assertions must see the unchanged original message. Report
+      // separately so metadata digits cannot satisfy a quota regex such as /1000/.
+      try {
+        const suffix = phaseSuffix(error, phase);
+        if (suffix && typeof reporter === "function") reporter(suffix.slice(1));
+      } catch {
+        // A failed reporter cannot replace the operation's original error.
+      }
+    }
     throw error;
   }
 }
