@@ -1,21 +1,25 @@
 import {
   checkDatabaseSignal,
   databaseCancelled,
+  observeDatabaseStream,
 } from "./database-read-cancellation.mjs";
+import { openDatabaseSSH } from "./database-ssh.mjs";
+import {
+  encodeRESP,
+  redisCommand,
+  redisWriteCommand,
+} from "./redis-commands.mjs";
+// Preserve the established public API while pure consumers use redis-commands.
+export {
+  encodeRESP,
+  redisCommand,
+  redisWriteCommand,
+} from "./redis-commands.mjs";
 import net from "node:net";
 import tls from "node:tls";
+import { X509Certificate } from "node:crypto";
 const MAX_REPLY = 2 * 1024 * 1024,
   MAX_BULK = 1024 * 1024;
-export function encodeRESP(args) {
-  const buffers = [Buffer.from("*" + args.length + "\r\n")];
-  for (const value of args) {
-    const b = Buffer.from(String(value));
-    buffers.push(Buffer.from("$" + b.length + "\r\n"), b, Buffer.from("\r\n"));
-  }
-  const result = Buffer.concat(buffers);
-  if (result.length > 65536) throw Error("Redis请求超过64KiB");
-  return result;
-}
 export function parseRESP(buffer) {
   if (buffer.length > MAX_REPLY) throw Error("Redis响应超过2MiB");
   let nodes = 0;
@@ -77,129 +81,6 @@ export function parseRESP(buffer) {
     return { value: values, bytes: cursor };
   }
   return parse(0, 0);
-}
-function commandArguments(input, stringsOnly = false) {
-  let args = input.command;
-  if (args === undefined) {
-    try {
-      args = JSON.parse(input.sql);
-    } catch {
-      throw Error('Redis命令须为JSON数组，例如["GET","key"]');
-    }
-  }
-  if (
-    !Array.isArray(args) ||
-    !args.length ||
-    args.length > 102 ||
-    Array.from({ length: args.length }, (_, i) => i).some(
-      (i) =>
-        !Object.hasOwn(args, i) ||
-        !(stringsOnly ? ["string"] : ["string", "number"]).includes(
-          typeof args[i],
-        ) ||
-        (stringsOnly && !args[i].isWellFormed()) ||
-        Buffer.byteLength(String(args[i])) > 4096,
-    )
-  )
-    throw Error("Redis命令参数无效");
-  args = args.map(String);
-  args[0] = args[0].toUpperCase();
-  return args;
-}
-export function redisCommand(input) {
-  let args = commandArguments(input);
-  const [command, ...rest] = args;
-  const exact = {
-    PING: 0,
-    GET: 1,
-    TYPE: 1,
-    TTL: 1,
-    PTTL: 1,
-    STRLEN: 1,
-    HLEN: 1,
-    LLEN: 1,
-    SCARD: 1,
-    ZCARD: 1,
-    HGET: 2,
-    HEXISTS: 2,
-    SISMEMBER: 2,
-    ZSCORE: 2,
-  };
-  if (Object.hasOwn(exact, command)) {
-    if (rest.length !== exact[command]) throw Error("Redis命令参数数量无效");
-  } else if (["MGET", "EXISTS"].includes(command)) {
-    if (rest.length < 1 || rest.length > 100) throw Error("Redis最多100个key");
-  } else if (command === "HMGET") {
-    if (rest.length < 2 || rest.length > 101)
-      throw Error("Redis HMGET参数无效");
-  } else if (["LRANGE", "ZRANGE", "GETRANGE"].includes(command)) {
-    if (rest.length !== 3 || !rest.slice(1).every((s) => /^-?\d+$/.test(s)))
-      throw Error("Redis范围参数无效");
-    const from = Number(rest[1]),
-      to = Number(rest[2]);
-    if (
-      ![from, to].every(Number.isSafeInteger) ||
-      from > to ||
-      (from >= 0 && to < 0) ||
-      to - from + 1 > (command === "GETRANGE" ? 65536 : 1000)
-    )
-      throw Error("Redis范围必须显式限制大小");
-  } else if (["SCAN", "HSCAN", "SSCAN", "ZSCAN"].includes(command)) {
-    const base = command === "SCAN" ? 1 : 2;
-    if (rest.length < base || !/^\d+$/.test(rest[base - 1]))
-      throw Error("Redis SCAN游标无效");
-    const used = new Set();
-    for (let i = base; i < rest.length; i += 2) {
-      const key = rest[i].toUpperCase(),
-        value = rest[i + 1];
-      if (
-        !["MATCH", "COUNT"].includes(key) ||
-        value === undefined ||
-        used.has(key)
-      )
-        throw Error("Redis SCAN选项无效");
-      used.add(key);
-      rest[i] = key;
-      if (
-        key === "COUNT" &&
-        (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 1000)
-      )
-        throw Error("Redis SCAN COUNT须为1至1000");
-    }
-    args = [command, ...rest];
-  } else
-    throw Error(
-      "Redis仅支持有界只读命令；写入、脚本、管理和无界集合读取被禁止",
-    );
-  encodeRESP(args);
-  return args;
-}
-export function redisWriteCommand(input) {
-  if (input.allowWrite !== true) throw Error("Redis写入需要仅本次明确授权");
-  const args = commandArguments(input, true);
-  if (args[0] !== "SET" || args.length < 3 || !args[1])
-    throw Error("Redis写入仅支持单键SET，键名不能为空，参数须为字符串");
-  let condition = false,
-    expiry = false;
-  for (let i = 3; i < args.length; i++) {
-    const option = args[i].toUpperCase();
-    args[i] = option;
-    if (["NX", "XX"].includes(option) && !condition) condition = true;
-    else if (["EX", "PX", "KEEPTTL"].includes(option) && !expiry) {
-      expiry = true;
-      if (option !== "KEEPTTL") {
-        const ttl = args[++i];
-        if (
-          !/^[1-9]\d*$/.test(ttl || "") ||
-          !Number.isSafeInteger(Number(ttl)) ||
-          Number(ttl) > 2147483647
-        )
-          throw Error("Redis EX/PX时长须为1至2147483647的整数字符串");
-      }
-    } else throw Error("Redis SET选项不支持或重复；仅支持NX/XX与EX/PX/KEEPTTL");
-  }
-  encodeRESP(args);
-  return args;
 }
 function validateRedisWriteTarget(input) {
   if (
@@ -304,20 +185,55 @@ export async function queryRedis(input, { signal } = {}) {
   checkDatabaseSignal(signal);
   return executeRedis(input, redisCommand(input), false, signal);
 }
+function validateRedisCA(ca) {
+  const invalid = () =>
+    Error("Redis CA须为完整PEM证书集合，不得包含无效证书或额外内容");
+  if (
+    ca !== undefined &&
+    (typeof ca !== "string" || Buffer.byteLength(ca) > 65536)
+  )
+    throw invalid();
+  // The existing editor sends an empty CA field for default trust/no TLS.
+  if (ca === undefined || ca === "") return;
+  const certificates =
+    /-----BEGIN CERTIFICATE-----([A-Za-z0-9+/=\t \r\n]+)-----END CERTIFICATE-----/g;
+  const whitespace = /^[\t \r\n]*$/;
+  let cursor = 0,
+    count = 0;
+  for (const match of ca.matchAll(certificates)) {
+    if (!whitespace.test(ca.slice(cursor, match.index))) throw invalid();
+    const encoded = match[1].replace(/[\t \r\n]/g, "");
+    const der = Buffer.from(encoded, "base64");
+    if (!encoded || der.toString("base64") !== encoded) throw invalid();
+    try {
+      // OpenSSL can silently ignore junk PEM blocks and trailing DER bytes.
+      // Parse each certificate independently and require the complete bytes.
+      if (!new X509Certificate(der).raw.equals(der)) throw invalid();
+    } catch {
+      throw invalid();
+    }
+    cursor = match.index + match[0].length;
+    count++;
+  }
+  if (!count || !whitespace.test(ca.slice(cursor))) throw invalid();
+}
 async function executeRedis(input, command, writing, signal, ownership) {
   checkDatabaseSignal(signal);
-  // Redis has no SSH transport. Never reinterpret an unsupported tunnel as
-  // permission to send credentials or a command over a direct connection.
-  if (input.ssh !== undefined) throw Error("Redis暂不支持SSH；已拒绝直连回退");
-  const host = input.host || "127.0.0.1",
-    port = Number(input.port) || 6379,
+  const host = input.host === undefined ? "127.0.0.1" : input.host,
+    port = input.port === undefined ? 6379 : Number(input.port),
     database = Number(input.database || 0);
   if (
     typeof host !== "string" ||
+    !host.length ||
     host.length > 253 ||
+    /[\s\x00-\x1f/\\@]/.test(host) ||
+    (input.port !== undefined &&
+      !["string", "number"].includes(typeof input.port)) ||
     !Number.isInteger(port) ||
     port < 1 ||
     port > 65535 ||
+    (input.database !== undefined &&
+      !["string", "number"].includes(typeof input.database)) ||
     !Number.isInteger(database) ||
     database < 0 ||
     database > 1023
@@ -329,11 +245,7 @@ async function executeRedis(input, command, writing, signal, ownership) {
       (typeof input[key] !== "string" || Buffer.byteLength(input[key]) > 8192)
     )
       throw Error("Redis认证参数无效");
-  if (
-    input.ca !== undefined &&
-    (typeof input.ca !== "string" || Buffer.byteLength(input.ca) > 65536)
-  )
-    throw Error("Redis CA无效");
+  validateRedisCA(input.ca);
   const commands = [];
   if (input.user || input.password)
     commands.push(
@@ -343,135 +255,190 @@ async function executeRedis(input, command, writing, signal, ownership) {
     );
   if (database) commands.push(["SELECT", String(database)]);
   commands.push(command);
-  return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0),
-      received = 0,
-      index = 0,
-      settled = false,
-      writeSent = false;
-    if (input.ssl !== undefined && typeof input.ssl !== "boolean")
-      throw Error("Redis TLS开关无效");
-    const options = { host, port },
-      socket = input.ssl
-        ? tls.connect({
-            ...options,
-            servername: net.isIP(host) ? undefined : host,
-            rejectUnauthorized: true,
-            ...(input.ca ? { ca: input.ca } : {}),
-          })
-        : net.connect(options);
-    const closed = new Promise((resolve) => socket.once("close", resolve));
-    const cancel = () => {
-      if (!ownership || !writeSent) finish(databaseCancelled());
-    };
-    const finish = async (error, result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", cancel);
-      socket.destroy();
-      // Acknowledgement fixes the outcome, but destroy() only requests cleanup.
-      // Writes, like reads, retain ownership until the local transport closes;
-      // peer FIN, remote rollback and disk durability are not implied.
-      await closed;
-      if (signal?.aborted && !ownership) error = databaseCancelled();
-      if (error && writeSent) {
-        const cause = error;
-        error = Error(
-          error.message +
-            "；Redis写入结果可能不确定，不能盲目重试，请先核查目标键（不能回滚）",
-        );
-        error.code = ownership ? cause.code : "REDIS_WRITE_UNCERTAIN";
-      }
-      error ? reject(error) : resolve(result);
-    };
-    const timeout = Math.min(
-      3000,
-      Math.max(100, Number(input.timeoutMs) || 3000),
+  if (input.ssl !== undefined && typeof input.ssl !== "boolean")
+    throw Error("Redis TLS开关无效");
+  // Supplied nonempty CA bundles are fully validated before creating context
+  // or opening SSH/direct transport; createSecureContext alone is permissive.
+  const secureContext = input.ssl
+    ? tls.createSecureContext(input.ca ? { ca: input.ca } : {})
+    : undefined;
+  for (const args of commands) encodeRESP(args);
+  // One budget includes SSH, TLS, AUTH, SELECT and the command. The caller
+  // cannot abort the transport behind a native SET observer after dispatch.
+  const controller = new AbortController();
+  let tunnel,
+    channelOwner,
+    owner,
+    failure,
+    rejectReply,
+    terminal = false,
+    writeSent = false;
+  const stop = (error) => {
+    if (terminal) return;
+    failure ??= error;
+    controller.abort();
+    owner?.close();
+    tunnel?.close();
+    rejectReply?.(failure);
+  };
+  const cancel = () => {
+    if (!ownership || !writeSent) stop(databaseCancelled());
+  };
+  const check = () => {
+    if (failure) throw failure;
+    if (!ownership || !writeSent) checkDatabaseSignal(signal);
+  };
+  const timeout = Math.min(
+    3000,
+    Math.max(100, Number(input.timeoutMs) || 3000),
+  );
+  const timer = setTimeout(
+    () =>
+      stop(
+        Object.assign(Error("Redis查询超时（总时限已到），已断开"), {
+          code: "REDIS_OPERATION_DEADLINE",
+        }),
+      ),
+    timeout,
+  );
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
+  let result;
+  try {
+    check();
+    tunnel = await openDatabaseSSH(
+      { ...input, type: "redis", host, port },
+      { signal: controller.signal },
     );
-    const timer = setTimeout(
-      () =>
-        finish(
-          Object.assign(Error("Redis查询超时（总时限已到），已断开"), {
-            code: "REDIS_OPERATION_DEADLINE",
-          }),
-        ),
-      timeout,
+    if (tunnel) channelOwner = observeDatabaseStream(tunnel.stream);
+    check();
+    const options = { host, port };
+    const socket = input.ssl
+      ? tls.connect({
+          ...options,
+          ...(tunnel ? { socket: tunnel.stream } : {}),
+          servername: net.isIP(host) ? undefined : host,
+          // Use the logical Redis identity, never the SSH host or loopback.
+          checkServerIdentity: (_name, cert) =>
+            tls.checkServerIdentity(host, cert),
+          rejectUnauthorized: true,
+          secureContext,
+        })
+      : tunnel?.stream || net.connect(options);
+    owner =
+      !input.ssl && channelOwner ? channelOwner : observeDatabaseStream(socket);
+    result = await new Promise((resolve, reject) => {
+      let buffer = Buffer.alloc(0),
+        received = 0,
+        index = 0;
+      const finish = (error, value) => {
+        if (terminal) return;
+        if (error) failure ??= error;
+        terminal = true;
+        clearTimeout(timer);
+        failure ? reject(failure) : resolve(value);
+      };
+      rejectReply = (error) => finish(error);
+      const send = () => {
+        if (terminal) return;
+        check();
+        const packet = encodeRESP(commands[index]);
+        if (writing && index === commands.length - 1) {
+          if (ownership) {
+            const checked = ownership.beforeDispatch();
+            if (checked !== undefined) {
+              if (checked instanceof Promise) checked.catch(() => {});
+              throw Error("原生写入派发检查必须同步完成");
+            }
+            check();
+          }
+          writeSent = true;
+          ownership?.dispatched();
+        }
+        socket.write(packet);
+      };
+      const ready = () => {
+        try {
+          send();
+        } catch (error) {
+          finish(error);
+        }
+      };
+      socket.on("error", (error) => finish(error));
+      socket.on("close", () => finish(Error("Redis连接提前关闭")));
+      socket.on("data", (chunk) => {
+        if (terminal) return;
+        try {
+          check();
+          received += chunk.length;
+          if (received > MAX_REPLY) throw Error("Redis响应超过2MiB");
+          buffer = Buffer.concat([buffer, chunk]);
+          const frame = parseRESP(buffer);
+          if (!frame) return;
+          if (frame.bytes !== buffer.length)
+            throw Error("Redis收到额外的未请求响应");
+          const nullBulk = buffer.equals(Buffer.from("$-1\r\n"));
+          buffer = Buffer.alloc(0);
+          if (index === commands.length - 1) {
+            const value = table(command[0], frame.value);
+            if (writing) {
+              const conditional = command
+                .slice(3)
+                .some((option) => ["NX", "XX"].includes(option));
+              if (
+                frame.value !== "OK" &&
+                !(conditional && frame.value === null && nullBulk)
+              )
+                throw Error("Redis SET确认响应无效");
+              return finish(null, {
+                write: true,
+                command: "SET",
+                acknowledged: true,
+                applied: frame.value === "OK",
+                affectedKeys: frame.value === "OK" ? 1 : 0,
+                ...value,
+                limit: 1,
+              });
+            }
+            return finish(null, value);
+          }
+          if (frame.value !== "OK") throw Error("Redis认证或数据库选择失败");
+          index++;
+          send();
+        } catch (error) {
+          finish(error);
+        }
+      });
+      if (input.ssl || !tunnel)
+        socket.once(input.ssl ? "secureConnect" : "connect", ready);
+      else ready(); // SSH channels are already connected; no connect event follows.
+    });
+  } catch (error) {
+    failure ??= error;
+  } finally {
+    terminal = true;
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+    // Destroying the channel/TLS wrapper alone leaves the SSH client alive.
+    // Settlement owns BOTH actual local closes, not a remote rollback guarantee.
+    owner?.close();
+    channelOwner?.close();
+    tunnel?.close();
+    // ssh2 Channel.destroy() sends EOF/CLOSE rather than destroying a Duplex.
+    // Its close event waits for readable EOF; TLS teardown may have paused the
+    // channel. Drain only during terminal cleanup so that actual close can fire.
+    channelOwner?.stream.resume();
+    await Promise.all([owner?.closed, channelOwner?.closed, tunnel?.closed]);
+  }
+  if (!writing && signal?.aborted) failure ??= databaseCancelled();
+  if (failure && writeSent) {
+    const cause = failure;
+    failure = Error(
+      cause.message +
+        "；Redis写入结果可能不确定，不能盲目重试，请先核查目标键（不能回滚）",
     );
-    const send = () => {
-      if (settled) return;
-      checkDatabaseSignal(signal);
-      const packet = encodeRESP(commands[index]);
-      if (writing && index === commands.length - 1) {
-        if (ownership) {
-          const checked = ownership.beforeDispatch();
-          if (checked !== undefined) {
-            // A mistakenly async host guard must neither dispatch nor leave an
-            // unhandled rejection after we reject this boundary.
-            if (checked instanceof Promise) checked.catch(() => {});
-            throw Error("原生写入派发检查必须同步完成");
-          }
-          checkDatabaseSignal(signal);
-          if (settled) return;
-        }
-        writeSent = true;
-        ownership?.dispatched();
-      }
-      socket.write(packet);
-    };
-    socket.once(input.ssl ? "secureConnect" : "connect", () => {
-      try {
-        send();
-      } catch (error) {
-        finish(error);
-      }
-    });
-    socket.on("error", (error) => finish(error));
-    socket.on("close", () => finish(Error("Redis连接提前关闭")));
-    socket.on("data", (chunk) => {
-      if (settled) return;
-      try {
-        if (!ownership || !writeSent) checkDatabaseSignal(signal);
-        received += chunk.length;
-        if (received > MAX_REPLY) throw Error("Redis响应超过2MiB");
-        buffer = Buffer.concat([buffer, chunk]);
-        const frame = parseRESP(buffer);
-        if (!frame) return;
-        if (frame.bytes !== buffer.length)
-          throw Error("Redis收到额外的未请求响应");
-        const nullBulk = buffer.equals(Buffer.from("$-1\r\n"));
-        buffer = Buffer.alloc(0);
-        if (index === commands.length - 1) {
-          const result = table(command[0], frame.value);
-          if (writing) {
-            const conditional = command
-              .slice(3)
-              .some((option) => ["NX", "XX"].includes(option));
-            if (
-              frame.value !== "OK" &&
-              !(conditional && frame.value === null && nullBulk)
-            )
-              throw Error("Redis SET确认响应无效");
-            return finish(null, {
-              write: true,
-              command: "SET",
-              acknowledged: true,
-              applied: frame.value === "OK",
-              affectedKeys: frame.value === "OK" ? 1 : 0,
-              ...result,
-              limit: 1,
-            });
-          }
-          return finish(null, result);
-        }
-        if (frame.value !== "OK") throw Error("Redis认证或数据库选择失败");
-        index++;
-        send();
-      } catch (error) {
-        finish(error);
-      }
-    });
-    signal?.addEventListener("abort", cancel, { once: true });
-    if (signal?.aborted) cancel();
-  });
+    failure.code = ownership ? cause.code : "REDIS_WRITE_UNCERTAIN";
+  }
+  if (failure) throw failure;
+  return result;
 }

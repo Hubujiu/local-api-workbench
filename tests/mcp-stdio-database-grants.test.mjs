@@ -284,7 +284,7 @@ test("strict envelope and explicit config preflight rejects mixed batches before
     { ...pg, ssh: { ...ssh, hostKeySHA256: "SHA256:invalid" } },
     { ...pg, ssh: { ...ssh, privateKey: "FICTIONAL PRIVATE KEY" } },
     { ...pg, ssh: { ...ssh, privateKeyFile: "/not-read" } },
-    { ...pg, type: "redis", ssh },
+    { ...pg, type: "mongodb", ssh },
     { ...pg, password: "bad\0value" },
   ];
   for (const config of invalidConfigs) {
@@ -392,6 +392,7 @@ test("native bindings require unique current source and matching type, Mongo aut
         type: "redis",
         host: "fictional.example.invalid",
         database: "0",
+        ssh,
       },
     },
   ]) {

@@ -67,19 +67,34 @@ These new runtime checks are pending exact-head CI. Local development validation
 is limited to syntax/format and static review; no local app, provider or database
 was run for this change.
 
-## Unsupported SSH is rejected before transport creation
+## Canonical owner SET over pinned SSH
 
-Redis does not implement SSH tunneling. The shared direct read/write execution
-boundary rejects every supplied `ssh` value other than `undefined`, including
-empty objects, empty strings, `null` and `false`. It never silently drops that
-configuration and sends AUTH or SET over a direct connection. The existing
-remote read wrapper's rejection remains unchanged. Native task write support is
-not introduced or expanded by this repair.
+Canonical HTTP configuration may supply the explicit `ssh` object described in
+[ADR-DATABASE-SSH.md](ADR-DATABASE-SSH.md). Only the owner-authenticated HTTP
+route with `allowWrite: true` can execute SET. Session, script, CLI and MCP grants
+remain read-only, including after a successful owner write. The frontend still
+has no SSH controls; this is a canonical backend/configuration capability.
 
-A real loopback regression exercises the exported read/write functions and the
-owner-authenticated HTTP route. Both candidate database and SSH endpoints must
-receive zero connections for rejected configuration; errors contain no input
-credentials. A subsequent ungranted SET remains rejected, while an explicit
-no-SSH SET retains the normal AUTH/SELECT/SET acknowledgement path and project
-storage remains unchanged. These protocol peers establish dispatch boundaries,
-not real Redis persistence or durability.
+One 100–3000 ms Redis deadline starts before SSH establishment and includes TLS,
+AUTH, SELECT and SET. There is no additional Redis budget after tunneling. An
+operation-owned abort controller preserves the first cancellation/deadline reason
+without breaking the native direct-SET observer's post-dispatch draining contract.
+TLS verifies the logical Redis DNS hostname through the channel, never the SSH
+host or a local forwarding address. Malformed configuration, unverified host keys,
+authentication failure and denied forwarding cannot fall back to a direct connection.
+
+Settlement awaits the RESP/TLS stream, SSH channel and underlying SSH transport
+close. An ACK or conditional no-op stays acknowledged during cleanup. Every error
+after SET dispatch remains uncertain, with no retry/replay/rollback claim. Native
+active-SSH import and native owner-broker SET over SSH remain unsupported; a plain
+native read source can be explicitly rebound to a canonical SSH session.
+
+Pure tests guard validation before transport creation and the native write limit.
+CI protocol peers cover password/key authentication, verified TLS, AUTH/SELECT,
+ACK/no-op/uncertainty, deadlines/cancellation, capacity recovery, project grants,
+revocation, HTTP disconnect and credential nonpersistence. Real Redis 7.2 CI
+acceptance separately checks tunneled values/conditions/expiry, a lost real SET
+ACK, native read rebinding, CLI stdin configuration, HTTP MCP and MCP stdio
+startup grants, process restart and explicit regrant. TLS peer fixtures are not
+real Redis TLS acceptance. Runtime acceptance remains pending exact-head CI;
+local validation does not run servers, apps, SDKs or network workflows.

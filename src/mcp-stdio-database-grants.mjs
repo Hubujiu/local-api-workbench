@@ -221,7 +221,7 @@ function prepareConfig(input) {
     if (Object.hasOwn(config, "authSource"))
       requireValue(config.type === "mongodb" && !!config.authSource.trim());
     if (Object.hasOwn(config, "ssh")) {
-      requireValue(["postgres", "mysql"].includes(config.type));
+      requireValue(["postgres", "mysql", "redis"].includes(config.type));
       config.ssh = databaseSSHConfig(config.ssh);
     }
   }

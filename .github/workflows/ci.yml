@@ -218,6 +218,7 @@ jobs:
           docker exec ${{ job.services.redis.id }} redis-cli HSET localapi:hash a 1 b 2
           docker exec ${{ job.services.redis.id }} redis-cli RPUSH localapi:list x y z
       - run: node tests/redis-integration.mjs
+      - run: node tests/redis-ssh-integration.mjs
       - name: Seed isolated MongoDB fixtures
         run: docker exec ${{ job.services.mongodb.id }} mongosh --quiet --eval 'db.getSiblingDB("fixture").items.insertMany([{n:NumberInt(1),name:"one"},{n:NumberInt(2),name:"two"},{n:NumberInt(3),name:"three"}])'
       - run: node tests/mongodb-integration.mjs

@@ -92,7 +92,7 @@ test("SSH rejects wrong host key before credentials, rejects bad auth/forward an
     /转发/,
   );
   await assert.rejects(
-    queryRemoteDatabase({ ...input, type: "redis", sql: "PING" }),
+    queryRemoteDatabase({ ...input, type: "mongodb", sql: "PING" }),
     /不会退回直连/,
   );
   for (const patch of [

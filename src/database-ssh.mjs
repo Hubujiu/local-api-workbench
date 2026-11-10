@@ -1,5 +1,5 @@
 import ssh2 from "ssh2";
-const { Client } = ssh2;
+const { Client, utils } = ssh2;
 import { timingSafeEqual } from "node:crypto";
 import { isIP, connect } from "node:net";
 import {
@@ -51,6 +51,11 @@ export function databaseSSHConfig(input) {
   if (hasKey && typeof input.privateKey !== "string")
     throw Error("SSH 私钥必须是字符串");
   if (hasKey && !input.privateKey.trim()) throw Error("SSH 私钥为空");
+  if (hasKey) {
+    const parsed = utils.parseKey(input.privateKey, input.passphrase);
+    if (parsed instanceof Error || !parsed?.isPrivateKey())
+      throw Error("SSH 私钥或口令无效");
+  }
   if (input.passphrase !== undefined && !hasKey)
     throw Error("SSH 私钥口令不能与密码认证混用");
   if (
@@ -79,15 +84,17 @@ export function databaseSSHConfig(input) {
 export async function openDatabaseSSH(input, { signal } = {}) {
   checkDatabaseSignal(signal);
   if (input.ssh === undefined) return null;
-  if (!["postgres", "mysql"].includes(input.type))
-    throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
+  if (!["postgres", "mysql", "redis"].includes(input.type))
+    throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL/Redis，不会退回直连");
   const config = databaseSSHConfig(input.ssh);
   const targetHost = input.host || "127.0.0.1",
     targetPort =
       input.port === undefined
         ? input.type === "postgres"
           ? 5432
-          : 3306
+          : input.type === "redis"
+            ? 6379
+            : 3306
         : Number(input.port);
   if (
     !host(targetHost) ||

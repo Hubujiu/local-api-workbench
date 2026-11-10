@@ -101,8 +101,8 @@ export class DatabaseSessions {
     config.ssl = input.ssl === true;
     if (type === "postgres") explicitPostgresOptions(config);
     if (input.ssh !== undefined) {
-      if (!["postgres", "mysql"].includes(type))
-        throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL");
+      if (!["postgres", "mysql", "redis"].includes(type))
+        throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL/Redis");
       config.ssh = databaseSSHConfig(input.ssh);
     }
     if (Buffer.byteLength(JSON.stringify(config)) > 131072)
