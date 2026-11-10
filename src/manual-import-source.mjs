@@ -350,9 +350,16 @@ export function buildManualImportSourceGraph(input, context) {
     }
     request(node, ["requests", index]);
   });
-  primary("documents", "document").forEach((node, index) =>
-    ref(node, "folder", ["documents", index, "folder"]),
-  );
+  primary("documents", "document").forEach((node, index) => {
+    const path = ["documents", index];
+    ref(node, "folder", [...path, "folder"]);
+    ref(node, "status", [...path, "statusId"]);
+    for (const key of Object.keys(project.documents[index].attributes || {}))
+      ref(node, "attribute", [...path, "attributes", key], {
+        key: true,
+        optional: false,
+      });
+  });
   primary("modelFolders", "model-folder").forEach((node, index) =>
     ref(node, "model-folder", ["modelFolders", index, "parentId"]),
   );

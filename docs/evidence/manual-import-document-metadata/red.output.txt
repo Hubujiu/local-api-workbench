@@ -1,0 +1,148 @@
+✖ document metadata contributes typed status and attribute dependencies, never body-text references (4.627502ms)
+✖ dangling document metadata rejects before a source graph can be planned (0.844488ms)
+✖ owner JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (183.409206ms)
+✖ sdk JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (175.85157ms)
+✖ owner directory document-only import retains status through reopen and backup without importing unselected documents or APIs (121.210543ms)
+✖ sdk directory document-only import retains status through reopen and backup without importing unselected documents or APIs (115.993084ms)
+✖ document status dependency cannot be excluded or silently replace a conflicting registry entry (95.443315ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 0
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1208.524278
+
+✖ failing tests:
+
+test at tests/manual-import-document-metadata.test.mjs:41:1
+✖ document metadata contributes typed status and attribute dependencies, never body-text references (4.627502ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + []
+  - [
+  -   'globals:configuration'
+  - ]
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:46:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'globals:configuration' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:68:1
+✖ dangling document metadata rejects before a source graph can be planned (0.844488ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:76:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /引用目标不存在或类型不匹配/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:190:5
+✖ owner JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (183.409206ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'Ready'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:205:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'Ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:190:5
+✖ sdk JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (175.85157ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'Ready'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:205:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'Ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:190:5
+✖ owner directory document-only import retains status through reopen and backup without importing unselected documents or APIs (121.210543ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'Ready'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:205:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'Ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:190:5
+✖ sdk directory document-only import retains status through reopen and backup without importing unselected documents or APIs (115.993084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'Ready'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:205:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'Ready',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/manual-import-document-metadata.test.mjs:230:1
+✖ document status dependency cannot be excluded or silently replace a conflicting registry entry (95.443315ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/manual-import-document-metadata.test.mjs:235:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { code: 'MANUAL_IMPORT_DEPENDENCY_EXCLUDED' },
+    operator: 'rejects',
+    diff: 'simple'
+  }
