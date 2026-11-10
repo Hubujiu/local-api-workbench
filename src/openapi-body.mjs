@@ -1,4 +1,4 @@
-import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
+import { importOpenAPIHeaderCookieValue } from "./openapi-header-cookie-values.mjs";
 
 import { validateOpenAPIFormEncoding } from "./openapi-form-encoding.mjs";
 import { assertMultipartMediaExportable } from "./multipart-part-media.mjs";
@@ -59,7 +59,7 @@ export function importOpenAPIHeaders(
         required: parameter.required === true,
         description: parameter.description || "",
         value: oas3
-          ? importOpenAPIScalarValue(parameter, parameter.example ?? "")
+          ? importOpenAPIHeaderCookieValue(parameter, parameter.example ?? "")
           : (parameter.example ?? ""),
         enabled: true,
       })),
