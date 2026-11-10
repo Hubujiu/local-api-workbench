@@ -185,6 +185,7 @@ const record = (p, entry) => {
 
 export class ActiveProjectImports {
   #owner = null;
+  #reads = new Set();
   constructor({ store, request, now = Date.now }) {
     this.store = store;
     this.request = request;
@@ -241,6 +242,18 @@ export class ActiveProjectImports {
   #owns(owner) {
     return !this.closed && this.#owner === owner;
   }
+  async #read(projectId) {
+    if (this.closed) throw Error("自动导入服务已关闭");
+    // Store.get owns a file guard until its promise settles. Track reads
+    // outside running imports too, so shutdown cannot leave that guard open.
+    const reading = this.store.get(projectId);
+    this.#reads.add(reading);
+    try {
+      return await reading;
+    } finally {
+      this.#reads.delete(reading);
+    }
+  }
   #install(owner, sources, credentials) {
     this.credentials = credentials;
     this.active = owner.projectId;
@@ -269,7 +282,7 @@ export class ActiveProjectImports {
     try {
       await this.#reset(owner);
       check();
-      const p = await this.store.get(projectId);
+      const p = await this.#read(projectId);
       check();
       if (p.archived) throw Error("归档项目不能自动导入");
       const sources = definitions(p);
@@ -309,7 +322,7 @@ export class ActiveProjectImports {
     // schedule anything. A later activation, stop or edit replaces the owner.
     owner.phase = "resuming";
     try {
-      const p = await this.store.get(owner.projectId);
+      const p = await this.#read(owner.projectId);
       if (!this.#owns(owner)) return this.snapshot();
       if (p.archived) {
         this.#reset();
@@ -334,6 +347,7 @@ export class ActiveProjectImports {
     this.closed = true;
     clearInterval(this.timer);
     await this.deactivate();
+    await Promise.allSettled([...this.#reads]);
   }
   current(projectId, epoch) {
     if (this.closed || this.active !== projectId || this.epoch !== epoch)
@@ -343,7 +357,7 @@ export class ActiveProjectImports {
     if (!this.active || this.running || this.closed) return;
     const projectId = this.active,
       epoch = this.epoch;
-    const p = await this.store.get(projectId);
+    const p = await this.#read(projectId);
     if (this.active !== projectId || this.epoch !== epoch || this.running)
       return;
     if (p.archived) {
@@ -385,7 +399,7 @@ export class ActiveProjectImports {
     }
   }
   async execute(projectId, sourceId, epoch) {
-    const p = await this.store.get(projectId);
+    const p = await this.#read(projectId);
     this.current(projectId, epoch);
     const source = definitions(p).find((d) => d.id === sourceId);
     if (p.archived || !source?.enabled) throw Error("数据源未启用或项目已归档");
@@ -432,7 +446,7 @@ export class ActiveProjectImports {
         maxAliasCount: 100,
         uniqueKeys: true,
       });
-      const current = await this.store.get(projectId);
+      const current = await this.#read(projectId);
       this.current(projectId, epoch);
       if (
         current.archived ||
@@ -474,7 +488,7 @@ export class ActiveProjectImports {
         !this.closed
       ) {
         try {
-          const current = await this.store.get(projectId);
+          const current = await this.#read(projectId);
           if (
             this.active === projectId &&
             this.epoch === epoch &&
