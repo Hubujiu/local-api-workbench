@@ -1138,6 +1138,7 @@ export class Store {
         opaquePlans.add(plan);
       }
     }
+    const unnormalizedPlans = p.plans;
     const normalizedPlans = p.plans.map((plan) =>
       opaquePlans.has(plan)
         ? structuredClone(plan)
@@ -1168,9 +1169,13 @@ export class Store {
         nativeAppend.context,
       ).project;
       this.#validateProject(expected);
-      expected.plans = expected.plans.map((plan) =>
-        snapshotPlan(plan, { allowRuntimeRows: hasRepeatSteps(plan.steps) }),
-      );
+      // Append must retain the complete locked plan collection before ordinary
+      // Store normalization. Prove that independently, then reuse its one
+      // validated normalization: a second snapshot rejects retained opaque
+      // plans and allocates different IDs/timestamps for sparse legacy plans.
+      if (!sameStoredPlan(expected.plans, unnormalizedPlans))
+        throw Error("原生追加不能夹带计划修改");
+      expected.plans = structuredClone(p.plans);
       // The sole private import path must match the entire replayed project,
       // not merely graph identity or a caller-controlled append flag.
       if (!isDeepStrictEqual(expected, p))
