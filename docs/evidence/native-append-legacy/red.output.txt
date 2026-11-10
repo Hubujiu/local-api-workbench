@@ -1,0 +1,68 @@
+✖ signed JSON append preserves inert legacy plans and admits no execution (221.082035ms)
+✖ signed directory append preserves inert legacy plans and admits no execution (139.557441ms)
+✔ native append cannot authorize changed or duplicated opaque plans or stale configuration (180.698109ms)
+✖ native append normalizes a sparse legacy plan once, with durable identities (103.981994ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1089.718426
+
+✖ failing tests:
+
+test at tests/native-append-legacy-plans.test.mjs:93:3
+✖ signed JSON append preserves inert legacy plans and admits no execution (221.082035ms)
+  AssertionError [ERR_ASSERTION]: {"error":"手动导入未完成；请检查选择、权限与冲突后重新预览"}
+
+  400 !== 200
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/native-append-legacy-plans.test.mjs:106:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/native-append-legacy-plans.test.mjs:93:3
+✖ signed directory append preserves inert legacy plans and admits no execution (139.557441ms)
+  AssertionError [ERR_ASSERTION]: {"error":"手动导入未完成；请检查选择、权限与冲突后重新预览"}
+
+  400 !== 200
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/native-append-legacy-plans.test.mjs:106:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/native-append-legacy-plans.test.mjs:168:1
+✖ native append normalizes a sparse legacy plan once, with durable identities (103.981994ms)
+  AssertionError [ERR_ASSERTION]: {"error":"手动导入未完成；请检查选择、权限与冲突后重新预览"}
+
+  400 !== 200
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/native-append-legacy-plans.test.mjs:188:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
