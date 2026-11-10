@@ -48,15 +48,15 @@ block a valid request body. Generic scalar selection and transport are unchanged
 
 `tests/openapi-object-parameter-admission.test.mjs` on unchanged baseline:
 3 passed and 9 failed for missing rejection. With the fix all 12 passed.
-Captured RED/GREEN output only has trailing whitespace removed. Four additional
-pure helper cases cover fallback selection, precedence, content rejection and
+Captured RED/GREEN output only has trailing whitespace removed. Five additional
+pure helper cases cover scalar diagnostics, fallback selection, precedence, content rejection and
 cycles. Independent review caught missing no-example const/enum/contains and
 conditional contracts; these are now covered by root and runtime fixtures.
 Root tests cover source immutability, ordinary and MCP batch atomicity,
 local references/path inheritance, ignored Content-Type, scalar cURL/OpenAPI
 roundtrip and legacy/primitive-array controls.
-Final related pure suites pass 64/64 with no skips or failures. Independent
-review reran 22/22 pure tests and found no remaining blocking issue. Syntax,
+Final related pure suites pass 65/65 with no skips or failures. Independent
+review reran 23/23 pure tests and found no remaining blocking issue. Syntax,
 whole-repository formatting and diff whitespace checks pass.
 
 Ten owner/official SDK HTTP and actual-wire workflows are authored and
@@ -64,6 +64,14 @@ syntax-checked locally; they run in ordinary CI. They compare complete Store
 baselines separately from HTTP projections, including definition history, and
 check durable files/revisions, other-project isolation, no import-time requests,
 Store reopen, and exact scalar/Query-array wire after export and reimport.
+
+The first CI commit exposed an error-contract regression in an existing scalar
+workflow: explicit scalar schemas with object examples reached the new compound
+check before their established scalar validator. A pure regression captured this
+as 4/5 passing, then 5/5 after correction (scalar-order RED/GREEN files). Scalar
+selection now runs first after schema/content admission; compound candidate and
+actual fallback checks still run afterward. Existing workflow assertions were
+not changed. The first CI run is preserved, not rerun.
 
 Cross-platform acceptance and artifact provenance must be verified for this
 commit. No full local runtime suite, original Apipost, native format expansion,

@@ -2,6 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { importOpenAPIHeaderCookieValue as select } from "../src/openapi-header-cookie-values.mjs";
 
+test("existing scalar selection errors retain their diagnostic contract", () => {
+  for (const location of ["header", "cookie"])
+    for (const parameter of [
+      { schema: { type: "boolean" }, example: {} },
+      { schema: { type: "string" }, examples: { only: { value: {} } } },
+      { schema: { type: "string", default: {} } },
+      { schema: { type: "string", example: {} } },
+    ])
+      assert.throws(
+        () => select({ in: location, ...parameter }),
+        /OpenAPI标量参数/,
+      );
+});
+
 test("Header/Cookie object admission checks delegated fallbacks as well as selected examples", () => {
   const value = { role: "admin" };
   const parameter = {

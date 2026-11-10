@@ -90,9 +90,11 @@ export function importOpenAPIHeaderCookieValue(parameter, legacyValue = "") {
   };
   if (own(parameter, "content")) fail("content参数序列化尚不支持");
   if (objectContract(parameter.schema)) fail("对象参数序列化尚不支持或不明确");
+  // Keep the established scalar validation and its error contract first.
+  // Only unsupported compound paths delegate to the fallback checked below.
+  const value = importOpenAPIScalarValue(parameter, legacyValue);
   if (selectedCandidates(parameter, legacyValue).some(objectValue))
     fail("对象或含对象的复合参数值尚不支持");
-  const value = importOpenAPIScalarValue(parameter, legacyValue);
   // Compound schemas delegate to legacy fallbacks before normal selection.
   // In particular, a Cookie fallback can be an object-valued schema default.
   if (objectValue(value)) fail("对象或含对象的复合参数值尚不支持");
