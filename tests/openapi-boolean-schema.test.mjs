@@ -163,9 +163,9 @@ test("form schemas retain forbidden properties and explicit boolean root constra
 
 test("OpenAPI 3.0 export rejects unsupported schema dialect constructs instead of silently weakening them", () => {
   for (const schema of [
-    { const: false },
+    { const: null },
     { type: ["string", "null"] },
-    { exclusiveMinimum: 2 },
+    { exclusiveMinimum: "2" },
     { prefixItems: [false] },
   ]) {
     const [request] = importDocument(document(schema));

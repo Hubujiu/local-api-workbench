@@ -26,6 +26,7 @@ export function normalizeOpenAPI30Schemas(document) {
     "minProperties",
     "required",
     "enum",
+    "const",
     "type",
     "allOf",
     "oneOf",
@@ -46,6 +47,54 @@ export function normalizeOpenAPI30Schemas(document) {
     "example",
     "deprecated",
   ]);
+  function constant(value, depth) {
+    enter(depth);
+    if (
+      value === null ||
+      typeof value === "boolean" ||
+      typeof value === "string" ||
+      (typeof value === "number" && Number.isFinite(value))
+    )
+      return value;
+    if (!object(value) && !Array.isArray(value))
+      throw Error("OpenAPI 3.0 const 导出需要有限 JSON 值");
+    if (
+      Array.isArray(value)
+        ? Object.getPrototypeOf(value) !== Array.prototype
+        : ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+    )
+      throw Error("OpenAPI 3.0 const 导出需要普通 JSON 对象");
+    const entries = Object.entries(Object.getOwnPropertyDescriptors(value));
+    if (
+      Object.getOwnPropertySymbols(value).length ||
+      entries.some(
+        ([key, descriptor]) =>
+          !(Array.isArray(value) && key === "length") &&
+          (!descriptor.enumerable || !own(descriptor, "value")),
+      )
+    )
+      throw Error("OpenAPI 3.0 const 导出不支持非 JSON 属性");
+    if (Array.isArray(value)) {
+      if (
+        entries.length !== value.length + 1 ||
+        entries.some(
+          ([key]) =>
+            key !== "length" &&
+            (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length),
+        )
+      )
+        throw Error("OpenAPI 3.0 const 导出不支持稀疏数组或附加属性");
+      return entries
+        .filter(([key]) => key !== "length")
+        .map(([, descriptor]) => constant(descriptor.value, depth + 1));
+    }
+    return Object.fromEntries(
+      entries.map(([key, descriptor]) => [
+        key,
+        constant(descriptor.value, depth + 1),
+      ]),
+    );
+  }
   function schema(value, depth = 0) {
     enter(depth);
     if (value === true) return {};
@@ -67,12 +116,31 @@ export function normalizeOpenAPI30Schemas(document) {
       )
     )
       throw Error("OpenAPI 3.0 不支持该 Schema type；请使用原始项目导出");
-    for (const key of ["exclusiveMinimum", "exclusiveMaximum"])
-      if (own(value, key) && typeof value[key] !== "boolean")
-        throw Error(
-          "OpenAPI 3.0 的 " + key + " 必须为布尔值；请使用原始项目导出",
-        );
     const result = { ...value };
+    for (const [key, bound] of [
+      ["exclusiveMinimum", "minimum"],
+      ["exclusiveMaximum", "maximum"],
+    ]) {
+      if (!own(value, key) || typeof value[key] === "boolean") continue;
+      const exclusive = value[key];
+      if (typeof exclusive !== "number" || !Number.isFinite(exclusive))
+        throw Error("OpenAPI 3.0 的 " + key + " 必须为布尔值或有限数值");
+      if (
+        own(value, bound) &&
+        (typeof value[bound] !== "number" || !Number.isFinite(value[bound]))
+      )
+        throw Error("OpenAPI Schema " + bound + " 必须为有限数值");
+      const stricterInclusive =
+        own(value, bound) &&
+        (bound === "minimum"
+          ? value[bound] > exclusive
+          : value[bound] < exclusive);
+      if (stricterInclusive) delete result[key];
+      else {
+        result[bound] = exclusive;
+        result[key] = true;
+      }
+    }
     if (own(value, "properties")) {
       if (!object(value.properties))
         throw Error("Schema properties 必须是对象");
@@ -99,6 +167,20 @@ export function normalizeOpenAPI30Schemas(document) {
         value.additionalProperties,
         depth + 1,
       );
+    if (own(value, "const")) {
+      // A top-level null singleton needs nullable/type dialect decisions which
+      // this bounded conversion does not infer. Null within JSON data is fine.
+      if (value.const === null)
+        throw Error("OpenAPI 3.0 暂不支持 const:null；请使用原始项目导出");
+      const singleton = { enum: [constant(value.const, depth + 1)] };
+      delete result.const;
+      if (own(value, "enum")) {
+        // Do not replace or compare the existing enum: conjunction preserves
+        // JSON structural equality, conflicting enums and all other siblings.
+        enter(depth + 1);
+        result.allOf = [...(result.allOf || []), singleton];
+      } else result.enum = singleton.enum;
+    }
     // OpenAPI 3.0 Reference Objects ignore siblings. Keep those constraints
     // on a Schema Object instead, with the reference as an allOf member.
     if (own(result, "$ref") && Object.keys(result).length > 1) {
