@@ -249,11 +249,13 @@ for (const next of ["switch", "stop", "credentials", "close"]) {
       if (next === "stop") await f.manager.deactivate(f.a.id);
       if (next === "credentials")
         await f.manager.activate(f.a.id, f.credentials("fresh"));
-      if (next === "close") await f.manager.close();
+      // Shutdown now drains this owned read; release the gate before awaiting it.
+      const closing = next === "close" ? f.manager.close() : undefined;
       const snapshot = f.manager.snapshot();
       if (failedRead) gate.fail();
       else gate.release();
       await resumed;
+      await closing;
       f.manager.discard(lease);
       assert.deepEqual(f.manager.snapshot(), snapshot);
       assert.equal(f.seen.length, 0);
@@ -290,8 +292,9 @@ test("close while activation is reading cannot install a late schedule", async (
   const activation = f.manager.activate(f.a.id);
   const rejected = assert.rejects(activation, /取消/);
   await gate.entered;
-  await f.manager.close();
+  const closing = f.manager.close();
   gate.release();
+  await closing;
   await rejected;
   assert.equal(f.manager.snapshot().projectId, null);
   assert.deepEqual(f.manager.snapshot().nextRuns, []);
