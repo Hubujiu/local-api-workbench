@@ -1,0 +1,144 @@
+✖ 3.0.3 scalar query rejects unsupported or malformed allowReserved (6.845778ms)
+✔ 3.0.3 absent and false scalar allowReserved preserve ordinary encoding (3.165066ms)
+✖ 3.0.3 invalid scalar reserved semantics reject whole mixed batch without mutation (1.614676ms)
+✖ 3.1.0 scalar query rejects unsupported or malformed allowReserved (0.370998ms)
+✔ 3.1.0 absent and false scalar allowReserved preserve ordinary encoding (0.908726ms)
+✖ 3.1.0 invalid scalar reserved semantics reject whole mixed batch without mutation (0.519541ms)
+✖ 2.0 scalar query rejects unsupported or malformed allowReserved (0.964419ms)
+✔ 2.0 absent and false scalar allowReserved preserve ordinary encoding (0.817899ms)
+✖ 2.0 invalid scalar reserved semantics reject whole mixed batch without mutation (0.72565ms)
+✖ resolved and inherited scalar allowReserved cannot bypass admission (0.558479ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 3
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 322.919048
+
+✖ failing tests:
+
+test at tests/openapi-query-allow-reserved.test.mjs:13:3
+✖ 3.0.3 scalar query rejects unsupported or malformed allowReserved (6.845778ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:17:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:34:3
+✖ 3.0.3 invalid scalar reserved semantics reject whole mixed batch without mutation (1.614676ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:46:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:13:3
+✖ 3.1.0 scalar query rejects unsupported or malformed allowReserved (0.370998ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:17:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:34:3
+✖ 3.1.0 invalid scalar reserved semantics reject whole mixed batch without mutation (0.519541ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:46:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:13:3
+✖ 2.0 scalar query rejects unsupported or malformed allowReserved (0.964419ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:17:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:34:3
+✖ 2.0 invalid scalar reserved semantics reject whole mixed batch without mutation (0.72565ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:46:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-query-allow-reserved.test.mjs:66:1
+✖ resolved and inherited scalar allowReserved cannot bypass admission (0.558479ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-query-allow-reserved.test.mjs:80:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /allowReserved/,
+    operator: 'throws',
+    diff: 'simple'
+  }

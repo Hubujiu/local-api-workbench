@@ -222,6 +222,11 @@ export function importOpenAPIQuery(
         ["allOf", "anyOf", "oneOf"].some((key) => own(schema, key))
       )
         fail("暂不支持Query联合类型或组合Schema");
+      if (
+        parameter.allowReserved !== undefined &&
+        parameter.allowReserved !== false
+      )
+        fail("尚不支持allowReserved:true或非布尔值");
       if (schema?.type !== "array") {
         if (oas3) row.value = importOpenAPIScalarValue(parameter, row.value);
         if (
@@ -233,11 +238,6 @@ export function importOpenAPIQuery(
           fail("数组或对象Query值须有明确受支持的Schema");
         return row;
       }
-      if (
-        parameter.allowReserved !== undefined &&
-        parameter.allowReserved !== false
-      )
-        fail("尚不支持allowReserved:true或非布尔值");
       let explode;
       if (swagger) {
         const format = own(parameter, "collectionFormat")

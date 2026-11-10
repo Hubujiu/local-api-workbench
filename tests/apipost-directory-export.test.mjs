@@ -199,7 +199,9 @@ test("directory export preserves independent frozen HTTP steps, inert sources an
       },
       body: JSON.stringify({ planId: reopened.plans[0].id }),
     });
-  assert.equal((await response.json()).status, "passed");
+  const result = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(result));
+  assert.equal(result.status, "passed", JSON.stringify(result));
   assert.equal(seen.length, 8);
   assert(
     seen.every(
