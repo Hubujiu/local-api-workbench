@@ -48,6 +48,16 @@ Store value. It explicitly checks that the baseline has a definition-history
 entry; no production behavior or history assertion is removed. Corrected local
 pure and owner-projection checks pass 34/34. Runtime results remain CI-only.
 
+The corrected commit's first CI run (`42836799244`) passed all 15 new cases
+on all three operating systems, but the pre-existing directory-export restart
+execution failed on macOS. Its final assertion had discarded the response,
+leaving only `failed !== passed` in all preserved artifacts. A diagnostic-only
+follow-up gives that assertion the same HTTP-status and serialized-result
+context as its three earlier executions. It changes no production behavior,
+timeouts or retries, does not weaken existing pass criteria, and is not a
+demonstrated root-cause fix.
+Both earlier runs remain preserved without reruns.
+
 Complete cross-platform workflow results and source/artifact provenance must be
 verified for this commit independently. No full local suite, original Apipost,
 restricted export integration, cancelled multipart publication, merge or
