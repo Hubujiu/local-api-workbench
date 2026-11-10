@@ -1,0 +1,20 @@
+✔ 3.0.3 rejects unsupported header object contracts and compound selected values (7.235381ms)
+✔ 3.0.3 header object refusal is atomic for ordinary import and all MCP cover modes (42.560767ms)
+✔ 3.0.3 rejects unsupported cookie object contracts and compound selected values (2.68893ms)
+✔ 3.0.3 cookie object refusal is atomic for ordinary import and all MCP cover modes (32.388774ms)
+✔ 3.1.0 rejects unsupported header object contracts and compound selected values (1.60409ms)
+✔ 3.1.0 header object refusal is atomic for ordinary import and all MCP cover modes (28.234316ms)
+✔ 3.1.0 rejects unsupported cookie object contracts and compound selected values (2.012684ms)
+✔ 3.1.0 cookie object refusal is atomic for ordinary import and all MCP cover modes (27.96703ms)
+✔ resolved and inherited object Header/Cookie parameters cannot bypass admission (1.420834ms)
+✔ ignored OAS3 Content-Type object parameters do not block valid body media (1.129067ms)
+✔ scalar values, literal JSON text and annotations retain OpenAPI roundtrip and cURL (7.773911ms)
+✔ legacy Swagger/manual rows and primitive arrays are not reinterpreted (0.523316ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 454.610068

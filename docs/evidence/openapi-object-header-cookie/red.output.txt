@@ -1,0 +1,182 @@
+✖ 3.0.3 rejects unsupported header object contracts and compound selected values (10.978583ms)
+✖ 3.0.3 header object refusal is atomic for ordinary import and all MCP cover modes (1.750119ms)
+✖ 3.0.3 rejects unsupported cookie object contracts and compound selected values (0.429225ms)
+✖ 3.0.3 cookie object refusal is atomic for ordinary import and all MCP cover modes (0.7521ms)
+✖ 3.1.0 rejects unsupported header object contracts and compound selected values (0.385149ms)
+✖ 3.1.0 header object refusal is atomic for ordinary import and all MCP cover modes (0.561633ms)
+✖ 3.1.0 rejects unsupported cookie object contracts and compound selected values (0.322855ms)
+✖ 3.1.0 cookie object refusal is atomic for ordinary import and all MCP cover modes (0.520702ms)
+✖ resolved and inherited object Header/Cookie parameters cannot bypass admission (0.511078ms)
+✔ ignored OAS3 Content-Type object parameters do not block valid body media (2.093596ms)
+✔ scalar values, literal JSON text and annotations retain OpenAPI roundtrip and cURL (14.809649ms)
+✔ legacy Swagger/manual rows and primitive arrays are not reinterpreted (0.510017ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 3
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 423.555869
+
+✖ failing tests:
+
+test at tests/openapi-object-parameter-admission.test.mjs:21:5
+✖ 3.0.3 rejects unsupported header object contracts and compound selected values (10.978583ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:25:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:33:5
+✖ 3.0.3 header object refusal is atomic for ordinary import and all MCP cover modes (1.750119ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:51:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:21:5
+✖ 3.0.3 rejects unsupported cookie object contracts and compound selected values (0.429225ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:25:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:33:5
+✖ 3.0.3 cookie object refusal is atomic for ordinary import and all MCP cover modes (0.7521ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:51:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:21:5
+✖ 3.1.0 rejects unsupported header object contracts and compound selected values (0.385149ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:25:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:33:5
+✖ 3.1.0 header object refusal is atomic for ordinary import and all MCP cover modes (0.561633ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:51:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:21:5
+✖ 3.1.0 rejects unsupported cookie object contracts and compound selected values (0.322855ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:25:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:33:5
+✖ 3.1.0 cookie object refusal is atomic for ordinary import and all MCP cover modes (0.520702ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:51:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*(对象|content|复合)/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/openapi-object-parameter-admission.test.mjs:70:1
+✖ resolved and inherited object Header/Cookie parameters cannot bypass admission (0.511078ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-object-parameter-admission.test.mjs:86:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /OpenAPI.*对象/,
+    operator: 'throws',
+    diff: 'simple'
+  }

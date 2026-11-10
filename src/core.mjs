@@ -144,7 +144,7 @@ import {
   validatePlanProtocolScripts,
   rejectHTTPProtocolScripts,
 } from "./wire-script-context.mjs";
-import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
+import { importOpenAPIHeaderCookieValue } from "./openapi-header-cookie-values.mjs";
 import {
   runScriptedGrpcStep,
   validatePlanGrpcScripts,
@@ -1966,7 +1966,7 @@ export function importDocument(doc) {
                 value:
                   typeof doc.openapi === "string" &&
                   doc.openapi.startsWith("3.")
-                    ? importOpenAPIScalarValue(
+                    ? importOpenAPIHeaderCookieValue(
                         p,
                         p.example ?? p.schema?.default ?? "",
                       )
