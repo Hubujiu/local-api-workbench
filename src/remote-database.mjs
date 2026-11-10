@@ -22,8 +22,11 @@ import { queryRedis } from "./redis.mjs";
 export async function queryRemoteDatabase(input, dependencies = {}) {
   const signal = dependencies.signal;
   checkDatabaseSignal(signal);
-  if (input.ssh !== undefined && !["postgres", "mysql"].includes(input.type))
-    throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL，不会退回直连");
+  if (
+    input.ssh !== undefined &&
+    !["postgres", "mysql", "redis"].includes(input.type)
+  )
+    throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL/Redis，不会退回直连");
   if (input.type === "clickhouse") return queryClickHouse(input, { signal });
   if (input.type === "redis") return queryRedis(input, { signal });
   if (input.type === "mongodb") return queryMongo(input, { signal });

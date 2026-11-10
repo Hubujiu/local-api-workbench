@@ -12,6 +12,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { Store } from "../src/runtime.mjs";
 import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
+import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
 
 async function diskText(directory) {
   const chunks = [];
@@ -28,7 +29,7 @@ export async function verifyMCPStdioNativeDatabaseFlow(
   config,
   { sourceFactory } = {},
 ) {
-  assert(["postgres", "mysql", "mongodb"].includes(config.type));
+  assert(["postgres", "mysql", "mongodb", "redis"].includes(config.type));
   assert(!Object.hasOwn(config, "name"));
   assert(!Object.hasOwn(config, "bindingId"));
   if (config.type === "mongodb")
@@ -64,10 +65,12 @@ export async function verifyMCPStdioNativeDatabaseFlow(
     const endpoint = `http://127.0.0.1:${echo.address().port}/echo`;
     const source = sourceFactory
       ? sourceFactory(endpoint)
-      : nativeDatabaseFixture(
-          endpoint,
-          config.type === "mysql" ? "mysql" : "pg",
-        );
+      : config.type === "redis"
+        ? nativeRedisFixture(endpoint)
+        : nativeDatabaseFixture(
+            endpoint,
+            config.type === "mysql" ? "mysql" : "pg",
+          );
     const originalSource = structuredClone(source),
       planId = "stdio-native-db";
     for (const project of [allowed, ungranted, denied]) {
@@ -144,7 +147,12 @@ export async function verifyMCPStdioNativeDatabaseFlow(
       assert.equal(response.content?.[0]?.type, "text");
       return JSON.parse(response.content[0].text);
     };
-    const expected = config.type === "mongodb" ? "one" : "from-database";
+    const expected =
+      config.type === "mongodb"
+        ? "one"
+        : config.type === "redis"
+          ? "hello"
+          : "from-database";
     const first = await connect(true);
     const passed = await run(first, allowed);
     assert.equal(passed.status, "passed");
@@ -157,11 +165,17 @@ export async function verifyMCPStdioNativeDatabaseFlow(
     assert.equal(wireValues.length, 1);
     await first.client.close();
 
+    // Closing the process revokes its invocation-only grants. Removing the
+    // owner-supplied file and restarting without it cannot revive that authority.
+    // File removal is not advertised as revocation of an already running process.
+    if (config.type === "redis") await rm(grantsFile);
     // The same stored plan is insufficient authority in a fresh subprocess.
     const second = await connect(false);
     assert.equal((await run(second, allowed)).status, "failed");
     assert.equal(wireValues.length, 1);
     await second.client.close();
+    if (config.type === "redis")
+      await writeFile(grantsFile, grantText, { mode: 0o600 });
     const third = await connect(true);
     const regranted = await run(third, allowed);
     assert.equal(regranted.status, "passed");

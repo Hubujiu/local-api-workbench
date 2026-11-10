@@ -5,6 +5,8 @@ import net from "node:net";
 export async function startSSHFixture({
   targets = [],
   rejectForward = false,
+  holdAuthentication = false,
+  holdForward = false,
 } = {}) {
   const key = () =>
     generateKeyPairSync("rsa", {
@@ -23,8 +25,15 @@ export async function startSSHFixture({
       .replace(/=$/, "");
   const clients = new Set(),
     sockets = new Set();
-  const stats = { authenticated: 0, forwarded: [], closed: 0 };
+  const stats = {
+    connections: 0,
+    authenticationAttempts: 0,
+    authenticated: 0,
+    forwarded: [],
+    closed: 0,
+  };
   const server = new Server({ hostKeys: [hostKey] }, (client) => {
+    stats.connections++;
     clients.add(client);
     client.on("error", () => {});
     client.once("close", () => {
@@ -32,6 +41,8 @@ export async function startSSHFixture({
       stats.closed++;
     });
     client.on("authentication", (ctx) => {
+      stats.authenticationAttempts++;
+      if (holdAuthentication) return;
       if (ctx.username !== "fixture") return ctx.reject();
       if (
         ctx.method === "password" &&
@@ -56,14 +67,15 @@ export async function startSSHFixture({
       client.on("session", (_accept, reject) => reject());
       client.on("tcpip", (accept, reject, info) => {
         stats.forwarded.push({ host: info.destIP, port: info.destPort });
-        if (
-          rejectForward ||
-          !targets.some(
-            (t) => t.host === info.destIP && t.port === info.destPort,
-          )
-        )
-          return reject();
-        const socket = net.connect(info.destPort, "127.0.0.1");
+        if (holdForward) return;
+        const target = targets.find(
+          (t) => t.host === info.destIP && t.port === info.destPort,
+        );
+        if (rejectForward || !target) return reject();
+        const socket = net.connect(
+          target.connectPort ?? info.destPort,
+          "127.0.0.1",
+        );
         sockets.add(socket);
         socket.once("close", () => sockets.delete(socket));
         let channel;

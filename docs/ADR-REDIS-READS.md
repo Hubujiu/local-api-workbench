@@ -21,15 +21,24 @@ KEYS, unbounded HGETALL/SMEMBERS, pubsub or arbitrary commands. Collection
 ranges are capped at1000 items; GETRANGE at64KiB; multi-key reads at100keys.
 SCAN COUNT is a server hint, not a guarantee; response-size limits still apply.
 
-- Total connection/auth/select/query deadline at most3seconds, no reconnect.
+- Total SSH/TLS/connection/auth/select/query deadline at most3seconds, no reconnect.
 - At most64KiB per encoded command,1MiB per bulk string,2MiB received wire data,
   8 nested levels,5000 parsed nodes and2002 members per RESP array.
 - Results show at most1000 rows; SCAN returns its cursor for explicit paging.
 - Non-UTF8 bulk strings are labelled base64; large integers remain strings.
-- TLS verification is mandatory, with optional caller-supplied CA. No certificate
-  bypass, Unix socket discovery, filesystem reads or credential discovery.
+- TLS verification is mandatory, with optional caller-supplied CA. Nonempty CA
+  input must be a complete PEM certificate bundle with no invalid blocks or
+  extra content, validated before direct or SSH connection creation. Empty CA
+  fields retain default trust. No certificate bypass, Unix socket discovery,
+  filesystem reads or credential discovery.
 
 The UI and protocol fixtures use synthetic local values. CI additionally starts
 an isolated official Redis7.2 service, seeds fictional data, and checks real
 GET/MGET/list/hash-scan behavior and mutation rejection. Authentication and TLS
 framing are independently tested against loopback protocol fixtures.
+
+Canonical configuration also supports ephemeral, fingerprint-pinned SSH as described
+in [ADR-DATABASE-SSH.md](ADR-DATABASE-SSH.md). TLS over SSH requires the logical
+Redis DNS hostname. Sessions, CLI and MCP remain read-only. Native active SSH
+imports remain rejected; plain native read tasks may explicitly bind canonical
+SSH grants. There are no new graphical SSH controls.
