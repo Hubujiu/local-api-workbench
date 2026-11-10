@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { redisWriteCommand } from "./redis.mjs";
+import { redisWriteCommand } from "./redis-commands.mjs";
 
 const plain = (value) =>
   value && typeof value === "object" && !Array.isArray(value);

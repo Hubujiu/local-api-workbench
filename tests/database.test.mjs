@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { querySQLite } from "../src/database.mjs";
+import {
+  sqliteTestPhases,
+  withSQLitePhase,
+} from "./helpers/sqlite-phase-diagnostics.mjs";
 test("database reads use parameters and refuse writes", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "local-db-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -133,7 +137,15 @@ test("SQLite write transaction rolls back trigger effects and oversized RETURNIN
   );
   db.close();
   await assert.rejects(
-    mutateSQLiteBounded(file, "INSERT INTO items(name) VALUES ('rollback')"),
+    withSQLitePhase(
+      sqliteTestPhases.triggerWriteRollback,
+      () =>
+        mutateSQLiteBounded(
+          file,
+          "INSERT INTO items(name) VALUES ('rollback')",
+        ),
+      (diagnostic) => t.diagnostic(diagnostic),
+    ),
     /1000/,
   );
   assert.equal(
