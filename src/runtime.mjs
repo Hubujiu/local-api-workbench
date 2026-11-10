@@ -1,3 +1,4 @@
+import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { appendNativeInheritance } from "./native-inheritance-append.mjs";
 import { isMessagePackResponseType } from "./response-media.mjs";
@@ -854,6 +855,8 @@ export class Store {
       p.settings.autoImports = normalizeAutoImports(p.settings.autoImports);
     for (const request of p.requests || []) normalizeRedirect(request.redirect);
     for (const request of p.requests || []) validateQueryArrayRequest(request);
+    for (const request of p.requests || [])
+      validateHeaderObjectRequest(request);
     validateProjectDatabaseWriteEvidence(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);

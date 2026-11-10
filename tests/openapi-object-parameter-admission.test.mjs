@@ -73,7 +73,17 @@ test("resolved and inherited object Header/Cookie parameters cannot bypass admis
       for (const inherited of [false, true]) {
         const source = objectParameterDocument(
           version,
-          objectParameter(location),
+          objectParameter(
+            location,
+            location === "header"
+              ? {
+                  schema: {
+                    type: "object",
+                    properties: { nested: { type: "object" } },
+                  },
+                }
+              : {},
+          ),
         );
         source.components = {
           parameters: { Object: source.paths["/check"].get.parameters[0] },

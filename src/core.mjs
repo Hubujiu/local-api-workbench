@@ -1,4 +1,10 @@
 import {
+  validateHeaderObjectRequest,
+  exportOpenAPIHeaderObject,
+  assertHeaderObjectOpenAPIHeaders,
+  assertHeaderObjectCurlDefinition,
+} from "./openapi-header-objects.mjs";
+import {
   validateDatabaseOperationHeader,
   validateDatabaseOperationBinding,
 } from "./plan-database-operation.mjs";
@@ -400,6 +406,7 @@ export function normalizeRequest(r = {}) {
       throw Error(key + " 必须是对象数组");
   }
   validateQueryArrayRequest(r);
+  validateHeaderObjectRequest(r);
   validateMultipartPartMedia(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
@@ -2454,6 +2461,7 @@ export function exportOpenAPI(project) {
     rejectHTTPProtocolScripts(source);
     assertRedirectExportable(source);
     validatePathSerialization(source);
+    assertHeaderObjectOpenAPIHeaders(source);
     let definition = source;
     if (postmanRawBodyPolicy(source)) {
       definition = applySharedScripts(project, source);
@@ -2602,6 +2610,9 @@ export function exportOpenAPI(project) {
             ...(location === "path"
               ? pathParameterDefinition(parameter)
               : { example: parameter.value }),
+            ...(location === "header"
+              ? exportOpenAPIHeaderObject(parameter)
+              : {}),
             ...(location === "query"
               ? {
                   ...openAPIEmptyQueryValue(parameter.allowEmptyValue),
@@ -2631,6 +2642,7 @@ export function prepareLiteralHTTPExport(
     throw Error("cURL须先通过项目上下文解析Postman collection变量");
   assertRedirectExportable(input);
   assertQueryArrayCurlDefinition(input);
+  assertHeaderObjectCurlDefinition(input);
   assertMultipartMediaExportable(input, "cURL");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>

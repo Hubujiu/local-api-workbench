@@ -20,11 +20,31 @@ export function objectVariants(location) {
   const base = objectParameter(location);
   const { example: _example, ...withoutExample } = base;
   return [
-    base,
-    withoutExample,
-    { ...withoutExample, schema: { ...objectSchema, default: objectValue } },
-    { ...withoutExample, schema: { ...objectSchema, example: objectValue } },
-    { ...withoutExample, examples: { only: { value: objectValue } } },
+    // Flat simple Header objects are supported by the versioned codec.
+    // Keep Cookie coverage and nested Header refusal as separate boundaries.
+    ...(location === "cookie"
+      ? [
+          base,
+          withoutExample,
+          {
+            ...withoutExample,
+            schema: { ...objectSchema, default: objectValue },
+          },
+          {
+            ...withoutExample,
+            schema: { ...objectSchema, example: objectValue },
+          },
+          { ...withoutExample, examples: { only: { value: objectValue } } },
+        ]
+      : [
+          {
+            ...base,
+            schema: {
+              type: "object",
+              properties: { nested: { type: "object" } },
+            },
+          },
+        ]),
     { ...withoutExample, schema: { const: objectValue } },
     { ...withoutExample, schema: { enum: [objectValue] } },
     { ...withoutExample, schema: { type: "array", contains: objectSchema } },

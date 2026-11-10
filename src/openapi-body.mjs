@@ -1,3 +1,4 @@
+import { importOpenAPIHeaderObject } from "./openapi-header-objects.mjs";
 import { importOpenAPIHeaderCookieValue } from "./openapi-header-cookie-values.mjs";
 
 import { validateOpenAPIFormEncoding } from "./openapi-form-encoding.mjs";
@@ -53,16 +54,22 @@ export function importOpenAPIHeaders(
           parameter.in === "header" &&
           (!ignoreContentType || !contentTypeName(parameter.name)),
       )
-      .map((parameter) => ({
-        key: parameter.name,
-        schema: parameter.schema ?? { type: parameter.type || "string" },
-        required: parameter.required === true,
-        description: parameter.description || "",
-        value: oas3
-          ? importOpenAPIHeaderCookieValue(parameter, parameter.example ?? "")
-          : (parameter.example ?? ""),
-        enabled: true,
-      })),
+      .map(
+        (parameter) =>
+          (oas3 && importOpenAPIHeaderObject(parameter)) || {
+            key: parameter.name,
+            schema: parameter.schema ?? { type: parameter.type || "string" },
+            required: parameter.required === true,
+            description: parameter.description || "",
+            value: oas3
+              ? importOpenAPIHeaderCookieValue(
+                  parameter,
+                  parameter.example ?? "",
+                )
+              : (parameter.example ?? ""),
+            enabled: true,
+          },
+      ),
     ...(contentType
       ? [{ key: "Content-Type", value: contentType, enabled: true }]
       : []),
