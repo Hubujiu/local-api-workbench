@@ -1,0 +1,18 @@
+✔ 3.0.3 scalar query rejects unsupported or malformed allowReserved (5.379273ms)
+✔ 3.0.3 absent and false scalar allowReserved preserve ordinary encoding (4.187433ms)
+✔ 3.0.3 invalid scalar reserved semantics reject whole mixed batch without mutation (17.050548ms)
+✔ 3.1.0 scalar query rejects unsupported or malformed allowReserved (1.804993ms)
+✔ 3.1.0 absent and false scalar allowReserved preserve ordinary encoding (1.619524ms)
+✔ 3.1.0 invalid scalar reserved semantics reject whole mixed batch without mutation (20.40245ms)
+✔ 2.0 scalar query rejects unsupported or malformed allowReserved (2.751274ms)
+✔ 2.0 absent and false scalar allowReserved preserve ordinary encoding (0.701735ms)
+✔ 2.0 invalid scalar reserved semantics reject whole mixed batch without mutation (3.658618ms)
+✔ resolved and inherited scalar allowReserved cannot bypass admission (0.82482ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 388.309703
