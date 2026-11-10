@@ -1,3 +1,7 @@
+import {
+  hasHeaderSerialization,
+  encodeHeaderObject,
+} from "./openapi-header-objects.mjs";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 // Do not turn ambiguous framing/authentication fields into repeated wire fields.
 const singleton = new Set([
@@ -25,7 +29,9 @@ export function requestHeaderMap(rows = [], authType = "none") {
   for (const row of rows) {
     if (row.enabled === false || !row.key) continue;
     const key = String(row.key).toLowerCase(),
-      value = String(row.value ?? "");
+      value = hasHeaderSerialization(row)
+        ? encodeHeaderObject(row)
+        : String(row.value ?? "");
     validateHeaderName(key);
     validateHeaderValue(key, value);
     if (Object.hasOwn(headers, key)) {

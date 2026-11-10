@@ -1,3 +1,8 @@
+import {
+  hasHeaderSerialization,
+  parseHeaderObject,
+  validateHeaderObjectRequest,
+} from "./openapi-header-objects.mjs";
 import { performance } from "node:perf_hooks";
 import {
   bindPathTemplates,
@@ -128,6 +133,13 @@ async function resolveDynamicRequestBase(
       arrayValues.push({ index, value: parseQueryArray(row) });
     row.value = "[]";
   }
+  const objectValues = [];
+  for (const [index, row] of (clone.headers || []).entries()) {
+    if (!hasHeaderSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      objectValues.push({ index, value: parseHeaderObject(row) });
+    row.value = "{}";
+  }
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
     for (const [index, row] of (clone[group] || []).entries()) {
       if (!row.dynamic) continue;
@@ -193,6 +205,10 @@ async function resolveDynamicRequestBase(
   const resolved = { ...interpolate(clone, variables), ...scriptSources };
   for (const { index, value } of arrayValues)
     resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+  for (const { index, value } of objectValues)
+    resolved.headers[index].value = JSON.stringify(
+      interpolate(value, variables),
+    );
   if (nativeOAuth2 !== undefined) {
     const selected = nativeOAuth2.addTokenTo;
     if (selected && nativeOAuth2.access_token) {
@@ -255,6 +271,7 @@ async function resolveDynamicRequestBase(
   if (bodySpecs.length && resolved.body.length > 1024 * 1024)
     throw Error("动态Body超过1MiB");
   validateQueryArrayRequest(resolved);
+  validateHeaderObjectRequest(resolved);
   return resolved;
 }
 
@@ -266,6 +283,7 @@ export async function resolveDynamicRequest(
   finalBody,
 ) {
   validateQueryArrayRequest(request);
+  validateHeaderObjectRequest(request);
   validatePathSerialization(request);
   nativeOAuth2Definition(request.auth);
   postmanOAuth2Definition(request.auth);

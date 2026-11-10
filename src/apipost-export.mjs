@@ -84,6 +84,10 @@ function rows(values, kind) {
   return values.map((row, index) => {
     // Native rows have no verified equivalent for this versioned wire contract.
     // Reject own presence, including malformed/undefined and disabled metadata.
+    if (row && Object.hasOwn(row, "headerSerialization"))
+      throw Error(
+        "Apipost导出不能保留OpenAPI headerSerialization；请使用项目备份",
+      );
     if (row && Object.hasOwn(row, "pathSerialization"))
       throw Error(
         "Apipost导出不能保留OpenAPI pathSerialization；请使用项目备份",

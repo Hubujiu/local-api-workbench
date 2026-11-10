@@ -1,4 +1,8 @@
 import {
+  hasHeaderSerialization,
+  validateHeaderObjectRequest,
+} from "./openapi-header-objects.mjs";
+import {
   validatePostmanOAuth2Project,
   preflightPostmanOAuth2Input,
 } from "../public/postman-oauth2-model.js";
@@ -39,6 +43,8 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
         throw Error("不支持临时覆盖文件字段");
       if (hasQuerySerialization(row) && !Array.isArray(value))
         throw Error("OpenAPI Query数组临时输入须为数组");
+      if (hasHeaderSerialization(row) && !object(value))
+        throw Error("OpenAPI Header对象临时输入须为对象");
       row.value =
         label === "path" && own(row, "pathSerialization")
           ? assertPathValue(row, value)
@@ -155,5 +161,6 @@ export function applyMCPInput(request, input) {
   if (own(input, "auth")) authOverride(result.auth, input.auth);
   validatePostmanOAuth2Project({ requests: [result] });
   validateQueryArrayRequest(result);
+  validateHeaderObjectRequest(result);
   return result;
 }
