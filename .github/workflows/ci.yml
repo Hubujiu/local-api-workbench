@@ -239,6 +239,24 @@ jobs:
         if: always()
         run: docker rm -f localapi-mongo-tls || true
       - run: node tests/clickhouse-integration.mjs
+      - name: Check TLS fixture orchestration contract (mock Docker only)
+        run: node tests/database-real-tls-orchestration.mjs
+      - name: Start isolated PostgreSQL MySQL Redis TLS fixtures
+        env:
+          LOCALAPI_TLS_ROOT: ${{ runner.temp }}/localapi-real-tls
+          POSTGRES_SERVICE_ID: ${{ job.services.postgres.id }}
+          MYSQL_SERVICE_ID: ${{ job.services.mysql.id }}
+          REDIS_SERVICE_ID: ${{ job.services.redis.id }}
+        run: bash scripts/ci/database-real-tls.sh setup
+      - name: Verify real database TLS through product paths
+        env:
+          LOCALAPI_TLS_ROOT: ${{ runner.temp }}/localapi-real-tls
+        run: node tests/database-real-tls-integration.mjs
+      - name: Remove isolated PostgreSQL MySQL Redis TLS fixtures
+        if: always()
+        env:
+          LOCALAPI_TLS_ROOT: ${{ runner.temp }}/localapi-real-tls
+        run: bash scripts/ci/database-real-tls.sh cleanup
 
   quickjs-reproducible:
     timeout-minutes: 15
