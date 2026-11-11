@@ -2,9 +2,11 @@
 
 ## 结论与范围
 
-**当前不能将 canonical repeat（PR44）宣称为原生 automated_testings 的导入/导出兼容。** 固定次数循环的 runner 语义已有静态证据；保存的 flat event_list 到有序 children、保存设置到 runner option 的真实组装调用及非空同源出口样本仍未查明。此报告保留这个独立交付缺口，不阻止其它后端工作。
+**当前不能将 canonical 控制图宣称为原生 automated_testings 的导入/导出兼容。** 已有公开非空项目材料：下文固定提交包含1项 automation、7个根级 API 事件；另有非空报告事件材料。不能再将这些材料概括为“没有非空样本”。它们未证明同版本原厂往返执行、排序冲突规则或保存设置到 runner option 的完整映射。固定次数循环的 runner 消费语义已有静态证据；保存的 flat event_list 到有序 children 的实际组装、设置优先级、manual/frequency 作用及 live API 的父层依赖仍未闭合。
 
-本次只读已合法取得的明文静态文件与既有虚构样本；没有执行原版、请求其 API、解除授权/付费检查、接受许可、进入 VM/XML/bytecode 专项，或修改产品代码。没有执行新的原版或 Workbench 功能测试。源代码事实仅概述结构/调用关系，不复制专有实现。
+本文按时间追加研究记录。第2、3节及早期补证中的“缺少非空”描述仅代表当时所查材料，已由后面的“公开非空项目形态与开源适配器补证”更新，不应作为当前全局结论。当前 canonical 能力也已超出 PR44 的单层 HTTP repeat，包含有界嵌套控制组和更多协议叶子；这些 Workbench 自有能力不补足原生格式语义证据。
+
+初次研究只读已合法取得的明文静态文件与既有虚构样本；没有执行原版、请求其 API、解除授权/付费检查、接受许可、进入 VM/XML/bytecode 专项，或修改产品代码。该初次研究没有执行新的原版或 Workbench 功能测试；后续 Workbench 合成验收见文末。源代码事实仅概述结构/调用关系，不复制专有实现。
 
 ## 1. 可复核源身份与位置
 
@@ -78,9 +80,9 @@
 
 限定检索还发现：已读 runner index.js 不含 event_list / parent_event_id 字面量；renderer 的 parent_event_id 命中主要是模板与导入身份处理。这只能支持“当前已读位置没有建立该转换链”，不排除其它文件、通用配置键、远端实现或不同版本中存在转换。
 
-## 4. 当前 Workbench 合同（不是新支持）
+## 4. 早期检查点的 Workbench 合同（不是新支持）
 
-相对于本轮读取的 api-integration 文件：
+以下路径/行号及单层限制对应当时读取的 api-integration 检查点，不是当前能力清单：
 
 - `src/apipost-modern.mjs:275`：非空 automated_testings 明确拒绝。
 - `src/apipost-directory.mjs:229–238`：现有目录 executions/flows 转换使用独立 nativeExecutionFlows，automated_testings 仍为空。
@@ -163,3 +165,22 @@
 - 5720.ca2c1a69877d.js，SHA256 `902c8c9728324994765246db19ca3d57feaef3a12932d18ee42e5a424d0f2616`，模块505720，偏移1542：Socket单请求组装。
 
 上述偏移均按完整文件0-based Unicode字符记录。结论只是这些材料及字面量/调用上下文检索中未找到，不是全局不存在证明；间接/计算属性、其他文件/版本或服务端实现仍未排除。保存事件图构树与settings实际映射仍未闭合，不能据此推定排序、启用兼容导入或宣称已完成原版往返。
+
+## 当前边界复核与合成拒绝验收
+
+本次只使用已保存研究与 Workbench 代码；未运行原厂程序、访问产品接口、接受新许可或复制第三方实现。证据强度如下：
+
+| 已有材料                           | 已证事实                                                                 | 不能据此推定                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| 上文固定第三方提交的非空项目 JSON  | 1项 automation、7个根 API；live 引用、空 apiData；该样本数组与 sort 一致 | 官方/同版本出口、嵌套构树、排序冲突优先级、保存设置执行语义  |
+| 固定原厂 CLI 包中的非空报告 JSON   | flat 父引用事件材料                                                      | 项目出口、保存到 runner 的组装链                             |
+| 已有 Offline2 明文 renderer/sender | 保存字段、runner 消费 children、API 来源分支及部分样例设置转换           | saved automation 的完整转换或父层依赖冻结                    |
+| MIT 文件夹适配器                   | 文件夹配置到运行选项的静态调用链                                         | 原生 automated_testings 导入/导出支持或 bundled runtime 许可 |
+
+当前 `src/apipost-modern.mjs` 仍拒绝非空 automated_testings，手动导入来源检查亦独立拒绝。原生目录 `executions/flows v2` 是另一已证格式，不可替代它。目录出口仍拒绝 canonical repeat、实时引用及不能表达的失败策略；不能通过展平丢失图意图。
+
+`tests/fixtures/native-automation-rejection.mjs` 是独立编写的完整现代项目**合成拒绝样本**：所有身份、地址及值均虚构，frequency 的非空值刻意未声明为原厂语法。它借用已记录的七个根事件结构，只验证拒绝，不是原厂 fixture、执行契约或兼容性证明。排序冲突与未知 schedule 是负面扰动，不定义其正确运行行为。
+
+`tests/native-automation-rejection.test.mjs` 先将 automated_testings 清空，确认同一项目外壳可导入七个 API；再覆盖非空项目的直接转换、owner 整体导入/手动预览、官方 SDK MCP stdio 整体导入/预览。每次拒绝后检查两项目对象、完整持久化文件字节及本地 HTTP 计数不变，并重新打开 Store 核对。失败预览响应明确不含 token（包括 MCP 文本中的 JSON）；另用该外壳的受支持空 automation 来源取得有效预览，再替换为非空来源申请 apply，验证 owner/MCP 不能挪用原 token 写入变更后的来源；拒绝可能发生在来源转换器之前。历史、来源档案和授权相关持久化状态不应被这类拒绝改变。
+
+这批验收不启用原生 automation，也不把同样的字段值视为已证运行映射。后续实现仍须先补齐具体语义，而不是索取笼统的运行许可或再次重复“没有非空样本”。
