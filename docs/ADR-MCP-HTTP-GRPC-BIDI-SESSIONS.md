@@ -1,13 +1,18 @@
 # HTTP MCP gRPC bidirectional sessions
 
+The independent stdio extension is described in
+[stdio bidi sessions](ADR-MCP-STDIO-GRPC-BIDI-SESSIONS.md). The HTTP-only
+scope below records the original slice and does not imply cross-process authority.
+
 ## Deliberately small first slice
 
-Six HTTP-only tools expose saved bidirectional streaming definitions:
+In the original HTTP-only slice, six tools expose saved bidirectional streaming definitions:
 `start_grpc_session`, `get_grpc_session`, `send_grpc_session`,
 `half_close_grpc_session`, `cancel_grpc_session`, and `get_grpc_operation`
 (all prefixed with `localapi_`). Both write and execute grants are required.
-Unary, client-only streaming, server-only streaming, stateless calls, and stdio
-are rejected. Existing finite gRPC tools and owner interactive APIs remain.
+Unary, client-only streaming, server-only streaming and stateless calls are rejected.
+Stdio was excluded from this original HTTP slice; its subsequent support and
+independent authority are specified in the stdio ADR linked above. Existing finite gRPC tools and owner interactive APIs remain.
 
 Start accepts only a project, saved definition ID and operation ID. It freezes
 the saved schema, target and method. There are no temporary targets, script hooks,

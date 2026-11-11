@@ -930,7 +930,7 @@ export function createMCP({
       }
       addTool(
         name.slice("localapi_".length),
-        "仅HTTP有状态MCP的已保存gRPC双向流；固定总期限，不自动重试。本地写入不代表远端确认；operationId仅进程内去重。取消等待原保存尝试，不重试存储。",
+        "有状态MCP的已保存gRPC双向流；固定总期限，不自动重试。本地写入不代表远端确认；operationId仅进程内去重。取消等待原保存尝试，不重试存储。",
         properties,
         required,
       );
@@ -1154,9 +1154,7 @@ export function createMCP({
         if (!grpcSessions || !write || !execute || !allowed.has(args.projectId))
           throw Error("gRPC交互执行未授权或当前传输不支持");
         if (!grpcOwner || typeof grpcOwner !== "object")
-          throw Error(
-            "gRPC双向流需要已初始化的HTTP MCP会话；不支持stdio或无状态请求",
-          );
+          throw Error("gRPC双向流需要已初始化的MCP会话；不支持无状态请求");
         const receipt = await grpcSessions.call(grpcAction, grpcOwner, args);
         return result({
           ...(["start", "send", "half_close"].includes(grpcAction) &&
@@ -1976,6 +1974,8 @@ if (isStdioEntrypoint()) {
       write,
       execute,
       websocketSessions: context.websocketSessions,
+      grpcSessions: context.grpcSessions,
+      grpcExecutor: context.grpcExecutor,
       databaseExecutor: context.databaseExecutor,
       databasePreflight: context.databasePreflight,
     });

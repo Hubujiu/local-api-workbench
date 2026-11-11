@@ -60,7 +60,9 @@ node src/mcp.mjs --project <project-id>
 
 stdio 的 `--write --execute --project <id>` 也提供已保存 WebSocket 定义的有界交互工具，须先 initialize。启动项目授权固定，HTTP 端修改授权或令牌不会撤销独立 stdio 进程；撤权须终止该进程。连接配额和操作去重按实例独立，不承诺跨进程 exactly-once，EOF/传输错误会关闭连接并等待保存尝试。详见 [stdio WebSocket 边界](docs/ADR-MCP-STDIO-WEBSOCKET-SESSIONS.md)。
 
-HTTP MCP 另提供已保存 gRPC 双向流的交互工具，需初始化及项目 write/execute 授权；与 owner gRPC 共用五个活动槽，保留定义的最长30秒总期限，无自动重放。首片不支持 stdio、其他流类型或临时凭据覆写。详见 [HTTP gRPC 双向流边界](docs/ADR-MCP-HTTP-GRPC-BIDI-SESSIONS.md)。
+HTTP MCP 另提供已保存 gRPC 双向流的交互工具，需初始化及项目 write/execute 授权；与 owner gRPC 共用五个活动槽，保留定义的最长30秒总期限，无自动重放。原 HTTP 首片当时未包含 stdio；后续 stdio 扩展见下一段。其他交互流类型及临时凭据覆写仍不支持。详见 [HTTP gRPC 双向流边界](docs/ADR-MCP-HTTP-GRPC-BIDI-SESSIONS.md)。
+
+同一 stdio 启动授权也可交互调用已保存的 gRPC bidi 定义，有限 gRPC 调用与交互流共用每实例五槽。保留定义的 50–30000ms 总期限，不提供续租，不扩大为其他流式形态。退出等待原保存尝试而不重试网络或存储；授权快照、信号/崩溃及跨进程限制见 [stdio gRPC bidi 边界](docs/ADR-MCP-STDIO-GRPC-BIDI-SESSIONS.md)。
 
 授权项目可用 `localapi_export_project` 导出、以 `--write` 使用 `localapi_import_project` 合并导入；显式格式仅 `apipost` / `apipost-directory`，内联 JSON 最多 4 MiB，不读文件、不抓取 URL、不清空或新建项目、不执行请求。导出可能包含已保存的凭据，分享前须检查。详见 [MCP 项目定义往返边界](docs/ADR-MCP-PROJECT-INTERCHANGE.md)。
 

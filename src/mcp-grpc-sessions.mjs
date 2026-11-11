@@ -13,7 +13,7 @@ const fields = {
 };
 const hash = (text) => createHash("sha256").update(text).digest("hex");
 
-// HTTP-only ownership adapter. The host supplies the existing GrpcSessions and
+// Stateful ownership adapter. The host supplies the existing GrpcSessions and
 // its shared GrpcSlots; no transport, credentials or authority comes from JSON.
 export class MCPGrpcSessions {
   constructor({ sessions, store, owns }) {
@@ -22,7 +22,7 @@ export class MCPGrpcSessions {
   }
   state(owner) {
     if (!owner || !this.owns(owner))
-      throw Error("gRPC requires a live initialized HTTP MCP owner");
+      throw Error("gRPC requires a live initialized HTTP or stdio MCP owner");
     let state = this.owners.get(owner);
     if (!state) {
       state = {

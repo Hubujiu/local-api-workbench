@@ -558,11 +558,21 @@ test(
       record.result,
     );
     await sdk.close();
-    // Independent stdio and CLI hosts retain their existing finite-plan contract;
-    // they do not receive a new live-session mutation capability.
+    // Explicitly authorized stdio now exposes bounded bidi sessions while its
+    // finite-plan contract and typed history remain unchanged. CLI stays finite.
     const stdio = await f.sdk(p.id, "stdio", true);
     const tools = await stdio.listTools();
-    assert(!tools.tools.some((tool) => /grpc.*session/.test(tool.name)));
+    const names = new Set(tools.tools.map((tool) => tool.name));
+    for (const name of [
+      "localapi_start_grpc_session",
+      "localapi_get_grpc_session",
+      "localapi_send_grpc_session",
+      "localapi_half_close_grpc_session",
+      "localapi_cancel_grpc_session",
+      "localapi_get_grpc_operation",
+    ])
+      assert(names.has(name), name);
+    assert.equal(names.size, 99);
     checkFinite(
       decode(
         await stdio.callTool({

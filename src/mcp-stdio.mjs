@@ -230,6 +230,7 @@ export async function serveMCPStdio({
         signal: lease.signal,
         websocketOwner:
           initialized && !ending ? registry.owner(session) : undefined,
+        grpcOwner: initialized && !ending ? registry.owner(session) : undefined,
         onProgress: (progress) => activity?.update(progress),
         manualImportSessionId: `stdio:${instanceEpoch}:${session}:${registry.capture()}`,
       });
