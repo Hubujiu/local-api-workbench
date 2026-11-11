@@ -71,3 +71,9 @@ This does not extend direct-read default sentinels to SSH: SSH continues to reje
 its previously unsupported zero/empty inputs. Inputs accepted by both direct
 and SSH paths retain the same nonzero numeric destination. No fallback, retry,
 new permission, saved-config migration or previous-query reconstruction is added.
+
+### UI 参数 JSON 的数值保真边界
+
+直查询与前/后置数据库操作参数编辑器在解析 JSON 时递归拒绝非有限数值及不安全整数，且在确认写入、更新操作配置和发送之前报错，避免 JSON.stringify 将溢出数值静默转成 null。合法 null、字符串和有限小数不变；Redis/MongoDB 直查询仍传原始查询 JSON 字符串，由后端原有规则校验。此检查不改变各数据库支持的参数结构。
+
+该检查不能识别 JSON 数字解析时已发生的小数舍入或下溢（例如 1e-400 已变成 0），也不承诺原始数字字面量保真。需要精确十进制或大整数时应使用数据库支持的字符串或精确类型表达。既有已保存或写入的 null 无法由本修复恢复。

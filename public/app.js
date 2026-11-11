@@ -1,4 +1,5 @@
 import { mysqlPortInput } from "./mysql-port-input.js";
+import { parseDatabaseParameterJSON } from "./database-parameter-json.js";
 import {
   parseApipostFunctionTemplate,
   isApipostFunctionSource,
@@ -2538,7 +2539,9 @@ function bind() {
           const connectionId = $("#operation-db-connection").value;
           if (!connections.some((item) => item.id === connectionId))
             throw Error("请明确选择一个已授权的会话连接");
-          const parameters = JSON.parse($("#operation-db-parameters").value),
+          const parameters = parseDatabaseParameterJSON(
+              $("#operation-db-parameters").value,
+            ),
             name = $("#operation-db-name").value.trim();
           if (!Array.isArray(parameters) || parameters.length > 1000)
             throw Error("绑定参数须为最多1000项的数组");
@@ -2665,7 +2668,7 @@ function bind() {
       sql: $("#db-sql").value,
       parameters: ["redis", "mongodb"].includes(type)
         ? []
-        : JSON.parse($("#db-params").value),
+        : parseDatabaseParameterJSON($("#db-params").value),
     };
     let redisKey;
     if (input.allowWrite && type === "redis") {
