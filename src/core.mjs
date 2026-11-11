@@ -1,4 +1,10 @@
 import {
+  importOpenAPICookieObject,
+  exportOpenAPICookieObject,
+  validateCookieObjectRequest,
+  assertCookieObjectCurlDefinition,
+} from "./openapi-cookie-objects.mjs";
+import {
   validateHeaderObjectRequest,
   exportOpenAPIHeaderObject,
   assertHeaderObjectOpenAPIHeaders,
@@ -411,6 +417,7 @@ export function normalizeRequest(r = {}) {
   }
   validateQueryArrayRequest(r);
   validateHeaderObjectRequest(r);
+  validateCookieObjectRequest(r);
   validateMultipartPartMedia(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
@@ -1969,21 +1976,24 @@ export function importDocument(doc) {
             }),
             cookies: params
               .filter((p) => p.in === "cookie")
-              .map((p) => ({
-                key: p.name,
-                schema: p.schema ?? { type: p.type || "string" },
-                required: p.required === true,
-                description: p.description || "",
-                value:
-                  typeof doc.openapi === "string" &&
-                  doc.openapi.startsWith("3.")
-                    ? importOpenAPIHeaderCookieValue(
-                        p,
-                        p.example ?? p.schema?.default ?? "",
-                      )
-                    : (p.example ?? p.schema?.default ?? ""),
-                enabled: true,
-              })),
+              .map(
+                (p) =>
+                  importOpenAPICookieObject(p) ?? {
+                    key: p.name,
+                    schema: p.schema ?? { type: p.type || "string" },
+                    required: p.required === true,
+                    description: p.description || "",
+                    value:
+                      typeof doc.openapi === "string" &&
+                      doc.openapi.startsWith("3.")
+                        ? importOpenAPIHeaderCookieValue(
+                            p,
+                            p.example ?? p.schema?.default ?? "",
+                          )
+                        : (p.example ?? p.schema?.default ?? ""),
+                    enabled: true,
+                  },
+              ),
             bodyType: importedBody.bodyType,
             body: importedBody.body,
             form: importedBody.form,
@@ -2466,6 +2476,7 @@ export function exportOpenAPI(project) {
     assertRedirectExportable(source);
     validatePathSerialization(source);
     assertHeaderObjectOpenAPIHeaders(source);
+    validateCookieObjectRequest(source);
     let definition = source;
     if (postmanRawBodyPolicy(source)) {
       definition = applySharedScripts(project, source);
@@ -2617,6 +2628,9 @@ export function exportOpenAPI(project) {
             ...(location === "header"
               ? exportOpenAPIHeaderObject(parameter)
               : {}),
+            ...(location === "cookie"
+              ? exportOpenAPICookieObject(parameter)
+              : {}),
             ...(location === "query"
               ? {
                   ...openAPIEmptyQueryValue(parameter.allowEmptyValue),
@@ -2650,6 +2664,7 @@ export function prepareLiteralHTTPExport(
   assertRedirectExportable(input);
   assertQueryArrayCurlDefinition(input);
   assertHeaderObjectCurlDefinition(input);
+  assertCookieObjectCurlDefinition(input);
   assertMultipartMediaExportable(input, "cURL");
   if (
     Object.values(input.bodyDynamic || {}).some((spec) =>

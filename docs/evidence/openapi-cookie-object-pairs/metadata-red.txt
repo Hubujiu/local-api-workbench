@@ -1,0 +1,40 @@
+✖ temporary Cookie input and fixed dynamic values do not evaluate replaced source examples (12.408155ms)
+✖ definition metadata is opaque while real transport, authentication and assertions still interpolate (1.924274ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 452.307477
+
+✖ failing tests:
+
+test at tests/dynamic-definition-metadata.test.mjs:29:1
+✖ temporary Cookie input and fixed dynamic values do not evaluate replaced source examples (12.408155ms)
+  Error: 未定义变量: unused
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:261:42
+      at String.replace (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:258:18)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:29)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:29)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:264:53
+
+test at tests/dynamic-definition-metadata.test.mjs:49:1
+✖ definition metadata is opaque while real transport, authentication and assertions still interpolate (1.924274ms)
+  Error: 未定义变量: unused
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:261:42
+      at String.replace (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:258:18)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:29)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:264:53
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:264:42)
+      at file:///workspace/scratch/75c2273f6a80/api-cookie-objects/src/core.mjs:267:49

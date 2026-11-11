@@ -1,3 +1,4 @@
+import { cookieObjectHeader } from "./openapi-cookie-objects.mjs";
 export function normalizeCookieEncoding(value = "raw") {
   if (!["raw", "apipost", "apipost-name"].includes(value))
     throw Error("Cookie编码选项无效");
@@ -14,6 +15,8 @@ function encodeOnce(value) {
 }
 export function requestCookieHeader(rows, policy = "raw") {
   normalizeCookieEncoding(policy);
+  const objects = cookieObjectHeader(rows, policy);
+  if (objects !== undefined) return objects || undefined;
   const active = rows.filter((row) => row.enabled !== false && row.key);
   if (!active.length) return undefined;
   return active

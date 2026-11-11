@@ -1,4 +1,8 @@
 import {
+  hasCookieSerialization,
+  validateCookieObjectRequest,
+} from "./openapi-cookie-objects.mjs";
+import {
   hasHeaderSerialization,
   validateHeaderObjectRequest,
 } from "./openapi-header-objects.mjs";
@@ -43,6 +47,8 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
         throw Error("不支持临时覆盖文件字段");
       if (hasQuerySerialization(row) && !Array.isArray(value))
         throw Error("OpenAPI Query数组临时输入须为数组");
+      if (hasCookieSerialization(row) && !object(value))
+        throw Error("OpenAPI Cookie对象临时输入须为对象");
       if (hasHeaderSerialization(row) && !object(value))
         throw Error("OpenAPI Header对象临时输入须为对象");
       row.value =
@@ -162,5 +168,6 @@ export function applyMCPInput(request, input) {
   validatePostmanOAuth2Project({ requests: [result] });
   validateQueryArrayRequest(result);
   validateHeaderObjectRequest(result);
+  validateCookieObjectRequest(result);
   return result;
 }
