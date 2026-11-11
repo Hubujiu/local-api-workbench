@@ -1,3 +1,4 @@
+import { validateLoadRuns } from "./load-report-evidence.mjs";
 import {
   isPostmanEnvironmentDocument,
   importPostmanEnvironment,
@@ -2858,6 +2859,7 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   validateRequestDefinitionHistory(document);
+  validateLoadRuns(document.loadRuns === undefined ? [] : document.loadRuns);
   if (
     document.runs !== undefined &&
     (!Array.isArray(document.runs) ||

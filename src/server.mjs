@@ -1,3 +1,4 @@
+import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
 import {
   hasLiveReferences,
@@ -1087,6 +1088,18 @@ export async function createApp({
                   (req.method === "POST" &&
                     ["cancel", "reconcile"].includes(parts[5])))));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
+          if (action === "load-reports") {
+            if (req.method !== "GET" || parts.length > 5 || u.search)
+              return json(res, 400, {
+                error: "压测报告仅支持无查询参数的读取",
+              });
+            res.setHeader("Cache-Control", "no-store");
+            if (!parts[4]) return json(res, 200, { records: p.loadRuns ?? [] });
+            const record = p.loadRuns?.find((item) => item.id === parts[4]);
+            return record
+              ? json(res, 200, record)
+              : json(res, 404, { error: "压测报告不存在" });
+          }
           if (
             action === "native-inheritance-edit" &&
             parts.length === 4 &&
@@ -2443,7 +2456,27 @@ export async function createApp({
           }
           if (action === "staged-load" && req.method === "POST") {
             const b = await body(req);
+            if (
+              b.persistReport !== undefined &&
+              typeof b.persistReport !== "boolean"
+            )
+              throw Error("persistReport 必须是布尔值");
             const { controller, runId } = claimRun(b.runId);
+            let pendingReport, reportReceipt;
+            const finishReport = async (result) => {
+              if (pendingReport) {
+                const pending = pendingReport;
+                pendingReport = undefined;
+                reportReceipt = await finishLoadReport(
+                  store,
+                  p.id,
+                  pending,
+                  result,
+                  controller.signal.aborted,
+                );
+              }
+              return reportReceipt;
+            };
             const disconnected = () => {
               if (!res.writableFinished) controller.abort();
             };
@@ -2455,6 +2488,11 @@ export async function createApp({
               res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
             };
             try {
+              if (b.persistReport) {
+                const begun = await beginLoadReport(store, p.id, "staged");
+                if (!begun.record) return json(res, 503, begun.receipt);
+                pendingReport = begun.record;
+              }
               let executionProject = p;
               let definition = p.plans.find((item) => item.id === b.planId);
               if (!definition) throw Error("计划不存在");
@@ -2495,17 +2533,24 @@ export async function createApp({
                 "Content-Type": "text/event-stream; charset=utf-8",
                 "Cache-Control": "no-store",
               });
-              emit("start", { runId });
+              emit("start", {
+                runId,
+                ...(pendingReport ? { recordId: pendingReport.id } : {}),
+              });
               const result = await runStagedLoad(executionProject, prepared, {
                 signal: controller.signal,
                 variables: context.variables,
                 cookieState,
-                onProgress: (progress) => emit("report", progress),
+                onProgress: (progress) => {
+                  if (b.persistReport && res.destroyed) return;
+                  emit("report", progress);
+                },
               });
+              await finishReport(result);
               if (!res.destroyed) {
                 // Explicit cancellation may happen while the caller remains connected.
                 res.write(
-                  `event: reportEnd\ndata: ${JSON.stringify(result)}\n\n`,
+                  `event: reportEnd\ndata: ${JSON.stringify({ ...result, ...reportReceipt })}\n\n`,
                 );
                 res.write(
                   `event: complete\ndata: ${JSON.stringify({ stopReason: result.stopReason })}\n\n`,
@@ -2514,15 +2559,24 @@ export async function createApp({
               }
               return;
             } catch (error) {
-              if (!res.headersSent) throw error;
+              await finishReport();
+              if (!res.headersSent) {
+                if (b.persistReport && !res.destroyed)
+                  return json(res, 400, {
+                    error: "STAGED_LOAD_FAILED",
+                    ...reportReceipt,
+                  });
+                throw error;
+              }
               if (!res.destroyed) {
                 res.write(
-                  'event: error\ndata: {"code":"STAGED_LOAD_FAILED"}\n\n',
+                  `event: error\ndata: ${JSON.stringify({ code: "STAGED_LOAD_FAILED", ...reportReceipt })}\n\n`,
                 );
                 res.end();
               }
               return;
             } finally {
+              await finishReport();
               req.off("aborted", disconnected);
               res.off("close", disconnected);
               controllers.delete(runId);
@@ -2530,6 +2584,11 @@ export async function createApp({
           }
           if (action === "load" && req.method === "POST") {
             const b = await body(req);
+            if (
+              b.persistReport !== undefined &&
+              typeof b.persistReport !== "boolean"
+            )
+              throw Error("persistReport 必须是布尔值");
             const context = debugEnvironment(
               p,
               b.environmentId,
@@ -2537,6 +2596,21 @@ export async function createApp({
               b.request?.postmanCollectionId,
             );
             const { controller, runId } = claimRun(b.runId);
+            let pendingReport, reportReceipt;
+            const finishReport = async (result) => {
+              if (pendingReport) {
+                const pending = pendingReport;
+                pendingReport = undefined;
+                reportReceipt = await finishLoadReport(
+                  store,
+                  p.id,
+                  pending,
+                  result,
+                  controller.signal.aborted,
+                );
+              }
+              return reportReceipt;
+            };
             const disconnected = () => {
               if (!res.writableFinished) controller.abort();
             };
@@ -2544,6 +2618,11 @@ export async function createApp({
             res.once("close", disconnected);
             if (req.aborted || res.destroyed) disconnected();
             try {
+              if (b.persistReport) {
+                const begun = await beginLoadReport(store, p.id, "one-shot");
+                if (!begun.record) return json(res, 503, begun.receipt);
+                pendingReport = begun.record;
+              }
               const result = await runLoad(p, b.request, {
                 cookieState: await projectCookieSession(
                   store,
@@ -2559,9 +2638,24 @@ export async function createApp({
                 variables: context.variables,
                 signal: controller.signal,
               });
-              if (!res.destroyed) return json(res, 200, result);
+              await finishReport(result);
+              if (!res.destroyed)
+                return json(
+                  res,
+                  200,
+                  reportReceipt ? { ...result, ...reportReceipt } : result,
+                );
               return;
+            } catch (error) {
+              await finishReport();
+              if (!b.persistReport) throw error;
+              if (!res.destroyed)
+                return json(res, 400, {
+                  error: "LOAD_FAILED",
+                  ...reportReceipt,
+                });
             } finally {
+              await finishReport();
               req.off("aborted", disconnected);
               res.off("close", disconnected);
               controllers.delete(runId);

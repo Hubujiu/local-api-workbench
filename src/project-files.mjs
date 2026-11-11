@@ -1,3 +1,4 @@
+import { validateLoadRuns } from "./load-report-evidence.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { validateRequestDefinitionHistory } from "./request-definition-history.mjs";
 import {
@@ -47,6 +48,7 @@ function validateLayout(project) {
   // Preserve existing layout diagnostics, then validate history as part of the
   // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
   validateRequestDefinitionHistory(project);
+  validateLoadRuns(project.loadRuns === undefined ? [] : project.loadRuns);
 }
 async function writeJSON(file, value, beforePublish, onPublicationPossible) {
   const text = JSON.stringify(value, null, 2) + "\n";
@@ -76,6 +78,8 @@ async function writeJSON(file, value, beforePublish, onPublicationPossible) {
 async function apply(directory, project) {
   const metadata = { ...project, storageFormat: 2, collections: {} };
   delete metadata._diskFingerprint;
+  delete metadata.loadReportFormat;
+  if (project.loadRuns !== undefined) metadata.loadReportFormat = 1;
   delete metadata.requestDefinitionHistory;
   delete metadata.requestDefinitionHistoryFormat;
   if (project.requestDefinitionHistory !== undefined)
@@ -107,12 +111,18 @@ async function apply(directory, project) {
     servers: "envs/servers.json",
     history: "history/requests.json",
     runs: "history/runs.json",
+    loadRuns: "history/load-reports.json",
     protocolRuns: "history/protocols.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
     parameterDictionary: "settings/parameter-dictionary.json",
     folders: "settings/folders.json",
   })) {
+    if (key === "loadRuns" && project.loadRuns === undefined) {
+      await rm(path.join(directory, file), { force: true });
+      delete metadata.loadRuns;
+      continue;
+    }
     await writeJSON(
       path.join(directory, file),
       project[key] ?? (["settings", "globalVariables"].includes(key) ? {} : []),
@@ -216,6 +226,13 @@ export async function readProject(directory, expectedId) {
   if (metadata.id !== expectedId || metadata.storageFormat !== 2)
     throw Error("项目清单格式或ID无效");
   const project = { ...metadata };
+  delete project.loadRuns;
+  if (
+    Object.hasOwn(metadata, "loadRuns") ||
+    (Object.hasOwn(metadata, "loadReportFormat") &&
+      metadata.loadReportFormat !== 1)
+  )
+    throw Error("压测报告清单格式无效");
   if (
     Object.hasOwn(metadata, "requestDefinitionHistory") ||
     (metadata.requestDefinitionHistoryFormat !== undefined &&
@@ -246,12 +263,14 @@ export async function readProject(directory, expectedId) {
     servers: "envs/servers.json",
     history: "history/requests.json",
     runs: "history/runs.json",
+    loadRuns: "history/load-reports.json",
     protocolRuns: "history/protocols.json",
     documents: "settings/documents.json",
     dictionary: "settings/dictionary.json",
     parameterDictionary: "settings/parameter-dictionary.json",
     folders: "settings/folders.json",
   })) {
+    if (key === "loadRuns" && metadata.loadReportFormat !== 1) continue;
     try {
       project[key] = JSON.parse(
         await readFile(path.join(directory, file), "utf8"),
@@ -265,10 +284,12 @@ export async function readProject(directory, expectedId) {
       else throw error;
     }
   }
+  delete project.loadReportFormat;
   delete project.storageFormat;
   delete project.collections;
   delete project.requestDefinitionHistoryFormat;
   validateRequestDefinitionHistory(project);
+  validateLoadRuns(project.loadRuns === undefined ? [] : project.loadRuns);
   project._diskFingerprint = projectFingerprint(project);
   return project;
 }
@@ -277,10 +298,12 @@ export function projectFingerprint(project) {
   const copy = { ...project };
   for (const key of [
     "_diskFingerprint",
+    "loadReportFormat",
     "revision",
     "updatedAt",
     "history",
     "runs",
+    "loadRuns",
     "protocolRuns",
   ])
     delete copy[key];

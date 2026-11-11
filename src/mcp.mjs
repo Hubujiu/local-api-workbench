@@ -1,3 +1,4 @@
+import { projectWithoutLoadRuns } from "./project-owner-projection.mjs";
 import { environmentTextRequired } from "./postman-environment-import.mjs";
 import { materializeLivePlan } from "./live-plan-materialize.mjs";
 import {
@@ -1697,7 +1698,7 @@ export function createMCP({
             type: "text",
             text: definitionHistory
               ? requestDefinitionHistoryMCPJSON(output)
-              : JSON.stringify(output),
+              : JSON.stringify(projectWithoutLoadRuns(output)),
           },
         ],
       });
