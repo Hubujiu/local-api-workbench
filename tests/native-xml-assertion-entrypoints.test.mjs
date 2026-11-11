@@ -25,6 +25,7 @@ import { Store } from "../src/runtime.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
 import { modernApipostFixture } from "./fixtures/apipost-modern.mjs";
 import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
+import { withCLIResultDiagnostics } from "./helpers/cli-result-diagnostics.mjs";
 
 const task = (id, type, data, enabled = 1) => ({
   id,
@@ -495,7 +496,10 @@ for (const [version, transport] of [
       assert.equal(edit.status, 200);
       f.setMode("blocked");
       const command = await cli(f.root, copy.id, plan.id);
-      assert.equal(command.code, 1, command.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(command.code, 1, command.stderr),
+        command.stdout,
+      );
       assert.equal(command.signal, null);
       const failed = JSON.parse(command.stdout);
       assert.equal(failed.status, "failed");
@@ -554,7 +558,10 @@ for (const [version, transport] of [
       assert.deepEqual(prior.results, failed.results);
       f.setMode("ok");
       const again = await cli(f.root, restored.value.id, plan.id);
-      assert.equal(again.code, 0, again.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(again.code, 0, again.stderr),
+        again.stdout,
+      );
       const passed = JSON.parse(again.stdout);
       assert.equal(passed.status, "passed");
       xmlAssertions(passed, true);
@@ -941,7 +948,10 @@ test(
       );
     }
     const command = await cli(f.root, p.id, plan.id);
-    assert.equal(command.code, 0, command.stderr);
+    withCLIResultDiagnostics(
+      () => assert.equal(command.code, 0, command.stderr),
+      command.stdout,
+    );
     const run = JSON.parse(command.stdout);
     assert.equal(run.status, "passed");
     assert.equal(run.variables.token, "unchanged-inert");
