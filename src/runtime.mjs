@@ -1,3 +1,4 @@
+import { loadNetworkBudget } from "./load-network-budget.mjs";
 import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
 import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
 import { isDeepStrictEqual } from "node:util";
@@ -1269,16 +1270,25 @@ export class Store {
     }
   }
 }
-export async function executeRequest(input, signal, { cookieSession } = {}) {
+export async function executeRequest(
+  input,
+  signal,
+  { cookieSession, networkBudget } = {},
+) {
   if (input?.nativeInheritance !== undefined)
     throw Error("请求须先按当前项目解析原生继承图");
 
   const r = normalizeRequest(input);
+  const admittedNetworkBudget = loadNetworkBudget(networkBudget);
+  if (admittedNetworkBudget)
+    validateRedirectAdmission({ ...r, redirect: true }, {});
   return executeRequestWithinDeadline(
     r,
     signal,
     cookieSession,
     performance.now() + r.timeout,
+    undefined,
+    admittedNetworkBudget,
   );
 }
 
@@ -1289,8 +1299,9 @@ async function executeRequestWithinDeadline(
   cookieSession,
   deadline,
   replay,
+  networkBudget,
 ) {
-  const controls = { signal, deadline };
+  const controls = { signal, deadline, networkBudget };
   throwIfInactive(controls);
   validatePostmanRawBodyRequest(r);
   // Detach the admitted policy before any connection/cookie await.
@@ -1465,6 +1476,7 @@ async function executeRequestWithinDeadline(
   const start = performance.now();
   const connectionBudget = deadline - performance.now();
   if (connectionBudget <= 0) throw requestTimeout();
+  networkBudget?.reserve();
   const connection = await prepareConnection(
     u,
     { ...r, timeout: Math.min(r.timeout, connectionBudget) },
@@ -1578,6 +1590,7 @@ async function executeRequestWithinDeadline(
         reject(error);
       });
       const sendBody = () => {
+        networkBudget?.start();
         if (body) req.write(body);
         req.end();
       };

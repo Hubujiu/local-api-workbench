@@ -1,0 +1,43 @@
+✔ owner redirect definitions survive saved case/plan freezing, real CLI, backup restore and app restart without replay (1529.697265ms)
+✔ owner and actual CLI retain blocked redirect 302 evidence, skip post-work and following steps, and preserve it through restore (945.042572ms)
+✔ redirect policy persists across restart and backup restore, while malformed writes remain atomic (142.031349ms)
+✔ bound HTTP load preserves collection layers and isolates concurrent and later iterations (4678.580881ms)
+✔ collection load rejects missing bindings before effects and prevents failed/forged stages leaking (2041.533823ms)
+✔ collection load cancellation stops main HTTP and never persists pre-stage changes (247.263329ms)
+✔ owner load uses bound debug overrides without publishing scopes or changing saved project (1256.711831ms)
+✔ collection child HTTP cancellation and duration retain existing stop semantics (1247.767578ms)
+✔ malformed collection types and scripted redirect reject before effects; pre-abort and unbound writes remain safe (270.835973ms)
+✔ shared capability never refunds reservations; untrusted JSON is not authority (2.668462ms)
+✔ exhaustion rejects before the next connection and retains actual response (27.709624ms)
+✔ load runs the actual script and dynamic pipeline with isolated variable scopes and truthful summaries (1363.616381ms)
+✔ one-shot redirect load rejects 51x2 before network and admits exactly 50x2 with one shared budget (145.901974ms)
+✔ one-shot redirect load refuses cross-origin before any target hit (6.312503ms)
+✔ one-shot redirect load preserves the complete supported status/method matrix (22.269546ms)
+✔ one-shot redirect load cancellation interrupts the second hop and starts no later iteration (5.881485ms)
+✔ one-shot redirect load shares cookies only within an iteration and never mutates its seed (22.41068ms)
+✔ staged redirect load rejects 51x2 before network and admits exactly 50x2 with one shared budget (99.257305ms)
+✔ staged redirect load refuses cross-origin before any target hit (4.318384ms)
+✔ staged redirect load preserves the complete supported status/method matrix (47.263008ms)
+✔ staged redirect load cancellation interrupts the second hop and starts no later iteration (3.93705ms)
+✔ staged redirect load shares cookies only within an iteration and never mutates its seed (11.68231ms)
+✔ one-shot redirect load rejects script and native-task definitions before network or VM execution (1.564934ms)
+✔ staged redirect load rejects script and native-task definitions before network or VM execution (2.501729ms)
+✔ one-shot redirect load timeout on an incomplete second response never starts its advertised next hop (153.88546ms)
+✔ staged redirect load timeout on an incomplete second response never starts its advertised next hop (154.496511ms)
+✔ staged mixed redirect and ordinary leaves count logical requests separately from shared network hops (15.274895ms)
+✔ staged progress reports share a monotonic network budget across a VU stage transition (2021.772184ms)
+✔ preparation validates disabled collection identities and registry before environment access (11.275076ms)
+✔ direct execution revalidates prepared bindings against current project before scopes and reports (3.374375ms)
+✔ owner SSE composes A/B/unbound/A and retains environment debug precedence without publishing (1484.778112ms)
+✔ owner collection cancellation terminates SSE without admitting next step or persisting writes (360.939692ms)
+✔ owner admission rejects over-budget collection plans before SSE or network effects (63.70169ms)
+✔ owner concurrent iterations retain distinct collection writes and reset reused VU sessions (1989.529887ms)
+✔ owner script failure keeps collection writes private and errors out of reports (350.593823ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14296.278384

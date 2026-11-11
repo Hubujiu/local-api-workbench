@@ -21,7 +21,10 @@ import {
 } from "./postman-collection-scopes.mjs";
 import { memoryCookieSession } from "./cookie-jar.mjs";
 import { denyNativeWrites } from "./native-redis-write-intent.mjs";
-import { normalizeRedirect } from "./http-redirect.mjs";
+import {
+  admitLoadRedirects,
+  createLoadNetworkBudget,
+} from "./load-network-budget.mjs";
 import { executeRequest } from "./runtime.mjs";
 import { analyzePlanRequirements } from "./plan-requirements.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
@@ -222,10 +225,10 @@ function admitPlan(plan, schedule) {
     throw Error("阶段压测仅支持至多 10 个展开后的启用 HTTP 步骤");
   if (worstCaseSteps * schedule.maxIterations > 100)
     throw Error("最大展开步骤数乘迭代上限不得超过 100");
-  for (const { request } of leaves) {
-    if (normalizeRedirect(request.redirect))
-      throw Error("阶段压测暂不支持重定向策略");
-  }
+  admitLoadRedirects(
+    leaves.map((s) => s.request),
+    worstCaseSteps * schedule.maxIterations,
+  );
   denyNativeWrites(leaves.map((step) => step.request));
   // Runtime rows must admit all potential work before their producer runs.
   // Keep legacy no-runtime-row DB failure timing in the existing runner.
@@ -287,6 +290,12 @@ export async function runStagedLoad(project, prepared, options = {}) {
     options.variables || environmentVariables(project, selected.id);
   const scopes = projectScopes(project, selected.id, variables);
   const controller = new AbortController();
+  const redirected = activePlanLeaves(snapshot.steps, {
+    allowRuntimeRows: true,
+  }).some((s) => s.request.redirect);
+  const networkBudget = redirected
+    ? createLoadNetworkBudget(() => stop("wire-budget", true))
+    : undefined;
   const slots = Array.from({ length: 10 }, () => ({
     active: false,
     running: false,
@@ -296,7 +305,13 @@ export async function runStagedLoad(project, prepared, options = {}) {
   const samples = new Map(
     activePlanLeaves(snapshot.steps, { allowRuntimeRows: true }).map((step) => [
       step.id,
-      { count: 0, failed: 0, durations: [], receivedBytes: 0 },
+      {
+        count: 0,
+        failed: 0,
+        durations: [],
+        receivedBytes: 0,
+        redirectFailures: {},
+      },
     ]),
   );
   const start = performance.now();
@@ -342,6 +357,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
       completed,
       failed,
       mainRequests,
+      ...(networkBudget ? { networkBudget: networkBudget.snapshot() } : {}),
       ...(runtimeRowsEnabled
         ? { iterationOutcomes: { ...iterationOutcomes } }
         : {}),
@@ -357,6 +373,9 @@ export async function runStagedLoad(project, prepared, options = {}) {
         p95Ms: percentile(item.durations, 0.95),
         p99Ms: percentile(item.durations, 0.99),
         receivedBytes: item.receivedBytes,
+        ...(networkBudget
+          ? { redirectFailures: { ...item.redirectFailures } }
+          : {}),
       })),
     };
   };
@@ -413,7 +432,10 @@ export async function runStagedLoad(project, prepared, options = {}) {
             variables,
             async (definition, signal, transport) => {
               mainRequests++;
-              return executeRequest(definition, signal, transport);
+              return executeRequest(definition, signal, {
+                ...transport,
+                networkBudget,
+              });
             },
             {
               allowRuntimeRows: true,
@@ -436,6 +458,11 @@ export async function runStagedLoad(project, prepared, options = {}) {
                 const item = samples.get(record.stepId);
                 if (!item) return;
                 item.count++;
+                if (record.redirectFailure) {
+                  const reason = record.redirectFailure.reason;
+                  item.redirectFailures[reason] =
+                    (item.redirectFailures[reason] || 0) + 1;
+                }
                 if (record.status !== "passed") item.failed++;
                 const size = record.response?.size;
                 if (Number.isSafeInteger(size) && size >= 0)

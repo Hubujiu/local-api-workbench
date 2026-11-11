@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 export const REDIRECT_BYTE_LIMIT = 8 * 1024 * 1024;
 const failures = new WeakMap();
 const reasons = new Set([
+  "wire-budget",
   "origin",
   "location",
   "retry-after",
