@@ -6,7 +6,14 @@ The importer previously silently converted a legitimate Postman `body.mode = "gr
 
 This original adapter uses the public [Postman collection v2.1 schema](https://schema.postman.com/collection/json/v2.1.0/draft-07/collection.json) and [Postman runtime body builder](https://raw.githubusercontent.com/postmanlabs/postman-runtime/develop/lib/requester/core-body-builder.js) as format/behavior references. No proprietary implementation is copied and no dependency or license acceptance is added. The upstream builder serializes query/operationName and can insert variables strings verbatim, including invalid JSON. This importer deliberately supports a smaller, validated static JSON contract, rather than reproducing malformed or dynamic wire payloads.
 
-## Contract
+## Original static contract
+
+The later [bounded variables-string extension](ADR-GRAPHQL-VARIABLE-STRINGS.md)
+adds explicit, safely encoded complete string placeholders only in variables.
+The following describes the original static subset; its non-template behavior
+and limits remain unchanged.
+
+### Static rules
 
 - An enabled GraphQL body requires a plain `graphql` object containing a string `query`, optional string `operationName`, and optional `variables`. Unknown GraphQL fields fail explicitly. Empty query/operationName strings are retained; GraphQL syntax itself is the destination server's responsibility.
 - Variables may be a JSON object, null, a valid serialized JSON object/null, omitted, or exactly the empty string. Omitted/empty string omit the variables member; null remains explicit null. Arrays/scalars at the variables root, whitespace-only strings, malformed JSON, undefined, nonfinite numbers and custom/non-JSON values reject. Nested JSON arrays/scalars are supported.

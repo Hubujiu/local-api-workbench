@@ -1,4 +1,8 @@
 import {
+  validateGraphQLVariableTemplate,
+  rejectGraphQLVariableTemplate,
+} from "./graphql-variable-template.mjs";
+import {
   validateQueryObjectRequest,
   hasQueryObjectSerialization,
 } from "./openapi-query-objects.mjs";
@@ -424,6 +428,7 @@ export function normalizeRequest(r = {}) {
   validateHeaderObjectRequest(r);
   validateCookieObjectRequest(r);
   validateMultipartPartMedia(r);
+  validateGraphQLVariableTemplate(r);
   for (const key of ["auth", "tls", "attributes", "bodyDynamic"])
     if (
       r[key] !== undefined &&
@@ -509,6 +514,9 @@ export function normalizeRequest(r = {}) {
           ? ""
           : JSON.stringify(r.body),
     bodyDynamic: r.bodyDynamic || {},
+    ...(Object.hasOwn(r, "graphqlVariableTemplate")
+      ? { graphqlVariableTemplate: structuredClone(r.graphqlVariableTemplate) }
+      : {}),
     form: r.form || [],
     assertions: r.assertions || [],
     extract: r.extract || [],
@@ -2214,6 +2222,9 @@ export function importDocument(doc) {
               value: v.value,
               enabled: true,
             })),
+            ...(graphql?.graphqlVariableTemplate
+              ? { graphqlVariableTemplate: graphql.graphqlVariableTemplate }
+              : {}),
             bodyType: graphql?.bodyType ?? mode,
             body: disabled ? "" : graphql ? graphql.body : body.raw || "",
             ...(rawProjection || {}),
@@ -2479,6 +2490,7 @@ export function exportOpenAPI(project) {
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
     rejectHTTPProtocolScripts(source);
     assertRedirectExportable(source);
+    rejectGraphQLVariableTemplate(source);
     validatePathSerialization(source);
     assertHeaderObjectOpenAPIHeaders(source);
     validateCookieObjectRequest(source);
@@ -2680,6 +2692,7 @@ export function prepareLiteralHTTPExport(
   if (input.postmanCollectionId !== undefined && !collectionResolved)
     throw Error("cURL须先通过项目上下文解析Postman collection变量");
   assertRedirectExportable(input);
+  rejectGraphQLVariableTemplate(input);
   assertQueryArrayCurlDefinition(input);
   assertHeaderObjectCurlDefinition(input);
   assertCookieObjectCurlDefinition(input);
