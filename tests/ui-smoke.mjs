@@ -4363,6 +4363,7 @@ try {
     await page.keyboard.press("Escape");
     await page.locator("#dialog").waitFor({ state: "hidden" });
     await page.locator('[data-edit-db-operation="0"]').click();
+    await page.locator("#dialog").waitFor({ state: "visible" });
     assert.equal(
       await page.locator("#operation-db-parameters").inputValue(),
       "[]",
