@@ -9,6 +9,74 @@ import {
 } from "./helpers/cli-result-diagnostics.mjs";
 
 const secret = "PRIVATE_BODY_TOKEN_PATH_SOURCE";
+
+test("Text CLI failure adds only bounded metadata and preserves the exit assertion", () => {
+  // Fabricated values verify projection only, not the historical CI failure's cause.
+  const privateText = "TEXT_CLI_PRIVATE_PAYLOAD_913";
+  const url = "https://private.invalid/" + privateText;
+  const stdout = JSON.stringify({
+    status: "failed",
+    name: privateText,
+    variables: { token: privateText },
+    results: [
+      { status: "passed", response: { body: privateText } },
+      {
+        status: "failed",
+        error: privateText,
+        request: { url, headers: { authorization: privateText } },
+        response: { body: privateText },
+        scriptStage: "async-completion",
+        scriptDiagnostics: {
+          activityBudgetMs: 250,
+          promiseStateMs: 259,
+          promiseStateCPUUs: 1456,
+          source: privateText,
+        },
+      },
+    ],
+  });
+  const stderr = "PASSED Text login\nFAILED Protected resource";
+  let failure,
+    originalMessage,
+    calls = 0;
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        calls++;
+        try {
+          assert.equal(1, 0, stderr);
+        } catch (error) {
+          failure = error;
+          originalMessage = error.message;
+          throw error;
+        }
+      }, stdout),
+    (error) => {
+      assert.equal(error, failure);
+      assert.equal(error.actual, 1);
+      assert.equal(error.expected, 0);
+      assert.equal(error.operator, "strictEqual");
+      assert.ok(
+        error.message.startsWith(originalMessage + "\nCLI_RESULT_METADATA "),
+      );
+      const suffix = error.message.slice(originalMessage.length);
+      assert.ok(Buffer.byteLength(suffix) <= 4096);
+      for (const denied of [privateText, url, stdout])
+        assert.ok(!suffix.includes(denied));
+      const metadata = JSON.parse(
+        suffix.slice("\nCLI_RESULT_METADATA ".length),
+      );
+      assert.equal(Object.keys(metadata.steps).length, 1);
+      assert.equal(metadata.steps[0].stepIndex, 1);
+      assert.equal(metadata.steps[0].status, "failed");
+      assert.equal(metadata.steps[0].scriptStage, "async-completion");
+      assert.equal(metadata.steps[0].reportedErrorKind, "other");
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
 const fixture = () => ({
   status: "failed",
   name: secret,

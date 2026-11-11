@@ -3,6 +3,7 @@
 // No original executable, account or separately scoped intrinsic audit is used.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { withCLIResultDiagnostics } from "./helpers/cli-result-diagnostics.mjs";
 import http from "node:http";
 import http2 from "node:http2";
 import { setTimeout as delay } from "node:timers/promises";
@@ -600,7 +601,10 @@ for (const [version, transport] of [
       const edit = await f.call(`/api/projects/${copy.id}`, stored, "PUT");
       assert.equal(edit.status, 200);
       const command = await cli(f.root, copy.id, plan.id);
-      assert.equal(command.code, 0, command.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(command.code, 0, command.stderr),
+        command.stdout,
+      );
       assert.equal(command.signal, null);
       assertTextRun(JSON.parse(command.stdout), "wire-text-2");
       assert.equal(f.wire.at(-1).authorization, "Bearer wire-text-2-view");
@@ -633,7 +637,10 @@ for (const [version, transport] of [
         true,
       );
       const again = await cli(f.root, restored.value.id, plan.id);
-      assert.equal(again.code, 0, again.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(again.code, 0, again.stderr),
+        again.stdout,
+      );
       assertTextRun(JSON.parse(again.stdout), "wire-text-3");
       const restarted = await new Store(f.root).get(restored.value.id);
       assert.equal(restarted.runs.length, 3);
@@ -1093,7 +1100,10 @@ test(
       );
     }
     const command = await cli(f.root, p.id, plan.id);
-    assert.equal(command.code, 0, command.stderr);
+    withCLIResultDiagnostics(
+      () => assert.equal(command.code, 0, command.stderr),
+      command.stdout,
+    );
     const run = JSON.parse(command.stdout);
     assert.equal(run.status, "passed");
     assert.equal(run.variables.token, "unchanged-inert-token");
