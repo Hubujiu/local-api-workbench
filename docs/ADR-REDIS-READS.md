@@ -27,6 +27,14 @@ Existing exact string keys remain unchanged. Previously normalized strings canno
 reveal whether an old numeric input was rounded; this fix cannot reconstruct such
 original keys and does not rewrite historical configurations.
 
+Redis AUTH username and password must be well-formed Unicode strings within the
+existing 8192-byte limit. Unpaired surrogates reject before direct, TLS or SSH
+transport is opened, rather than being silently replaced by U+FFFD. Errors do not
+include credential values. Omitted and empty fields keep their existing AUTH
+selection behavior; valid Unicode, literal U+FFFD and NUL are not rewritten. This
+does not change SSH credentials, authentication grants, stored data, or outcome
+semantics. The check is shared by reads, explicit SET and native SET observation.
+
 Supported reads: PING, GET, TYPE, TTL/PTTL, STRLEN, HLEN, LLEN, SCARD, ZCARD,
 HGET, HEXISTS, SISMEMBER, ZSCORE, MGET, EXISTS, HMGET, bounded LRANGE/ZRANGE/
 GETRANGE, and SCAN/HSCAN/SSCAN/ZSCAN with MATCH/COUNT. No SET, EVAL, CONFIG,
