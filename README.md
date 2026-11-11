@@ -60,6 +60,8 @@ node src/mcp.mjs --project <project-id>
 
 stdio 的 `--write --execute --project <id>` 也提供已保存 WebSocket 定义的有界交互工具，须先 initialize。启动项目授权固定，HTTP 端修改授权或令牌不会撤销独立 stdio 进程；撤权须终止该进程。连接配额和操作去重按实例独立，不承诺跨进程 exactly-once，EOF/传输错误会关闭连接并等待保存尝试。详见 [stdio WebSocket 边界](docs/ADR-MCP-STDIO-WEBSOCKET-SESSIONS.md)。
 
+HTTP MCP 另提供已保存 gRPC 双向流的交互工具，需初始化及项目 write/execute 授权；与 owner gRPC 共用五个活动槽，保留定义的最长30秒总期限，无自动重放。首片不支持 stdio、其他流类型或临时凭据覆写。详见 [HTTP gRPC 双向流边界](docs/ADR-MCP-HTTP-GRPC-BIDI-SESSIONS.md)。
+
 授权项目可用 `localapi_export_project` 导出、以 `--write` 使用 `localapi_import_project` 合并导入；显式格式仅 `apipost` / `apipost-directory`，内联 JSON 最多 4 MiB，不读文件、不抓取 URL、不清空或新建项目、不执行请求。导出可能包含已保存的凭据，分享前须检查。详见 [MCP 项目定义往返边界](docs/ADR-MCP-PROJECT-INTERCHANGE.md)。
 
 后端还提供显式选择导出：owner `POST /api/projects/:id/export-preview` / `export-selection`，或只读 MCP `localapi_preview_project_export` / `localapi_export_project_selection`。先预览非空资源选择及必需依赖，再使用返回的配置版本、内容摘要和全部依赖身份导出。只支持上述两种原生格式，目录选择包含完整子树；空选择不退回整项目。原有完整导出保持不变，定义历史、执行记录、计划和回收站不属于该选择范围。选择图成立不代表所有资源可表达，未证明可保真的原生语义仍拒绝。详见 [选择定义导出合同](docs/ADR-SCOPED-DEFINITION-EXPORT.md)。

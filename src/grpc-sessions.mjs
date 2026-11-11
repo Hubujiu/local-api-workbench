@@ -36,6 +36,22 @@ const status = (code, details = "") => ({
   details: safeDetails(details),
 });
 
+// Trusted lifecycle observers must never interrupt transport cleanup.
+function observeOperation(session, onComplete, details = {}) {
+  session.operationObservers ??= new Set();
+  let settled = false;
+  const settle = (state) => {
+    if (settled) return;
+    settled = true;
+    session.operationObservers.delete(settle);
+    try {
+      onComplete?.({ state, ...details });
+    } catch {}
+  };
+  session.operationObservers.add(settle);
+  return settle;
+}
+
 export class GrpcSessions {
   constructor({
     store,
@@ -70,7 +86,7 @@ export class GrpcSessions {
       }),
     });
   }
-  start(projectId, source, input = {}) {
+  start(projectId, source, input = {}, { onSubmitted } = {}) {
     if (this.closing) throw Error("gRPC会话管理器正在关闭");
     if (
       !plain(input) ||
@@ -182,6 +198,9 @@ export class GrpcSessions {
       this.maybeComplete(s);
     };
     try {
+      // Admission, validation and slot acquisition are complete. This trusted
+      // marker distinguishes definite preflight refusal without a second check.
+      onSubmitted?.({ sessionId: s.id });
       s.client = this.createClient(transport.address, transport.credentials);
       const args = [desc.path, desc.requestSerialize, desc.responseDeserialize];
       const options = { deadline: new Date(s.view.deadlineAt) };
@@ -295,7 +314,7 @@ export class GrpcSessions {
         "deadline",
       );
   }
-  send(projectId, id, message) {
+  send(projectId, id, message, { onSubmitted, onComplete } = {}) {
     const s = this.get(projectId, id),
       v = s.view;
     this.checkDeadline(s);
@@ -316,6 +335,10 @@ export class GrpcSessions {
       v.requestWireBytes + prepared.wireBytes > GRPC_MAX_BYTES
     )
       throw Error("gRPC请求超过100条或1MiB");
+    const messageIndex = v.requestMessages.length + 1;
+    // An observer failure here is definitely before network submission.
+    onSubmitted?.({ messageIndex });
+    const settle = observeOperation(s, onComplete, { messageIndex });
     const entry = {
       ...prepared,
       sendState: "pending",
@@ -339,17 +362,20 @@ export class GrpcSessions {
       entry.sendState = "accepted"; // Local callback/drain only, never a remote ack.
       s.pending = null;
       s.call.off("drain", onDrain);
+      settle("locally-written");
     };
     const onDrain = () => {
       pending.drained = true;
       complete();
     };
+    pending.cleanup = () => s.call?.off("drain", onDrain);
     s.call.once("drain", onDrain);
     try {
       const ready = s.call.write(prepared.message, (error) => {
         if (v.lifecycle !== "active" || s.pending !== pending) return;
         if (error) {
           entry.sendState = "failed";
+          pending.cleanup();
           s.pending = null;
           this.finish(
             s,
@@ -366,6 +392,7 @@ export class GrpcSessions {
       complete();
     } catch {
       entry.sendState = "failed";
+      pending.cleanup();
       s.pending = null;
       this.finish(
         s,
@@ -375,7 +402,7 @@ export class GrpcSessions {
     }
     return this.snapshot(projectId, id);
   }
-  halfClose(projectId, id) {
+  halfClose(projectId, id, { onSubmitted, onComplete } = {}) {
     const s = this.get(projectId, id),
       v = s.view;
     this.checkDeadline(s);
@@ -387,19 +414,33 @@ export class GrpcSessions {
     )
       throw Error("gRPC请求方向不能半关闭");
     if (s.pending) throw Error("gRPC发送未完成本地回调或drain，不能半关闭");
+    onSubmitted?.({});
+    const settle = observeOperation(s, onComplete);
     v.requestState = "halfClosing";
+    let returned = false,
+      callbackDone = false;
+    const complete = () => {
+      if (returned && callbackDone && v.lifecycle === "active") {
+        v.requestState = "halfClosed";
+        settle("half-closed");
+      }
+    };
     try {
       s.call.end((error) => {
+        if (callbackDone) return;
         this.checkDeadline(s);
         if (v.lifecycle !== "active") return;
+        callbackDone = true;
         if (error)
           this.finish(
             s,
             status(grpc.status.UNKNOWN, "gRPC请求方向关闭失败"),
             "error",
           );
-        else v.requestState = "halfClosed";
+        else complete();
       });
+      returned = true;
+      complete();
     } catch {
       this.finish(
         s,
@@ -416,6 +457,7 @@ export class GrpcSessions {
     clearTimeout(s.timer);
     for (const entry of v.requestMessages)
       if (entry.sendState === "pending") entry.sendState = "unknown";
+    s.pending?.cleanup?.();
     s.pending = null;
     if (v.requestState !== "halfClosed") v.requestState = "unavailable";
     v.status = outcome;
@@ -424,6 +466,7 @@ export class GrpcSessions {
     v.finishedAt = new Date().toISOString();
     v.lifecycle = "terminal";
     s.finalSnapshot = structuredClone(v);
+    for (const settle of s.operationObservers || []) settle("unknown");
     try {
       s.call?.cancel();
     } catch {
@@ -466,7 +509,7 @@ export class GrpcSessions {
     });
     return s.recordPromise;
   }
-  async cancel(projectId, id) {
+  async cancel(projectId, id, { retryStorage = true } = {}) {
     const s = this.get(projectId, id),
       terminal = s.view.lifecycle === "terminal";
     this.finish(
@@ -474,7 +517,7 @@ export class GrpcSessions {
       status(grpc.status.CANCELLED, "已取消；远端结果未确认"),
       "cancel",
     );
-    await this.save(s, terminal);
+    await this.save(s, terminal && retryStorage);
     return this.snapshot(projectId, id);
   }
   async reconcile(projectId, id) {

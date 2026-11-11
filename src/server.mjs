@@ -64,6 +64,7 @@ import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { saveProjectArchive } from "./project-archive-grants.mjs";
 import { createWireSessionRecorder } from "./wire-session-recorder.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
+import { MCPGrpcSessions } from "./mcp-grpc-sessions.mjs";
 import { MCPWebSocketSessions } from "./mcp-websocket-sessions.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
@@ -257,8 +258,16 @@ export async function createApp({
     store,
     owns: (owner) => mcpHTTPSessions.owns(owner),
   });
+  const mcpGrpcSessions = new MCPGrpcSessions({
+    sessions: grpcSessions,
+    store,
+    owns: (owner) => mcpHTTPSessions.owns(owner),
+  });
   mcpHTTPSessions.onDispose = (owner, reason) =>
-    mcpWebSocketSessions.dispose(owner, reason);
+    Promise.all([
+      mcpWebSocketSessions.dispose(owner, reason),
+      mcpGrpcSessions.dispose(owner, reason),
+    ]);
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpSessionProjects = [],
     mcpToken = "",
@@ -613,6 +622,7 @@ export async function createApp({
             grpcExecutor: executePlanGrpc,
             protocolExecutor: executePlanWire,
             websocketSessions: mcpWebSocketSessions,
+            grpcSessions: mcpGrpcSessions,
             socketioExecutor: (projectId, input, signal) =>
               executeSocketIOFlow(input, signal, {
                 projectId,
@@ -633,6 +643,10 @@ export async function createApp({
           });
           result = await dispatch(message, {
             signal,
+            grpcOwner:
+              sessionId === undefined
+                ? undefined
+                : mcpHTTPSessions.owner(sessionId),
             websocketOwner:
               sessionId === undefined
                 ? undefined
@@ -1412,8 +1426,10 @@ export async function createApp({
                   for (const projects of [mcp.projects, mcpSessionProjects])
                     for (let i = projects.length - 1; i >= 0; i--)
                       if (projects[i] === projectId) projects.splice(i, 1);
-                  websocketArchiveDrain =
-                    mcpWebSocketSessions.revokeProject(projectId);
+                  websocketArchiveDrain = Promise.all([
+                    mcpWebSocketSessions.revokeProject(projectId),
+                    mcpGrpcSessions.revokeProject(projectId),
+                  ]);
                 },
               );
               if (b.archived && mcp.remember)
