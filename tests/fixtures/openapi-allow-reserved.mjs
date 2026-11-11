@@ -1,4 +1,4 @@
-export const invalidReservedValues = [true, "true", null, 0, "false", [], {}];
+export const invalidReservedValues = ["true", null, 0, "false", [], {}];
 export const versions = ["3.0.3", "3.1.0", "2.0"];
 
 export function reservedDocument(

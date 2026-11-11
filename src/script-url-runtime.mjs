@@ -194,7 +194,10 @@ export function initializeQueryRuntime(request) {
   for (const key of ["query", "path"])
     if (
       (request[key] || []).some(
-        (row) => row && Object.hasOwn(row, "querySerialization"),
+        (row) =>
+          row &&
+          (Object.hasOwn(row, "querySerialization") ||
+            Object.hasOwn(row, "reservedQuerySerialization")),
       )
     )
       throw Error("OpenAPI Query数组: 尚不支持与SDK URL模式组合");

@@ -1,4 +1,8 @@
 import {
+  hasReservedQuerySerialization,
+  encodeReservedQueryValue,
+} from "./openapi-query-reserved.mjs";
+import {
   hasCookieSerialization,
   validateCookieObjectRequest,
 } from "./openapi-cookie-objects.mjs";
@@ -45,6 +49,12 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
     for (const row of matches) {
       if (form && (row.type === "file" || row.filename || row.requiresFile))
         throw Error("不支持临时覆盖文件字段");
+      if (
+        hasReservedQuerySerialization(row) &&
+        !["string", "number", "boolean"].includes(typeof value)
+      )
+        throw Error("OpenAPI allowReserved: 临时输入须为primitive值");
+      if (hasReservedQuerySerialization(row)) encodeReservedQueryValue(value);
       if (hasQuerySerialization(row) && !Array.isArray(value))
         throw Error("OpenAPI Query数组临时输入须为数组");
       if (hasCookieSerialization(row) && !object(value))

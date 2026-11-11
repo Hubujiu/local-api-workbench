@@ -1,0 +1,20 @@
+✔ native JSON and directory cannot silently erase reserved scalar wire metadata in live or disabled rows (29.933542ms)
+✔ native frozen samples and independent plans cannot lose reserved scalar metadata through an unmarked live API (32.510745ms)
+✔ reserved scalar preserves literal URL spelling through actual HTTP/1.1, HTTP/2 and curl (115.71221ms)
+✔ reserved scalar OpenAPI roundtrip, frozen Store/reopen/backup and SDK temporary input preserve the contract (1688.367663ms)
+✔ reserved scalar dynamic/temporary inputs do not evaluate replaced source examples and reject unsafe values before network (1267.850525ms)
+✔ reserved scalar basic and bearer authentication preserve the exact request target (7.625415ms)
+✔ reserved scalar encoder preserves safe reserved and percent spelling without parameter injection (10.41367ms)
+✔ raw URL query spelling survives appending and authentication field replacement (1.497352ms)
+✔ descriptor survives OpenAPI roundtrip, scalar selection and local refs (13.816108ms)
+✔ unsupported combinations and malformed descriptors are rejected even if disabled (3.704974ms)
+✔ MCP and dynamic scalars replace source examples without metadata interpolation (4.652087ms)
+✔ OpenAPI projection and SDK facade cannot silently rewrite reserved/raw query contracts (1.713117ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3992.420216

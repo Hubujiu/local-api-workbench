@@ -1307,6 +1307,7 @@ async function executeRequestWithinDeadline(
   if (!["http:", "https:"].includes(u.protocol))
     throw Error("仅支持 HTTP/HTTPS");
   if (u.username || u.password) throw Error("请在认证面板配置凭据");
+  validateQueryArrayRequest(r);
   appendRequestQuery(u, r.query, r.queryAddEqual);
   const headers = requestHeaderMap(r.headers, r.auth.type);
   validateRedirectAdmission(r, headers);

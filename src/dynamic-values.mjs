@@ -1,4 +1,8 @@
 import {
+  hasReservedQuerySerialization,
+  encodeReservedQueryValue,
+} from "./openapi-query-reserved.mjs";
+import {
   hasCookieSerialization,
   parseCookieObject,
   validateCookieObjectRequest,
@@ -229,11 +233,19 @@ async function resolveDynamicRequestBase(
     cookieSchemas.push({ index, schema: row.schema });
     delete row.schema;
   }
+  const querySchemas = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (!hasReservedQuerySerialization(row)) continue;
+    querySchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
   const resolved = {
     ...interpolate(clone, variables),
     ...scriptSources,
     ...operation,
   };
+  for (const { index, schema } of querySchemas)
+    resolved.query[index].schema = schema;
   for (const { index, schema } of cookieSchemas)
     resolved.cookies[index].schema = schema;
   for (const { index, value } of arrayValues)
@@ -281,6 +293,17 @@ async function resolveDynamicRequestBase(
       request.queryAddEqual === false
     )
       throw Error("原版Query函数空结果与省略等号组合尚未兼容");
+    if (
+      group === "query" &&
+      hasReservedQuerySerialization(resolved[group][index]) &&
+      !["string", "number", "boolean"].includes(typeof value)
+    )
+      throw Error("OpenAPI allowReserved: 动态输入须为primitive值");
+    if (
+      group === "query" &&
+      hasReservedQuerySerialization(resolved[group][index])
+    )
+      encodeReservedQueryValue(value);
     resolved[group][index].value =
       group === "path" &&
       Object.hasOwn(resolved[group][index], "pathSerialization")

@@ -1,3 +1,9 @@
+import {
+  hasReservedQuerySerialization,
+  validateReservedQueryRequest,
+  importReservedQuery,
+  exportReservedQuery,
+} from "./openapi-query-reserved.mjs";
 // Canonical array parameters are explicit. Legacy scalar rows are never guessed
 // from their schema or their spelling, and no user-supplied encoding is executed.
 import { importOpenAPIScalarValue } from "./openapi-scalar-values.mjs";
@@ -116,6 +122,7 @@ export function validateQueryArrayRequest(request) {
   for (const group of ["query", "headers", "path", "cookies", "form"])
     if (request[group] !== undefined && !Array.isArray(request[group]))
       throw Error(group + " 必须是对象数组");
+  validateReservedQueryRequest(request);
   const marked = (request.query || []).filter(hasQuerySerialization);
   if (
     marked.length &&
@@ -222,6 +229,12 @@ export function importOpenAPIQuery(
         ["allOf", "anyOf", "oneOf"].some((key) => own(schema, key))
       )
         fail("暂不支持Query联合类型或组合Schema");
+      if (parameter.allowReserved === true) {
+        if (schema?.type === "array") fail("尚不支持数组allowReserved:true");
+        if (oas3) row.value = importOpenAPIScalarValue(parameter, row.value);
+        const reserved = importReservedQuery(parameter, row, { oas3, swagger });
+        if (reserved) return reserved;
+      }
       if (
         parameter.allowReserved !== undefined &&
         parameter.allowReserved !== false
@@ -266,6 +279,7 @@ export function importOpenAPIQuery(
 }
 
 export function exportOpenAPIQueryArray(row) {
+  if (hasReservedQuerySerialization(row)) return exportReservedQuery(row);
   if (!hasQuerySerialization(row)) return {};
   const configuration = descriptor(row);
   encodeQueryArray(row);
@@ -283,7 +297,9 @@ export function assertQueryArrayCurlDefinition(request) {
   if (
     (request.query || []).some(
       (row) =>
-        row.enabled !== false && hasQuerySerialization(row) && row.dynamic,
+        row.enabled !== false &&
+        (hasQuerySerialization(row) || hasReservedQuerySerialization(row)) &&
+        row.dynamic,
     )
   )
     fail("动态数组定义不能无损导出cURL，请使用实际请求记录或项目备份");

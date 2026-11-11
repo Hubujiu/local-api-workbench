@@ -11,7 +11,10 @@ import {
 
 for (const version of versions) {
   test(`${version} scalar query rejects unsupported or malformed allowReserved`, () => {
-    for (const value of invalidReservedValues) {
+    for (const value of [
+      ...invalidReservedValues,
+      ...(version === "2.0" ? [true] : []),
+    ]) {
       const source = reservedDocument(version, value);
       const before = structuredClone(source);
       assert.throws(() => importDocument(source), /allowReserved/);
@@ -38,7 +41,10 @@ for (const version of versions) {
       folders: ["Existing"],
       settings: {},
     };
-    for (const value of invalidReservedValues) {
+    for (const value of [
+      ...invalidReservedValues,
+      ...(version === "2.0" ? [true] : []),
+    ]) {
       const source = mixedReservedDocument(version, value);
       const sourceBefore = structuredClone(source);
       for (const sync of [false, true]) {
@@ -66,7 +72,7 @@ for (const version of versions) {
 test("resolved and inherited scalar allowReserved cannot bypass admission", () => {
   for (const version of ["3.0.3", "3.1.0"])
     for (const inherited of [false, true]) {
-      const source = reservedDocument(version, true);
+      const source = reservedDocument(version, "true");
       const parameter = source.paths["/search"].get.parameters[0];
       source.components = { parameters: { Reserved: parameter } };
       source.paths["/search"].get.parameters = [
