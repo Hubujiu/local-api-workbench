@@ -85,3 +85,27 @@ or CLI grant integration.
 Browser checks cover provider configuration and a delayed old-provider response
 that must not overwrite the newly selected provider. This does not claim a full
 MongoDB GUI/database lifecycle test or complete original-product equivalence.
+
+## Explicit direct-query port admission
+
+Direct MongoDB query ports reject null, booleans, objects, arrays, non-finite
+numbers, fractional/out-of-range numbers and nondecimal string syntax before
+creating a worker or transport. Both direct and remote adapters use the same
+connection validator. Errors do not echo the input. This prevents an invalid
+value from silently selecting the default port through numeric coercion.
+
+The previous explicit direct defaults are retained: omitted port, numeric zero,
+empty string and decimal zero strings select 27017. Nonzero ports accept integers
+1..65535 or ASCII decimal digit strings, including leading zeros. Session grants
+keep their stricter existing integer-only contract (omitted/numeric zero means
+provider default); this does not admit string defaults to sessions. MongoDB SSH
+remains unsupported by the owner/remote/session entrypoints, with no direct
+fallback introduced.
+
+The existing UI still applies Number() before serialization. Invalid text such
+as `abc` becomes JSON null and now rejects instead of opening port 27017, but
+hexadecimal/exponent spellings already converted into a valid integer cannot be
+identified by the backend. Raw UI text validation remains a separate task.
+The tests use real MongoClient traffic with a protocol fixture, not a real
+MongoDB service. No authorization, retry, deadline or stored-history format is
+changed, and earlier requests cannot be reconstructed.
