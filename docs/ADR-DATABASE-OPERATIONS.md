@@ -50,3 +50,24 @@ limits, budgets, write approval and unknown-outcome/no-replay behavior are uncha
 There is no stored-format change, migration or reconstruction of previously
 replaced characters. This slice does not cover ClickHouse's independent query
 path or expand PostgreSQL/MySQL connection-parameter validation.
+
+## MySQL read port admission
+
+Direct MySQL reads accept integer numbers in 1..65535 or decimal digit strings
+in that range (including leading zeros). Missing/undefined, numeric zero, empty
+string and decimal zero strings retain the previous direct-read default 3306.
+Explicit null, booleans, arrays/objects, non-finite numbers, fractional numbers,
+out-of-range values and nondecimal string syntax reject before direct or SSH
+transport construction. In particular, UI Number conversion followed by JSON
+serialization turns invalid numeric text into null; it must not silently choose 3306. The frontend is unchanged and this does not recover original text after
+it has already become a valid number. For example UI inputs `3.306e3` or `0xcea`
+become the valid integer 3306 before the backend sees them, so this fix does not
+reject their original UI syntax. Direct API string inputs retain their spelling
+and those nondecimal syntaxes are rejected; not all invalid-looking UI text can
+be distinguished after numeric conversion.
+
+PostgreSQL, MySQL session registration and MySQL write contracts are unchanged.
+This does not extend direct-read default sentinels to SSH: SSH continues to reject
+its previously unsupported zero/empty inputs. Inputs accepted by both direct
+and SSH paths retain the same nonzero numeric destination. No fallback, retry,
+new permission, saved-config migration or previous-query reconstruction is added.
