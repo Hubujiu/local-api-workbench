@@ -148,6 +148,15 @@ function databaseName(value) {
   return value;
 }
 export function mongoConnection(input) {
+  if (
+    (input.port !== undefined &&
+      !["number", "string"].includes(typeof input.port)) ||
+    (typeof input.port === "number" && !Number.isFinite(input.port)) ||
+    (typeof input.port === "string" &&
+      input.port !== "" &&
+      !/^\d+$/.test(input.port))
+  )
+    throw Error("MongoDB主机/端口无效");
   const host = input.host || "127.0.0.1",
     port = Number(input.port) || 27017,
     database = databaseName(input.database);
