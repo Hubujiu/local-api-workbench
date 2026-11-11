@@ -1,3 +1,4 @@
+import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
 import { manualImportDigest } from "./manual-import-token.mjs";
 import { validateResourceFolder } from "./api-resource-lifecycle.mjs";
 
@@ -61,6 +62,7 @@ export function normalizeManualImportInput(raw) {
     fail();
   }
   const value = structuredClone(raw);
+  requirePostmanEnvironmentText(value?.document);
   exact(
     value,
     ["format", "document", "selection"],

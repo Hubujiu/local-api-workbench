@@ -1,3 +1,8 @@
+import { assertUniqueJSONMembers } from "./json-member-uniqueness.mjs";
+import {
+  isPostmanEnvironmentDocument,
+  environmentTextRequired,
+} from "./postman-environment-import.mjs";
 import { parse as parseYAML } from "yaml";
 
 // Match the existing HTTP body / stdio frame ceiling. Those envelopes can impose
@@ -7,9 +12,11 @@ export function parseImportDocumentText(text) {
   if (typeof text !== "string") throw Error("导入文本必须是字符串");
   if (Buffer.byteLength(text, "utf8") > IMPORT_DOCUMENT_MAX_BYTES)
     throw Error("导入文本超过12MiB");
-  let result;
+  let result,
+    parsedJSON = false;
   try {
     result = JSON.parse(text);
+    parsedJSON = true;
   } catch {
     result = parseYAML(text, { maxAliasCount: 100, uniqueKeys: true });
   }
@@ -37,6 +44,11 @@ export function parseImportDocumentText(text) {
       iterator: Object.values(value).values(),
       depth: frame.depth + 1,
     });
+  }
+  // Keep legacy JSON duplicate-member behavior for other document formats.
+  if (isPostmanEnvironmentDocument(result)) {
+    if (!parsedJSON) throw environmentTextRequired();
+    assertUniqueJSONMembers(text);
   }
   return result;
 }

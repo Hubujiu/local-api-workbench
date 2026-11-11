@@ -1,3 +1,4 @@
+import { environmentTextRequired } from "./postman-environment-import.mjs";
 import {
   appendNativeInheritance,
   assertNativeAppendInput,
@@ -16,6 +17,8 @@ import { projectFingerprint } from "./project-files.mjs";
 // source storage nor grants; live permissions and cancellation remain host-owned.
 const tokens = createManualImportTokens();
 export function manualImportError(error) {
+  if (error?.code === "MANUAL_IMPORT_ENVIRONMENT_TEXT_REQUIRED")
+    return environmentTextRequired();
   if (
     ["PROJECT_COMMIT_UNCERTAIN", "PROJECT_RECOVERY_REQUIRED"].includes(
       error?.code,
@@ -62,6 +65,14 @@ async function plan(project, input, context, signal) {
   );
   active(signal);
   if (native) return appendNativeInheritance(project, source, context);
+  if (
+    source.postmanEnvironment &&
+    (input.clearScope !== undefined ||
+      input.policies.api === "clear" ||
+      Object.keys(input.bindings).length ||
+      Object.keys(input.folderMap).length)
+  )
+    throw Error("独立环境导入不支持覆盖、清除或绑定已有资源");
   return buildManualImportPlan(project, source, input, context);
 }
 export async function previewManualImport(

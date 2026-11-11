@@ -1,3 +1,4 @@
+import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
 import {
   hasLiveReferences,
   materializeLivePlan,
@@ -1485,6 +1486,7 @@ export async function createApp({
           }
           if (action === "import" && req.method === "POST") {
             const b = await body(req);
+            requirePostmanEnvironmentText(b.document);
             importIntoProject(p, b.document, {
               postmanVariableMode: b.postmanVariableMode,
               modelNameMode: b.modelNameMode,

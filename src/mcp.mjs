@@ -1,3 +1,4 @@
+import { environmentTextRequired } from "./postman-environment-import.mjs";
 import { materializeLivePlan } from "./live-plan-materialize.mjs";
 import {
   scopedExportArguments,
@@ -143,6 +144,7 @@ const manualImportErrorCodes = new Set([
   "MANUAL_IMPORT_INVALID",
   "MANUAL_IMPORT_ABORTED",
   "MANUAL_IMPORT_INPUT_INVALID",
+  "MANUAL_IMPORT_ENVIRONMENT_TEXT_REQUIRED",
   "MANUAL_IMPORT_CONFLICT",
   "MANUAL_IMPORT_PLAN_INVALID",
   "MANUAL_IMPORT_RESOURCE_CONFLICT",
@@ -1720,7 +1722,9 @@ export function createMCP({
       const message = manualImport
         ? Object.keys(outcome).length
           ? "手动导入提交结果不确定；请恢复并读取现有项目，不要自动重试"
-          : "手动导入失败；请检查当前授权、有效会话与输入，并重新预览"
+          : e?.code === "MANUAL_IMPORT_ENVIRONMENT_TEXT_REQUIRED"
+            ? environmentTextRequired().message
+            : "手动导入失败；请检查当前授权、有效会话与输入，并重新预览"
         : projectInterchange
           ? typeof e.message === "string"
             ? e.message.slice(0, 2048)

@@ -1,3 +1,4 @@
+import { isPostmanEnvironmentDocument } from "./postman-environment-import.mjs";
 import { isDeepStrictEqual, types } from "node:util";
 import { manualImportDigest, manualImportID } from "./manual-import-token.mjs";
 import {
@@ -1006,6 +1007,7 @@ export async function prepareManualImportSource(
     document = ordinaryCopy(parseImportDocumentText(document));
   }
   if (!object(document)) fail("文档须为JSON/YAML对象");
+  const postmanEnvironment = isPostmanEnvironmentDocument(document);
   const directory = document.format === "apipost-offline-directory-v1";
   const openapi = Boolean(document.openapi || document.swagger);
   const apipost =
@@ -1055,6 +1057,7 @@ export async function prepareManualImportSource(
     !directory &&
     !openapi &&
     !apipost &&
+    !postmanEnvironment &&
     !(document.info && Array.isArray(document.item)) &&
     !Array.isArray(document.requests)
   )
@@ -1090,5 +1093,7 @@ export async function prepareManualImportSource(
     }
     return converterCopy(source);
   }
-  return buildManualImportSourceGraph(source, context);
+  const graph = buildManualImportSourceGraph(source, context);
+  if (postmanEnvironment) graph.postmanEnvironment = true;
+  return graph;
 }
