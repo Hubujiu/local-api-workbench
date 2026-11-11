@@ -1,3 +1,4 @@
+import { assertReservedQueryOpenAPI } from "./openapi-query-reserved.mjs";
 import {
   importOpenAPICookieObject,
   exportOpenAPICookieObject,
@@ -2477,6 +2478,7 @@ export function exportOpenAPI(project) {
     validatePathSerialization(source);
     assertHeaderObjectOpenAPIHeaders(source);
     validateCookieObjectRequest(source);
+    assertReservedQueryOpenAPI(source);
     let definition = source;
     if (postmanRawBodyPolicy(source)) {
       definition = applySharedScripts(project, source);

@@ -1,4 +1,8 @@
 import {
+  hasReservedQuerySerialization,
+  encodeReservedQuery,
+} from "./openapi-query-reserved.mjs";
+import {
   hasQuerySerialization,
   encodeQueryArray,
   validateQueryArrayRequest,
@@ -11,6 +15,11 @@ export function appendRequestQuery(url, rows, addEqual = true) {
   validateQueryArrayRequest({ query: rows });
   const added = [];
   for (const row of rows.filter((row) => row.enabled !== false && row.key)) {
+    if (hasReservedQuerySerialization(row)) {
+      if (!addEqual) throw Error("OpenAPI allowReserved: 首片空值固定保留等号");
+      added.push(encodeReservedQuery(row));
+      continue;
+    }
     if (hasQuerySerialization(row)) {
       added.push(...encodeQueryArray(row));
       continue;
