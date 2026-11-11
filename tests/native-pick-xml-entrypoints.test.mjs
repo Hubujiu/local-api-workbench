@@ -22,6 +22,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createApp } from "../src/server.mjs";
+import { withCLIResultDiagnostics } from "./helpers/cli-result-diagnostics.mjs";
 import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 import { Store } from "../src/runtime.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
@@ -448,8 +449,20 @@ for (const [version, transport] of [
       ).data.variables[0].expression = "string(/login/missing-live)";
       const edit = await f.call(`/api/projects/${copy.id}`, stored, "PUT");
       assert.equal(edit.status, 200);
+      const commandWireStart = f.wire.length;
       const command = await cli(f.root, copy.id, plan.id);
-      assert.equal(command.code, 0, command.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(command.code, 0, command.stderr),
+        command.stdout,
+        {
+          loginRequestCount: f.wire
+            .slice(commandWireStart)
+            .filter((entry) => entry.path.startsWith("/login/")).length,
+          laterRequestCount: f.wire
+            .slice(commandWireStart)
+            .filter((entry) => entry.path === "/resource").length,
+        },
+      );
       assert.equal(command.signal, null);
       assertXMLRun(JSON.parse(command.stdout), "wire-xml-2");
       assert.equal(f.wire.at(-1).authorization, "Bearer wire-xml-2");
@@ -481,8 +494,20 @@ for (const [version, transport] of [
         ).isError,
         true,
       );
+      const againWireStart = f.wire.length;
       const again = await cli(f.root, restored.value.id, plan.id);
-      assert.equal(again.code, 0, again.stderr);
+      withCLIResultDiagnostics(
+        () => assert.equal(again.code, 0, again.stderr),
+        again.stdout,
+        {
+          loginRequestCount: f.wire
+            .slice(againWireStart)
+            .filter((entry) => entry.path.startsWith("/login/")).length,
+          laterRequestCount: f.wire
+            .slice(againWireStart)
+            .filter((entry) => entry.path === "/resource").length,
+        },
+      );
       assertXMLRun(JSON.parse(again.stdout), "wire-xml-3");
       const restarted = await new Store(f.root).get(restored.value.id);
       assert.equal(restarted.runs.length, 3);
