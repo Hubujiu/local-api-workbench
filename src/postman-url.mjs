@@ -2,7 +2,46 @@ import { isIP } from "node:net";
 
 // Original bounded serialization of Postman's documented URL component format.
 // Raw URLs keep their existing precedence; no URL parsing/encoding occurs here.
-function rawImportURL(value, replaceQuery) {
+// Match the SDK's segment boundary and first-dot suffix rule, not a prefix
+// regex: :user-id.json references "user-id", never "user". This adapter keeps
+// Workbench's existing encoded value binding; it is not full SDK URL parity.
+function importPath(pathname, variables) {
+  const definitions = new Map();
+  for (const row of Array.isArray(variables) ? variables : []) {
+    const previous = definitions.get(row?.key);
+    if (previous) {
+      previous.ambiguous ||=
+        (row?.disabled !== undefined && row.disabled !== false) ||
+        previous.disabled ||
+        typeof row?.value !== "string" ||
+        row.value !== previous.value;
+    } else {
+      definitions.set(row?.key, {
+        value: row?.value,
+        disabled: row?.disabled !== undefined && row.disabled !== false,
+        ambiguous: false,
+      });
+    }
+  }
+  return pathname
+    .split("/")
+    .map((segment) => {
+      if (!segment.startsWith(":")) return segment;
+      const dot = segment.indexOf(".");
+      const name = segment.slice(1, dot < 0 ? undefined : dot);
+      if (!name) return segment;
+      if (!/^[A-Za-z0-9_-]+$/.test(name))
+        throw Error("Postman路径变量名称不受支持，不能截断为其他变量");
+      // The SDK selects the last enabled duplicate; legacy Workbench binds the
+      // first. Identical enabled string definitions are equivalent under both.
+      if (definitions.get(name)?.ambiguous)
+        throw Error("Postman路径变量重复且存在歧义，无法安全导入");
+      return "{" + name + "}" + segment.slice(name.length + 1);
+    })
+    .join("/");
+}
+
+function rawImportURL(value, replaceQuery, variables) {
   const hashAt = value.indexOf("#");
   const fragment = hashAt < 0 ? "" : value.slice(hashAt);
   const target = hashAt < 0 ? value : value.slice(0, hashAt);
@@ -17,7 +56,7 @@ function rawImportURL(value, replaceQuery) {
     )?.[0] || "";
   return (
     authority +
-    pathname.slice(authority.length).replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") +
+    importPath(pathname.slice(authority.length), variables) +
     query +
     fragment
   );
@@ -32,7 +71,7 @@ export function postmanImportURL(url, replaceQuery = false) {
   if (typeof url !== "object" || Array.isArray(url)) fail();
   if (Object.hasOwn(url, "raw")) {
     if (typeof url.raw !== "string") fail();
-    return rawImportURL(url.raw, replaceQuery);
+    return rawImportURL(url.raw, replaceQuery, url.variable);
   }
   for (const key of ["protocol", "port", "hash"])
     if (url[key] !== undefined && typeof url[key] !== "string") fail();
@@ -85,7 +124,7 @@ export function postmanImportURL(url, replaceQuery = false) {
     (protocol ? protocol + "://" : "") +
     host +
     (port ? ":" + port : "") +
-    pathname.replace(/\/:([A-Za-z0-9_]+)/g, "/{$1}") +
+    importPath(pathname, url.variable) +
     (url.hash === undefined ? "" : "#" + url.hash);
   if (/[\u0000-\u001f\u007f]/.test(value)) fail();
   return value;
