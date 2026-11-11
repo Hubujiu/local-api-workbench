@@ -66,7 +66,11 @@ export function mongoQuery(input) {
   let nodes = 0;
   const inspect = (value, depth) => {
     if (++nodes > 1000 || depth > 10) throw Error("MongoDB查询结构过大或过深");
-    if (value === null || ["string", "boolean"].includes(typeof value)) return;
+    if (typeof value === "string") {
+      if (!value.isWellFormed()) throw Error("MongoDB查询字符串Unicode无效");
+      return;
+    }
+    if (value === null || typeof value === "boolean") return;
     if (typeof value === "number") {
       if (!Number.isFinite(value)) throw Error("MongoDB查询数值无效");
       if (Number.isInteger(value) && !Number.isSafeInteger(value))
@@ -115,7 +119,7 @@ export function mongoQuery(input) {
       }
     }
     for (const [key, child] of Object.entries(value)) {
-      if (forbidden.has(key) || key.includes("\0"))
+      if (!key.isWellFormed() || forbidden.has(key) || key.includes("\0"))
         throw Error("MongoDB禁止写入/JavaScript/不安全字段");
       inspect(child, depth + 1);
     }
@@ -135,6 +139,7 @@ export function mongoQuery(input) {
 function databaseName(value) {
   if (
     typeof value !== "string" ||
+    !value.isWellFormed() ||
     !value ||
     Buffer.byteLength(value) > 63 ||
     /[\/\\.\s"$\0]/.test(value)
@@ -160,7 +165,9 @@ export function mongoConnection(input) {
   for (const key of ["user", "password"])
     if (
       input[key] !== undefined &&
-      (typeof input[key] !== "string" || Buffer.byteLength(input[key]) > 8192)
+      (typeof input[key] !== "string" ||
+        !input[key].isWellFormed() ||
+        Buffer.byteLength(input[key]) > 8192)
     )
       throw Error("MongoDB认证参数无效");
   if (
