@@ -1,4 +1,8 @@
 import {
+  hasQueryObjectSerialization,
+  parseQueryObject,
+} from "./openapi-query-objects.mjs";
+import {
   hasReservedQuerySerialization,
   encodeReservedQueryValue,
 } from "./openapi-query-reserved.mjs";
@@ -142,6 +146,13 @@ async function resolveDynamicRequestBase(
       arrayValues.push({ index, value: parseQueryArray(row) });
     row.value = "[]";
   }
+  const queryObjectValues = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (!hasQueryObjectSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      queryObjectValues.push({ index, value: parseQueryObject(row) });
+    row.value = "{}";
+  }
   const objectValues = [];
   for (const [index, row] of (clone.headers || []).entries()) {
     if (!hasHeaderSerialization(row)) continue;
@@ -235,7 +246,11 @@ async function resolveDynamicRequestBase(
   }
   const querySchemas = [];
   for (const [index, row] of (clone.query || []).entries()) {
-    if (!hasReservedQuerySerialization(row) && !hasQuerySerialization(row))
+    if (
+      !hasReservedQuerySerialization(row) &&
+      !hasQuerySerialization(row) &&
+      !hasQueryObjectSerialization(row)
+    )
       continue;
     querySchemas.push({ index, schema: row.schema });
     delete row.schema;
@@ -261,6 +276,8 @@ async function resolveDynamicRequestBase(
     resolved.query[index].schema = schema;
   for (const { index, schema } of cookieSchemas)
     resolved.cookies[index].schema = schema;
+  for (const { index, value } of queryObjectValues)
+    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
   for (const { index, value } of arrayValues)
     resolved.query[index].value = JSON.stringify(interpolate(value, variables));
   for (const { index, value } of objectValues)
@@ -317,6 +334,12 @@ async function resolveDynamicRequestBase(
       hasReservedQuerySerialization(resolved[group][index])
     )
       encodeReservedQueryValue(value);
+    if (
+      group === "query" &&
+      hasQueryObjectSerialization(resolved[group][index]) &&
+      (value === null || typeof value !== "object" || Array.isArray(value))
+    )
+      throw Error("OpenAPI Query对象动态输入须为对象");
     resolved[group][index].value =
       group === "path" &&
       Object.hasOwn(resolved[group][index], "pathSerialization")

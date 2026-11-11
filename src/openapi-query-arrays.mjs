@@ -1,4 +1,11 @@
 import {
+  validateQueryObjectRequest,
+  importOpenAPIQueryObject,
+  hasQueryObjectSerialization,
+  exportOpenAPIQueryObject,
+  assertQueryObjectCurlDefinition,
+} from "./openapi-query-objects.mjs";
+import {
   hasReservedQuerySerialization,
   validateReservedQueryRequest,
   importReservedQuery,
@@ -123,6 +130,7 @@ export function validateQueryArrayRequest(request) {
     if (request[group] !== undefined && !Array.isArray(request[group]))
       throw Error(group + " 必须是对象数组");
   validateReservedQueryRequest(request);
+  validateQueryObjectRequest(request);
   const marked = (request.query || []).filter(hasQuerySerialization);
   if (
     marked.length &&
@@ -204,7 +212,8 @@ export function importOpenAPIQuery(
             )
           : { type: parameter.type || "string" });
       if (own(parameter, "content")) fail("暂不支持Query content参数");
-      if (schema?.type === "object") fail("暂不支持对象Query参数");
+      if (schema?.type === "object")
+        return importOpenAPIQueryObject(parameter, { oas3, swagger });
       const row = {
         key: parameter.name,
         ...(parameter.allowEmptyValue === undefined
@@ -279,6 +288,7 @@ export function importOpenAPIQuery(
 }
 
 export function exportOpenAPIQueryArray(row) {
+  if (hasQueryObjectSerialization(row)) return exportOpenAPIQueryObject(row);
   if (hasReservedQuerySerialization(row)) return exportReservedQuery(row);
   if (!hasQuerySerialization(row)) return {};
   const configuration = descriptor(row);
@@ -293,6 +303,7 @@ export function exportOpenAPIQueryArray(row) {
 }
 
 export function assertQueryArrayCurlDefinition(request) {
+  assertQueryObjectCurlDefinition(request);
   validateQueryArrayRequest(request);
   if (
     (request.query || []).some(

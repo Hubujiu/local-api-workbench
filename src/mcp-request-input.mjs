@@ -1,3 +1,4 @@
+import { hasQueryObjectSerialization } from "./openapi-query-objects.mjs";
 import {
   hasReservedQuerySerialization,
   encodeReservedQueryValue,
@@ -55,6 +56,19 @@ function rowsOverride(rows, values, label, insensitive = false, form = false) {
       )
         throw Error("OpenAPI allowReserved: 临时输入须为primitive值");
       if (hasReservedQuerySerialization(row)) encodeReservedQueryValue(value);
+      if (hasQueryObjectSerialization(row) && !object(value))
+        throw Error("OpenAPI Query对象临时输入须为对象");
+      if (hasQueryObjectSerialization(row)) {
+        dictionary(value, "Query对象");
+        for (const item of Object.values(value))
+          if (
+            !["string", "number", "boolean"].includes(typeof item) ||
+            (typeof item === "number" &&
+              (!Number.isFinite(item) ||
+                (Number.isInteger(item) && !Number.isSafeInteger(item))))
+          )
+            throw Error("OpenAPI Query对象临时值须为安全primitive");
+      }
       if (hasQuerySerialization(row) && !Array.isArray(value))
         throw Error("OpenAPI Query数组临时输入须为数组");
       if (hasCookieSerialization(row) && !object(value))
