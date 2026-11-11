@@ -1,5 +1,8 @@
 import { performance } from "node:perf_hooks";
-import { normalizeRedirect } from "./http-redirect.mjs";
+import {
+  admitLoadRedirects,
+  createLoadNetworkBudget,
+} from "./load-network-budget.mjs";
 import { denyNativeWrites } from "./native-redis-write-intent.mjs";
 import { loadTiming } from "../public/load-timing.js";
 import { parseLoadCSV } from "../public/load-data.js";
@@ -22,8 +25,6 @@ import { executeRequest } from "./runtime.mjs";
 const monotonicNow = performance.now.bind(performance);
 
 export async function runLoad(project, request, options = {}) {
-  if (normalizeRedirect(request.redirect))
-    throw Error("压测暂不支持 HTTP 重定向策略，请使用普通执行");
   const timing = loadTiming(options);
   const dataRows = parseLoadCSV(options.dataCSV);
   const count = Math.min(
@@ -34,6 +35,7 @@ export async function runLoad(project, request, options = {}) {
     10,
     Math.max(1, Math.floor(Number(options.concurrency)) || 1),
   );
+  admitLoadRedirects([request], count);
   const selected = selectedEnvironment(project, options.environmentId);
   const environmentId = selected.id;
   const collectionId = request?.postmanCollectionId;
@@ -56,6 +58,10 @@ export async function runLoad(project, request, options = {}) {
       .filter((step) => step.enabled !== false)
       .map((step) => step.request || {}),
   );
+  const redirected = admitLoadRedirects(
+    plan.steps.map((s) => s.request),
+    count,
+  );
   const results = [];
   let cursor = 0,
     mainRequests = 0;
@@ -67,6 +73,9 @@ export async function runLoad(project, request, options = {}) {
     stopReason = reason;
     controller.abort();
   };
+  const networkBudget = redirected
+    ? createLoadNetworkBudget(() => stop("wire-budget"))
+    : undefined;
   const cancel = () => stop("cancelled");
   options.signal?.addEventListener("abort", cancel, { once: true });
   if (options.signal?.aborted) cancel();
@@ -95,7 +104,10 @@ export async function runLoad(project, request, options = {}) {
               variables,
               async (definition, signal, transport) => {
                 mainRequests++;
-                return executeRequest(definition, signal, transport);
+                return executeRequest(definition, signal, {
+                  ...transport,
+                  networkBudget,
+                });
               },
               {
                 signal: controller.signal,
@@ -169,6 +181,17 @@ export async function runLoad(project, request, options = {}) {
                 error: String(item.error || "断言未通过").slice(0, 500),
               })),
               subrequests,
+              ...(record.redirectFailure
+                ? {
+                    redirectFailure: {
+                      code: record.redirectFailure.code,
+                      reason: record.redirectFailure.reason,
+                      retry_safe: false,
+                      responseComplete: record.redirectFailure.responseComplete,
+                      requestStarted: record.redirectFailure.requestStarted,
+                    },
+                  }
+                : {}),
               ...(record.error
                 ? { error: String(record.error).slice(0, 1000) }
                 : {}),
@@ -217,6 +240,7 @@ export async function runLoad(project, request, options = {}) {
         Math.min(timings.length - 1, Math.floor(timings.length * 0.95))
       ] || 0,
     mainRequests,
+    ...(networkBudget ? { networkBudget: networkBudget.snapshot() } : {}),
     scriptRequests: results.reduce(
       (sum, r) => sum + (r.subrequests?.length || 0),
       0,

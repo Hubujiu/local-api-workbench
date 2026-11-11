@@ -1,3 +1,4 @@
+import { isLoadNetworkBudgetFailure } from "./load-network-budget.mjs";
 import { isMessagePackResponseType } from "./response-media.mjs";
 import { responseContentDecoder } from "./http-response-content.mjs";
 import { prepareConnection } from "./connection.mjs";
@@ -41,6 +42,7 @@ export async function executePreparedRedirect(
   const failure = (reason) =>
     httpRedirectFailure(latest, reason, trace, attempted, started, complete);
   const classify = (error) => {
+    if (isLoadNetworkBudgetFailure(error)) return "wire-budget";
     try {
       throwIfInactive(controls);
     } catch (interruption) {
@@ -69,6 +71,7 @@ export async function executePreparedRedirect(
     wire.hash = "";
     let connection;
     try {
+      controls.networkBudget?.reserve();
       connection = await prepareConnection(
         wire,
         { ...r, timeout: Math.ceil(controls.deadline - performance.now()) },
@@ -92,6 +95,7 @@ export async function executePreparedRedirect(
         },
         () => {
           started = true;
+          controls.networkBudget?.start(hop);
         },
         localReasons,
       );

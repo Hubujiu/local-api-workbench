@@ -301,7 +301,7 @@ test(
   },
 );
 
-test("malformed collection types and redirect reject before effects; pre-abort and unbound writes remain safe", async (t) => {
+test("malformed collection types and scripted redirect reject before effects; pre-abort and unbound writes remain safe", async (t) => {
   const f = await fixture(t),
     p = project();
   const invalid = structuredClone(p);
@@ -317,6 +317,7 @@ test("malformed collection types and redirect reject before effects; pre-abort a
         postmanCollectionId: "a",
         url: f.url,
         redirect: { mode: "same-origin" },
+        beforeScript,
       },
       { count: 1 },
     ),

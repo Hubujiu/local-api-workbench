@@ -106,7 +106,7 @@ test("lossy exports reject only policies on definitions they actually export", (
   }
 });
 
-test("load runner rejects enabled redirect policy before environment lookup or traffic", async () => {
+test("load runner rejects excessive redirect budget before environment lookup or traffic", async () => {
   let reads = 0;
   const hostile = new Proxy(
     {},
@@ -118,7 +118,7 @@ test("load runner rejects enabled redirect policy before environment lookup or t
     },
   );
   await assert.rejects(
-    runLoad(hostile, request({ redirect: enabled })),
+    runLoad(hostile, request({ redirect: enabled }), { count: 100 }),
     /重定向/,
   );
   assert.equal(reads, 0);
