@@ -4193,6 +4193,38 @@ try {
   };
   await page.locator("#db-path").fill(sqliteWriteFile);
   await page.locator("#db-sql").fill("INSERT INTO entries(value) VALUES (?)");
+  let numericDatabaseRequests = 0,
+    numericConfirmations = 0;
+  const countNumericRequest = (request) => {
+    if (new URL(request.url()).pathname.endsWith("/database"))
+      numericDatabaseRequests++;
+  };
+  const rejectNumericDialog = async (dialog) => {
+    numericConfirmations++;
+    await dialog.dismiss();
+  };
+  page.on("request", countNumericRequest);
+  page.on("dialog", rejectNumericDialog);
+  await page.locator("#db-write").check();
+  for (const source of [
+    "[1e400]",
+    "[-1e400]",
+    "[9007199254740993]",
+    '[{"nested":[1e400]}]',
+  ]) {
+    await page.locator("#db-params").fill(source);
+    await page.locator("#db-query").click();
+    await page
+      .locator("#toast")
+      .getByText("数字须有限且整数须安全", { exact: false })
+      .waitFor();
+  }
+  assert.equal(numericDatabaseRequests, 0);
+  assert.equal(numericConfirmations, 0);
+  assert.equal(countSQLiteRows(), 0);
+  page.off("request", countNumericRequest);
+  page.off("dialog", rejectNumericDialog);
+  await page.locator("#db-write").uncheck();
   await page.locator("#db-params").fill('["from-ui"]');
   await page.locator("#db-query").click();
   await page
@@ -4316,6 +4348,27 @@ try {
     await page.locator("#operation-db-path").inputValue(),
     '$.rows[0]["row.value"]',
   );
+  for (const source of [
+    "[1e400]",
+    "[9007199254740993]",
+    '[{"nested":[-1e400]}]',
+  ]) {
+    await page.locator("#operation-db-parameters").fill(source);
+    await page.locator("#dialog-save").click();
+    await page
+      .locator("#toast")
+      .getByText("数字须有限且整数须安全", { exact: false })
+      .waitFor();
+    assert.equal(await page.locator("#dialog").isVisible(), true);
+    await page.keyboard.press("Escape");
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    await page.locator('[data-edit-db-operation="0"]').click();
+    await page.locator("#dialog").waitFor({ state: "visible" });
+    assert.equal(
+      await page.locator("#operation-db-parameters").inputValue(),
+      "[]",
+    );
+  }
   await page.locator("#operation-db-parameters").fill("{}");
   await page.locator("#dialog-save").click();
   await page
