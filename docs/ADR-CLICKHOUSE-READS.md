@@ -25,3 +25,23 @@ Client total timeout5seconds, response≤1MiB, URL≤256KiB, parameters≤1000, 
 52c10212 / Actions39636013999 failed on the first real ClickHouse request: GET had already enabled read-only mode, so trying to set readonly=1 in URL parameters was rejected with READONLY/Code164. The client now omits this conflicting setting while retaining GET, rather than falling back to POST or changing server security. Custom SETTINGS text is rejected, including conservative matches in literals/comments (use bound values), so queries cannot override requested execution/result limits. The actual server GET write-rejection test remains. The failure is retained; the corrected commit needs its own green CI.
 
 The next real-service run (aed7fa1 / Actions39636710785) revealed that the server emitted UInt64 as an unquoted JSON number, losing precision in JavaScript. The client now explicitly requests quoted64bit integers and rejects unsafe integral JSON numbers rather than silently rounding them. The original exact18446744073709551615 assertion remains unchanged. This also conservatively rejects very large integral Float64 results; convert those to strings in SQL if needed.
+
+## Unicode request fidelity
+
+SQL text, the encoded database name, Basic authentication username/password and
+string parameter values reject unpaired Unicode surrogates before HTTP/HTTPS
+request construction. URLSearchParams and UTF-8 encoding must not silently
+replace them with U+FFFD. Errors do not include the rejected input. The shared
+request builder covers direct and remote query entrypoints; the remote provider
+continues to reject SSH rather than fall back to direct transport.
+
+Valid surrogate pairs, Chinese text and literal U+FFFD are preserved without
+normalization. Existing empty/omitted field behavior, parameter escaping, SQL
+subset, result limits and deadlines remain unchanged. This remains a read-only
+GET adapter, not a ClickHouse write implementation. Loopback tests inspect actual
+HTTP request bytes and simulated responses, not real ClickHouse authentication
+or query execution. Existing non-string database coercions are preserved, but the resulting
+string also has to be well-formed. Numeric parameter precision is a separate issue: this check does not
+make already-rounded JavaScript numbers exact; use strings for exact numeric
+values. Stored history is not rewritten and prior substitutions cannot be
+reconstructed.
