@@ -10,6 +10,7 @@ async function harness(t, entry, worker) {
   const root = await mkdtemp(path.join(tmpdir(), "sqlite-diagnostics-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const name of [
+    "sqlite-filename.mjs",
     "database-process.mjs",
     "sqlite-process-diagnostics.mjs",
     "database-read-cancellation.mjs",

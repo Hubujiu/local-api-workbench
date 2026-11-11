@@ -1,3 +1,4 @@
+import { validateSQLiteFilename } from "./sqlite-filename.mjs";
 import { explicitPostgresOptions } from "./postgres-client.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
@@ -89,8 +90,7 @@ export class DatabaseSessions {
           throw Error("连接字段无效: " + key);
         config[key] = input[key];
       }
-    if (type === "sqlite" && !config.filename?.trim())
-      throw Error("数据库路径为空");
+    if (type === "sqlite") validateSQLiteFilename(config.filename);
     if (input.port !== undefined && input.port !== 0) {
       if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535)
         throw Error("数据库端口无效");
