@@ -29,7 +29,10 @@ function commandArguments(input, stringsOnly = false) {
         !(stringsOnly ? ["string"] : ["string", "number"]).includes(
           typeof args[i],
         ) ||
-        (stringsOnly && !args[i].isWellFormed()) ||
+        (typeof args[i] === "string" && !args[i].isWellFormed()) ||
+        (typeof args[i] === "number" &&
+          (!Number.isFinite(args[i]) ||
+            (Number.isInteger(args[i]) && !Number.isSafeInteger(args[i])))) ||
         Buffer.byteLength(String(args[i])) > 4096,
     )
   )

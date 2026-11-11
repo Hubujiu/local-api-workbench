@@ -14,6 +14,19 @@ Choose Redis in the database page, enter host/port, optional username/password,
 numeric database index, TLS choice, and a JSON command array such as
 `["GET","key"]`. Credentials remain request-scoped and are not saved.
 
+Read command arguments reject unpaired Unicode surrogates, non-finite numbers,
+and unsafe integer numbers before any connection or native-task canonicalization.
+Use strings for exact large numeric keys, such as `["GET","9007199254740993"]`.
+Valid finite non-integer numbers retain their existing JavaScript string conversion;
+JSON/JavaScript decimal numbers can still round or underflow before this policy;
+use strings for exact decimal keys too. Numeric source-literal fidelity is not
+promised. Safe integers and well-formed Unicode strings remain accepted. Writes remain
+string-only. This command-argument policy does not change authentication field
+validation, response decoding, stored history, deadlines, or authorization.
+Existing exact string keys remain unchanged. Previously normalized strings cannot
+reveal whether an old numeric input was rounded; this fix cannot reconstruct such
+original keys and does not rewrite historical configurations.
+
 Supported reads: PING, GET, TYPE, TTL/PTTL, STRLEN, HLEN, LLEN, SCARD, ZCARD,
 HGET, HEXISTS, SISMEMBER, ZSCORE, MGET, EXISTS, HMGET, bounded LRANGE/ZRANGE/
 GETRANGE, and SCAN/HSCAN/SSCAN/ZSCAN with MATCH/COUNT. No SET, EVAL, CONFIG,
