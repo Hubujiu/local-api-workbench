@@ -40,8 +40,30 @@ normalization. Existing empty/omitted field behavior, parameter escaping, SQL
 subset, result limits and deadlines remain unchanged. This remains a read-only
 GET adapter, not a ClickHouse write implementation. Loopback tests inspect actual
 HTTP request bytes and simulated responses, not real ClickHouse authentication
-or query execution. Existing non-string database coercions are preserved, but the resulting
-string also has to be well-formed. Numeric parameter precision is a separate issue: this check does not
-make already-rounded JavaScript numbers exact; use strings for exact numeric
-values. Stored history is not rewritten and prior substitutions cannot be
-reconstructed.
+or query execution. Existing non-string database coercions are preserved, but the
+resulting string also has to be well-formed. Unicode checks do not make rounded
+JavaScript numbers exact; the integer policy below addresses their admission.
+Use strings for exact numeric values. Stored history is not rewritten and prior
+substitutions cannot be reconstructed.
+
+## Integer parameter fidelity
+
+ClickHouse parameter numbers must now be finite and must not be unsafe integers.
+The same rule applies to array and named parameters before HTTP/HTTPS construction
+in both direct and remote query paths. This aligns integer admission with the
+other database adapters: even an exactly representable integer outside the safe
+range rejects because the original JavaScript/JSON numeric intent is not known.
+Use an exact string with the appropriate ClickHouse typed placeholder for large
+integers, such as `{id:UInt64}` with `"18446744073709551615"`.
+
+Safe integers, finite fractional numbers, strings, booleans and intentional null
+retain their existing conversion and escaping. Finite fractions remain approximate
+JavaScript numbers: this is not preservation of decimal JSON spelling. A value
+may already have rounded or underflowed during JSON parsing; exact decimals should
+also be supplied as strings. No numeric wrapper format or rounding is introduced.
+
+This backend check cannot recover a client-side Infinity that JSON serialization
+already replaced with null, including the existing UI parse/serialize chain.
+Intentional null remains supported. Frontend pre-serialization validation is a
+separate task. Tests inspect actual loopback HTTP parameters, not real ClickHouse
+numeric conversion or query execution. Existing history is not reconstructed.

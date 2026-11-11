@@ -13,6 +13,12 @@ function escapedParameter(value) {
     (typeof value === "number" && !Number.isFinite(value))
   )
     throw Error("ClickHouse参数须为字符串、有限数字、布尔值或null");
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    !Number.isSafeInteger(value)
+  )
+    throw Error("ClickHouse大整数参数请使用精确字符串");
   return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/\0/g, "\\0")
