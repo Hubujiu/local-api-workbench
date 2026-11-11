@@ -1,4 +1,8 @@
 import {
+  isPostmanEnvironmentDocument,
+  importPostmanEnvironment,
+} from "./postman-environment-import.mjs";
+import {
   validateGraphQLVariableTemplate,
   rejectGraphQLVariableTemplate,
 } from "./graphql-variable-template.mjs";
@@ -3127,6 +3131,19 @@ export function importIntoProject(
     else {
       original = parseImportDocumentText(original);
     }
+  }
+  if (isPostmanEnvironmentDocument(original)) {
+    if (
+      sync ||
+      mode !== undefined ||
+      modelNameMode !== undefined ||
+      inheritanceMode !== undefined
+    )
+      throw Error("Postman独立环境不支持同步或其他导入模式选项");
+    const environment = importPostmanEnvironment(original, id);
+    if (!Array.isArray(project.environments)) throw Error("项目环境列表无效");
+    project.environments = [...project.environments, environment];
+    return [];
   }
   original = retainNullableSources(original);
   if (variableMode === "collection") {
