@@ -9,6 +9,7 @@ function escapedParameter(value) {
   if (value === null) return "\\N";
   if (
     !["string", "number", "boolean"].includes(typeof value) ||
+    (typeof value === "string" && !value.isWellFormed()) ||
     (typeof value === "number" && !Number.isFinite(value))
   )
     throw Error("ClickHouse参数须为字符串、有限数字、布尔值或null");
@@ -24,7 +25,12 @@ function escapedParameter(value) {
 export function clickhouseRequest(input) {
   const sql =
     typeof input.sql === "string" ? input.sql.trim().replace(/;\s*$/, "") : "";
-  if (!/^(SELECT|WITH)\b/i.test(sql) || sql.length > 50000 || sql.includes(";"))
+  if (
+    !sql.isWellFormed() ||
+    !/^(SELECT|WITH)\b/i.test(sql) ||
+    sql.length > 50000 ||
+    sql.includes(";")
+  )
     throw Error("ClickHouse仅支持单条SELECT/WITH；分号值请使用绑定参数");
   if (/\bSETTINGS\b/i.test(sql))
     throw Error("ClickHouse只读查询不支持自定义SETTINGS，相关文本值请绑定参数");
@@ -58,7 +64,12 @@ export function clickhouseRequest(input) {
     output_format_json_quote_decimals: 1,
   }))
     url.searchParams.set(key, String(value));
-  if (input.database) url.searchParams.set("database", String(input.database));
+  if (input.database) {
+    const database = String(input.database);
+    if (!database.isWellFormed())
+      throw Error("ClickHouse数据库名称Unicode无效");
+    url.searchParams.set("database", database);
+  }
   const parameters = input.parameters ?? [];
   if (!parameters || typeof parameters !== "object")
     throw Error("绑定参数须为数组或命名对象");
@@ -79,10 +90,13 @@ export function clickhouseRequest(input) {
   const user = input.user || "default";
   if (
     typeof user !== "string" ||
+    !user.isWellFormed() ||
     user.length > 1000 ||
     user.includes(":") ||
     (input.password !== undefined &&
-      (typeof input.password !== "string" || input.password.length > 65536))
+      (typeof input.password !== "string" ||
+        !input.password.isWellFormed() ||
+        input.password.length > 65536))
   )
     throw Error("ClickHouse用户名无效");
   return {
