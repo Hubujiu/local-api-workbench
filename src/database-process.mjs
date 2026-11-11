@@ -1,3 +1,4 @@
+import { validateSQLiteFilename } from "./sqlite-filename.mjs";
 import {
   checkDatabaseSignal,
   databaseCancelled,
@@ -17,6 +18,8 @@ export function runSQLiteProcess(input, { signal } = {}) {
   // Mutations retain their separate uncertain-outcome contract.
   if (input.mode !== "read") signal = undefined;
   checkDatabaseSignal(signal);
+  if (typeof input.filename === "string")
+    validateSQLiteFilename(input.filename);
   if (typeof input.sql === "string" && !input.sql.isWellFormed())
     throw Error("SQL Unicode无效");
   return new Promise((resolve, reject) => {

@@ -1,3 +1,4 @@
+import { validateSQLiteFilename } from "./sqlite-filename.mjs";
 import {
   databaseColumns,
   databaseParameters,
@@ -5,8 +6,7 @@ import {
 } from "./database-values.mjs";
 import { DatabaseSync } from "node:sqlite";
 export function querySQLite(filename, sql, parameters = []) {
-  if (typeof filename !== "string" || !filename.trim())
-    throw Error("数据库路径为空");
+  validateSQLiteFilename(filename);
   if (typeof sql !== "string" || !sql.isWellFormed() || sql.length > 50000)
     throw Error("SQL 无效");
   if (!/^\s*(SELECT\b|WITH\b|EXPLAIN\b)/i.test(sql))
@@ -61,6 +61,7 @@ export function mutateSQLite(filename, sql, parameters = [], onStage) {
     } catch {}
   };
   observe("validate");
+  validateSQLiteFilename(filename);
   if (
     typeof sql !== "string" ||
     !sql.isWellFormed() ||
@@ -126,8 +127,6 @@ export function mutateSQLite(filename, sql, parameters = [], onStage) {
   if (words.some((word, i) => word === "OR" && words[i + 1] === "REPLACE"))
     throw Error("REPLACE可能产生未计数删除，写入模式不支持");
   if (quote || comment === "block") throw Error("SQL字符串或注释未闭合");
-  if (typeof filename !== "string" || !filename.trim())
-    throw Error("数据库路径为空");
   // Do not create a new file merely because an opt-in operation fails.
   observe("probe-open");
   const probe = new DatabaseSync(filename, {

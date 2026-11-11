@@ -21,6 +21,7 @@ for (const boundary of ["before-commit", "after-commit", "after-result"]) {
       for (const name of [
         "database.mjs",
         "database-values.mjs",
+        "sqlite-filename.mjs",
         "database-process.mjs",
         "database-process-entry.mjs",
         "database-read-cancellation.mjs",
