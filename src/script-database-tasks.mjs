@@ -47,6 +47,7 @@ export function normalizeDatabaseOperations(value = []) {
           entry.resultShape !== "redis-value")) ||
       !name(entry.connectionId) ||
       typeof entry.query !== "string" ||
+      !entry.query.isWellFormed() ||
       !entry.query.trim() ||
       entry.query.length > 50000 ||
       /\{\{/.test(entry.query) ||

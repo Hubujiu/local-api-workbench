@@ -16,6 +16,7 @@ export function parseMySQLWrite(sql, database) {
     return Promise.reject(Error("MySQL数据库名称无效"));
   if (
     typeof sql !== "string" ||
+    !sql.isWellFormed() ||
     !sql.trim() ||
     sql.length > 50000 ||
     /[\0\\#]/.test(sql) ||
@@ -78,6 +79,8 @@ export async function mutateMySQL(input, dependencies = {}) {
     throw Error("MySQL端口无效");
   if (input.ssl !== undefined && typeof input.ssl !== "boolean")
     throw Error("MySQL TLS标识无效");
+  if (typeof input.sql === "string" && !input.sql.isWellFormed())
+    throw Error("MySQL SQL Unicode无效");
   const parameters = databaseParameters(
     input.parameters === undefined ? [] : input.parameters,
     "mysql",

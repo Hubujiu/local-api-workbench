@@ -31,3 +31,22 @@ The operation list exposes database editing/rebinding, enable/disable, movement 
 The browser acceptance adds invalid-edit/cancel/reopen, parameter binding edit, reordering, toggling, canceled/accepted removal, revoke→failed execution→new connection→explicit rebind→successful HTTP. The prior generic JSON editor remains available for non-database operations and complete configuration.
 
 The first editor-browser run (496568b / Actions39638980888) read the old hidden dialog field immediately after reopening asynchronously and observed the rejected draft `{}` instead of the saved `[]`. The preserved trace shows inputValue occurring before the new dialog rendered; the failure screenshot already shows the restored `[]`. The fixed test waits for actual hidden→visible dialog transitions before asserting, including the expired-connection path. It retains the exact cancellation/value assertions and original timeout; no production rollback rule or data assertion is relaxed.
+
+## SQL text Unicode fidelity
+
+PostgreSQL, MySQL and SQLite SQL source text must be well-formed Unicode.
+Unpaired surrogate code units reject before remote transport, SQLite process
+creation or MySQL write-slot admission. Direct synchronous SQLite and exported
+write validators retain the same guard. Declarative native database tasks and
+plan binding validation also reject malformed literal query text before execution.
+No replacement or normalization is performed; valid Chinese, surrogate pairs and
+literal U+FFFD retain their existing meaning. Errors do not echo SQL text.
+
+This prevents drivers from silently replacing a literal or identifier with
+U+FFFD before execution. Loopback PG/MySQL protocol fixtures verify wire intent
+and acknowledgements, not database-engine commit durability. A separate temporary
+SQLite file verifies actual stored values. Existing SQL subsets, parameter rules,
+limits, budgets, write approval and unknown-outcome/no-replay behavior are unchanged.
+There is no stored-format change, migration or reconstruction of previously
+replaced characters. This slice does not cover ClickHouse's independent query
+path or expand PostgreSQL/MySQL connection-parameter validation.

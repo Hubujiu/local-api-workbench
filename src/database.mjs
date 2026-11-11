@@ -7,7 +7,8 @@ import { DatabaseSync } from "node:sqlite";
 export function querySQLite(filename, sql, parameters = []) {
   if (typeof filename !== "string" || !filename.trim())
     throw Error("数据库路径为空");
-  if (typeof sql !== "string" || sql.length > 50000) throw Error("SQL 无效");
+  if (typeof sql !== "string" || !sql.isWellFormed() || sql.length > 50000)
+    throw Error("SQL 无效");
   if (!/^\s*(SELECT\b|WITH\b|EXPLAIN\b)/i.test(sql))
     throw Error("仅支持只读 SELECT / WITH / EXPLAIN 查询");
   parameters = databaseParameters(parameters, "sqlite");
@@ -62,6 +63,7 @@ export function mutateSQLite(filename, sql, parameters = [], onStage) {
   observe("validate");
   if (
     typeof sql !== "string" ||
+    !sql.isWellFormed() ||
     sql.length > 50000 ||
     !/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)
   )

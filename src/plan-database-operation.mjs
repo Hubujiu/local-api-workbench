@@ -26,6 +26,7 @@ export function validateDatabaseOperationBinding(operation) {
   if (
     typeof operation.connectionId !== "string" ||
     typeof operation.sql !== "string" ||
+    !operation.sql.isWellFormed() ||
     operation.sql.length > 50000 ||
     !Array.isArray(operation.parameters ?? [])
   )
