@@ -64,6 +64,8 @@ HTTP MCP 另提供已保存 gRPC 双向流的交互工具，需初始化及项�
 
 同一 stdio 启动授权也可交互调用已保存的 gRPC bidi 定义，有限 gRPC 调用与交互流共用每实例五槽。保留定义的 50–30000ms 总期限，不提供续租，不扩大为其他流式形态。退出等待原保存尝试而不重试网络或存储；授权快照、信号/崩溃及跨进程限制见 [stdio gRPC bidi 边界](docs/ADR-MCP-STDIO-GRPC-BIDI-SESSIONS.md)。
 
+HTTP/stdio MCP 也提供已保存 TCP 的有界持久交互：与各自现有 WS 共用连接池和操作账本，严格隔离协议类型，不自动发送默认消息或重连。仅显式文本发送，接收可按保存定义选择 UTF-8/hex/base64；TCP chunk 不保证业务消息边界，written 不等于远端确认。未证明的完成规则、临时端点、TLS与脚本字段拒绝。详见 [TCP MCP 边界](docs/ADR-MCP-TCP-SESSIONS.md)。
+
 授权项目可用 `localapi_export_project` 导出、以 `--write` 使用 `localapi_import_project` 合并导入；显式格式仅 `apipost` / `apipost-directory`，内联 JSON 最多 4 MiB，不读文件、不抓取 URL、不清空或新建项目、不执行请求。导出可能包含已保存的凭据，分享前须检查。详见 [MCP 项目定义往返边界](docs/ADR-MCP-PROJECT-INTERCHANGE.md)。
 
 后端还提供显式选择导出：owner `POST /api/projects/:id/export-preview` / `export-selection`，或只读 MCP `localapi_preview_project_export` / `localapi_export_project_selection`。先预览非空资源选择及必需依赖，再使用返回的配置版本、内容摘要和全部依赖身份导出。只支持上述两种原生格式，目录选择包含完整子树；空选择不退回整项目。原有完整导出保持不变，定义历史、执行记录、计划和回收站不属于该选择范围。选择图成立不代表所有资源可表达，未证明可保真的原生语义仍拒绝。详见 [选择定义导出合同](docs/ADR-SCOPED-DEFINITION-EXPORT.md)。

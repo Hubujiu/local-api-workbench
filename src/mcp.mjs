@@ -237,6 +237,7 @@ export function createMCP({
   databaseExecutor,
   databasePreflight,
   websocketSessions,
+  tcpSessions,
   grpcSessions,
 }) {
   const allowed = new Set([...projects, ...sessionProjects]);
@@ -906,6 +907,47 @@ export function createMCP({
       );
     }
   }
+  const tcpActions = new Map([
+    ["localapi_start_tcp_session", "start"],
+    ["localapi_get_tcp_session", "get"],
+    ["localapi_send_tcp_session", "send"],
+    ["localapi_stop_tcp_session", "stop"],
+    ["localapi_renew_tcp_session", "renew"],
+    ["localapi_get_tcp_operation", "operation"],
+  ]);
+  if (tcpSessions && write && execute) {
+    const descriptions = {
+      start:
+        "有状态 MCP：打开已保存 TCP 定义，不接受临时目标或覆写；operationId 仅进程内去重，响应丢失先查询，不能保证跨崩溃 exactly-once",
+      get: "读取所属 TCP 的有界字节流片段页，不保证消息边界；afterEvent 为全局事件序号，读取不会续租；内容可能含敏感数据",
+      send: "向所属 TCP 发送消息；operationId 同内容去重，并发发送拒绝；本地 written 不表示远端确认，未知结果不得自动重发",
+      stop: "关闭所属 TCP 并等待已启动的记录保存；存储未知不等于网络未执行",
+      renew:
+        "显式续租所属 TCP 最多 60 秒，不延长 15 分钟绝对上限；读取不会续租",
+      operation:
+        "查询当前实例逻辑会话内操作状态，不会重发；不提供跨崩溃恢复保证",
+    };
+    for (const [name, action] of tcpActions) {
+      const properties = { projectId: str };
+      if (action === "start") properties.definitionId = str;
+      if (["start", "send", "operation"].includes(action))
+        properties.operationId = str;
+      if (["get", "send", "stop", "renew"].includes(action))
+        properties.sessionId = str;
+      if (action === "send") properties.message = str;
+      const required = Object.keys(properties);
+      if (action === "get") {
+        properties.afterEvent = { type: "integer", minimum: 0 };
+        properties.limit = { type: "integer", minimum: 1, maximum: 20 };
+      }
+      addTool(
+        name.slice("localapi_".length),
+        descriptions[action],
+        properties,
+        required,
+      );
+    }
+  }
   const grpcActions = new Map([
     ["localapi_start_grpc_session", "start"],
     ["localapi_get_grpc_session", "get"],
@@ -1143,6 +1185,34 @@ export function createMCP({
         );
         return result({
           ...(["start", "send"].includes(websocketAction) &&
+          ["failed-before-submit", "unknown"].includes(receipt.state)
+            ? { isError: true }
+            : {}),
+          content: [{ type: "text", text: JSON.stringify(receipt) }],
+        });
+      }
+      const tcpAction = tcpActions.get(params.name);
+      if (tcpAction) {
+        if (!tcpSessions || !write || !execute)
+          throw Error("TCP 交互执行未授权或当前传输不支持");
+        if (!allowed.has(args.projectId)) throw Error("项目未授权");
+        if (!websocketOwner || typeof websocketOwner !== "object")
+          throw Error("TCP 交互需要已初始化的 MCP 逻辑会话；不支持无状态请求");
+        if (
+          args.afterEvent !== undefined &&
+          (!Number.isSafeInteger(args.afterEvent) || args.afterEvent < 0)
+        )
+          throw Error("afterEvent 必须为非负安全整数");
+        if (
+          args.limit !== undefined &&
+          (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 20)
+        )
+          throw Error("limit 必须为 1 至 20 的整数");
+        // The service reserves operation IDs before its first asynchronous read,
+        // then verifies project existence/archive state and the live owner epoch.
+        const receipt = await tcpSessions.call(tcpAction, websocketOwner, args);
+        return result({
+          ...(["start", "send"].includes(tcpAction) &&
           ["failed-before-submit", "unknown"].includes(receipt.state)
             ? { isError: true }
             : {}),
@@ -1974,6 +2044,7 @@ if (isStdioEntrypoint()) {
       write,
       execute,
       websocketSessions: context.websocketSessions,
+      tcpSessions: context.tcpSessions,
       grpcSessions: context.grpcSessions,
       grpcExecutor: context.grpcExecutor,
       databaseExecutor: context.databaseExecutor,

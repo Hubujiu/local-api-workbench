@@ -3,7 +3,7 @@ import { MCPWebSocketSessions } from "./mcp-websocket-sessions.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { createWireSessionRecorder } from "./wire-session-recorder.mjs";
 
-// One isolated stdio launch, not the owner's HTTP server. Neither live HTTP
+// One isolated WS/TCP stdio pool, not the owner's HTTP server. Neither live HTTP
 // config nor a client-supplied session/epoch can grant or revoke this identity.
 export function createMCPStdioWebSocketSessions({ store, projects }) {
   const allowed = new Set(projects);
@@ -29,6 +29,13 @@ export function createMCPStdioWebSocketSessions({ store, projects }) {
         if (!allowed.has(args?.projectId))
           throw Error("WebSocket project was not authorized at stdio startup");
         return service.call(action, owner, args);
+      },
+    },
+    tcpService: {
+      call(action, owner, args) {
+        if (!allowed.has(args?.projectId))
+          throw Error("TCP project was not authorized at stdio startup");
+        return service.call(action, owner, args, "tcp");
       },
     },
     close() {

@@ -59,6 +59,7 @@ export async function createMCPStdioContext(argv, root) {
   return {
     store,
     websocketSessions: sessions?.websocketSessions,
+    tcpSessions: sessions?.tcpSessions,
     websocketRegistry: sessions?.registry,
     grpcSessions: sessions?.grpcSessions,
     grpcExecutor: sessions?.grpcExecutor,

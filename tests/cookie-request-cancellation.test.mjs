@@ -130,14 +130,33 @@ for (const mode of ["abort", "deadline"]) {
       const f = await fixture(t),
         entered = deferred();
       let release;
+      const lifecycle = {
+        httpEntered: false,
+        lockHeld: false,
+        captureEntered: false,
+        runSettled: false,
+      };
+      let verified = false,
+        reported = false;
+      const diagnose = () => {
+        if (!verified && !reported) {
+          reported = true;
+          t.diagnostic(`COOKIE_CAPTURE_LIFECYCLE ${JSON.stringify(lifecycle)}`);
+        }
+      };
+      t.signal.addEventListener("abort", diagnose, { once: true });
+      t.after(diagnose);
       const capture = f.jar.capture;
       f.jar.capture = function (...args) {
         const pending = Reflect.apply(capture, this, args);
+        lifecycle.captureEntered = true;
         entered.resolve();
         return pending;
       };
       f.setHandler(async (_req, res) => {
+        lifecycle.httpEntered = true;
         release = await f.hold();
+        lifecycle.lockHeld = true;
         res.setHeader("Set-Cookie", "late=must-not-persist; Path=/");
         res.setHeader("X-Real-Evidence", "completed");
         res.setHeader("Content-Type", "application/json");
@@ -170,6 +189,15 @@ for (const mode of ["abort", "deadline"]) {
         signal: controller.signal,
         cookieSession: f.jar,
       });
+      // Observe settlement without changing ordering, budgets or retry semantics.
+      running.then(
+        () => {
+          lifecycle.runSettled = true;
+        },
+        () => {
+          lifecycle.runSettled = true;
+        },
+      );
       await entered.promise;
       if (mode === "abort") controller.abort();
       const run = await running;
@@ -196,6 +224,7 @@ for (const mode of ["abort", "deadline"]) {
       assert.deepEqual(await readFile(f.jar.file), f.before);
       await release();
       await f.healthy();
+      verified = true;
     },
   );
 }
