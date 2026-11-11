@@ -1,5 +1,21 @@
+import { isDeepStrictEqual } from "node:util";
+import { schemaSourceKey, openAPIDialect } from "./openapi-schema-source.mjs";
 // Normalize Schema positions only. Payload examples and extension values are opaque.
-export function normalizeOpenAPI30Schemas(document) {
+export function normalizeOpenAPI30Schemas(
+  document,
+  { sourceDialect = openAPIDialect(document.openapi) } = {},
+) {
+  // These source locations have no equivalent location in the emitted 3.0
+  // document. Never spread them through with unconverted Schema children.
+  for (const key of ["webhooks", "definitions", "parameters", "responses"])
+    if (Object.hasOwn(document, key))
+      throw Error(
+        "OpenAPI 3.0 导出暂不支持顶层 " + key + "；请使用原始项目导出",
+      );
+  if (document.components && Object.hasOwn(document.components, "pathItems"))
+    throw Error(
+      "OpenAPI 3.0 导出暂不支持 components.pathItems；请使用原始项目导出",
+    );
   let nodes = 0;
   const enter = (depth) => {
     if (++nodes > 50000 || depth > 60)
@@ -117,6 +133,34 @@ export function normalizeOpenAPI30Schemas(document) {
     )
       throw Error("OpenAPI 3.0 不支持该 Schema type；请使用原始项目导出");
     const result = { ...value };
+    let dialect = sourceDialect;
+    if (own(value, schemaSourceKey)) {
+      if (sourceDialect)
+        throw Error(
+          "OpenAPI Schema 扩展名称与内部来源记录冲突: " + schemaSourceKey,
+        );
+      const source = value[schemaSourceKey];
+      if (
+        !object(source) ||
+        source.version !== 1 ||
+        !["3.0", "3.1"].includes(source.dialect) ||
+        Object.keys(source).sort().join(",") !== "dialect,nullable,version" ||
+        !own(value, "nullable") ||
+        !isDeepStrictEqual(source.nullable, value.nullable)
+      )
+        throw Error(
+          "OpenAPI nullable 来源记录无效或已过期；请重新导入原始定义",
+        );
+      dialect = source.dialect;
+      delete result[schemaSourceKey];
+    }
+    if (own(value, "nullable")) {
+      if (dialect === "3.1") delete result.nullable;
+      else if (dialect !== "3.0")
+        throw Error("OpenAPI nullable 来源版本不明；请重新导入原始定义");
+      else if (typeof value.nullable !== "boolean")
+        throw Error("OpenAPI 3.0 nullable 必须为布尔值");
+    }
     for (const [key, bound] of [
       ["exclusiveMinimum", "minimum"],
       ["exclusiveMaximum", "maximum"],

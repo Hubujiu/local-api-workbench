@@ -212,6 +212,10 @@ import {
   referenceChildMode,
   referenceModeIsAllowed,
 } from "./openapi-reference-context.mjs";
+import {
+  retainNullableSources,
+  assertCompatibleNullableSources,
+} from "./openapi-schema-source.mjs";
 import { normalizeOpenAPI30Schemas } from "./openapi-schema-export.mjs";
 import { supportedOpenAPIPathItems } from "./openapi-operation-admission.mjs";
 import { schemaReferenceWithSiblings } from "./openapi-schema-reference.mjs";
@@ -1883,7 +1887,7 @@ export function importDocument(doc) {
   if (isApipostDirectoryDocument(doc))
     throw Error("原版目录须使用完整项目导入以保留环境及资源");
   if (doc.openapi || doc.swagger) {
-    doc = resolveLocalReferences(doc);
+    doc = resolveLocalReferences(retainNullableSources(doc));
     swagger2SecurityDefinitions(doc);
     const base = doc.host
       ? `${doc.schemes?.[0] || "https"}://${doc.host}${doc.basePath || ""}`
@@ -2625,12 +2629,15 @@ export function exportOpenAPI(project) {
       ...(requestBody ? { requestBody } : {}),
     };
   }
-  return normalizeOpenAPI30Schemas({
-    openapi: "3.0.3",
-    info: { title: project.name, version: "1.0.0" },
-    paths,
-    ...(Object.keys(components).length ? { components } : {}),
-  });
+  return normalizeOpenAPI30Schemas(
+    {
+      openapi: "3.0.3",
+      info: { title: project.name, version: "1.0.0" },
+      paths,
+      ...(Object.keys(components).length ? { components } : {}),
+    },
+    { sourceDialect: null },
+  );
 }
 export function prepareLiteralHTTPExport(
   input,
@@ -3075,6 +3082,7 @@ export function importIntoProject(
       original = parseImportDocumentText(original);
     }
   }
+  original = retainNullableSources(original);
   if (variableMode === "collection") {
     if (sync)
       throw Error("collection 模式不支持隐式同步，请作为独立collection导入");
@@ -3207,6 +3215,11 @@ export function importIntoProject(
         if (["__proto__", "prototype", "constructor"].includes(name))
           throw Error("不安全的组件名称");
         const old = mergedComponents[category][name];
+        assertCompatibleNullableSources(
+          old,
+          value,
+          referenceChildMode("components", category, items).replace("map:", ""),
+        );
         if (
           !sync &&
           old !== undefined &&
