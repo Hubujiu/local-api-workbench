@@ -11,7 +11,7 @@ const fields = {
   renew: ["projectId", "sessionId"],
   operation: ["projectId", "operationId"],
 };
-// One host service with its host-local ProtocolSessions pool. Owner objects
+// Shared WS/TCP service (legacy class name) with its host-local ProtocolSessions pool. Owner objects
 // come exclusively from the host registry, never from JSON or bearer claims.
 export class MCPWebSocketSessions {
   constructor({
@@ -30,10 +30,20 @@ export class MCPWebSocketSessions {
     this.maxOperations = Math.min(200, maxOperations);
     this.owners = new Map();
   }
-  state(owner) {
+  // Thin typed views share this exact owner ledger and transport pool.
+  forProtocol(protocolType) {
+    if (!["websocket", "tcp"].includes(protocolType))
+      throw Error("Unsupported MCP interactive protocol");
+    return {
+      call: (action, owner, args) =>
+        this.call(action, owner, args, protocolType),
+    };
+  }
+  state(owner, protocolType = "websocket") {
+    const label = protocolType === "tcp" ? "TCP" : "WebSocket";
     if (!owner || !this.owns(owner))
       throw Error(
-        "WebSocket requires a live initialized HTTP or stdio MCP session",
+        `${label} requires a live initialized HTTP or stdio MCP session`,
       );
     let state = this.owners.get(owner);
     if (!state) {
@@ -46,12 +56,13 @@ export class MCPWebSocketSessions {
       };
       this.owners.set(owner, state);
     }
-    if (state.closed) throw Error("WebSocket ownership was revoked");
+    if (state.closed) throw Error(`${label} ownership was revoked`);
     return state;
   }
-  assertLive(owner, state) {
+  assertLive(owner, state, protocolType = "websocket") {
+    const label = protocolType === "tcp" ? "TCP" : "WebSocket";
     if (state.closed || !this.owns(owner))
-      throw Error("WebSocket ownership was revoked");
+      throw Error(`${label} ownership was revoked`);
   }
   async dispose(owner, reason = "ownership-ended") {
     const state = this.owners.get(owner);
@@ -102,11 +113,16 @@ export class MCPWebSocketSessions {
     );
     connection.timer.unref?.();
   }
-  connection(state, args, active = false) {
+  connection(state, args, active = false, protocolType = "websocket") {
+    const label = protocolType === "tcp" ? "TCP" : "WebSocket";
     const connection = state.connections.get(args.sessionId);
-    if (!connection || connection.projectId !== args.projectId)
+    if (
+      !connection ||
+      connection.projectId !== args.projectId ||
+      connection.protocolType !== protocolType
+    )
       throw Error(
-        "WebSocket session does not belong to this MCP owner and project",
+        `${label} session does not belong to this MCP owner and project`,
       );
     if (!connection.ended && this.now() >= connection.leaseUntil)
       this.end(connection, "mcp-lease-expired");
@@ -116,7 +132,7 @@ export class MCPWebSocketSessions {
       (connection.ended || !["connecting", "open"].includes(session.state))
     )
       throw Error(
-        "WebSocket session has ended; it cannot be renewed or sent to",
+        `${label} session has ended; it cannot be renewed or sent to`,
       );
     return connection;
   }
@@ -154,7 +170,10 @@ export class MCPWebSocketSessions {
       retrySafe: false,
     });
   }
-  call(action, owner, args) {
+  call(action, owner, args, protocolType = "websocket") {
+    const label = protocolType === "tcp" ? "TCP" : "WebSocket";
+    if (!["websocket", "tcp"].includes(protocolType))
+      throw Error("Unsupported MCP interactive protocol");
     if (
       !fields[action] ||
       !args ||
@@ -162,11 +181,11 @@ export class MCPWebSocketSessions {
       Array.isArray(args) ||
       Object.keys(args).some((key) => !fields[action].includes(key))
     )
-      throw Error("Unsupported WebSocket tool arguments");
+      throw Error(`Unsupported ${label} tool arguments`);
     for (const key of fields[action].filter(
       (key) => !["message", "afterEvent", "limit"].includes(key),
     )) {
-      if (!identifier(args[key])) throw Error("Invalid WebSocket " + key);
+      if (!identifier(args[key])) throw Error(`Invalid ${label} ` + key);
     }
     if (
       action === "send" &&
@@ -174,9 +193,7 @@ export class MCPWebSocketSessions {
         !args.message.isWellFormed() ||
         Buffer.byteLength(args.message) > 1048576)
     )
-      throw Error(
-        "WebSocket message must be a bounded well-formed text string",
-      );
+      throw Error(`${label} message must be a bounded well-formed text string`);
     if (
       action === "get" &&
       ((args.afterEvent !== undefined &&
@@ -184,50 +201,58 @@ export class MCPWebSocketSessions {
         (args.limit !== undefined &&
           (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 20)))
     )
-      throw Error("Invalid bounded WebSocket event page");
-    const state = this.state(owner);
+      throw Error(`Invalid bounded ${label} event page`);
+    const state = this.state(owner, protocolType);
     if (state.blockedProjects.has(args.projectId))
-      throw Error("WebSocket project grant has been revoked");
+      throw Error(`${label} project grant has been revoked`);
     if (action === "operation") {
       const op = state.operations.get(args.operationId);
-      if (!op || op.projectId !== args.projectId)
+      if (
+        !op ||
+        op.projectId !== args.projectId ||
+        op.protocolType !== protocolType
+      )
         throw Error(
-          "WebSocket operation does not belong to this owner and project",
+          `${label} operation does not belong to this owner and project`,
         );
       return this.operationReceipt(op);
     }
     if (action === "start" || action === "send") {
       const fingerprint = createHash("sha256")
         .update(
-          JSON.stringify([action, ...fields[action].map((key) => args[key])]),
+          JSON.stringify([
+            protocolType,
+            action,
+            ...fields[action].map((key) => args[key]),
+          ]),
         )
         .digest("hex");
       const existing = state.operations.get(args.operationId);
       if (existing) {
         if (existing.fingerprint !== fingerprint)
           throw Error(
-            "WebSocket operation ID was already used with different content",
+            `${label} operation ID was already used with different content`,
           );
         return this.operationReceipt(existing);
       }
       if (state.operations.size >= this.maxOperations)
         throw Error(
-          "WebSocket operation ledger is full; read or stop existing sessions, then initialize a new MCP session",
+          `${label} operation ledger is full; read or stop existing sessions, then initialize a new MCP session`,
         );
       // Reserve before the first asynchronous project read or network action.
       const op = {
         id: args.operationId,
         projectId: args.projectId,
         action,
+        protocolType,
         fingerprint,
         state: "pending",
       };
       state.operations.set(op.id, op);
-      const pending = this.perform(action, owner, state, args, op)
+      const pending = this.perform(action, owner, state, args, op, protocolType)
         .catch((error) => {
           if (op.state === "pending") op.state = "failed-before-submit";
-          op.error =
-            "WebSocket operation failed; inspect its state and stored evidence. No automatic network retry.";
+          op.error = `${label} operation failed; inspect its state and stored evidence. No automatic network retry.`;
         })
         .then(() => this.operationReceipt(op));
       op.task = pending;
@@ -238,7 +263,12 @@ export class MCPWebSocketSessions {
       });
       return pending;
     }
-    const connection = this.connection(state, args, action === "renew");
+    const connection = this.connection(
+      state,
+      args,
+      action === "renew",
+      protocolType,
+    );
     if (action === "renew") this.arm(connection);
     if (action === "stop") {
       this.end(connection, "mcp-stop");
@@ -272,42 +302,66 @@ export class MCPWebSocketSessions {
       hasMore: (events.at(-1)?.sequence ?? after) < session.totalEvents,
     };
   }
-  async perform(action, owner, state, args, op) {
+  async perform(action, owner, state, args, op, protocolType) {
+    const label = protocolType === "tcp" ? "TCP" : "WebSocket";
     if (action === "start") {
       const project = await this.store.get(args.projectId);
-      this.assertLive(owner, state);
+      this.assertLive(owner, state, protocolType);
       if (state.blockedProjects.has(args.projectId))
-        throw Error("WebSocket project grant has been revoked");
+        throw Error(`${label} project grant has been revoked`);
       if (!project || project.archived)
-        throw Error("WebSocket project unavailable");
+        throw Error(`${label} project unavailable`);
       const definition = project.protocols?.find(
         (item) => item.id === args.definitionId,
       );
-      if (!definition || definition.type !== "websocket")
+      if (!definition || definition.type !== protocolType)
         throw Error(
-          "Only a saved WebSocket definition is supported; no stdio, gRPC or temporary targets",
+          protocolType === "tcp"
+            ? "Only a saved TCP definition is supported; no temporary targets"
+            : `Only a saved ${label} definition is supported; no stdio, gRPC or temporary targets`,
         );
-      const allowed = [
-        "id",
-        "name",
-        "folder",
-        "type",
-        "url",
-        "port",
-        "message",
-        "handshake",
-        "templateMode",
-        "protocols",
-        "duration",
-      ];
+      const allowed =
+        protocolType === "tcp"
+          ? [
+              "id",
+              "name",
+              "folder",
+              "type",
+              "url",
+              "port",
+              "message",
+              "templateMode",
+              "receiveEncoding",
+            ]
+          : [
+              "id",
+              "name",
+              "folder",
+              "type",
+              "url",
+              "port",
+              "message",
+              "handshake",
+              "templateMode",
+              "protocols",
+              "duration",
+            ];
       if (Object.keys(definition).some((key) => !allowed.includes(key)))
-        throw Error("Unsupported saved WebSocket definition behavior");
+        throw Error(`Unsupported saved ${label} definition behavior`);
+      if (
+        protocolType === "tcp" &&
+        definition.message !== undefined &&
+        (typeof definition.message !== "string" ||
+          !definition.message.isWellFormed() ||
+          Buffer.byteLength(definition.message) > 1048576)
+      )
+        throw Error("TCP first slice only supports bounded text definitions");
       const prepared = prepareWireExecution(project, {
         definitionId: args.definitionId,
       });
-      this.assertLive(owner, state);
+      this.assertLive(owner, state, protocolType);
       if (state.blockedProjects.has(args.projectId))
-        throw Error("WebSocket project grant has been revoked");
+        throw Error(`${label} project grant has been revoked`);
       // start may attempt a handshake before returning. Never retry an ambiguous
       // exception or represent it as a definitely-unsent operation.
       op.state = "unknown";
@@ -319,6 +373,7 @@ export class MCPWebSocketSessions {
       const connection = {
         id: result.id,
         projectId: project.id,
+        protocolType,
         absoluteUntil: this.now() + 900000,
         ended: false,
         pendingSend: false,
@@ -328,23 +383,23 @@ export class MCPWebSocketSessions {
       op.state = "started";
       return;
     }
-    const connection = this.connection(state, args, true);
+    const connection = this.connection(state, args, true, protocolType);
     if (connection.pendingSend)
       throw Error(
-        "A WebSocket send is already unconfirmed; no concurrent send or automatic replay",
+        `A ${label} send is already unconfirmed; no concurrent send or automatic replay`,
       );
-    this.assertLive(owner, state);
+    this.assertLive(owner, state, protocolType);
     if (state.blockedProjects.has(args.projectId))
-      throw Error("WebSocket project grant has been revoked");
+      throw Error(`${label} project grant has been revoked`);
     connection.pendingSend = true;
     try {
       const project = await this.store.get(args.projectId);
-      this.assertLive(owner, state);
+      this.assertLive(owner, state, protocolType);
       if (state.blockedProjects.has(args.projectId))
-        throw Error("WebSocket project grant has been revoked");
+        throw Error(`${label} project grant has been revoked`);
       if (!project || project.archived)
-        throw Error("WebSocket project unavailable");
-      this.connection(state, args, true);
+        throw Error(`${label} project unavailable`);
+      this.connection(state, args, true, protocolType);
       this.sessions.send(connection.id, args.message, {
         onSubmitted: () => {
           op.sessionId = connection.id;

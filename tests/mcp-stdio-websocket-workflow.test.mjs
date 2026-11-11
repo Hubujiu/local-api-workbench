@@ -182,11 +182,11 @@ test(
     const authorized = await f.connect();
     const tools = (await authorized.listTools()).tools;
     const names = new Set(tools.map((tool) => tool.name));
-    assert.equal(tools.length, 99);
-    assert.equal(names.size, 99);
+    assert.equal(tools.length, 105);
+    assert.equal(names.size, 105);
     assert.equal(
       tools.filter((tool) => tool.name.startsWith("localapi_")).length,
-      69,
+      75,
     );
     assert.equal(
       tools.filter((tool) => tool.name.startsWith("apipost_")).length,

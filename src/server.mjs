@@ -622,6 +622,7 @@ export async function createApp({
             grpcExecutor: executePlanGrpc,
             protocolExecutor: executePlanWire,
             websocketSessions: mcpWebSocketSessions,
+            tcpSessions: mcpWebSocketSessions.forProtocol("tcp"),
             grpcSessions: mcpGrpcSessions,
             socketioExecutor: (projectId, input, signal) =>
               executeSocketIOFlow(input, signal, {

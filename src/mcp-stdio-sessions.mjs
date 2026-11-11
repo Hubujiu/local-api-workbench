@@ -4,7 +4,7 @@ import { GrpcSessions } from "./grpc-sessions.mjs";
 import { GrpcSlots } from "./grpc-slots.mjs";
 import { executeGrpc } from "./grpc.mjs";
 
-// One stdio launch owns both interactive protocols and a single shared pool for
+// One stdio launch owns the interactive protocols and a single shared pool for
 // all its finite and interactive gRPC calls. This is not a cross-process grant.
 export function createMCPStdioSessions({ store, projects }) {
   const websocket = createMCPStdioWebSocketSessions({ store, projects });
@@ -39,6 +39,7 @@ export function createMCPStdioSessions({ store, projects }) {
   return {
     registry,
     websocketSessions: websocket.service,
+    tcpSessions: websocket.tcpService,
     grpcManager,
     grpcSessions: {
       call(action, owner, args) {
