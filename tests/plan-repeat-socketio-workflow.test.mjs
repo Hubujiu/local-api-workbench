@@ -16,6 +16,7 @@ import { Store, executeRequest } from "../src/runtime.mjs";
 import { runPlan } from "../src/core.mjs";
 import { executeSocketIOFlow } from "../src/socketio-plan.mjs";
 import { SocketIOSessions } from "../src/socketio.mjs";
+import { socketIOFixtureDiagnostics } from "./helpers/socketio-fixture-diagnostics.mjs";
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cert = await readFile(
   new URL("./fixtures/localhost.crt", import.meta.url),
@@ -612,59 +613,84 @@ test(
     for (const mode of ["owner-cancel", "deadline"])
       await t.test(mode, async (t) => {
         const f = await fixture(t);
-        f.stall();
-        const made = await f.post(
-          `projects/${f.project.id}/plans`,
-          f.definition(),
-        );
-        assert.equal(made.status, 200);
-        const controller = new AbortController();
-        const executing =
-          mode === "owner-cancel"
-            ? f.post(`projects/${f.project.id}/run`, {
-                planId: made.value.id,
-                runId: "socketio-repeat-cancel",
-                socketioCredentials: f.credentials(),
-              })
-            : runPlan(made.value, { token: "initial" }, executeRequest, {
-                executeSocketIO: executeSocketIOFlow,
-                socketioCredentials: f.credentials(),
-                signal: controller.signal,
-              });
-        await until(
-          () => f.received.length === 2 && f.received[1].inputs.length === 1,
-        );
-        if (mode === "owner-cancel")
-          assert.equal(
-            (await f.post("cancel", { id: "socketio-repeat-cancel" })).status,
-            200,
+        const diagnostic = socketIOFixtureDiagnostics(t, f);
+        try {
+          f.stall();
+          const made = await f.post(
+            `projects/${f.project.id}/plans`,
+            f.definition(),
           );
-        else {
-          const deadline = AbortSignal.timeout(100);
-          deadline.addEventListener(
-            "abort",
-            () => controller.abort(deadline.reason),
-            { once: true },
+          assert.equal(made.status, 200);
+          const controller = new AbortController();
+          diagnostic.state.runInvoked = true;
+          const executing =
+            mode === "owner-cancel"
+              ? f.post(`projects/${f.project.id}/run`, {
+                  planId: made.value.id,
+                  runId: "socketio-repeat-cancel",
+                  socketioCredentials: f.credentials(),
+                })
+              : runPlan(made.value, { token: "initial" }, executeRequest, {
+                  executeSocketIO: executeSocketIOFlow,
+                  socketioCredentials: f.credentials(),
+                  signal: controller.signal,
+                });
+          // Observe settlement only; preserve the original promise and await order.
+          executing.then(
+            () => {
+              diagnostic.state.runSettled = true;
+            },
+            () => {
+              diagnostic.state.runSettled = true;
+              diagnostic.state.runRejected = true;
+            },
           );
+          await until(
+            () => f.received.length === 2 && f.received[1].inputs.length === 1,
+          );
+          diagnostic.state.secondInputObserved = true;
+          if (mode === "owner-cancel") {
+            diagnostic.state.cancelRequested = true;
+            assert.equal(
+              (await f.post("cancel", { id: "socketio-repeat-cancel" })).status,
+              200,
+            );
+            diagnostic.state.cancelAccepted = true;
+          } else {
+            const deadline = AbortSignal.timeout(100);
+            deadline.addEventListener(
+              "abort",
+              () => controller.abort(deadline.reason),
+              { once: true },
+            );
+          }
+          const response = await executing,
+            run = mode === "owner-cancel" ? response.value : response;
+          diagnostic.state.runAwaited = true;
+          assert.equal(run.status, "cancelled");
+          assert.equal(run.results.length, 3);
+          assert.equal(f.received.length, 2);
+          assert.equal(f.consumed.length, 1);
+          assert.equal(run.variables.token, f.received[0].token);
+          assert.equal(run.results[2].socketioResult.status, "cancelled");
+          await until(() => f.active.size === 0);
+          f.lateAck();
+          diagnostic.state.lateAckInvoked = true;
+          diagnostic.state.nextRunInvoked = true;
+          const next = await f.post(`projects/${f.project.id}/run`, {
+            planId: made.value.id,
+            socketioCredentials: f.credentials(),
+          });
+          checkRun(next.value);
+          assert.ok(!JSON.stringify(next.value).includes("late-old-session"));
+          assert.equal(f.received.length, 4);
+          assert.equal(f.consumed.length, 3);
+        } catch (error) {
+          diagnostic.report();
+          throw error;
+        } finally {
+          diagnostic.dispose();
         }
-        const response = await executing,
-          run = mode === "owner-cancel" ? response.value : response;
-        assert.equal(run.status, "cancelled");
-        assert.equal(run.results.length, 3);
-        assert.equal(f.received.length, 2);
-        assert.equal(f.consumed.length, 1);
-        assert.equal(run.variables.token, f.received[0].token);
-        assert.equal(run.results[2].socketioResult.status, "cancelled");
-        await until(() => f.active.size === 0);
-        f.lateAck();
-        const next = await f.post(`projects/${f.project.id}/run`, {
-          planId: made.value.id,
-          socketioCredentials: f.credentials(),
-        });
-        checkRun(next.value);
-        assert.ok(!JSON.stringify(next.value).includes("late-old-session"));
-        assert.equal(f.received.length, 4);
-        assert.equal(f.consumed.length, 3);
       });
   },
 );
