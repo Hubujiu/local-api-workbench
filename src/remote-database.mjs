@@ -160,6 +160,18 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
 }
 
 export function remoteConnectionConfig(input) {
+  if (input.type === "mysql") {
+    const port = input.port;
+    if (
+      (port !== undefined && !["number", "string"].includes(typeof port)) ||
+      (typeof port === "number" && !Number.isFinite(port)) ||
+      (typeof port === "string" && port !== "" && !/^\d+$/.test(port))
+    )
+      throw Error("MySQL端口无效");
+    const normalized = Number(port) || 3306;
+    if (!Number.isInteger(normalized) || normalized < 1 || normalized > 65535)
+      throw Error("MySQL端口无效");
+  }
   return {
     host: input.host || "127.0.0.1",
     port: Number(input.port) || (input.type === "postgres" ? 5432 : 3306),
