@@ -242,7 +242,9 @@ async function executeRedis(input, command, writing, signal, ownership) {
   for (const key of ["user", "password"])
     if (
       input[key] !== undefined &&
-      (typeof input[key] !== "string" || Buffer.byteLength(input[key]) > 8192)
+      (typeof input[key] !== "string" ||
+        !input[key].isWellFormed() ||
+        Buffer.byteLength(input[key]) > 8192)
     )
       throw Error("Redis认证参数无效");
   validateRedisCA(input.ca);
