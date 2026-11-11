@@ -1,4 +1,9 @@
 import {
+  hasCookieSerialization,
+  parseCookieObject,
+  validateCookieObjectRequest,
+} from "./openapi-cookie-objects.mjs";
+import {
   hasHeaderSerialization,
   parseHeaderObject,
   validateHeaderObjectRequest,
@@ -140,6 +145,13 @@ async function resolveDynamicRequestBase(
       objectValues.push({ index, value: parseHeaderObject(row) });
     row.value = "{}";
   }
+  const cookieValues = [];
+  for (const [index, row] of (clone.cookies || []).entries()) {
+    if (!hasCookieSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      cookieValues.push({ index, value: parseCookieObject(row) });
+    row.value = "{}";
+  }
   for (const group of ["query", "headers", "path", "cookies", "form"]) {
     for (const [index, row] of (clone[group] || []).entries()) {
       if (!row.dynamic) continue;
@@ -202,11 +214,36 @@ async function resolveDynamicRequestBase(
   if (postmanOAuth2 !== undefined) delete clone.auth.postmanOAuth2;
   // Native grant metadata is stored, never interpolated or executed here.
   if (nativeOAuth2 !== undefined) delete clone.auth.nativeOAuth2;
-  const resolved = { ...interpolate(clone, variables), ...scriptSources };
+  // The retained OpenAPI operation is import/export provenance. Execution uses
+  // normalized URL/auth/rows; interpolating stale source examples would make an
+  // otherwise complete temporary override depend on an unused original value.
+  const operation = Object.hasOwn(clone, "openapiOperation")
+    ? { openapiOperation: clone.openapiOperation }
+    : {};
+  delete clone.openapiOperation;
+  const cookieSchemas = [];
+  for (const [index, row] of (clone.cookies || []).entries()) {
+    if (!hasCookieSerialization(row)) continue;
+    // This codec admits only literal primitive type declarations. Its schema
+    // example/default is definition metadata, not a second runtime value.
+    cookieSchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
+  const resolved = {
+    ...interpolate(clone, variables),
+    ...scriptSources,
+    ...operation,
+  };
+  for (const { index, schema } of cookieSchemas)
+    resolved.cookies[index].schema = schema;
   for (const { index, value } of arrayValues)
     resolved.query[index].value = JSON.stringify(interpolate(value, variables));
   for (const { index, value } of objectValues)
     resolved.headers[index].value = JSON.stringify(
+      interpolate(value, variables),
+    );
+  for (const { index, value } of cookieValues)
+    resolved.cookies[index].value = JSON.stringify(
       interpolate(value, variables),
     );
   if (nativeOAuth2 !== undefined) {
@@ -272,6 +309,7 @@ async function resolveDynamicRequestBase(
     throw Error("动态Body超过1MiB");
   validateQueryArrayRequest(resolved);
   validateHeaderObjectRequest(resolved);
+  validateCookieObjectRequest(resolved);
   return resolved;
 }
 
@@ -284,6 +322,7 @@ export async function resolveDynamicRequest(
 ) {
   validateQueryArrayRequest(request);
   validateHeaderObjectRequest(request);
+  validateCookieObjectRequest(request);
   validatePathSerialization(request);
   nativeOAuth2Definition(request.auth);
   postmanOAuth2Definition(request.auth);

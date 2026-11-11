@@ -1,3 +1,4 @@
+import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
 import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
 import { isDeepStrictEqual } from "node:util";
 import { appendNativeInheritance } from "./native-inheritance-append.mjs";
@@ -857,6 +858,8 @@ export class Store {
     for (const request of p.requests || []) validateQueryArrayRequest(request);
     for (const request of p.requests || [])
       validateHeaderObjectRequest(request);
+    for (const request of p.requests || [])
+      validateCookieObjectRequest(request);
     validateProjectDatabaseWriteEvidence(p);
     validateEnvironmentModel(p);
     validateModelFolders(p);
@@ -1335,6 +1338,7 @@ async function executeRequestWithinDeadline(
     if (jwt.in === "query") setURLQuery(u, jwt.key, jwt.value);
     else headers[jwt.key] = jwt.value;
   }
+  validateCookieObjectRequest(r);
   const cookieHeader = requestCookieHeader(r.cookies, r.cookieEncoding);
   if (cookieHeader !== undefined) headers.cookie = cookieHeader;
   if (cookieSession) {

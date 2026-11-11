@@ -1,0 +1,24 @@
+✔ native JSON and directory cannot silently erase Cookie object wire metadata in live or disabled rows (36.21117ms)
+✔ native frozen samples and independent plans cannot lose Cookie object metadata through an unmarked live API (35.467208ms)
+✔ explicit Cookie pairs preserve owner/SDK HTTP+stdio wire, OpenAPI roundtrip and frozen backup/restart (2128.622729ms)
+✔ Cookie objects interpolate parsed values and reject dynamic malformed or colliding values before network (15.399782ms)
+✔ Cookie pairs reach real HTTP/1.1, HTTP/2 and curl; empty objects produce no pairs (31.964895ms)
+✔ real Cookie jar retains priority over object pairs and removes the header when enabled but empty (37.806438ms)
+✔ unsupported Cookie object imports reject atomically via owner and official SDK without disk or network changes (891.05193ms)
+✔ explicit Cookie dialect serializes object pairs and retains typed definitions on roundtrip (19.962191ms)
+✔ ambiguous unmarked objects and unsupported source contracts fail closed (5.197147ms)
+✔ selection, names, literals and empty objects are explicit (3.536288ms)
+✔ marked request rejects collisions, nonraw policy, Cookie Header and auth overwrite (4.983698ms)
+✔ legacy Cookie bytes and policies remain unchanged without a marker (0.311102ms)
+✔ marker location and disabled definitions are validated without invoking accessors (5.492029ms)
+✔ typed values, closed dictionaries and encoded aggregate budgets are enforced (3.57441ms)
+✔ interpolation and MCP temporary object input preserve JSON grammar and frozen source (6.919291ms)
+✔ Schema constraints remain metadata and edited JSON duplicate keys use the existing last-value contract (1.937686ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4073.778113
