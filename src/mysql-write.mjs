@@ -1,3 +1,4 @@
+import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { Worker } from "node:worker_threads";
 import { Socket } from "node:net";
 import { observeDatabaseStream } from "./database-read-cancellation.mjs";
@@ -9,6 +10,7 @@ export const mysqlWriteUsage = () => ({ active: active.size, limit: 5 });
 export function parseMySQLWrite(sql, database) {
   if (
     typeof database !== "string" ||
+    !database.isWellFormed() ||
     !database.trim() ||
     database.length > 64 ||
     database.includes("\0")
@@ -79,6 +81,7 @@ export async function mutateMySQL(input, dependencies = {}) {
     throw Error("MySQL端口无效");
   if (input.ssl !== undefined && typeof input.ssl !== "boolean")
     throw Error("MySQL TLS标识无效");
+  validateMySQLConnectionText(input);
   if (typeof input.sql === "string" && !input.sql.isWellFormed())
     throw Error("MySQL SQL Unicode无效");
   const parameters = databaseParameters(
