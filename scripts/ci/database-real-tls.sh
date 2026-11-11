@@ -159,6 +159,9 @@ CREATE USER 'tls_reader'@'%' IDENTIFIED BY 'public-ci-tls-only' REQUIRE SSL;
 CREATE TABLE fixture.tls_fixture(value varchar(32));
 INSERT INTO fixture.tls_fixture VALUES ('tls-value');
 GRANT SELECT ON fixture.* TO 'tls_reader'@'%';
+-- Separate read-only probe isolates the global transport policy from account SSL.
+CREATE USER 'transport_probe'@'%' IDENTIFIED BY 'public-ci-tls-only' REQUIRE NONE;
+GRANT SELECT ON fixture.* TO 'transport_probe'@'%';
 SQL
         ;;
       redis)

@@ -64,3 +64,20 @@ plaintext port / enabled TLS port evidence and a successful authenticated TLS re
 Unit tests reject generic SQL resets/EOF, authentication errors, missing policy
 evidence and unreachable/timeouts. Mock orchestration also injects a policy-check
 failure and checks cleanup; it remains explicitly not real-service evidence.
+
+## First CI observation and follow-up candidate
+
+PR187 run 43040098575, head 49e4e87ef5f48680b32c3749b55e3fe397dde07e:
+all six real fixture startups and live policy checks succeeded. PostgreSQL printed
+its full pass marker. MySQL reached `mysql:plaintext` and failed; the log contains
+no underlying driver error, so the original cause is **not established**. Cleanup
+succeeded. Do not call this a verified fix or rerun the historical head blindly.
+
+The follow-up keeps `tls_reader REQUIRE SSL` and adds a separate fixture-only
+SELECT account `transport_probe REQUIRE NONE`. It first confirms that account's
+trusted TLS read, then requires the same strict global policy error 3159 for its
+plaintext attempt. This separates MySQL's account-level SSL check from its global
+transport requirement without disabling either the original account restriction
+or server policy. Failure-only diagnostics project fixed code enums, approved
+errno values and booleans, never raw errors, SQL, URLs, credentials or PEM.
+The new candidate remains unverified against real services until its own CI runs.

@@ -62,3 +62,30 @@ export function rejectionClass(error, expected, type, policy) {
     );
   return false;
 }
+
+// Failure-only diagnostic projection. No message/cause/SQL/URL/credentials are
+// copied; unsupported values collapse to fixed enums or zero.
+export function rejectionDiagnostic(error, type, expected, rejected) {
+  const codes = new Map([
+    ["ER_SECURE_TRANSPORT_REQUIRED", "MYSQL_SECURE_TRANSPORT"],
+    ["ER_ACCESS_DENIED_ERROR", "MYSQL_ACCESS_DENIED"],
+    ["28000", "PG_AUTHORIZATION"],
+    ["28P01", "PG_PASSWORD"],
+    ["ECONNRESET", "RESET"],
+    ["EPIPE", "PIPE"],
+    ["ECONNREFUSED", "REFUSED"],
+    ["ETIMEDOUT", "TIMEOUT"],
+    ["ERR_TLS_CERT_ALTNAME_INVALID", "TLS_HOSTNAME"],
+    ["SELF_SIGNED_CERT_IN_CHAIN", "TLS_TRUST"],
+    ["UNABLE_TO_VERIFY_LEAF_SIGNATURE", "TLS_TRUST"],
+  ]);
+  return {
+    engine: ["postgres", "mysql", "redis"].includes(type) ? type : "unknown",
+    expected: ["trust", "hostname", "auth", "plaintext"].includes(expected)
+      ? expected
+      : "unknown",
+    rejected: rejected === true,
+    code: codes.get(error?.code) || "OTHER",
+    errno: [1045, 3159].includes(error?.errno) ? error.errno : 0,
+  };
+}

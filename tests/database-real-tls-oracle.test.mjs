@@ -129,3 +129,48 @@ test("oracle returns booleans only; sensitive diagnostic sentinels are never out
     true,
   );
 });
+
+test("failure diagnostic only emits approved enums, errno and boolean, never sentinel/cause", async () => {
+  const { rejectionDiagnostic } = await import(
+    "./helpers/database-real-tls-oracle.mjs"
+  );
+  const secret = "SECRET_TOKEN_URL_PEM_SENTINEL";
+  const error = {
+    code: secret,
+    errno: 987654321,
+    message: secret,
+    cause: { message: secret },
+    sql: secret,
+  };
+  assert.deepEqual(rejectionDiagnostic(error, secret, secret, secret), {
+    engine: "unknown",
+    expected: "unknown",
+    rejected: false,
+    code: "OTHER",
+    errno: 0,
+  });
+  const mapped = rejectionDiagnostic(
+    { ...error, code: "ER_ACCESS_DENIED_ERROR", errno: 1045 },
+    "mysql",
+    "plaintext",
+    true,
+  );
+  assert.deepEqual(mapped, {
+    engine: "mysql",
+    expected: "plaintext",
+    rejected: true,
+    code: "MYSQL_ACCESS_DENIED",
+    errno: 1045,
+  });
+  assert.equal(JSON.stringify(mapped).includes(secret), false);
+  // Diagnosis of access-denied must not change the strict acceptance oracle.
+  assert.equal(
+    rejectionClass(
+      { ...error, code: "ER_ACCESS_DENIED_ERROR", errno: 1045 },
+      "plaintext",
+      "mysql",
+      policies.mysql,
+    ),
+    false,
+  );
+});

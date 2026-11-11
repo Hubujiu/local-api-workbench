@@ -10,7 +10,10 @@ let current = "fixture";
 function requireCondition(value) {
   if (!value) throw new Error("REAL_TLS_ASSERTION_FAILED");
 }
-import { rejectionClass } from "./helpers/database-real-tls-oracle.mjs";
+import {
+  rejectionClass,
+  rejectionDiagnostic,
+} from "./helpers/database-real-tls-oracle.mjs";
 
 function successful(result) {
   requireCondition(result && JSON.stringify(result.columns) === '["value"]');
@@ -23,8 +26,23 @@ async function negative(input, expected, good, policy) {
     await queryRemoteDatabase(input);
   } catch (error) {
     rejected = true;
-    requireCondition(rejectionClass(error, expected, input.type, policy));
+    const matches = rejectionClass(error, expected, input.type, policy);
+    if (!matches)
+      console.error(
+        "REAL_TLS_NEGATIVE_DIAGNOSTIC:" +
+          JSON.stringify(
+            rejectionDiagnostic(error, input.type, expected, true),
+          ),
+      );
+    requireCondition(matches);
   }
+  if (!rejected)
+    console.error(
+      "REAL_TLS_NEGATIVE_DIAGNOSTIC:" +
+        JSON.stringify(
+          rejectionDiagnostic(undefined, input.type, expected, false),
+        ),
+    );
   requireCondition(rejected);
   // A refusal is never accepted as evidence if the fixture stopped serving.
   successful(await queryRemoteDatabase(good));
@@ -129,8 +147,13 @@ async function main() {
       current = `${type}:hostname`;
       await negative({ ...good, port: ports[type].bad }, "hostname", good);
       current = `${type}:plaintext`;
+      // The normal MySQL account retains REQUIRE SSL. A separate read-only
+      // account isolates the server-global policy, whose refusal must be 3159.
+      const transport =
+        type === "mysql" ? { ...good, user: "transport_probe" } : good;
+      successful(await queryRemoteDatabase(transport));
       await negative(
-        { ...good, ssl: false },
+        { ...transport, ssl: false },
         "plaintext",
         good,
         policies[type],
