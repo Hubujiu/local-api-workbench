@@ -7,14 +7,28 @@ import {
   encodeQueryArray,
   validateQueryArrayRequest,
 } from "./openapi-query-arrays.mjs";
+import {
+  hasQueryObjectSerialization,
+  encodeQueryObject,
+  validateQueryObjectRequest,
+} from "./openapi-query-objects.mjs";
 const encodedPair = (key, value) =>
   new URLSearchParams([[String(key), String(value)]]).toString();
 // Preserve literal URL query spelling instead of reserializing unrelated fields.
 export function appendRequestQuery(url, rows, addEqual = true) {
   if (typeof addEqual !== "boolean") throw Error("Query等号选项必须为布尔值");
   validateQueryArrayRequest({ query: rows });
+  validateQueryObjectRequest({
+    query: rows,
+    url: url.href,
+    queryAddEqual: addEqual,
+  });
   const added = [];
   for (const row of rows.filter((row) => row.enabled !== false && row.key)) {
+    if (hasQueryObjectSerialization(row)) {
+      added.push(...encodeQueryObject(row));
+      continue;
+    }
     if (hasReservedQuerySerialization(row)) {
       if (!addEqual) throw Error("OpenAPI allowReserved: 首片空值固定保留等号");
       added.push(encodeReservedQuery(row));

@@ -1,3 +1,7 @@
+import {
+  validateQueryObjectRequest,
+  hasQueryObjectSerialization,
+} from "./openapi-query-objects.mjs";
 import { assertReservedQueryOpenAPI } from "./openapi-query-reserved.mjs";
 import {
   importOpenAPICookieObject,
@@ -2479,6 +2483,18 @@ export function exportOpenAPI(project) {
     assertHeaderObjectOpenAPIHeaders(source);
     validateCookieObjectRequest(source);
     assertReservedQueryOpenAPI(source);
+    validateQueryObjectRequest(source);
+    if ((source.query || []).some(hasQueryObjectSerialization)) {
+      const effective = applySharedAuth(
+        project,
+        applyGlobalParameters(project, source),
+      );
+      validateQueryObjectRequest(effective);
+      if (JSON.stringify(effective.query) !== JSON.stringify(source.query))
+        throw Error(
+          "OpenAPI Query对象: 出口不能丢失共享Query参数，请使用冻结定义或项目备份",
+        );
+    }
     let definition = source;
     if (postmanRawBodyPolicy(source)) {
       definition = applySharedScripts(project, source);

@@ -1,0 +1,24 @@
+✔ native JSON and directory refuse Query object contracts including disabled live definitions (32.833916ms)
+✔ native serializers reject own Query object marker presence even with malformed or undefined metadata (7.345472ms)
+✔ native frozen samples and independent frozen plans refuse Query object contracts without losing them through plain live APIs (47.445683ms)
+✔ query object produces encoded property pairs through actual HTTP/1.1, HTTP/2 and curl (90.227794ms)
+✔ query object OpenAPI roundtrip, frozen Store/reopen/backup and SDK temporary input preserve the contract (1915.169029ms)
+✔ query object dynamic/temporary inputs do not evaluate replaced source examples and reject unsafe values before network (1071.710539ms)
+✔ query object basic and bearer authentication preserve the exact request target (8.605427ms)
+✔ query object collisions and unsupported combinations fail before network or durable import (109.286058ms)
+✔ query object runtime key, BEFORE-script and URL changes reject collisions before HTTP (363.982808ms)
+✔ global and folder Query defaults cannot collide with object properties after environment resolution (368.011317ms)
+✔ form object emits property names, literal percent contract, deterministic limits (12.189441ms)
+✔ only explicitly supported OAS shape is admitted (3.548107ms)
+✔ all marker boundaries reject malformed definitions, URL projection, SDK and auth before erasure (7.110973ms)
+✔ expanded names collide with scalar, array and other object while ordinary repeats outside scope stay unchanged (2.145897ms)
+✔ post-interpolation collision and raw URL rejection, replacement leaves source and active types intact (6.67765ms)
+✔ OpenAPI object export cannot bypass effective auth or silently omit shared Query (3.444884ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4950.196487

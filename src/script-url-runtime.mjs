@@ -196,7 +196,8 @@ export function initializeQueryRuntime(request) {
       (request[key] || []).some(
         (row) =>
           row &&
-          (Object.hasOwn(row, "querySerialization") ||
+          (Object.hasOwn(row, "queryObjectSerialization") ||
+            Object.hasOwn(row, "querySerialization") ||
             Object.hasOwn(row, "reservedQuerySerialization")),
       )
     )

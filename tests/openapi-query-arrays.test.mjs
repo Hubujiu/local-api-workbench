@@ -131,7 +131,7 @@ test("unsupported formats, ambiguous examples and lossy arrays fail explicitly",
       importOpenAPIQuery([
         { name: "x", in: "query", schema: { type: "object" } },
       ]),
-    /对象Query/,
+    /Query对象.*OAS3/,
   );
   assert.throws(
     () =>
