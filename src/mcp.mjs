@@ -863,7 +863,7 @@ export function createMCP({
       );
     }
   }
-  // Only the HTTP host supplies this service. Stdio deliberately has no tools.
+  // A stateful HTTP or stdio host supplies the service and trusted owner.
   const websocketActions = new Map([
     ["localapi_start_websocket_session", "start"],
     ["localapi_get_websocket_session", "get"],
@@ -875,14 +875,14 @@ export function createMCP({
   if (websocketSessions && write && execute) {
     const descriptions = {
       start:
-        "仅 HTTP 有状态 MCP：打开已保存 WebSocket 定义，不接受临时目标或覆写；operationId 仅进程内去重，响应丢失先查询，不能保证跨崩溃 exactly-once",
+        "有状态 MCP：打开已保存 WebSocket 定义，不接受临时目标或覆写；operationId 仅进程内去重，响应丢失先查询，不能保证跨崩溃 exactly-once",
       get: "读取所属 WebSocket 的有界消息页；afterEvent 为全局事件序号，读取不会续租；消息可能包含敏感数据",
       send: "向所属 WebSocket 发送消息；operationId 同内容去重，并发发送拒绝；本地 written 不表示远端确认，未知结果不得自动重发",
       stop: "关闭所属 WebSocket 并等待已启动的记录保存；存储未知不等于网络未执行",
       renew:
         "显式续租所属 WebSocket 最多 60 秒，不延长 15 分钟绝对上限；读取不会续租",
       operation:
-        "查询当前 HTTP 逻辑会话内操作状态，不会重发；不提供跨崩溃恢复保证",
+        "查询当前实例逻辑会话内操作状态，不会重发；不提供跨崩溃恢复保证",
     };
     for (const [name, action] of websocketActions) {
       const properties = { projectId: str };
@@ -1090,7 +1090,7 @@ export function createMCP({
         if (!allowed.has(args.projectId)) throw Error("项目未授权");
         if (!websocketOwner || typeof websocketOwner !== "object")
           throw Error(
-            "WebSocket 交互需要已初始化的 HTTP MCP 逻辑会话；不支持 stdio 或无状态请求",
+            "WebSocket 交互需要已初始化的 MCP 逻辑会话；不支持无状态请求",
           );
         if (
           args.afterEvent !== undefined &&
@@ -1926,6 +1926,7 @@ if (isStdioEntrypoint()) {
       sessionProjects,
       write,
       execute,
+      websocketSessions: context.websocketSessions,
       databaseExecutor: context.databaseExecutor,
       databasePreflight: context.databasePreflight,
     });
@@ -1933,6 +1934,8 @@ if (isStdioEntrypoint()) {
     await serveMCPStdio({
       input: process.stdin,
       output: process.stdout,
+      registry: context.websocketRegistry,
+      closeResources: () => context.close(),
       dispatch,
       activityFactory: (message) => {
         const args = message.params?.arguments || {};
@@ -1956,6 +1959,6 @@ if (isStdioEntrypoint()) {
     );
     process.exitCode = 1;
   } finally {
-    context?.close();
+    await context?.close();
   }
 }

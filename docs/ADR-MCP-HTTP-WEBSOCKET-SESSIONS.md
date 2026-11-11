@@ -1,5 +1,10 @@
 # Bounded HTTP MCP WebSocket interaction
 
+This records the original HTTP slice. For the subsequent independent stdio host
+and its distinct authorization/revocation boundaries, see
+[stdio WebSocket sessions](ADR-MCP-STDIO-WEBSOCKET-SESSIONS.md).
+
+
 This first slice supports an adaptive challenge/response workflow on one saved
 WebSocket connection. It is not a new arbitrary network target API, a stdio
 session broker, a gRPC API, or a script execution engine.
