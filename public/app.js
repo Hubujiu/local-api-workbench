@@ -1,3 +1,4 @@
+import { mysqlPortInput } from "./mysql-port-input.js";
 import {
   parseApipostFunctionTemplate,
   isApipostFunctionSource,
@@ -2407,11 +2408,15 @@ function bind() {
   });
   on("#db-register", "click", () => {
     const projectId = project.id;
+    const type = $("#db-type").value;
     const connection = {
-      type: $("#db-type").value,
+      type,
       filename: $("#db-path").value,
       host: $("#db-host").value,
-      port: Number($("#db-port").value),
+      port:
+        type === "mysql"
+          ? mysqlPortInput($("#db-port").value)
+          : Number($("#db-port").value),
       user: $("#db-user").value,
       password: $("#db-password").value,
       database: $("#db-name").value,
@@ -2643,7 +2648,10 @@ function bind() {
     const input = {
       type,
       host: $("#db-host").value,
-      port: Number($("#db-port").value),
+      port:
+        type === "mysql"
+          ? mysqlPortInput($("#db-port").value)
+          : Number($("#db-port").value),
       user: $("#db-user").value,
       password: $("#db-password").value,
       database: $("#db-name").value,
