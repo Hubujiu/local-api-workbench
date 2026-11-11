@@ -102,10 +102,23 @@ provider default); this does not admit string defaults to sessions. MongoDB SSH
 remains unsupported by the owner/remote/session entrypoints, with no direct
 fallback introduced.
 
-The existing UI still applies Number() before serialization. Invalid text such
-as `abc` becomes JSON null and now rejects instead of opening port 27017, but
-hexadecimal/exponent spellings already converted into a valid integer cannot be
-identified by the backend. Raw UI text validation remains a separate task.
+The database-page direct query and session-registration handlers now inspect
+MongoDB raw port text before Number() conversion, using the existing MySQL decimal
+parser through a MongoDB-specific wrapper. After trimming surrounding whitespace,
+only ASCII decimal digits in 0..65535 or blank input are accepted. Blank/zero
+preserve default-port behavior; leading zeros remain accepted. Invalid input
+produces fixed text before any fetch, grant dialog or busy-state change, and can
+be corrected without reloading. MySQL wording/behavior is retained; PostgreSQL,
+Redis, ClickHouse and hidden SQLite fields retain their separate existing paths.
+Backend validation remains mandatory, and cannot recover earlier coercion in an
+external client. No persisted configuration is rewritten.
+
+`mongodb-port-input.test.mjs` and the unchanged MySQL conversion tests cover the
+shared parser. `exerciseMongoPortUI` runs real DOM/event steps with intercepted
+responses in `ui-smoke.mjs`, or via `tests/mongodb-port-ui.mjs`: both entrypoints,
+no fetch/dialog on rejection, correction, defaults/decimals and other-provider
+compatibility. These are frontend admission checks, not database connectivity.
+The browser test must actually run successfully before claiming browser acceptance.
 The tests use real MongoClient traffic with a protocol fixture, not a real
 MongoDB service. No authorization, retry, deadline or stored-history format is
 changed, and earlier requests cannot be reconstructed.

@@ -1,4 +1,4 @@
-import { mysqlPortInput } from "./mysql-port-input.js";
+import { mysqlPortInput, mongoPortInput } from "./mysql-port-input.js";
 import { parseDatabaseParameterJSON } from "./database-parameter-json.js";
 import {
   parseApipostFunctionTemplate,
@@ -2417,7 +2417,9 @@ function bind() {
       port:
         type === "mysql"
           ? mysqlPortInput($("#db-port").value)
-          : Number($("#db-port").value),
+          : type === "mongodb"
+            ? mongoPortInput($("#db-port").value)
+            : Number($("#db-port").value),
       user: $("#db-user").value,
       password: $("#db-password").value,
       database: $("#db-name").value,
@@ -2654,7 +2656,9 @@ function bind() {
       port:
         type === "mysql"
           ? mysqlPortInput($("#db-port").value)
-          : Number($("#db-port").value),
+          : type === "mongodb"
+            ? mongoPortInput($("#db-port").value)
+            : Number($("#db-port").value),
       user: $("#db-user").value,
       password: $("#db-password").value,
       database: $("#db-name").value,

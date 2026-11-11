@@ -12,8 +12,9 @@ zeroes and surrounding whitespace remain compatible. Invalid text produces one
 fixed message before any fetch or authorization dialog. Correcting the field does
 not require reloading the page. Backend validation remains independently required.
 
-Other database providers keep their existing conversion and authorization
-contracts. In particular this change does not add defaults to Redis writes, alter
+PostgreSQL, Redis, ClickHouse and SQLite keep their existing conversion and
+authorization contracts. MongoDB has a separate wrapper over the same decimal
+parser; adding it does not change the MySQL message or accepted inputs. In particular this change does not add defaults to Redis writes, alter
 PostgreSQL write confirmation, or apply a MySQL guard to SQLite's hidden field.
 It does not change the protocol page, database transport, grants, SQL or deadlines.
 
