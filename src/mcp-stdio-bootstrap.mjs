@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createMCPStdioWebSocketSessions } from "./mcp-stdio-websocket.mjs";
+import { createMCPStdioSessions } from "./mcp-stdio-sessions.mjs";
 import { Store } from "./runtime.mjs";
 import { loadMCPStdioDatabaseGrants } from "./mcp-stdio-database-grants.mjs";
 
@@ -52,14 +52,16 @@ export async function createMCPStdioContext(argv, root) {
           execute: options.execute,
           resolveProject: (id) => store.get(id),
         });
-  const websocket =
+  const sessions =
     options.write && options.execute && options.projects.length
-      ? createMCPStdioWebSocketSessions({ store, projects: options.projects })
+      ? createMCPStdioSessions({ store, projects: options.projects })
       : undefined;
   return {
     store,
-    websocketSessions: websocket?.service,
-    websocketRegistry: websocket?.registry,
+    websocketSessions: sessions?.websocketSessions,
+    websocketRegistry: sessions?.registry,
+    grpcSessions: sessions?.grpcSessions,
+    grpcExecutor: sessions?.grpcExecutor,
     projects: [...options.projects],
     write: options.write,
     execute: options.execute,
@@ -72,7 +74,7 @@ export async function createMCPStdioContext(argv, root) {
       : undefined,
     close: async () => {
       grants?.close();
-      await websocket?.close();
+      await sessions?.close();
     },
   };
 }

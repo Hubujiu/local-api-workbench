@@ -431,7 +431,7 @@ test(
 );
 
 test(
-  "official stdio SDK does not expose or execute HTTP-only interactive gRPC tools",
+  "official stdio SDK without execute grant does not expose or execute interactive gRPC tools",
   { timeout: 20000 },
   async (t) => {
     const f = await fixture(t);
@@ -442,7 +442,6 @@ test(
         "--project",
         f.p.id,
         "--write",
-        "--execute",
       ],
       env: { ...process.env, LOCAL_API_DATA: f.root },
       stderr: "pipe",
