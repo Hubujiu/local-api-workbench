@@ -1,3 +1,8 @@
+import {
+  loadFailureReasons,
+  loadFailureCounts,
+  countLoadFailures,
+} from "./load-report-semantics.mjs";
 import { performance } from "node:perf_hooks";
 import { isProxy } from "node:util/types";
 import { snapshotPlan, runPlan } from "./core.mjs";
@@ -311,7 +316,15 @@ export async function runStagedLoad(project, prepared, options = {}) {
         durations: [],
         receivedBytes: 0,
         redirectFailures: {},
+        failureCounts: loadFailureCounts(),
       },
+    ]),
+  );
+  const failureCounts = loadFailureCounts();
+  const stepStatus = new Map(
+    activePlanLeaves(snapshot.steps, { allowRuntimeRows: true }).map((step) => [
+      step.id,
+      step.expectedStatus,
     ]),
   );
   const start = performance.now();
@@ -350,6 +363,8 @@ export async function runStagedLoad(project, prepared, options = {}) {
     const rate = (count) =>
       elapsedMs > 0 ? Math.round((count * 1000000) / elapsedMs) / 1000 : 0;
     return {
+      reportSemantics: { version: 1, statusPolicy: "plan" },
+      failureCounts: { ...failureCounts },
       elapsedMs,
       activeVUs: active,
       runningIterations: running,
@@ -367,6 +382,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
         stepId,
         count: item.count,
         failed: item.failed,
+        failureCounts: { ...item.failureCounts },
         timingSamples: item.durations.length,
         p50Ms: percentile(item.durations, 0.5),
         p90Ms: percentile(item.durations, 0.9),
@@ -426,6 +442,7 @@ export async function runStagedLoad(project, prepared, options = {}) {
           // Finish already admitted iterations, but do not admit a replacement.
           stop("iteration-limit", false);
         }
+        const iterationFailures = new Set();
         try {
           const result = await runPlan(
             snapshot,
@@ -463,7 +480,17 @@ export async function runStagedLoad(project, prepared, options = {}) {
                   item.redirectFailures[reason] =
                     (item.redirectFailures[reason] || 0) + 1;
                 }
-                if (record.status !== "passed") item.failed++;
+                if (record.status !== "passed") {
+                  item.failed++;
+                  const classified = loadFailureReasons(record, {
+                    expectedStatus: stepStatus.get(record.stepId),
+                    strict200: snapshot.statusPolicy === "strict200",
+                    cancelled: controller.signal.aborted,
+                  });
+                  countLoadFailures(item.failureCounts, classified);
+                  for (const reason of classified)
+                    iterationFailures.add(reason);
+                }
                 const size = record.response?.size;
                 if (Number.isSafeInteger(size) && size >= 0)
                   item.receivedBytes += size;
@@ -478,7 +505,13 @@ export async function runStagedLoad(project, prepared, options = {}) {
             },
           );
           completed++;
-          if (result.status !== "passed") failed++;
+          if (result.status !== "passed") {
+            failed++;
+            if (result.status === "cancelled")
+              iterationFailures.add("cancelled");
+            if (!iterationFailures.size) iterationFailures.add("execution");
+            countLoadFailures(failureCounts, [...iterationFailures]);
+          }
           const outcome =
             result.status === "cancelled"
               ? "cancelled"
@@ -491,6 +524,10 @@ export async function runStagedLoad(project, prepared, options = {}) {
         } catch {
           completed++;
           failed++;
+          iterationFailures.add(
+            controller.signal.aborted ? "cancelled" : "execution",
+          );
+          countLoadFailures(failureCounts, [...iterationFailures]);
           iterationOutcomes[
             controller.signal.aborted ? "cancelled" : "executionError"
           ]++;

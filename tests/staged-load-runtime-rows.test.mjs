@@ -807,7 +807,7 @@ test("prepared schedule copies retain legal limits and reject numerical boundary
   }
 });
 
-test("legacy and disabled-runtime-row staged reports retain their original field shape", async (t) => {
+test("legacy and disabled-runtime-row plans add only versioned report metadata", async (t) => {
   const { project, url } = await fixture(t, (_req, res) => res.end("ok"));
   for (const extra of [
     [],
@@ -836,9 +836,22 @@ test("legacy and disabled-runtime-row staged reports retain their original field
     assert(reports.length > 0);
     for (const report of reports) {
       assert.equal(Object.hasOwn(report, "iterationOutcomes"), false);
+      assert.deepEqual(report.reportSemantics, {
+        version: 1,
+        statusPolicy: "plan",
+      });
+      assert.deepEqual(report.failureCounts, {
+        "http-status-policy": 0,
+        assertion: 0,
+        execution: 0,
+        cancelled: 0,
+        redirect: 0,
+      });
       assert.deepEqual(
         Object.keys(report).sort(),
         [
+          "reportSemantics",
+          "failureCounts",
           "elapsedMs",
           "activeVUs",
           "runningIterations",

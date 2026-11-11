@@ -391,7 +391,16 @@ test(
     assert.equal(Number.isInteger(report.elapsedMs), true);
     assert(report.elapsedMs >= 0);
     const { elapsedMs, ...rest } = report;
+    const zeroFailureCounts = {
+      "http-status-policy": 0,
+      assertion: 0,
+      execution: 0,
+      cancelled: 0,
+      redirect: 0,
+    };
     assert.deepEqual(rest, {
+      reportSemantics: { version: 1, statusPolicy: "plan" },
+      failureCounts: zeroFailureCounts,
       activeVUs: 0,
       runningIterations: 0,
       started: 0,
@@ -405,6 +414,7 @@ test(
           stepId: "s",
           count: 0,
           failed: 0,
+          failureCounts: zeroFailureCounts,
           timingSamples: 0,
           p50Ms: null,
           p90Ms: null,
