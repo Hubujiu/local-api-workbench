@@ -77,7 +77,7 @@ test("embedded templates keep Query and multiple-expression boundaries and bound
     /Query/,
   );
   for (const expression of [
-    "{{token|upper}} {{token|lower}}",
+    "{{token|upper}} {{$function.fn_f(raw)}}",
     "prefix {{plain}}",
     "{{broken prefix {{token|upper}}",
   ])

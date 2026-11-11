@@ -53,7 +53,12 @@ import { previewFunction } from "./custom-functions.mjs";
 // Elapsed execution budgets must not follow civil-clock adjustments.
 const monotonicNow = performance.now.bind(performance);
 
-export async function resolveDynamicValue(spec, variables, functions = []) {
+export async function resolveDynamicValue(
+  spec,
+  variables,
+  functions = [],
+  deadline,
+) {
   if (
     !spec ||
     ![
@@ -81,6 +86,7 @@ export async function resolveDynamicValue(spec, variables, functions = []) {
       functions,
       apipostFunctionSourceGroups[spec.source],
       variables,
+      deadline,
     );
   }
   let value;
@@ -320,7 +326,12 @@ async function resolveDynamicRequestBase(
     );
   for (const { group, index, spec } of specs) {
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
-    const value = await resolveDynamicValue(spec, variables, functions);
+    const value = await resolveDynamicValue(
+      spec,
+      variables,
+      functions,
+      deadline,
+    );
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     if (
       spec.source === "apipost-function" &&
@@ -361,7 +372,12 @@ async function resolveDynamicRequestBase(
       continue;
     }
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
-    const value = await resolveDynamicValue(dynamic.spec, variables, functions);
+    const value = await resolveDynamicValue(
+      dynamic.spec,
+      variables,
+      functions,
+      deadline,
+    );
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     parts[index] =
       dynamic.spec.format === "json" || typeof value !== "string"

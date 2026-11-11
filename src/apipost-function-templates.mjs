@@ -12,11 +12,57 @@ import {
 } from "../public/apipost-function-template.js";
 import { validateResources } from "./resources.mjs";
 import { runScript } from "./scripts.mjs";
+const monotonicNow = performance.now.bind(performance);
 export async function resolveApipostFunctionTemplate(
   expression,
   functions,
   group = "query",
   variables = {},
+  inheritedDeadline,
+) {
+  const parsed = parseApipostFunctionTemplate(expression);
+  if (!parsed.fieldExpressions)
+    return resolveSingleTemplate(expression, functions, group, variables);
+  if (!["headers", "form", "body"].includes(group))
+    throw Error("原版Query模板暂不支持多个表达式或前后缀");
+  const deadline = inheritedDeadline ?? monotonicNow() + 5000;
+  const check = (field) => {
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (Buffer.byteLength(JSON.stringify(field), "utf8") > 65536)
+      throw Error("原版函数模板结果超过64KiB");
+  };
+  let field = expression;
+  check(field);
+  // The initial ordered list is immutable. Repeated entries are evaluated again,
+  // but inserted text never extends that list. No custom functions enter here.
+  for (const item of parsed.fieldExpressions) {
+    check(field);
+    const value = await resolveSingleTemplate(
+      item,
+      functions,
+      group,
+      variables,
+      true,
+    );
+    check(field);
+    if (value !== item && field.includes(item))
+      field = replaceApipostFieldTemplate(
+        field,
+        item,
+        typeof value === "string" ? value : JSON.stringify(value),
+      );
+    check(field);
+  }
+  if (group === "headers" && /[\r\n]/.test(field))
+    throw Error("原版函数结果包含尚未兼容的分隔符或替换符，不发送不等价请求");
+  return field;
+}
+async function resolveSingleTemplate(
+  expression,
+  functions,
+  group = "query",
+  variables = {},
+  rawResult = false,
 ) {
   if (!["query", "headers", "form", "body"].includes(group))
     throw Error("原版函数模板参数位置无效");
@@ -168,6 +214,7 @@ export async function resolveApipostFunctionTemplate(
     throw Error("原版函数模板暂仅支持有限同步基本类型结果");
   if (Buffer.byteLength(JSON.stringify(value), "utf8") > 65536)
     throw Error("原版函数模板结果超过64KiB");
+  if (rawResult) return value;
   if (parsed.fieldExpression) {
     value =
       value === innerExpression

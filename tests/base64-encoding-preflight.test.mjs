@@ -201,11 +201,16 @@ test("generated pipeline invokes preflight before UTF-8 allocation and encoder, 
   });
   let utf8Calls = 0,
     encoderCalls = 0,
-    removeCall = false;
+    removeCall = false,
+    captures = 0;
   const context = {
     Buffer,
     TextEncoder,
+    // This VM hosts the trusted Node generator, not the generated user script.
+    // Supply its real monotonic clock; never fake or widen the production budget.
+    performance,
     capture: async (code, _input, options) => {
+      captures++;
       assert.deepEqual(JSON.parse(JSON.stringify(options)), {
         requestLimit: 0,
         timerLimit: 0,
@@ -254,6 +259,17 @@ test("generated pipeline invokes preflight before UTF-8 allocation and encoder, 
   };
   runInNewContext(bundle.outputFiles[0].text, context, { timeout: 1000 });
   const resolve = context.Templates.resolveApipostFunctionTemplate;
+  await assert.rejects(
+    resolve(
+      "{{token|upper}}/{{token|lower}}",
+      [],
+      "body",
+      { token: "safe" },
+      performance.now() - 1,
+    ),
+    /5秒总预算/,
+  );
+  assert.equal(captures, 0, "an expired shared deadline cannot start a worker");
   await assert.rejects(
     resolve("{{token|base64|length}}", [], "body", {
       token: "x".repeat(50000),
