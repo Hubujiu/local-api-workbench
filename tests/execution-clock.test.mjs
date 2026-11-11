@@ -149,3 +149,34 @@ test("rollback preserves load cancellation timer and nonnegative elapsed evidenc
   assert(result.results.every((row) => row.interrupted));
   assert(Number.isSafeInteger(result.elapsed) && result.elapsed >= 950);
 });
+
+test("GraphQL strings retain the aggregate monotonic deadline even with no dynamic rows", async () => {
+  for (const dynamicRows of [false, true]) {
+    let delayed = false;
+    await withCivilClock(async (jump) => {
+      await assert.rejects(
+        resolveDynamicRequest(
+          {
+            bodyType: "json",
+            body: '{"query":"query{node{id}}","variables":{"id":"{{id}}"}}',
+            graphqlVariableTemplate: { version: 1 },
+            ...(dynamicRows ? request : {}),
+          },
+          { id: "safe" },
+          functions,
+          (value, variables) => {
+            if (!delayed) {
+              delayed = true;
+              jump(-60000);
+              const cell = new Int32Array(new SharedArrayBuffer(4));
+              assert.equal(Atomics.wait(cell, 0, 0, 5100), "timed-out");
+            }
+            return interpolate(value, variables);
+          },
+        ),
+        /动态值处理超过5秒总预算/,
+      );
+    });
+    assert.equal(delayed, true);
+  }
+});
