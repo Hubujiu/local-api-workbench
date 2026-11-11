@@ -39,6 +39,24 @@ Date, Timestamp and Binary wrappers are not added to this validation scope.
 Sources: [MongoDB EJSON numeric types](https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/)
 and [type-wrapper parsing rules](https://specifications.readthedocs.io/en/latest/extended-json/extended-json/#parsers).
 
+Query strings and object keys must contain well-formed Unicode, recursively
+including arrays, filter values/keys, collection names, projection and sort.
+Unpaired surrogates reject before task canonicalization or worker creation rather
+than becoming U+FFFD in BSON, where distinct input keys can collide. The existing
+1000-node/10-level walk and byte limits are unchanged. Valid surrogate pairs,
+Chinese text and literal U+FFFD remain accepted; no Unicode normalization occurs.
+Database names, selected authSource, username and password receive the same
+well-formedness check before a worker or transport starts, with generic errors
+that do not echo the input. Empty/omitted credential behavior is unchanged.
+
+Actual-driver loopback OP_QUERY/OP_MSG tests establish altered BSON query fields
+and the rejection boundary; they are not a real MongoDB authentication test.
+SCRAM mechanisms can handle invalid passwords differently, so this does not
+claim all malformed credentials previously authenticated or that this was an
+authentication bypass. No result decoding, history format or write policy changes.
+Old malformed definitions now reject when validated/executed; stored history is
+not rewritten, and previously substituted characters cannot be reconstructed.
+
 Writes, arbitrary commands, aggregation, watches, server-side JavaScript and
 unsafe prototype keys are rejected. Recursive validation limits queries to64KiB,
 1000 nodes and10 levels. Results are capped at1MiB per document,2MiB total and
