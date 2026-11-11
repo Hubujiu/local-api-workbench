@@ -1514,33 +1514,54 @@ export async function createApp({
             );
           }
           if (action === "export" && req.method === "GET") {
-            const values = u.searchParams.getAll("modelNameMode");
-            if (values.length > 1) throw Error("modelNameMode查询参数重复");
-            const modelNameMode = values[0];
-            resolveModelNameMode(modelNameMode);
+            // A typo or unsupported scope must never silently become a full backup.
+            // Keep diagnostics fixed: query names/values may themselves be secrets.
+            for (const key of u.searchParams.keys()) {
+              if (!["format", "modelNameMode", "databaseMode"].includes(key))
+                throw Error("项目导出不接受此查询参数");
+              if (u.searchParams.getAll(key).length !== 1)
+                throw Error("项目导出查询参数不得重复");
+            }
+            const format = u.searchParams.get("format") ?? "native";
             if (
-              values.length &&
-              !["apipost", "apipost-directory"].includes(
-                u.searchParams.get("format"),
-              )
+              ![
+                "native",
+                "backup",
+                "apipost",
+                "apipost-directory",
+                "openapi",
+              ].includes(format)
             )
-              throw Error("modelNameMode仅支持Apipost原生格式");
+              throw Error("项目导出格式无效");
+            const apipostFormat = ["apipost", "apipost-directory"].includes(
+              format,
+            );
+            const modelNameMode =
+              u.searchParams.get("modelNameMode") ?? undefined;
+            const databaseMode =
+              u.searchParams.get("databaseMode") ?? undefined;
+            if (
+              !apipostFormat &&
+              (modelNameMode !== undefined || databaseMode !== undefined)
+            )
+              throw Error("项目导出选项仅支持Apipost原生格式");
+            resolveModelNameMode(modelNameMode);
+            if (databaseMode !== undefined && databaseMode !== "rebind")
+              throw Error("数据库导出模式仅支持显式 rebind");
             return json(
               res,
               200,
-              u.searchParams.get("format") === "apipost-directory"
+              format === "apipost-directory"
                 ? exportApipostDirectory(p, {
                     modelNameMode,
-                    databaseMode:
-                      u.searchParams.get("databaseMode") ?? undefined,
+                    databaseMode,
                   })
-                : u.searchParams.get("format") === "apipost"
+                : format === "apipost"
                   ? exportApipost(p, {
                       modelNameMode,
-                      databaseMode:
-                        u.searchParams.get("databaseMode") ?? undefined,
+                      databaseMode,
                     })
-                  : u.searchParams.get("format") === "openapi"
+                  : format === "openapi"
                     ? exportOpenAPI(p)
                     : p,
               { completeProject: true },
