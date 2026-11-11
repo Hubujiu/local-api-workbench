@@ -1,3 +1,8 @@
+import {
+  loadFailureReasons,
+  loadFailureCounts,
+  countLoadFailures,
+} from "./load-report-semantics.mjs";
 import { performance } from "node:perf_hooks";
 import {
   admitLoadRedirects,
@@ -144,6 +149,7 @@ export async function runLoad(project, request, options = {}) {
                 error: "请求已中断",
                 passed: false,
                 interrupted: true,
+                failureReasons: ["cancelled"],
               });
               continue;
             }
@@ -171,6 +177,10 @@ export async function runLoad(project, request, options = {}) {
                 record.status === "passed" &&
                 record.response?.status >= 200 &&
                 record.response?.status < 300,
+              failureReasons: loadFailureReasons(record, {
+                policy: "2xx-and-assertions",
+                cancelled: run.status === "cancelled",
+              }),
               assertionFailureCount: assertionFailures.length,
               assertionFailures: assertionFailures.slice(0, 10).map((item) => ({
                 name: String(item.name || item.target || "assertion").slice(
@@ -211,6 +221,9 @@ export async function runLoad(project, request, options = {}) {
               interrupted: controller.signal.aborted,
               error: String(error.message).slice(0, 1000),
               passed: false,
+              failureReasons: [
+                controller.signal.aborted ? "cancelled" : "execution",
+              ],
             });
           }
         }
@@ -225,7 +238,12 @@ export async function runLoad(project, request, options = {}) {
     .filter((r) => r.duration !== undefined)
     .map((r) => r.duration)
     .sort((a, b) => a - b);
+  const failureCounts = loadFailureCounts();
+  for (const result of results)
+    countLoadFailures(failureCounts, result.failureReasons);
   return {
+    reportSemantics: { version: 1, statusPolicy: "2xx-and-assertions" },
+    failureCounts,
     ...timing,
     stopReason,
     count: results.length,
