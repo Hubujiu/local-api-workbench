@@ -237,6 +237,7 @@ export function createMCP({
   databaseExecutor,
   databasePreflight,
   websocketSessions,
+  grpcSessions,
 }) {
   const allowed = new Set([...projects, ...sessionProjects]);
   const socketioSessions = new SocketIOSessions();
@@ -905,6 +906,36 @@ export function createMCP({
       );
     }
   }
+  const grpcActions = new Map([
+    ["localapi_start_grpc_session", "start"],
+    ["localapi_get_grpc_session", "get"],
+    ["localapi_send_grpc_session", "send"],
+    ["localapi_half_close_grpc_session", "half_close"],
+    ["localapi_cancel_grpc_session", "cancel"],
+    ["localapi_get_grpc_operation", "operation"],
+  ]);
+  if (grpcSessions && write && execute) {
+    for (const [name, action] of grpcActions) {
+      const properties = { projectId: str };
+      if (action === "start") properties.definitionId = str;
+      if (["start", "send", "half_close", "operation"].includes(action))
+        properties.operationId = str;
+      if (["get", "send", "half_close", "cancel"].includes(action))
+        properties.sessionId = str;
+      if (action === "send") properties.message = { type: "object" };
+      const required = Object.keys(properties);
+      if (action === "get") {
+        properties.afterMessage = { type: "integer", minimum: 0 };
+        properties.limit = { type: "integer", minimum: 1, maximum: 20 };
+      }
+      addTool(
+        name.slice("localapi_".length),
+        "仅HTTP有状态MCP的已保存gRPC双向流；固定总期限，不自动重试。本地写入不代表远端确认；operationId仅进程内去重。取消等待原保存尝试，不重试存储。",
+        properties,
+        required,
+      );
+    }
+  }
   for (const tool of tools) {
     if (!tool.name.startsWith("localapi_delete_")) continue;
     tool.inputSchema.properties.confirm = {
@@ -923,6 +954,7 @@ export function createMCP({
       onProgress: emitProgress = onProgress,
       manualImportSessionId,
       websocketOwner,
+      grpcOwner,
     } = {},
   ) {
     const { id: requestId, method, params: incomingParams = {} } = message;
@@ -1111,6 +1143,23 @@ export function createMCP({
         );
         return result({
           ...(["start", "send"].includes(websocketAction) &&
+          ["failed-before-submit", "unknown"].includes(receipt.state)
+            ? { isError: true }
+            : {}),
+          content: [{ type: "text", text: JSON.stringify(receipt) }],
+        });
+      }
+      const grpcAction = grpcActions.get(params.name);
+      if (grpcAction) {
+        if (!grpcSessions || !write || !execute || !allowed.has(args.projectId))
+          throw Error("gRPC交互执行未授权或当前传输不支持");
+        if (!grpcOwner || typeof grpcOwner !== "object")
+          throw Error(
+            "gRPC双向流需要已初始化的HTTP MCP会话；不支持stdio或无状态请求",
+          );
+        const receipt = await grpcSessions.call(grpcAction, grpcOwner, args);
+        return result({
+          ...(["start", "send", "half_close"].includes(grpcAction) &&
           ["failed-before-submit", "unknown"].includes(receipt.state)
             ? { isError: true }
             : {}),

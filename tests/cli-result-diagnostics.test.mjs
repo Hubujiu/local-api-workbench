@@ -653,3 +653,86 @@ test("classified evidence preserves the original exit assertion and failure iden
     assert.equal(JSON.stringify(run), stdout);
   }
 });
+
+test("XML CLI failure diagnostics preserve exit assertions and exclude XML token URL and stdout sentinels", () => {
+  const token = "XML_CLI_PRIVATE_TOKEN_591";
+  const url = "https://private.invalid/login/" + token;
+  const xml = `<login><token>${token}</token></login>`;
+  const stdout = JSON.stringify({
+    status: "failed",
+    name: token,
+    variables: { token },
+    results: [
+      {
+        status: "failed",
+        name: token,
+        error: token,
+        request: { url, headers: { authorization: token } },
+        response: { body: xml },
+        scriptStage: "total-deadline",
+        scriptDiagnostics: {
+          lastWorkerStage: "starting",
+          elapsedMs: 2009,
+          source: xml,
+        },
+      },
+    ],
+  });
+  for (const counts of [
+    { loginRequestCount: 0, laterRequestCount: 0 },
+    { loginRequestCount: 1, laterRequestCount: 0 },
+  ]) {
+    let failure,
+      calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            calls++;
+            try {
+              assert.equal(1, 0, "FAILED XML login");
+            } catch (error) {
+              failure = error;
+              throw error;
+            }
+          },
+          stdout,
+          { ...counts, url, token, xml },
+        ),
+      (error) => {
+        assert.equal(error, failure);
+        assert.equal(error.actual, 1);
+        assert.equal(error.expected, 0);
+        assert.equal(error.operator, "strictEqual");
+        const suffix = error.message.slice(
+          error.message.indexOf("\nCLI_RESULT_METADATA "),
+        );
+        assert.ok(Buffer.byteLength(suffix) <= 4096);
+        for (const forbidden of [stdout, xml, token, url])
+          assert.ok(!error.message.includes(forbidden));
+        const metadata = JSON.parse(
+          suffix.slice("\nCLI_RESULT_METADATA ".length),
+        );
+        assert.deepEqual({ ...metadata.workflowObservations }, counts);
+        assert.equal(metadata.steps[0].reportedErrorKind, "other");
+        assert.equal(metadata.steps[0].lastWorkerStage, "starting");
+        assert.equal(metadata.steps[0].elapsedMs, 2009);
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+  }
+  // Successful assertion does not inspect or parse the supplied diagnostic input.
+  const uninspectable = new Proxy(
+    {},
+    {
+      get() {
+        throw Error("must not read stdout");
+      },
+    },
+  );
+  assert.equal(
+    withCLIResultDiagnostics(() => "ok", uninspectable),
+    "ok",
+  );
+});
