@@ -1,3 +1,4 @@
+import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
 import { postmanRawBodyPolicy } from "./postman-raw-body.mjs";
 import {
   preflightApipostAttributes,
@@ -369,6 +370,7 @@ export function exportApipost(project, options = {}) {
   for (const name of project.folders || []) folder(name);
   const requestIds = new Set();
   function requestNode(input) {
+    rejectGraphQLVariableTemplate(input);
     if (postmanRawBodyPolicy(input))
       throw Error("Apipost导出不能保留Postman raw媒体策略；请使用项目备份");
     assertRedirectExportable(input);

@@ -87,8 +87,6 @@ test("GraphQL unsupported dynamic and malformed definitions reject instead of dr
     { query: "{{query}}" },
     { query, operationName: "{{op}}" },
     { query, variables: { "{{key}}": 1 } },
-    { query, variables: { x: ["{{nested}}"] } },
-    { query, variables: '{"x":"\\u007b\\u007bsecret}}"}' },
     { query, variables: '{"x":"\\u007b\\u007bsecret}}","x":"static"}' },
     { query, variables: { x: Infinity } },
     { query, variables: { x: undefined } },

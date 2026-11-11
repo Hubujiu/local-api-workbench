@@ -1,4 +1,8 @@
 import {
+  renderGraphQLVariableTemplate,
+  validateGraphQLVariableTemplate,
+} from "./graphql-variable-template.mjs";
+import {
   hasQueryObjectSerialization,
   parseQueryObject,
 } from "./openapi-query-objects.mjs";
@@ -131,6 +135,7 @@ async function resolveDynamicRequestBase(
   functions,
   interpolate,
   literalBody,
+  inheritedDeadline,
 ) {
   validateApipostTemplateRequest(request);
   const postmanOAuth2 = postmanOAuth2Definition(request.auth);
@@ -210,7 +215,7 @@ async function resolveDynamicRequestBase(
     0,
   );
   if (transforms > 20) throw Error("每个请求最多20次动态函数处理");
-  const deadline = monotonicNow() + 5000;
+  const deadline = inheritedDeadline ?? monotonicNow() + 5000;
   // Scripts resolve templates explicitly at execution time, including post-extraction scopes.
   const scriptSources = {};
   for (const key of [
@@ -363,6 +368,8 @@ async function resolveDynamicRequestBase(
         ? JSON.stringify(value)
         : value;
   }
+  if (inheritedDeadline !== undefined && monotonicNow() > deadline)
+    throw Error("动态值处理超过5秒总预算");
   resolved.body = parts.join("");
   if (bodySpecs.length && resolved.body.length > 1024 * 1024)
     throw Error("动态Body超过1MiB");
@@ -393,7 +400,18 @@ export async function resolveDynamicRequest(
     )
   )
     throw Error("原版正文函数模板不支持脚本最终正文覆盖");
-  const literalBody = finalBodyLiteral(finalBody, request);
+  const graphqlDeadline = Object.hasOwn(request, "graphqlVariableTemplate")
+    ? monotonicNow() + 5000
+    : undefined;
+  if (validateGraphQLVariableTemplate(request) && finalBody !== undefined)
+    throw Error("GraphQL变量模板不支持脚本最终正文覆盖");
+  const literalBody =
+    renderGraphQLVariableTemplate(request, variables) ??
+    finalBodyLiteral(finalBody, request);
+  if (Object.hasOwn(request, "graphqlVariableTemplate")) {
+    request = structuredClone(request);
+    delete request.graphqlVariableTemplate;
+  }
   const resolve = (request, variables, functions, interpolate) =>
     resolveDynamicRequestBase(
       request,
@@ -401,6 +419,7 @@ export async function resolveDynamicRequest(
       functions,
       interpolate,
       literalBody,
+      graphqlDeadline,
     );
   if (normalizeScriptURLMode(request.scriptURLMode) === "sdk")
     return resolveSDKURLRequest(

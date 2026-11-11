@@ -15,8 +15,29 @@ test("execution clocks preserve aggregate limits and separate rounded observatio
     );
     assert(!source.includes("Date.now"));
   }
-  assert(dynamic.includes("const deadline = monotonicNow() + 5000;"));
-  assert.equal((dynamic.match(/monotonicNow\(\) > deadline/g) || []).length, 4);
+  assert(
+    dynamic.includes(
+      "const deadline = inheritedDeadline ?? monotonicNow() + 5000;",
+    ),
+  );
+  assert.match(
+    dynamic,
+    /const graphqlDeadline = Object.hasOwn\(request, "graphqlVariableTemplate"\)\s*\? monotonicNow\(\) \+ 5000\s*: undefined;/,
+  );
+  assert(
+    dynamic.indexOf("const graphqlDeadline") <
+      dynamic.indexOf("if (validateGraphQLVariableTemplate(request)"),
+  );
+  assert.match(dynamic, /literalBody,\s*graphqlDeadline,/);
+  assert(
+    dynamic.includes(
+      "if (inheritedDeadline !== undefined && monotonicNow() > deadline)",
+    ),
+  );
+  assert.equal(
+    (dynamic.match(/if \(monotonicNow\(\) > deadline\)/g) || []).length,
+    4,
+  );
   assert(!dynamic.includes("Math.round"));
   for (const literal of [
     "const started = monotonicNow();",

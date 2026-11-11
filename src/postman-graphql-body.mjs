@@ -1,3 +1,4 @@
+import { validateGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
 import { types } from "node:util";
 
 const BYTE_LIMIT = 8 * 1024 * 1024;
@@ -42,18 +43,18 @@ function stringJSONBytes(value) {
   }
   return bytes;
 }
-function staticText(value) {
+function staticText(value, templates = false) {
   if (
     typeof value !== "string" ||
     !value.isWellFormed() ||
-    value.includes("{{") ||
+    (!templates && value.includes("{{")) ||
     Buffer.byteLength(value) > BYTE_LIMIT
   )
     throw fail();
   stringJSONBytes(value);
   return value;
 }
-function snapshotJSON(value) {
+function snapshotJSON(value, templates = false) {
   let nodes = 0,
     bytes = 0;
   const consume = (amount) => {
@@ -61,7 +62,7 @@ function snapshotJSON(value) {
     if (bytes > BYTE_LIMIT) throw fail();
   };
   const countText = (text) => {
-    staticText(text);
+    staticText(text, templates);
     consume(stringJSONBytes(text));
     return text;
   };
@@ -136,7 +137,8 @@ export function importPostmanGraphQLBody(body) {
     )
   )
     throw fail();
-  let payloadBytes = 2;
+  let payloadBytes = 2,
+    templated = false;
   const reserve = (size) => {
     payloadBytes += size;
     if (payloadBytes > BYTE_LIMIT) throw fail();
@@ -154,7 +156,7 @@ export function importPostmanGraphQLBody(body) {
     if (variables !== "") {
       let source;
       if (typeof variables === "string") {
-        staticText(variables);
+        staticText(variables, true);
         try {
           variables = JSON.parse(variables);
         } catch {
@@ -162,7 +164,7 @@ export function importPostmanGraphQLBody(body) {
         }
         // JSON.parse collapses duplicate keys; inspect every original string token too.
         for (const token of gql.variables.value.matchAll(/"(?:\\.|[^"\\])*"/g))
-          staticText(JSON.parse(token[0]));
+          templated ||= staticText(JSON.parse(token[0]), true).includes("{{");
         // Preserve original number lexemes, whitespace and object key order.
         source = gql.variables.value;
       }
@@ -171,7 +173,8 @@ export function importPostmanGraphQLBody(body) {
         (typeof variables !== "object" || Array.isArray(variables))
       )
         throw fail();
-      const snapshot = snapshotJSON(variables);
+      const snapshot = snapshotJSON(variables, true);
+      templated ||= JSON.stringify(snapshot.value).includes("{{");
       reserve(
         ',"variables":'.length +
           (source === undefined ? snapshot.bytes : Buffer.byteLength(source)),
@@ -181,5 +184,10 @@ export function importPostmanGraphQLBody(body) {
   }
   const payload = "{" + parts.join(",") + "}";
   if (Buffer.byteLength(payload) > BYTE_LIMIT) throw fail();
-  return { bodyType: "json", body: payload };
+  const result = { bodyType: "json", body: payload };
+  if (templated || payload.includes("{{")) {
+    result.graphqlVariableTemplate = { version: 1 };
+    validateGraphQLVariableTemplate(result);
+  }
+  return result;
 }

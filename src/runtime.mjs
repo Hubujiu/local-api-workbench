@@ -1,3 +1,4 @@
+import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
 import { loadNetworkBudget } from "./load-network-budget.mjs";
 import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
 import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
@@ -1278,6 +1279,7 @@ export async function executeRequest(
   if (input?.nativeInheritance !== undefined)
     throw Error("请求须先按当前项目解析原生继承图");
 
+  rejectGraphQLVariableTemplate(input);
   const r = normalizeRequest(input);
   const admittedNetworkBudget = loadNetworkBudget(networkBudget);
   if (admittedNetworkBudget)
