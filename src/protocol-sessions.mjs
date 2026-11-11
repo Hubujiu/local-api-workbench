@@ -46,6 +46,7 @@ export class ProtocolSessions {
     });
   }
   finish(session, reason) {
+    for (const settle of session.pendingSends || []) settle("unknown");
     delete session.templateContext;
     if (!session.finishedAt) {
       session.finishedAt = new Date().toISOString();
@@ -307,7 +308,7 @@ export class ProtocolSessions {
     }
     return this.snapshot(session.id);
   }
-  send(id, message) {
+  send(id, message, { onSubmitted, onComplete } = {}) {
     const session = this.get(id);
     if (session.state !== "open" || session.type === "sse")
       throw Error("当前会话不可发送消息");
@@ -329,9 +330,23 @@ export class ProtocolSessions {
     const recorded = session.events.at(-1);
     recorded.encoding = payload.binary ? "base64" : "utf8";
     recorded.sendState = "queued";
+    let settled = false;
+    const settle = (state) => {
+      if (settled) return;
+      settled = true;
+      session.pendingSends.delete(settle);
+      // Observers are trusted bookkeeping, not transport participants.
+      try {
+        onComplete?.({ state, eventId: recorded.id });
+      } catch {}
+    };
+    session.pendingSends ??= new Set();
+    session.pendingSends.add(settle);
     const complete = (error) => {
-      if (session.state !== "open") return;
+      if (settled) return;
+      if (session.state !== "open") return settle("unknown");
       recorded.sendState = error ? "failed" : "written";
+      settle(error ? "unknown" : "locally-written");
       if (error) {
         session.state = "error";
         session.error = "协议发送失败，远端结果未确认，不会自动重试";
@@ -340,9 +355,26 @@ export class ProtocolSessions {
         this.finish(session, "error");
       }
     };
-    if (session.type === "websocket")
-      session.socket.send(payload.buffer, { binary: payload.binary }, complete);
-    else session.socket.write(payload.buffer, complete);
+    try {
+      onSubmitted?.({ eventId: recorded.id });
+    } catch {
+      // No network submission has happened if bookkeeping fails.
+      session.pendingSends.delete(settle);
+      recorded.sendState = "failed";
+      throw Error("发送状态登记失败，未提交网络");
+    }
+    try {
+      if (session.type === "websocket")
+        session.socket.send(
+          payload.buffer,
+          { binary: payload.binary },
+          complete,
+        );
+      else session.socket.write(payload.buffer, complete);
+    } catch {
+      // A transport throw does not prove zero bytes reached the peer.
+      complete(Error("协议发送结果未知"));
+    }
     return this.snapshot(id);
   }
   stop(id, reason = "manual") {

@@ -64,6 +64,7 @@ import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { saveProjectArchive } from "./project-archive-grants.mjs";
 import { finalizeWireSession } from "./wire-session-evidence.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
+import { MCPWebSocketSessions } from "./mcp-websocket-sessions.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
 import { executeSocketIOFlow } from "./socketio-plan.mjs";
 import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
@@ -277,6 +278,13 @@ export async function createApp({
   const debugEnvironments = new Map();
   const mcpActivities = new Map();
   const mcpHTTPSessions = new MCPHTTPSessions();
+  const mcpWebSocketSessions = new MCPWebSocketSessions({
+    sessions: protocolSessions,
+    store,
+    owns: (owner) => mcpHTTPSessions.owns(owner),
+  });
+  mcpHTTPSessions.onDispose = (owner, reason) =>
+    mcpWebSocketSessions.dispose(owner, reason);
   let mcp = { enabled: false, projects: [], write: false, execute: false },
     mcpSessionProjects = [],
     mcpToken = "",
@@ -496,6 +504,7 @@ export async function createApp({
           return json(res, 404, { error: "Unknown MCP session" });
         if (req.method === "DELETE" && sessionHeader !== undefined) {
           mcpHTTPSessions.delete(sessionHeader);
+          await mcpHTTPSessions.drain();
           res.writeHead(204);
           return res.end();
         }
@@ -629,6 +638,7 @@ export async function createApp({
               mcpDatabaseGrants.query(mcpEpoch, projectId, operation, signal),
             grpcExecutor: executePlanGrpc,
             protocolExecutor: executePlanWire,
+            websocketSessions: mcpWebSocketSessions,
             socketioExecutor: (projectId, input, signal) =>
               executeSocketIOFlow(input, signal, {
                 projectId,
@@ -649,6 +659,10 @@ export async function createApp({
           });
           result = await dispatch(message, {
             signal,
+            websocketOwner:
+              sessionId === undefined
+                ? undefined
+                : mcpHTTPSessions.owner(sessionId),
             manualImportSessionId:
               sessionId === undefined
                 ? undefined
@@ -933,6 +947,7 @@ export async function createApp({
               mcpHTTPSessions.advance({ dropSessions: !mcp.enabled });
               if (!mcp.enabled) mcpToken = "";
               const reducedGeneration = mcpPublication.advanceRevocation();
+              await mcpHTTPSessions.drain();
               mcpWarning =
                 "当前进程已限制MCP权限，持久化尚未确认；重启可能恢复旧授权。";
               try {
@@ -992,6 +1007,7 @@ export async function createApp({
                 mcpSessionProjects = [];
                 mcpToken = nextToken;
                 mcpWarning = "";
+                await mcpHTTPSessions.drain();
               });
           } else if (req.method !== "GET")
             return json(res, 405, { error: "Method not allowed" });
@@ -1411,6 +1427,7 @@ export async function createApp({
             if (b.archived) await autoImports.deactivate(p.id);
             else if (importSessionChanged)
               importLease = await autoImports.suspend(p.id);
+            let websocketArchiveDrain;
             const saveWithArchiveRevocation = async () => {
               const saved = await saveProjectArchive(
                 b,
@@ -1421,6 +1438,8 @@ export async function createApp({
                   for (const projects of [mcp.projects, mcpSessionProjects])
                     for (let i = projects.length - 1; i >= 0; i--)
                       if (projects[i] === projectId) projects.splice(i, 1);
+                  websocketArchiveDrain =
+                    mcpWebSocketSessions.revokeProject(projectId);
                 },
               );
               if (b.archived && mcp.remember)
@@ -1434,6 +1453,7 @@ export async function createApp({
                 : await saveWithArchiveRevocation();
               await autoImports.reactivate(importLease);
             } finally {
+              await websocketArchiveDrain;
               autoImports.discard(importLease);
             }
             return json(res, 200, saved);
@@ -2696,6 +2716,7 @@ export async function createApp({
     (protocolShutdown ??= Promise.all([
       protocolSessions.close(),
       grpcSessions.close(),
+      mcpHTTPSessions.drain(),
     ]).then(([protocolSessions, grpcSessions]) => ({
       protocolSessions,
       grpcSessions,

@@ -10,13 +10,17 @@ export class MCPHTTPSessions {
   #transient = new Set();
   #epoch = 0;
   #closed = false;
+  #owners = new WeakSet();
+  #pendingDisposals = new Set();
   constructor({
     now = Date.now,
     maxSessions = 32,
     idleMs = 900000,
     maxRequests = 1024,
     maxTransient = 32,
+    onDispose,
   } = {}) {
+    this.onDispose = onDispose;
     this.now = now;
     this.maxSessions = maxSessions;
     this.idleMs = idleMs;
@@ -26,10 +30,60 @@ export class MCPHTTPSessions {
   capture() {
     return this.#epoch;
   }
+  #newOwner() {
+    const owner = Object.freeze({ epoch: this.#epoch });
+    this.#owners.add(owner);
+    return owner;
+  }
+  owner(id) {
+    return this.get(id)?.owner;
+  }
+  owns(owner) {
+    return !!owner && this.#owners.has(owner);
+  }
+  #dispose(session, reason) {
+    const owner = session.owner;
+    if (!this.#owners.delete(owner)) return;
+    // Revoke synchronously, before any asynchronous socket/storage drain.
+    let result;
+    try {
+      result = this.onDispose?.(owner, reason);
+    } catch (error) {
+      result = Promise.reject(error);
+    }
+    const pending = Promise.resolve(result).then(
+      (value) => ({ status: "fulfilled", value }),
+      (reason) => ({ status: "rejected", reason }),
+    );
+    this.#pendingDisposals.add(pending);
+    pending.then(() => this.#pendingDisposals.delete(pending));
+  }
+  async drain() {
+    const results = [];
+    while (this.#pendingDisposals.size)
+      results.push(...(await Promise.all([...this.#pendingDisposals])));
+    return results;
+  }
+  #arm(id, session) {
+    clearTimeout(session.idleTimer);
+    if (!Number.isFinite(this.idleMs) || session.inflight) return;
+    session.idleTimer = setTimeout(
+      () => {
+        if (this.#sessions.get(id) !== session) return;
+        this.#prune();
+        if (this.#sessions.get(id) === session) this.#arm(id, session);
+      },
+      Math.max(1, this.idleMs - (this.now() - session.lastUsed) + 1),
+    );
+    session.idleTimer.unref?.();
+  }
   #prune() {
     for (const [id, session] of this.#sessions)
-      if (!session.inflight && this.now() - session.lastUsed > this.idleMs)
+      if (!session.inflight && this.now() - session.lastUsed > this.idleMs) {
         this.#sessions.delete(id);
+        clearTimeout(session.idleTimer);
+        this.#dispose(session, "expired");
+      }
   }
   create(requestId) {
     if (this.#closed) throw Error("MCP execution ownership is closed");
@@ -39,18 +93,24 @@ export class MCPHTTPSessions {
     if (this.#sessions.size >= this.maxSessions)
       throw Error("MCP session limit reached");
     const id = randomUUID();
-    this.#sessions.set(id, {
+    const session = {
+      owner: this.#newOwner(),
       lastUsed: this.now(),
       seen: new Set(),
       inflight: 0,
       active: new Map(),
-    });
+    };
+    this.#sessions.set(id, session);
+    this.#arm(id, session);
     return id;
   }
   get(id) {
     this.#prune();
     const session = typeof id === "string" ? this.#sessions.get(id) : undefined;
-    if (session) session.lastUsed = this.now();
+    if (session) {
+      session.lastUsed = this.now();
+      this.#arm(id, session);
+    }
     return session;
   }
   begin(id, requestId, cancellable) {
@@ -66,6 +126,7 @@ export class MCPHTTPSessions {
       );
     session.seen.add(key);
     session.inflight++;
+    clearTimeout(session.idleTimer);
     const controller = cancellable ? new AbortController() : undefined;
     const active = { controller, epoch: this.#epoch, notified: false };
     if (controller) session.active.set(key, active);
@@ -82,6 +143,7 @@ export class MCPHTTPSessions {
         if (controller && session.active.get(key)?.controller === controller)
           session.active.delete(key);
         session.lastUsed = this.now();
+        if (this.#sessions.get(id) === session) this.#arm(id, session);
       },
     };
   }
@@ -121,6 +183,8 @@ export class MCPHTTPSessions {
     if (!session) return false;
     for (const { controller } of session.active.values()) controller.abort();
     this.#sessions.delete(id);
+    clearTimeout(session.idleTimer);
+    this.#dispose(session, "deleted");
     return true;
   }
   advance({ dropSessions = false } = {}) {
@@ -129,6 +193,9 @@ export class MCPHTTPSessions {
     for (const session of this.#sessions.values()) {
       for (const { controller } of session.active.values()) controller.abort();
       session.active.clear();
+      this.#dispose(session, this.#closed ? "closed" : "authorization-changed");
+      if (dropSessions) clearTimeout(session.idleTimer);
+      else session.owner = this.#newOwner();
     }
     if (dropSessions) this.#sessions.clear();
   }
