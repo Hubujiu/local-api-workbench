@@ -1,0 +1,99 @@
+{
+  "repository": "postmanlabs/schemas",
+  "commit": "c5fa20c6210207d09b06a23d700f9228c31ad703",
+  "rootBlob": "fe7983c89c04d78beca5562f4245f70ba142b94b",
+  "definitions": [
+    {
+      "name": "auth-attribute.json",
+      "blob": "b3ac7691333e8ed28bfb193d5be8202ce9526b4d"
+    },
+    {
+      "name": "auth.json",
+      "blob": "15437a554c4e7fe1d09d680071d2b19c86cf6cfb"
+    },
+    {
+      "name": "certificate-list.json",
+      "blob": "6356b18c74f788270bf93290fe6a67faf2340cf6"
+    },
+    {
+      "name": "certificate.json",
+      "blob": "34e46c20a646405b0eb6c46b6ccf964a4bf0b699"
+    },
+    {
+      "name": "cookie-list.json",
+      "blob": "1103fd509fb86b5c88abb5ca790fba290216374f"
+    },
+    {
+      "name": "cookie.json",
+      "blob": "bef178d5716a46f824a95d11dd560c7814410191"
+    },
+    {
+      "name": "description.json",
+      "blob": "6c7476aa03f062da0c9f19f3951170e7cab41183"
+    },
+    {
+      "name": "event-list.json",
+      "blob": "e7e0c9993d9857f0af7e6e3b1b97bd4ab21c3cef"
+    },
+    {
+      "name": "event.json",
+      "blob": "faca73a618a2802a46c0b01478f8b67a39828a27"
+    },
+    {
+      "name": "header-list.json",
+      "blob": "21f724b1ca7261cb67079bc9bec1028ff201447e"
+    },
+    {
+      "name": "header.json",
+      "blob": "3eb92a86ab6c1ba3bc3670a2f63c215e75543204"
+    },
+    {
+      "name": "info.json",
+      "blob": "4a7c4eac815df3a67e303ed5fd23f4de683cca67"
+    },
+    {
+      "name": "item-group.json",
+      "blob": "4dc298a29a9bd422dbf591850165b6144247b3ea"
+    },
+    {
+      "name": "item.json",
+      "blob": "22e2265da2fea9dcd11fbc640af7dfd8ce23d753"
+    },
+    {
+      "name": "protocol-profile-behavior.json",
+      "blob": "cda390b87213b21c867911393777223c13e084a5"
+    },
+    {
+      "name": "proxy-config.json",
+      "blob": "c58ba6572755072b8e946facba35ea5a292ee8bc"
+    },
+    {
+      "name": "request.json",
+      "blob": "7f0f89925c6c5ac680e99855573f5b710721aa70"
+    },
+    {
+      "name": "response.json",
+      "blob": "985c3a44d0afda11a4afbfd3875fb5010b6883a3"
+    },
+    {
+      "name": "script.json",
+      "blob": "c31d5fe8ebaa948e8814a994c87f5a63b3afff0f"
+    },
+    {
+      "name": "url.json",
+      "blob": "3823b9d39ebdd49d8fbe176893d4eff30a7bc091"
+    },
+    {
+      "name": "variable-list.json",
+      "blob": "a6ead2e940c501e4561139a38d9c60f032bb9ca8"
+    },
+    {
+      "name": "variable.json",
+      "blob": "d6b3d012985201a5c40de9de97bd9d38569fcf56"
+    },
+    {
+      "name": "version.json",
+      "blob": "7291f202f997edeb0180b32c29016c60516f87b0"
+    }
+  ]
+}
