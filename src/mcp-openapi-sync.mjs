@@ -1,3 +1,5 @@
+import { assertCompatibleNullableSources } from "./openapi-schema-source.mjs";
+import { referenceChildMode } from "./openapi-reference-context.mjs";
 import { parseImportDocumentText } from "./import-document-parser.mjs";
 import { ensureNativeDefaults } from "./native-mcp-environments.mjs";
 import { importIntoProject, resolveLocalReferences } from "./core.mjs";
@@ -82,6 +84,12 @@ export function syncMCPOpenAPI(project, args, { native = false } = {}) {
   for (const [category, entries] of Object.entries(
     converted.openapiComponents,
   )) {
+    for (const [name, value] of Object.entries(entries))
+      assertCompatibleNullableSources(
+        draft.openapiComponents[category]?.[name],
+        value,
+        referenceChildMode("components", category, entries).replace("map:", ""),
+      );
     draft.openapiComponents[category] = {
       ...(draft.openapiComponents[category] || {}),
       ...entries,
