@@ -44,6 +44,7 @@ const omitted = [
   "plans",
   "history",
   "runs",
+  "loadRuns",
   "protocolRuns",
   "requestDefinitionHistory",
   "apiResourceTrash",
@@ -52,6 +53,7 @@ const omitted = [
 const transientRoots = new Set([
   ...omitted.filter((key) => !key.includes(".")),
   "requestDefinitionHistoryFormat",
+  "loadReportFormat",
   "revision",
   "configRevision",
   "_diskFingerprint",

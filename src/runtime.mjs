@@ -1,3 +1,7 @@
+import {
+  validateLoadRuns,
+  transitionLoadRun,
+} from "./load-report-evidence.mjs";
 import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
 import { loadNetworkBudget } from "./load-network-budget.mjs";
 import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
@@ -402,6 +406,9 @@ export class Store {
         validateAPIResourceTrash(project);
         validatePostmanOAuth2Project(project);
         validateGrpcSessionHistory(project.protocolRuns ?? []);
+        validateLoadRuns(
+          project.loadRuns === undefined ? [] : project.loadRuns,
+        );
         validateRequestDefinitionHistory(project);
         return project;
       }
@@ -414,6 +421,7 @@ export class Store {
     validateAPIResourceTrash(project);
     validatePostmanOAuth2Project(project);
     validateGrpcSessionHistory(project.protocolRuns ?? []);
+    validateLoadRuns(project.loadRuns === undefined ? [] : project.loadRuns);
     validateRequestDefinitionHistory(project);
     project._diskFingerprint = projectFingerprint(project);
     return project;
@@ -899,6 +907,7 @@ export class Store {
         p.settings.socketioDefinitions,
       );
     validateProtocolRuns(p.protocolRuns ?? []);
+    validateLoadRuns(p.loadRuns === undefined ? [] : p.loadRuns);
     if (p.settings?.apipostDirectoryArtifacts !== undefined)
       p.settings.apipostDirectoryArtifacts = normalizeDirectoryArtifacts(
         p.settings.apipostDirectoryArtifacts,
@@ -1035,6 +1044,7 @@ export class Store {
       nativeInheritanceEditContext,
       apiResourceRestore,
       definitionHistoryOperation,
+      loadReportOperation,
     },
     base,
     creating = false,
@@ -1221,6 +1231,16 @@ export class Store {
       next.runs = previous.runs;
       next.protocolRuns = previous.protocolRuns || [];
     }
+    if (loadReportOperation) {
+      if (!activity || !previous) throw Error("压测收据只能更新现有项目活动");
+      next.loadRuns = transitionLoadRun(
+        previous.loadRuns ?? [],
+        loadReportOperation,
+      );
+    } else if (previous) {
+      if (previous.loadRuns === undefined) delete next.loadRuns;
+      else next.loadRuns = structuredClone(previous.loadRuns);
+    }
     next.updatedAt = new Date().toISOString();
     const definitions = reconcileRequestDefinitionHistory(previous, next, {
       activity,
@@ -1258,6 +1278,51 @@ export class Store {
       throw new ProjectCommitUncertain(p.id, error);
     }
     return p;
+  }
+  async writeLoadReport(key, record) {
+    validateLoadRuns([record]);
+    const operation = structuredClone(record);
+    // Receipt transitions own their entire read/modify/write critical section.
+    // Never read a detached revision before queueing, and never call get/save
+    // while holding this same project lock. This path has no execution callback.
+    const task = this.pending
+      .catch(() => {})
+      .then(async () => {
+        await this.init();
+        const base = this.base(key);
+        if (Object.hasOwn(this.creationErrors, key))
+          throw this.creationErrors[key];
+        const release = await acquireFileLock(
+          path.join(base, key + ".json.lock"),
+        );
+        let committed = false,
+          primaryError;
+        try {
+          const current = await this.readUnlocked(key, base);
+          this.#validateProject(current);
+          await this.#saveLocked(
+            current,
+            { activity: true, loadReportOperation: operation },
+            base,
+          );
+          committed = true;
+          return current;
+        } catch (error) {
+          primaryError = error;
+          throw error;
+        } finally {
+          try {
+            await release();
+          } catch (error) {
+            throw (
+              primaryError ||
+              (committed ? new ProjectCommitUncertain(key, error) : error)
+            );
+          }
+        }
+      });
+    this.pending = task;
+    return task;
   }
   async append(key, field, value, limit = 50) {
     for (let attempt = 0; attempt < 5; attempt++) {
