@@ -328,7 +328,8 @@ test("synthetic native directory templates retain shared functions and scope scr
     bad = structuredClone(document);
   const file = bad.files.find((file) => file.path === "apis/api.json");
   const record = JSON.parse(file.text);
-  record.data.request.body.raw = "{{token.value|upper}} {{token.value|lower}}";
+  record.data.request.body.raw =
+    "{{token.value|upper}} {{$function.fn_wrap(raw)}}";
   file.text = JSON.stringify(record);
   assert.throws(() => importIntoProject(project, bad), /表达式|模板/);
   assert.deepEqual(

@@ -61,6 +61,19 @@ export function parseApipostFunctionTemplate(value, allowField = true) {
   if (!match && !variable && !literal && allowField) {
     const expressions = value.match(/\{\{[^{}]*\}\}/g) || [];
     if (
+      expressions.length > 1 &&
+      !value.replace(/\{\{[^{}]*\}\}/g, "").includes("{{")
+    ) {
+      const parsed = expressions.map((item) =>
+        parseApipostFunctionTemplate(item, false),
+      );
+      const stages = parsed.flatMap(apipostTemplateStages);
+      if (stages.some((name) => !isApipostBuiltinStage(name)))
+        throw Error("多个表达式暂不支持自定义函数");
+      if (stages.length > 20) throw Error("每个请求最多20次动态函数处理");
+      return { fieldExpressions: expressions };
+    }
+    if (
       expressions.length === 1 &&
       expressions[0] !== value &&
       !value.replace(expressions[0], "").includes("{{")
@@ -72,7 +85,7 @@ export function parseApipostFunctionTemplate(value, allowField = true) {
   }
   if (!match && !variable && !literal)
     throw Error(
-      "仅支持完整函数、安全点路径变量或引号文本及白名单加工链，不支持嵌套或多个表达式",
+      "仅支持完整函数、安全点路径变量或引号文本及白名单加工链，不支持嵌套或未受支持的表达式",
     );
   if (
     variable &&
@@ -180,10 +193,12 @@ export function parseApipostFunctionTemplate(value, allowField = true) {
 export const isApipostTemplateCandidate = (value) =>
   typeof value === "string" &&
   (/\$function\./i.test(value) || /\{\{[^{}]*\|/.test(value));
-export const apipostTemplateStages = (parsed) => [
-  ...(parsed.name ? [parsed.name] : []),
-  ...(parsed.pipeline || []),
-];
+export const apipostTemplateStages = (parsed) =>
+  parsed.fieldExpressions
+    ? parsed.fieldExpressions.flatMap((item) =>
+        apipostTemplateStages(parseApipostFunctionTemplate(item, false)),
+      )
+    : [...(parsed.name ? [parsed.name] : []), ...(parsed.pipeline || [])];
 
 export function validateApipostTemplateRequest(request) {
   const entries = [];
@@ -241,7 +256,10 @@ export function validateApipostTemplateRequest(request) {
   let count = 0;
   for (const { group, row } of entries) {
     const parsed = parseApipostFunctionTemplate(row.dynamic.value);
-    if (parsed.fieldExpression && group === "query")
+    if (
+      (parsed.fieldExpression || parsed.fieldExpressions) &&
+      group === "query"
+    )
       throw Error("原版Query模板暂不支持表达式前后缀");
     if (row.dynamic.functions?.length)
       throw Error("原版函数模板暂不支持额外加工链");
