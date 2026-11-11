@@ -1,3 +1,8 @@
+import {
+  loadReportReadArguments,
+  readLoadReport,
+  loadReportReadError,
+} from "./load-report-mcp-read.mjs";
 import { projectWithoutLoadRuns } from "./project-owner-projection.mjs";
 import { environmentTextRequired } from "./postman-environment-import.mjs";
 import { materializeLivePlan } from "./live-plan-materialize.mjs";
@@ -690,6 +695,24 @@ export function createMCP({
     { ...projectArg, definitionId: str },
   );
   addTool(
+    "list_load_reports",
+    "只读列出授权项目最多60条已保存压测收据元数据；pending仅表示终态未确认，不表示正在运行，不执行或恢复请求",
+    {
+      projectId: { type: "string", minLength: 1, maxLength: 4096 },
+    },
+  );
+  addTool(
+    "get_load_report",
+    "只读获取已保存压测白名单收据；completed不代表所有样本通过，pending不触发修复或重放",
+    {
+      projectId: { type: "string", minLength: 1, maxLength: 4096 },
+      recordId: {
+        type: "string",
+        pattern: "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+      },
+    },
+  );
+  addTool(
     "list_protocol_runs",
     "读取项目最近协议执行摘要，不返回消息正文",
     projectArg,
@@ -887,6 +910,22 @@ export function createMCP({
       };
     // Bounded interchange/history tools cannot echo an unbounded/structured ID
     // even in their error envelope. Other tools retain their existing contract.
+    const loadReportRead = [
+      "localapi_list_load_reports",
+      "localapi_get_load_report",
+    ].includes(params?.name);
+    if (
+      loadReportRead &&
+      !(
+        (typeof requestId === "string" &&
+          Buffer.byteLength(requestId) <= 256) ||
+        (typeof requestId === "number" && Number.isSafeInteger(requestId))
+      )
+    )
+      return {
+        jsonrpc: "2.0",
+        error: { code: -32600, message: loadReportReadError },
+      };
     const definitionHistory = [
       "localapi_list_api_definition_history",
       "localapi_get_api_definition_version",
@@ -932,6 +971,13 @@ export function createMCP({
       const tool = tools.find((t) => t.name === params.name);
       if (!tool) throw Error("工具不存在或未授权");
       let args = params.arguments === undefined ? {} : params.arguments;
+      if (loadReportRead) {
+        signal?.throwIfAborted();
+        args = loadReportReadArguments(
+          args,
+          params.name === "localapi_get_load_report",
+        );
+      }
       if (manualImport) {
         args = manualImportMCPArguments(
           args,
@@ -1032,9 +1078,9 @@ export function createMCP({
         const lockId = nativePlanArgs?.flow_id || args.planId || args.plan?.id;
         if (lockId && lockedOperations.includes(params.name))
           unlockPlan = lockMCPPlan(store, args.projectId, lockId);
-        if (scopedExport) signal?.throwIfAborted();
+        if (scopedExport || loadReportRead) signal?.throwIfAborted();
         const p = await store.get(args.projectId);
-        if (scopedExport) signal?.throwIfAborted();
+        if (scopedExport || loadReportRead) signal?.throwIfAborted();
         if (!scopedExport && p.archived) throw Error("项目已归档");
         if (nativeName && Object.hasOwn(args, "environmentId"))
           args = {
@@ -1145,6 +1191,11 @@ export function createMCP({
               return result(await importMCPProject(store, p, args, requestId));
             case "localapi_export_project":
               return result(exportMCPProject(p, args, requestId));
+            case "localapi_list_load_reports":
+            case "localapi_get_load_report":
+              output = readLoadReport(p, args.recordId);
+              signal?.throwIfAborted();
+              break;
             case "localapi_list_protocol_runs":
               output = (p.protocolRuns || []).map(
                 ({ id, runId, type, mode, status, createdAt, durationMs }) => ({
@@ -1706,6 +1757,12 @@ export function createMCP({
         ],
       });
     } catch (e) {
+      // Never inspect injected Store errors or echo arguments/storage paths.
+      if (loadReportRead)
+        return result({
+          isError: true,
+          content: [{ type: "text", text: loadReportReadError }],
+        });
       // Archive chunks use a fixed error even for hostile injected Store
       // failures. Do not inspect error properties before this boundary.
       if (importedChunkRequest)
