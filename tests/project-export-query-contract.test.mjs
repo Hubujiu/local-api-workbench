@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
+import { Store } from "../src/runtime.mjs";
 import { normalizeRequest, exportOpenAPI } from "../src/core.mjs";
 
 import { exportApipost } from "../src/apipost-export.mjs";
@@ -48,7 +49,7 @@ async function fixture(t) {
     );
     return { status: r.status, body: await r.json() };
   };
-  return { app, p: before, get };
+  return { app, root, p: before, get };
 }
 
 test("explicit invalid export queries reject without project or query data disclosure", async (t) => {
@@ -64,6 +65,10 @@ test("explicit invalid export queries reject without project or query data discl
     "?format=native&format=native",
     "?format=native&%66ormat=openapi",
     "?format=native&environmentId=dev",
+    "?format=backup&environmentId=dev",
+    "?format=backup&format=backup",
+    "?format=backup&databaseMode=rebind",
+    "?format=backup&modelNameMode=preserve",
     "?environmentId=dev",
     "?format=openapi&selection=private-query-fixture",
     "?format=apipost&folder=private-query-fixture",
@@ -90,7 +95,7 @@ test("explicit invalid export queries reject without project or query data discl
 
 test("default and native remain full backups; historical explicit formats and options remain valid", async (t) => {
   const f = await fixture(t);
-  for (const query of ["", "?format=native"]) {
+  for (const query of ["", "?format=native", "?format=backup"]) {
     const r = await f.get(query);
     assert.equal(r.status, 200);
     assert.deepEqual(r.body, f.p);
@@ -143,6 +148,7 @@ test("owner authentication still precedes export and query validation", async (t
   for (const q of [
     "",
     "?format=native",
+    "?format=backup",
     "?format=postman",
     "?format=apipost",
   ]) {
@@ -150,4 +156,33 @@ test("owner authentication still precedes export and query validation", async (t
     assert.equal(r.status, 403);
     assert.doesNotMatch(JSON.stringify(r.body), /private-.*-fixture/);
   }
+});
+
+test("historical backup alias restores a complete isolated project and survives Store reopen", async (t) => {
+  const f = await fixture(t);
+  const backup = await f.get("?format=backup");
+  assert.equal(backup.status, 200);
+  assert.deepEqual(backup.body, f.p);
+  const response = await fetch(f.app.url + "/api/restore", {
+    method: "POST",
+    headers: {
+      "x-local-token": f.app.token,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ document: backup.body }),
+  });
+  const restored = await response.json();
+  assert.equal(response.status, 201, JSON.stringify(restored));
+  assert.notEqual(restored.id, f.p.id);
+  const reopened = await new Store(f.root).get(restored.id);
+  for (const field of [
+    "environments",
+    "requests",
+    "globalVariables",
+    "dictionary",
+    "openapiComponents",
+  ]) {
+    assert.deepEqual(reopened[field], f.p[field], field);
+  }
+  assert.deepEqual(await f.app.store.get(f.p.id), f.p);
 });

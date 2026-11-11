@@ -1524,9 +1524,13 @@ export async function createApp({
             }
             const format = u.searchParams.get("format") ?? "native";
             if (
-              !["native", "apipost", "apipost-directory", "openapi"].includes(
-                format,
-              )
+              ![
+                "native",
+                "backup",
+                "apipost",
+                "apipost-directory",
+                "openapi",
+              ].includes(format)
             )
               throw Error("项目导出格式无效");
             const apipostFormat = ["apipost", "apipost-directory"].includes(
