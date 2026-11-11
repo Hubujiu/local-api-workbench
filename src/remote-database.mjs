@@ -38,6 +38,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
   if (!["postgres", "mysql"].includes(type)) throw Error("数据库类型无效");
   if (
     typeof sql !== "string" ||
+    !sql.isWellFormed() ||
     sql.length > 50000 ||
     !/^\s*(SELECT\b|WITH\b)/i.test(sql)
   )

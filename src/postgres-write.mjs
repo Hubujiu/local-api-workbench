@@ -13,6 +13,7 @@ import {
 export function validatePostgresWrite(sql) {
   if (
     typeof sql !== "string" ||
+    !sql.isWellFormed() ||
     sql.length > 50000 ||
     !/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)
   )

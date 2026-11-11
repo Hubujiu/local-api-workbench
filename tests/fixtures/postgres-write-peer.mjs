@@ -34,6 +34,7 @@ export async function startPostgresWritePeer({
 } = {}) {
   const sockets = [],
     commands = [],
+    preparedSQL = [],
     startups = [];
   let reach,
     fail,
@@ -88,7 +89,7 @@ export async function startPostgresWritePeer({
           if (tag === "Q") {
             const sql = payload.toString().replace(/\0$/, "");
             commands.push(sql);
-            if (sql === "BEGIN READ WRITE") {
+            if (["BEGIN READ WRITE", "BEGIN READ ONLY"].includes(sql)) {
               if (mode === "hold-begin") {
                 reach();
                 continue;
@@ -109,6 +110,10 @@ export async function startPostgresWritePeer({
             }
           } else if (tag === "P") {
             commands.push("DML PREPARE");
+            const start = payload.indexOf(0) + 1;
+            preparedSQL.push(
+              payload.subarray(start, payload.indexOf(0, start)).toString(),
+            );
             send(packet("1", Buffer.alloc(0)));
           } else if (tag === "B") send(packet("2", Buffer.alloc(0)));
           else if (tag === "D") send(description);
@@ -176,6 +181,7 @@ export async function startPostgresWritePeer({
     cert,
     sockets,
     commands,
+    preparedSQL,
     startups,
     reached,
     stats: () => ({ commitACK, rollbackACK }),
