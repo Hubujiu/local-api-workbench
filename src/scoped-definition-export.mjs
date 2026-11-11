@@ -1,3 +1,7 @@
+import {
+  exportPostmanDefinition,
+  POSTMAN_DEFINITION_FORMAT,
+} from "./postman-definition-export.mjs";
 import { types } from "node:util";
 import { createHash } from "node:crypto";
 import { prepareDefinitionExportScope } from "./definition-export-scope.mjs";
@@ -10,7 +14,7 @@ import {
 } from "./mcp-project-interchange.mjs";
 
 export const SCOPED_EXPORT_ARGUMENT_BYTES = 2 * 1024 * 1024;
-const formats = ["apipost", "apipost-directory"];
+const formats = ["apipost", "apipost-directory", POSTMAN_DEFINITION_FORMAT];
 const safeErrors = new WeakMap();
 const fail = (message) => {
   const error = Error("选择导出：" + message);
@@ -51,8 +55,12 @@ export function scopedExportArguments(
       : []),
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) fail("未知参数");
-  if (!formats.includes(value.format))
-    fail("format 必须为 apipost 或 apipost-directory");
+  if (!formats.includes(value.format)) fail("format 必须为已支持的定义格式");
+  if (
+    value.format === POSTMAN_DEFINITION_FORMAT &&
+    (value.modelNameMode !== undefined || value.databaseMode !== undefined)
+  )
+    fail("Postman 定义不接受原生格式选项");
   if (!plain(value.selection)) fail("必须提供明确 selection");
   if (
     value.modelNameMode !== undefined &&
@@ -136,6 +144,12 @@ function build(project, args) {
   } catch {
     fail("selection 无效、必需依赖缺失或包含未证明可保真的引用；请调整选择");
   }
+  if (
+    args.format === POSTMAN_DEFINITION_FORMAT &&
+    args.selection.mode === "explicit" &&
+    args.selection.resources.some((r) => !["api", "folder"].includes(r.kind))
+  )
+    fail("Postman 定义仅接受接口或目录选择");
   const options = {
     modelNameMode: args.modelNameMode ?? "namespaced",
     databaseMode: args.databaseMode,
@@ -145,15 +159,19 @@ function build(project, args) {
   let document;
   try {
     document = (
-      args.format === "apipost" ? exportApipost : exportApipostDirectory
+      args.format === POSTMAN_DEFINITION_FORMAT
+        ? exportPostmanDefinition
+        : args.format === "apipost"
+          ? exportApipost
+          : exportApipostDirectory
     )(prepared.project, options);
   } catch {
-    fail("所选资源或必需依赖无法保真转换为此原生格式；未生成文档");
+    fail("所选资源或必需依赖无法保真转换为此定义格式；未生成文档");
   }
   const encoded = JSON.stringify(document);
   const documentBytes = Buffer.byteLength(encoded);
   if (documentBytes > MCP_PROJECT_DOCUMENT_BYTES)
-    fail("原生文档超过 4 MiB 上限");
+    fail("定义文档超过 4 MiB 上限");
   // Directory conversion includes source timestamps. Bind the actual artifact,
   // not just configRevision or the selection graph, including activity changes.
   const digest = createHash("sha256")
@@ -171,7 +189,26 @@ function build(project, args) {
     },
     scope: { ...prepared.scope, digest },
     documentBytes,
+    ...(args.format === POSTMAN_DEFINITION_FORMAT
+      ? {
+          omittedConfiguration: {
+            environments: prepared.project.environments.map((e) => ({
+              kind: "environment",
+              id: e.id,
+            })),
+            globalVariables:
+              Object.keys(prepared.project.globalVariables || {}).length > 0,
+            independentlyReplayable: false,
+          },
+        }
+      : {}),
     warnings: [
+      ...(args.format === POSTMAN_DEFINITION_FORMAT
+        ? [
+            "Postman 集合仅包含请求定义；环境及全局变量值未包含，占位符未解析，不能声称可独立重放。",
+            "请求 URL、Header、raw 正文可包含已保存凭据；这是非脱敏文件。scope依赖用于确认和校验，不代表全部写入Collection。",
+          ]
+        : []),
       "定义导出不是完整备份；执行记录、接口版本历史、回收站及计划未包含。",
       "所选定义及必需全局配置可能包含静态认证和变量；导出前应确认依赖，不要公开分享敏感文档。",
       ...(args.databaseMode === "rebind"

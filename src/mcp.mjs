@@ -583,11 +583,14 @@ export function createMCP({
     addTool(
       exporting ? "export_project_selection" : "preview_project_export",
       exporting
-        ? "导出明确选择并确认依赖的原生定义；可能含静态凭据，不执行请求"
-        : "预览原生定义选择、必需依赖及大小，不返回定义或凭据",
+        ? "导出明确选择并确认依赖的定义；可能含静态凭据，不执行请求"
+        : "预览定义选择、必需依赖及大小，不返回定义或凭据",
       {
         ...projectArg,
-        format: projectFormat,
+        format: {
+          type: "string",
+          enum: [...projectFormat.enum, "postman-collection-v2.1"],
+        },
         selection: {
           type: "object",
           description:
