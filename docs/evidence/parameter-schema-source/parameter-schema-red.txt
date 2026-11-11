@@ -1,0 +1,55 @@
+✖ query marked source schemas stay literal after replacement without masking live failures (17.240402ms)
+✖ headers marked source schemas stay literal after replacement without masking live failures (33.552593ms)
+✖ parameter source isolation preserves runtime auth, assertions, ordinary schemas and response interpolation (0.983974ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 750.758906
+
+✖ failing tests:
+
+test at tests/parameter-schema-source.test.mjs:26:3
+✖ query marked source schemas stay literal after replacement without masking live failures (17.240402ms)
+  Error: 未定义变量: unused
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:262:42
+      at String.replace (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:259:18)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:265:53
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:265:42)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:29)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+
+test at tests/parameter-schema-source.test.mjs:26:3
+✖ headers marked source schemas stay literal after replacement without masking live failures (33.552593ms)
+  Error: 未定义变量: unused
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:262:42
+      at String.replace (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:259:18)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:29)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:29)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+
+test at tests/parameter-schema-source.test.mjs:46:1
+✖ parameter source isolation preserves runtime auth, assertions, ordinary schemas and response interpolation (0.983974ms)
+  Error: 未定义变量: unused
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:262:42
+      at String.replace (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:259:18)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:265:53
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:265:42)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49
+      at Array.map (<anonymous>)
+      at interpolate (file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:29)
+      at file:///workspace/scratch/75c2273f6a80/api-parameter-schema-source/src/core.mjs:268:49

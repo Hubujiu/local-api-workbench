@@ -1,0 +1,13 @@
+✔ official SDK HTTP and stdio replace Query-array/Header-object schema examples without old variables (2274.434653ms)
+✔ fixed dynamic parameter values survive frozen plans, backup and restart without rewriting source schemas (767.302953ms)
+✔ query marked source schemas stay literal after replacement without masking live failures (16.956409ms)
+✔ headers marked source schemas stay literal after replacement without masking live failures (6.682335ms)
+✔ parameter source isolation preserves runtime auth, assertions, ordinary schemas and response interpolation (1.261623ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4329.299782

@@ -235,8 +235,19 @@ async function resolveDynamicRequestBase(
   }
   const querySchemas = [];
   for (const [index, row] of (clone.query || []).entries()) {
-    if (!hasReservedQuerySerialization(row)) continue;
+    if (!hasReservedQuerySerialization(row) && !hasQuerySerialization(row))
+      continue;
     querySchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
+  // Marked arrays and Header objects admit literal type/shape schemas. Their
+  // examples/defaults are source metadata, not additional active input values.
+  // Restore before the existing resolved-value validation; ordinary schemas and
+  // all other runtime interpolation remain on their established paths.
+  const headerSchemas = [];
+  for (const [index, row] of (clone.headers || []).entries()) {
+    if (!hasHeaderSerialization(row)) continue;
+    headerSchemas.push({ index, schema: row.schema });
     delete row.schema;
   }
   const resolved = {
@@ -244,6 +255,8 @@ async function resolveDynamicRequestBase(
     ...scriptSources,
     ...operation,
   };
+  for (const { index, schema } of headerSchemas)
+    resolved.headers[index].schema = schema;
   for (const { index, schema } of querySchemas)
     resolved.query[index].schema = schema;
   for (const { index, schema } of cookieSchemas)
