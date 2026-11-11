@@ -80,7 +80,7 @@ async function backup() {
 }
 async function inspectHistory(expected, label) {
   const before = hits.length;
-  await page.getByRole("button", { name: "执行计划", exact: false }).click();
+  await page.locator('header button[data-page="plans"]').click();
   await page.locator('[data-plan-tab="runs"]').click();
   const exportButton = page.locator(`[data-export-run="${expected.id}"]`);
   const card = page.locator("details.card").filter({ has: exportButton });
@@ -176,7 +176,8 @@ try {
   await page.locator("#dialog-save").click();
   await closedDialog();
   await page
-    .getByRole("button", { name: "GET Journey request", exact: false })
+    .locator(".sidebar button[data-request]")
+    .filter({ hasText: /^GET\s*Journey request$/ })
     .click();
   await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("bearer");
@@ -214,7 +215,7 @@ try {
   assert.equal(hits.length, 2);
   assert.equal(hits[1].database, "journey-db");
   mark("plan");
-  await page.getByRole("button", { name: "执行计划", exact: false }).click();
+  await page.locator('header button[data-page="plans"]').click();
   await page.locator("#new-plan").click();
   await page.locator("#plan-name").fill("Journey frozen plan");
   await page.locator("#dialog-save").click();
@@ -222,10 +223,7 @@ try {
   const pendingRun = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/run"),
   );
-  await page
-    .getByRole("button", { name: "执行计划", exact: true })
-    .last()
-    .click();
+  await page.locator("#run-plan").click();
   const run = await (await pendingRun).json();
   assert.equal(run.status, "passed");
   assert.equal(run.results.length, 1);
@@ -256,7 +254,23 @@ try {
     first.launchUrl.split("#token=")[1],
   );
   await page.goto(server.launchUrl);
-  await page.locator("#project-select").selectOption(originalId);
+  const oldProjectSelect = await page
+    .locator("#project-select")
+    .elementHandle();
+  assert.ok(oldProjectSelect);
+  try {
+    await page.locator("#project-select").selectOption(originalId);
+    await page.waitForFunction(
+      (element) => !element.isConnected,
+      oldProjectSelect,
+    );
+    assert.equal(
+      await page.locator("#project-select").inputValue(),
+      originalId,
+    );
+  } finally {
+    await oldProjectSelect.dispose();
+  }
   mark("history-after-restart");
   await inspectHistory(
     saved.runs.find((r) => r.id === run.id),
@@ -283,7 +297,8 @@ try {
   );
   assert.equal(hits.length, 3);
   await page
-    .getByRole("button", { name: "GET Journey request", exact: false })
+    .locator(".sidebar button[data-request]")
+    .filter({ hasText: /^GET\s*Journey request$/ })
     .click();
   result = await execute();
   assert.equal(result.outcome, "failed");
