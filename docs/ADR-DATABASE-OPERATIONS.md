@@ -83,3 +83,23 @@ new permission, saved-config migration or previous-query reconstruction is added
 同步读写、隔离进程 fork 前及会话注册均校验文件名为非空合法 Unicode 字符串，拒绝孤立代理码元，避免 UTF-8 编码将其替换成 U+FFFD 后打开另一个现存文件。执行 worker 内同步入口再次校验；MCP 临时授权复用会话注册。合法 U+FFFD、中文及成对代理表示的字符保持原样，不修剪或规范化实际路径。stdio 启动授权快照原先已有合法 Unicode 检查，本次不改变该合同。
 
 本修复不恢复历史上错误文件中的读写，不改变路径解析、目录权限或创建文件策略；NUL 原先由驱动拒绝，不属于本次误目标缺陷。
+
+## MySQL connection-text Unicode fidelity
+
+MySQL username, password and database strings reject unpaired Unicode surrogates
+before read transport, write-slot/parser admission or ephemeral session/grant
+creation. The read and write paths share the same narrow check, including SSH
+and TLS; exported write-parser database validation retains its own defense.
+Errors are fixed text and do not expose credential values. No credential or
+authentication-token logging is added.
+
+Valid surrogate pairs and literal U+FFFD are not normalized. Existing omission,
+empty-field, type, size, port and authorization rules are not changed. This is
+only Unicode fidelity, not a new credential syntax or NUL policy. SSH's own
+credentials and other database providers retain their separate validation.
+
+An actual mysql2 protocol fixture confirms legal username/database bytes and
+password-derived token equality, then deliberately refuses authentication. It is
+not real MySQL authentication acceptance or write execution. Historical malformed
+configuration now rejects when used or granted; this does not recover previously
+substituted characters or change write unknown-outcome/no-replay semantics.

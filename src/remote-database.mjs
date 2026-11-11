@@ -1,3 +1,4 @@
+import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { Socket } from "node:net";
 import {
   databaseCancelled,
@@ -161,6 +162,7 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
 
 export function remoteConnectionConfig(input) {
   if (input.type === "mysql") {
+    validateMySQLConnectionText(input);
     const port = input.port;
     if (
       (port !== undefined && !["number", "string"].includes(typeof port)) ||

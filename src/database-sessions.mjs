@@ -1,4 +1,5 @@
 import { validateSQLiteFilename } from "./sqlite-filename.mjs";
+import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { explicitPostgresOptions } from "./postgres-client.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
@@ -100,6 +101,7 @@ export class DatabaseSessions {
       throw Error("TLS选项必须为布尔值");
     config.ssl = input.ssl === true;
     if (type === "postgres") explicitPostgresOptions(config);
+    if (type === "mysql") validateMySQLConnectionText(config);
     if (input.ssh !== undefined) {
       if (!["postgres", "mysql", "redis"].includes(type))
         throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL/Redis");
