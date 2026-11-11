@@ -94,9 +94,11 @@ async function exerciseDatabasePortUI(
     }
   };
   try {
+    // MongoDB hides SQL parameters; reset them through the visible MySQL UI.
+    await page.locator("#db-type").selectOption("mysql");
+    await page.locator("#db-params").fill("[]");
     await page.locator("#db-type").selectOption(type);
     await page.locator("#db-sql").fill("SELECT 1");
-    await page.locator("#db-params").fill("[]");
     for (const raw of [
       exponent,
       hexadecimal,
