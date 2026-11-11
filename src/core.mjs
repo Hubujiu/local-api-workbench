@@ -2333,15 +2333,20 @@ export function importCurl(source) {
     r.url = value;
   };
   for (let i = 1; i < tokens.length; i++) {
-    const t = clean(tokens[i]);
+    // Split only at an option position: values such as a literal "-dtext"
+    // consumed by -H/-d/--url must never be reinterpreted as options.
+    const token = clean(tokens[i]);
+    const attached = token.length > 2 && /^-[XHd]/.test(token);
+    const t = attached ? token.slice(0, 2) : token;
+    const optionValue = () => (attached ? token.slice(2) : clean(tokens[++i]));
     if (t === "--disable" || t === "-q") {
       if (i !== 1) throw Error("禁用cURL默认配置的参数必须位于首位");
     } else if (t === "-X" || t === "--request") {
-      r.method = clean(tokens[++i]);
+      r.method = optionValue();
       explicitMethod = true;
       if (!r.method) throw Error("缺少 HTTP 方法");
     } else if (t === "-H" || t === "--header") {
-      const h = clean(tokens[++i]);
+      const h = optionValue();
       if (!h || (!h.includes(":") && !h.endsWith(";")))
         throw Error("无效 Header");
       const n = h.indexOf(":");
@@ -2364,7 +2369,7 @@ export function importCurl(source) {
         "--json",
       ].includes(t)
     ) {
-      let value = clean(tokens[++i]);
+      let value = optionValue();
       if (value === undefined) throw Error("缺少 cURL 请求体参数");
       const kind = t === "--json" ? "json" : "data";
       if (r.bodyType === "form-data" || (dataKind && dataKind !== kind))
