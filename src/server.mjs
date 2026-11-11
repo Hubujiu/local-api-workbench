@@ -62,7 +62,7 @@ import {
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { saveProjectArchive } from "./project-archive-grants.mjs";
-import { finalizeWireSession } from "./wire-session-evidence.mjs";
+import { createWireSessionRecorder } from "./wire-session-recorder.mjs";
 import { executeWireFlow } from "./wire-plan.mjs";
 import { MCPWebSocketSessions } from "./mcp-websocket-sessions.mjs";
 import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
@@ -167,33 +167,7 @@ export async function createApp({
     store,
     request: executeRequest,
   });
-  function saveWireSession(session) {
-    if (!session.projectId) return;
-    if (session.recordSaved || session.recordPromise)
-      return session.recordPromise;
-    session.recordPending = true;
-    session.recordPromise = (async () => {
-      try {
-        const recordId = await finalizeWireSession(
-          store,
-          session.projectId,
-          session,
-          session.finalSnapshot,
-        );
-        session.recordSaved = true;
-        session.receipt = recordSaveSuccess(recordId);
-      } catch (error) {
-        session.receipt = recordSaveFailure(
-          session.projectId,
-          session.finalRecord?.id ?? null,
-          error,
-        );
-      }
-      session.recordPending = false;
-      return session.receipt;
-    })();
-    return session.recordPromise;
-  }
+  const saveWireSession = createWireSessionRecorder(store);
   const protocolSessions = new ProtocolSessions({ onFinish: saveWireSession });
 
   const grpcSlots = new GrpcSlots();

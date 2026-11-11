@@ -11,8 +11,8 @@ const fields = {
   renew: ["projectId", "sessionId"],
   operation: ["projectId", "operationId"],
 };
-// One host service, sharing the owner's ProtocolSessions pool. Owner objects
-// come exclusively from MCPHTTPSessions, never from JSON or bearer claims.
+// One host service with its host-local ProtocolSessions pool. Owner objects
+// come exclusively from the host registry, never from JSON or bearer claims.
 export class MCPWebSocketSessions {
   constructor({
     sessions,
@@ -32,7 +32,9 @@ export class MCPWebSocketSessions {
   }
   state(owner) {
     if (!owner || !this.owns(owner))
-      throw Error("WebSocket requires a live initialized HTTP MCP session");
+      throw Error(
+        "WebSocket requires a live initialized HTTP or stdio MCP session",
+      );
     let state = this.owners.get(owner);
     if (!state) {
       state = {
@@ -104,7 +106,7 @@ export class MCPWebSocketSessions {
     const connection = state.connections.get(args.sessionId);
     if (!connection || connection.projectId !== args.projectId)
       throw Error(
-        "WebSocket session does not belong to this HTTP owner and project",
+        "WebSocket session does not belong to this MCP owner and project",
       );
     if (!connection.ended && this.now() >= connection.leaseUntil)
       this.end(connection, "mcp-lease-expired");
@@ -210,7 +212,7 @@ export class MCPWebSocketSessions {
       }
       if (state.operations.size >= this.maxOperations)
         throw Error(
-          "WebSocket operation ledger is full; read or stop existing sessions, then initialize a new HTTP session",
+          "WebSocket operation ledger is full; read or stop existing sessions, then initialize a new MCP session",
         );
       // Reserve before the first asynchronous project read or network action.
       const op = {

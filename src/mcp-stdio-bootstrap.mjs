@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createMCPStdioWebSocketSessions } from "./mcp-stdio-websocket.mjs";
 import { Store } from "./runtime.mjs";
 import { loadMCPStdioDatabaseGrants } from "./mcp-stdio-database-grants.mjs";
 
@@ -51,8 +52,14 @@ export async function createMCPStdioContext(argv, root) {
           execute: options.execute,
           resolveProject: (id) => store.get(id),
         });
+  const websocket =
+    options.write && options.execute && options.projects.length
+      ? createMCPStdioWebSocketSessions({ store, projects: options.projects })
+      : undefined;
   return {
     store,
+    websocketSessions: websocket?.service,
+    websocketRegistry: websocket?.registry,
     projects: [...options.projects],
     write: options.write,
     execute: options.execute,
@@ -63,6 +70,9 @@ export async function createMCPStdioContext(argv, root) {
     databasePreflight: grants
       ? (projectId, ids, signal) => grants.preflight(projectId, ids, signal)
       : undefined,
-    close: () => grants?.close(),
+    close: async () => {
+      grants?.close();
+      await websocket?.close();
+    },
   };
 }

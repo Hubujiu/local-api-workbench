@@ -153,14 +153,16 @@ export async function serveMCPStdio({
   maxTools = 10,
   maxInputBytes = 12 * 1024 * 1024,
   writerOptions = {},
+  registry = new MCPHTTPSessions({ maxSessions: 1, idleMs: Infinity }),
+  closeResources = async () => {},
 }) {
-  const registry = new MCPHTTPSessions({ maxSessions: 1, idleMs: Infinity });
   const session = registry.create();
   const instanceEpoch = randomUUID();
   const buffer = new ReadBuffer({ maxBufferSize: maxInputBytes });
   const pending = new Set();
   let tools = 0,
     ending = false,
+    initialized = false,
     failure,
     tailBytes = 0,
     resolveDone,
@@ -184,11 +186,18 @@ export async function serveMCPStdio({
     input.off("close", onClose);
     input.pause();
     buffer.clear();
-    registry.advance({ dropSessions: true });
+    registry.close();
     void (async () => {
-      await Promise.allSettled([...pending]);
-      writer.dispose();
-      failure ? rejectDone(failure) : resolveDone();
+      try {
+        await Promise.allSettled([...pending]);
+        await registry.drain();
+        await closeResources();
+      } catch (error) {
+        failure ||= error;
+      } finally {
+        writer.dispose();
+        failure ? rejectDone(failure) : resolveDone();
+      }
     })();
   };
   const writer = new BoundedMCPWriter(output, {
@@ -219,6 +228,8 @@ export async function serveMCPStdio({
       }
       answer = await dispatch(message, {
         signal: lease.signal,
+        websocketOwner:
+          initialized && !ending ? registry.owner(session) : undefined,
         onProgress: (progress) => activity?.update(progress),
         manualImportSessionId: `stdio:${instanceEpoch}:${session}:${registry.capture()}`,
       });
@@ -243,6 +254,13 @@ export async function serveMCPStdio({
         await writer.enqueue(frame, {
           shouldSend: () => !lease.cancelledByNotification,
         });
+        if (
+          message.method === "initialize" &&
+          answer?.result &&
+          !answer.error &&
+          !ending
+        )
+          initialized = true;
       }
     } catch {
       await activity
