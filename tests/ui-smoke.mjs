@@ -1,5 +1,8 @@
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
-import { exerciseMySQLPortUI } from "./helpers/mysql-port-ui.mjs";
+import {
+  exerciseMySQLPortUI,
+  exerciseMongoPortUI,
+} from "./helpers/mysql-port-ui.mjs";
 import MarkdownIt from "markdown-it";
 import { createHmac, generateKeyPairSync, verify } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -4317,6 +4320,7 @@ try {
   await page.locator("#db-type").selectOption("mysql");
   assert.equal(await page.locator("#db-write-label").isVisible(), false);
   await exerciseMySQLPortUI(page);
+  await exerciseMongoPortUI(page);
   await page.locator("#db-type").selectOption("sqlite");
   await page.locator("#db-sql").fill(sqliteWriteSQL);
 

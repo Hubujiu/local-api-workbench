@@ -3,6 +3,33 @@ import assert from "node:assert/strict";
 // Real app DOM/events, with inert responses: this verifies frontend admission,
 // not database connectivity or the separate server authorization contract.
 export async function exerciseMySQLPortUI(page) {
+  return exerciseDatabasePortUI(
+    page,
+    "mysql",
+    "MySQL",
+    "3.306e3",
+    "0xcea",
+    3306,
+  );
+}
+export async function exerciseMongoPortUI(page) {
+  return exerciseDatabasePortUI(
+    page,
+    "mongodb",
+    "MongoDB",
+    "2.7017e4",
+    "0x6989",
+    27017,
+  );
+}
+async function exerciseDatabasePortUI(
+  page,
+  type,
+  label,
+  exponent,
+  hexadecimal,
+  samplePort,
+) {
   const previous = {
     type: await page.locator("#db-type").inputValue(),
     port: await page.locator("#db-port").inputValue(),
@@ -21,7 +48,7 @@ export async function exerciseMySQLPortUI(page) {
   await page.route(pattern, respond);
   await page.evaluate(() => {
     const original = window.fetch;
-    window.__mysqlPortFetchProbe = { original, calls: 0 };
+    window.__databasePortFetchProbe = { original, calls: 0 };
     window.fetch = function (...args) {
       if (
         args[1]?.method === "POST" &&
@@ -29,11 +56,12 @@ export async function exerciseMySQLPortUI(page) {
           new URL(args[0], location.href).pathname,
         )
       )
-        window.__mysqlPortFetchProbe.calls++;
+        window.__databasePortFetchProbe.calls++;
       return Reflect.apply(original, this, args);
     };
   });
-  const calls = () => page.evaluate(() => window.__mysqlPortFetchProbe.calls);
+  const calls = () =>
+    page.evaluate(() => window.__databasePortFetchProbe.calls);
   const submit = async (action) => {
     if (action === "query") {
       await Promise.all([
@@ -66,14 +94,14 @@ export async function exerciseMySQLPortUI(page) {
     }
   };
   try {
-    await page.locator("#db-type").selectOption("mysql");
+    await page.locator("#db-type").selectOption(type);
     await page.locator("#db-sql").fill("SELECT 1");
     await page.locator("#db-params").fill("[]");
     for (const raw of [
-      "3.306e3",
-      "0xcea",
-      "+3306",
-      "3306.0",
+      exponent,
+      hexadecimal,
+      `+${samplePort}`,
+      `${samplePort}.0`,
       "abc",
       "Infinity",
       "65536",
@@ -88,9 +116,12 @@ export async function exerciseMySQLPortUI(page) {
         await page.locator(`#db-${action}`).click();
         await page
           .locator("#toast")
-          .getByText("MySQL端口须为十进制整数0至65535；留空或0使用默认端口", {
-            exact: true,
-          })
+          .getByText(
+            `${label}端口须为十进制整数0至65535；留空或0使用默认端口`,
+            {
+              exact: true,
+            },
+          )
           .waitFor();
         assert.equal(await calls(), before, "invalid text must not call fetch");
         assert.equal(await page.locator("#dialog").isVisible(), false);
@@ -104,18 +135,18 @@ export async function exerciseMySQLPortUI(page) {
       ["  ", 0],
       ["0", 0],
       ["000", 0],
-      [" 03306 ", 3306],
+      [` 0${samplePort} `, samplePort],
       ["65535", 65535],
     ]) {
       await page.locator("#db-port").fill(raw);
       for (const action of ["query", "register"]) {
         await submit(action);
-        assert.equal(received.at(-1).type, "mysql");
+        assert.equal(received.at(-1).type, type);
         assert.equal(received.at(-1).port, expected);
       }
     }
     // Other providers deliberately retain their separate existing conversion.
-    for (const type of ["postgres", "redis", "mongodb", "clickhouse"]) {
+    for (const type of ["postgres", "redis", "clickhouse"]) {
       await page.locator("#db-type").selectOption(type);
       await page.locator("#db-port").fill("3.306e3");
       for (const action of ["query", "register"]) {
@@ -132,13 +163,13 @@ export async function exerciseMySQLPortUI(page) {
       assert.equal(
         received.at(-1).port,
         null,
-        "hidden stale field must not acquire a MySQL guard",
+        "hidden stale field must not acquire a SQL/Mongo port guard",
       );
     }
   } finally {
     await page.evaluate(() => {
-      window.fetch = window.__mysqlPortFetchProbe.original;
-      delete window.__mysqlPortFetchProbe;
+      window.fetch = window.__databasePortFetchProbe.original;
+      delete window.__databasePortFetchProbe;
     });
     await page.unroute(pattern, respond);
     await page.locator("#db-type").selectOption(previous.type);
