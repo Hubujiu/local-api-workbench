@@ -570,9 +570,16 @@ test(
       "localapi_half_close_grpc_session",
       "localapi_cancel_grpc_session",
       "localapi_get_grpc_operation",
+      "localapi_start_tcp_session",
+      "localapi_get_tcp_session",
+      "localapi_send_tcp_session",
+      "localapi_stop_tcp_session",
+      "localapi_renew_tcp_session",
+      "localapi_get_tcp_operation",
     ])
       assert(names.has(name), name);
-    assert.equal(names.size, 99);
+    assert.equal(tools.tools.length, 105);
+    assert.equal(names.size, 105);
     checkFinite(
       decode(
         await stdio.callTool({
