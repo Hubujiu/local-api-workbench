@@ -21,6 +21,77 @@ async function bounded(promise) {
     clearTimeout(timer);
   }
 }
+// Keep the real upstream response held until the test releases it, and join the
+// handler before unroute/teardown. Route errors must fail the test, not escape
+// as an unhandled rejection that hides its original assertion failure.
+export function holdRealResponse() {
+  const received = deferred(),
+    release = deferred(),
+    finished = deferred();
+  let started = false,
+    failure;
+  const handler = async (route) => {
+    if (started) {
+      failure ||= Error("unexpected duplicate held request");
+      await route.abort("failed").catch((error) => {
+        failure ||= error;
+      });
+      return;
+    }
+    started = true;
+    try {
+      const response = await route.fetch();
+      assert.equal(response.status(), 200, "real upstream request committed");
+      received.resolve();
+      await release.promise;
+      await route.fulfill({ response });
+    } catch (error) {
+      failure ||= error;
+      received.resolve();
+    } finally {
+      finished.resolve();
+    }
+  };
+  const check = () => {
+    if (failure) throw failure;
+  };
+  return {
+    handler,
+    async ready() {
+      await bounded(received.promise);
+      check();
+    },
+    async release() {
+      release.resolve();
+      if (started) await bounded(finished.promise);
+      check();
+    },
+  };
+}
+export async function releaseWithResponse(held, response) {
+  // Observe both promises immediately even if release fails before the response.
+  await Promise.all([response, held.release()]);
+}
+export async function finishHeldRoute(held, unroute, primary) {
+  const errors = primary ? [primary] : [];
+  try {
+    await held.release();
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    await unroute();
+  } catch (error) {
+    errors.push(error);
+  }
+  const unique = [...new Set(errors)];
+  if (unique.length === 1) throw unique[0];
+  if (unique.length)
+    throw new AggregateError(
+      unique,
+      "execution fixture and route cleanup failed",
+    );
+}
 export async function exerciseExecutionWriteOwnership(page) {
   await createImportOwnershipFixture(page);
   await page.locator('.rail [data-page="apis"]').click();
@@ -66,20 +137,16 @@ export async function exerciseExecutionWriteOwnership(page) {
       planRuns++;
   };
   page.on("request", observe);
-  const saved = deferred(),
-    releaseSave = deferred();
-  const holdSave = async (route) => {
-    if (route.request().method() !== "PUT") return route.continue();
-    const response = await route.fetch();
-    assert.equal(response.status(), 200);
-    saved.resolve();
-    await releaseSave.promise;
-    await route.fulfill({ response });
-  };
+  const heldSave = holdRealResponse();
+  const holdSave = (route) =>
+    route.request().method() === "PUT"
+      ? heldSave.handler(route)
+      : route.continue();
   await page.route(endpoint, holdSave);
+  let saveFailure;
   try {
     await page.locator('[data-run-case="' + caseId + '"]').click();
-    await bounded(saved.promise);
+    await heldSave.ready();
     await page.locator('[data-run-case="' + caseId + '"]').click();
     await page
       .locator("#toast")
@@ -96,8 +163,7 @@ export async function exerciseExecutionWriteOwnership(page) {
         r.request().method() === "GET" &&
         r.status() === 200,
     );
-    releaseSave.resolve();
-    await done;
+    await releaseWithResponse(heldSave, done);
     await page.waitForFunction(
       (id) => !document.querySelector('[data-run-case="' + id + '"]')?.disabled,
       caseId,
@@ -107,9 +173,14 @@ export async function exerciseExecutionWriteOwnership(page) {
       1,
       "double click causes exactly one execution POST",
     );
+  } catch (error) {
+    saveFailure = error;
   } finally {
-    releaseSave.resolve();
-    await page.unroute(endpoint, holdSave);
+    await finishHeldRoute(
+      heldSave,
+      () => page.unroute(endpoint, holdSave),
+      saveFailure,
+    );
   }
   await page.locator('[data-page="plans"]').click();
   await page.locator("#new-plan").click();
@@ -123,21 +194,15 @@ export async function exerciseExecutionWriteOwnership(page) {
   const planId = (await planResponse.json()).id;
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-plan="' + planId + '"]').click();
-  const completed = deferred(),
-    releaseRun = deferred();
-  const holdRun = async (route) => {
-    const response = await route.fetch();
-    assert.equal(response.status(), 200);
-    completed.resolve();
-    await releaseRun.promise;
-    await route.fulfill({ response });
-  };
+  const heldRun = holdRealResponse(),
+    holdRun = heldRun.handler;
   await page.route(endpoint + "/run", holdRun);
+  let runFailure;
   try {
     await page.locator("#run-plan").click();
-    await bounded(completed.promise);
+    await heldRun.ready();
     await page.locator("#plan-name").fill("New plan draft after execution");
-    releaseRun.resolve();
+    await heldRun.release();
     await page
       .locator("#toast")
       .getByText(/不会自动重放/)
@@ -152,9 +217,14 @@ export async function exerciseExecutionWriteOwnership(page) {
       .getByText(/重新加载原项目核对执行结果/)
       .waitFor();
     assert.equal(planRuns, 1);
+  } catch (error) {
+    runFailure = error;
   } finally {
-    releaseRun.resolve();
-    await page.unroute(endpoint + "/run", holdRun);
+    await finishHeldRoute(
+      heldRun,
+      () => page.unroute(endpoint + "/run", holdRun),
+      runFailure,
+    );
   }
   const discard = (dialog) => dialog.accept();
   page.on("dialog", discard);

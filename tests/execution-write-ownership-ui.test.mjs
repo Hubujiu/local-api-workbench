@@ -474,3 +474,153 @@ test("blocked plan structure callbacks never mutate the current draft before rej
     );
   }
 });
+
+test("held real response joins fulfillment before route cleanup", async () => {
+  const { holdRealResponse } = await import(
+    "./helpers/execution-write-ownership-ui.mjs"
+  );
+  const held = holdRealResponse();
+  let allowFulfill,
+    fulfilled = false,
+    fetches = 0,
+    releases = 0;
+  const gate = new Promise((resolve) => {
+    allowFulfill = resolve;
+  });
+  const response = { status: () => 200 };
+  const running = held.handler({
+    async fetch() {
+      fetches++;
+      return response;
+    },
+    async fulfill(options) {
+      assert.equal(options.response, response);
+      await gate;
+      fulfilled = true;
+    },
+  });
+  await held.ready();
+  assert.equal(fetches, 1);
+  assert.equal(fulfilled, false);
+  const releasing = held.release().then(() => {
+    releases++;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(releases, 0, "cannot unroute while fulfillment remains pending");
+  allowFulfill();
+  await releasing;
+  await running;
+  await held.release();
+  assert.equal(fulfilled, true);
+  assert.equal(fetches, 1, "cleanup does not replay the upstream request");
+});
+
+test("held response reports fetch and fulfill failures on awaited test path", async () => {
+  const { holdRealResponse } = await import(
+    "./helpers/execution-write-ownership-ui.mjs"
+  );
+  for (const phase of ["fetch", "fulfill"]) {
+    const held = holdRealResponse(),
+      error = Error("fixture " + phase);
+    const running = held.handler({
+      async fetch() {
+        if (phase === "fetch") throw error;
+        return { status: () => 200 };
+      },
+      async fulfill() {
+        throw error;
+      },
+    });
+    if (phase === "fetch")
+      await assert.rejects(held.ready(), (e) => e === error);
+    else await held.ready();
+    await assert.rejects(held.release(), (e) => e === error);
+    await running; // handler itself never leaks an unhandled rejection
+  }
+});
+
+test("held response fails unexpected duplicate without replaying upstream", async () => {
+  const { holdRealResponse } = await import(
+    "./helpers/execution-write-ownership-ui.mjs"
+  );
+  const held = holdRealResponse();
+  let fetches = 0,
+    aborts = 0;
+  const route = {
+    async fetch() {
+      fetches++;
+      return { status: () => 200 };
+    },
+    async fulfill() {},
+    async abort() {
+      aborts++;
+    },
+  };
+  const running = held.handler(route);
+  await held.ready();
+  await held.handler(route);
+  await assert.rejects(held.release(), /unexpected duplicate/);
+  await running;
+  assert.equal(fetches, 1);
+  assert.equal(aborts, 1);
+});
+
+test("route cleanup retains original assertion and all cleanup failures", async () => {
+  const { finishHeldRoute } = await import(
+    "./helpers/execution-write-ownership-ui.mjs"
+  );
+  const primary = Error("original assertion"),
+    release = Error("fulfill failed"),
+    remove = Error("unroute failed");
+  let removed = false;
+  await assert.rejects(
+    finishHeldRoute(
+      {
+        release: async () => {
+          throw release;
+        },
+      },
+      async () => {
+        removed = true;
+        throw remove;
+      },
+      primary,
+    ),
+    (e) => {
+      assert.ok(e instanceof AggregateError);
+      assert.deepEqual(e.errors, [primary, release, remove]);
+      return true;
+    },
+  );
+  assert.equal(removed, true);
+  await assert.rejects(
+    finishHeldRoute({ release: async () => {} }, async () => {}, primary),
+    (e) => e === primary,
+  );
+});
+
+test("response waiter remains observed when held route release fails first", async () => {
+  const { releaseWithResponse } = await import(
+    "./helpers/execution-write-ownership-ui.mjs"
+  );
+  const releaseError = Error("release failed"),
+    responseError = Error("response timeout");
+  let rejectResponse;
+  const response = new Promise((_, reject) => {
+    rejectResponse = reject;
+  });
+  await assert.rejects(
+    releaseWithResponse(
+      {
+        release: async () => {
+          throw releaseError;
+        },
+      },
+      response,
+    ),
+    (e) => e === releaseError,
+  );
+  rejectResponse(responseError);
+  await new Promise((resolve) => setImmediate(resolve));
+  // node:test fails this test if the now-rejected waiter is unhandled.
+});
