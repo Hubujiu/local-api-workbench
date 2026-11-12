@@ -1,6 +1,6 @@
 # Packaged Electron restart journey acceptance
 
-Test-only candidate based on PR207. This is not a product lifecycle change or a
+Test-only journey introduced by PR208 on top of PR207. This is not a product lifecycle change or a
 new license acceptance. It uses the existing packaged executable in each desktop
 CI job (Windows, macOS, Linux/Xvfb), not a development Electron entrypoint.
 
@@ -30,9 +30,31 @@ not passing evidence. Per-generation traces and final/history screenshots go to
 `dist/desktop-restart-evidence`, included in the existing always-upload metadata
 artifact. These are synthetic test artifacts, not user data.
 
-Local verification is limited to syntax, formatting and non-browser lifecycle/
-receipt regression. The new packaged journey and extracted browser adapter still
-require their own reviewed CI execution before claiming acceptance. It does not
+Initial local verification was limited to syntax, formatting and non-browser
+lifecycle/receipt regression. That initial evidence did not establish packaged
+journey acceptance; the subsequent exact CI results are recorded below. It does not
 cover installers, signing/notarization, crash/power-loss recovery, every provider
 or arbitrary user projects. Existing shutdown cancellation/failure tests remain
 independent and unchanged.
+
+## Verified CI checkpoint (2026-11-12)
+
+PR210 head `adf8dbbf2efc35bf41128404cc7887f08cbade42`, tree
+`4d8765ad4b2ea44b716d2ac98df1bf861918caff`, passed all 43 jobs in
+[run 43148687129](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129),
+attempt 1. Windows job 130952481393, Linux job 130952481581 and macOS job
+130952481681 each logged the exact BUILD_HEAD, both clean exits and
+`PACKAGED_DESKTOP_RESTART_JOURNEY_PASS`. Both artifact-upload steps passed on each
+platform. This verifies the scoped journey above, not signing, installers, all
+providers, arbitrary projects or complete product delivery. The PR remains draft;
+nothing was merged or deployed.
+
+PR210 only adds explicit `acceptDownloads: true` to the test launch. PR209's
+[original run 43147844278](https://github.com/Hubujiu/local-api-workbench/actions/runs/43147844278)
+remains failed (40 successful jobs, three failed desktop jobs): all three stopped
+while waiting for the backup download before their first restart. PR208's
+[original run 43095668942](https://github.com/Hubujiu/local-api-workbench/actions/runs/43095668942)
+was still queued with zero jobs during the 2026-11-12 06:05 UTC review. Neither
+original run is reclassified by PR210's success. See the
+[current checkpoint](BACKEND-CHECKPOINT-2026-10-25.md#2026-11-12-桌面重启旅程检查点)
+for the stacked commits and remaining delivery boundaries.

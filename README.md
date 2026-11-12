@@ -1,5 +1,7 @@
 # Local API Workbench
 
+> 当前验收入口（2026-11-12）：[精确提交与历史结果](docs/BACKEND-CHECKPOINT-2026-10-25.md#2026-11-12-桌面重启旅程检查点)。PR #210 的 `adf8dbbf2efc35bf41128404cc7887f08cbade42` / [CI 43148687129](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129) 已 43/43 jobs 成功，三平台真实 Electron 重启旅程已执行通过。这是草稿候选的验证结果，不是已发布版本、main 合并或完整产品交付；#208 原运行仍单独排队，#209 原运行的失败保留。
+
 开发中，尚未完成 Apipost 全功能复刻验收。当前以后端完整流程为重点，最新已验证提交、功能边界与遗留问题统一见 [后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。历史逐项清单与交付候选记录仅代表各自版本，不作为当前能力或最新验收结论。改动按功能保存在独立 draft PR，同功能修复更新原 PR；组合分支用于集成验证，尚未合入 main 或部署。
 
 本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
@@ -19,7 +21,9 @@ npm start
 
 桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
 
-最后完整已验证根为 `da97a0e9` / CI `40549158177`（19项通过，实际提交／树及产物已核）。较新的结构编辑组合 `6c238a41` / CI `40551216982` 为18通过／1失败：macOS脚本跨作用域配额测试的scope为project而非request，底层原因未记录，仍未知。新增结构编辑流程通过不抵消该失败，不以旧绿灯或单功能CI宣布新根已验收。
+以下两段保留旧阶段记录，不是当前候选结论；最新精确状态以上方验收入口为准。
+
+该历史阶段最后完整已验证根为 `da97a0e9` / CI `40549158177`（19项通过，实际提交／树及产物已核）。较新的结构编辑组合 `6c238a41` / CI `40551216982` 为18通过／1失败：macOS脚本跨作用域配额测试的scope为project而非request，底层原因未记录，仍未知。新增结构编辑流程通过不抵消该失败，不以旧绿灯或单功能CI宣布新根已验收。
 
 当前候选补保图API软回收／恢复：保留binding、请求ID、own配置和旧case／plan／history；stored tombstone阻断live／cURL及伪造旧bound调用，精确已存冻结请求仍可执行。owner、既有MCP回收权限、真实CLI、备份重启与repeat交叉已本地验证；普通PUT不能切换回收状态，native批次历史不静默清除。永久清除、解绑、目录回收仍拒绝，原生出口不冒充完整历史备份。另仅为配额断言增加失败诊断，未改runtime／预算或降低预期，不声称已修根因。**此新组合CI尚待。**
 

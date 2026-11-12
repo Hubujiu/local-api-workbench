@@ -1,4 +1,17 @@
-# 后端检查点 · 2026-10-28 03:02 UTC
+# 后端检查点
+
+## 2026-11-12 桌面重启旅程检查点
+
+本节是当前候选的验收入口；下方 2026-10-28 及更早章节保留其原时点含义，不以新的成功改判旧失败。
+
+- 当前已核验候选为 [PR #210](https://github.com/Hubujiu/local-api-workbench/pull/210) head `adf8dbbf2efc35bf41128404cc7887f08cbade42`，tree `4d8765ad4b2ea44b716d2ac98df1bf861918caff`；[原 CI 43148687129](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129) attempt 1 completed/success，43/43 jobs 成功。PR 仍为 draft/open，未合并或部署，不是正式发行或完整复刻交付。
+- 堆叠关系为 #208（`c402ce3e1d699efa5b38494c2ada94264f99b957`）→ #209（`80cb576cfac865a17d471267837f2abdb72027aa`）→ #210。#209 补 GUI 中 preserve 原生继承项目的请求回收/恢复接线与并发保护；#210 仅在 Electron 测试启动显式设置 `acceptDownloads: true`，没有改产品下载实现、预算或安全设置。
+- Windows job [130952481393](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129/job/130952481393)、Linux job [130952481581](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129/job/130952481581)、macOS job [130952481681](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129/job/130952481681) 的日志均含精确 BUILD_HEAD、两代 `DESKTOP_RESTART_CLEAN_EXIT` 与 `PACKAGED_DESKTOP_RESTART_JOURNEY_PASS`。实际完成打包 Electron 的备份、退出重启、历史读取、恢复、重新授权及再次执行，不再只是浏览器/服务进程重启。三平台上传步骤成功；未将产物上传成功等同于全部 ZIP 字节已独立验收。
+- [#209 原 CI 43147844278](https://github.com/Hubujiu/local-api-workbench/actions/runs/43147844278) 保持 failure：40 成功、3 失败、0 取消。三平台新 Electron 旅程均在 backup 下载等待阶段超时，未到首次重启；不能用 #210 成功改判它。
+- [#208 原 CI 43095668942](https://github.com/Hubujiu/local-api-workbench/actions/runs/43095668942) 在 2026-11-12 06:05 UTC 本轮复核中仍 queued、0 jobs，真实 Electron 旅程尚未在该原运行执行。它与 #209/#210 分别记账。更早 [#207 原 CI 43094696449](https://github.com/Hubujiu/local-api-workbench/actions/runs/43094696449) 的 4 成功、2 上传失败、37 取消证据继续保留，不算通过。先前上传失败与排队早于 GitHub 官方故障开始，不能断言同因；未重跑、取消或删除旧运行/产物。
+- 验收边界不变：本旅程使用合成本地 HTTP/SQLite fixture，不等于 SQL Server、Oracle、达梦 provider 产品化或实库验收，也不补齐 Apipost 非空原生自动化同源样本。安装器、签名/公证、断电/崩溃恢复、任意用户项目、全量原版 GUI 与历史偶发失败根因仍不能据此宣布完成。CI 成功不授予合并、部署或新增许可接受权限。
+
+## 历史检查点：2026-10-28 03:02 UTC
 
 本文按精确提交区分已保存、已验证与仍未交付。历史完整记录保留在本文件 Git 历史、各功能 ADR、PR 与 Actions；旧 GREEN 不覆盖新 RED，测试数量不是产品交付率。
 
