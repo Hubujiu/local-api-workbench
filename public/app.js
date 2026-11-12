@@ -1,3 +1,6 @@
+import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
+const nativeRequestLifecycle = createNativeRequestLifecycle();
+let projectOpenSequence = 0;
 import { mysqlPortInput, mongoPortInput } from "./mysql-port-input.js";
 import { parseDatabaseParameterJSON } from "./database-parameter-json.js";
 import {
@@ -227,6 +230,7 @@ function mark() {
   if (s) s.textContent = "● 未保存";
 }
 async function save() {
+  if (project) nativeRequestLifecycle.assertCanSave(project.id);
   if (!project || saving) return;
   collect();
   const snapshot = structuredClone(project),
@@ -299,10 +303,48 @@ function collect() {
     }
   }
 }
+async function changeNativeRequestLifecycle(requestId, restore) {
+  return nativeRequestLifecycle.run({
+    requestId,
+    restore,
+    getState: () => ({ project, dirty, editVersion, busy, saving }),
+    collect,
+    confirm,
+    save,
+    post: api,
+    apply: (saved) => {
+      project = saved;
+      dirty = false;
+      if (!project.requests.some((r) => r.id === current && !r.deletedAt))
+        current = project.requests.find((r) => !r.deletedAt)?.id;
+      response = responses.get(project.id + ":" + current) || null;
+      render();
+      toast(restore ? "接口已恢复" : "接口已移到回收站");
+    },
+  });
+}
 async function openProject(id) {
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
   if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
-  project = await api("/projects/" + id);
+  const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
+  const sequence = ++projectOpenSequence,
+    previousProject = project,
+    version = editVersion,
+    previousDirty = dirty;
+  const loaded = await api("/projects/" + id);
+  if (sequence !== projectOpenSequence) return false;
+  if (
+    project !== previousProject ||
+    editVersion !== version ||
+    dirty !== previousDirty ||
+    busy ||
+    saving
+  )
+    throw Error("加载期间项目或草稿已变化，未替换当前内容；请重新操作");
+  if (loaded?.id !== id) throw Error("返回项目身份不匹配，未替换当前内容");
+  nativeRequestLifecycle.assertReloadCurrent(reloadCheckpoint);
+  project = loaded;
+  nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   current = project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
   dirty = false;
@@ -2175,7 +2217,11 @@ function bind() {
     mark();
     render();
   });
-  on("#delete", "click", () => {
+  on("#delete", "click", async () => {
+    if (project.settings?.nativeInheritance) {
+      await changeNativeRequestLifecycle(request().id, false);
+      return;
+    }
     if (!confirm("将此接口移到回收站？")) return;
     request().deletedAt = new Date().toISOString();
     current = project.requests.find((r) => !r.deletedAt)?.id;
@@ -2183,10 +2229,14 @@ function bind() {
     mark();
     render();
   });
-  on("[data-restore]", "click", (_, e) => {
+  on("[data-restore]", "click", async (_, e) => {
+    if (project.settings?.nativeInheritance) {
+      await changeNativeRequestLifecycle(e.dataset.restore, true);
+      return;
+    }
     delete project.requests.find((r) => r.id === e.dataset.restore).deletedAt;
     mark();
-    save();
+    await save();
   });
   on("#send", "click", send);
   on("#cancel", "click", () => {
