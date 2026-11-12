@@ -1,3 +1,5 @@
+import { createProjectImportGuard } from "./project-import-guard.js";
+const projectImports = createProjectImportGuard();
 import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
 const nativeRequestLifecycle = createNativeRequestLifecycle();
 let projectOpenSequence = 0;
@@ -231,6 +233,7 @@ function mark() {
 }
 async function save() {
   if (project) nativeRequestLifecycle.assertCanSave(project.id);
+  if (project) projectImports.assertCanSave(project.id);
   if (!project || saving) return;
   collect();
   const snapshot = structuredClone(project),
@@ -304,6 +307,7 @@ function collect() {
   }
 }
 async function changeNativeRequestLifecycle(requestId, restore) {
+  projectImports.assertCanStart(project.id, "interfaces");
   return nativeRequestLifecycle.run({
     requestId,
     restore,
@@ -327,6 +331,7 @@ async function openProject(id) {
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
   if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
+  const importCheckpoint = projectImports.reloadCheckpoint();
   const sequence = ++projectOpenSequence,
     previousProject = project,
     version = editVersion,
@@ -343,8 +348,10 @@ async function openProject(id) {
     throw Error("加载期间项目或草稿已变化，未替换当前内容；请重新操作");
   if (loaded?.id !== id) throw Error("返回项目身份不匹配，未替换当前内容");
   nativeRequestLifecycle.assertReloadCurrent(reloadCheckpoint);
+  projectImports.assertReloadCurrent(importCheckpoint);
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
+  projectImports.acknowledgeReload(id, importCheckpoint);
   current = project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
   dirty = false;
@@ -2274,55 +2281,118 @@ function bind() {
       "导入接口",
       `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost旧版/现代JSON（有限兼容）。现代JSON同时导入环境、服务和全局变量，遇到未支持资源会拒绝；请选择导入环境后再发送。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option><option value="apipost-directory">原版目录JSON子集（实验性，非完整迁移）</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea><label>仅原版目录模式使用：选择含 project.json 的目录，未知文件会拒绝</label><input id="import-directory" type="file" webkitdirectory multiple aria-label="原版项目目录">`,
       async () => {
+        if (busy || saving) throw Error("请先结束当前请求或保存，再导入");
+        nativeRequestLifecycle.assertCanSave(project.id);
+        nativeRequestLifecycle.reloadCheckpoint();
         const targetProjectId = project.id,
           importRevision = modalRevision,
-          importMode = $("#import-mode").value;
-        const stopped = () =>
+          importMode = $("#import-mode").value,
+          selectedFile = $("#import-file").files[0],
+          selectedText = $("#import-text").value,
+          directoryFiles = Array.from($("#import-directory").files);
+        const inputChanged = () =>
           project.id !== targetProjectId ||
           modalRevision !== importRevision ||
           !$("#dialog").open ||
-          $("#import-mode")?.value !== importMode;
-        if (dirty) {
-          if (!confirm("当前有未保存修改，先保存再导入？"))
-            throw Error("导入已取消，修改仍保留");
-          await save();
-        }
-        if (stopped()) throw Error("导入已取消或目标项目已变化");
-        const f = $("#import-file").files[0],
-          document =
-            $("#import-mode").value === "apipost-directory"
-              ? await selectedDirectoryDocument($("#import-directory").files, {
+          $("#import-mode")?.value !== importMode ||
+          $("#import-file")?.files[0] !== selectedFile ||
+          $("#import-text")?.value !== selectedText ||
+          (importMode === "apipost-directory" &&
+            (Array.from($("#import-directory")?.files || []).length !==
+              directoryFiles.length ||
+              directoryFiles.some(
+                (file, index) => $("#import-directory").files[index] !== file,
+              )));
+        const operation = projectImports.begin(targetProjectId, importMode);
+        let posted = false,
+          result;
+        try {
+          collect();
+          if (dirty) {
+            if (!confirm("当前有未保存修改，先保存再导入？"))
+              throw Error("导入已取消，修改仍保留");
+            await operation.saveDraft(save);
+          }
+          if (inputChanged() || dirty || busy || saving)
+            throw Error("项目、草稿或导入内容已变化，未执行导入");
+          const targetProject = project,
+            version = editVersion,
+            openingSequence = projectOpenSequence;
+          const stopped = () =>
+            inputChanged() ||
+            project !== targetProject ||
+            editVersion !== version ||
+            projectOpenSequence !== openingSequence ||
+            dirty ||
+            busy ||
+            saving;
+          const document =
+            importMode === "apipost-directory"
+              ? await selectedDirectoryDocument(directoryFiles, {
                   shouldStop: stopped,
                 })
-              : f
-                ? await f.text()
-                : $("#import-text").value;
-        if (stopped()) throw Error("导入已取消或目标项目已变化");
-        if ($("#import-mode").value === "restore") {
-          const restored = await api("/restore", "POST", {
+              : selectedFile
+                ? await selectedFile.text()
+                : selectedText;
+          if (stopped()) throw Error("项目、草稿或导入内容已变化，未执行导入");
+          const body = {
             document:
-              typeof document === "string" ? JSON.parse(document) : document,
-          });
-          projects = await api("/projects");
-          await openProject(restored.id);
-        } else {
-          project = await api("/projects/" + project.id + "/import", "POST", {
-            document,
-          });
-          current = project.requests.at(-1)?.id;
-          response = null;
-          if (current && !opened.includes(current)) opened.push(current);
-          if (request()?.importNotes?.length) {
-            page = "apis";
-            mode = "design";
+              importMode === "restore" && typeof document === "string"
+                ? JSON.parse(document)
+                : document,
+          };
+          posted = true;
+          result = await api(
+            importMode === "restore"
+              ? "/restore"
+              : "/projects/" + targetProjectId + "/import",
+            "POST",
+            body,
+          );
+          if (stopped())
+            throw Error("导入返回时项目或草稿已变化，未替换当前内容");
+          if (importMode === "restore") {
+            if (!result?.id || result.id === targetProjectId)
+              throw Error("恢复返回的项目身份无效");
+            operation.finish();
+            const list = await api("/projects");
+            if (stopped())
+              throw Error("恢复完成后项目或草稿已变化，未切换当前内容");
+            projects = list;
+            await openProject(result.id);
+          } else {
+            if (result?.id !== targetProjectId)
+              throw Error("导入返回的项目身份不匹配");
+            project = result;
+            dirty = false;
+            current = project.requests.at(-1)?.id;
+            response = null;
+            if (current && !opened.includes(current)) opened.push(current);
+            if (request()?.importNotes?.length) {
+              page = "apis";
+              mode = "design";
+            }
+            render();
           }
-          render();
+          toast(
+            request()?.importNotes?.length
+              ? "导入完成，请确认导入提示"
+              : "导入完成",
+          );
+        } catch (error) {
+          if (posted) {
+            operation.requireReconciliation();
+            throw Error(
+              error.message +
+                (importMode === "restore"
+                  ? "。恢复可能已创建副本，请刷新页面检查项目列表，勿直接重复恢复；当前草稿仍保留。"
+                  : "。导入可能已写入原项目，请重新加载核对，勿重复导入；当前草稿仍保留，请先复制需要保留的修改。"),
+            );
+          }
+          throw error;
+        } finally {
+          operation.finish();
         }
-        toast(
-          request()?.importNotes?.length
-            ? "导入完成，请确认导入提示"
-            : "导入完成",
-        );
       },
     ),
   );
