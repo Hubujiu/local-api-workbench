@@ -35,6 +35,11 @@ const openSource = source.slice(
 );
 const fixture = () => ({
   id: "a",
+  name: "fixture",
+  updatedAt: "now",
+  settings: {},
+  documents: [],
+  dictionary: [],
   revision: 1,
   configRevision: 1,
   _diskFingerprint: "v1",
@@ -110,7 +115,12 @@ test("two case clicks while dirty-save is pending execute at most once", async (
     0,
     "no execution before the owning save finishes",
   );
-  h.calls[0].resolve(fixture());
+  h.calls[0].resolve({
+    ...fixture(),
+    revision: 2,
+    configRevision: 2,
+    _diskFingerprint: "saved",
+  });
   await tick();
   assert.equal(h.calls.filter((c) => c.url.endsWith("/execute")).length, 1);
   h.calls[1].resolve({});

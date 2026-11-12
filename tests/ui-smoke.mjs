@@ -1,3 +1,4 @@
+import { exerciseProjectDraftSave } from "./helpers/project-draft-save-ui.mjs";
 import { exerciseExecutionWriteOwnership } from "./helpers/execution-write-ownership-ui.mjs";
 import { exercisePlanStructureEditor } from "./helpers/plan-structure-ui.mjs";
 import { exerciseCaseWriteOwnership } from "./helpers/case-write-ownership-ui.mjs";
@@ -7358,6 +7359,7 @@ try {
   await exerciseProjectImportOwnership(page);
   await exerciseGeneratedBodyOwnership(page);
   await exerciseCaseWriteOwnership(page);
+  await exerciseProjectDraftSave(page);
   await exercisePlanStructureEditor(page);
   assert.deepEqual(errors, []);
   await exerciseExecutionWriteOwnership(page);
