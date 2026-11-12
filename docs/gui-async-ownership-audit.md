@@ -72,3 +72,9 @@ Executed red tests selected this work: plan readback changed an edited name from
 ## Remaining acceptance boundary
 
 Residual preview-to-wrong-project writes, optimistic rollback, OAuth2 ownership and session generation remain prioritized follow-ups. This audit is not a blanket safety claim. Signed installers, real external database breadth and complete third-party migration compatibility are independent acceptance tracks.
+
+## Preview ownership follow-up (based on #226)
+
+The historical baseline findings above remain evidence, not a claim about later fixes. The dictionary-preview and bulk-error-code paths now capture the opening project object, edit version and modal revision. Both recheck before and after their read-only preview; changes to input, dismissal, a new modal, project replacement or edits invalidate the result. Dictionary confirmation advances synchronously to a new owned modal and rechecks before mutation. Both writes use the existing save coordinator; definite no-commit rollback uses the shared owner/version receipt and unknown outcomes retain the draft without automatic retry. This is not a global solution for every residual async path in the table.
+
+The regression uses actual extracted app callbacks for both paths, including project switch, edits, dismissal, reopening, changed input, malformed results, confirmation ownership, success, definite rejection and unknown outcomes. These callback tests are not browser evidence; real-browser and complete CI results must be checked on the exact candidate head separately.
