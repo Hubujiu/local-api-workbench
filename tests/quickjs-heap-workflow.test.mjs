@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
+import { assertHeapWorkflowOOM } from "./helpers/heap-workflow-diagnostics.mjs";
 
 // Ordinary guest-owned buffers, bounded at twenty MiB. The old engine accepted
 // all of these because cumulative payload bytes were not accounted for.
@@ -62,16 +63,10 @@ test("real debug and plan OOM preserve phase commits, history, project isolation
   other.environments[0].variables = { marker: "isolated" };
   await app.store.save(other);
   const url = `http://127.0.0.1:${fixture.address().port}`;
-  const oom = (result) => {
-    assert.equal(result.outcome ?? result.status, "failed");
-    assert.match(result.error, /out of memory/);
-    assert.equal(result.scriptStage, "script");
-    assert.equal(result.scriptDiagnostics.activityBudgetMs, 250);
-  };
   const before = await call(project, "execute", {
     request: { url: url + "/must-not-send", beforeScript: exhaust },
   });
-  oom(before);
+  assertHeapWorkflowOOM(before, "PRE");
   assert.deepEqual(seen, []);
   let saved = await app.store.get(project.id);
   assert.equal(saved.environments[0].variables.marker, "original");
@@ -86,7 +81,7 @@ test("real debug and plan OOM preserve phase commits, history, project isolation
       afterScript: exhaust,
     },
   });
-  oom(after);
+  assertHeapWorkflowOOM(after, "POST");
   assert.equal(after.status, 200);
   assert.equal(after.body, '{"wire":"unchanged"}');
   assert.deepEqual(seen, ["/post-failure"]);
@@ -124,7 +119,7 @@ test("real debug and plan OOM preserve phase commits, history, project isolation
   const run = await call(project, "run", { planId: plan.id });
   assert.equal(run.status, "failed");
   assert.equal(run.results.length, 2);
-  oom(run.results[0]);
+  assertHeapWorkflowOOM(run.results[0], "PLAN-PRE");
   assert.equal(run.results[0].response, undefined);
   assert.equal(run.results[1].status, "passed", JSON.stringify(run.results[1]));
   assert.equal(run.results[1].response.status, 200);
