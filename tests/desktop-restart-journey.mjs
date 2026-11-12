@@ -8,10 +8,18 @@ import path from "node:path";
 import { _electron as electron } from "playwright";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { exerciseRestartJourney } from "./helpers/restart-journey-ui.mjs";
-import { assertCleanDesktopExit } from "./helpers/desktop-restart-receipt.mjs";
+import {
+  assertCleanDesktopExit,
+  assertCrashDesktopExit,
+} from "./helpers/desktop-restart-receipt.mjs";
+assert.ok(
+  process.argv.slice(2).every((arg) => arg === "--crash"),
+  "Unknown journey option",
+);
+const crash = process.argv.includes("--crash");
 const root = await mkdtemp(path.join(tmpdir(), "packaged-restart-journey-"));
 const evidence = path.resolve(
-  "dist/desktop-restart-evidence",
+  crash ? "dist/desktop-crash-evidence" : "dist/desktop-restart-evidence",
   process.platform,
 );
 const databaseFile = path.join(root, "journey.sqlite");
@@ -89,6 +97,27 @@ async function launch(generation) {
       stopped = true;
       assertCleanDesktopExit({ code, signal, closed: true, saved, forced });
       console.log("DESKTOP_RESTART_CLEAN_EXIT", generation);
+    },
+    async crash() {
+      await host.endTrace();
+      assert.equal(child.exitCode, null);
+      assert.equal(child.signalCode, null);
+      // OS-level hard termination; never call app.quit, app.exit or the save hook.
+      forced = true;
+      const sent = child.kill("SIGKILL");
+      const [code, signal] = await bounded(exit, "Desktop hard-stop timeout");
+      await bounded(closed, "Desktop hard-stop close timeout");
+      stopped = true;
+      assertCrashDesktopExit({
+        code,
+        signal,
+        closed: true,
+        saved,
+        forced,
+        sent,
+        platform: process.platform,
+      });
+      console.log("DESKTOP_CRASH_EXIT", generation);
     },
     async cleanup() {
       const failures = [];
@@ -172,7 +201,8 @@ try {
         await first.page.locator("#saved-state").innerText(),
         "✓ 已保存",
       );
-      await first.quit();
+      if (crash) await first.crash();
+      else await first.quit();
       await assert.rejects(fetch(first.url + "/api/session"));
       host = await launch(2);
       assert.notEqual(host.pid, first.pid);
@@ -193,7 +223,11 @@ try {
   const beforeQuit = hits.length;
   await host.quit();
   assert.equal(hits.length, beforeQuit);
-  console.log("PACKAGED_DESKTOP_RESTART_JOURNEY_PASS");
+  console.log(
+    crash
+      ? "PACKAGED_DESKTOP_CRASH_JOURNEY_PASS"
+      : "PACKAGED_DESKTOP_RESTART_JOURNEY_PASS",
+  );
 } catch (error) {
   failed = true;
   console.error("DESKTOP_RESTART_JOURNEY_FAILED", phase);

@@ -115,6 +115,12 @@ jobs:
         if: runner.os != 'Linux'
       - run: xvfb-run --auto-servernum node tests/desktop-restart-journey.mjs
         if: runner.os == 'Linux'
+      - name: Packaged crash recovery journey
+        run: node tests/desktop-restart-journey.mjs --crash
+        if: runner.os != 'Linux'
+      - name: Packaged crash recovery journey (Xvfb)
+        run: xvfb-run --auto-servernum node tests/desktop-restart-journey.mjs --crash
+        if: runner.os == 'Linux'
       - name: Verify complete portable contents before archive/upload
         run: node scripts/verify-portable.mjs
       - name: Archive desktop executable permissions
@@ -130,6 +136,7 @@ jobs:
             dist/LocalAPI/build-manifest.json
             dist/desktop-failure.png
             dist/desktop-restart-evidence/
+            dist/desktop-crash-evidence/
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 7
