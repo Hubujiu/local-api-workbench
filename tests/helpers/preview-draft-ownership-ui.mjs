@@ -49,6 +49,22 @@ export async function readPreviewProject(page, url) {
   return result.project;
 }
 
+export const previewImportViews = {
+  dictionary: {
+    page: "dictionary",
+    button: "#import-parameter-dictionary",
+    source: "#dictionary-source",
+    title: "导入参数字典",
+  },
+  "error-codes": {
+    page: "settings",
+    settingsAnchor: "resource-statusCodes",
+    button: "#bulk-error-codes",
+    source: "#error-codes-source",
+    title: "批量编辑错误码",
+  },
+};
+
 export async function exercisePreviewDraftOwnership(page) {
   await createImportOwnershipFixture(page);
   const other = await page.locator("#project-select").inputValue();
@@ -133,11 +149,8 @@ export async function exercisePreviewDraftOwnership(page) {
   try {
     for (const kind of ["dictionary", "error-codes"]) {
       const dictionary = kind === "dictionary";
-      const nav = dictionary ? "dictionary" : "docs";
-      const button = dictionary
-        ? "#import-parameter-dictionary"
-        : "#bulk-error-codes";
-      const source = dictionary ? "#dictionary-source" : "#error-codes-source";
+      const view = previewImportViews[kind];
+      const { button, source } = view;
       const original = await snapshot(owner),
         untouched = await snapshot(other);
       const before = puts;
@@ -161,9 +174,23 @@ export async function exercisePreviewDraftOwnership(page) {
       };
       const url = endpoint(owner) + `/${kind}-preview`;
       await page.route(url, handler);
+      async function navigate() {
+        await page.locator(`.rail [data-page="${view.page}"]`).click();
+        if (view.settingsAnchor)
+          await page
+            .locator(
+              `.settings-nav [data-settings-anchor="${view.settingsAnchor}"]`,
+            )
+            .click();
+        await page.locator(button).waitFor({ state: "visible" });
+      }
       async function open(value) {
-        await page.locator(`.rail [data-page="${nav}"]`).click();
+        await navigate();
         await page.locator(button).click();
+        await page
+          .locator("#dialog-title")
+          .getByText(view.title, { exact: true })
+          .waitFor();
         await page.locator(`#dialog ${source}`).fill(value);
       }
       async function start(value) {
@@ -286,7 +313,7 @@ export async function exercisePreviewDraftOwnership(page) {
           "only the intentional latest import may PUT",
         );
         await select(owner);
-        await page.locator(`.rail [data-page="${nav}"]`).click();
+        await navigate();
         await page
           .locator(".page table")
           .getByText("owned_value", { exact: true })
@@ -313,6 +340,11 @@ export async function exercisePreviewDraftOwnership(page) {
         await Promise.all(pending.map((item) => bounded(item.done.promise)));
         await page.unroute(url, handler);
       }
+      console.log(
+        dictionary
+          ? "GUI_PREVIEW_DICTIONARY_PASS"
+          : "GUI_PREVIEW_ERROR_CODES_PASS",
+      );
     }
     console.log("PREVIEW_DRAFT_OWNERSHIP_UI_PASS");
   } finally {
