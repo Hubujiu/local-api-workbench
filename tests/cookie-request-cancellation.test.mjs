@@ -11,6 +11,8 @@ import { executeRequest } from "../src/runtime.mjs";
 import { runPlan, snapshotPlan } from "../src/core.mjs";
 import { readHttpFinalizationFailure } from "../src/http-finalization.mjs";
 
+import { observeCaptureEntry } from "./helpers/cookie-capture-entry.mjs";
+
 const deferred = () => {
   let resolve;
   const promise = new Promise((r) => {
@@ -135,6 +137,9 @@ for (const mode of ["abort", "deadline"]) {
         lockHeld: false,
         captureEntered: false,
         runSettled: false,
+        firstExecutionSettled: false,
+        firstOutcome: "pending",
+        firstErrorCode: null,
       };
       let verified = false,
         reported = false;
@@ -185,7 +190,13 @@ for (const mode of ["abort", "deadline"]) {
           { request: { url: f.url + "/must-not-run" } },
         ],
       });
-      const running = runPlan(plan, { untouched: "keep" }, executeRequest, {
+      const observedExecute = observeCaptureEntry({
+        execute: executeRequest,
+        controller,
+        entered,
+        lifecycle,
+      });
+      const running = runPlan(plan, { untouched: "keep" }, observedExecute, {
         signal: controller.signal,
         cookieSession: f.jar,
       });
@@ -201,6 +212,11 @@ for (const mode of ["abort", "deadline"]) {
       await entered.promise;
       if (mode === "abort") controller.abort();
       const run = await running;
+      assert.equal(
+        lifecycle.captureEntered,
+        true,
+        "Capture phase was not reached; inspect COOKIE_CAPTURE_LIFECYCLE (not a capture timeout success)",
+      );
       assert.equal(run.status, mode === "abort" ? "cancelled" : "failed");
       assert.equal(run.results.length, 1);
       const step = run.results[0];
@@ -715,3 +731,64 @@ for (const mode of ["abort", "deadline"]) {
     },
   );
 }
+
+test(
+  "pre-capture deadline fails the capture fixture promptly without dispatching the next step",
+  { timeout: 5000 },
+  async (t) => {
+    const f = await fixture(t);
+    const entered = deferred(),
+      responseEnded = deferred();
+    const lifecycle = { captureEntered: false };
+    const controller = new AbortController();
+    let release;
+    const capture = f.jar.capture;
+    f.jar.capture = function (...args) {
+      lifecycle.captureEntered = true;
+      entered.resolve();
+      return Reflect.apply(capture, this, args);
+    };
+    f.setHandler(async (_req, res) => {
+      release = await f.hold();
+      await sleep(250);
+      res.setHeader("Set-Cookie", "late=must-not-persist; Path=/");
+      res.end("late response");
+      responseEnded.resolve();
+    });
+    let dispatches = 0;
+    const observed = observeCaptureEntry({
+      execute: async (...args) => {
+        dispatches++;
+        return executeRequest(...args);
+      },
+      controller,
+      entered,
+      lifecycle,
+    });
+    const running = runPlan(
+      snapshotPlan({
+        steps: [
+          { request: { url: f.url, timeout: 150 } },
+          { request: { url: f.url + "/must-not-run" } },
+        ],
+      }),
+      {},
+      observed,
+      { signal: controller.signal, cookieSession: f.jar },
+    );
+    await entered.promise;
+    const run = await running;
+    assert.equal(lifecycle.captureEntered, false);
+    assert.equal(lifecycle.firstOutcome, "rejected");
+    assert.equal(lifecycle.firstErrorCode, "REQUEST_TIMEOUT");
+    assert.equal(run.status, "cancelled");
+    assert.equal(run.results.length, 1);
+    assert.equal(run.results[0].status, "failed");
+    assert.equal(typeof run.results[0].error, "string");
+    assert.equal(dispatches, 1);
+    assert.equal(f.requests.length, 1);
+    await responseEnded.promise;
+    await release();
+    await f.healthy();
+  },
+);
