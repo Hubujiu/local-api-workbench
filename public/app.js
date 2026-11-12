@@ -462,6 +462,32 @@ async function openProject(id) {
   sessionStorage.setItem("project", id);
   render();
 }
+// A preview is read-only; its result may write only the draft and dialog that
+// requested it. Rebind only when synchronously advancing to confirmation.
+function previewDraftOwner() {
+  collect();
+  const owner = project,
+    version = editVersion;
+  let dialogVersion;
+  return {
+    owner,
+    bindDialog() {
+      dialogVersion = modalRevision;
+    },
+    assertCurrent() {
+      if (
+        project !== owner ||
+        editVersion !== version ||
+        modalRevision !== dialogVersion ||
+        !$("#dialog").open
+      )
+        throw Error("项目、草稿或导入窗口已变化，请重新预览；未写入任何内容");
+      if (busy || saving) throw Error("请先结束当前请求或保存，再导入");
+      nativeRequestLifecycle.assertCanSave(owner.id);
+      projectImports.assertCanSave(owner.id);
+    },
+  };
+}
 function modal(title, html, onSave, label = "确定") {
   const d = $("#dialog"),
     revision = ++modalRevision;
@@ -1576,49 +1602,78 @@ function bind() {
       },
     );
   });
-  on("#import-parameter-dictionary", "click", () =>
+  on("#import-parameter-dictionary", "click", () => {
+    const context = previewDraftOwner();
     modal(
       "导入参数字典",
       '<select id="dictionary-format"><option value="kv">key-value</option><option value="json">JSON</option><option value="mysql">MySQL CREATE TABLE</option></select><textarea id="dictionary-source" placeholder="name: 姓名"></textarea>',
       async () => {
+        context.assertCurrent();
+        const format = $("#dictionary-format").value,
+          source = $("#dictionary-source").value;
         const preview = await api(
-          "/projects/" + project.id + "/dictionary-preview",
+          "/projects/" + context.owner.id + "/dictionary-preview",
           "POST",
-          {
-            format: $("#dictionary-format").value,
-            source: $("#dictionary-source").value,
+          { format, source },
+        );
+        context.assertCurrent();
+        if (
+          $("#dictionary-format").value !== format ||
+          $("#dictionary-source").value !== source
+        )
+          throw Error("导入内容已变化，请重新预览");
+        if (
+          !Array.isArray(preview) ||
+          preview.some(
+            (item) =>
+              !item?.entry ||
+              typeof item.entry.key !== "string" ||
+              typeof item.entry.type !== "string",
+          )
+        )
+          throw Error("字典预览结果无效，未写入任何内容");
+        modal(
+          "确认字典导入",
+          "<p>同名同类型的已有项默认不选；源内重复项取信息更完整者。</p>" +
+            preview
+              .map(
+                (item, index) =>
+                  `<label><input data-import-parameter="${index}" type="checkbox" ${item.duplicate ? "" : "checked"}>${esc(item.entry.key)} · ${esc(item.entry.type)} · ${item.duplicate ? "已有重复" : "新增"}${item.entry.note ? `<br><small class="muted">${esc(item.entry.note)}</small>` : ""}</label>`,
+              )
+              .join(""),
+          async () => {
+            context.assertCurrent();
+            const selected = Array.from(
+              document.querySelectorAll("[data-import-parameter]:checked"),
+              (input) => preview[Number(input.dataset.importParameter)]?.entry,
+            );
+            if (selected.some((item) => !item))
+              throw Error("导入选择无效，请重新预览");
+            const previous = context.owner.parameterDictionary;
+            context.owner.parameterDictionary = [
+              ...(previous || []),
+              ...structuredClone(selected),
+            ];
+            mark();
+            try {
+              await save();
+            } catch (error) {
+              rollbackProjectSave(error, () => {
+                if (previous === undefined)
+                  delete context.owner.parameterDictionary;
+                else context.owner.parameterDictionary = previous;
+              });
+              throw error;
+            }
           },
+          "导入选中项",
         );
-        setTimeout(
-          () =>
-            modal(
-              "确认字典导入",
-              "<p>同名同类型的已有项默认不选；源内重复项取信息更完整者。</p>" +
-                preview
-                  .map(
-                    (item, index) =>
-                      `<label><input data-import-parameter="${index}" type="checkbox" ${item.duplicate ? "" : "checked"}>${esc(item.entry.key)} · ${esc(item.entry.type)} · ${item.duplicate ? "已有重复" : "新增"}${item.entry.note ? `<br><small class="muted">${esc(item.entry.note)}</small>` : ""}</label>`,
-                  )
-                  .join(""),
-              async () => {
-                project.parameterDictionary ??= [];
-                for (const input of document.querySelectorAll(
-                  "[data-import-parameter]:checked",
-                ))
-                  project.parameterDictionary.push(
-                    preview[Number(input.dataset.importParameter)].entry,
-                  );
-                mark();
-                await save();
-              },
-              "导入选中项",
-            ),
-          0,
-        );
+        context.bindDialog();
       },
       "预览",
-    ),
-  );
+    );
+    context.bindDialog();
+  });
   on("[data-dynamic-pair]", "click", (_, element) => {
     collect();
     const [group, index] = element.dataset.dynamicPair.split(":");
@@ -1799,6 +1854,7 @@ function bind() {
     await save();
   });
   on("#bulk-error-codes", "click", () => {
+    const context = previewDraftOwner();
     const source = (project.settings?.statusCodes || [])
       .map((item) => String(item.code) + ": " + JSON.stringify(item.label))
       .join("\n");
@@ -1806,11 +1862,26 @@ function bind() {
       "批量编辑错误码",
       '<p>每行 错误码:描述。提交后整体替换字典，未列出的代码会移除。多行说明可使用带引号的 JSON 字符串。</p><textarea id="error-codes-source"></textarea>',
       async () => {
+        context.assertCurrent();
+        const input = $("#error-codes-source").value;
         const result = await api(
-          "/projects/" + project.id + "/error-codes-preview",
+          "/projects/" + context.owner.id + "/error-codes-preview",
           "POST",
-          { source: $("#error-codes-source").value },
+          { source: input },
         );
+        context.assertCurrent();
+        if ($("#error-codes-source").value !== input)
+          throw Error("导入内容已变化，请重新预览");
+        if (
+          !Array.isArray(result?.codes) ||
+          result.codes.some(
+            (item) =>
+              !item ||
+              !["string", "number"].includes(typeof item.code) ||
+              typeof item.label !== "string",
+          )
+        )
+          throw Error("错误码预览结果无效，未写入任何内容");
         const previous = project.settings?.statusCodes || [];
         project.settings ??= {};
         project.settings.statusCodes = result.codes.map((item) => ({
@@ -1830,6 +1901,7 @@ function bind() {
         }
       },
     );
+    context.bindDialog();
     $("#error-codes-source").value = source;
   });
   on("#mock-builtins", "change", (_, element) => {

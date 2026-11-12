@@ -1,3 +1,4 @@
+import { exercisePreviewDraftOwnership } from "./helpers/preview-draft-ownership-ui.mjs";
 import { exerciseProtocolSessionLifecycle } from "./helpers/protocol-session-lifecycle-ui.mjs";
 import { exerciseProjectDraftSave } from "./helpers/project-draft-save-ui.mjs";
 import { exerciseExecutionWriteOwnership } from "./helpers/execution-write-ownership-ui.mjs";
@@ -7351,6 +7352,7 @@ try {
   );
 
   assert.deepEqual(errors, []);
+  await exercisePreviewDraftOwnership(page);
   await exerciseProjectImportOwnership(page);
   await exerciseGeneratedBodyOwnership(page);
   await exerciseCaseWriteOwnership(page);
