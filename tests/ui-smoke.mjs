@@ -1,3 +1,4 @@
+import { exerciseGeneratedBodyOwnership } from "./helpers/generated-body-ownership-ui.mjs";
 import { exerciseProjectImportOwnership } from "./helpers/project-import-ownership-ui.mjs";
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
 import {
@@ -7312,6 +7313,7 @@ try {
 
   assert.deepEqual(errors, []);
   await exerciseProjectImportOwnership(page);
+  await exerciseGeneratedBodyOwnership(page);
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
