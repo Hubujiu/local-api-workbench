@@ -187,7 +187,15 @@ async function api(path, method = "GET", data) {
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   const b = await r.json();
-  if (!r.ok) throw Error(b.error || r.statusText);
+  if (!r.ok) {
+    const error = Error(b.error || r.statusText);
+    error.projectCommitOutcome = {
+      project_id: b.project_id,
+      commit_outcome: b.commit_outcome,
+      retry_safe: b.retry_safe,
+    };
+    throw error;
+  }
   return b;
 }
 function toast(s) {
@@ -235,10 +243,13 @@ function mark() {
 async function save() {
   if (project) nativeRequestLifecycle.assertCanSave(project.id);
   if (project) projectImports.assertCanSave(project.id);
-  if (!project || saving) return;
+  if (!project) return;
+  if (saving) throw Error("保存尚未完成，请等待");
   collect();
-  const snapshot = structuredClone(project),
-    version = editVersion;
+  const owner = project,
+    snapshot = structuredClone(project),
+    version = editVersion,
+    operation = projectImports.beginSave(project.id);
   snapshot.history = [];
   snapshot.runs = [];
   saving = true;
@@ -246,6 +257,7 @@ async function save() {
     button.disabled = true;
   try {
     const saved = await api("/projects/" + snapshot.id, "PUT", snapshot);
+    assertProjectSaveReceipt(saved, snapshot);
     const metadata = projects.find((item) => item.id === saved.id);
     if (metadata)
       Object.assign(metadata, {
@@ -253,7 +265,7 @@ async function save() {
         archived: !!saved.archived,
         updatedAt: saved.updatedAt,
       });
-    if (project.id === snapshot.id) {
+    if (project === owner) {
       if (editVersion === version) {
         project = saved;
         dirty = false;
@@ -266,10 +278,84 @@ async function save() {
       }
     }
     toast(dirty ? "已保存本次快照，后续修改仍未保存" : "已保存到本地");
+  } catch (error) {
+    const outcome = error?.projectCommitOutcome;
+    const rejected =
+      outcome?.project_id === snapshot.id &&
+      outcome.commit_outcome === "not_committed" &&
+      outcome.retry_safe === false;
+    if (rejected) {
+      error.projectSaveRollback = { owner, version };
+      throw error;
+    }
+    operation.requireReconciliation();
+    throw Error(
+      "保存结果尚未确认；不会自动重试。请重新加载原项目核对，当前草稿仍保留，请先复制需要保留的修改。",
+      { cause: error },
+    );
   } finally {
+    operation.finish();
     saving = false;
     render();
   }
+}
+
+function assertProjectSaveReceipt(saved, snapshot) {
+  const object = (value) =>
+    value && typeof value === "object" && !Array.isArray(value);
+  const fail = () => {
+    throw Error("保存回执不完整或版本不匹配");
+  };
+  if (
+    !object(saved) ||
+    saved.id !== snapshot.id ||
+    !Number.isSafeInteger(saved.revision) ||
+    saved.revision <= (snapshot.revision ?? 0) ||
+    !Number.isSafeInteger(saved.configRevision) ||
+    saved.configRevision > saved.revision ||
+    saved.configRevision !==
+      (snapshot.configRevision ?? snapshot.revision ?? 0) + 1 ||
+    typeof saved._diskFingerprint !== "string" ||
+    !saved._diskFingerprint ||
+    typeof saved.name !== "string" ||
+    typeof saved.updatedAt !== "string" ||
+    !object(saved.settings)
+  )
+    fail();
+  for (const key of [
+    "requests",
+    "documents",
+    "dictionary",
+    "environments",
+    "plans",
+    "cases",
+    "history",
+    "runs",
+  ])
+    if (!Array.isArray(saved[key])) fail();
+  // Only these internal histories are intentionally omitted by the owner response.
+  const omitted = new Set(["requestDefinitionHistory", "loadRuns"]);
+  for (const [key, value] of Object.entries(
+    JSON.parse(JSON.stringify(snapshot)),
+  )) {
+    if (omitted.has(key)) continue;
+    if (
+      !Object.hasOwn(saved, key) ||
+      (Array.isArray(value) && !Array.isArray(saved[key])) ||
+      (object(value) && !object(saved[key]))
+    )
+      fail();
+  }
+}
+
+function rollbackProjectSave(error, rollback) {
+  const receipt = error?.projectSaveRollback;
+  if (receipt?.owner !== project || receipt?.version !== editVersion)
+    return false;
+  rollback();
+  mark();
+  render();
+  return true;
 }
 
 function collect() {
@@ -1412,8 +1498,9 @@ function bind() {
         try {
           await save();
         } catch (error) {
-          project.parameterDictionary = previous;
-          mark();
+          rollbackProjectSave(error, () => {
+            project.parameterDictionary = previous;
+          });
           throw error;
         }
       },
@@ -1549,8 +1636,9 @@ function bind() {
         try {
           await save();
         } catch (error) {
-          project.settings.parameterDescriptions = previous;
-          mark();
+          rollbackProjectSave(error, () => {
+            project.settings.parameterDescriptions = previous;
+          });
           throw error;
         }
       },
@@ -1571,8 +1659,9 @@ function bind() {
     try {
       await save();
     } catch (error) {
-      project.settings.parameterDescriptions = previous;
-      mark();
+      rollbackProjectSave(error, () => {
+        project.settings.parameterDescriptions = previous;
+      });
       throw error;
     }
   });
@@ -1678,8 +1767,9 @@ function bind() {
     try {
       await save();
     } catch (error) {
-      project.settings.functions = previous;
-      mark();
+      rollbackProjectSave(error, () => {
+        project.settings.functions = previous;
+      });
       throw error;
     }
   });
@@ -1721,8 +1811,9 @@ function bind() {
         try {
           await save();
         } catch (error) {
-          project.settings.statusCodes = previous;
-          mark();
+          rollbackProjectSave(error, () => {
+            project.settings.statusCodes = previous;
+          });
           throw error;
         }
       },
@@ -1936,8 +2027,9 @@ function bind() {
         try {
           await save();
         } catch (error) {
-          project.settings[key] = previous;
-          mark();
+          rollbackProjectSave(error, () => {
+            project.settings[key] = previous;
+          });
           throw error;
         }
         render();
@@ -4337,8 +4429,9 @@ function editAttributeDefinition(index) {
       try {
         await save();
       } catch (error) {
-        project.settings.attributes = previous;
-        mark();
+        rollbackProjectSave(error, () => {
+          project.settings.attributes = previous;
+        });
         throw error;
       }
       if (index === undefined) index = fields.length - 1;
@@ -4369,8 +4462,9 @@ function editErrorCode(index) {
       try {
         await save();
       } catch (error) {
-        project.settings.statusCodes = previous;
-        mark();
+        rollbackProjectSave(error, () => {
+          project.settings.statusCodes = previous;
+        });
         throw error;
       }
       if (index === undefined) index = project.settings.statusCodes.length - 1;
@@ -4411,8 +4505,9 @@ function editMockField(id) {
       try {
         await save();
       } catch (error) {
-        project.settings.mockFieldRules = previous;
-        mark();
+        rollbackProjectSave(error, () => {
+          project.settings.mockFieldRules = previous;
+        });
         throw error;
       }
     },
@@ -4586,8 +4681,9 @@ function editFunction(index) {
       try {
         await save();
       } catch (error) {
-        project.settings.functions = previous;
-        mark();
+        rollbackProjectSave(error, () => {
+          project.settings.functions = previous;
+        });
         throw error;
       }
       if (index === undefined) index = project.settings.functions.length - 1;

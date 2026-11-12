@@ -59,6 +59,7 @@ import {
   recordSaveSuccess,
 } from "./execution-evidence.mjs";
 
+import { createOwnerProjectPutOutcome } from "./owner-project-put-outcome.mjs";
 import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
 import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
 import { saveProjectArchive } from "./project-archive-grants.mjs";
@@ -398,6 +399,7 @@ export async function createApp({
     return JSON.parse(Buffer.concat(chunks).toString() || "{}");
   }
   server = http.createServer(async (req, res) => {
+    let ownerPutOutcome = null;
     try {
       const base = `http://127.0.0.1:${server.address().port}`,
         host = req.headers.host;
@@ -1079,6 +1081,8 @@ export async function createApp({
         }
         if (parts[1] === "projects" && parts[2]) {
           const action = parts[3];
+          if (!action && req.method === "PUT")
+            ownerPutOutcome = createOwnerProjectPutOutcome(parts[2]);
           // Existing terminal evidence must remain readable while its project
           // storage is damaged or requires recovery. Ownership is checked below;
           // only observation/terminal storage actions bypass a project read,
@@ -1093,6 +1097,7 @@ export async function createApp({
                   (req.method === "POST" &&
                     ["cancel", "reconcile"].includes(parts[5])))));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
+          ownerPutOutcome?.validatedRead();
           if (action === "load-reports") {
             if (req.method !== "GET" || parts.length > 5 || u.search)
               return json(res, 400, {
@@ -1420,7 +1425,7 @@ export async function createApp({
             const saveWithArchiveRevocation = async () => {
               const saved = await saveProjectArchive(
                 b,
-                () => store.save(b),
+                () => ownerPutOutcome.save(() => store.save(b)),
                 (projectId) => {
                   // Dispatchers retain these arrays. Remove in place without
                   // promoting grants from a replaced owner policy/session.
@@ -2699,6 +2704,7 @@ export async function createApp({
         error: e.message,
         ...sqliteProcessFailureDetails(e),
         ...publicProjectCommitOutcome(e),
+        ...ownerPutOutcome?.public(e),
       });
     }
   });

@@ -23,8 +23,20 @@ export function createProjectImportGuard() {
     assertCanStart,
     assertCanSave(id) {
       if (needsReload.has(id)) throw Error(reload(id));
-      if (pending?.id === id && !ownSave)
+      if (pending && (pending.id !== id || !ownSave))
         throw Error(`${pending.label}尚未完成，请等待后保存`);
+    },
+    beginSave(id) {
+      this.assertCanSave(id);
+      if (pending && ownSave && pending.id === id) {
+        return {
+          requireReconciliation() {
+            needsReload.set(id, "保存");
+          },
+          finish() {},
+        };
+      }
+      return this.begin(id, "save");
     },
     reloadCheckpoint() {
       if (pending) throw Error(`${pending.label}尚未完成，请等待后重新加载`);
@@ -38,8 +50,9 @@ export function createProjectImportGuard() {
     begin(id, mode) {
       assertCanStart(id, mode);
       const label =
-        { case: "用例保存", plan: "计划保存", execution: "执行" }[mode] ||
-        "导入";
+        { save: "保存", case: "用例保存", plan: "计划保存", execution: "执行" }[
+          mode
+        ] || "导入";
       const operation = { id, label };
       generationLabel = label;
       pending = operation;

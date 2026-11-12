@@ -198,7 +198,15 @@ for (const format of ["apipost", "apipost-directory"])
         invalidDescription,
         400,
       );
-      assert.deepEqual(Object.keys(rejectedSave), ["error"]);
+      assert.deepEqual(Object.keys(rejectedSave).sort(), [
+        "commit_outcome",
+        "error",
+        "project_id",
+        "retry_safe",
+      ]);
+      assert.equal(rejectedSave.project_id, current.id);
+      assert.equal(rejectedSave.commit_outcome, "not_committed");
+      assert.equal(rejectedSave.retry_safe, false);
       assert.deepEqual(await new Store(root).get(current.id), valid);
       assert.deepEqual(
         await diskSnapshot(app.store.directory(current.id)),

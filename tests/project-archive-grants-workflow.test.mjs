@@ -509,6 +509,9 @@ test(
       400,
     );
     assert.equal(typeof failure.error, "string");
+    assert.equal(failure.project_id, c.p.id);
+    assert.equal(failure.commit_outcome, "unknown");
+    assert.equal(failure.retry_safe, false);
     assert.equal(
       failure.code,
       undefined,
