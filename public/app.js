@@ -1,3 +1,7 @@
+import {
+  planStructureEditor,
+  bindPlanStructureEditor,
+} from "./plan-structure-editor.js";
 import { createProjectImportGuard } from "./project-import-guard.js";
 const projectImports = createProjectImportGuard();
 import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
@@ -3896,6 +3900,56 @@ function bind() {
     modal("编辑计划 JSON", jsonEditor(p), () =>
       savePlan(JSON.parse($("#modal-json").value)),
     );
+  });
+  on("#edit-plan-structure", "click", () => {
+    assertExecutionReady();
+    const owner = project,
+      selected = planId,
+      version = editVersion,
+      original = project.plans.find((item) => item.id === selected);
+    let collectStructure, dialogVersion;
+    const assertCurrent = () => {
+      if (
+        project !== owner ||
+        planId !== selected ||
+        editVersion !== version ||
+        project.plans.find((item) => item.id === selected) !== original ||
+        modalRevision !== dialogVersion ||
+        !$("#dialog").open
+      )
+        throw Error("项目、计划或草稿已变化，请重新打开结构编辑器");
+      assertExecutionReady();
+    };
+    modal(
+      "编辑步骤结构",
+      planStructureEditor(),
+      () => savePlan(collectStructure()),
+      "保存结构",
+    );
+    dialogVersion = modalRevision;
+    collectStructure = bindPlanStructureEditor($("#dialog-content"), original, {
+      requests: structuredClone(owner.requests),
+      assertCurrent,
+      preview: async (candidate) => {
+        assertCurrent();
+        const receipt = await api(
+          "/projects/" + owner.id + "/plans-validate",
+          "POST",
+          {
+            ...candidate,
+            projectConfigRevision: owner.configRevision ?? owner.revision,
+          },
+        );
+        assertCurrent();
+        if (
+          receipt?.valid !== true ||
+          receipt.project_id !== owner.id ||
+          receipt.projectConfigRevision !==
+            (owner.configRevision ?? owner.revision)
+        )
+          throw Error("结构预检回执不匹配，未修改草稿");
+      },
+    });
   });
   on("#add-step", "click", () =>
     modal(
