@@ -795,6 +795,10 @@ try {
   await page
     .locator('#step-auth [data-auth="token"]')
     .fill("must-not-survive-failed-save");
+  const conflictProjectId = await page.locator("#project-select").inputValue();
+  const conflictPlanId = await page
+    .locator(".plan-list [data-plan].active")
+    .getAttribute("data-plan");
   await page.route("**/api/projects/*/plans", (route) =>
     route.request().method() === "POST"
       ? route.fulfill({
@@ -805,7 +809,10 @@ try {
       : route.continue(),
   );
   await page.locator("#dialog-save").click();
-  await page.getByText("fixture plan conflict", { exact: true }).waitFor();
+  await page
+    .locator("#toast")
+    .getByText(/fixture plan conflict.*不会自动重放/)
+    .waitFor();
   await page.unroute("**/api/projects/*/plans");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator('[data-step-edit="0"]').click();
@@ -814,11 +821,44 @@ try {
     "step-fixture-token",
   );
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page
-    .getByRole("button", { name: "执行计划", exact: true })
-    .last()
-    .click();
+  // A rejected write requires a safe current read before deliberate execution.
+  // This keeps the failed-auth-change assertion above and does not replay POST.
+  const beforeConflictReload = await page
+    .locator("#project-select")
+    .elementHandle();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/projects/" + conflictProjectId &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+    ),
+    page.locator("#project-select").selectOption(conflictProjectId),
+  ]);
+  await page.waitForFunction(
+    (element) => !element.isConnected,
+    beforeConflictReload,
+  );
+  await beforeConflictReload.dispose();
+  await page.locator('[data-plan="' + conflictPlanId + '"]').click();
+  await page.locator('[data-step-edit="0"]').waitFor();
+  uploadedMultipart = null;
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/projects/" + conflictProjectId + "/run" &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+    ),
+    page.getByRole("button", { name: "执行计划", exact: true }).last().click(),
+  ]);
   await page.getByText("✓ 通过", { exact: false }).waitFor();
+  assert(
+    uploadedMultipart,
+    "the explicit post-reconciliation run must reach the real upload fixture",
+  );
   assert(
     uploadedMultipart.body.includes(Buffer.from([0, 1, 255, 13, 10])),
     "selected binary file bytes reach real multipart HTTP fixture",

@@ -4,10 +4,9 @@ import { readFile } from "node:fs/promises";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
 import { createNativeRequestLifecycle } from "../public/native-request-lifecycle.js";
 import { adoptVariableWrites } from "../public/variable-write-receipt.js";
-const source = await readFile(
-  new URL("../public/app.js", import.meta.url),
-  "utf8",
-);
+const source = (
+  await readFile(new URL("../public/app.js", import.meta.url), "utf8")
+).replaceAll("\r\n", "\n");
 const saveSource = source.slice(
   source.indexOf("async function save()"),
   source.indexOf("\nfunction collect()"),

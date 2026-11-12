@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
 export async function exercisePlanStructureEditor(page) {
   await createImportOwnershipFixture(page);
-  await page.locator('.rail [data-page="plans"]').click();
+  await page.locator('[data-page="plans"]').click();
   await page.locator("#new-plan").click();
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -62,7 +62,7 @@ export async function exercisePlanStructureEditor(page) {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.reload();
-  await page.locator('.rail [data-page="plans"]').click();
+  await page.locator('[data-page="plans"]').click();
   await page.locator(`[data-plan="${plan.id}"]`).click();
   await page.locator('[data-step-edit="0"]').click();
   const persisted = JSON.parse(
