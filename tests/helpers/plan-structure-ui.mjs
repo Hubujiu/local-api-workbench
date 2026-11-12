@@ -1,3 +1,4 @@
+import { exerciseVisualPlanControls } from "./plan-control-ui.mjs";
 import assert from "node:assert/strict";
 import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
 export async function exercisePlanStructureEditor(page) {
@@ -53,6 +54,7 @@ export async function exercisePlanStructureEditor(page) {
     /GET/,
   );
   await page.locator('[data-step-edit="0"]').click();
+  await page.locator("[data-control-mode]").selectOption("json");
   const original = JSON.parse(
     await page.locator("[data-step-json]").inputValue(),
   );
@@ -65,6 +67,7 @@ export async function exercisePlanStructureEditor(page) {
   await page.locator('[data-page="plans"]').click();
   await page.locator(`[data-plan="${plan.id}"]`).click();
   await page.locator('[data-step-edit="0"]').click();
+  await page.locator("[data-control-mode]").selectOption("json");
   const persisted = JSON.parse(
     await page.locator("[data-step-json]").inputValue(),
   );
@@ -81,6 +84,7 @@ export async function exercisePlanStructureEditor(page) {
   assert.equal(protocol.enabled, false);
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
+  await exerciseVisualPlanControls(page, plan.id);
   console.log(
     "Nested plan and protocol editor: real server save/reload PASS (no transport executed)",
   );
