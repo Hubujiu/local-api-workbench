@@ -184,7 +184,7 @@ export async function exerciseExecutionWriteOwnership(page) {
   }
   await page.locator('[data-page="plans"]').click();
   await page.locator("#new-plan").click();
-  await page.locator("#plan-name").fill("Owned execution plan");
+  await page.locator("#dialog #plan-name").fill("Owned execution plan");
   const [planResponse] = await Promise.all([
     page.waitForResponse(
       (r) => r.url() === endpoint + "/plans" && r.status() === 200,
@@ -201,14 +201,16 @@ export async function exerciseExecutionWriteOwnership(page) {
   try {
     await page.locator("#run-plan").click();
     await heldRun.ready();
-    await page.locator("#plan-name").fill("New plan draft after execution");
+    await page
+      .locator("#app #plan-name")
+      .fill("New plan draft after execution");
     await heldRun.release();
     await page
       .locator("#toast")
       .getByText(/不会自动重放/)
       .waitFor();
     assert.equal(
-      await page.locator("#plan-name").inputValue(),
+      await page.locator("#app #plan-name").inputValue(),
       "New plan draft after execution",
     );
     await page.locator("#run-plan").click();
@@ -228,6 +230,7 @@ export async function exerciseExecutionWriteOwnership(page) {
   }
   const discard = (dialog) => dialog.accept();
   page.on("dialog", discard);
+  const previousSelect = await page.locator("#project-select").elementHandle();
   try {
     await Promise.all([
       page.waitForResponse(
@@ -235,10 +238,12 @@ export async function exerciseExecutionWriteOwnership(page) {
       ),
       page.locator("#project-select").selectOption(id),
     ]);
+    await previousSelect.waitForElementState("hidden");
     await page.locator('[data-plan="' + planId + '"]').click();
     await page.waitForFunction(
       () =>
-        document.querySelector("#plan-name")?.value === "Owned execution plan",
+        document.querySelector("#app #plan-name")?.value ===
+        "Owned execution plan",
     );
   } finally {
     page.off("dialog", discard);

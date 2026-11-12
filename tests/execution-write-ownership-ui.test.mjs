@@ -624,3 +624,22 @@ test("response waiter remains observed when held route release fails first", asy
   await new Promise((resolve) => setImmediate(resolve));
   // node:test fails this test if the now-rejected waiter is unhandled.
 });
+
+test("execution browser fixture scopes duplicate plan ids to their owning surface", async () => {
+  const fixture = await readFile(
+    new URL("./helpers/execution-write-ownership-ui.mjs", import.meta.url),
+    "utf8",
+  );
+  // The hidden creation dialog retains its own #plan-name after close. A bare
+  // locator still matches both nodes under Playwright strict mode.
+  assert.match(
+    fixture,
+    /locator\("#dialog #plan-name"\)\.fill\("Owned execution plan"\)/,
+  );
+  assert.match(
+    fixture,
+    /locator\("#app #plan-name"\)\s*\.fill\("New plan draft after execution"\)/,
+  );
+  assert.match(fixture, /locator\("#app #plan-name"\)\.inputValue\(\)/);
+  assert.doesNotMatch(fixture, /(?:locator|querySelector)\("#plan-name"\)/);
+});
