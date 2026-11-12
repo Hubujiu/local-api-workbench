@@ -386,3 +386,88 @@ test("native lifecycle and imports cannot overlap through actual application dis
   assert.equal(calls, 0);
   pending.finish();
 });
+
+for (const input of ["text", "file"]) {
+  test(`actual restore ${input} sends a parsed object without double encoding`, async () => {
+    const h = harness({ mode: "restore" });
+    const document = {
+      id: "backup",
+      requests: [{ body: '\\"\\\\'.repeat(1024) }],
+    };
+    const text = JSON.stringify(document);
+    if (input === "file")
+      h.els["#import-file"].files = [{ text: async () => text }];
+    else h.els["#import-text"].value = text;
+    const running = h.run();
+    await tick();
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].url, "/restore");
+    assert.deepEqual(h.calls[0].body.document, document);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(h.calls[0].body)).document,
+      document,
+    );
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(h.calls[0].body)) <
+        Buffer.byteLength(JSON.stringify({ document: text })),
+    );
+    h.calls[0].reject(Error("lost response"));
+    await assert.rejects(running, /恢复可能已创建副本/);
+  });
+}
+for (const dirty of [false, true]) {
+  test(`browser fixture setup owns new project and removes dialog handler with dirty=${dirty}`, async () => {
+    const { createImportOwnershipFixture } = await import(
+      "./helpers/project-import-ownership-ui.mjs"
+    );
+    const listeners = new Set();
+    let accepted = 0;
+    const page = {
+      on(event, callback) {
+        assert.equal(event, "dialog");
+        listeners.add(callback);
+      },
+      off(event, callback) {
+        assert.equal(event, "dialog");
+        listeners.delete(callback);
+      },
+      async waitForResponse(predicate) {
+        assert(
+          predicate({
+            url: () => "http://localhost/api/projects",
+            request: () => ({ method: () => "POST" }),
+            status: () => 201,
+          }),
+        );
+        return { json: async () => ({ id: "created" }) };
+      },
+      locator(selector) {
+        return {
+          fill: async () => {},
+          waitFor: async () => {},
+          inputValue: async () => "created",
+          click: async () => {
+            if (selector === "#dialog-save" && dirty)
+              for (const callback of listeners)
+                await callback({
+                  type: () => "confirm",
+                  message: () => "当前修改尚未保存，确定切换项目？",
+                  accept: async () => {
+                    accepted++;
+                  },
+                  dismiss: async () =>
+                    assert.fail("expected discard confirmation"),
+                });
+          },
+        };
+      },
+    };
+    await createImportOwnershipFixture(page);
+    assert.equal(accepted, Number(dirty));
+    assert.equal(
+      listeners.size,
+      0,
+      "setup cannot intercept later reconciliation dialogs",
+    );
+  });
+}

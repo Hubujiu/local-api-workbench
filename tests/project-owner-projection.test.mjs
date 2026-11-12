@@ -52,7 +52,7 @@ test("backup restore UI passes parsed object without double string encoding and 
   );
   assert.match(
     source,
-    /document:\s*typeof document === "string" \? JSON\.parse\(document\) : document/,
+    /document:\s*importMode === "restore" && typeof document === "string"\s*\? JSON\.parse\(document\)\s*: document/,
   );
   const text = JSON.stringify({
     id: "project",

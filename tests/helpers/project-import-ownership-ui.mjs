@@ -23,11 +23,52 @@ async function bounded(promise) {
     clearTimeout(timer);
   }
 }
-export async function exerciseProjectImportOwnership(page) {
+export async function createImportOwnershipFixture(page) {
   await page.locator("#new-project").click();
   await page.locator("#new-name").fill("Import response ownership");
-  await page.locator("#dialog-save").click();
-  await page.locator("#dialog").waitFor({ state: "hidden" });
+  // The preceding smoke scenarios may leave a synthetic draft. Explicitly
+  // discard it when opening our newly created fixture, never edit that project.
+  let unexpectedDialog;
+  const discardPriorFixture = async (dialog) => {
+    if (
+      dialog.type() === "confirm" &&
+      dialog.message() === "当前修改尚未保存，确定切换项目？"
+    )
+      await dialog.accept();
+    else {
+      await dialog.dismiss();
+      unexpectedDialog = dialog.message();
+    }
+  };
+  page.on("dialog", discardPriorFixture);
+  try {
+    const [createdResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/projects" &&
+          response.request().method() === "POST" &&
+          response.status() === 201,
+      ),
+      page.locator("#dialog-save").click(),
+    ]);
+    const created = await createdResponse.json();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(
+      unexpectedDialog,
+      undefined,
+      "unexpected fixture setup dialog",
+    );
+    assert.equal(
+      await page.locator("#project-select").inputValue(),
+      created.id,
+      "fixture must own its newly created project before adding requests",
+    );
+  } finally {
+    page.off("dialog", discardPriorFixture);
+  }
+}
+export async function exerciseProjectImportOwnership(page) {
+  await createImportOwnershipFixture(page);
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator("#add-request").click();
   await page.locator("#request-name").fill("Original request");
