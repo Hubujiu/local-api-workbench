@@ -48,6 +48,8 @@ async function bounded(promise, label, ms = 30000) {
 async function launch(generation) {
   const application = await electron.launch({
     executablePath: desktopLayout().executable,
+    // Electron does not enable Playwright download events by default.
+    acceptDownloads: true,
     env: { ...process.env, LOCAL_API_DESKTOP_DATA: root },
     timeout: 30000,
   });
