@@ -26,6 +26,29 @@ async function bounded(promise) {
   }
 }
 
+// Read through the authenticated browser session, matching the existing
+// protocol/restart fixtures. Never return the local token to the test runner.
+export async function readPreviewProject(page, url) {
+  const result = await page.evaluate(async (url) => {
+    if (new URL(url).origin !== location.origin)
+      throw Error("Preview snapshot must stay on the application origin");
+    const response = await fetch(url, {
+      redirect: "error",
+      headers: { "x-local-token": sessionStorage.getItem("local-api-token") },
+    });
+    return {
+      status: response.status,
+      project: response.ok ? await response.json() : null,
+    };
+  }, url);
+  assert.equal(
+    result.status,
+    200,
+    "authenticated preview snapshot must succeed",
+  );
+  return result.project;
+}
+
 export async function exercisePreviewDraftOwnership(page) {
   await createImportOwnershipFixture(page);
   const other = await page.locator("#project-select").inputValue();
@@ -42,9 +65,7 @@ export async function exercisePreviewDraftOwnership(page) {
       puts++;
   };
   async function snapshot(id) {
-    const response = await page.request.get(endpoint(id));
-    assert.equal(response.status(), 200);
-    const project = await response.json();
+    const project = await readPreviewProject(page, endpoint(id));
     return {
       dictionary: project.parameterDictionary || [],
       codes: project.settings?.statusCodes || [],
