@@ -2166,3 +2166,12 @@ input[data-select-case] {
   padding: 0;
   accent-color: var(--accent);
 }
+
+.plan-step-children {
+  margin: 0 0 12px 24px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+.plan-step-children > .row {
+  margin: 8px 0;
+}
