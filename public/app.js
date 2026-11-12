@@ -3,6 +3,7 @@ const projectImports = createProjectImportGuard();
 import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
 const nativeRequestLifecycle = createNativeRequestLifecycle();
 let projectOpenSequence = 0;
+let bodyGenerationSequence = 0;
 import { mysqlPortInput, mongoPortInput } from "./mysql-port-input.js";
 import { parseDatabaseParameterJSON } from "./database-parameter-json.js";
 import {
@@ -1964,11 +1965,34 @@ function bind() {
     render();
   });
   on("#generate-body", "click", async () => {
-    const data = await api("/projects/" + project.id + "/sample", "POST", {
-      schema: request().schema,
-    });
-    request().body = JSON.stringify(data.sample, null, 2);
-    request().bodyType = "json";
+    collect();
+    const targetProject = project,
+      targetRequest = request(),
+      version = editVersion,
+      openingSequence = projectOpenSequence,
+      generation = ++bodyGenerationSequence,
+      targetPage = page,
+      targetMode = mode;
+    if (!targetProject || !targetRequest) throw Error("请先选择接口");
+    const data = await api(
+      "/projects/" + targetProject.id + "/sample",
+      "POST",
+      {
+        schema: structuredClone(targetRequest.schema),
+      },
+    );
+    if (
+      generation !== bodyGenerationSequence ||
+      project !== targetProject ||
+      request() !== targetRequest ||
+      editVersion !== version ||
+      projectOpenSequence !== openingSequence ||
+      page !== targetPage ||
+      mode !== targetMode
+    )
+      throw Error("接口、项目或草稿已变化，未应用生成结果；当前内容仍保留");
+    targetRequest.body = JSON.stringify(data.sample, null, 2);
+    targetRequest.bodyType = "json";
     mark();
     render();
   });
