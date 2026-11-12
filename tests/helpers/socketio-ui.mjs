@@ -1,0 +1,368 @@
+import assert from "node:assert/strict";
+import http from "node:http";
+import { Server } from "socket.io";
+import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
+import { readPreviewProject } from "./preview-draft-ownership-ui.mjs";
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+async function bounded(promise) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              Error(
+                "Socket.IO browser fixture did not reach its expected phase",
+              ),
+            ),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function exerciseSocketIOUI(page) {
+  const server = http.createServer();
+  const io = new Server(server, { path: "/browser-events/" });
+  const namespace = io.of("/browser");
+  const secret = "fictional-socketio-browser-runtime-only";
+  const connected = deferred();
+  let connections = 0,
+    echoCalls = 0,
+    unknownCalls = 0;
+  namespace.use((socket, next) => {
+    if (
+      socket.handshake.auth.token !== secret ||
+      socket.handshake.query.fixture !== secret ||
+      socket.handshake.headers["x-fixture-runtime"] !== secret
+    )
+      return next(Error("fixture-credentials-rejected"));
+    next();
+  });
+  namespace.on("connection", (socket) => {
+    connections++;
+    connected.resolve();
+    socket.on("echo", (value, ack) => {
+      echoCalls++;
+      if (typeof ack === "function") ack({ echoed: value });
+      socket.emit("reply", value);
+    });
+    socket.on("no-ack", () => {
+      unknownCalls++;
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const target = `http://127.0.0.1:${server.address().port}/browser`;
+  let startRequests = 0,
+    sendRequests = 0;
+  const observe = (request) => {
+    if (request.method() !== "POST") return;
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith("/socketio-sessions")) startRequests++;
+    if (/\/socketio-sessions\/[^/]+\/send$/.test(pathname)) sendRequests++;
+  };
+  page.on("request", observe);
+  const clickResponse = async (button, suffix, method = "POST") => {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname.endsWith(suffix) &&
+          r.request().method() === method,
+      ),
+      page.locator(button).click(),
+    ]);
+    assert(
+      response.ok(),
+      "Socket.IO browser operation must return HTTP success",
+    );
+    return response.json();
+  };
+  try {
+    const idle = () => page.locator("#socketio-list:not([disabled])").waitFor();
+    await createImportOwnershipFixture(page);
+    const owner = await page.locator("#project-select").inputValue();
+    const projectURL = new URL(`/api/projects/${owner}`, page.url()).href;
+    await page.locator('.rail [data-page="socketio"]').click();
+    await page.locator("#socketio-name").fill("Browser Socket.IO fixture");
+    await page.locator("#socketio-url").fill(target);
+    await page.locator("#socketio-path").fill("/browser-events/");
+    await page.locator("#socketio-events").fill('["reply"]');
+    await page.locator("#socketio-workbench details summary").first().click();
+    const fillCredentials = async () => {
+      await page
+        .locator("#socketio-auth")
+        .fill(JSON.stringify({ token: secret }));
+      await page
+        .locator("#socketio-query")
+        .fill(JSON.stringify({ fixture: secret }));
+      await page
+        .locator("#socketio-headers")
+        .fill(JSON.stringify({ "x-fixture-runtime": secret }));
+    };
+    await fillCredentials();
+    await clickResponse("#socketio-save", `/api/projects/${owner}`, "PUT");
+    await idle();
+    await page
+      .locator("#socketio-notice")
+      .getByText("定义已保存", { exact: false })
+      .waitFor();
+    let saved = await readPreviewProject(page, projectURL);
+    const definitionId = saved.settings.socketioDefinitions.find(
+      (d) => d.name === "Browser Socket.IO fixture",
+    )?.id;
+    assert(definitionId, "Socket.IO definition must save through the UI");
+    assert(
+      !JSON.stringify(saved).includes(secret),
+      "runtime connection credentials must not enter saved project",
+    );
+    assert.equal(connections, 0, "save must not connect");
+    assert.equal(startRequests, 0);
+    await clickResponse(
+      "#socketio-project-reload",
+      `/api/projects/${owner}`,
+      "GET",
+    );
+    await idle();
+    await page.locator("#socketio-definition").selectOption(definitionId);
+    assert.equal(await page.locator("#socketio-url").inputValue(), target);
+    assert.equal(
+      await page.locator("#socketio-path").inputValue(),
+      "/browser-events/",
+    );
+    assert.equal(
+      await page.locator("#socketio-events").inputValue(),
+      '["reply"]',
+    );
+    assert.equal(await page.locator("#socketio-auth").inputValue(), "{}");
+    assert.equal(startRequests, 0, "reload and selection must not connect");
+    await page.locator("#socketio-workbench details summary").first().click();
+    await fillCredentials();
+    const created = await clickResponse(
+      "#socketio-connect",
+      "/socketio-sessions",
+    );
+    assert.equal(created.type, "socketio");
+    assert.equal(typeof created.id, "string");
+    await bounded(connected.promise);
+    await idle();
+    const refreshUntil = async (predicate) => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const value = await clickResponse(
+          "#socketio-refresh",
+          `/socketio-sessions/${created.id}`,
+          "GET",
+        );
+        await idle();
+        if (predicate(value)) return value;
+        await page.waitForTimeout(25);
+      }
+      throw Error("Socket.IO expected observation did not arrive");
+    };
+    let session = await refreshUntil((value) => value.state === "open");
+    assert.equal(connections, 1);
+    assert.equal(startRequests, 1);
+    await page.locator("#socketio-event").fill("echo");
+    await page.locator("#socketio-args").fill('[{"text":"browser-echo"}]');
+    const acknowledged = await clickResponse(
+      "#socketio-send",
+      `/socketio-sessions/${created.id}/send`,
+    );
+    await idle();
+    assert.equal(acknowledged.status, "acknowledged");
+    assert.equal(acknowledged.remoteOutcome, "acknowledged");
+    const result = JSON.parse(
+      await page.locator("#socketio-result").textContent(),
+    );
+    assert.equal(result.args[0].echoed.text, "browser-echo");
+    assert.equal(echoCalls, 1);
+    session = await refreshUntil((value) =>
+      value.events.some(
+        (e) => e.direction === "received" && e.event === "reply",
+      ),
+    );
+    assert(
+      session.events.some(
+        (e) =>
+          e.direction === "received" &&
+          e.event === "reply" &&
+          e.args[0]?.text === "browser-echo",
+      ),
+      "real inbound event must be observed",
+    );
+    assert(
+      JSON.parse(
+        await page.locator("#socketio-events-result").textContent(),
+      ).some((e) => e.event === "reply"),
+    );
+
+    // Hold a genuine list response, leave its owning panel, then deliver it.
+    // The stale result must not populate the replacement panel's session picker.
+    const held = deferred(),
+      release = deferred();
+    const listRoute = async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      held.resolve();
+      await release.promise;
+      await route.fulfill({ response });
+    };
+    const listPattern = `**/api/projects/${owner}/socketio-sessions`;
+    await page.route(listPattern, listRoute);
+    try {
+      await page.locator("#socketio-list").click();
+      await bounded(held.promise);
+      await page.locator('.rail [data-page="apis"]').click();
+      const response = page.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname ===
+            `/api/projects/${owner}/socketio-sessions` &&
+          r.request().method() === "GET",
+      );
+      release.resolve();
+      await response;
+      await page.locator('.rail [data-page="socketio"]').click();
+      await idle();
+      assert.equal(
+        await page.locator("#socketio-session option").count(),
+        1,
+        "late list must not repopulate picker after leaving panel",
+      );
+      assert.equal(await page.locator("#socketio-auth").inputValue(), "{}");
+      assert.equal(await page.locator("#socketio-query").inputValue(), "{}");
+      assert.equal(await page.locator("#socketio-headers").inputValue(), "{}");
+    } finally {
+      release.resolve();
+      await page.unroute(listPattern, listRoute);
+    }
+    await clickResponse("#socketio-list", "/socketio-sessions", "GET");
+    await idle();
+    await page.locator("#socketio-session").selectOption(created.id);
+    assert.equal(
+      startRequests,
+      1,
+      "choosing existing session must not reconnect",
+    );
+    await page.locator("#socketio-event").fill("no-ack");
+    await page.locator("#socketio-args").fill('["one-attempt"]');
+    await page.locator("#socketio-ackTimeoutMs").fill("200");
+    const noAckResponse = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname.endsWith(
+          `/socketio-sessions/${created.id}/send`,
+        ) && r.request().method() === "POST",
+    );
+    await page.locator("#socketio-send").evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    const noAck = await (await noAckResponse).json();
+    await idle();
+    assert.equal(noAck.status, "ack-timeout");
+    assert.equal(noAck.remoteOutcome, "unknown");
+    assert.equal(
+      unknownCalls,
+      1,
+      "duplicate button activation must cause only one remote event",
+    );
+    assert.equal(sendRequests, 2);
+    assert(
+      await page.locator("#socketio-send").isDisabled(),
+      "unknown send must prevent blind resend",
+    );
+    await clickResponse(
+      "#socketio-refresh",
+      `/socketio-sessions/${created.id}`,
+      "GET",
+    );
+    await idle();
+    assert(
+      await page.locator("#socketio-send").isDisabled(),
+      "read-only refresh must not clear unknown send",
+    );
+    // A hard browser reload must retain the noncredential uncertainty marker,
+    // without automatically reconnecting or replaying the timed-out event.
+    await page.reload();
+    await page.locator("#project-select").waitFor();
+    assert.equal(await page.locator("#project-select").inputValue(), owner);
+    await page.locator('.rail [data-page="socketio"]').click();
+    await idle();
+    assert.equal(startRequests, 1, "hard reload must not reconnect");
+    assert.equal(sendRequests, 2, "hard reload must not replay events");
+    assert(
+      await page.locator("#socketio-send").isDisabled(),
+      "hard reload must preserve unknown-send gate",
+    );
+    await page.locator("#socketio-definition").selectOption(definitionId);
+    await clickResponse(
+      "#socketio-refresh",
+      `/socketio-sessions/${created.id}`,
+      "GET",
+    );
+    await idle();
+    assert(
+      await page.locator("#socketio-send").isDisabled(),
+      "restored snapshot must not erase unknown-send evidence",
+    );
+    const stopped = await clickResponse(
+      "#socketio-stop",
+      `/socketio-sessions/${created.id}/stop`,
+    );
+    await idle();
+    assert.equal(stopped.state, "closed");
+    assert.equal(stopped.recordSaved, true);
+    assert.equal(
+      JSON.parse(await page.locator("#socketio-stop-result").textContent())
+        .recordSaved,
+      true,
+      "actual stop persistence receipt must remain visible",
+    );
+    assert(
+      await page.locator("#socketio-send").isDisabled(),
+      "stop must not erase unknown remote result",
+    );
+    saved = await readPreviewProject(page, projectURL);
+    assert(
+      saved.protocolRuns.some((r) => r.type === "socketio"),
+      "explicit stop must persist protocol evidence",
+    );
+    assert(
+      !JSON.stringify(saved).includes(secret),
+      "auth/query/header runtime credentials must not enter saved evidence",
+    );
+    assert.equal(connections, 1);
+    assert.equal(startRequests, 1);
+    assert.equal(sendRequests, 2);
+    await page.locator("#socketio-workbench details summary").first().click();
+    await page
+      .locator("#socketio-key")
+      .fill("fictional-socketio-private-key-panel-only");
+    await page.locator('.rail [data-page="apis"]').click();
+    await page.locator('.rail [data-page="socketio"]').click();
+    assert.equal(await page.locator("#socketio-key").inputValue(), "");
+    saved = await readPreviewProject(page, projectURL);
+    assert(
+      !JSON.stringify(saved).includes(
+        "fictional-socketio-private-key-panel-only",
+      ),
+    );
+    await page.locator('.rail [data-page="apis"]').click();
+    console.log(
+      "SOCKETIO_BROWSER_PASS definition/save/reload/connect/receive/ack/unknown-no-replay/reload-recovery/stop-record/runtime-isolation/stale-list",
+    );
+  } finally {
+    page.off("request", observe);
+    await new Promise((resolve) => io.close(resolve));
+  }
+}

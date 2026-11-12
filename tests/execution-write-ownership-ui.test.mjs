@@ -72,6 +72,7 @@ function harness(initial = fixture()) {
     "adoptVariableWrites",
     `
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
+ let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let project=initial,projects=[{id:"a"}],dirty=false,saving=false,busy=false,editVersion=0,projectOpenSequence=0,current="r",planId="p",planTab="plans",lastRun,runId,opened=[],response,loadResult,selectedProtocolId;
  const collect=()=>{},render=()=>{},toast=()=>{},env=()=>project.environments[0]?.id||"e",uid=()=>"run-id",confirm=()=>true;
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},caseResults={set(){}};
