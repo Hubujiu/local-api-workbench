@@ -1,3 +1,4 @@
+import { exerciseGrpcUnaryUI } from "./helpers/grpc-unary-ui.mjs";
 import { exerciseScopedExportUI } from "./helpers/scoped-export-ui.mjs";
 import { exercisePreviewDraftOwnership } from "./helpers/preview-draft-ownership-ui.mjs";
 import { exerciseProtocolSessionLifecycle } from "./helpers/protocol-session-lifecycle-ui.mjs";
@@ -7353,6 +7354,7 @@ try {
   );
 
   assert.deepEqual(errors, []);
+  await exerciseGrpcUnaryUI(page);
   await exerciseScopedExportUI(page);
   await exercisePreviewDraftOwnership(page);
   await exerciseProjectImportOwnership(page);

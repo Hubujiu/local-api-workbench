@@ -245,6 +245,7 @@ function bindGrpcWorkbench() {
     state,
     definitions: project.settings?.grpcDefinitions || [],
     uid,
+    confirmDiscard: () => confirm("当前gRPC定义草稿未保存，确定切换定义？"),
     assertCurrent: current,
     onChange: () => {
       if (

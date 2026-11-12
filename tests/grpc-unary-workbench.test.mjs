@@ -368,3 +368,34 @@ test("real schema and example contract with saved normalized definition", async 
   assert.equal(state.saved.id, "real-definition");
   assert.equal(state.draftDirty, false);
 });
+
+for (const id of ["", "other"])
+  test(`dirty definition selection ${id || "new"} requires explicit discard confirmation`, () => {
+    const state = createGrpcUnaryState();
+    selectGrpcUnary(state, definition);
+    state.definition.name = "Unsaved edit";
+    let allowed = false,
+      prompts = 0,
+      refreshes = 0;
+    const c = createGrpcUnaryController({
+      state,
+      definitions: [definition, { ...definition, id: "other" }],
+      assertCurrent() {},
+      confirmDiscard() {
+        prompts++;
+        return allowed;
+      },
+      onChange() {
+        refreshes++;
+      },
+    });
+    c.select(id);
+    assert.equal(state.definition.name, "Unsaved edit");
+    assert.equal(state.definition.id, "d");
+    assert.equal(prompts, 1);
+    assert.equal(refreshes, 1);
+    allowed = true;
+    c.select(id);
+    assert.equal(state.definition.id, id || undefined);
+    assert.equal(prompts, 2);
+  });

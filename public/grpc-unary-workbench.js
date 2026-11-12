@@ -157,6 +157,10 @@ export function createGrpcUnaryController(options) {
     if (state.pending) throw Error("请等待当前操作结束");
     const d = (options.definitions || []).find((x) => x.id === id);
     if (id && !d) throw Error("gRPC定义不存在");
+    if (state.draftDirty && options.confirmDiscard?.() !== true) {
+      refresh();
+      return false;
+    }
     selectGrpcUnary(state, d);
     refresh();
   }
