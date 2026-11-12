@@ -1,3 +1,4 @@
+import { isHTTPPlanStep, planStepSummary } from "./plan-step-types.js";
 import { assertionState } from "./assertion-state.js";
 const esc = (value) =>
   String(value ?? "").replace(
@@ -92,41 +93,90 @@ function renderEditor(plan, busy, environments) {
     ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
     '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="add-step">＋ 添加步骤</button></div></div>' +
     plan.steps
-      .map(
-        (step, index) =>
-          '<div class="plan-step ' +
-          (plan.provenance?.steps?.[step.id] === "ai" ? "ai-value" : "") +
-          '" draggable="true" data-step-drag="' +
-          index +
-          '"><span class="drag-handle" title="拖动排序">⠿</span><span class="step-number">' +
-          (index + 1) +
-          '</span><input type="checkbox" data-step-enable="' +
-          index +
-          '" ' +
-          (step.enabled ? "checked" : "") +
-          ' aria-label="启用步骤"><span class="method ' +
-          step.request.method +
-          '">' +
-          step.request.method +
-          '</span><div class="grow"><strong>' +
-          esc(step.name) +
-          '</strong><div class="subtle">' +
-          esc(step.request.url) +
-          '</div></div><button data-step-up="' +
-          index +
-          '" ' +
-          (index === 0 ? "disabled" : "") +
-          ' aria-label="上移步骤">↑</button><button data-step-edit="' +
-          index +
-          '">编辑</button><button data-step-delete="' +
-          index +
-          '" class="danger">移除</button></div>',
-      )
+      .map((step, index) => renderPlanStep(step, index, plan))
       .join("") +
     (!plan.steps.length
       ? '<div class="notice">计划为空，请添加已有接口的独立快照。</div>'
       : "") +
     '<div class="plan-save"><button id="save-plan-details" class="primary">保存计划</button></div>'
+  );
+}
+function stepOverview(step, position, inheritedDisabled = false) {
+  const summary = planStepSummary(step);
+  return (
+    '<span class="step-number">' +
+    esc(position) +
+    "</span>" +
+    '<span class="method">' +
+    esc(summary.kind) +
+    "</span>" +
+    '<div class="grow"><strong>' +
+    esc(step.name || summary.kind) +
+    "</strong>" +
+    '<div class="subtle">' +
+    esc(summary.detail) +
+    "</div>" +
+    (step.enabled === false || inheritedDisabled
+      ? '<span class="muted">已禁用（含上层禁用）</span>'
+      : "") +
+    "</div>"
+  );
+}
+function nestedSteps(step, position, inheritedDisabled = false, depth = 0) {
+  if (!["repeat", "if"].includes(step.type)) return "";
+  if (depth >= 8) return '<p class="notice">结构过深，请使用 JSON 检查。</p>';
+  return (
+    '<div class="plan-step-children">' +
+    (step.steps || [])
+      .map((child, index) => {
+        const path = position + "." + (index + 1);
+        const disabled = inheritedDisabled || step.enabled === false;
+        return (
+          '<div class="row" data-plan-node="' +
+          esc(path) +
+          '">' +
+          stepOverview(child, path, disabled) +
+          "</div>" +
+          nestedSteps(child, path, disabled, depth + 1)
+        );
+      })
+      .join("") +
+    "</div>"
+  );
+}
+function renderPlanStep(step, index, plan) {
+  const advanced = !isHTTPPlanStep(step);
+  return (
+    '<section class="plan-step-block"><div class="plan-step ' +
+    (plan.provenance?.steps?.[step.id] === "ai" ? "ai-value" : "") +
+    '" draggable="true" data-step-drag="' +
+    index +
+    '">' +
+    '<span class="drag-handle" title="拖动排序">⠿</span>' +
+    '<input type="checkbox" data-step-enable="' +
+    index +
+    '" ' +
+    (step.enabled !== false ? "checked" : "") +
+    ' aria-label="启用步骤">' +
+    stepOverview(step, index + 1) +
+    '<button data-step-up="' +
+    index +
+    '" ' +
+    (index === 0 ? "disabled" : "") +
+    ' aria-label="上移步骤">↑</button>' +
+    '<button data-step-edit="' +
+    index +
+    '">' +
+    (advanced ? "编辑 JSON" : "编辑") +
+    "</button>" +
+    '<button data-step-delete="' +
+    index +
+    '" class="danger">移除</button></div>' +
+    nestedSteps(step, index + 1) +
+    (advanced
+      ? '<p class="subtle">编辑保留整组及协议字段；子步骤在本步骤 JSON 中编辑，保存仍由服务端校验。</p>'
+      : "") +
+    "</section>"
   );
 }
 function renderRuns(runs, lastRun) {

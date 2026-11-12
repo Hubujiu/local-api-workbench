@@ -1,4 +1,9 @@
 import {
+  isHTTPPlanStep,
+  parsePlanStepJSON,
+  planStepSummary,
+} from "./plan-step-types.js";
+import {
   normalizeScriptDialect,
   scriptDialectOptions,
   scriptDialectNotice,
@@ -19,6 +24,15 @@ const esc = (v) =>
       ],
   );
 export function stepEditor(step) {
+  if (!isHTTPPlanStep(step))
+    return (
+      '<div class="step-editor"><p class="notice">' +
+      esc(planStepSummary(step).kind) +
+      "：编辑此完整步骤定义，保留 ID、类型及未修改字段；不会展开或转换为 HTTP。子步骤与条件均在此 JSON 中编辑。保存前由服务端校验，不执行请求。</p>" +
+      '<label>步骤 JSON<textarea data-step-json spellcheck="false" rows="18">' +
+      esc(JSON.stringify(step, null, 2)) +
+      "</textarea></label></div>"
+    );
   const r = step.request;
   const input = (key, label, value) =>
     "<label>" +
@@ -378,6 +392,12 @@ export function stepRuleRow(kind, index, rule = {}) {
   return `<div class="row step-rule-row" data-step-rule-row="${kind}:${index}">${fields}<button data-step-rule-remove aria-label="移除规则">×</button></div>`;
 }
 export function bindStepEditor(container, step) {
+  if (!isHTTPPlanStep(step))
+    return () =>
+      parsePlanStepJSON(
+        step,
+        container.querySelector("[data-step-json]").value,
+      );
   let auth = structuredClone(step.request.auth || { type: "none" });
   const authHolder = container.querySelector("#step-auth");
   const collectAuth = () => {
