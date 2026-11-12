@@ -385,7 +385,8 @@ async function openHarness(
     "projectImports",
     "api",
     `
-    let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
+    let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
+ let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
       projectOpenSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
     const confirm=()=>true,sessionStorage={setItem(){}},render=()=>{};
     ${source}
