@@ -1,4 +1,9 @@
 import {
+  isControlStep,
+  controlEditor,
+  bindControlEditor,
+} from "./plan-control-editor.js";
+import {
   isHTTPPlanStep,
   parsePlanStepJSON,
   planStepSummary,
@@ -24,6 +29,7 @@ const esc = (v) =>
       ],
   );
 export function stepEditor(step) {
+  if (isControlStep(step)) return controlEditor(step);
   if (!isHTTPPlanStep(step))
     return (
       '<div class="step-editor"><p class="notice">' +
@@ -392,6 +398,7 @@ export function stepRuleRow(kind, index, rule = {}) {
   return `<div class="row step-rule-row" data-step-rule-row="${kind}:${index}">${fields}<button data-step-rule-remove aria-label="移除规则">×</button></div>`;
 }
 export function bindStepEditor(container, step) {
+  if (isControlStep(step)) return bindControlEditor(container, step);
   if (!isHTTPPlanStep(step))
     return () =>
       parsePlanStepJSON(

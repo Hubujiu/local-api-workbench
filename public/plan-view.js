@@ -167,14 +167,18 @@ function renderPlanStep(step, index, plan) {
     '<button data-step-edit="' +
     index +
     '">' +
-    (advanced ? "编辑 JSON" : "编辑") +
+    (["repeat", "if"].includes(step.type)
+      ? "编辑循环/条件"
+      : advanced
+        ? "编辑 JSON"
+        : "编辑") +
     "</button>" +
     '<button data-step-delete="' +
     index +
     '" class="danger">移除</button></div>' +
     nestedSteps(step, index + 1) +
     (advanced
-      ? '<p class="subtle">编辑保留整组及协议字段；子步骤在本步骤 JSON 中编辑，保存仍由服务端校验。</p>'
+      ? '<p class="subtle">循环/条件可视化修改；协议和结构详情使用完整 JSON，未修改字段保留。</p>'
       : "") +
     "</section>"
   );

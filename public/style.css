@@ -2175,3 +2175,20 @@ input[data-select-case] {
 .plan-step-children > .row {
   margin: 8px 0;
 }
+
+[data-control-node] {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+[data-control-condition] {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+}
+[data-control-error] {
+  color: var(--red);
+}
+#dialog-content textarea[data-control-key] {
+  min-height: 52px;
+}
