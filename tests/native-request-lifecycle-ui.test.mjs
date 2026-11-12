@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createProjectImportGuard } from "../public/project-import-guard.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
@@ -381,6 +382,7 @@ async function openHarness(
   const create = new Function(
     "initial",
     "nativeRequestLifecycle",
+    "projectImports",
     "api",
     `
     let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
@@ -392,7 +394,11 @@ async function openHarness(
       replace(p){project=p;},flag(key){if(key==="busy")busy=true;else saving=true;}};
   `,
   );
-  return { ...create(initial, controller, api), gets, controller };
+  return {
+    ...create(initial, controller, createProjectImportGuard(), api),
+    gets,
+    controller,
+  };
 }
 async function unknownCommand(h) {
   await assert.rejects(

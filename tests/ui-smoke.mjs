@@ -1,3 +1,4 @@
+import { exerciseProjectImportOwnership } from "./helpers/project-import-ownership-ui.mjs";
 import { nativeDirectoryFixture } from "./fixtures/apipost-directory.mjs";
 import {
   exerciseMySQLPortUI,
@@ -7309,6 +7310,8 @@ try {
     "prefix:{{'Edited-Literal'|lower|concat(-tail)|substr(7,12)|padstart(14,0)|concat(/)|encodeuricomponent|sha256|base64}}:suffix",
   );
 
+  assert.deepEqual(errors, []);
+  await exerciseProjectImportOwnership(page);
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {
