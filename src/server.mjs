@@ -1,3 +1,4 @@
+import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
 import {
@@ -171,6 +172,7 @@ export async function createApp({
   });
   const saveWireSession = createWireSessionRecorder(store);
   const protocolSessions = new ProtocolSessions({ onFinish: saveWireSession });
+  const protocolIntents = new ProtocolSessionIntents(protocolSessions);
 
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
@@ -426,7 +428,11 @@ export async function createApp({
           return json(res, 403, {
             error: "请使用启动时生成的本地链接打开工作台",
           });
-        return json(res, 200, { token, version: "0.1.0" });
+        return json(res, 200, {
+          token,
+          version: "0.1.0",
+          instanceId: protocolIntents.instanceId,
+        });
       }
       if (/^\/oauth1\/callback\/[a-f0-9]{48}$/.test(u.pathname)) {
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -817,6 +823,41 @@ export async function createApp({
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)
           return json(res, 403, { error: "Session token required" });
+        if (parts[1] === "protocol-session-intents") {
+          res.setHeader("Cache-Control", "no-store");
+          try {
+            const id = parts[2];
+            if (
+              u.search ||
+              u.pathname !==
+                `/api/protocol-session-intents/${id}${parts[3] === "stop" ? "/stop" : ""}`
+            )
+              return json(res, 400, { error: "连接意图路径无效" });
+            if (parts.length === 3 && req.method === "GET")
+              return json(res, 200, protocolIntents.read(id));
+            if (
+              req.method !== "POST" ||
+              !(
+                parts.length === 3 ||
+                (parts.length === 4 && parts[3] === "stop")
+              )
+            )
+              return json(res, 400, { error: "连接意图操作无效" });
+            const input = await body(req);
+            return json(
+              res,
+              200,
+              parts[3] === "stop"
+                ? protocolIntents.stop(id, input.instanceId)
+                : protocolIntents.start(id, input.instanceId, input.definition),
+            );
+          } catch (error) {
+            return json(res, error.intentStatus || 400, {
+              error: error.message,
+              retry_safe: false,
+            });
+          }
+        }
         if (u.pathname === "/api/protocol-sessions" && req.method === "POST") {
           const input = await body(req);
           if (
@@ -2745,7 +2786,8 @@ export async function createApp({
     }
   });
   let protocolShutdown;
-  const beginProtocolShutdown = () =>
+  const beginProtocolShutdown = () => (
+    protocolIntents.close(),
     (protocolShutdown ??= Promise.all([
       protocolSessions.close(),
       grpcSessions.close(),
@@ -2753,7 +2795,8 @@ export async function createApp({
     ]).then(([protocolSessions, grpcSessions]) => ({
       protocolSessions,
       grpcSessions,
-    })));
+    })))
+  );
   server.on("close", () => {
     closeManualImports();
     void autoImports.close();

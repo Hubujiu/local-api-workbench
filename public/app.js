@@ -1,3 +1,4 @@
+import { createProtocolSessionController } from "./protocol-session-controller.js";
 import {
   planStructureEditor,
   bindPlanStructureEditor,
@@ -160,7 +161,14 @@ let opened = [],
   lastRun = null,
   loadResult = null,
   activeSession = null,
-  sessionTimer = null,
+  sessionController = null,
+  sessionState = {
+    phase: "idle",
+    warning: "",
+    canConnect: false,
+    canSend: false,
+    canStop: false,
+  },
   mcpState = { enabled: false, activities: [] },
   updateMCPPanel = null,
   mcpPollSequence = 0,
@@ -981,7 +989,7 @@ function renderPage() {
       )
       .join(
         "",
-      )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><button id="session-connect" class="primary">建立交互会话</button><button id="session-send">发送消息</button><button id="session-stop">断开会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(activeSession?.state || "未连接")}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
+      )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><strong>当前全局会话</strong><button id="session-connect" class="primary" ${sessionState.canConnect ? "" : "disabled"}>建立交互会话</button><button id="session-send" ${sessionState.canSend ? "" : "disabled"}>发送消息</button><button id="session-stop" ${sessionState.canStop ? "" : "disabled"}>断开会话</button><button id="session-refresh">核对会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(sessionLabel())}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
     return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
@@ -2650,40 +2658,22 @@ function bind() {
     mark();
     await save();
   });
-  on("#session-connect", "click", async () => {
-    if (activeSession && ["open", "connecting"].includes(activeSession.state))
-      throw Error("请先断开当前会话");
-    activeSession = await api("/protocol-sessions", "POST", {
+  on("#session-connect", "click", () =>
+    sessionController.connect({
       type: $("#protocol-type").value,
       url: $("#protocol-url").value,
       host: $("#protocol-url").value,
       port: Number($("#protocol-port").value),
-    });
-    clearTimeout(sessionTimer);
-    pollSession();
-  });
-  on("#session-send", "click", async () => {
-    if (!activeSession) throw Error("尚未连接");
-    activeSession = await api(
-      "/protocol-sessions/" + activeSession.id + "/send",
-      "POST",
-      { message: $("#protocol-message").value },
-    );
-    showSession();
-  });
-  on("#session-stop", "click", async () => {
-    if (!activeSession) return;
-    activeSession = await api(
-      "/protocol-sessions/" + activeSession.id + "/stop",
-      "POST",
-      {},
-    );
-    clearTimeout(sessionTimer);
-    showSession();
-  });
+    }),
+  );
+  on("#session-send", "click", () =>
+    sessionController.send($("#protocol-message").value),
+  );
+  on("#session-stop", "click", () => sessionController.stop());
+  on("#session-refresh", "click", () => sessionController.poll());
   on("#session-export", "click", () => {
-    if (!activeSession) throw Error("没有会话消息");
-    download("protocol-session.json", activeSession);
+    if (!sessionController.status().intentId) throw Error("没有会话或恢复证据");
+    download("protocol-session.json", sessionController.evidence());
   });
   on("#protocol-run", "click", async () => {
     assertExecutionReady();
@@ -4379,7 +4369,19 @@ async function init() {
     "";
   if (location.hash)
     history.replaceState(null, "", location.pathname + location.search);
-  token = (await api("/session")).token;
+  const localSession = await api("/session");
+  token = localSession.token;
+  sessionController = createProtocolSessionController({
+    api,
+    storage: sessionStorage,
+    instanceId: localSession.instanceId,
+    onChange: (state) => {
+      sessionState = state;
+      activeSession = state.snapshot;
+      showSession();
+    },
+  });
+  await sessionController.restore();
   sessionStorage.setItem("local-api-token", token);
   projects = await api("/projects");
   if (!projects.some((item) => !item.archived && !item.error)) {
@@ -4646,25 +4648,43 @@ function editDocument(index) {
   preview.innerHTML = renderMarkdown(input.value);
 }
 
+function sessionLabel() {
+  const label =
+    {
+      idle: "未连接",
+      starting: "连接请求中",
+      active: "会话已建立",
+      sending: "正在提交消息",
+      stopping: "正在断开",
+      closed: "已关闭",
+      "uncertain-start": "连接结果待核对",
+      "uncertain-send": "发送结果待核对",
+      "uncertain-stop": "断开结果待核对",
+    }[sessionState.phase] || "待核对";
+  return (
+    (sessionState.phase === "active" ||
+    (sessionState.phase === "closed" &&
+      ["closed", "error"].includes(activeSession?.state))
+      ? activeSession.state
+      : label) + (sessionState.warning ? " · " + sessionState.warning : "")
+  );
+}
 function showSession() {
-  if ($("#session-status"))
-    $("#session-status").textContent = activeSession.state;
+  if ($("#session-status")) $("#session-status").textContent = sessionLabel();
   if ($("#session-events"))
-    $("#session-events").textContent = activeSession.events
-      .map((event) => `${event.at} ${event.direction} ${event.data}`)
-      .join("\n");
+    $("#session-events").textContent =
+      activeSession?.events
+        ?.map((event) => `${event.at} ${event.direction} ${event.data}`)
+        .join("\n") || "";
+  for (const [id, enabled] of [
+    ["#session-connect", sessionState.canConnect],
+    ["#session-send", sessionState.canSend],
+    ["#session-stop", sessionState.canStop],
+  ])
+    if ($(id)) $(id).disabled = !enabled;
 }
 async function pollSession() {
-  if (!activeSession) return;
-  try {
-    activeSession = await api("/protocol-sessions/" + activeSession.id);
-    showSession();
-    if (["open", "connecting"].includes(activeSession.state))
-      sessionTimer = setTimeout(pollSession, 1000);
-  } catch (error) {
-    toast(error.message);
-    clearTimeout(sessionTimer);
-  }
+  return sessionController.poll();
 }
 
 async function refreshMCPActivity() {

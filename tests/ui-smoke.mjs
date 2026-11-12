@@ -1,3 +1,4 @@
+import { exerciseProtocolSessionLifecycle } from "./helpers/protocol-session-lifecycle-ui.mjs";
 import { exerciseProjectDraftSave } from "./helpers/project-draft-save-ui.mjs";
 import { exerciseExecutionWriteOwnership } from "./helpers/execution-write-ownership-ui.mjs";
 import { exercisePlanStructureEditor } from "./helpers/plan-structure-ui.mjs";
@@ -1328,13 +1329,7 @@ try {
     fixtureURL + "/sse",
   );
   await page.locator("#tree-type").selectOption("all");
-  await page.locator("#session-connect").click();
-  await page
-    .locator("#session-events")
-    .getByText("ui-stream-fixture", { exact: false })
-    .waitFor();
-  await page.locator("#session-stop").click();
-  await page.getByText("closed", { exact: true }).waitFor();
+  await exerciseProtocolSessionLifecycle(page);
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="settings-mcp"]').click();
   await page.screenshot({ path: "/tmp/local-api-mcp-settings.png" });

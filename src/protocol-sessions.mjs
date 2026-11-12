@@ -110,7 +110,13 @@ export class ProtocolSessions {
   }
   start(
     input,
-    { templateContext, templateProvenance, projectId, definition } = {},
+    {
+      templateContext,
+      templateProvenance,
+      projectId,
+      definition,
+      onAllocated,
+    } = {},
   ) {
     if (this.closing) throw Error("协议会话管理器正在关闭");
     if (input.templateMode === "variables")
@@ -153,6 +159,13 @@ export class ProtocolSessions {
         : {}),
     };
     this.sessions.set(session.id, session);
+    // Trusted internal observer only; no transport or timers exist yet.
+    try {
+      onAllocated?.(session.id);
+    } catch (error) {
+      this.sessions.delete(session.id);
+      throw error;
+    }
     session.deadline = setTimeout(
       () => this.stop(session.id, "deadline"),
       15 * 60 * 1000,
