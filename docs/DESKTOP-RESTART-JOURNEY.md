@@ -63,7 +63,12 @@ for the stacked commits and remaining delivery boundaries.
 
 `node tests/desktop-restart-journey.mjs --crash` runs the same complete synthetic
 journey using a fresh temporary data directory, but terminates the first packaged
-Electron main process with an OS-level `SIGKILL` instead of calling `app.quit`.
+Electron main process with an OS-level `SIGKILL` on POSIX, or the owned process
+tree with `taskkill /PID <owned-pid> /T /F` on Windows, instead of calling
+`app.quit`. Windows requires tree termination because a main-process-only kill
+can leave inherited stdio handles in child processes; the original Windows
+main-only attempt failed its close-timeout assertion and is not passing evidence.
+No process-name matching, shell expansion or arbitrary PID input is used.
 The hard-stop receipt requires an accepted kill request, abnormal termination,
 closed process streams and no shutdown-saved receipt. Before any subsequent save,
 execute or backup restore, a read-only native export of the original project is

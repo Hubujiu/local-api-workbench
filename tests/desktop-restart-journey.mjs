@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron } from "playwright";
+import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { exerciseRestartJourney } from "./helpers/restart-journey-ui.mjs";
 import {
@@ -102,9 +103,9 @@ async function launch(generation) {
       await host.endTrace();
       assert.equal(child.exitCode, null);
       assert.equal(child.signalCode, null);
-      // OS-level hard termination; never call app.quit, app.exit or the save hook.
+      // OS hard stop (owned tree on Windows); no app.quit, app.exit or save hook.
       forced = true;
-      const sent = child.kill("SIGKILL");
+      const sent = await hardStopDesktopProcess(child);
       const [code, signal] = await bounded(exit, "Desktop hard-stop timeout");
       await bounded(closed, "Desktop hard-stop close timeout");
       stopped = true;
@@ -129,7 +130,7 @@ async function launch(generation) {
       if (!stopped) {
         forced = true;
         if (child.exitCode === null && child.signalCode === null)
-          child.kill("SIGKILL");
+          await hardStopDesktopProcess(child);
         try {
           await bounded(closed, "Desktop cleanup close timeout");
           stopped = true;
