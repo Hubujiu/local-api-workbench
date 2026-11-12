@@ -1,3 +1,4 @@
+import { exerciseVisualPlanStructure } from "./visual-plan-structure-ui.mjs";
 import { exerciseVisualPlanControls } from "./plan-control-ui.mjs";
 import assert from "node:assert/strict";
 import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
@@ -85,6 +86,7 @@ export async function exercisePlanStructureEditor(page) {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await exerciseVisualPlanControls(page, plan.id);
+  await exerciseVisualPlanStructure(page);
   console.log(
     "Nested plan and protocol editor: real server save/reload PASS (no transport executed)",
   );

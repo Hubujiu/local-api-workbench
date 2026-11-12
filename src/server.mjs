@@ -2378,7 +2378,43 @@ export async function createApp({
             await store.save(p);
             return json(res, 200, { item, project: p });
           }
+          if (action === "plans-validate") {
+            if (req.method !== "POST" || parts.length !== 4 || u.search)
+              return json(res, 400, {
+                error: "计划预检仅支持精确路径 POST 且不能含查询参数",
+              });
+            const b = await body(req);
+            if (
+              (b.projectConfigRevision ?? b.projectRevision) !== undefined &&
+              (b.projectConfigRevision ?? b.projectRevision) !==
+                (p.configRevision ?? p.revision)
+            )
+              throw Error("项目已有其他修改，请重新加载");
+            // This checks the candidate definition only. Reading the project may
+            // recover an existing journal; no candidate write or execution occurs.
+            // Freeze/normalization results must never replace the caller's draft.
+            const project = structuredClone(p),
+              input = structuredClone(b);
+            versionPlan(
+              project.plans.find((item) => item.id === input.id),
+              {
+                ...input,
+                functions: input.functions || project.settings?.functions || [],
+              },
+              "manual",
+              project,
+            );
+            return json(res, 200, {
+              valid: true,
+              project_id: p.id,
+              projectConfigRevision: p.configRevision ?? p.revision,
+            });
+          }
           if (action === "plans" && req.method === "POST") {
+            if (parts.length !== 4 || u.search)
+              return json(res, 400, {
+                error: "计划保存仅支持精确路径且不能含查询参数",
+              });
             const b = await body(req);
             if (
               (b.projectConfigRevision ?? b.projectRevision) !== undefined &&

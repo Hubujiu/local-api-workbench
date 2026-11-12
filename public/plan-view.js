@@ -91,7 +91,7 @@ function renderEditor(plan, busy, environments) {
     '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
     (plan.statusPolicy === "strict200" ? "selected" : "") +
     ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
-    '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="add-step">＋ 添加步骤</button></div></div>' +
+    '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button><button id="add-step">＋ 添加步骤</button></div></div>' +
     plan.steps
       .map((step, index) => renderPlanStep(step, index, plan))
       .join("") +
