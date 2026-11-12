@@ -1,3 +1,4 @@
+import { exerciseSocketIOUI } from "./helpers/socketio-ui.mjs";
 import { exerciseGrpcUnaryUI } from "./helpers/grpc-unary-ui.mjs";
 import { exerciseScopedExportUI } from "./helpers/scoped-export-ui.mjs";
 import { exercisePreviewDraftOwnership } from "./helpers/preview-draft-ownership-ui.mjs";
@@ -500,6 +501,7 @@ try {
       "history",
       "apis",
       "grpc",
+      "socketio",
       "docs",
       "dictionary",
       "settings",
@@ -7369,6 +7371,7 @@ try {
 
   assert.deepEqual(errors, []);
   await exerciseGrpcUnaryUI(page);
+  await exerciseSocketIOUI(page);
   await exerciseScopedExportUI(page);
   await exercisePreviewDraftOwnership(page);
   await exerciseProjectImportOwnership(page);

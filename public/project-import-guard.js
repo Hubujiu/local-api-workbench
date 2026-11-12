@@ -47,8 +47,15 @@ export function createProjectImportGuard() {
       assertReloadCurrent(checkpoint);
       needsReload.delete(id);
     },
-    begin(id, mode) {
-      assertCanStart(id, mode);
+    // Recovery may stop an existing session after an unknown result, but cannot
+    // run concurrently with another project mutation or clear uncertainty.
+    beginRecovery(id) {
+      return this.begin(id, "execution", true);
+    },
+    begin(id, mode, recovery = false) {
+      if (recovery) {
+        if (pending) throw Error(`${pending.label}尚未完成，请等待`);
+      } else assertCanStart(id, mode);
       const label =
         { save: "保存", case: "用例保存", plan: "计划保存", execution: "执行" }[
           mode

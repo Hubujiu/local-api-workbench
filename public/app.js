@@ -1,4 +1,11 @@
 import {
+  createSocketIOState,
+  selectSocketIO,
+  invalidateSocketIO,
+  renderSocketIO,
+  bindSocketIO,
+} from "./socketio-workbench.js";
+import {
   createGrpcUnaryState,
   renderGrpcUnary,
   bindGrpcUnary,
@@ -193,6 +200,233 @@ let opened = [],
   responseLayout = "stacked",
   compactUI = false,
   settingsSection = "settings-basic";
+let socketioWorkbenchState = null,
+  socketioWorkbenchProject = "",
+  socketioNavigationGeneration = 0,
+  socketioWasVisible = false,
+  socketioBusyToken = null;
+const socketioProjectStates = new Map();
+const socketioActiveOperations = new Map();
+function socketioEvidenceKey(id) {
+  return "socketio-evidence-v1:" + id;
+}
+function persistSocketIOEvidence(id, state) {
+  sessionStorage.setItem(
+    socketioEvidenceKey(id),
+    JSON.stringify({
+      version: 1,
+      uncertainStart: !!state.uncertainStart,
+      uncertainSessions: state.uncertainSessions,
+      stopProblems: state.stopProblems,
+      sessionId: state.session?.id || null,
+      sessionClosed:
+        state.session?.state === "closed" || state.session?.state === "error",
+    }),
+  );
+  return true;
+}
+function restoreSocketIOEvidence(id, state) {
+  try {
+    const raw = sessionStorage.getItem(socketioEvidenceKey(id));
+    if (!raw) return;
+    const value = JSON.parse(raw);
+    if (
+      value.version !== 1 ||
+      typeof value.uncertainStart !== "boolean" ||
+      !Array.isArray(value.uncertainSessions) ||
+      value.uncertainSessions.some(
+        (x) => typeof x !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(x),
+      ) ||
+      value.uncertainSessions.length > 100 ||
+      !Array.isArray(value.stopProblems) ||
+      value.stopProblems.length > 100 ||
+      value.stopProblems.some(
+        (x) => typeof x !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(x),
+      ) ||
+      (value.sessionId !== null &&
+        (typeof value.sessionId !== "string" ||
+          !/^[A-Za-z0-9_-]{1,200}$/.test(value.sessionId)))
+    )
+      throw Error("无效恢复记录");
+    state.uncertainStart = value.uncertainStart;
+    state.uncertainSessions = value.uncertainSessions;
+    state.stopProblems = value.stopProblems;
+    if (value.sessionId)
+      state.session = {
+        id: value.sessionId,
+        type: "socketio",
+        state: value.sessionClosed ? "closed" : "connecting",
+        events: [],
+        definition: {},
+      };
+    state.notice =
+      "已恢复本页操作标记；状态尚未核实，请只读刷新或列出会话。不会自动重连或重发。";
+  } catch {
+    state.uncertainStart = true;
+    state.notice =
+      "无法读取操作恢复标记，新连接已阻止。请核对原服务会话，不会自动重试。";
+  }
+}
+function syncSocketIOWorkbench() {
+  if (socketioWorkbenchProject !== project?.id) {
+    if (socketioWorkbenchState) invalidateSocketIO(socketioWorkbenchState);
+    socketioWorkbenchProject = project?.id || "";
+    socketioWorkbenchState = socketioProjectStates.get(
+      socketioWorkbenchProject,
+    );
+    if (!socketioWorkbenchState) {
+      socketioWorkbenchState = createSocketIOState();
+      restoreSocketIOEvidence(socketioWorkbenchProject, socketioWorkbenchState);
+      socketioProjectStates.set(
+        socketioWorkbenchProject,
+        socketioWorkbenchState,
+      );
+    }
+    socketioNavigationGeneration++;
+  }
+  if (socketioWasVisible && page !== "socketio") {
+    invalidateSocketIO(socketioWorkbenchState);
+    socketioNavigationGeneration++;
+  }
+  socketioWasVisible = page === "socketio";
+}
+function bindSocketIOWorkbench() {
+  const root = $("#socketio-workbench");
+  if (!root) return;
+  const state = socketioWorkbenchState,
+    navigation = socketioNavigationGeneration;
+  let owner = project,
+    version = editVersion,
+    ownBusy = null;
+  const current = () => {
+    if (
+      project !== owner ||
+      editVersion !== version ||
+      page !== "socketio" ||
+      socketioWorkbenchState !== state ||
+      socketioNavigationGeneration !== navigation
+    )
+      throw Error("项目或面板已变化，未应用迟到结果");
+  };
+  const rebindSaved = () => {
+    if (project?.id === owner.id && socketioWorkbenchState === state) {
+      owner = project;
+      version = editVersion;
+    }
+  };
+  bindSocketIO(root, {
+    state,
+    definitions: project.settings?.socketioDefinitions || [],
+    uid,
+    confirmDiscard: () =>
+      confirm("当前Socket.IO定义草稿未保存，确定切换定义？"),
+    assertCurrent: current,
+    persistEvidence: (value) => persistSocketIOEvidence(owner.id, value),
+    onChange: () => {
+      if (
+        page === "socketio" &&
+        socketioWorkbenchState === state &&
+        socketioNavigationGeneration === navigation
+      )
+        render();
+    },
+    setBusy: (value, kind) => {
+      if (value) {
+        current();
+        if (busy || saving) throw Error("请等待当前请求或保存结束");
+        if (["connect", "send", "save"].includes(kind)) {
+          if (state.stopProblems.length)
+            throw Error(
+              "前次停止或记录保存仍需核对；请先只读刷新或显式停止保存，未开始新操作",
+            );
+          nativeRequestLifecycle.assertCanSave(owner.id);
+          projectImports.assertCanSave(owner.id);
+          if (dirty) throw Error("项目有未保存修改；请先保存，未自动保存");
+        }
+        ownBusy = { state };
+        socketioBusyToken = ownBusy;
+        busy = true;
+      } else if (
+        socketioBusyToken?.state === state &&
+        !state.pending &&
+        !state.stopPending
+      ) {
+        socketioBusyToken = null;
+        ownBusy = null;
+        busy = false;
+      }
+    },
+    get: (action) => {
+      current();
+      if (!/^socketio-sessions(?:\/[A-Za-z0-9_-]+)?$/.test(action))
+        throw Error("未知Socket.IO读取");
+      return api("/projects/" + owner.id + "/" + action);
+    },
+    post: async (action, body) => {
+      current();
+      if (
+        !/^socketio-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|stop))?$/.test(action)
+      )
+        throw Error("未知Socket.IO操作");
+      const stopping = action.endsWith("/stop");
+      // A stop must remain possible while send is pending, or after uncertainty.
+      const sharedOperation = stopping
+        ? socketioActiveOperations.get(owner.id)
+        : null;
+      const operation =
+        sharedOperation ||
+        (stopping
+          ? projectImports.beginRecovery(owner.id)
+          : projectImports.begin(owner.id, "execution"));
+      if (!stopping) socketioActiveOperations.set(owner.id, operation);
+      try {
+        const result = await api(
+          "/projects/" + owner.id + "/" + action,
+          "POST",
+          body,
+        );
+        if (stopping && result?.recordSaved !== true)
+          operation?.requireReconciliation();
+        return result;
+      } catch (error) {
+        operation?.requireReconciliation();
+        throw error;
+      } finally {
+        if (!sharedOperation) {
+          operation.finish();
+          if (socketioActiveOperations.get(owner.id) === operation)
+            socketioActiveOperations.delete(owner.id);
+        }
+      }
+    },
+    saveDefinition: async (definition) => {
+      current();
+      if (dirty) throw Error("项目有未保存修改；未自动保存其他草稿");
+      const previous = owner.settings?.socketioDefinitions;
+      owner.settings ??= {};
+      owner.settings.socketioDefinitions = [
+        ...(previous || []).filter((item) => item.id !== definition.id),
+        structuredClone(definition),
+      ];
+      mark();
+      try {
+        await save();
+        rebindSaved();
+        return project.settings.socketioDefinitions.find(
+          (item) => item.id === definition.id,
+        );
+      } catch (error) {
+        rollbackProjectSave(error, () => {
+          if (previous === undefined) delete owner.settings.socketioDefinitions;
+          else owner.settings.socketioDefinitions = previous;
+        });
+        rebindSaved();
+        throw error;
+      }
+    },
+  });
+}
+
 let grpcWorkbenchState = null,
   grpcWorkbenchProject = "",
   grpcNavigationGeneration = 0,
@@ -579,6 +813,14 @@ async function changeNativeRequestLifecycle(requestId, restore) {
 }
 async function openProject(id) {
   if (
+    socketioWorkbenchState?.draftDirty &&
+    socketioWorkbenchProject === project?.id &&
+    !confirm(
+      "Socket.IO定义编辑尚未保存，重新加载或切换项目会丢弃此草稿，确定继续？",
+    )
+  )
+    return false;
+  if (
     grpcWorkbenchState?.draftDirty &&
     grpcWorkbenchProject === project?.id &&
     !confirm("gRPC定义编辑尚未保存，重新加载或切换项目会丢弃此草稿，确定继续？")
@@ -609,6 +851,20 @@ async function openProject(id) {
   grpcWorkbenchState = null;
   grpcWorkbenchProject = "";
   grpcNavigationGeneration++;
+  if (socketioWorkbenchState) {
+    invalidateSocketIO(socketioWorkbenchState);
+    // Preserve in-memory uncertainty across reload; only discard the confirmed definition draft.
+    selectSocketIO(
+      socketioWorkbenchState,
+      (loaded.id === project?.id
+        ? loaded
+        : project
+      ).settings?.socketioDefinitions?.find(
+        (item) => item.id === socketioWorkbenchState.selectedId,
+      ),
+    );
+  }
+  socketioNavigationGeneration++;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
@@ -755,6 +1011,7 @@ function nav() {
     ["history", "◷", "最近"],
     ["apis", "▤", "APIs"],
     ["grpc", "↗", "gRPC"],
+    ["socketio", "↗", "Socket.IO"],
     ["docs", "▧", "文档"],
     ["dictionary", "♧", "字典"],
     ["settings", "⚙", "配置"],
@@ -790,6 +1047,12 @@ function tree() {
       label: "gRPC",
       url: item.target,
       attribute: 'data-grpc-definition="' + esc(item.id) + '"',
+    })),
+    ...(project?.settings?.socketioDefinitions || []).map((item) => ({
+      ...item,
+      kind: "socketio",
+      label: "Socket.IO",
+      attribute: 'data-socketio-definition="' + esc(item.id) + '"',
     })),
     ...(project?.protocols || []).map((item) => ({
       ...item,
@@ -834,6 +1097,7 @@ function tree() {
 
 function render(preserveEditingFocus = false) {
   syncGrpcWorkbench();
+  syncSocketIOWorkbench();
   const active = document.activeElement;
   const editing =
     preserveEditingFocus &&
@@ -880,6 +1144,7 @@ function render(preserveEditingFocus = false) {
             ["websocket", "WebSocket"],
             ["tcp", "TCP"],
             ["grpc", "gRPC"],
+            ["socketio", "Socket.IO"],
             ["document", "文档"],
           ]
             .map(
@@ -888,7 +1153,7 @@ function render(preserveEditingFocus = false) {
             )
             .join(
               "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button id="new-folder">新建目录</button></div></details>`
+            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
@@ -1206,6 +1471,8 @@ function modePanel(r) {
   }</div>`;
 }
 function renderPage() {
+  if (page === "socketio")
+    return `<div class="page"><button id="socketio-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">刷新页面不重连。内存会话可能仍在运行；请显式读取列表核对。定义和消息正文可进入项目历史，临时认证/TLS不保存。</p>${renderSocketIO(socketioWorkbenchState, project.settings?.socketioDefinitions || [])}</div>`;
   if (page === "grpc")
     return `<div class="page"><button id="grpc-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">重新加载仅核对本机记录，不证明远端未执行。普通项目草稿和gRPC定义草稿分别保存。</p>${renderGrpcUnary(grpcWorkbenchState, project.settings?.grpcDefinitions || [])}<details><summary>最近已保存gRPC记录（正文保存在项目历史，可能敏感）</summary>${
       (project.protocolRuns || [])
@@ -1462,6 +1729,8 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  bindSocketIOWorkbench();
+  on("#socketio-project-reload", "click", () => openProject(project.id));
   bindGrpcWorkbench();
   on("#grpc-project-reload", "click", () => openProject(project.id));
   const mcpPanel = $("#settings-mcp");
@@ -4436,6 +4705,23 @@ function bindTree() {
     };
   }
 
+  on("[data-socketio-definition]", "click", (_, element) => {
+    collect();
+    if (busy || saving) throw Error("请等待当前请求或保存结束");
+    syncSocketIOWorkbench();
+    if (
+      socketioWorkbenchState.draftDirty &&
+      !confirm("当前Socket.IO定义草稿未保存，确定切换定义？")
+    )
+      return;
+    const definition = project.settings?.socketioDefinitions?.find(
+      (item) => item.id === element.dataset.socketioDefinition,
+    );
+    if (!definition) throw Error("Socket.IO定义不存在");
+    selectSocketIO(socketioWorkbenchState, definition);
+    page = "socketio";
+    render();
+  });
   on("[data-grpc-definition]", "click", (_, element) => {
     collect();
     if (busy || saving) throw Error("请等待当前请求或保存结束");
