@@ -60,7 +60,8 @@ function harness({
     "hooks",
     "importMode",
     `
-    let project=initial,dirty=false,editVersion=0,busy=false,saving=false,modalRevision=1,projectOpenSequence=0,
+    let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
+ let project=initial,dirty=false,editVersion=0,busy=false,saving=false,modalRevision=1,projectOpenSequence=0,
       current="r",response=null,opened=[],page="apis",mode="design",projects=[{id:initial.id}],lastRun,loadResult,planId,selectedProtocolId;
     const els={"#import-mode":{value:importMode},"#import-file":{files:[]},"#import-text":{value:"{}"},"#import-directory":{files:[]},"#dialog":{open:true}};
     const $=s=>els[s], confirm=(text)=>hooks.confirm?.(text)??true, collect=()=>hooks.collect?.(), render=()=>{},toast=()=>{},request=()=>project.requests[0],sessionStorage={setItem(){}};

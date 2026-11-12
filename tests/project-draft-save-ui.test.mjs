@@ -57,6 +57,7 @@ function harness(initial = fixture(), transport) {
     "api",
     "projectImports",
     `
+ let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const nativeRequestLifecycle={assertCanSave(){},reloadCheckpoint(){return 0},assertReloadCurrent(){},acknowledgeReload(){}};
  let modalCallback, rendered;
@@ -240,10 +241,10 @@ test("old GET cannot unlock failed PUT; fresh safe GET can", async () => {
   h.calls[3].resolve(saved(h.calls[3].data));
   await s;
 });
-test("all eleven optimistic catch rollback sites use the common owner receipt", () => {
+test("all twelve optimistic catch rollback sites use the common owner receipt", () => {
   assert.equal(
     (source.match(/rollbackProjectSave\(error, \(\) =>/g) || []).length,
-    11,
+    12,
   );
   assert.doesNotMatch(
     source,

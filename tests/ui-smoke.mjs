@@ -1,3 +1,4 @@
+import { exerciseGrpcUnaryUI } from "./helpers/grpc-unary-ui.mjs";
 import { exerciseScopedExportUI } from "./helpers/scoped-export-ui.mjs";
 import { exercisePreviewDraftOwnership } from "./helpers/preview-draft-ownership-ui.mjs";
 import { exerciseProtocolSessionLifecycle } from "./helpers/protocol-session-lifecycle-ui.mjs";
@@ -491,7 +492,21 @@ try {
     "project controls should be centered at reference width",
   );
   assert.equal(await page.locator('.rail [data-page="plans"]').count(), 0);
-  assert.equal(await page.locator(".rail button").count(), 7);
+  assert.deepEqual(
+    await page
+      .locator(".rail button")
+      .evaluateAll((nodes) => nodes.map((n) => n.dataset.page)),
+    [
+      "history",
+      "apis",
+      "grpc",
+      "docs",
+      "dictionary",
+      "settings",
+      "git",
+      "trash",
+    ],
+  );
   const bodyPanelBox = await page.locator(".request-panel").boundingBox();
   const bodyEditorBox = await page.locator(".body-editor-shell").boundingBox();
   assert(
@@ -7353,6 +7368,7 @@ try {
   );
 
   assert.deepEqual(errors, []);
+  await exerciseGrpcUnaryUI(page);
   await exerciseScopedExportUI(page);
   await exercisePreviewDraftOwnership(page);
   await exerciseProjectImportOwnership(page);

@@ -36,6 +36,7 @@ function harness({ initial = fixture(), hooks = {} } = {}) {
     "projectImports",
     "nativeRequestLifecycle",
     `
+ let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let project=initial,current="r",editVersion=0,projectOpenSequence=0,modalRevision=0,dirty=false,busy=false,saving=false,opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const els={"#case-name":{value:"new case"},"#case-folder":{value:""},"#modal-json":{value:JSON.stringify(initial.requests[0])},"#dialog":{open:true}};
  const $=s=>els[s],esc=s=>s,jsonEditor=()=>"",caseFolderPath=()=>"",collect=()=>{},render=()=>{},toast=()=>{},sessionStorage={setItem(){}},confirm=()=>hooks.confirm??true,request=()=>project.requests.find(r=>r.id===current);
