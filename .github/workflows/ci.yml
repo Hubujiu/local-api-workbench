@@ -286,3 +286,36 @@ jobs:
       - name: Rebuild reviewed runtime with pinned official SDK
         run: docker run --rm --network=none -v "$RUNNER_TEMP/quickjs:/work" -w /work/packages/variant-quickjs-wasmfile-release-sync emscripten/emsdk:3.1.65 make -j1 dist/emscripten-module.mjs
       - run: node scripts/build-quickjs.mjs verify "$RUNNER_TEMP/quickjs"
+
+  downloaded-portable:
+    name: downloaded portable (${{ matrix.os }})
+    needs: desktop
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: Linux
+            platform: linux
+          - os: windows-latest
+            artifact: Windows
+            platform: win32
+          - os: macos-latest
+            artifact: macOS
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test downloaded-package verifier without executing fixture code
+        run: python -m unittest discover -s tests -p test_portable_download.py -v
+      - name: Download this run's successful portable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LocalAPI-${{ matrix.artifact }}-portable
+          path: ${{ runner.temp }}/localapi-downloaded-portable
+      - name: Verify downloaded package contents and exact candidate identity
+        run: python scripts/verify_portable_download.py "${{ runner.temp }}/localapi-downloaded-portable" --platform ${{ matrix.platform }} --head ${{ github.event.pull_request.head.sha || github.sha }}
