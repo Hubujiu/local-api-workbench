@@ -1,3 +1,12 @@
+import {
+  scopedExportResources,
+  scopedExportSelectionHTML,
+  readScopedExportInput,
+  assertScopedExportPreview,
+  scopedExportConfirmationHTML,
+  scopedExportRequest,
+  assertScopedExportResult,
+} from "./scoped-export-view.js";
 import { createProtocolSessionController } from "./protocol-session-controller.js";
 import {
   planStructureEditor,
@@ -487,6 +496,69 @@ function previewDraftOwner() {
       projectImports.assertCanSave(owner.id);
     },
   };
+}
+function openScopedDefinitionExport() {
+  const context = previewDraftOwner();
+  const resources = scopedExportResources(context.owner);
+  const assertCurrent = () => {
+    context.assertCurrent();
+    if (dirty)
+      throw Error("当前有未保存修改；未自动保存或导出，请先保存后重新打开");
+  };
+  modal(
+    "选择定义导出（不是完整备份）",
+    scopedExportSelectionHTML(resources),
+    async () => {
+      assertCurrent();
+      const input = readScopedExportInput($("#dialog-content"), resources);
+      const fingerprint = JSON.stringify(input);
+      const preview = await api(
+        "/projects/" + context.owner.id + "/export-preview",
+        "POST",
+        input,
+      );
+      assertCurrent();
+      if (
+        JSON.stringify(
+          readScopedExportInput($("#dialog-content"), resources),
+        ) !== fingerprint
+      )
+        throw Error("选择或格式已变化，请重新预览；未触发下载");
+      assertScopedExportPreview(preview, input, context.owner);
+      let attempted = false;
+      modal(
+        "确认导出范围与依赖",
+        scopedExportConfirmationHTML(preview, resources),
+        async () => {
+          assertCurrent();
+          if (!$("#scoped-export-accept").checked)
+            throw Error("请先明确接受范围、依赖及敏感信息警告");
+          if (attempted)
+            throw Error(
+              "本次下载结果尚未确认，请关闭后重新预览；不会自动重复下载",
+            );
+          attempted = true;
+          const result = await api(
+            "/projects/" + context.owner.id + "/export-selection",
+            "POST",
+            scopedExportRequest(input, preview),
+          );
+          assertCurrent();
+          if (!$("#scoped-export-accept").checked)
+            throw Error("已撤回确认；未触发下载，请重新预览");
+          const document = assertScopedExportResult(result, preview);
+          download(
+            context.owner.name + ".selected." + input.format + ".json",
+            document,
+          );
+        },
+        "下载所选定义",
+      );
+      context.bindDialog();
+    },
+    "预览范围",
+  );
+  context.bindDialog();
 }
 function modal(title, html, onSave, label = "确定") {
   const d = $("#dialog"),
@@ -2659,10 +2731,10 @@ function bind() {
       },
     ),
   );
-  on("#export", "click", () =>
+  on("#export", "click", () => {
     modal(
       "导出项目",
-      '<label>格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
+      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
       async () => {
         await save();
         const format = $("#export-format").value;
@@ -2672,8 +2744,15 @@ function bind() {
         download(project.name + "." + format + ".json", data);
       },
       "导出",
-    ),
-  );
+    );
+    $("#scoped-export-open").onclick = () => {
+      try {
+        openScopedDefinitionExport();
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+  });
   on("#locate-request", "click", () => {
     collect();
     const selected = request();

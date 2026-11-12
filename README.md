@@ -72,7 +72,9 @@ HTTP/stdio MCP 也提供已保存 TCP 的有界持久交互：与各自现有 WS
 
 授权项目可用 `localapi_export_project` 导出、以 `--write` 使用 `localapi_import_project` 合并导入；显式格式仅 `apipost` / `apipost-directory`，内联 JSON 最多 4 MiB，不读文件、不抓取 URL、不清空或新建项目、不执行请求。导出可能包含已保存的凭据，分享前须检查。详见 [MCP 项目定义往返边界](docs/ADR-MCP-PROJECT-INTERCHANGE.md)。
 
-后端还提供显式选择导出：owner `POST /api/projects/:id/export-preview` / `export-selection`，或只读 MCP `localapi_preview_project_export` / `localapi_export_project_selection`。先预览非空资源选择及必需依赖，再使用返回的配置版本、内容摘要和全部依赖身份导出。只支持上述两种原生格式，目录选择包含完整子树；空选择不退回整项目。原有完整导出保持不变，定义历史、执行记录、计划和回收站不属于该选择范围。选择图成立不代表所有资源可表达，未证明可保真的原生语义仍拒绝。详见 [选择定义导出合同](docs/ADR-SCOPED-DEFINITION-EXPORT.md)。
+工作台可从“导出 → 选择资源导出定义”选择已保存的接口、目录等资源，先查看最终范围、必需依赖和敏感信息警告，再明确确认下载。默认不选择任何资源，未保存草稿不会自动保存；定义文件不是完整备份或脱敏文件。完整备份仍使用原“本地项目 JSON”选项。
+
+后端还提供显式选择导出：owner `POST /api/projects/:id/export-preview` / `export-selection`，或只读 MCP `localapi_preview_project_export` / `localapi_export_project_selection`。先预览非空资源选择及必需依赖，再使用返回的配置版本、内容摘要和全部依赖身份导出。支持上述两种原生格式和受限 Postman Collection 2.1（后者仅选接口/目录，不含环境及全局变量值，不能保证独立重放），目录选择包含完整子树；空选择不退回整项目。原有完整导出保持不变，定义历史、执行记录、计划和回收站不属于该选择范围。选择图成立不代表所有资源可表达，未证明可保真的原生语义仍拒绝。详见 [选择定义导出合同](docs/ADR-SCOPED-DEFINITION-EXPORT.md)。
 
 ## 固定验收
 
