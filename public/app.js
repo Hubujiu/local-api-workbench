@@ -1,4 +1,11 @@
 import {
+  createGrpcUnaryState,
+  renderGrpcUnary,
+  bindGrpcUnary,
+  selectGrpcUnary,
+  invalidateGrpcUnary,
+} from "./grpc-unary-workbench.js";
+import {
   scopedExportResources,
   scopedExportSelectionHTML,
   readScopedExportInput,
@@ -186,6 +193,140 @@ let opened = [],
   responseLayout = "stacked",
   compactUI = false,
   settingsSection = "settings-basic";
+let grpcWorkbenchState = null,
+  grpcWorkbenchProject = "",
+  grpcNavigationGeneration = 0,
+  grpcWasVisible = false,
+  grpcBusyToken = null;
+function syncGrpcWorkbench() {
+  if (grpcWorkbenchProject !== project?.id) {
+    if (grpcWorkbenchState) invalidateGrpcUnary(grpcWorkbenchState);
+    grpcWorkbenchState = createGrpcUnaryState();
+    grpcWorkbenchProject = project?.id || "";
+    grpcNavigationGeneration++;
+  }
+  if (grpcWasVisible && page !== "grpc") {
+    invalidateGrpcUnary(grpcWorkbenchState);
+    grpcNavigationGeneration++;
+  }
+  grpcWasVisible = page === "grpc";
+}
+function bindGrpcWorkbench() {
+  const root = $("#grpc-unary-workbench");
+  if (!root) return;
+  const state = grpcWorkbenchState,
+    navigation = grpcNavigationGeneration;
+  let owner = project,
+    version = editVersion,
+    ownBusy = null;
+  const current = () => {
+    if (
+      project !== owner ||
+      editVersion !== version ||
+      page !== "grpc" ||
+      grpcWorkbenchState !== state ||
+      grpcNavigationGeneration !== navigation
+    )
+      throw Error("项目或面板已变化，未应用迟到结果");
+  };
+  const assertCanStart = () => {
+    current();
+    if (saving) throw Error("请等待项目保存结束");
+    nativeRequestLifecycle.assertCanSave(owner.id);
+    projectImports.assertCanSave(owner.id);
+  };
+  const rebindSaved = () => {
+    if (project?.id === owner.id && grpcWorkbenchState === state) {
+      owner = project;
+      version = editVersion;
+    }
+  };
+  bindGrpcUnary(root, {
+    state,
+    definitions: project.settings?.grpcDefinitions || [],
+    uid,
+    assertCurrent: current,
+    onChange: () => {
+      if (
+        page === "grpc" &&
+        grpcWorkbenchState === state &&
+        grpcNavigationGeneration === navigation
+      )
+        render();
+    },
+    setBusy: (value) => {
+      if (value) {
+        assertCanStart();
+        if (busy || saving) throw Error("请等待当前请求或保存结束");
+        if (dirty)
+          throw Error("项目有未保存修改；请先保存后重新操作，未自动保存");
+        ownBusy = {};
+        grpcBusyToken = ownBusy;
+        busy = true;
+      } else if (ownBusy && grpcBusyToken === ownBusy) {
+        grpcBusyToken = null;
+        ownBusy = null;
+        busy = false;
+      }
+    },
+    post: async (action, body) => {
+      current();
+      if (
+        ![
+          "grpc-schema",
+          "grpc-request-example",
+          "grpc-reflection",
+          "grpc-run",
+        ].includes(action)
+      )
+        throw Error("未知gRPC操作");
+      const network = action === "grpc-run" || action === "grpc-reflection";
+      const operation = network
+        ? projectImports.begin(owner.id, "execution")
+        : null;
+      try {
+        const result = await api(
+          "/projects/" + owner.id + "/" + action,
+          "POST",
+          body,
+        );
+        if (action === "grpc-run" && result?.recordSaved !== true)
+          operation.requireReconciliation();
+        return result;
+      } catch (error) {
+        if (action === "grpc-run") operation.requireReconciliation();
+        throw error;
+      } finally {
+        operation?.finish();
+      }
+    },
+    cancelRun: (runId) => api("/cancel", "POST", { id: runId }),
+    saveDefinition: async (definition) => {
+      current();
+      if (dirty) throw Error("项目有未保存修改；未自动保存其他草稿");
+      const previous = owner.settings?.grpcDefinitions;
+      const next = (previous || []).filter((item) => item.id !== definition.id);
+      next.push(structuredClone(definition));
+      owner.settings ??= {};
+      owner.settings.grpcDefinitions = next;
+      mark();
+      try {
+        await save();
+        rebindSaved();
+        return project.settings.grpcDefinitions.find(
+          (item) => item.id === definition.id,
+        );
+      } catch (error) {
+        rollbackProjectSave(error, () => {
+          if (previous === undefined) delete owner.settings.grpcDefinitions;
+          else owner.settings.grpcDefinitions = previous;
+        });
+        rebindSaved();
+        throw error;
+      }
+    },
+  });
+}
 const methodOptions = [
   "GET",
   "POST",
@@ -436,6 +577,12 @@ async function changeNativeRequestLifecycle(requestId, restore) {
   });
 }
 async function openProject(id) {
+  if (
+    grpcWorkbenchState?.draftDirty &&
+    grpcWorkbenchProject === project?.id &&
+    !confirm("gRPC定义编辑尚未保存，重新加载或切换项目会丢弃此草稿，确定继续？")
+  )
+    return false;
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
   if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
@@ -457,6 +604,10 @@ async function openProject(id) {
   if (loaded?.id !== id) throw Error("返回项目身份不匹配，未替换当前内容");
   nativeRequestLifecycle.assertReloadCurrent(reloadCheckpoint);
   projectImports.assertReloadCurrent(importCheckpoint);
+  if (grpcWorkbenchState) invalidateGrpcUnary(grpcWorkbenchState);
+  grpcWorkbenchState = null;
+  grpcWorkbenchProject = "";
+  grpcNavigationGeneration++;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
@@ -602,6 +753,7 @@ function nav() {
   return [
     ["history", "◷", "最近"],
     ["apis", "▤", "APIs"],
+    ["grpc", "↗", "gRPC"],
     ["docs", "▧", "文档"],
     ["dictionary", "♧", "字典"],
     ["settings", "⚙", "配置"],
@@ -630,6 +782,13 @@ function tree() {
       kind: "document",
       label: "MD",
       attribute: 'data-document-index="' + index + '"',
+    })),
+    ...(project?.settings?.grpcDefinitions || []).map((item) => ({
+      ...item,
+      kind: "grpc",
+      label: "gRPC",
+      url: item.target,
+      attribute: 'data-grpc-definition="' + esc(item.id) + '"',
     })),
     ...(project?.protocols || []).map((item) => ({
       ...item,
@@ -673,6 +832,7 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  syncGrpcWorkbench();
   const active = document.activeElement;
   const editing =
     preserveEditingFocus &&
@@ -718,6 +878,7 @@ function render(preserveEditingFocus = false) {
             ["sse", "SSE"],
             ["websocket", "WebSocket"],
             ["tcp", "TCP"],
+            ["grpc", "gRPC"],
             ["document", "文档"],
           ]
             .map(
@@ -726,7 +887,7 @@ function render(preserveEditingFocus = false) {
             )
             .join(
               "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button id="new-folder">新建目录</button></div></details>`
+            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs">${opened
@@ -1044,6 +1205,18 @@ function modePanel(r) {
   }</div>`;
 }
 function renderPage() {
+  if (page === "grpc")
+    return `<div class="page"><button id="grpc-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">重新加载仅核对本机记录，不证明远端未执行。普通项目草稿和gRPC定义草稿分别保存。</p>${renderGrpcUnary(grpcWorkbenchState, project.settings?.grpcDefinitions || [])}<details><summary>最近已保存gRPC记录（正文保存在项目历史，可能敏感）</summary>${
+      (project.protocolRuns || [])
+        .filter((item) => item.type === "grpc")
+        .slice(-10)
+        .reverse()
+        .map(
+          (item) =>
+            `<p>运行 ${esc(item.runId || item.id)} · ${esc(item.createdAt)} · ${esc(item.status)} · gRPC ${esc(item.result?.status?.code)} · ${esc(item.result?.messages?.length || 0)} 条消息</p>`,
+        )
+        .join("") || "<p>本机暂无已保存记录；不代表远端未执行。</p>"
+    }</details></div>`;
   if (!project) return "";
   if (page === "settings")
     return settingsPanel(
@@ -1288,6 +1461,8 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  bindGrpcWorkbench();
+  on("#grpc-project-reload", "click", () => openProject(project.id));
   const mcpPanel = $("#settings-mcp");
   updateMCPPanel = mcpPanel
     ? bindMCPSettings(mcpPanel, {
@@ -4260,6 +4435,23 @@ function bindTree() {
     };
   }
 
+  on("[data-grpc-definition]", "click", (_, element) => {
+    collect();
+    if (busy || saving) throw Error("请等待当前请求或保存结束");
+    syncGrpcWorkbench();
+    if (
+      grpcWorkbenchState.draftDirty &&
+      !confirm("当前gRPC定义草稿未保存，确定切换定义？")
+    )
+      return;
+    const definition = project.settings?.grpcDefinitions?.find(
+      (item) => item.id === element.dataset.grpcDefinition,
+    );
+    if (!definition) throw Error("gRPC定义不存在");
+    selectGrpcUnary(grpcWorkbenchState, definition);
+    page = "grpc";
+    render();
+  });
   on("[data-document-index]", "click", (_, element) => {
     collect();
     const index = Number(element.dataset.documentIndex);
