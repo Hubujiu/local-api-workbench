@@ -1,3 +1,4 @@
+import { exerciseExecutionWriteOwnership } from "./helpers/execution-write-ownership-ui.mjs";
 import { exercisePlanStructureEditor } from "./helpers/plan-structure-ui.mjs";
 import { exerciseCaseWriteOwnership } from "./helpers/case-write-ownership-ui.mjs";
 import { exerciseGeneratedBodyOwnership } from "./helpers/generated-body-ownership-ui.mjs";
@@ -7318,6 +7319,8 @@ try {
   await exerciseGeneratedBodyOwnership(page);
   await exerciseCaseWriteOwnership(page);
   await exercisePlanStructureEditor(page);
+  assert.deepEqual(errors, []);
+  await exerciseExecutionWriteOwnership(page);
   assert.deepEqual(errors, []);
   console.log("UI_SMOKE_PASS");
 } catch (error) {

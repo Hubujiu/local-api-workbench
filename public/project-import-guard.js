@@ -1,4 +1,4 @@
-// Shared import/case mutation ownership; one pending write and reconciliation gate.
+// Shared project mutation/execution ownership; one pending write and reconciliation gate.
 // Client ownership only. The server still owns validation, persistence and revisions.
 export function createProjectImportGuard() {
   let pending = null,
@@ -37,7 +37,9 @@ export function createProjectImportGuard() {
     },
     begin(id, mode) {
       assertCanStart(id, mode);
-      const label = mode === "case" ? "用例保存" : "导入";
+      const label =
+        { case: "用例保存", plan: "计划保存", execution: "执行" }[mode] ||
+        "导入";
       const operation = { id, label };
       generationLabel = label;
       pending = operation;

@@ -949,32 +949,95 @@ function addRequest() {
   mark();
   render();
 }
+function assertExecutionReady() {
+  if (busy || saving) throw Error("请等待当前请求或保存结束");
+  nativeRequestLifecycle.reloadCheckpoint();
+  nativeRequestLifecycle.assertCanSave(project.id);
+  projectImports.assertCanStart(project.id, "execution");
+}
+async function prepareProjectWrite(mode) {
+  assertExecutionReady();
+  const projectId = project.id,
+    operation = projectImports.begin(projectId, mode);
+  try {
+    collect();
+    if (dirty) await operation.saveDraft(save);
+    if (project.id !== projectId || dirty || busy || saving)
+      throw Error("项目或草稿在保存期间已变化，未开始后续操作");
+    const owner = project,
+      version = editVersion,
+      openingSequence = projectOpenSequence,
+      plans = JSON.stringify(project.plans);
+    return {
+      projectId,
+      operation,
+      assertCurrent(updated) {
+        const planChanged =
+          project === owner && JSON.stringify(project.plans) !== plans;
+        if (planChanged && !dirty) mark();
+        if (
+          project !== owner ||
+          editVersion !== version ||
+          dirty ||
+          projectOpenSequence !== openingSequence ||
+          saving ||
+          planChanged ||
+          (updated && updated.id !== projectId)
+        )
+          throw Error("项目或草稿已变化，未应用迟到的写入结果");
+      },
+      uncertain(error) {
+        operation.requireReconciliation();
+        return Error(
+          error.message +
+            "。操作可能已完成，请先复制草稿并重新加载原项目核对；不会自动重放，核对后可明确重新执行。",
+        );
+      },
+    };
+  } catch (error) {
+    operation.finish();
+    throw error;
+  }
+}
 async function savePlan(plan) {
   plan = structuredClone(plan);
-  if (dirty) {
-    await save();
-    if (dirty) throw Error("保存期间出现新的修改，请检查后再次保存");
+  const selectedPlan = planId,
+    write = await prepareProjectWrite("plan");
+  let posted = false;
+  try {
+    write.assertCurrent();
+    posted = true;
+    const result = await api(
+      "/projects/" + write.projectId + "/plans",
+      "POST",
+      {
+        ...plan,
+        projectConfigRevision: project.configRevision ?? project.revision,
+      },
+    );
+    write.assertCurrent();
+    const {
+      projectRevision,
+      projectConfigRevision,
+      projectFingerprint,
+      ...saved
+    } = result;
+    if (!saved.id || (plan.id && saved.id !== plan.id))
+      throw Error("返回计划身份不匹配");
+    const index = project.plans.findIndex((item) => item.id === saved.id);
+    if (index < 0) project.plans.push(saved);
+    else project.plans[index] = saved;
+    if (planId === selectedPlan) planId = saved.id;
+    project.revision = projectRevision;
+    project.configRevision = projectConfigRevision;
+    project._diskFingerprint = projectFingerprint;
+    render();
+  } catch (error) {
+    if (posted) throw write.uncertain(error);
+    throw error;
+  } finally {
+    write.operation.finish();
   }
-  const projectId = project.id;
-  const result = await api("/projects/" + projectId + "/plans", "POST", {
-    ...plan,
-    projectConfigRevision: project.configRevision ?? project.revision,
-  });
-  if (project.id !== projectId) return;
-  const {
-    projectRevision,
-    projectConfigRevision,
-    projectFingerprint,
-    ...saved
-  } = result;
-  const index = project.plans.findIndex((item) => item.id === saved.id);
-  if (index < 0) project.plans.push(saved);
-  else project.plans[index] = saved;
-  planId = saved.id;
-  project.revision = projectRevision;
-  project.configRevision = projectConfigRevision;
-  project._diskFingerprint = projectFingerprint;
-  render();
 }
 
 function editRules() {
@@ -2527,6 +2590,7 @@ function bind() {
     download("protocol-session.json", activeSession);
   });
   on("#protocol-run", "click", async () => {
+    assertExecutionReady();
     runId = uid();
     busy = true;
     $("#protocol-run").disabled = true;
@@ -3408,7 +3472,7 @@ function bind() {
     render();
   });
   async function runInterfaceCaseBatch(ids) {
-    if (busy || saving) throw Error("请等待当前操作结束");
+    assertExecutionReady();
     const projectId = project.id,
       source = current;
     if (dirty) await save();
@@ -3538,34 +3602,42 @@ function bind() {
     ),
   );
   on("[data-run-case]", "click", async (_, e) => {
-    const item = project.cases.find(
-      (candidate) => candidate.id === e.dataset.runCase,
-    );
-    if (dirty) await save();
-    const environmentId = env();
-    busy = true;
-    runId = uid();
-    render();
+    const source = current,
+      caseId = e.dataset.runCase,
+      write = await prepareProjectWrite("execution");
+    let posted = false,
+      ownsBusy = false;
     try {
-      const result = await api("/projects/" + project.id + "/execute", "POST", {
-        request: { ...item.request, name: item.name, serviceSnapshot: true },
-        functions: item.functions,
-        environmentId,
-        runId,
-      });
-      caseResults.set(project.id, item.id, result);
-      const latest = await api("/projects/" + project.id);
-      project.history = latest.history;
-      const adoption = adoptVariableWrites(
-        project,
-        latest,
-        result.variableWrites,
+      write.assertCurrent();
+      if (current !== source) throw Error("当前接口已变化，未执行用例");
+      const item = project.cases.find((candidate) => candidate.id === caseId);
+      if (!item) throw Error("用例已不存在");
+      const environmentId = env();
+      busy = true;
+      ownsBusy = true;
+      runId = uid();
+      render();
+      posted = true;
+      const result = await api(
+        "/projects/" + write.projectId + "/execute",
+        "POST",
+        {
+          request: { ...item.request, name: item.name, serviceSnapshot: true },
+          functions: item.functions,
+          environmentId,
+          runId,
+        },
       );
-      if (adoption === "none") project.revision = latest.revision;
-      if (adoption === "conflict")
-        toast("变量已保存，但项目还有其他变更；请重新加载并检查后再保存");
+      caseResults.set(write.projectId, caseId, result);
+      const latest = await api("/projects/" + write.projectId);
+      write.assertCurrent(latest);
+      project = latest;
+    } catch (error) {
+      if (posted) throw write.uncertain(error);
+      throw error;
     } finally {
-      busy = false;
+      if (ownsBusy) busy = false;
+      write.operation.finish();
       render();
     }
   });
@@ -3605,6 +3677,7 @@ function bind() {
     element.value = "";
   });
   on("#load-run", "click", async () => {
+    assertExecutionReady();
     collect();
     const count = Number($("#load-count").value),
       concurrency = Number($("#load-concurrency").value),
@@ -3680,6 +3753,7 @@ function bind() {
   });
   on("[data-step-drag]", "dragover", (event) => event.preventDefault());
   on("[data-step-drag]", "drop", async (event, element) => {
+    assertExecutionReady();
     event.preventDefault();
     const from = Number(event.dataTransfer.getData("text/plain")),
       to = Number(element.dataset.stepDrag);
@@ -3741,6 +3815,7 @@ function bind() {
         )
         .join("")}</select>`,
       async () => {
+        assertExecutionReady();
         const p = project.plans.find((p) => p.id === planId);
         const r = project.requests.find((r) => r.id === $("#step-api").value);
         if (!r) throw Error("请先创建接口");
@@ -3750,30 +3825,35 @@ function bind() {
     ),
   );
   on("#plan-status-policy", "change", async (_, e) => {
+    assertExecutionReady();
     const plan = project.plans.find((item) => item.id === planId);
     plan.statusPolicy = e.value;
     await savePlan(plan);
   });
   on("#plan-env", "change", (_, e) => {
+    assertExecutionReady();
     const p = project.plans.find((p) => p.id === planId);
     p.environmentId = e.value;
-    savePlan(p);
+    return savePlan(p);
   });
   on("[data-step-enable]", "change", (_, e) => {
+    assertExecutionReady();
     const p = project.plans.find((p) => p.id === planId);
     p.steps[e.dataset.stepEnable].enabled = e.checked;
-    savePlan(p);
+    return savePlan(p);
   });
   on("[data-step-up]", "click", (_, e) => {
+    assertExecutionReady();
     const p = project.plans.find((p) => p.id === planId),
       i = Number(e.dataset.stepUp);
     [p.steps[i - 1], p.steps[i]] = [p.steps[i], p.steps[i - 1]];
-    savePlan(p);
+    return savePlan(p);
   });
   on("[data-step-delete]", "click", (_, e) => {
+    assertExecutionReady();
     const p = project.plans.find((p) => p.id === planId);
     p.steps.splice(Number(e.dataset.stepDelete), 1);
-    savePlan(p);
+    return savePlan(p);
   });
   on("[data-step-edit]", "click", (_, e) => {
     const p = project.plans.find((p) => p.id === planId),
@@ -3787,22 +3867,37 @@ function bind() {
     collectEdits = bindStepEditor($("#dialog-content"), p.steps[i]);
   });
   on("#run-plan", "click", async () => {
-    if (dirty) {
-      await save();
-      if (dirty) throw Error("还有新的修改，请先保存");
-    }
-    busy = true;
-    runId = uid();
-    render();
+    const selectedPlan = planId,
+      write = await prepareProjectWrite("execution");
+    let posted = false,
+      ownsBusy = false;
     try {
-      lastRun = await api("/projects/" + project.id + "/run", "POST", {
-        planId,
-        runId,
-      });
-      planTab = "runs";
-      project = await api("/projects/" + project.id);
+      write.assertCurrent();
+      if (planId !== selectedPlan) throw Error("计划选择已变化，未执行");
+      busy = true;
+      ownsBusy = true;
+      runId = uid();
+      render();
+      posted = true;
+      const result = await api(
+        "/projects/" + write.projectId + "/run",
+        "POST",
+        {
+          planId: selectedPlan,
+          runId,
+        },
+      );
+      if (project.id === write.projectId) lastRun = result;
+      const updated = await api("/projects/" + write.projectId);
+      write.assertCurrent(updated);
+      project = updated;
+      if (planId === selectedPlan) planTab = "runs";
+    } catch (error) {
+      if (posted) throw write.uncertain(error);
+      throw error;
     } finally {
-      busy = false;
+      if (ownsBusy) busy = false;
+      write.operation.finish();
       render();
     }
   });
@@ -4054,6 +4149,7 @@ function editDictionary(index) {
   };
 }
 async function send() {
+  assertExecutionReady();
   collect();
   const targetId = current,
     projectId = project.id,
@@ -4116,7 +4212,7 @@ document.addEventListener("keydown", (e) => {
     !busy
   ) {
     e.preventDefault();
-    send();
+    send().catch((error) => toast(error.message));
   }
 });
 window.addEventListener("beforeunload", (e) => {
