@@ -1,4 +1,5 @@
 import test from "node:test";
+import { assertHeapWorkflowOOM } from "./helpers/heap-workflow-diagnostics.mjs";
 import assert, { AssertionError } from "node:assert/strict";
 import {
   workerFailureMetadata,
@@ -782,5 +783,88 @@ test("XML rejection mismatch retains a fixed case label and worker metadata with
       matcher,
       caseId,
     ),
+  );
+});
+
+const heapResult = () => ({
+  outcome: "failed",
+  error: "脚本Promise被拒绝: out of memory",
+  scriptStage: "script",
+  scriptDiagnostics: { activityBudgetMs: 250 },
+});
+test("heap workflow OOM assertions retain PRE POST and plan contracts without inspecting success diagnostics", () => {
+  for (const phase of ["PRE", "POST", "PLAN-PRE"]) {
+    const result = heapResult();
+    Object.defineProperty(result, "activityMetrics", {
+      get() {
+        throw Error("must not inspect successful diagnostics");
+      },
+    });
+    assert.doesNotThrow(() => assertHeapWorkflowOOM(result, phase));
+  }
+});
+test("heap workflow timeout remains a failing OOM assertion with safe phase metadata", () => {
+  for (const phase of ["PRE", "POST", "PLAN-PRE"]) {
+    const result = {
+      ...heapResult(),
+      error: "脚本执行超时",
+      activityOperation: "promise-state",
+      activityMetrics: { compatibilityMs: 17, userScriptMs: 234 },
+      request: { secret: "DO_NOT_SERIALIZE" },
+      response: { secret: "DO_NOT_SERIALIZE" },
+      variables: { secret: "DO_NOT_SERIALIZE" },
+    };
+    let inspected = false;
+    Object.defineProperty(result, "activityCPUTimeUs", {
+      get() {
+        inspected = true;
+        throw Error("DO_NOT_SERIALIZE");
+      },
+    });
+    assert.throws(
+      () => assertHeapWorkflowOOM(result, phase),
+      (error) => {
+        assert(error instanceof AssertionError);
+        assert.equal(error.actual, "脚本执行超时");
+        assert.equal(error.operator, "match");
+        assert.match(error.message, new RegExp(`HEAP_WORKFLOW_PHASE ${phase}`));
+        assert(!error.message.includes("DO_NOT_SERIALIZE"));
+        const suffix = error.message.slice(
+          error.message.indexOf("\nHEAP_WORKFLOW_PHASE"),
+        );
+        assert(Buffer.byteLength(suffix) <= 2048);
+        assert.deepEqual(JSON.parse(error.message.split(prefix)[1]), {
+          scriptStage: "script",
+          activityOperation: "promise-state",
+          scriptDiagnostics: { activityBudgetMs: 250 },
+          activityMetrics: { compatibilityMs: 17, userScriptMs: 234 },
+        });
+        return true;
+      },
+    );
+    assert.equal(inspected, false);
+  }
+});
+test("heap workflow diagnostic wrapper preserves outcome stage and activity budget failures", () => {
+  for (const change of [
+    { outcome: "passed" },
+    { scriptStage: "bootstrap" },
+    { scriptDiagnostics: { activityBudgetMs: 251 } },
+  ]) {
+    assert.throws(
+      () => assertHeapWorkflowOOM({ ...heapResult(), ...change }, "POST"),
+      (error) =>
+        error instanceof AssertionError && error.operator === "strictEqual",
+    );
+  }
+});
+test("heap workflow labels never serialize arbitrary caller text", () => {
+  assert.throws(
+    () =>
+      assertHeapWorkflowOOM({ ...heapResult(), error: "timeout" }, "SECRET"),
+    (error) =>
+      error instanceof AssertionError &&
+      !error.message.includes("SECRET") &&
+      !error.message.includes("HEAP_WORKFLOW_PHASE"),
   );
 });
