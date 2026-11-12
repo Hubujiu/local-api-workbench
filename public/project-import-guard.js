@@ -1,31 +1,33 @@
+// Shared import/case mutation ownership; one pending write and reconciliation gate.
 // Client ownership only. The server still owns validation, persistence and revisions.
 export function createProjectImportGuard() {
   let pending = null,
     generation = 0,
     ownSave = false,
-    restoreUncertain = false;
-  const needsReload = new Set();
-  const reload =
-    "请重新加载原项目核对导入结果；当前草稿仍保留，请先复制需要保留的修改。";
+    restoreUncertain = false,
+    generationLabel = "导入";
+  const needsReload = new Map();
+  const reload = (id) =>
+    `请重新加载原项目核对${needsReload.get(id) || "导入"}结果；当前草稿仍保留，请先复制需要保留的修改。`;
   function assertCanStart(id, mode) {
-    if (pending) throw Error("导入尚未完成，请等待");
-    if (needsReload.has(id)) throw Error(reload);
+    if (pending) throw Error(`${pending.label}尚未完成，请等待`);
+    if (needsReload.has(id)) throw Error(reload(id));
     if (mode === "restore" && restoreUncertain)
       throw Error("恢复结果尚未核对，请刷新页面检查项目列表，避免重复创建副本");
   }
   function assertReloadCurrent(checkpoint) {
     if (pending || checkpoint !== generation)
-      throw Error("加载期间导入状态已变化，请重新加载核对");
+      throw Error(`加载期间${generationLabel}状态已变化，请重新加载核对`);
   }
   return {
     assertCanStart,
     assertCanSave(id) {
-      if (needsReload.has(id)) throw Error(reload);
+      if (needsReload.has(id)) throw Error(reload(id));
       if (pending?.id === id && !ownSave)
-        throw Error("导入尚未完成，请等待后保存");
+        throw Error(`${pending.label}尚未完成，请等待后保存`);
     },
     reloadCheckpoint() {
-      if (pending) throw Error("导入尚未完成，请等待后重新加载");
+      if (pending) throw Error(`${pending.label}尚未完成，请等待后重新加载`);
       return generation;
     },
     assertReloadCurrent,
@@ -35,7 +37,9 @@ export function createProjectImportGuard() {
     },
     begin(id, mode) {
       assertCanStart(id, mode);
-      const operation = { id };
+      const label = mode === "case" ? "用例保存" : "导入";
+      const operation = { id, label };
+      generationLabel = label;
       pending = operation;
       generation++;
       return {
@@ -49,7 +53,7 @@ export function createProjectImportGuard() {
         },
         requireReconciliation() {
           if (mode === "restore") restoreUncertain = true;
-          else needsReload.add(id);
+          else needsReload.set(id, label);
         },
         finish() {
           if (pending === operation) {

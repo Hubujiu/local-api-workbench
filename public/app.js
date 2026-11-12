@@ -3194,6 +3194,8 @@ function bind() {
     collect();
     const item = (project.cases || []).find((candidate) => candidate.id === id);
     const source = item?.sourceRequestId || current;
+    const ownerProjectId = project.id;
+    let caseModalRevision;
     modal(
       item ? "编辑接口用例" : "新建接口用例",
       `<label>用例名称</label><input id="case-name" value="${esc(item?.name || "新用例")}"><label>分组</label><select id="case-folder"><option value="">根目录</option>${(
@@ -3208,20 +3210,78 @@ function bind() {
           "",
         )}</select><label>独立请求快照</label>${jsonEditor(item?.request || request())}`,
       async () => {
-        if (dirty) await save();
-        const result = await api("/projects/" + project.id + "/cases", "POST", {
-          id: item?.id,
-          name: $("#case-name").value,
-          sourceRequestId: source,
-          folderId: $("#case-folder").value,
-          request: JSON.parse($("#modal-json").value),
-          functions: item?.functions,
-          createdAt: item?.createdAt,
-        });
-        project = result.project;
-        render();
+        if (busy || saving) throw Error("请先结束当前请求或保存，再保存用例");
+        nativeRequestLifecycle.assertCanSave(project.id);
+        const input = {
+          name: $("#case-name")?.value,
+          folderId: $("#case-folder")?.value,
+          requestText: $("#modal-json")?.value,
+        };
+        const inputChanged = () =>
+          project.id !== ownerProjectId ||
+          modalRevision !== caseModalRevision ||
+          !$("#dialog")?.open ||
+          $("#case-name")?.value !== input.name ||
+          $("#case-folder")?.value !== input.folderId ||
+          $("#modal-json")?.value !== input.requestText;
+        if (inputChanged()) throw Error("项目或用例窗口已变化，未保存用例");
+        const requestSnapshot = JSON.parse(input.requestText);
+        const operation = projectImports.begin(ownerProjectId, "case");
+        let posted = false;
+        try {
+          collect();
+          if (dirty) {
+            if (!confirm("当前有未保存修改，先保存再保存用例？"))
+              throw Error("用例保存已取消，修改仍保留");
+            await operation.saveDraft(save);
+          }
+          if (inputChanged() || dirty || busy || saving)
+            throw Error("项目、草稿或用例内容已变化，未保存用例");
+          const targetProject = project,
+            version = editVersion,
+            openingSequence = projectOpenSequence;
+          posted = true;
+          const result = await api(
+            "/projects/" + ownerProjectId + "/cases",
+            "POST",
+            {
+              id: item?.id,
+              name: input.name,
+              sourceRequestId: source,
+              folderId: input.folderId,
+              request: requestSnapshot,
+              functions: item?.functions,
+              createdAt: item?.createdAt,
+            },
+          );
+          if (
+            inputChanged() ||
+            project !== targetProject ||
+            editVersion !== version ||
+            projectOpenSequence !== openingSequence ||
+            dirty ||
+            busy ||
+            saving ||
+            result?.project?.id !== ownerProjectId
+          )
+            throw Error("用例返回时项目或草稿已变化，未替换当前内容");
+          project = result.project;
+          render();
+        } catch (error) {
+          if (posted) {
+            operation.requireReconciliation();
+            throw Error(
+              error.message +
+                "。用例可能已写入原项目，请重新加载核对，勿直接重复提交；当前草稿仍保留。",
+            );
+          }
+          throw error;
+        } finally {
+          operation.finish();
+        }
       },
     );
+    caseModalRevision = modalRevision;
   }
   function editCaseFolder(id) {
     const folder = (project.caseFolders || []).find((f) => f.id === id);
