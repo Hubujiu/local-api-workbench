@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { assertRestartedProject } from "./restart-project-receipt.mjs";
 import { readFile } from "node:fs/promises";
 // Shared UI actions/assertions for Chromium-service and packaged Electron hosts.
 export async function exerciseRestartJourney({
@@ -205,6 +206,22 @@ export async function exerciseRestartJourney({
   } finally {
     await oldProjectSelect.dispose();
   }
+  // Read the original persisted project before any save, execute or external
+  // backup restore can mask loss. The UI export action saves first, so use its
+  // read-only export endpoint directly for this observation.
+  const restarted = await page.evaluate(async (id) => {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(id)}/export?format=native`,
+      {
+        headers: { "x-local-token": sessionStorage.getItem("local-api-token") },
+      },
+    );
+    if (!response.ok)
+      throw Error(`Restart readback failed: ${response.status}`);
+    return response.json();
+  }, originalId);
+  assertRestartedProject(saved, restarted);
+  mark("original-persisted-project-verified");
   mark("history-after-restart");
   await inspectHistory(
     saved.runs.find((r) => r.id === run.id),

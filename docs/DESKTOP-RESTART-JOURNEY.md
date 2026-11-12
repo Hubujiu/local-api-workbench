@@ -58,3 +58,36 @@ was still queued with zero jobs during the 2026-11-12 06:05 UTC review. Neither
 original run is reclassified by PR210's success. See the
 [current checkpoint](BACKEND-CHECKPOINT-2026-10-25.md#2026-11-12-桌面重启旅程检查点)
 for the stacked commits and remaining delivery boundaries.
+
+## Separate hard-stop recovery journey
+
+`node tests/desktop-restart-journey.mjs --crash` runs the same complete synthetic
+journey using a fresh temporary data directory, but terminates the first packaged
+Electron main process with an OS-level `SIGKILL` on POSIX, or the owned process
+tree with `taskkill /PID <owned-pid> /T /F` on Windows, instead of calling
+`app.quit`. Windows requires tree termination because a main-process-only kill
+can leave inherited stdio handles in child processes; the original Windows
+main-only attempt failed its close-timeout assertion and is not passing evidence.
+No process-name matching, shell expansion or arbitrary PID input is used.
+The hard-stop receipt requires an accepted kill request, abnormal termination,
+closed process streams and no shutdown-saved receipt. Before any subsequent save,
+execute or backup restore, a read-only native export of the original project is
+deep-compared with the pre-stop export (including requests, folders, plans,
+environments, settings and history), so restoring an external backup cannot mask
+persisted data loss. This assertion also strengthens the clean-exit journey.
+Cleanup kills never satisfy
+this assertion. The second launch must use a new process/token, reject the old
+token, preserve the saved plan/history, discard temporary database grants, avoid
+network replay, restore the exported backup and execute only after explicit
+regrant/rebind. The second process still exits cleanly.
+
+This is an additional required step on all three desktop CI platforms; the
+original clean-exit journey and its stricter clean receipt are unchanged.
+Evidence is separate under `dist/desktop-crash-evidence`. The new commit must pass
+its own jobs before this hard-stop journey can be called verified.
+
+Scope: the hard stop occurs after the UI has acknowledged saves and the backup
+has completed. This does not establish recovery during an in-flight save/network
+operation, renderer-only crashes, OS power loss, filesystem/hardware failure or
+preservation of unsaved drafts. It complements, rather than replaces, the lower
+level interrupted-transaction and locking tests.
