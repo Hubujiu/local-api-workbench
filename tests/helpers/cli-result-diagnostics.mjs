@@ -169,7 +169,12 @@ export function workflowFailureObservations(source) {
 
 // Synchronous by design: retain the caller's exact assertion, one invocation,
 // expected/actual values and AssertionError identity. Parse only on failure.
-export function withCLIResultDiagnostics(assertion, stdout, observations) {
+export function withCLIResultDiagnostics(
+  assertion,
+  stdout,
+  observations,
+  diagnostic,
+) {
   try {
     return assertion();
   } catch (error) {
@@ -185,6 +190,15 @@ export function withCLIResultDiagnostics(assertion, stdout, observations) {
         if (Buffer.byteLength(suffix) > 4096)
           suffix = '\nCLI_RESULT_METADATA {"input":"metadata-too-large"}';
         error.message = descriptor.value + suffix;
+        // Node reporters may print a previously cached AssertionError.stack.
+        // Emit only the bounded whitelist, never the original assertion or data.
+        if (typeof diagnostic === "function") {
+          try {
+            diagnostic(suffix.trimStart());
+          } catch {
+            // Observability must never replace the original failure.
+          }
+        }
       }
     }
     throw error;

@@ -1,4 +1,10 @@
 import {
+  createGrpcStreamState,
+  renderGrpcStream,
+  bindGrpcStream,
+  invalidateGrpcStream,
+} from "./grpc-stream-workbench.js";
+import {
   createSocketIOState,
   selectSocketIO,
   invalidateSocketIO,
@@ -562,6 +568,187 @@ function bindGrpcWorkbench() {
     },
   });
 }
+let grpcStreamState = null,
+  grpcStreamProject = "",
+  grpcStreamOwner = null,
+  grpcStreamGeneration = 0,
+  grpcStreamVisible = false,
+  grpcStreamBusyToken = null;
+const grpcStreamProjectStates = new Map();
+const grpcStreamOperations = new Map();
+function persistGrpcStreamEvidence(id, state) {
+  sessionStorage.setItem(
+    "grpc-stream-evidence-v1:" + id,
+    JSON.stringify({
+      version: 1,
+      definitionId: state.definitionId || "",
+      sessionId: state.sessionId || "",
+      sessionIdKnown: !!state.sessionIdKnown,
+      uncertainStart: !!state.uncertainStart,
+      uncertainSessions: state.uncertainSessions,
+      persistenceProblems: state.persistenceProblems,
+    }),
+  );
+  return true;
+}
+function restoreGrpcStreamEvidence(id, state) {
+  try {
+    const raw = sessionStorage.getItem("grpc-stream-evidence-v1:" + id);
+    if (!raw) return;
+    const value = JSON.parse(raw),
+      validId = (x) =>
+        typeof x === "string" && /^[A-Za-z0-9_-]{0,200}$/.test(x);
+    if (
+      value.version !== 1 ||
+      !validId(value.definitionId) ||
+      !validId(value.sessionId) ||
+      typeof value.sessionIdKnown !== "boolean" ||
+      typeof value.uncertainStart !== "boolean" ||
+      [value.uncertainSessions, value.persistenceProblems].some(
+        (xs) =>
+          !Array.isArray(xs) ||
+          xs.length > 100 ||
+          xs.some((x) => !validId(x) || !x),
+      )
+    )
+      throw Error("无效恢复记录");
+    for (const key of [
+      "definitionId",
+      "sessionId",
+      "sessionIdKnown",
+      "uncertainStart",
+      "uncertainSessions",
+      "persistenceProblems",
+    ])
+      state[key] = value[key];
+    state.notice = "已恢复操作标记；请显式读取会话核对，不会自动连接或重发。";
+  } catch {
+    state.uncertainStart = true;
+    state.notice =
+      "无法读取恢复标记，新连接已阻止；请核对原会话，不会自动重试。";
+  }
+}
+function syncGrpcStreamWorkbench() {
+  if (grpcStreamOwner !== project || (grpcStreamVisible && page !== "grpc")) {
+    if (grpcStreamState) invalidateGrpcStream(grpcStreamState);
+    grpcStreamGeneration++;
+  }
+  if (grpcStreamProject !== project?.id) {
+    grpcStreamProject = project?.id || "";
+    grpcStreamState = grpcStreamProjectStates.get(grpcStreamProject);
+    if (!grpcStreamState) {
+      grpcStreamState = createGrpcStreamState();
+      restoreGrpcStreamEvidence(grpcStreamProject, grpcStreamState);
+      grpcStreamProjectStates.set(grpcStreamProject, grpcStreamState);
+    }
+  }
+  grpcStreamOwner = project;
+  grpcStreamVisible = page === "grpc";
+}
+function bindGrpcStreamWorkbench() {
+  const root = $("#grpc-stream-workbench");
+  if (!root) return;
+  const state = grpcStreamState,
+    owner = project,
+    version = editVersion,
+    generation = grpcStreamGeneration;
+  const current = () => {
+    if (
+      project !== owner ||
+      editVersion !== version ||
+      page !== "grpc" ||
+      grpcStreamState !== state ||
+      grpcStreamGeneration !== generation
+    )
+      throw Error("项目或面板已变化，未应用迟到结果");
+  };
+  bindGrpcStream(root, {
+    state,
+    definitions: owner.settings?.grpcDefinitions || [],
+    assertCurrent: current,
+    persistEvidence: (value) => persistGrpcStreamEvidence(owner.id, value),
+    onChange: () => {
+      if (
+        page === "grpc" &&
+        grpcStreamState === state &&
+        grpcStreamGeneration === generation
+      )
+        render();
+    },
+    setBusy: (value, kind) => {
+      if (value) {
+        current();
+        if (busy || saving) throw Error("请等待当前操作或保存结束");
+        if (!["refresh", "cancel", "reconcile"].includes(kind)) {
+          nativeRequestLifecycle.assertCanSave(owner.id);
+          projectImports.assertCanSave(owner.id);
+          if (dirty) throw Error("项目有未保存修改，请先保存；未自动保存");
+        }
+        grpcStreamBusyToken = { state };
+        busy = true;
+      } else if (
+        grpcStreamBusyToken?.state === state &&
+        !state.pending &&
+        !state.cancelPending
+      ) {
+        grpcStreamBusyToken = null;
+        busy = false;
+      }
+    },
+    inspectDefinition: (definition) => {
+      current();
+      const source = Object.fromEntries(
+        ["proto", "protoName", "files", "schema"]
+          .filter((k) => definition[k] !== undefined)
+          .map((k) => [k, structuredClone(definition[k])]),
+      );
+      return api("/projects/" + owner.id + "/grpc-schema", "POST", source);
+    },
+    get: (action) => {
+      current();
+      if (!/^grpc-sessions\/[A-Za-z0-9_-]+$/.test(action))
+        throw Error("未知gRPC会话读取");
+      return api("/projects/" + owner.id + "/" + action);
+    },
+    post: async (action, body) => {
+      current();
+      if (
+        !/^grpc-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|half-close|cancel|reconcile))?$/.test(
+          action,
+        )
+      )
+        throw Error("未知gRPC会话操作");
+      const recovery = /\/(cancel|reconcile)$/.test(action),
+        shared = recovery ? grpcStreamOperations.get(owner.id) : null;
+      const operation =
+        shared ||
+        (recovery
+          ? projectImports.beginRecovery(owner.id)
+          : projectImports.begin(owner.id, "execution"));
+      if (!recovery) grpcStreamOperations.set(owner.id, operation);
+      try {
+        const result = await api(
+          "/projects/" + owner.id + "/" + action,
+          "POST",
+          body,
+        );
+        if (["failed", "unknown"].includes(result?.receiptState))
+          operation.requireReconciliation();
+        return result;
+      } catch (error) {
+        operation.requireReconciliation();
+        throw error;
+      } finally {
+        if (!shared) {
+          operation.finish();
+          if (grpcStreamOperations.get(owner.id) === operation)
+            grpcStreamOperations.delete(owner.id);
+        }
+      }
+    },
+  });
+}
+
 const methodOptions = [
   "GET",
   "POST",
@@ -1098,6 +1285,7 @@ function tree() {
 function render(preserveEditingFocus = false) {
   syncGrpcWorkbench();
   syncSocketIOWorkbench();
+  syncGrpcStreamWorkbench();
   const active = document.activeElement;
   const editing =
     preserveEditingFocus &&
@@ -1474,7 +1662,7 @@ function renderPage() {
   if (page === "socketio")
     return `<div class="page"><button id="socketio-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">刷新页面不重连。内存会话可能仍在运行；请显式读取列表核对。定义和消息正文可进入项目历史，临时认证/TLS不保存。</p>${renderSocketIO(socketioWorkbenchState, project.settings?.socketioDefinitions || [])}</div>`;
   if (page === "grpc")
-    return `<div class="page"><button id="grpc-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">重新加载仅核对本机记录，不证明远端未执行。普通项目草稿和gRPC定义草稿分别保存。</p>${renderGrpcUnary(grpcWorkbenchState, project.settings?.grpcDefinitions || [])}<details><summary>最近已保存gRPC记录（正文保存在项目历史，可能敏感）</summary>${
+    return `<div class="page"><button id="grpc-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">重新加载仅核对本机记录，不证明远端未执行。普通项目草稿和gRPC定义草稿分别保存。</p>${renderGrpcUnary(grpcWorkbenchState, project.settings?.grpcDefinitions || [])}${renderGrpcStream(grpcStreamState, project.settings?.grpcDefinitions || [])}<details><summary>最近已保存gRPC记录（正文保存在项目历史，可能敏感）</summary>${
       (project.protocolRuns || [])
         .filter((item) => item.type === "grpc")
         .slice(-10)
@@ -1732,6 +1920,7 @@ function bind() {
   bindSocketIOWorkbench();
   on("#socketio-project-reload", "click", () => openProject(project.id));
   bindGrpcWorkbench();
+  bindGrpcStreamWorkbench();
   on("#grpc-project-reload", "click", () => openProject(project.id));
   const mcpPanel = $("#settings-mcp");
   updateMCPPanel = mcpPanel

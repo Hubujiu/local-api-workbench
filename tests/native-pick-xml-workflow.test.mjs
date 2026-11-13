@@ -326,7 +326,7 @@ test("native responseXml rejects unsafe or ambiguous login XML atomically, prese
     },
   ];
   for (const sample of samples)
-    await t.test(sample.name, async () => {
+    await t.test(sample.name, async (t) => {
       active = sample;
       seen.length = 0;
       const p = await app.store.create(sample.name);
@@ -382,6 +382,7 @@ test("native responseXml rejects unsafe or ambiguous login XML atomically, prese
           laterRequestCount: seen.filter((url) => url === "/later").length,
           hasRecordedResponse: Object.hasOwn(run.results[0], "response"),
         },
+        (message) => t.diagnostic(message),
       );
       assert.deepEqual(seen, ["/login"]);
       assert.equal(run.variables.token, "stale");
