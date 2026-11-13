@@ -261,7 +261,11 @@ test("pure synthetic subprocess emits retained evidence in failing TAP", () => {
   const child = spawnSync(
     process.execPath,
     ["--input-type=module", "-e", source],
-    { encoding: "utf8", timeout: 10000, maxBuffer: 65536 },
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      maxBuffer: 65536,
+    },
   );
   assert.equal(child.error, undefined);
   assert.equal(child.status, 1);
@@ -803,4 +807,131 @@ test("XML CLI failure diagnostics preserve exit assertions and exclude XML token
     withCLIResultDiagnostics(() => "ok", uninspectable),
     "ok",
   );
+});
+
+test("failure diagnostic reaches Node spec reporter despite cached assertion stack", () => {
+  const helper = new URL(
+    "./helpers/cli-result-diagnostics.mjs",
+    import.meta.url,
+  ).href;
+  const code = `
+    import test from "node:test";
+    import assert from "node:assert/strict";
+    import { withCLIResultDiagnostics } from ${JSON.stringify(helper)};
+    test("fixture", t => withCLIResultDiagnostics(
+      () => assert.match("interrupted", /assertion/),
+      JSON.stringify({ status:"failed", results:[{status:"failed",error:"interrupted", body:"PRIVATE_SENTINEL"}] }),
+      {loginRequestCount:1},
+      message => t.diagnostic(message)
+    ));
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--test-reporter=spec", "--input-type=module", "-e", code],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /CLI_RESULT_METADATA/);
+  assert.match(result.stdout, /"reportedErrorKind":"interrupted"/);
+  assert(!result.stdout.includes("PRIVATE_SENTINEL"));
+});
+
+test("diagnostic callback only observes failure and cannot replace it", () => {
+  let calls = 0;
+  assert.equal(
+    withCLIResultDiagnostics(
+      () => 42,
+      "{}",
+      {},
+      () => calls++,
+    ),
+    42,
+  );
+  assert.equal(calls, 0);
+  const original = new AssertionError({
+    actual: 1,
+    expected: 0,
+    operator: "strictEqual",
+  });
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(
+        () => {
+          throw original;
+        },
+        "{}",
+        {},
+        () => {
+          calls++;
+          throw new Error("observer");
+        },
+      ),
+    (error) => error === original,
+  );
+  assert.equal(calls, 1);
+});
+
+test("failure whitelist survives the actual CI preload and spec/tap reporters", async () => {
+  const { mkdtemp, writeFile, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "cli-diagnostic-reporters-"));
+  const helper = new URL(
+    "./helpers/cli-result-diagnostics.mjs",
+    import.meta.url,
+  ).href;
+  const fixture = join(root, "fixture.mjs");
+  await writeFile(
+    fixture,
+    `
+    import test from "node:test";
+    import assert from "node:assert/strict";
+    import { withCLIResultDiagnostics } from ${JSON.stringify(helper)};
+    test("fixture", t => withCLIResultDiagnostics(
+      () => assert.match("interrupted", /assertion/),
+      JSON.stringify({status:"failed",results:[{status:"failed",error:"interrupted",body:"PRIVATE_REPORTER_SENTINEL"}]}),
+      {loginRequestCount:1}, message => t.diagnostic(message)
+    ));
+  `,
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--import=" +
+        new URL("../scripts/core-worker-observer-preload.mjs", import.meta.url)
+          .href,
+      "--test",
+      "--test-reporter=spec",
+      "--test-reporter-destination=stdout",
+      "--test-reporter=tap",
+      "--test-reporter-destination=" + join(root, "result.tap"),
+      "--test-reporter=" +
+        new URL("../scripts/core-progress-reporter.mjs", import.meta.url).href,
+      "--test-reporter-destination=" + join(root, "progress.jsonl"),
+      fixture,
+    ],
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) => key !== "NODE_TEST_CONTEXT",
+        ),
+      ),
+    },
+  );
+  assert.equal(result.status, 1);
+  for (const output of [
+    result.stdout,
+    await readFile(join(root, "result.tap"), "utf8"),
+  ]) {
+    assert.match(output, /CLI_RESULT_METADATA/);
+    assert.match(output, /"reportedErrorKind":"interrupted"/);
+    assert(!output.includes("PRIVATE_REPORTER_SENTINEL"));
+  }
+  const progress = await readFile(join(root, "progress.jsonl"), "utf8");
+  assert(progress.length > 0);
+  // The progress reporter intentionally admits only its own worker whitelist.
+  assert(!progress.includes("CLI_RESULT_METADATA"));
+  assert(!progress.includes("PRIVATE_REPORTER_SENTINEL"));
 });
