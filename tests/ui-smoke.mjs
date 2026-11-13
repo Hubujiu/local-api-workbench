@@ -5,6 +5,7 @@ import { exerciseGrpcUnaryUI } from "./helpers/grpc-unary-ui.mjs";
 import { exerciseScopedExportUI } from "./helpers/scoped-export-ui.mjs";
 import { exercisePreviewDraftOwnership } from "./helpers/preview-draft-ownership-ui.mjs";
 import { exerciseProtocolSessionLifecycle } from "./helpers/protocol-session-lifecycle-ui.mjs";
+import { exerciseProjectSaveConflict } from "./helpers/project-save-conflict-ui.mjs";
 import { exerciseProjectDraftSave } from "./helpers/project-draft-save-ui.mjs";
 import { exerciseExecutionWriteOwnership } from "./helpers/execution-write-ownership-ui.mjs";
 import { exercisePlanStructureEditor } from "./helpers/plan-structure-ui.mjs";
@@ -7382,6 +7383,7 @@ try {
   await exerciseGeneratedBodyOwnership(page);
   await exerciseCaseWriteOwnership(page);
   await exerciseProjectDraftSave(page);
+  await exerciseProjectSaveConflict(page);
   await exercisePlanStructureEditor(page);
   assert.deepEqual(errors, []);
   await exerciseExecutionWriteOwnership(page);
