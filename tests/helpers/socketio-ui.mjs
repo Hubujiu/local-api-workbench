@@ -398,6 +398,31 @@ export async function exerciseSocketIOUI(page) {
       ),
       "incoming ack response must survive explicit stop and project readback",
     );
+    await page.locator('.rail [data-page="history"]').click();
+    await clickResponse(
+      "#history-project-reload",
+      `/api/projects/${owner}`,
+      "GET",
+    );
+    await idle();
+    const historyIndex = saved.protocolRuns.findIndex(
+      (r) =>
+        r.type === "socketio" &&
+        r.result.events.some(
+          (e) => e.direction === "ack-sent" && e.ackId === question.ackId,
+        ),
+    );
+    assert(historyIndex >= 0);
+    await page.locator("[data-protocol-history]").nth(historyIndex).click();
+    const historyText = await page
+      .locator("#protocol-history-detail")
+      .textContent();
+    assert.deepEqual(JSON.parse(historyText), saved.protocolRuns[historyIndex]);
+    await page.locator("#dialog-save").click();
+    await page.locator('.rail [data-page="socketio"]').click();
+    console.log(
+      "PROTOCOL_HISTORY_BROWSER_PASS saved-evidence/read-only/full-detail",
+    );
     assert.equal(connections, 1);
     assert.equal(startRequests, 1);
     assert.equal(sendRequests, 2);
