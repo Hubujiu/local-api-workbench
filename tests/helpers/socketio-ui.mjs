@@ -39,6 +39,8 @@ export async function exerciseSocketIOUI(page) {
   const namespace = io.of("/browser");
   const secret = "fictional-socketio-browser-runtime-only";
   const connected = deferred();
+  let peer,
+    incomingReplies = 0;
   let connections = 0,
     echoCalls = 0,
     unknownCalls = 0;
@@ -52,6 +54,7 @@ export async function exerciseSocketIOUI(page) {
     next();
   });
   namespace.on("connection", (socket) => {
+    peer = socket;
     connections++;
     connected.resolve();
     socket.on("echo", (value, ack) => {
@@ -98,7 +101,7 @@ export async function exerciseSocketIOUI(page) {
     await page.locator("#socketio-name").fill("Browser Socket.IO fixture");
     await page.locator("#socketio-url").fill(target);
     await page.locator("#socketio-path").fill("/browser-events/");
-    await page.locator("#socketio-events").fill('["reply"]');
+    await page.locator("#socketio-events").fill('["reply","question"]');
     await page.locator("#socketio-workbench details summary").first().click();
     const fillCredentials = async () => {
       await page
@@ -143,7 +146,7 @@ export async function exerciseSocketIOUI(page) {
     );
     assert.equal(
       await page.locator("#socketio-events").inputValue(),
-      '["reply"]',
+      '["reply","question"]',
     );
     assert.equal(await page.locator("#socketio-auth").inputValue(), "{}");
     assert.equal(startRequests, 0, "reload and selection must not connect");
@@ -205,6 +208,47 @@ export async function exerciseSocketIOUI(page) {
       JSON.parse(
         await page.locator("#socketio-events-result").textContent(),
       ).some((e) => e.event === "reply"),
+    );
+
+    const answered = deferred();
+    peer.emit("question", { prompt: "fixture" }, (...args) => {
+      incomingReplies++;
+      answered.resolve(args);
+    });
+    session = await refreshUntil((value) =>
+      value.events.some((e) => e.event === "question" && e.ackId),
+    );
+    const question = session.events.find(
+      (e) => e.event === "question" && e.ackId,
+    );
+    await page.locator("#socketio-incomingAckId").selectOption(question.ackId);
+    await page.locator("#socketio-incomingAckArgs").fill('[{"answer":42}]');
+    const incomingReceipt = await clickResponse(
+      "#socketio-ack",
+      `/socketio-sessions/${created.id}/ack`,
+    );
+    await idle();
+    assert.equal(incomingReceipt.acknowledged, true);
+    assert.deepEqual(await bounded(answered.promise), [{ answer: 42 }]);
+    assert.equal(incomingReplies, 1);
+    assert.equal(
+      JSON.parse(await page.locator("#socketio-result").textContent())
+        .remoteOutcome,
+      "unknown",
+    );
+    await page.locator("#socketio-ack").click();
+    await page
+      .locator("#socketio-notice")
+      .getByText("尚未回应", { exact: false })
+      .waitFor();
+    assert.equal(incomingReplies, 1);
+    session = await refreshUntil((value) =>
+      value.events.some(
+        (e) => e.direction === "ack-sent" && e.ackId === question.ackId,
+      ),
+    );
+    console.log(
+      "SOCKETIO_INCOMING_ACK_BROWSER_PASS explicit-response/local-receipt/no-replay",
     );
 
     // Hold a genuine list response, leave its owning panel, then deliver it.
@@ -340,6 +384,19 @@ export async function exerciseSocketIOUI(page) {
     assert(
       !JSON.stringify(saved).includes(secret),
       "auth/query/header runtime credentials must not enter saved evidence",
+    );
+    assert(
+      saved.protocolRuns.some(
+        (r) =>
+          r.type === "socketio" &&
+          r.result.events.some(
+            (e) =>
+              e.direction === "ack-sent" &&
+              e.ackId === question.ackId &&
+              e.args[0]?.answer === 42,
+          ),
+      ),
+      "incoming ack response must survive explicit stop and project readback",
     );
     assert.equal(connections, 1);
     assert.equal(startRequests, 1);

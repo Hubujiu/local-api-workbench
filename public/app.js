@@ -340,7 +340,7 @@ function bindSocketIOWorkbench() {
       if (value) {
         current();
         if (busy || saving) throw Error("请等待当前请求或保存结束");
-        if (["connect", "send", "save"].includes(kind)) {
+        if (["connect", "send", "ack", "save"].includes(kind)) {
           if (state.stopProblems.length)
             throw Error(
               "前次停止或记录保存仍需核对；请先只读刷新或显式停止保存，未开始新操作",
@@ -371,7 +371,9 @@ function bindSocketIOWorkbench() {
     post: async (action, body) => {
       current();
       if (
-        !/^socketio-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|stop))?$/.test(action)
+        !/^socketio-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|ack|stop))?$/.test(
+          action,
+        )
       )
         throw Error("未知Socket.IO操作");
       const stopping = action.endsWith("/stop");

@@ -286,3 +286,53 @@ test("project switch never injects same-id definition from B into cached A state
   );
   assert.equal(state.definition.url, definition.url);
 });
+function prepareIncoming(h) {
+  const r = h.runtime;
+  r.state.session = {
+    ...structuredClone(snapshot),
+    events: [{ direction: "received", ackId: "incoming" }],
+  };
+  r.state.incomingAckId = "incoming";
+  r.state.incomingAckArgs = '[{"answer":"not-a-secret"}]';
+  return r;
+}
+test("actual adapter admits explicit incoming ack and persists only identifiers before dispatch", async () => {
+  const h = harness(),
+    r = prepareIncoming(h);
+  const p = r.controller.acknowledge();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].url, "/projects/p/socketio-sessions/session-id/ack");
+  const saved = JSON.parse(h.storage.get("socketio-evidence-v1:p"));
+  assert.deepEqual(saved.uncertainSessions, ["session-id"]);
+  assert(!JSON.stringify(saved).includes("not-a-secret"));
+  h.calls[0].resolve({ acknowledged: true });
+  await p;
+  assert.equal(r.state.result.remoteOutcome, "unknown");
+  await assert.rejects(r.controller.acknowledge());
+  assert.equal(h.calls.length, 1);
+});
+test("actual ack lost response restores unknown and owner guard denies replay", async () => {
+  const h = harness(),
+    r = prepareIncoming(h);
+  const p = r.controller.acknowledge();
+  h.calls[0].reject(Error("network lost"));
+  await p;
+  assert.deepEqual(r.restore().uncertainSessions, ["session-id"]);
+  await assert.rejects(r.controller.acknowledge());
+  assert.throws(() => h.guard.assertCanSave("p"));
+  assert.equal(h.calls.length, 1);
+});
+test("actual ack late result cannot mutate departed view and stop still dispatched", async () => {
+  const h = harness(),
+    r = prepareIncoming(h);
+  const p = r.controller.acknowledge(),
+    q = r.controller.stop();
+  assert.equal(h.calls.length, 2);
+  h.calls[1].resolve({ ...snapshot, state: "closed", recordSaved: false });
+  await q;
+  r.leave();
+  h.calls[0].resolve({ acknowledged: true });
+  await p;
+  assert.equal(r.state.result, null);
+  assert.deepEqual(r.state.stopProblems, ["session-id"]);
+});

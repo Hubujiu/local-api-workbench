@@ -308,7 +308,7 @@ test("render escapes payload and states limitations", () => {
   const html = renderSocketIO(f.state, [f.state.definition]);
   assert.equal(html.includes("<script>bad"), false);
   assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /仅展示/);
+  assert.match(html, /本地提交不代表远端业务成功/);
   assert.match(html, /不会自动|不自动/);
 });
 
@@ -422,4 +422,141 @@ test("restored stop problems block new effects but allow read-only recovery", as
   await f.controller.list();
   assert.equal(f.requests.length, 0);
   assert.equal(f.saved.length, 0);
+});
+
+test("incoming ack uses current evidence once and distinguishes local receipt", async () => {
+  const calls = [];
+  const f = fixture({
+    post: async (...x) => (calls.push(x), { acknowledged: true }),
+  });
+  f.state.session = {
+    ...snap(),
+    events: [
+      { direction: "received", ackId: "a", event: "question", args: [] },
+    ],
+  };
+  f.state.incomingAckId = "a";
+  f.state.incomingAckArgs = '[{"answer":42}]';
+  const c = createSocketIOController(f.options);
+  await c.acknowledge();
+  assert.deepEqual(calls, [
+    ["socketio-sessions/s/ack", { ackId: "a", args: [{ answer: 42 }] }],
+  ]);
+  assert.equal(f.state.result.remoteOutcome, "unknown");
+  await assert.rejects(c.acknowledge());
+  assert.equal(calls.length, 1);
+});
+test("lost incoming ack receipt blocks resend and survives view invalidation", async () => {
+  let calls = 0;
+  const f = fixture({
+    post: async () => {
+      calls++;
+      throw Error("lost");
+    },
+  });
+  f.state.session = {
+    ...snap(),
+    events: [{ direction: "received", ackId: "a" }],
+  };
+  f.state.incomingAckId = "a";
+  const c = createSocketIOController(f.options);
+  await c.acknowledge();
+  invalidateSocketIO(f.state);
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+  await assert.rejects(c.acknowledge());
+  assert.equal(calls, 1);
+});
+test("unknown or foreign incoming ID and oversized arrays never dispatch", async () => {
+  let calls = 0;
+  const f = fixture({ post: async () => calls++ });
+  f.state.session = snap();
+  f.state.incomingAckId = "foreign";
+  const c = createSocketIOController(f.options);
+  await assert.rejects(c.acknowledge());
+  f.state.session.events = [{ direction: "received", ackId: "a" }];
+  f.state.incomingAckId = "a";
+  f.state.incomingAckArgs = JSON.stringify(Array(101).fill(0));
+  await assert.rejects(c.acknowledge());
+  assert.equal(calls, 0);
+});
+function ackFixture(overrides = {}) {
+  const f = fixture(overrides);
+  f.state.session = {
+    ...snap(),
+    events: [{ direction: "received", ackId: "a" }],
+  };
+  f.state.incomingAckId = "a";
+  return f;
+}
+test("ack duplicate clicks dispatch once while pending", async () => {
+  const d = deferred();
+  let calls = 0;
+  const f = ackFixture({
+    post: async () => {
+      calls++;
+      return d.promise;
+    },
+  });
+  const p = f.controller.acknowledge();
+  await assert.rejects(f.controller.acknowledge());
+  d.resolve({ acknowledged: true });
+  await p;
+  assert.equal(calls, 1);
+});
+test("ack storage unavailable never dispatches", async () => {
+  let calls = 0;
+  const f = ackFixture({
+    post: async () => calls++,
+    persistEvidence: () => false,
+  });
+  await f.controller.acknowledge();
+  assert.equal(calls, 0);
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+});
+test("expired ack refusal remains visible unknown and does not replay", async () => {
+  let calls = 0;
+  const f = ackFixture({
+    post: async () => {
+      calls++;
+      throw Error("确认标识不存在或已过期");
+    },
+  });
+  await f.controller.acknowledge();
+  assert.match(f.state.notice, /已过期/);
+  await assert.rejects(f.controller.acknowledge());
+  assert.equal(calls, 1);
+});
+test("late ack cannot change newer view or remove its unknown evidence", async () => {
+  const d = deferred();
+  const f = ackFixture({ post: () => d.promise });
+  const p = f.controller.acknowledge();
+  invalidateSocketIO(f.state);
+  d.resolve({ acknowledged: true });
+  await p;
+  assert.equal(f.state.result, null);
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+});
+test("stop remains available during incoming ack and late ack cannot clear stop failure", async () => {
+  const d = deferred();
+  const f = ackFixture({
+    post: (path) =>
+      path.endsWith("/ack") ? d.promise : Promise.reject(Error("lost stop")),
+  });
+  const p = f.controller.acknowledge();
+  await f.controller.stop();
+  d.resolve({ acknowledged: true });
+  await p;
+  assert.deepEqual(f.state.stopProblems, ["s"]);
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+});
+
+test("incoming ack local receipt quota fails closed without dropping evidence", async () => {
+  const f = ackFixture();
+  f.state.incomingAckReceipts = Array.from({ length: 1000 }, (_, i) => ({
+    sessionId: "s",
+    ackId: String(i),
+  }));
+  await assert.rejects(f.controller.acknowledge(), /1000/);
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.state.incomingAckReceipts.length, 1000);
 });
