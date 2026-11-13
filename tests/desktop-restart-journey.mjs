@@ -7,17 +7,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron } from "playwright";
 import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
-import { desktopLayout } from "../desktop/build-layout.mjs";
+import { desktopJourneyOptions } from "./helpers/desktop-journey-options.mjs";
 import { exerciseRestartJourney } from "./helpers/restart-journey-ui.mjs";
 import {
   assertCleanDesktopExit,
   assertCrashDesktopExit,
 } from "./helpers/desktop-restart-receipt.mjs";
-assert.ok(
-  process.argv.slice(2).every((arg) => arg === "--crash"),
-  "Unknown journey option",
+const { crash, downloaded, executable } = desktopJourneyOptions(
+  process.argv.slice(2),
 );
-const crash = process.argv.includes("--crash");
 const root = await mkdtemp(path.join(tmpdir(), "packaged-restart-journey-"));
 const evidence = path.resolve(
   crash ? "dist/desktop-crash-evidence" : "dist/desktop-restart-evidence",
@@ -56,7 +54,7 @@ async function bounded(promise, label, ms = 30000) {
 }
 async function launch(generation) {
   const application = await electron.launch({
-    executablePath: desktopLayout().executable,
+    executablePath: executable,
     // Electron does not enable Playwright download events by default.
     acceptDownloads: true,
     env: { ...process.env, LOCAL_API_DESKTOP_DATA: root },
@@ -224,6 +222,12 @@ try {
   const beforeQuit = hits.length;
   await host.quit();
   assert.equal(hits.length, beforeQuit);
+  if (downloaded)
+    console.log(
+      crash
+        ? "DOWNLOADED_DESKTOP_CRASH_JOURNEY_PASS"
+        : "DOWNLOADED_DESKTOP_RESTART_JOURNEY_PASS",
+    );
   console.log(
     crash
       ? "PACKAGED_DESKTOP_CRASH_JOURNEY_PASS"

@@ -311,7 +311,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test downloaded-package verifier without executing fixture code
-        run: python -m unittest discover -s tests -p test_portable_download.py -v
+        run: python -m unittest discover -s tests -p "test_portable_*.py" -v
       - name: Download this run's successful portable artifact
         uses: actions/download-artifact@v4
         with:
@@ -319,3 +319,31 @@ jobs:
           path: ${{ runner.temp }}/localapi-downloaded-portable
       - name: Verify downloaded package contents and exact candidate identity
         run: python scripts/verify_portable_download.py "${{ runner.temp }}/localapi-downloaded-portable" --platform ${{ matrix.platform }} --head ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Materialize only the fully verified download into a fresh directory
+        run: python scripts/materialize_portable_download.py "${{ runner.temp }}/localapi-downloaded-portable" "${{ runner.temp }}/localapi-launch-package" --platform ${{ matrix.platform }} --head ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm install --no-save --ignore-scripts playwright@1.64.1
+      - name: Launch downloaded portable and verify clean restart
+        if: runner.os != 'Linux'
+        run: node tests/desktop-restart-journey.mjs --package-root "${{ runner.temp }}/localapi-launch-package"
+      - name: Launch downloaded portable and verify clean restart (Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum node tests/desktop-restart-journey.mjs --package-root "${{ runner.temp }}/localapi-launch-package"
+      - name: Launch downloaded portable and verify crash recovery
+        if: runner.os != 'Linux'
+        run: node tests/desktop-restart-journey.mjs --package-root "${{ runner.temp }}/localapi-launch-package" --crash
+      - name: Launch downloaded portable and verify crash recovery (Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum node tests/desktop-restart-journey.mjs --package-root "${{ runner.temp }}/localapi-launch-package" --crash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: downloaded-portable-journey-${{ matrix.artifact }}
+          retention-days: 7
+          path: |
+            dist/desktop-restart-evidence/
+            dist/desktop-crash-evidence/
