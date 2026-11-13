@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { exerciseProtocolDraftClose } from "./helpers/protocol-draft-close-electron.mjs";
 import http from "node:http";
 import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
@@ -218,6 +219,7 @@ try {
       return host.page;
     },
   });
+  await exerciseProtocolDraftClose(host.application, host.page);
   assert.deepEqual(errors, []);
   const beforeQuit = hits.length;
   await host.quit();
