@@ -17,7 +17,7 @@ const statusText = (record) => {
 };
 export function protocolHistoryView(project) {
   const records = project.protocolRuns || [];
-  return `<section id="protocol-history"><h2>已保存协议记录</h2><p class="notice">仅查看本项目已保存的证据，不重新连接或发送。消息正文可能敏感，未脱敏；本地发送和确认不证明远端业务成功。未显示的记录不代表远端未执行。</p>${records.map((record) => `<div class="card"><strong>${esc(record.type || "未知协议")}</strong> · ${esc(statusText(record))}<p>${esc(record.createdAt)} · ${esc(record.runId || record.id)}</p><button data-protocol-history="${esc(identity(record))}" data-protocol-project="${esc(project.id)}" ${identity(record) ? "" : "disabled"}>查看完整记录</button></div>`).join("") || "<p>暂无已保存协议记录</p>"}</section>`;
+  return `<section id="protocol-history"><h2>已保存协议记录</h2><p class="notice">仅查看本项目已保存的证据，不重新连接或发送。消息正文可能敏感，未脱敏；本地发送和确认不证明远端业务成功。未显示的记录不代表远端未执行。</p>${records.map((record) => `<div class="card"><strong>${esc(record.type || "未知协议")}</strong> · ${esc(statusText(record))}<p>${esc(record.createdAt)} · ${esc(record.runId || record.id)}</p><button data-protocol-history="${esc(identity(record))}" data-protocol-project="${esc(project.id)}" ${identity(record) ? "" : "disabled"}>查看完整记录</button><button data-protocol-history-export="${esc(identity(record))}" data-protocol-project="${esc(project.id)}" ${identity(record) ? "" : "disabled"}>导出记录…</button></div>`).join("") || "<p>暂无已保存协议记录</p>"}</section>`;
 }
 export function protocolHistoryDetail(project, projectId, recordId) {
   if (
@@ -33,4 +33,23 @@ export function protocolHistoryDetail(project, projectId, recordId) {
   if (matches.length !== 1) return null;
   const record = matches[0];
   return `<p class="notice">已保存的原始记录，仅供查看。正文未脱敏；不会重放网络操作。</p><pre id="protocol-history-detail">${esc(JSON.stringify(record, null, 2))}</pre>`;
+}
+
+export function prepareProtocolHistoryExport(project, projectId, recordId) {
+  if (protocolHistoryDetail(project, projectId, recordId) === null) return null;
+  const record = project.protocolRuns.find((r) => identity(r) === recordId);
+  const serialized = JSON.stringify(record);
+  return {
+    preview: protocolHistoryDetail(project, projectId, recordId),
+    confirm(currentProject) {
+      if (protocolHistoryDetail(currentProject, projectId, recordId) === null)
+        throw Error("项目或记录已变化，请重新选择导出");
+      const current = currentProject.protocolRuns.find(
+        (r) => identity(r) === recordId,
+      );
+      if (JSON.stringify(current) !== serialized)
+        throw Error("记录已变化，请重新预览后导出");
+      return JSON.parse(serialized);
+    },
+  };
 }

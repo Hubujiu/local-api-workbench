@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import { readFile } from "node:fs/promises";
 import { Server } from "socket.io";
 import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
 import { readPreviewProject } from "./preview-draft-ownership-ui.mjs";
@@ -426,6 +427,31 @@ export async function exerciseSocketIOUI(page) {
       .textContent();
     assert.deepEqual(JSON.parse(historyText), saved.protocolRuns[historyIndex]);
     await page.locator("#dialog-save").click();
+    let recordDownloads = 0;
+    const observeRecordDownload = () => recordDownloads++;
+    page.on("download", observeRecordDownload);
+    const exportButton = page.locator(
+      `[data-protocol-history-export=${JSON.stringify(historyId)}]`,
+    );
+    await exportButton.click();
+    await page.locator('#dialog footer button[value="cancel"]').click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(recordDownloads, 0, "canceling preview must not download");
+    await exportButton.click();
+    assert.match(await page.locator("#dialog-content").textContent(), /未脱敏/);
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#dialog-save").click();
+    const downloaded = await downloadPromise;
+    assert.equal(downloaded.suggestedFilename(), "protocol-record.json");
+    assert.deepEqual(
+      JSON.parse(await readFile(await downloaded.path(), "utf8")),
+      historyRecord,
+    );
+    assert.equal(recordDownloads, 1, "only explicit confirmation downloads");
+    page.off("download", observeRecordDownload);
+    console.log(
+      "PROTOCOL_HISTORY_EXPORT_BROWSER_PASS exact-record/explicit-download/no-replay",
+    );
     await page.locator('.rail [data-page="socketio"]').click();
     console.log(
       "PROTOCOL_HISTORY_BROWSER_PASS saved-evidence/read-only/full-detail",
