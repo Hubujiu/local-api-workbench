@@ -1,3 +1,4 @@
+import { exerciseGrpcStreamUI } from "./helpers/grpc-stream-ui.mjs";
 import { exerciseSocketIOUI } from "./helpers/socketio-ui.mjs";
 import { exerciseGrpcUnaryUI } from "./helpers/grpc-unary-ui.mjs";
 import { exerciseScopedExportUI } from "./helpers/scoped-export-ui.mjs";
@@ -7371,6 +7372,7 @@ try {
 
   assert.deepEqual(errors, []);
   await exerciseGrpcUnaryUI(page);
+  await exerciseGrpcStreamUI(page);
   await exerciseSocketIOUI(page);
   await exerciseScopedExportUI(page);
   await exercisePreviewDraftOwnership(page);
