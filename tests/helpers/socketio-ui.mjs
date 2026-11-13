@@ -1,3 +1,4 @@
+import { assertProtocolDraftBlocksReload } from "./protocol-draft-unload-ui.mjs";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
@@ -100,6 +101,11 @@ export async function exerciseSocketIOUI(page) {
     const projectURL = new URL(`/api/projects/${owner}`, page.url()).href;
     await page.locator('.rail [data-page="socketio"]').click();
     await page.locator("#socketio-name").fill("Browser Socket.IO fixture");
+    await assertProtocolDraftBlocksReload(
+      page,
+      "#socketio-name",
+      "Browser Socket.IO fixture",
+    );
     await page.locator("#socketio-url").fill(target);
     await page.locator("#socketio-path").fill("/browser-events/");
     await page.locator("#socketio-events").fill('["reply","question"]');

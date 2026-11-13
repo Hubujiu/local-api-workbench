@@ -5211,7 +5211,12 @@ document.addEventListener("keydown", (e) => {
   }
 });
 window.addEventListener("beforeunload", (e) => {
-  if (dirty) {
+  if (
+    dirty ||
+    (grpcWorkbenchProject === project?.id && grpcWorkbenchState?.draftDirty) ||
+    (socketioWorkbenchProject === project?.id &&
+      socketioWorkbenchState?.draftDirty)
+  ) {
     e.preventDefault();
     e.returnValue = "";
   }
