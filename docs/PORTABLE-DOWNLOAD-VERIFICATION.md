@@ -19,9 +19,13 @@ Python 3.12 is a verification-job dependency only. It is not a product runtime o
 an additional prerequisite of `npm test`. Standard-library unit tests use inert
 synthetic files and run on each platform before the artifact is downloaded.
 
-This verifies the distributed bytes and structure after GitHub artifact download;
-it is not another application launch, a signature/notarization check, an installer
-acceptance test or a guarantee on arbitrary user machines. GitHub's downloader
+The verifier described here checks distributed bytes and structure after GitHub
+artifact download; it does not itself launch the application. The workflow now
+follows it with safe materialization and actual downloaded normal/crash journeys,
+as described in [Downloaded portable launch acceptance](ADR-DOWNLOADED-PORTABLE-JOURNEY.md).
+Neither check establishes signing/notarization, installer acceptance or support
+on arbitrary user machines. See [candidate quickstart](PORTABLE-QUICKSTART.md)
+for version selection and isolated trial data. GitHub's downloader
 handles the outer artifact ZIP; this script does not independently claim an outer
 ZIP digest comparison. The manifest is a consistency record, not a cryptographic
 publisher signature or proof of the provenance of every transitive dependency.
