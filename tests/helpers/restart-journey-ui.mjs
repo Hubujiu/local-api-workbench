@@ -144,7 +144,26 @@ export async function exerciseRestartJourney({
     "Rejected import must not execute business traffic",
   );
   mark("import");
-  // Correct the rejected document in the same still-open dialog.
+  // A POST failure remains conservatively gated until an explicit safe GET.
+  // Do not infer a reusable no-write receipt from HTTP 400 alone.
+  assert.match(await page.locator("#toast").textContent(), /重新加载核对/);
+  await page.keyboard.press("Escape");
+  await closedDialog();
+  await page.locator('.rail [data-page="history"]').click();
+  const reloaded = page.waitForResponse(
+    (r) =>
+      r.request().method() === "GET" &&
+      r.url().endsWith(`/projects/${originalId}`) &&
+      r.status() === 200,
+  );
+  await page.locator("#history-project-reload").click();
+  await reloaded;
+  await page.locator("#history-project-reload:not([disabled])").waitFor();
+  assert.deepEqual(await readPersisted(), beforeInvalid);
+  assert.equal(hits.length, hitsBeforeInvalid);
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#import").click();
+  // Explicitly import the corrected document only after reconciliation.
 
   await page.locator("#import-text").fill(
     JSON.stringify({
