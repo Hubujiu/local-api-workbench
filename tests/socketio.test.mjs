@@ -253,6 +253,61 @@ test("Socket.IO HTTP project APIs persist definitions and final evidence, isolat
   ).json();
   assert.equal(sent.status, "acknowledged");
   assert.equal(f.seen.length, 1);
+  let incomingCount = 0;
+  const incomingReply = new Promise((resolve) =>
+    f.socket.emit("question", { from: "peer" }, (...args) => {
+      incomingCount++;
+      resolve(args);
+    }),
+  );
+  let question;
+  for (let i = 0; i < 100; i++) {
+    question = (await get()).events.find(
+      (e) => e.event === "question" && e.ackId,
+    );
+    if (question) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert(question);
+  const body = { ackId: question.ackId, args: [{ answer: 42 }] };
+  const wrongOwner = await fetch(
+    app.url +
+      "/api/projects/" +
+      other.id +
+      "/socketio-sessions/" +
+      session.id +
+      "/ack",
+    { method: "POST", headers, body: JSON.stringify(body) },
+  );
+  assert.equal(wrongOwner.ok, false);
+  const ackResponse = await post(
+    "socketio-sessions/" + session.id + "/ack",
+    body,
+  );
+  assert.equal(ackResponse.status, 200);
+  assert.deepEqual(await ackResponse.json(), { acknowledged: true });
+  let replyTimer;
+  try {
+    assert.deepEqual(
+      await Promise.race([
+        incomingReply,
+        new Promise((_, reject) => {
+          replyTimer = setTimeout(
+            () => reject(Error("incoming ack fixture response timeout")),
+            5000,
+          );
+        }),
+      ]),
+      [{ answer: 42 }],
+    );
+  } finally {
+    clearTimeout(replyTimer);
+  }
+  assert.equal(
+    (await post("socketio-sessions/" + session.id + "/ack", body)).ok,
+    false,
+  );
+  assert.equal(incomingCount, 1);
   const append = app.store.append.bind(app.store);
   let fail = true;
   app.store.append = async (...args) => {
