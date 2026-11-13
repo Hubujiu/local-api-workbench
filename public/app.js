@@ -1,5 +1,6 @@
 import {
   protocolHistoryView,
+  applyProtocolHistoryFilters,
   protocolHistoryDetail,
   prepareProtocolHistoryExport,
 } from "./protocol-history-view.js";
@@ -4836,6 +4837,14 @@ function bind() {
     ),
   );
   on("#history-project-reload", "click", () => openProject(project.id));
+  on("#protocol-history-filter", "submit", (event) => {
+    event.preventDefault();
+    applyProtocolHistoryFilters($("#protocol-history"), project);
+  });
+  on("#protocol-history-filter-clear", "click", () => {
+    $("#protocol-history-filter").reset();
+    applyProtocolHistoryFilters($("#protocol-history"), project);
+  });
   on("[data-protocol-history]", "click", (_, e) => {
     const detail = protocolHistoryDetail(
       project,

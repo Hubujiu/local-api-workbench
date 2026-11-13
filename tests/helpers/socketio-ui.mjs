@@ -421,6 +421,43 @@ export async function exerciseSocketIOUI(page) {
       `[data-protocol-history=${JSON.stringify(historyId)}]`,
     );
     await historyButton.waitFor();
+    await page
+      .locator("#protocol-history-query")
+      .fill("no-such-history-record-unique-sentinel");
+    await page
+      .locator('#protocol-history-filter button[type="submit"]')
+      .click();
+    assert.equal(await historyButton.isVisible(), false);
+    assert.equal(
+      await page.locator("#protocol-history-empty").isVisible(),
+      true,
+    );
+    await page.locator("#protocol-history-filter-clear").click();
+    assert.equal(await historyButton.isVisible(), true);
+    await page.locator("#protocol-history-type").selectOption("socketio");
+    const savedStatus = historyRecord.status ?? historyRecord.result?.status;
+    const statusLabel =
+      typeof savedStatus === "string" || typeof savedStatus === "number"
+        ? String(savedStatus)
+        : typeof savedStatus?.code === "number"
+          ? `gRPC 状态码 ${savedStatus.code}`
+          : typeof (historyRecord.state ?? historyRecord.result?.state) ===
+              "string"
+            ? `会话状态 ${historyRecord.state ?? historyRecord.result.state}`
+            : "未提供状态";
+    await page.locator("#protocol-history-status").selectOption(statusLabel);
+    await page.locator("#protocol-history-query").fill(historyId);
+    await page
+      .locator('#protocol-history-filter button[type="submit"]')
+      .click();
+    assert.equal(await historyButton.isVisible(), true);
+    assert.match(
+      await page.locator("#protocol-history-count").textContent(),
+      /显示 1 \/ /,
+    );
+    console.log(
+      "PROTOCOL_HISTORY_FILTER_BROWSER_PASS loaded-records/no-network/stable-identity",
+    );
     await historyButton.click();
     const historyText = await page
       .locator("#protocol-history-detail")
