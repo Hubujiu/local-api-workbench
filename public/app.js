@@ -1,6 +1,7 @@
 import {
   protocolHistoryView,
   protocolHistoryDetail,
+  prepareProtocolHistoryExport,
 } from "./protocol-history-view.js";
 import {
   createGrpcStreamState,
@@ -4842,6 +4843,21 @@ function bind() {
       e.dataset.protocolHistory,
     );
     if (detail !== null) modal("已保存协议记录", detail, () => {}, "关闭");
+  });
+  on("[data-protocol-history-export]", "click", (_, e) => {
+    const prepared = prepareProtocolHistoryExport(
+      project,
+      e.dataset.protocolProject,
+      e.dataset.protocolHistoryExport,
+    );
+    if (!prepared) return;
+    modal(
+      "导出已保存协议记录",
+      prepared.preview +
+        '<p class="notice">下载文件包含上方完整原始记录，可能包含消息正文和敏感信息，未脱敏。仅导出这条已保存记录，不包含活动会话，不是项目备份，不执行或重发请求。请确认后下载，分享前检查。</p>',
+      () => download("protocol-record.json", prepared.confirm(project)),
+      "确认下载未脱敏记录",
+    );
   });
   on("[data-history]", "click", (_, e) => {
     const h = project.history.find((h) => h.id === e.dataset.history);
