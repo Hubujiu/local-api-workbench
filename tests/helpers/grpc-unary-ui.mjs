@@ -1,3 +1,4 @@
+import { assertProtocolDraftBlocksReload } from "./protocol-draft-unload-ui.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -80,6 +81,11 @@ export async function exerciseGrpcUnaryUI(page) {
     const projectURL = new URL(`/api/projects/${owner}`, page.url()).href;
     await page.locator('.rail [data-page="grpc"]').click();
     await page.locator("#grpc-name").fill("Browser unary fixture");
+    await assertProtocolDraftBlocksReload(
+      page,
+      "#grpc-name",
+      "Browser unary fixture",
+    );
     await page.locator("#grpc-target").fill(target);
     await page.locator("#grpc-proto").fill(proto);
     await clickResponse("#grpc-inspect", "/grpc-schema");
