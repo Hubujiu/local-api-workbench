@@ -404,7 +404,8 @@ export async function exerciseSocketIOUI(page) {
       `/api/projects/${owner}`,
       "GET",
     );
-    await idle();
+    await page.locator("#history-project-reload:not([disabled])").waitFor();
+    await page.locator("#protocol-history").waitFor();
     const historyIndex = saved.protocolRuns.findIndex(
       (r) =>
         r.type === "socketio" &&
@@ -413,7 +414,13 @@ export async function exerciseSocketIOUI(page) {
         ),
     );
     assert(historyIndex >= 0);
-    await page.locator("[data-protocol-history]").nth(historyIndex).click();
+    const historyRecord = saved.protocolRuns[historyIndex];
+    const historyId = historyRecord.id || historyRecord.runId;
+    const historyButton = page.locator(
+      `[data-protocol-history=${JSON.stringify(historyId)}]`,
+    );
+    await historyButton.waitFor();
+    await historyButton.click();
     const historyText = await page
       .locator("#protocol-history-detail")
       .textContent();
