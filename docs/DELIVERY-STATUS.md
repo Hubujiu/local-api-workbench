@@ -9,6 +9,8 @@
 | [#235](https://github.com/Hubujiu/local-api-workbench/pull/235) 协议历史筛选 | `ad2182e9582421d3dfa38548ef80720f1e4c9bb7` | [43425542187](https://github.com/Hubujiu/local-api-workbench/actions/runs/43425542187) | 46/46 jobs 成功；真实筛选浏览器旅程、历史详情/显式导出及 Socket.IO 旅程，三平台 Electron 正常/崩溃重启及下载归档通过 |
 | [#234](https://github.com/Hubujiu/local-api-workbench/pull/234) 单条已保存记录显式导出 | `2dffce796b8233b64d29a5a0d5ea0ff0d6305c5a` | [43415860765](https://github.com/Hubujiu/local-api-workbench/actions/runs/43415860765) | 独立的 46/46 jobs 成功；真实导出浏览器、三平台重启与下载归档通过 |
 
+#235 attempt 1 的 CI checkout 为 merge commit `ee5b3fb6c0e59ae06419498caf55baf9a3fa9aab`，与 head 同树。实际下载归档 Linux `14038290285`、macOS `14038410391`、Windows `14036692260` 的内容、head/hash 以及正常/崩溃重启日志已核。
+
 #235 tree：`2782bdaff432c3e0ef3df3d45d32b93cbb92c334`，基于 #234。两次 CI 分别记账，不用父提交的成功替代新提交验证。本文件所在的文档提交不是上述 head；其自身 CI 需独立检查，不能继承为已通过。
 
 #235 聚焦回归与独立复验各 72/72；本地 Chromium 启动遇到 socket EPERM，未声称本地真实浏览器通过，真实浏览器证据来自上述 CI。没有 #235 本地全量测试通过的可靠记录。#230 本地 full 也仍无可靠终态证据，不补写为通过。
