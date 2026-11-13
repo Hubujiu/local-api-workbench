@@ -1,5 +1,7 @@
 # Local API Workbench — frozen delivery plan
 
+> Historical plan recorded on 2026-10-17. Current candidate evidence and outstanding delivery gates are tracked in [DELIVERY-STATUS.md](DELIVERY-STATUS.md). Preserve the scope and historical statements below; the old branch/delegation workflow is not current authorization. Follow the latest user instructions and applicable permissions; no main merge or deployment is authorized by this document.
+
 ## Evidence and scope (2026-10-17)
 Observed official product site, pricing, help/basics, help/mcp and help/executions via cloud browser. Product screenshot: cream title/sidebars, thin vertical navigation, tree sidebar, request tabs, design/debug/cases/load/mock, request parameters and split response panel. Implement independently with original branding; do not redistribute Apipost binaries/assets.
 
