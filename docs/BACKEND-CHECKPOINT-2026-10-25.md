@@ -1,8 +1,10 @@
 # 后端检查点
 
+> 本文件保留各历史阶段的原始判断。2026-11-13 起的当前入口见 [交付矩阵与验收索引](DELIVERY-STATUS.md)。下文“当前”均指相应记录时点；#208 的单独检查已暂停，不将旧 queued 观察当作当前状态。
+
 ## 2026-11-12 桌面重启旅程检查点
 
-本节是当前候选的验收入口；下方 2026-10-28 及更早章节保留其原时点含义，不以新的成功改判旧失败。
+本节是 2026-11-12 记录时点的候选验收入口；下方 2026-10-28 及更早章节保留其原时点含义，不以新的成功改判旧失败。
 
 - 当前已核验候选为 [PR #210](https://github.com/Hubujiu/local-api-workbench/pull/210) head `adf8dbbf2efc35bf41128404cc7887f08cbade42`，tree `4d8765ad4b2ea44b716d2ac98df1bf861918caff`；[原 CI 43148687129](https://github.com/Hubujiu/local-api-workbench/actions/runs/43148687129) attempt 1 completed/success，43/43 jobs 成功。PR 仍为 draft/open，未合并或部署，不是正式发行或完整复刻交付。
 - 堆叠关系为 #208（`c402ce3e1d699efa5b38494c2ada94264f99b957`）→ #209（`80cb576cfac865a17d471267837f2abdb72027aa`）→ #210。#209 补 GUI 中 preserve 原生继承项目的请求回收/恢复接线与并发保护；#210 仅在 Electron 测试启动显式设置 `acceptDownloads: true`，没有改产品下载实现、预算或安全设置。
