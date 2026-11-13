@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
+import { diagnoseHeaderCompletion } from "./helpers/header-completion-diagnostics.mjs";
 import http from "node:http";
 import { executeRequest } from "../src/runtime.mjs";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
@@ -337,7 +338,7 @@ test("native Header bounds current primitive strings and rejects getter, deletio
 
 test("native Header completion cannot be bypassed by return, cross-task catch or replacing global proof", async (t) => {
   const response = await fixture(t);
-  for (const tasks of [
+  for (const [caseIndex, tasks] of [
     [script("return;"), pick([row("token", "x-token")])],
     [script("try {"), pick([row("token", "missing")]), script("} catch {}")],
     [
@@ -346,8 +347,16 @@ test("native Header completion cannot be bypassed by return, cross-task catch or
       ),
       pick([row("token", "missing")]),
     ],
-  ])
-    await assert.rejects(phase(response, tasks), /未完成|传输证据/);
+  ].entries())
+    await diagnoseHeaderCompletion(
+      caseIndex,
+      (capture) =>
+        assert.rejects(
+          phase(response, tasks).catch(capture),
+          /未完成|传输证据/,
+        ),
+      (line) => t.diagnostic(line),
+    );
   const completed = await phase(response, [
     pick([row("token", "x-token")]),
     script("return;"),

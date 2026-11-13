@@ -102,8 +102,69 @@ export async function exerciseRestartJourney({
   await page.locator("#dialog-save").click();
   await closedDialog();
   const originalId = await page.locator("#project-select").inputValue();
-  mark("import");
+  mark("invalid-import-recovery");
+  const readPersisted = () =>
+    page.evaluate(async (id) => {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(id)}/export?format=native`,
+        {
+          headers: {
+            "x-local-token": sessionStorage.getItem("local-api-token"),
+          },
+        },
+      );
+      if (!response.ok)
+        throw Error(`Import readback failed: ${response.status}`);
+      return response.json();
+    }, originalId);
+  const beforeInvalid = await readPersisted();
+  const hitsBeforeInvalid = hits.length;
   await page.locator("#import").click();
+  await page.locator("#import-text").fill('{"openapi":');
+  const invalidReply = page.waitForResponse(
+    (r) =>
+      r.request().method() === "POST" &&
+      r.url().endsWith(`/projects/${originalId}/import`),
+  );
+  await page.locator("#dialog-save").click();
+  const rejectedImport = await invalidReply;
+  assert.equal(rejectedImport.status(), 400);
+  await page.locator("#dialog-save:not([disabled])").waitFor();
+  assert.equal(await page.locator("#dialog").evaluate((d) => d.open), true);
+  assert.equal(await page.locator("#import-text").inputValue(), '{"openapi":');
+  assert.equal(await page.locator("#project-select").inputValue(), originalId);
+  assert.deepEqual(
+    await readPersisted(),
+    beforeInvalid,
+    "Rejected import must not mutate the original persisted project",
+  );
+  assert.equal(
+    hits.length,
+    hitsBeforeInvalid,
+    "Rejected import must not execute business traffic",
+  );
+  mark("import");
+  // A POST failure remains conservatively gated until an explicit safe GET.
+  // Do not infer a reusable no-write receipt from HTTP 400 alone.
+  assert.match(await page.locator("#toast").textContent(), /重新加载核对/);
+  await page.keyboard.press("Escape");
+  await closedDialog();
+  await page.locator('.rail [data-page="history"]').click();
+  const reloaded = page.waitForResponse(
+    (r) =>
+      r.request().method() === "GET" &&
+      r.url().endsWith(`/projects/${originalId}`) &&
+      r.status() === 200,
+  );
+  await page.locator("#history-project-reload").click();
+  await reloaded;
+  await page.locator("#history-project-reload:not([disabled])").waitFor();
+  assert.deepEqual(await readPersisted(), beforeInvalid);
+  assert.equal(hits.length, hitsBeforeInvalid);
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator("#import").click();
+  // Explicitly import the corrected document only after reconciliation.
+
   await page.locator("#import-text").fill(
     JSON.stringify({
       openapi: "3.0.3",
@@ -125,6 +186,7 @@ export async function exerciseRestartJourney({
     .locator(".sidebar button[data-request]")
     .filter({ hasText: /^GET\s*Journey request$/ })
     .click();
+  console.log("FIRST_USE_INVALID_IMPORT_RECOVERY_PASS");
   await page.locator('[data-param="auth"]').click();
   await page.locator("#auth-type").selectOption("bearer");
   await page.locator('[data-auth="token"]').fill("fictional-journey-token");

@@ -473,3 +473,25 @@ for (const dirty of [false, true]) {
     );
   });
 }
+
+// An HTTP status alone is not a mutation receipt; retain the existing gate.
+test("invalid import response requires explicit GET before corrected import", async () => {
+  const h = harness();
+  const first = h.run();
+  h.calls[0].reject(
+    Object.assign(Error("Invalid JSON (HTTP 400)"), { status: 400 }),
+  );
+  await assert.rejects(first, /核对/);
+  await assert.rejects(h.run(), /重新加载/);
+  assert.equal(h.calls.length, 1);
+  const reload = h.open("a");
+  h.calls.at(-1).resolve(fixture());
+  await reload;
+  const corrected = h.run();
+  h.calls.at(-1).resolve(fixture());
+  await corrected;
+  assert.deepEqual(
+    h.calls.map((c) => c.method),
+    ["POST", "GET", "POST"],
+  );
+});
