@@ -22,7 +22,7 @@ class FirstInstallTests(unittest.TestCase):
                              'ReadEnvStr $0 LOCAL_API_DESKTOP_DATA', 'GetDriveTypeW', 'SetOverwrite off',
                              'IfErrors failed', 'SetErrorLevel 4', 'SetErrorLevel 5']:
                 self.assertIn(required, script)
-            self.assertEqual(script.count('StrCpy $INSTDIR $FixedTarget'), 2)
+            self.assertEqual(script.count('StrCpy $INSTDIR $PendingTarget'), 2)
             self.assertNotIn('Page directory', script)
             for forbidden in ['Exec ', 'ExecWait', 'RMDir', 'Delete ', 'WriteReg', 'WriteUninstaller']:
                 self.assertNotIn(forbidden, script)
@@ -58,3 +58,31 @@ class FirstInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Dollar-bearing payload paths unsupported'):
                 prepare(payload, manifest, root / 'build', HEAD, '0.1.0', hashlib.sha256(manifest.read_bytes()).hexdigest())
             self.assertFalse((root / 'build').exists())
+
+    def test_pending_promotion_guard_order_and_no_replace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve(); payload = root / 'payload'
+            make_directory(payload, package()); manifest = payload / 'build-manifest.json'
+            script = prepare(payload, manifest, root / 'build', HEAD, '0.1.0', hashlib.sha256(manifest.read_bytes()).hexdigest()).read_text()
+            section = script.split('Section "First install only', 1)[1]
+            reserve = section.index('CreateDirectoryW')
+            self.assertLess(section.index('Call CheckAncestors'), reserve)
+            self.assertEqual(section[:reserve].count('Call RequireMissing'), 2)
+            self.assertIn('StrCpy $2 $PendingTarget', section[:reserve])
+            last_file = section.rindex('  File ')
+            promotion = section.index('MoveFileExW(w r2, w r3, i 0)')
+            between = section[last_file:promotion]
+            for guard in ['SetCurrentDirectoryW(w r2) i .r0', 'Call CheckAncestors', 'Call RequireMissing',
+                          'StrCpy $2 $PendingTarget', 'GetFileAttributesW', '& 0x400', '& 0x10', 'StrCpy $3 $FixedTarget']:
+                self.assertIn(guard, between)
+            self.assertLess(promotion, section.index('Payload copy and no-replace publication completed'))
+            self.assertIn('IntCmp $0 0 failed', section[promotion:])
+            self.assertIn('GetFileAttributesW(w r2) i .r0 ?e', script)
+            self.assertIn('IntCmp $1 2 missing_ok missing_refused missing_refused', script)
+            self.assertNotIn('StrCpy $INSTDIR $FixedTarget', script)
+            self.assertNotIn('SetOverwrite on', script)
+            self.assertNotIn('SetOutPath "$LOCALAPPDATA"', script)
+            self.assertEqual(script.count('  SetOutPath '), script.count('  File '))
+            self.assertTrue(all(line.startswith('  SetOutPath "$INSTDIR') for line in script.splitlines() if 'SetOutPath ' in line))
+            self.assertLess(between.index('Call CheckAncestors'), between.index('SetCurrentDirectoryW'))
+            self.assertIn('IntCmp $0 0 failed', between[between.index('SetCurrentDirectoryW'):])
