@@ -1,3 +1,4 @@
+import { assertHistoryRequests } from "./history-request-evidence.mjs";
 import { exercisePlanHistoryFocus } from "./plan-history-focus-ui.mjs";
 import {
   observeRefreshCompletion,
@@ -219,9 +220,11 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
         .waitFor();
       assert.equal(await page.locator("#request-name").inputValue(), draft);
       assert.deepEqual(await owner(), concurrent);
-      assert.deepEqual(requests.slice(beforeSave), [
-        { url: endpoint, method: "PUT" },
-      ]);
+      assertHistoryRequests(
+        requests.slice(beforeSave),
+        [{ url: endpoint, method: "PUT" }],
+        endpoint,
+      );
       assert.deepEqual(seen, peerBefore);
       assert.deepEqual(errors, []);
       console.log(

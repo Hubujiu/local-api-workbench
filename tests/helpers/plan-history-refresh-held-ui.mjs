@@ -1,3 +1,4 @@
+import { assertHistoryRequests } from "./history-request-evidence.mjs";
 import assert from "node:assert/strict";
 import {
   holdRealResponse,
@@ -46,9 +47,11 @@ export async function exerciseHeldPlanHistoryRefresh(
     assert.equal(await button.isDisabled(), true);
     // Native click honours disabled; do not force or dispatch a synthetic event.
     await button.evaluate((element) => element.click());
-    assert.deepEqual(requests.slice(before), [
-      { url: endpoint, method: "GET" },
-    ]);
+    assertHistoryRequests(
+      requests.slice(before),
+      [{ url: endpoint, method: "GET" }],
+      endpoint,
+    );
     assert.equal(
       await page.locator(`[data-export-run="${recordId}"]`).count(),
       0,
@@ -89,10 +92,10 @@ export async function exerciseHeldPlanHistoryRefresh(
         .locator("#saved-state")
         .getByText("● 未保存", { exact: true })
         .waitFor();
-      assert.deepEqual(
+      assertHistoryRequests(
         requests.slice(before),
         [{ url: endpoint, method: "GET" }],
-        "no duplicate refresh or navigation reload",
+        endpoint,
       );
     } finally {
       await oldRecords.dispose();
