@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 class WindowsStageCIContractTests(unittest.TestCase):
     def test_actual_cli_success_and_fail_closed_without_source_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            # macOS temporary roots may use /var -> /private/var; use the
+            # canonical trusted root, without relaxing destination link checks.
+            root = Path(directory).resolve()
             source, target = root / 'download', root / 'launch'
             make_directory(source / 'LocalAPI', package())
             before = snapshot(source)
