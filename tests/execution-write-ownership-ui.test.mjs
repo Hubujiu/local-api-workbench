@@ -21,9 +21,30 @@ const helpers = source.includes("function assertExecutionReady(")
       source.indexOf("async function savePlan("),
     )
   : "";
-const runPlanSource = source.slice(
-  source.indexOf('  on("#run-plan",'),
-  source.indexOf('  on("[data-export-run]",'),
+// Use the enclosing declaration as the boundary, never the nested on() call:
+// slicing before the nested call leaves an unclosed arrow that captures the
+// case handler registration instead of executing it in the harness.
+function boundedSource(text, startMarker, endMarker) {
+  const start = text.indexOf(startMarker),
+    end = text.indexOf(endMarker);
+  assert(start >= 0, `missing harness start marker: ${startMarker}`);
+  assert(end > start, `missing or reordered harness end marker: ${endMarker}`);
+  assert.equal(
+    text.indexOf(startMarker, start + startMarker.length),
+    -1,
+    `ambiguous harness start marker: ${startMarker}`,
+  );
+  assert.equal(
+    text.indexOf(endMarker, end + endMarker.length),
+    -1,
+    `ambiguous harness end marker: ${endMarker}`,
+  );
+  return text.slice(start, end);
+}
+const runPlanSource = boundedSource(
+  source,
+  '  on("#run-plan",',
+  "  const bindRunExports =",
 );
 const caseSource = source.slice(
   source.indexOf('  on("[data-run-case]",'),
@@ -70,6 +91,7 @@ function harness(initial = fixture()) {
     "projectImports",
     "nativeRequestLifecycle",
     "adoptVariableWrites",
+    "assert",
     `
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -84,11 +106,14 @@ function harness(initial = fixture()) {
  const handlers={};const on=(selector,event,fn)=>{handlers[selector]=fn};
  ${runPlanSource}
  ${caseSource}
+ assert.equal(typeof handlers["#run-plan"], "function", "plan handler must register eagerly");
+ assert.equal(typeof handlers["[data-run-case]"], "function", "case handler must register eagerly");
+ assert.deepEqual(Object.keys(handlers).sort(), ["#run-plan", "[data-run-case]"].sort(), "harness must register only the intended execution handlers");
  return {ready:assertExecutionReady,runPlan:()=>handlers["#run-plan"](),runCase:()=>handlers["[data-run-case]"](null,{dataset:{runCase:"c"}}),save,savePlan,open:openProject,dirty(){dirty=true},edit(){project.plans[0].name="new draft";mark()},state:()=>({project,dirty,busy,saving,planId,planTab,lastRun}),replace(p){project=p},navigate(){projectOpenSequence++},selectPlan(){planId="other"}};
  `,
   );
   return {
-    ...create(initial, api, guard, native, adoptVariableWrites),
+    ...create(initial, api, guard, native, adoptVariableWrites, assert),
     calls,
     guard,
     native,
@@ -654,4 +679,19 @@ test("execution browser fixture scopes duplicate plan ids to their owning surfac
   );
   assert.match(fixture, /locator\("#app #plan-name"\)\.inputValue\(\)/);
   assert.doesNotMatch(fixture, /(?:locator|querySelector)\("#plan-name"\)/);
+});
+
+test("execution harness boundaries fail closed on missing, moved or repeated markers", () => {
+  assert.equal(
+    boundedSource("before START body END after", "START", "END"),
+    "START body ",
+  );
+  for (const text of [
+    "missing END",
+    "START missing",
+    "END START",
+    "START START END",
+    "START END END",
+  ])
+    assert.throws(() => boundedSource(text, "START", "END"));
 });
