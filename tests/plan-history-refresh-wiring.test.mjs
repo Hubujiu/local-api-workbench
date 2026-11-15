@@ -1,3 +1,7 @@
+import {
+  capturePlanHistoryFocus,
+  restorePlanHistoryFocus,
+} from "../public/plan-history-focus.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
@@ -13,7 +17,11 @@ assert(start > 0 && end > start);
 function fixture() {
   let handler, resolve;
   const pending = new Promise((r) => (resolve = r));
-  const target = { isConnected: true, innerHTML: "old evidence" };
+  const target = {
+    isConnected: true,
+    contains: () => false,
+    innerHTML: "old evidence",
+  };
   const status = { isConnected: true, textContent: "" },
     button = { isConnected: true };
   const requests = [],
@@ -28,6 +36,9 @@ function fixture() {
     requests: [{ name: "draft" }],
   };
   const context = vm.createContext({
+    document: { activeElement: null },
+    capturePlanHistoryFocus,
+    restorePlanHistoryFocus,
     project: owner,
     projectOpenSequence: 1,
     editVersion: 5,
@@ -143,4 +154,32 @@ test("export chooses the same local lastRun shown by the renderer", () => {
   vm.runInContext(source.slice(a, b), context);
   handler(null, { dataset: { exportRun: "same" } });
   assert.equal(exported, local);
+});
+test("actual refresh fallback focuses only after button is re-enabled", async () => {
+  const f = fixture(),
+    active = { closest: () => null };
+  f.context.document.activeElement = active;
+  f.target.contains = (element) => element === active;
+  f.target.querySelectorAll = () => [];
+  let focused = 0;
+  f.button.focus = (options) => {
+    assert.equal(f.button.disabled, false);
+    assert.deepEqual(options, { preventScroll: true });
+    focused++;
+  };
+  const result = f.run();
+  f.resolve({ id: "p", runs: [] });
+  await result;
+  assert.equal(focused, 1);
+});
+test("failed receipt does not move existing record focus", async () => {
+  const f = fixture(),
+    active = { closest: () => null };
+  f.context.document.activeElement = active;
+  f.target.contains = () => true;
+  f.button.focus = () => assert.fail("failed read must not focus");
+  const result = f.run();
+  f.resolve({ id: "other", runs: [] });
+  await result;
+  assert.equal(f.target.innerHTML, "old evidence");
 });

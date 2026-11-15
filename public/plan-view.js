@@ -191,7 +191,9 @@ export function renderRuns(runs, lastRun) {
     (runs
       .map(
         (run) =>
-          '<details class="card" ' +
+          '<details class="card" data-plan-run-id="' +
+          esc(run.id) +
+          '" ' +
           (run.id === lastRun?.id ? "open" : "") +
           '><summary><span class="' +
           (run.status === "passed" ? "success" : "failed") +

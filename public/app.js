@@ -1,4 +1,8 @@
 import {
+  capturePlanHistoryFocus,
+  restorePlanHistoryFocus,
+} from "./plan-history-focus.js";
+import {
   protocolHistoryView,
   applyProtocolHistoryFilters,
   protocolHistoryDetail,
@@ -4861,6 +4865,7 @@ function bind() {
       page === "plans" &&
       planTab === "runs" &&
       target.isConnected;
+    let replacedFocus = null;
     button.disabled = true;
     status.textContent = "正在只读刷新已保存记录…";
     try {
@@ -4879,6 +4884,7 @@ function bind() {
           : runs,
         previousRun,
       );
+      replacedFocus = capturePlanHistoryFocus(target, document.activeElement);
       owner.runs = runs;
       target.innerHTML = html;
       bindRunExports();
@@ -4887,6 +4893,7 @@ function bind() {
       if (status.isConnected) status.textContent = error.message;
     } finally {
       if (button.isConnected) button.disabled = false;
+      restorePlanHistoryFocus(target, button, replacedFocus);
     }
   });
   on("#history-project-reload", "click", () => openProject(project.id));

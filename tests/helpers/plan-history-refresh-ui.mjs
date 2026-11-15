@@ -1,3 +1,4 @@
+import { exercisePlanHistoryFocus } from "./plan-history-focus-ui.mjs";
 import {
   observeRefreshCompletion,
   exerciseHeldPlanHistoryRefresh,
@@ -143,6 +144,7 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
         JSON.parse(await readFile(await download.path(), "utf8")),
         record,
       );
+      await exercisePlanHistoryFocus(page, endpoint, run.id);
       await refresh();
       assert.equal(
         await page.locator(`[data-export-run="${run.id}"]`).count(),
@@ -161,7 +163,7 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
       assert.equal(
         requests.filter((r) => r.url === endpoint && r.method === "GET")
           .length - refreshReadsBefore,
-        2,
+        3,
       );
       assert.deepEqual(
         requests.filter((r) => !["GET", "HEAD"].includes(r.method)),
