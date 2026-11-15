@@ -73,9 +73,13 @@ class WindowsPayloadStageTests(unittest.TestCase):
     def test_case_alias_output_overlap_rejected_before_write(self):
         make_directory(self.source / 'LocalAPI',package())
         target=self.root / 'DOWNLOAD' / 'stage'
-        with self.assertRaisesRegex(ValueError,'overlap'):
+        before = snapshot(self.source)
+        # Native Windows resolves the case alias into the first disjoint guard;
+        # case-sensitive hosts reach the explicit Windows alias guard instead.
+        with self.assertRaisesRegex(ValueError, r'^(Staging source and destination must be disjoint|Windows case-insensitive source/output overlap)$'):
             stage_windows_payload(self.source,target,HEAD,'0.1.0','x64')
         self.assertFalse(target.exists())
+        self.assertEqual(snapshot(self.source), before)
 
     def test_wrong_metadata_rejected_before_destination(self):
         mutations = [

@@ -48,3 +48,17 @@ Windows 路径陷阱、源目标重叠与已有目标拒绝。部分非法名称
 还需独立核真实 CI payload 的该步骤并保存输入 artifact ID/digest、head/version、工具提交、命令、
 输出和字节比较；无论该步骤是否成功，[安装发行协议](INSTALLER-RELEASE-ACCEPTANCE.md)中的签名、
 干净机器首次运行、升级/卸载/重装仍须单独完成。当前没有安装/卸载或 Windows 原生运行验收声明。
+
+## 下载包 CI 衔接
+
+`downloaded-portable` 的 Windows lane 对本次运行下载的真实包调用此 CLI，
+复用原 `localapi-launch-package` 新目录，不额外复制一份大型 payload。
+Linux/macOS 仍使用原 materializer；既有包验证、正常重启和崩溃恢复检查保留。
+Windows 步骤仅在 CLI 成功且 JSON 身份及非安装/非签名字段符合预期后输出
+`WINDOWS_PAYLOAD_STAGED_PASS`，同时保留 `DOWNLOADED_PORTABLE_MATERIALIZED_PASS` 兼容标记。
+显式版本 `0.1.0` 和架构 `x64` 是当前构建约束，发布版本/目标架构变化时须一起复审，不能从待验包自动接受。
+工作流接线不等于已经运行通过；需核对该精确提交的真实 Windows job 日志。
+
+这些重启旅程使用 `LOCAL_API_DESKTOP_DATA` 隔离测试数据，仍不是安装生命周期验收。
+后续干净 Windows 安装验收须在无此 override 时验证默认 Electron `userData/projects`，
+不得隐式迁移自定义试用目录。

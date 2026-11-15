@@ -321,7 +321,20 @@ jobs:
         run: python scripts/verify_portable_download.py "${{ runner.temp }}/localapi-downloaded-portable" --platform ${{ matrix.platform }} --head ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Materialize only the fully verified download into a fresh directory
+        if: runner.os != 'Windows'
         run: python scripts/materialize_portable_download.py "${{ runner.temp }}/localapi-downloaded-portable" "${{ runner.temp }}/localapi-launch-package" --platform ${{ matrix.platform }} --head ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Stage verified Windows payload into the same fresh launch directory
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $output = python scripts/stage_windows_payload.py "${{ runner.temp }}/localapi-downloaded-portable" "${{ runner.temp }}/localapi-launch-package" --head "$env:EXPECTED_HEAD" --expected-version 0.1.0 --arch x64
+          if ($LASTEXITCODE -ne 0) { throw "Windows payload staging failed" }
+          $stage = $output | ConvertFrom-Json
+          if ($stage.kind -ne 'windows-payload-staging' -or $stage.head -ne $env:EXPECTED_HEAD -or $stage.platform -ne 'win32' -or $stage.arch -ne 'x64' -or $stage.version -ne '0.1.0' -or $stage.applicationName -ne 'local-api-workbench' -or $stage.entrypoint -ne 'desktop/main.mjs' -or $stage.installationPerformed -isnot [bool] -or $stage.signatureVerified -isnot [bool] -or $stage.installationPerformed -cne $false -or $stage.signatureVerified -cne $false) { throw "Windows staging evidence mismatch" }
+          Write-Output "DOWNLOADED_PORTABLE_MATERIALIZED_PASS $output"
+          Write-Output "WINDOWS_PAYLOAD_STAGED_PASS $output"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
