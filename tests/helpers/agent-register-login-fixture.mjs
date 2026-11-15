@@ -9,7 +9,7 @@ import { createApp } from "../../src/server.mjs";
 
 // Synthetic accounts only. Explicit stop prevents login after failed registration;
 // it cannot undo registration, or promise exactly-once remote business effects.
-export async function registerLoginScenario(t, failRegistration) {
+export async function registerLoginScenario(t, failRegistration, beforeRun) {
   const root = await mkdtemp(path.join(tmpdir(), "register-login-"));
   const app = await createApp({ root, port: 0 });
   const seen = [];
@@ -121,6 +121,7 @@ export async function registerLoginScenario(t, failRegistration) {
       ],
     },
   });
+  await beforeRun?.({ app, project, plan, seen });
   const run = await call("localapi_run_plan", {
     projectId: project.id,
     planId: plan.id,

@@ -1,3 +1,4 @@
+import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
 import { exerciseAgentRegisterLoginUI } from "./helpers/agent-register-login-ui.mjs";
 import { exerciseGrpcStreamUI } from "./helpers/grpc-stream-ui.mjs";
 import { exerciseSocketIOUI } from "./helpers/socketio-ui.mjs";
@@ -427,6 +428,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
   await exerciseAgentRegisterLoginUI(browserContext);
+  await exercisePlanHistoryRefreshUI(browserContext);
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });

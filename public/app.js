@@ -122,7 +122,9 @@ import {
   effectiveParameterDictionary,
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
-import { renderPlans } from "./plan-view.js";
+import { renderPlans, renderRuns } from "./plan-view.js";
+import { createPlanHistoryRefresh } from "./plan-history-refresh.js";
+const refreshPlanHistory = createPlanHistoryRefresh();
 import { resources, settingsSidebar } from "./resource-view.js";
 import { highlightJSON } from "./code-format.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
@@ -4830,12 +4832,63 @@ function bind() {
       render();
     }
   });
-  on("[data-export-run]", "click", (_, e) =>
-    download(
-      "run-" + e.dataset.exportRun + ".json",
-      project.runs.find((r) => r.id === e.dataset.exportRun) || lastRun,
-    ),
-  );
+  const bindRunExports = () =>
+    on("[data-export-run]", "click", (_, e) =>
+      download(
+        "run-" + e.dataset.exportRun + ".json",
+        lastRun?.id === e.dataset.exportRun
+          ? lastRun
+          : project.runs.find((r) => r.id === e.dataset.exportRun),
+      ),
+    );
+  bindRunExports();
+  on("#refresh-plan-history", "click", async (_, button) => {
+    if (busy || saving) throw Error("请先结束当前执行或保存，再刷新记录");
+    const owner = project,
+      opening = projectOpenSequence,
+      version = editVersion,
+      previousRun = lastRun,
+      previousRuns = project.runs,
+      target = $("#plan-run-records"),
+      status = $("#plan-history-refresh-status");
+    const isCurrent = () =>
+      project === owner &&
+      projectOpenSequence === opening &&
+      editVersion === version &&
+      lastRun === previousRun &&
+      !busy &&
+      !saving &&
+      page === "plans" &&
+      planTab === "runs" &&
+      target.isConnected;
+    button.disabled = true;
+    status.textContent = "正在只读刷新已保存记录…";
+    try {
+      const runs = await refreshPlanHistory({
+        owner,
+        read: (id) => api("/projects/" + id),
+        isCurrent,
+      });
+      if (!isCurrent() || owner.runs !== previousRuns)
+        throw Error("页面或执行记录已变化，未替换记录；请重新刷新");
+      // Do not call render/openProject: they may replace editors. In particular,
+      // this GET cannot acknowledge an uncertain write or advance CAS revisions.
+      const html = renderRuns(
+        previousRun
+          ? [previousRun, ...runs.filter((run) => run.id !== previousRun.id)]
+          : runs,
+        previousRun,
+      );
+      owner.runs = runs;
+      target.innerHTML = html;
+      bindRunExports();
+      status.textContent = "已刷新已保存记录；草稿和项目版本未变。";
+    } catch (error) {
+      if (status.isConnected) status.textContent = error.message;
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
+  });
   on("#history-project-reload", "click", () => openProject(project.id));
   on("#protocol-history-filter", "submit", (event) => {
     event.preventDefault();

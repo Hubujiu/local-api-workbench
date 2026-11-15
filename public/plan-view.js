@@ -36,7 +36,9 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
       .join("") +
     '</aside><section class="plan-main">' +
     (tab === "runs"
-      ? renderRuns(runs, lastRun)
+      ? '<div class="row"><button id="refresh-plan-history">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle">只读刷新已保存记录，不运行计划或保存草稿。</span></div><div id="plan-run-records">' +
+        renderRuns(runs, lastRun) +
+        "</div>"
       : plan
         ? renderEditor(plan, busy, project.environments)
         : '<div class="empty"><p>新建计划后添加接口步骤。</p></div>') +
@@ -183,7 +185,7 @@ function renderPlanStep(step, index, plan) {
     "</section>"
   );
 }
-function renderRuns(runs, lastRun) {
+export function renderRuns(runs, lastRun) {
   return (
     '<h2>执行记录 <span class="subtle">最近 50 条</span></h2>' +
     (runs
@@ -198,7 +200,9 @@ function renderRuns(runs, lastRun) {
             ? "✓ 通过"
             : run.status === "cancelled"
               ? "■ 已取消"
-              : "× 失败") +
+              : run.status === "failed"
+                ? "× 失败"
+                : "? 结果待核对") +
           "</span> " +
           esc(run.planName) +
           ' <span class="subtle">' +
@@ -233,7 +237,7 @@ function renderRuns(runs, lastRun) {
             )
             .join("") +
           '<button data-export-run="' +
-          run.id +
+          esc(run.id) +
           '">导出证据 JSON</button></details>',
       )
       .join("") || '<div class="empty"><p>计划运行后会保留逐步证据。</p></div>')
