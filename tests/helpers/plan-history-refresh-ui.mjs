@@ -1,3 +1,7 @@
+import {
+  observeRefreshCompletion,
+  exerciseHeldPlanHistoryRefresh,
+} from "./plan-history-refresh-held-ui.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { registerLoginScenario } from "./agent-register-login-fixture.mjs";
@@ -17,6 +21,7 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
         async ({ app, project, seen }) => {
           page = await browserContext.newPage();
           page.on("pageerror", (error) => errors.push(error.message));
+          await page.addInitScript(observeRefreshCompletion);
           await page.goto(app.launchUrl);
           const previousSelect = await page
             .locator("#project-select")
@@ -98,6 +103,16 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
         "no automatic history adoption",
       );
       const peerBefore = structuredClone(seen);
+      await exerciseHeldPlanHistoryRefresh(page, endpoint, run.id, requests);
+      assert.deepEqual(
+        seen,
+        peerBefore,
+        "held GET must not replay peer requests",
+      );
+      assert.deepEqual(await owner(), concurrent);
+      const refreshReadsBefore = requests.filter(
+        (r) => r.url === endpoint && r.method === "GET",
+      ).length;
       const refresh = async () => {
         await page.locator("#refresh-plan-history").click();
         await page
@@ -144,7 +159,8 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
         "GUI refresh must not commit project changes",
       );
       assert.equal(
-        requests.filter((r) => r.url === endpoint && r.method === "GET").length,
+        requests.filter((r) => r.url === endpoint && r.method === "GET")
+          .length - refreshReadsBefore,
         2,
       );
       assert.deepEqual(
