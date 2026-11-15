@@ -1,3 +1,4 @@
+import { nativeAutomationBoundaryCases } from "./fixtures/native-automation-boundaries.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -129,21 +130,7 @@ test("synthetic complete native automation is atomically rejected by direct, own
   const mcpToken = JSON.parse(mcpPreview.content[0].text).token;
   assert.equal(typeof mcpToken, "string");
   await unchanged();
-  const variants = [
-    ["observed root structure", () => {}],
-    [
-      "sort conflict (semantics deliberately unknown)",
-      (s) => {
-        s.automated_testings[0].event_list[1].sort = 1;
-      },
-    ],
-    [
-      "unknown schedule (never inferred)",
-      (s) => {
-        s.automated_testings[0].scenario = "synthetic-unknown-schedule";
-      },
-    ],
-  ];
+  const variants = nativeAutomationBoundaryCases();
   for (const [label, mutate] of variants) {
     const document = structuredClone(original);
     mutate(document);
