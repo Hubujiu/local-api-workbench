@@ -40,3 +40,21 @@ Windows 安装验收。无签名、SmartScreen、管理员 token、首次启动�
 提取后 final 被其他进程建立时发布失败且不覆盖，pending 保留；SetCurrentDirectoryW 或重命名失败无完成提示。
 这些是待测合同，不是 Linux 静态测试证明。NSIS 错误捕获使用官方
 [System 插件 ?e](https://nsis.sourceforge.io/Docs/System/System.html) 返回的即时 Win32 error。
+
+## 文件验收：独立只读回读
+
+在受控账户完成正常安装后，关闭应用，确保测试目录无其他写入方。用测试工具环境中
+已有的 Python 执行以下命令（工具不是 Workbench 的运行依赖）。从测试账户记录真实
+LOCALAPPDATA；从已独立核验的**原始构建输入**取 payload head、版本和 manifest 摘要，
+不得用刚安装的 manifest 自行生成期望值。安装器源码 head、载荷 head、安装介质摘要
+是三个独立字段。
+
+```powershell
+python scripts/verify_windows_first_install.py --local-app-data "$env:LOCALAPPDATA" --payload-head <full-payload-head> --version <payload-version> --manifest-sha256 <pinned-build-manifest-sha256>
+```
+
+固定 final 路径和祖先须为普通目录，同级 pending 必须不存在。工具逐文件检查 SHA-256，
+拒绝缺失、额外文件、额外空目录、链接/重解析点和不可读取的目录；成功才打印 JSON
+回执，失败返回非零。保留该回执与真实安装日志、进程身份和安装前的快照；工具只证明
+读取时的普通文件清单，不证明安装器曾执行、签名有效、无 NTFS 替代数据流、首次
+应用启动成功或数据保留。不要把 .pending 改名来让校验通过。

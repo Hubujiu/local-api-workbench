@@ -36,8 +36,9 @@ def identity(root, version, arch):
             'entrypoint': package['main']}
 
 
-def windows_names(root):
-    inventory = inventory_directory(root)
+def windows_names(root, *, inventory=None):
+    if inventory is None:
+        inventory = inventory_directory(root)
     folded = set()
     for name, (kind, _) in inventory.entries.items():
         if not name:
