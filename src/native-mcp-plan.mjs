@@ -61,9 +61,14 @@ export function inputAuth(base, input) {
     basic: "basic",
     bearer: "bearer",
     apiKey: "kv",
+    digest: "workbench_digest",
   }[type];
   if (!provider)
     throw Error("原版兼容计划暂不支持此认证覆盖；请用Workbench计划接口");
+  // Explicit Workbench extension, not an assertion of upstream Digest schema.
+  // Keep challenge policy and transport-owned challenge state out of overrides.
+  if (provider === "workbench_digest" && a.type !== provider)
+    throw Error("Digest覆盖须显式使用Workbench扩展workbench_digest");
   plain(a, ["type", provider], "认证覆盖");
   if (a.type !== undefined && a.type !== provider)
     throw Error("不能改变认证类型");
@@ -72,6 +77,7 @@ export function inputAuth(base, input) {
     bearer: { key: "token" },
     kv: { key: "key", value: "value", in: "in" },
     noauth: {},
+    workbench_digest: { username: "username", password: "password" },
   }[provider];
   const patch = a[provider] || {};
   plain(patch, Object.keys(fields), "认证覆盖");

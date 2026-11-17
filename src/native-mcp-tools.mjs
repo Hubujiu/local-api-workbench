@@ -21,7 +21,11 @@ const input = {
     headers: { type: "object" },
     cookies: { type: "object" },
     body: {},
-    auth: { type: "object" },
+    auth: {
+      type: "object",
+      description:
+        'Workbench扩展：已定义Digest认证可用{type:"workbench_digest",workbench_digest:{username,password}}覆盖已有凭据字段；不是Apipost原版参数合同，不改变认证类型或挑战策略。计划覆盖随快照保存。',
+    },
   },
   additionalProperties: false,
 };
