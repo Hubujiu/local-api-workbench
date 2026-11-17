@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from stage_windows_payload import identity, windows_names
+from windows_install_record import RECORD_NAME, record_bytes, reserve_record_name
 from verify_portable_download import inventory_directory, require
 
 
@@ -25,6 +26,9 @@ def prepare(payload, manifest, output, head, version, manifest_sha256):
     windows_names(payload)
     require(all('$' not in name for name in inventory.entries), 'Dollar-bearing payload paths unsupported by installer candidate')
     identity(payload, version, 'x64')
+    reserve_record_name(inventory.entries)
+    install_record = record_bytes(head, version, digest)
+    install_record_sha256 = hashlib.sha256(install_record).hexdigest()
     require(not output.exists(), 'Fresh build output required')
     lines = [
         'Unicode true', 'RequestExecutionLevel user', 'SilentInstall normal',
@@ -71,16 +75,18 @@ def prepare(payload, manifest, output, head, version, manifest_sha256):
         "  System::Call 'kernel32::CreateDirectoryW(w r2, p 0) i .r0'",
         '  IntCmp $0 0 refused', '  SetOverwrite off',
     ]
-    for name, (kind, _) in sorted(inventory.entries.items()):
-        if not name or kind != 'file':
-            continue
+    sources = [(name, payload / name) for name, (kind, _) in sorted(inventory.entries.items()) if name and kind == 'file']
+    # Metadata is extracted last into pending and promoted with the payload.
+    # It is never written into an existing/final application directory.
+    sources.append((RECORD_NAME, output / RECORD_NAME))
+    for name, source in sources:
         parent, leaf = name.rsplit('/', 1) if '/' in name else ('', name)
         destination = '$INSTDIR' + ('\\' + parent.replace('/', '\\') if parent else '')
         # Paths from verified Windows inventory; quote literals while preserving only our $INSTDIR.
         lines += ['  ClearErrors', '  SetOutPath ' + quoted(destination).replace('$$INSTDIR', '$INSTDIR', 1),
                   '  IfErrors failed',
                   '  IfFileExists ' + quoted(destination + '\\' + leaf).replace('$$INSTDIR', '$INSTDIR', 1) + ' failed',
-                  '  File ' + quoted('/oname=' + leaf) + ' ' + quoted(payload / name),
+                  '  File ' + quoted('/oname=' + leaf) + ' ' + quoted(source),
                   '  IfErrors failed']
     lines += ['  Call CheckAncestors', '  StrCpy $2 $LOCALAPPDATA',
               "  System::Call 'kernel32::SetCurrentDirectoryW(w r2) i .r0'",
@@ -100,9 +106,11 @@ def prepare(payload, manifest, output, head, version, manifest_sha256):
               '  DetailPrint "Payload copy and no-replace publication completed. This is unsigned; installation acceptance is still pending."',
               'SectionEnd']
     output.mkdir()
+    (output / RECORD_NAME).write_bytes(install_record)
     (output / 'first-install.nsi').write_text('\n'.join(lines) + '\n', encoding='utf-8')
     (output / 'build-input.json').write_text(json.dumps({**evidence, 'manifest': str(manifest),
-        'manifestSha256': digest, 'candidateOnly': True, 'runtimeVerified': False}, indent=2) + '\n')
+        'manifestSha256': digest, 'installRecord': RECORD_NAME,
+        'installRecordSha256': install_record_sha256, 'installRecordBytes': len(install_record), 'candidateOnly': True, 'runtimeVerified': False}, indent=2) + '\n')
     return output / 'first-install.nsi'
 
 

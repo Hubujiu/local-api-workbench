@@ -50,11 +50,24 @@ LOCALAPPDATA；从已独立核验的**原始构建输入**取 payload head、版
 是三个独立字段。
 
 ```powershell
-python scripts/verify_windows_first_install.py --local-app-data "$env:LOCALAPPDATA" --payload-head <full-payload-head> --version <payload-version> --manifest-sha256 <pinned-build-manifest-sha256>
+python scripts/verify_windows_first_install.py --local-app-data "$env:LOCALAPPDATA" --payload-head <full-payload-head> --version <payload-version> --manifest-sha256 <pinned-build-manifest-sha256> --install-record-sha256 <independently-pinned-build-input-record-sha256>
 ```
+
+上述命令用于本生成器的新记录格式。历史 #258 无记录安装应省略 `--install-record-sha256`；不得从已安装记录自算期望摘要。
 
 固定 final 路径和祖先须为普通目录，同级 pending 必须不存在。工具逐文件检查 SHA-256，
 拒绝缺失、额外文件、额外空目录、链接/重解析点和不可读取的目录；成功才打印 JSON
 回执，失败返回非零。保留该回执与真实安装日志、进程身份和安装前的快照；工具只证明
 读取时的普通文件清单，不证明安装器曾执行、签名有效、无 NTFS 替代数据流、首次
 应用启动成功或数据保留。不要把 .pending 改名来让校验通过。
+
+## 安装记录候选格式
+
+生成器现在在 pending 中最后提取独立的 `localapi-install-record.json`，随 payload 一起发布。
+它绑定固定 application-only 布局和 payload manifest 身份，但不授权删除或证明账户所有权。
+本格式验收须额外传入构建回执里的独立 `--install-record-sha256`；历史无记录候选省略该参数。
+详见[安装记录合同与兼容边界](WINDOWS-INSTALL-RECORD.md)。完整库存统计额外包含该记录。
+
+后续生命周期文件状态可使用[只读比较门禁](WINDOWS-LIFECYCLE-FILE-VERIFICATION.md)。
+该工具已支持显式安装记录 pin；不会执行卸载、升级或回滚。
+历史用户机 smoke 与本次候选分开记录于[历史验证范围](WINDOWS-HISTORICAL-SMOKE-SCOPE.md)。

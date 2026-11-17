@@ -26,9 +26,9 @@ class FirstInstallTests(unittest.TestCase):
             self.assertNotIn('Page directory', script)
             for forbidden in ['Exec ', 'ExecWait', 'RMDir', 'Delete ', 'WriteReg', 'WriteUninstaller']:
                 self.assertNotIn(forbidden, script)
-            self.assertEqual(script.count('  File "/oname='), len(before))
-            self.assertEqual(script.count('  IfFileExists '), len(before))
-            self.assertEqual(script.count('  IfErrors failed'), 2 * len(before))
+            self.assertEqual(script.count('  File "/oname='), len(before) + 1)
+            self.assertEqual(script.count('  IfFileExists '), len(before) + 1)
+            self.assertEqual(script.count('  IfErrors failed'), 2 * (len(before) + 1))
             with self.assertRaises(ValueError):
                 prepare(payload, payload / 'build-manifest.json', output, HEAD, '0.1.0', hashlib.sha256((payload / 'build-manifest.json').read_bytes()).hexdigest())
 
