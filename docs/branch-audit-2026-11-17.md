@@ -88,6 +88,10 @@ shard 5 的 41 字节 XML/七条断言消耗 compatibility 85ms、user 171ms。�
 
 shard 7 是一个 HTTP 前置阶段的真实 utils 初始化：functionLibrary 246ms 墙钟、5.054ms CPU，加上 compatibility 28ms 后在用户脚本前耗尽预算。已核对 functions 为空，但仍有 33 字节的 const utils 初始化，不能删除其语义或移出计费。该路径不使用 XML guard；现有日志无法确定具体调度/原生等待来源，不宣称 XML 优化修复它。此轮所有失败保留，没有单独重跑失败作业；修订整树继续以自身完整 CI 为合并门槛。
 
+### 第四轮 HTTP 后置断言证据缺口
+
+[第四轮 run 44121828186](https://github.com/Hubujiu/local-api-workbench/actions/runs/44121828186) 最终 45 个作业成功、2 个失败；唯一实际失败是 macOS 的恢复后 HTTP/CLI 用例缺少预期后置断言，另一项为 required 正确拒绝。旧失败目标与 XML 防篡改新增场景本轮三平台均通过，但这不能解释新失败。现只为原来的两条 after 断言接入已有有界执行诊断，保留错误身份、全部断言、执行次数和预算；目标两种 transport 流程 2/2 通过，注入确认缺失/失败仍会报原错。原日志不足以确定超时或恢复缺陷，未修改生产逻辑。详见 [CI-HTTP-AFTER-DIAGNOSTICS-20261117.md](CI-HTTP-AFTER-DIAGNOSTICS-20261117.md) 与 [第四轮完整记录](branch-audit-2026-11-17/evidence/integration-ci-fourth.json)。
+
 ## 合并与后续分支管理
 
 先将最新候选与确认漏项组合在隔离 review 分支，保持旧分支不动；以正常 PR 面向 main 验证最终 merge tree。全部 required 条件满足后再合并，并核对 main push CI。不得对 main 使用强制推送，不得用 squash 丢掉本次需要追溯的历史关系。

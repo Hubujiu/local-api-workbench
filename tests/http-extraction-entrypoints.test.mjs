@@ -13,6 +13,7 @@ import { createApp } from "../src/server.mjs";
 import { Store } from "../src/runtime.mjs";
 import { normalizeRequest } from "../src/core.mjs";
 import { runPlanCLI } from "./helpers/run-plan-cli.mjs";
+import { withExecutionResultDiagnostics } from "./helpers/execution-result-diagnostics.mjs";
 
 for (const transport of ["http", "stdio"])
   test(
@@ -206,8 +207,10 @@ for (const transport of ["http", "stdio"])
         const after = run.results[3].assertions.filter(
           (a) => a.phase === "after",
         );
-        assert.equal(after.length, 1);
-        assert.equal(after[0].passed, true);
+        withExecutionResultDiagnostics(run.results[3], () => {
+          assert.equal(after.length, 1);
+          assert.equal(after[0].passed, true);
+        });
       };
       const checkWire = (count) => {
         assert.equal(seen.length, count * 5);
