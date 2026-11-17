@@ -68,6 +68,23 @@ class DownloadGateTests(unittest.TestCase):
         result = gate.verify_download(self.root, 'win32', HEAD)
         self.assertEqual(result['files'], 5)
 
+    def test_unreadable_extra_subtree_cannot_pass_complete_download_verification(self):
+        package = self.root / 'LocalAPI'
+        make_directory(package, fixture('win32'))
+        unreadable = package / 'unreadable-extra'
+        unreadable.mkdir()
+        (unreadable / 'unexpected.exe').write_bytes(b'inert unmanifested fixture')
+        actual_scandir = gate.os.scandir
+
+        def scandir(path):
+            if Path(path) == unreadable:
+                raise PermissionError('package subtree scan denied')
+            return actual_scandir(path)
+
+        with mock.patch.object(gate.os, 'scandir', side_effect=scandir):
+            with self.assertRaisesRegex(PermissionError, 'subtree scan denied'):
+                gate.verify_download(self.root, 'win32', HEAD)
+
     def test_both_unix_archives_and_metadata(self):
         for platform, label in [('linux', 'Linux'), ('darwin', 'macOS')]:
             with self.subTest(platform=platform):

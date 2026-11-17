@@ -137,7 +137,7 @@ class Inventory:
         return {"head": head, "platform": platform, "arch": manifest["arch"], "files": len(files), "links": len(links), "bytes": self.total}
 
 
-def inventory_directory(root, *, fail_on_walk_error=False):
+def inventory_directory(root, *, fail_on_walk_error=True):
     root = Path(root)
     require(root.is_dir() and not root.is_symlink(), "Invalid package directory")
     require(not (getattr(root.lstat(), "st_file_attributes", 0) & 0x400), "Windows reparse root")

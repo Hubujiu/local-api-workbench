@@ -1,7 +1,7 @@
 name: Validate Local API
 on:
   push:
-    branches: [wip/backend-integration]
+    branches: [main, wip/backend-integration]
   pull_request:
   workflow_dispatch:
 concurrency:
@@ -360,3 +360,36 @@ jobs:
           path: |
             dist/desktop-restart-evidence/
             dist/desktop-crash-evidence/
+  required:
+    name: required
+    if: always()
+    needs:
+      - core
+      - browser
+      - desktop
+      - source-format
+      - database-integration
+      - quickjs-reproducible
+      - downloaded-portable
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          VALIDATION_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["VALIDATION_RESULTS"])
+          expected = {"core", "browser", "desktop", "source-format", "database-integration", "quickjs-reproducible", "downloaded-portable"}
+          if set(results) != expected:
+              sys.exit("Required validation job set does not match")
+          failed = {name: job["result"] for name, job in results.items() if job["result"] != "success"}
+          if failed:
+              print("Required validation failed: " + json.dumps(failed, sort_keys=True))
+              sys.exit(1)
+          print("All validation jobs succeeded")
+          PY
