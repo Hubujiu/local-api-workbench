@@ -1,0 +1,4 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-api-workbench@0.1.0 check
+> node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js

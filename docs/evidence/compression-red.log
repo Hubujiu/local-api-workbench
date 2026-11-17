@@ -1,0 +1,36 @@
+✔ real HTTP body, query, auth and response evidence (18.000389ms)
+✔ disk store rejects traversal and survives reopening (6.642212ms)
+✔ non HTTP protocols blocked (0.519093ms)
+✔ stale saves rejected, history append preserves latest content (7.061025ms)
+✔ HTTP timeout and cancellation produce explicit failures (125.420236ms)
+✖ compressed responses are decoded with a size limit (4.539534ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 239.070882
+
+✖ failing tests:
+
+test at tests/runtime.test.mjs:8:1
+✖ compressed responses are decoded with a size limit (4.539534ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '\x1F�\b\x00\x00\x00\x00\x00\x00\x03�V��V�*)*M�\x05\x00�_ԧ\x0B\x00\x00\x00'
+  - '{"ok":true}'
+  
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/api-workbench/tests/runtime.test.mjs:8:387)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '\x1F�\b\x00\x00\x00\x00\x00\x00\x03�V��V�*)*M�\x05\x00�_ԧ\x0B\x00\x00\x00',
+    expected: '{"ok":true}',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

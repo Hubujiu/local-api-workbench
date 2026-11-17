@@ -1,0 +1,15 @@
+✔ document metadata contributes typed status and attribute dependencies, never body-text references (9.069786ms)
+✔ dangling document metadata rejects before a source graph can be planned (1.205141ms)
+✔ owner JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (197.409783ms)
+✔ sdk JSON document-only import retains status through reopen and backup without importing unselected documents or APIs (190.724854ms)
+✔ owner directory document-only import retains status through reopen and backup without importing unselected documents or APIs (118.54381ms)
+✔ sdk directory document-only import retains status through reopen and backup without importing unselected documents or APIs (168.700831ms)
+✔ document status dependency cannot be excluded or silently replace a conflicting registry entry (148.115569ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1376.787753

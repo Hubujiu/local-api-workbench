@@ -1,0 +1,23 @@
+✖ native create-only preview/apply retains existing definitions and concurrent activity (94.109345ms)
+✔ native append rejects semantic conflicts and unsupported policies without writes (249.761976ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 722.174575
+
+✖ failing tests:
+
+test at tests/native-inheritance-append.test.mjs:20:1
+✖ native create-only preview/apply retains existing definitions and concurrent activity (94.109345ms)
+  Error: 手动导入未完成；请检查选择、权限与冲突后重新预览
+      at manualImportError (file:///workspace/scratch/75c2273f6a80/native-safe-append-20261106/src/manual-import.mjs:29:5)
+      at Store.previewManualImport (file:///workspace/scratch/75c2273f6a80/native-safe-append-20261106/src/runtime.mjs:723:13)
+      at async TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/native-safe-append-20261106/tests/native-inheritance-append.test.mjs:22:16)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'MANUAL_IMPORT_TARGET_UNSUPPORTED'
+  }

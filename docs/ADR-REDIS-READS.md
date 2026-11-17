@@ -1,0 +1,65 @@
+# Bounded Redis reads
+
+Apipost's database reference includes Redis among its database integrations:
+https://wiki.apipost.cn/docs/http_debug/database/ . This adds a read-only subset;
+it does not claim all commands, Redis Cluster/Sentinel or database script hooks.
+The separate manual SET entry point is specified in [ADR-REDIS-WRITES.md](ADR-REDIS-WRITES.md); this query entry point and session/script connections remain read-only.
+
+The wire client implements bounded RESP2 framing from
+https://redis.io/docs/latest/develop/reference/protocol-spec/ . Arguments use
+binary-safe length-prefixed strings, not an inline command or shell. No Redis
+server or external executable is bundled into the desktop product.
+
+Choose Redis in the database page, enter host/port, optional username/password,
+numeric database index, TLS choice, and a JSON command array such as
+`["GET","key"]`. Credentials remain request-scoped and are not saved.
+
+Read command arguments reject unpaired Unicode surrogates, non-finite numbers,
+and unsafe integer numbers before any connection or native-task canonicalization.
+Use strings for exact large numeric keys, such as `["GET","9007199254740993"]`.
+Valid finite non-integer numbers retain their existing JavaScript string conversion;
+JSON/JavaScript decimal numbers can still round or underflow before this policy;
+use strings for exact decimal keys too. Numeric source-literal fidelity is not
+promised. Safe integers and well-formed Unicode strings remain accepted. Writes remain
+string-only. This command-argument policy does not change authentication field
+validation, response decoding, stored history, deadlines, or authorization.
+Existing exact string keys remain unchanged. Previously normalized strings cannot
+reveal whether an old numeric input was rounded; this fix cannot reconstruct such
+original keys and does not rewrite historical configurations.
+
+Redis AUTH username and password must be well-formed Unicode strings within the
+existing 8192-byte limit. Unpaired surrogates reject before direct, TLS or SSH
+transport is opened, rather than being silently replaced by U+FFFD. Errors do not
+include credential values. Omitted and empty fields keep their existing AUTH
+selection behavior; valid Unicode, literal U+FFFD and NUL are not rewritten. This
+does not change SSH credentials, authentication grants, stored data, or outcome
+semantics. The check is shared by reads, explicit SET and native SET observation.
+
+Supported reads: PING, GET, TYPE, TTL/PTTL, STRLEN, HLEN, LLEN, SCARD, ZCARD,
+HGET, HEXISTS, SISMEMBER, ZSCORE, MGET, EXISTS, HMGET, bounded LRANGE/ZRANGE/
+GETRANGE, and SCAN/HSCAN/SSCAN/ZSCAN with MATCH/COUNT. No SET, EVAL, CONFIG,
+KEYS, unbounded HGETALL/SMEMBERS, pubsub or arbitrary commands. Collection
+ranges are capped at1000 items; GETRANGE at64KiB; multi-key reads at100keys.
+SCAN COUNT is a server hint, not a guarantee; response-size limits still apply.
+
+- Total SSH/TLS/connection/auth/select/query deadline at most3seconds, no reconnect.
+- At most64KiB per encoded command,1MiB per bulk string,2MiB received wire data,
+  8 nested levels,5000 parsed nodes and2002 members per RESP array.
+- Results show at most1000 rows; SCAN returns its cursor for explicit paging.
+- Non-UTF8 bulk strings are labelled base64; large integers remain strings.
+- TLS verification is mandatory, with optional caller-supplied CA. Nonempty CA
+  input must be a complete PEM certificate bundle with no invalid blocks or
+  extra content, validated before direct or SSH connection creation. Empty CA
+  fields retain default trust. No certificate bypass, Unix socket discovery,
+  filesystem reads or credential discovery.
+
+The UI and protocol fixtures use synthetic local values. CI additionally starts
+an isolated official Redis7.2 service, seeds fictional data, and checks real
+GET/MGET/list/hash-scan behavior and mutation rejection. Authentication and TLS
+framing are independently tested against loopback protocol fixtures.
+
+Canonical configuration also supports ephemeral, fingerprint-pinned SSH as described
+in [ADR-DATABASE-SSH.md](ADR-DATABASE-SSH.md). TLS over SSH requires the logical
+Redis DNS hostname. Sessions, CLI and MCP remain read-only. Native active SSH
+imports remain rejected; plain native read tasks may explicitly bind canonical
+SSH grants. There are no new graphical SSH controls.

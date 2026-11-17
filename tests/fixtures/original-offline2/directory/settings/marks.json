@@ -1,0 +1,34 @@
+[
+  {
+    "color": "#2857FF",
+    "is_default_mark": 1,
+    "is_sys_default": 1,
+    "mark_id": "1",
+    "name": "开发中",
+    "project_id": "10f7386134404a"
+  },
+  {
+    "color": "#26CEA4",
+    "is_default_mark": -1,
+    "is_sys_default": 1,
+    "mark_id": "2",
+    "name": "已完成",
+    "project_id": "10f7386134404a"
+  },
+  {
+    "color": "#FFC01E",
+    "is_default_mark": -1,
+    "is_sys_default": 1,
+    "mark_id": "3",
+    "name": "需修改",
+    "project_id": "10f7386134404a"
+  },
+  {
+    "color": "#FF2200",
+    "is_default_mark": -1,
+    "is_sys_default": 1,
+    "mark_id": "4",
+    "name": "已废弃",
+    "project_id": "10f7386134404a"
+  }
+]

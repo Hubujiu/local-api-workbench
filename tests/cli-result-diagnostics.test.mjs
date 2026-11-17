@@ -1,0 +1,937 @@
+import assert, { AssertionError } from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+import {
+  cliReportedErrorKind,
+  cliResultMetadata,
+  withCLIResultDiagnostics,
+  workflowFailureObservations,
+} from "./helpers/cli-result-diagnostics.mjs";
+
+const secret = "PRIVATE_BODY_TOKEN_PATH_SOURCE";
+
+test("Text CLI failure adds only bounded metadata and preserves the exit assertion", () => {
+  // Fabricated values verify projection only, not the historical CI failure's cause.
+  const privateText = "TEXT_CLI_PRIVATE_PAYLOAD_913";
+  const url = "https://private.invalid/" + privateText;
+  const stdout = JSON.stringify({
+    status: "failed",
+    name: privateText,
+    variables: { token: privateText },
+    results: [
+      { status: "passed", response: { body: privateText } },
+      {
+        status: "failed",
+        error: privateText,
+        request: { url, headers: { authorization: privateText } },
+        response: { body: privateText },
+        scriptStage: "async-completion",
+        scriptDiagnostics: {
+          activityBudgetMs: 250,
+          promiseStateMs: 259,
+          promiseStateCPUUs: 1456,
+          source: privateText,
+        },
+      },
+    ],
+  });
+  const stderr = "PASSED Text login\nFAILED Protected resource";
+  let failure,
+    originalMessage,
+    calls = 0;
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        calls++;
+        try {
+          assert.equal(1, 0, stderr);
+        } catch (error) {
+          failure = error;
+          originalMessage = error.message;
+          throw error;
+        }
+      }, stdout),
+    (error) => {
+      assert.equal(error, failure);
+      assert.equal(error.actual, 1);
+      assert.equal(error.expected, 0);
+      assert.equal(error.operator, "strictEqual");
+      assert.ok(
+        error.message.startsWith(originalMessage + "\nCLI_RESULT_METADATA "),
+      );
+      const suffix = error.message.slice(originalMessage.length);
+      assert.ok(Buffer.byteLength(suffix) <= 4096);
+      for (const denied of [privateText, url, stdout])
+        assert.ok(!suffix.includes(denied));
+      const metadata = JSON.parse(
+        suffix.slice("\nCLI_RESULT_METADATA ".length),
+      );
+      assert.equal(Object.keys(metadata.steps).length, 1);
+      assert.equal(metadata.steps[0].stepIndex, 1);
+      assert.equal(metadata.steps[0].status, "failed");
+      assert.equal(metadata.steps[0].scriptStage, "async-completion");
+      assert.equal(metadata.steps[0].reportedErrorKind, "other");
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
+const fixture = () => ({
+  status: "failed",
+  name: secret,
+  error: { message: secret },
+  variables: secret,
+  results: [
+    { status: "passed", body: secret },
+    {
+      status: "failed",
+      scriptStage: "script",
+      name: secret,
+      scriptScope: secret,
+      response: { body: secret },
+      error: { message: secret },
+      scriptDiagnostics: {
+        activityBudgetMs: 12.5,
+        fakerCalls: 0,
+        timerCount: 2,
+        requestCount: 1,
+        userScriptMs: 38,
+        userScriptCPUUs: 1000,
+        fakerLoadMs: 9,
+        elapsedMs: 40,
+        lastWorkerStage: "async-completion",
+        activityOperation: "promise-state",
+        source: secret,
+        vars: secret,
+      },
+    },
+  ],
+});
+
+test("retains only numeric/enumerated persisted diagnostics and zero-based index", () => {
+  const metadata = cliResultMetadata(JSON.stringify(fixture()));
+  assert.equal(metadata.resultCount, 2);
+  assert.equal(metadata.steps[0].stepIndex, 1);
+  assert.equal(metadata.steps[0].scriptDiagnostics.fakerCalls, 0);
+  assert.equal(metadata.steps[0].scriptDiagnostics.activityBudgetMs, 12.5);
+  assert.equal(metadata.steps[0].activityMetrics.userScriptMs, 38);
+  assert.equal(metadata.steps[0].activityCPUTimeUs.userScriptUs, 1000);
+  assert.equal(metadata.steps[0].lastWorkerStage, "async-completion");
+  assert.equal(metadata.steps[0].activityOperation, "promise-state");
+  assert.equal(metadata.steps[0].elapsedMs, 40);
+  assert.ok(!JSON.stringify(metadata).includes(secret));
+});
+
+test("drops unknown labels, wrong types, negative, fractional and over-cap numbers", () => {
+  const run = fixture();
+  Object.assign(run.results[1], { status: secret, scriptStage: secret });
+  Object.assign(run.results[1].scriptDiagnostics, {
+    fakerCalls: 1002,
+    timerCount: -1,
+    requestCount: 1.2,
+    activityBudgetMs: "12",
+    userScriptMs: 60001,
+    userScriptCPUUs: 60000001,
+    elapsedMs: 60001,
+    lastWorkerStage: secret,
+    activityOperation: secret,
+  });
+  const step = cliResultMetadata(JSON.stringify(run)).steps[0];
+  assert.equal(step.status, "unknown");
+  assert.equal(step.scriptDiagnostics, undefined);
+  assert.equal(step.activityCPUTimeUs, undefined);
+  assert.deepEqual(Object.keys(step.activityMetrics), ["fakerLoadMs"]);
+  assert.ok(!JSON.stringify(step).includes(secret));
+});
+
+test("malformed/truncated JSON and shape return fixed labels without data", () => {
+  for (const text of ["{", '{"results":[', secret])
+    assert.equal(cliResultMetadata(text).input, "invalid-json");
+  for (const value of [null, 1, [], {}, { results: {} }])
+    assert.equal(
+      cliResultMetadata(JSON.stringify(value)).input,
+      "invalid-shape",
+    );
+});
+
+test("byte and code-unit input guards reject before parsing or coercion", () => {
+  assert.equal(
+    cliResultMetadata(" ".repeat(2 * 1024 * 1024 + 1)).input,
+    "oversized",
+  );
+  assert.equal(cliResultMetadata("界".repeat(800000)).input, "oversized");
+  const proxy = new Proxy(
+    {},
+    {
+      get() {
+        throw Error("must not read");
+      },
+    },
+  );
+  assert.equal(cliResultMetadata(proxy).input, "not-text");
+});
+
+test("bounded scan, retained steps and explicit omission counts", () => {
+  const run = fixture();
+  run.results = Array.from({ length: 250 }, () => run.results[1]);
+  const metadata = cliResultMetadata(JSON.stringify(run));
+  assert.equal(metadata.scannedCount, 200);
+  assert.equal(metadata.unscannedCount, 50);
+  assert.equal(metadata.omittedCount, 196);
+  assert.equal(Object.keys(metadata.steps).length, 4);
+  assert.ok(Buffer.byteLength(JSON.stringify(metadata)) < 4096);
+});
+
+test("same assertion error, original message/expected/actual, one call", () => {
+  const failure = new AssertionError({
+    actual: 1,
+    expected: 0,
+    operator: "strictEqual",
+    message: "original",
+  });
+  const originalMessage = failure.message;
+  let calls = 0;
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        calls++;
+        throw failure;
+      }, JSON.stringify(fixture())),
+    (error) => {
+      assert.equal(error, failure);
+      assert.equal(error.actual, 1);
+      assert.equal(error.expected, 0);
+      assert.ok(
+        error.message.startsWith(originalMessage + "\nCLI_RESULT_METADATA "),
+      );
+      assert.ok(!error.message.includes(secret));
+      assert.ok(
+        Buffer.byteLength(error.message.slice(originalMessage.length)) <= 4096,
+      );
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+});
+
+test("successful assertion never parses stdout; nonassertion/read-only errors unchanged", () => {
+  const hostile = new Proxy(
+    {},
+    {
+      get() {
+        throw Error("must not read");
+      },
+    },
+  );
+  assert.equal(
+    withCLIResultDiagnostics(() => 42, hostile),
+    42,
+  );
+  const error = new Error("unchanged");
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        throw error;
+      }, "{}"),
+    (caught) => caught === error,
+  );
+  assert.equal(error.message, "unchanged");
+  const failure = new AssertionError({ message: "read-only" });
+  Object.defineProperty(failure, "message", { writable: false });
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        throw failure;
+      }, "{}"),
+    (caught) => caught === failure,
+  );
+  assert.equal(failure.message, "read-only");
+});
+
+test("pure synthetic subprocess emits retained evidence in failing TAP", () => {
+  const helper = new URL(
+    "./helpers/cli-result-diagnostics.mjs",
+    import.meta.url,
+  ).href;
+  const source = `import test from 'node:test'; import assert from 'node:assert/strict';
+    import { withCLIResultDiagnostics } from ${JSON.stringify(helper)};
+    test('fabricated CLI failure', () => withCLIResultDiagnostics(
+      () => assert.equal(1, 0, 'original'), ${JSON.stringify(JSON.stringify(fixture()))}));`;
+  const child = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", source],
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      maxBuffer: 65536,
+    },
+  );
+  assert.equal(child.error, undefined);
+  assert.equal(child.status, 1);
+  const output = child.stdout + child.stderr;
+  assert.match(output, /CLI_RESULT_METADATA/);
+  assert.match(output, /userScriptUs/);
+  assert.match(output, /stepIndex/);
+  assert.ok(!output.includes(secret));
+});
+
+test("maximum whitelist values still produce bounded failure suffix", () => {
+  const run = fixture();
+  const diagnostic = run.results[1].scriptDiagnostics;
+  for (const phase of [
+    "compatibility",
+    "functionLibrary",
+    "userScript",
+    "microtask",
+    "callback",
+    "promiseState",
+    "serialization",
+  ]) {
+    diagnostic[phase + "Ms"] = 60000;
+    diagnostic[phase + "CPUUs"] = 60000000;
+  }
+  run.results = Array.from({ length: 5 }, () => run.results[1]);
+  const failure = new AssertionError({ message: "original" });
+  const original = failure.message;
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        throw failure;
+      }, JSON.stringify(run)),
+    (error) => error === failure,
+  );
+  const suffix = failure.message.slice(original.length);
+  assert.ok(Buffer.byteLength(suffix) <= 4096);
+  assert.match(suffix, /CLI_RESULT_METADATA/);
+  assert.ok(!suffix.includes(secret));
+});
+
+test("JSON proto keys cannot inject labels or serialization hooks", () => {
+  const text =
+    '{"results":[{"status":"failed","__proto__":{"scriptStage":"script"},"scriptDiagnostics":{"__proto__":{"requestCount":2},"toJSON":"PRIVATE_BODY_TOKEN_PATH_SOURCE"}}]}';
+  const step = cliResultMetadata(text).steps[0];
+  assert.equal(step.scriptStage, undefined);
+  assert.equal(step.scriptDiagnostics, undefined);
+  assert.ok(!JSON.stringify(step).includes(secret));
+});
+
+test("persisted bootstrap run retains substep counters without manufacturing missing CPU", () => {
+  const run = fixture();
+  const step = run.results[1];
+  step.scriptStage = "bootstrap";
+  Object.assign(step.scriptDiagnostics, {
+    bootstrapOperation: "trusted-libraries",
+    bootstrapElapsedMs: 60000,
+    bootstrapOperationMs: 60000,
+    bootstrapCPUUs: 60000000,
+    bootstrapOperationCPUUs: 60000000,
+    bootstrapSecret: secret,
+  });
+  const fields = cliResultMetadata(JSON.stringify(run)).steps[0]
+    .scriptDiagnostics;
+  for (const key of [
+    "bootstrapOperation",
+    "bootstrapElapsedMs",
+    "bootstrapOperationMs",
+    "bootstrapCPUUs",
+    "bootstrapOperationCPUUs",
+  ])
+    assert.equal(fields[key], step.scriptDiagnostics[key]);
+  assert(!JSON.stringify(fields).includes(secret));
+  delete step.scriptDiagnostics.bootstrapCPUUs;
+  delete step.scriptDiagnostics.bootstrapOperationCPUUs;
+  const partial = cliResultMetadata(JSON.stringify(run)).steps[0]
+    .scriptDiagnostics;
+  assert(!Object.hasOwn(partial, "bootstrapCPUUs"));
+  assert(!Object.hasOwn(partial, "bootstrapOperationCPUUs"));
+  for (const stage of ["script", "compatibility", "starting", undefined]) {
+    step.scriptStage = stage;
+    assert(
+      !Object.hasOwn(
+        cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+        "bootstrapOperation",
+      ),
+    );
+  }
+});
+
+test("persisted bootstrap counters reject unsafe values and keep maximum suffix bounded", () => {
+  const run = fixture();
+  const step = run.results[1];
+  step.scriptStage = "bootstrap";
+  step.scriptDiagnostics = { bootstrapOperation: "setup" };
+  for (const [key, max] of Object.entries({
+    bootstrapElapsedMs: 60000,
+    bootstrapOperationMs: 60000,
+    bootstrapCPUUs: 60000000,
+    bootstrapOperationCPUUs: 60000000,
+  })) {
+    for (const value of [
+      NaN,
+      Infinity,
+      -Infinity,
+      -1,
+      0.5,
+      max + 1,
+      "1",
+      {},
+      null,
+    ]) {
+      step.scriptDiagnostics[key] = value;
+      assert(
+        !Object.hasOwn(
+          cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+          key,
+        ),
+      );
+    }
+    step.scriptDiagnostics[key] = max;
+  }
+  for (const phase of [
+    "compatibility",
+    "functionLibrary",
+    "userScript",
+    "microtask",
+    "callback",
+    "promiseState",
+    "serialization",
+  ]) {
+    step.scriptDiagnostics[phase + "Ms"] = 60000;
+    step.scriptDiagnostics[phase + "CPUUs"] = 60000000;
+  }
+  Object.assign(step.scriptDiagnostics, {
+    activityBudgetMs: 250,
+    fakerCalls: 1001,
+    timerCount: 101,
+    requestCount: 11,
+    fakerLoadMs: 60000,
+    elapsedMs: 60000,
+    lastWorkerStage: "bootstrap",
+    activityOperation: "bootstrap",
+    secret,
+  });
+  run.results = Array.from({ length: 5 }, () => step);
+  const failure = new AssertionError({ message: "original" });
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(() => {
+        throw failure;
+      }, JSON.stringify(run)),
+    (error) => error === failure,
+  );
+  const suffix = failure.message.slice("original".length);
+  assert(Buffer.byteLength(suffix) <= 4096);
+  assert.match(suffix, /CLI_RESULT_METADATA/);
+  assert(!suffix.includes(secret));
+  step.scriptDiagnostics.bootstrapOperation = secret;
+  assert(
+    !Object.hasOwn(
+      cliResultMetadata(JSON.stringify(run)).steps[0].scriptDiagnostics,
+      "bootstrapOperation",
+    ),
+  );
+});
+
+test("workflow observations retain only own fixed booleans and bounded hit counts", () => {
+  const source = {
+    loginRequestCount: 0,
+    laterRequestCount: 16,
+    hasRecordedResponse: false,
+    body: secret,
+    request: secret,
+    phase: secret,
+    script: secret,
+    response: { body: secret },
+  };
+  const metadata = workflowFailureObservations(source);
+  assert.equal(Object.getPrototypeOf(metadata), null);
+  assert.deepEqual(
+    { ...metadata },
+    {
+      loginRequestCount: 0,
+      laterRequestCount: 16,
+      hasRecordedResponse: false,
+    },
+  );
+  assert.equal(
+    workflowFailureObservations({ hasRecordedResponse: true })
+      .hasRecordedResponse,
+    true,
+  );
+  assert.ok(!JSON.stringify(metadata).includes(secret));
+  for (const value of [-1, 17, 1.5, Infinity, NaN, "1", true, null, 1n]) {
+    assert.deepEqual(
+      {
+        ...workflowFailureObservations({
+          loginRequestCount: value,
+          laterRequestCount: value,
+        }),
+      },
+      {},
+    );
+  }
+  for (const value of [0, 1, "true", null, undefined, {}, []])
+    assert.deepEqual(
+      { ...workflowFailureObservations({ hasRecordedResponse: value }) },
+      {},
+    );
+});
+
+test("workflow observations never read accessors, inherited values or proxy traps", () => {
+  let reads = 0;
+  const inherited = Object.create({
+    loginRequestCount: 1,
+    hasRecordedResponse: true,
+  });
+  Object.defineProperty(inherited, "laterRequestCount", {
+    get() {
+      reads++;
+      throw Error("must not read observation getter");
+    },
+  });
+  Object.defineProperty(inherited, "toJSON", {
+    value() {
+      reads++;
+      throw Error("must not serialize observations");
+    },
+  });
+  const proxy = new Proxy(
+    {},
+    {
+      get() {
+        reads++;
+        throw Error("must not read proxy");
+      },
+      getOwnPropertyDescriptor() {
+        reads++;
+        throw Error("must not inspect proxy");
+      },
+    },
+  );
+  for (const source of [inherited, proxy, null, undefined, false, secret])
+    assert.deepEqual({ ...workflowFailureObservations(source) }, {});
+  assert.equal(reads, 0);
+});
+
+test("workflow evidence is appended only after original regex failure with identical assertion error", () => {
+  for (const expectedPattern of [/XML|XPath|pickVars/, /loginRequestCount/]) {
+    const run = fixture();
+    run.results[1].error = "interrupted";
+    const observations = {
+      loginRequestCount: 1,
+      laterRequestCount: 0,
+      hasRecordedResponse: true,
+      body: secret,
+      phase: "XML",
+    };
+    let originalFailure;
+    let originalMessage;
+    let calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            calls++;
+            try {
+              assert.match(run.results[1].error, expectedPattern);
+            } catch (failure) {
+              originalFailure = failure;
+              originalMessage = failure.message;
+              throw failure;
+            }
+          },
+          JSON.stringify(run),
+          observations,
+        ),
+      (failure) => {
+        assert.equal(failure, originalFailure);
+        assert(failure instanceof AssertionError);
+        assert.equal(failure.actual, "interrupted");
+        assert.equal(failure.expected, expectedPattern);
+        assert.equal(
+          failure.message.slice(0, originalMessage.length),
+          originalMessage,
+        );
+        const suffix = failure.message.slice(originalMessage.length);
+        const marker = "\nCLI_RESULT_METADATA ";
+        assert(suffix.startsWith(marker));
+        assert(Buffer.byteLength(suffix) <= 4096);
+        assert.deepEqual(
+          JSON.parse(suffix.slice(marker.length)).workflowObservations,
+          {
+            loginRequestCount: 1,
+            laterRequestCount: 0,
+            hasRecordedResponse: true,
+          },
+        );
+        assert.ok(!suffix.includes(secret));
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+    assert.equal(run.results[1].error, "interrupted");
+    assert.equal(observations.phase, "XML");
+  }
+});
+
+test("successful assertions never inspect optional workflow observations and old calls keep their shape", () => {
+  let reads = 0;
+  const observations = new Proxy(
+    {},
+    {
+      get() {
+        reads++;
+        throw Error("must not read successful observations");
+      },
+      getOwnPropertyDescriptor() {
+        reads++;
+        throw Error("must not inspect successful observations");
+      },
+    },
+  );
+  assert.equal(
+    withCLIResultDiagnostics(() => 42, "not-json", observations),
+    42,
+  );
+  assert.equal(reads, 0);
+  for (const optional of [undefined, {}, { phase: secret }]) {
+    const failure = new AssertionError({ message: "original" });
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            throw failure;
+          },
+          "{}",
+          optional,
+        ),
+      (caught) => caught === failure,
+    );
+    const suffix = failure.message.slice(
+      "original\nCLI_RESULT_METADATA ".length,
+    );
+    assert.deepEqual(JSON.parse(suffix), { input: "invalid-shape" });
+  }
+});
+
+test("error kinds use only exact persisted strings, never fragments or error objects", () => {
+  const cases = [
+    ["脚本执行超时", "script-timeout"],
+    ["interrupted", "interrupted"],
+    ["脚本微任务执行失败或超时", "other"],
+    ["script-timeout", "other"],
+    ["Interrupted", "other"],
+    [" interrupted", "other"],
+    ["interrupted\n", "other"],
+    ["脚本执行超时 " + secret, "other"],
+    [secret + "interrupted", "other"],
+    [{ message: "interrupted", code: "脚本执行超时", secret }, "other"],
+    [null, "other"],
+    [undefined, "other"],
+    [0, "other"],
+    [false, "other"],
+    [["interrupted"], "other"],
+  ];
+  for (const [error, expected] of cases) {
+    assert.equal(cliReportedErrorKind(error), expected);
+    const run = fixture();
+    run.results[1].error = error;
+    // Matching or missing timing observations never determine the error kind.
+    run.results[1].scriptDiagnostics = {
+      activityBudgetMs: 250,
+      userScriptMs: 0,
+      compatibilityMs: 268,
+      compatibilityCPUUs: 57505,
+    };
+    const metadata = cliResultMetadata(JSON.stringify(run));
+    assert.equal(metadata.steps[0].reportedErrorKind, expected);
+    assert.ok(!JSON.stringify(metadata).includes(secret));
+  }
+});
+
+test("error classification does not read getters, proxies or coercion hooks", () => {
+  let reads = 0;
+  const fail = () => {
+    reads++;
+    throw Error(secret);
+  };
+  const hostile = Object.defineProperties(
+    {},
+    {
+      message: { get: fail },
+      code: { get: fail },
+      toJSON: { value: fail },
+      toString: { value: fail },
+      [Symbol.toPrimitive]: { value: fail },
+    },
+  );
+  const proxy = new Proxy(hostile, {
+    get: fail,
+    getOwnPropertyDescriptor: fail,
+    getPrototypeOf: fail,
+    ownKeys: fail,
+  });
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  for (const value of [hostile, proxy, revoked.proxy, Symbol(secret), 1n]) {
+    assert.equal(cliReportedErrorKind(value), "other");
+    assert.equal(cliResultMetadata(value).input, "not-text");
+  }
+  assert.equal(reads, 0);
+});
+
+test("classified evidence preserves the original exit assertion and failure identity", () => {
+  for (const [error, kind] of [
+    ["脚本执行超时", "script-timeout"],
+    ["interrupted", "interrupted"],
+    [secret, "other"],
+  ]) {
+    const run = fixture();
+    run.results[1].error = error;
+    const stdout = JSON.stringify(run);
+    let failure,
+      originalMessage,
+      calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(() => {
+          calls++;
+          try {
+            assert.equal(1, 0, "original exit assertion");
+          } catch (caught) {
+            failure = caught;
+            originalMessage = caught.message;
+            throw caught;
+          }
+        }, stdout),
+      (caught) => {
+        assert.equal(caught, failure);
+        assert.equal(caught.actual, 1);
+        assert.equal(caught.expected, 0);
+        assert.equal(caught.operator, "strictEqual");
+        assert.ok(caught.message.startsWith(originalMessage));
+        const suffix = caught.message.slice(originalMessage.length);
+        assert.ok(Buffer.byteLength(suffix) <= 4096);
+        const metadata = JSON.parse(
+          suffix.slice("\nCLI_RESULT_METADATA ".length),
+        );
+        assert.equal(metadata.steps[0].reportedErrorKind, kind);
+        assert.ok(!suffix.includes(secret));
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(run), stdout);
+  }
+});
+
+test("XML CLI failure diagnostics preserve exit assertions and exclude XML token URL and stdout sentinels", () => {
+  const token = "XML_CLI_PRIVATE_TOKEN_591";
+  const url = "https://private.invalid/login/" + token;
+  const xml = `<login><token>${token}</token></login>`;
+  const stdout = JSON.stringify({
+    status: "failed",
+    name: token,
+    variables: { token },
+    results: [
+      {
+        status: "failed",
+        name: token,
+        error: token,
+        request: { url, headers: { authorization: token } },
+        response: { body: xml },
+        scriptStage: "total-deadline",
+        scriptDiagnostics: {
+          lastWorkerStage: "starting",
+          elapsedMs: 2009,
+          source: xml,
+        },
+      },
+    ],
+  });
+  for (const counts of [
+    { loginRequestCount: 0, laterRequestCount: 0 },
+    { loginRequestCount: 1, laterRequestCount: 0 },
+  ]) {
+    let failure,
+      calls = 0;
+    assert.throws(
+      () =>
+        withCLIResultDiagnostics(
+          () => {
+            calls++;
+            try {
+              assert.equal(1, 0, "FAILED XML login");
+            } catch (error) {
+              failure = error;
+              throw error;
+            }
+          },
+          stdout,
+          { ...counts, url, token, xml },
+        ),
+      (error) => {
+        assert.equal(error, failure);
+        assert.equal(error.actual, 1);
+        assert.equal(error.expected, 0);
+        assert.equal(error.operator, "strictEqual");
+        const suffix = error.message.slice(
+          error.message.indexOf("\nCLI_RESULT_METADATA "),
+        );
+        assert.ok(Buffer.byteLength(suffix) <= 4096);
+        for (const forbidden of [stdout, xml, token, url])
+          assert.ok(!error.message.includes(forbidden));
+        const metadata = JSON.parse(
+          suffix.slice("\nCLI_RESULT_METADATA ".length),
+        );
+        assert.deepEqual({ ...metadata.workflowObservations }, counts);
+        assert.equal(metadata.steps[0].reportedErrorKind, "other");
+        assert.equal(metadata.steps[0].lastWorkerStage, "starting");
+        assert.equal(metadata.steps[0].elapsedMs, 2009);
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+  }
+  // Successful assertion does not inspect or parse the supplied diagnostic input.
+  const uninspectable = new Proxy(
+    {},
+    {
+      get() {
+        throw Error("must not read stdout");
+      },
+    },
+  );
+  assert.equal(
+    withCLIResultDiagnostics(() => "ok", uninspectable),
+    "ok",
+  );
+});
+
+test("failure diagnostic reaches Node spec reporter despite cached assertion stack", () => {
+  const helper = new URL(
+    "./helpers/cli-result-diagnostics.mjs",
+    import.meta.url,
+  ).href;
+  const code = `
+    import test from "node:test";
+    import assert from "node:assert/strict";
+    import { withCLIResultDiagnostics } from ${JSON.stringify(helper)};
+    test("fixture", t => withCLIResultDiagnostics(
+      () => assert.match("interrupted", /assertion/),
+      JSON.stringify({ status:"failed", results:[{status:"failed",error:"interrupted", body:"PRIVATE_SENTINEL"}] }),
+      {loginRequestCount:1},
+      message => t.diagnostic(message)
+    ));
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--test-reporter=spec", "--input-type=module", "-e", code],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /CLI_RESULT_METADATA/);
+  assert.match(result.stdout, /"reportedErrorKind":"interrupted"/);
+  assert(!result.stdout.includes("PRIVATE_SENTINEL"));
+});
+
+test("diagnostic callback only observes failure and cannot replace it", () => {
+  let calls = 0;
+  assert.equal(
+    withCLIResultDiagnostics(
+      () => 42,
+      "{}",
+      {},
+      () => calls++,
+    ),
+    42,
+  );
+  assert.equal(calls, 0);
+  const original = new AssertionError({
+    actual: 1,
+    expected: 0,
+    operator: "strictEqual",
+  });
+  assert.throws(
+    () =>
+      withCLIResultDiagnostics(
+        () => {
+          throw original;
+        },
+        "{}",
+        {},
+        () => {
+          calls++;
+          throw new Error("observer");
+        },
+      ),
+    (error) => error === original,
+  );
+  assert.equal(calls, 1);
+});
+
+test("failure whitelist survives the actual CI preload and spec/tap reporters", async () => {
+  const { mkdtemp, writeFile, readFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "cli-diagnostic-reporters-"));
+  const helper = new URL(
+    "./helpers/cli-result-diagnostics.mjs",
+    import.meta.url,
+  ).href;
+  const fixture = join(root, "fixture.mjs");
+  await writeFile(
+    fixture,
+    `
+    import test from "node:test";
+    import assert from "node:assert/strict";
+    import { withCLIResultDiagnostics } from ${JSON.stringify(helper)};
+    test("fixture", t => withCLIResultDiagnostics(
+      () => assert.match("interrupted", /assertion/),
+      JSON.stringify({status:"failed",results:[{status:"failed",error:"interrupted",body:"PRIVATE_REPORTER_SENTINEL"}]}),
+      {loginRequestCount:1}, message => t.diagnostic(message)
+    ));
+  `,
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--import=" +
+        new URL("../scripts/core-worker-observer-preload.mjs", import.meta.url)
+          .href,
+      "--test",
+      "--test-reporter=spec",
+      "--test-reporter-destination=stdout",
+      "--test-reporter=tap",
+      "--test-reporter-destination=" + join(root, "result.tap"),
+      "--test-reporter=" +
+        new URL("../scripts/core-progress-reporter.mjs", import.meta.url).href,
+      "--test-reporter-destination=" + join(root, "progress.jsonl"),
+      fixture,
+    ],
+    {
+      encoding: "utf8",
+      timeout: 10000,
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([key]) => key !== "NODE_TEST_CONTEXT",
+        ),
+      ),
+    },
+  );
+  assert.equal(result.status, 1);
+  for (const output of [
+    result.stdout,
+    await readFile(join(root, "result.tap"), "utf8"),
+  ]) {
+    assert.match(output, /CLI_RESULT_METADATA/);
+    assert.match(output, /"reportedErrorKind":"interrupted"/);
+    assert(!output.includes("PRIVATE_REPORTER_SENTINEL"));
+  }
+  const progress = await readFile(join(root, "progress.jsonl"), "utf8");
+  assert(progress.length > 0);
+  // The progress reporter intentionally admits only its own worker whitelist.
+  assert(!progress.includes("CLI_RESULT_METADATA"));
+  assert(!progress.includes("PRIVATE_REPORTER_SENTINEL"));
+});

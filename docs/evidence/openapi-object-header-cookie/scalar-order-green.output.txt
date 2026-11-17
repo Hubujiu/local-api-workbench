@@ -1,0 +1,13 @@
+✔ existing scalar selection errors retain their diagnostic contract (1.660335ms)
+✔ Header/Cookie object admission checks delegated fallbacks as well as selected examples (0.953763ms)
+✔ non-object schemas, unselected defaults and literal annotations retain precedence (0.915996ms)
+✔ Header/Cookie content serialization refuses distinctly even for scalar media (0.59263ms)
+✔ schema and array traversal is cycle-safe without walking literal object annotations (0.315314ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 128.503292

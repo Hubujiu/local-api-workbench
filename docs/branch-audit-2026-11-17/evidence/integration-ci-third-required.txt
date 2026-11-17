@@ -1,0 +1,86 @@
+﻿2026-11-17T15:53:40.8134959Z Current runner version: '2.338.2'
+2026-11-17T15:53:40.8153670Z ##[group]Runner Image Provisioner
+2026-11-17T15:53:40.8154776Z Hosted Compute Agent
+2026-11-17T15:53:40.8155271Z Version: 20261103.629
+2026-11-17T15:53:40.8155840Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-17T15:53:40.8156469Z Build Date: 2026-11-03T17:26:59Z
+2026-11-17T15:53:40.8157045Z Worker ID: {4d150d05-634e-4463-ba04-b05136d62b74}
+2026-11-17T15:53:40.8157628Z Region: centralus
+2026-11-17T15:53:40.8158083Z Cloud: Azure
+2026-11-17T15:53:40.8158508Z ##[endgroup]
+2026-11-17T15:53:40.8159737Z ##[group]Operating System
+2026-11-17T15:53:40.8160238Z Ubuntu
+2026-11-17T15:53:40.8160696Z 26.04.1
+2026-11-17T15:53:40.8161133Z LTS
+2026-11-17T15:53:40.8161563Z ##[endgroup]
+2026-11-17T15:53:40.8162059Z ##[group]Runner Image
+2026-11-17T15:53:40.8162566Z Image: ubuntu-26.04
+2026-11-17T15:53:40.8163247Z Version: 20261111.196.1
+2026-11-17T15:53:40.8164398Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-17T15:53:40.8165649Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+2026-11-17T15:53:40.8166451Z ##[endgroup]
+2026-11-17T15:53:40.8167351Z ##[group]GITHUB_TOKEN Permissions
+2026-11-17T15:53:40.8169358Z Contents: read
+2026-11-17T15:53:40.8169877Z Metadata: read
+2026-11-17T15:53:40.8170341Z ##[endgroup]
+2026-11-17T15:53:40.8172041Z Secret source: Actions
+2026-11-17T15:53:40.8172822Z Cache mode: write
+2026-11-17T15:53:40.8174021Z Prepare workflow directory
+2026-11-17T15:53:40.8485621Z Prepare all required actions
+2026-11-17T15:53:40.8537694Z Complete job name: required
+2026-11-17T15:53:40.9386785Z ##[group]Run python3 - <<'PY'
+2026-11-17T15:53:40.9387510Z [36;1mpython3 - <<'PY'[0m
+2026-11-17T15:53:40.9388006Z [36;1mimport json[0m
+2026-11-17T15:53:40.9388621Z [36;1mimport os[0m
+2026-11-17T15:53:40.9389082Z [36;1mimport sys[0m
+2026-11-17T15:53:40.9389536Z [36;1m[0m
+2026-11-17T15:53:40.9390142Z [36;1mresults = json.loads(os.environ["VALIDATION_RESULTS"])[0m
+2026-11-17T15:53:40.9391235Z [36;1mexpected = {"core", "browser", "desktop", "source-format", "database-integration", "quickjs-reproducible", "downloaded-portable"}[0m
+2026-11-17T15:53:40.9392242Z [36;1mif set(results) != expected:[0m
+2026-11-17T15:53:40.9392868Z [36;1m    sys.exit("Required validation job set does not match")[0m
+2026-11-17T15:53:40.9394232Z [36;1mfailed = {name: job["result"] for name, job in results.items() if job["result"] != "success"}[0m
+2026-11-17T15:53:40.9395013Z [36;1mif failed:[0m
+2026-11-17T15:53:40.9395803Z [36;1m    print("Required validation failed: " + json.dumps(failed, sort_keys=True))[0m
+2026-11-17T15:53:40.9396564Z [36;1m    sys.exit(1)[0m
+2026-11-17T15:53:40.9397115Z [36;1mprint("All validation jobs succeeded")[0m
+2026-11-17T15:53:40.9397679Z [36;1mPY[0m
+2026-11-17T15:53:40.9988602Z shell: /usr/bin/bash -e {0}
+2026-11-17T15:53:40.9989284Z env:
+2026-11-17T15:53:40.9989844Z   NPM_CONFIG_FETCH_TIMEOUT: 30000
+2026-11-17T15:53:40.9990402Z   NPM_CONFIG_FETCH_RETRIES: 1
+2026-11-17T15:53:40.9990969Z   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: 2000
+2026-11-17T15:53:40.9991541Z   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: 5000
+2026-11-17T15:53:40.9993875Z   VALIDATION_RESULTS: {
+  "core": {
+    "result": "failure",
+    "outputs": {}
+  },
+  "browser": {
+    "result": "success",
+    "outputs": {}
+  },
+  "desktop": {
+    "result": "success",
+    "outputs": {}
+  },
+  "source-format": {
+    "result": "success",
+    "outputs": {}
+  },
+  "database-integration": {
+    "result": "success",
+    "outputs": {}
+  },
+  "quickjs-reproducible": {
+    "result": "success",
+    "outputs": {}
+  },
+  "downloaded-portable": {
+    "result": "success",
+    "outputs": {}
+  }
+}
+2026-11-17T15:53:40.9996013Z ##[endgroup]
+2026-11-17T15:53:41.0346968Z Required validation failed: {"core": "failure"}
+2026-11-17T15:53:41.0406286Z ##[error]Process completed with exit code 1.
+2026-11-17T15:53:41.0595960Z Cleaning up orphan processes

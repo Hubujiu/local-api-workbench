@@ -1,0 +1,12 @@
+✔ signed JSON append preserves inert legacy plans and admits no execution (280.777034ms)
+✔ signed directory append preserves inert legacy plans and admits no execution (204.563072ms)
+✔ native append cannot authorize changed or duplicated opaque plans or stale configuration (146.609937ms)
+✔ native append normalizes a sparse legacy plan once, with durable identities (175.65998ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1267.636658

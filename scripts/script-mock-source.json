@@ -1,0 +1,50 @@
+{
+  "package": "apipost-mock",
+  "version": "1.0.2",
+  "path": "node_modules/apipost-mock/dist/index.js",
+  "sha256": "444c7ccad3c4ee00ce6871517995852d5a5928715a6b449d3f2622291e6e816a",
+  "ranges": [
+    {
+      "name": "natural-integer",
+      "start": 181,
+      "end": 195,
+      "sha256": "8dcc1a6fe22daf288e6a00d0fe6c483f1bbd4ab06c2134a088cdc6e71d5920fd"
+    },
+    {
+      "name": "pick",
+      "start": 1168,
+      "end": 1185,
+      "sha256": "1273b16ad01692d6898cb3bf1adc4b960124d4bd933a89466d9861e708147f98"
+    },
+    {
+      "name": "parse",
+      "start": 5872,
+      "end": 5916,
+      "sha256": "a8e96c87beb72577bf93cc5893b3d598f2f4786953adc1503ac2d18522429043"
+    },
+    {
+      "name": "gen",
+      "start": 6929,
+      "end": 6975,
+      "sha256": "cfaaf863fe326e5f058f4b1006aab0f74c31f0efdbcedabca5752938e133a49e"
+    },
+    {
+      "name": "array",
+      "start": 6978,
+      "end": 7070,
+      "sha256": "113a92866d435254190f7d0b5841eea9c3f076e6f3e7971a660d4761e9127480"
+    },
+    {
+      "name": "object-unruled",
+      "start": 7096,
+      "end": 7141,
+      "sha256": "d7f1b86f4e5d189e14abc0fb65511fa23313e2a453c6887cfb62a88600d2169c"
+    },
+    {
+      "name": "number",
+      "start": 7144,
+      "end": 7167,
+      "sha256": "9d931fff006362498ff2e12fe0ce2f1e451e7afe1e58708f2d040ce319cd68a6"
+    }
+  ]
+}

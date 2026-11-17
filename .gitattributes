@@ -1,0 +1,32 @@
+# Preserve reviewed URL SDK source and generated asset bytes on every platform.
+# Their manifests intentionally hash exact bytes, not normalized text.
+/scripts/vendor/postman-url-sdk/** -text
+/src/vendor/url-sdk.js -text
+/src/vendor/url-sdk-host.js -text
+/src/vendor/url-sdk-manifest.json -text
+/src/vendor/URL-SDK-LICENSES.txt -text
+/src/vendor/url-sdk-facade.js -text
+/src/vendor/url-sdk-facade-manifest.json -text
+/src/script-url-facade.mjs text eol=lf
+/src/script-url-runtime.mjs text eol=lf
+/src/script-url-state.mjs text eol=lf
+# Preserve the licensed Mock bundle's exact-byte integrity on Windows checkout.
+/src/vendor/native-mock-library.js -text
+/src/vendor/native-mock-library.json -text
+/src/vendor/script-mock-library.js -text
+/src/vendor/script-mock-library.json -text
+/src/vendor/MOCKJS-UPSTREAM-LICENSE.txt -text
+/scripts/script-mock-entry.mjs text eol=lf
+/src/script-mock-core.mjs text eol=lf
+/src/script-mock-template.mjs text eol=lf
+/scripts/script-mock-source.json text eol=lf
+/src/vendor/APIPOST-MOCK-LICENSE.txt -text
+# Native XML has an exact-source manifest and a reproducible private bundle.
+/scripts/sandbox-intrinsic-guard.mjs text eol=lf
+/scripts/sandbox-native-xml-entry.mjs text eol=lf
+/src/native-xml-path.mjs text eol=lf
+/src/vendor/native-xml-library.js -text
+/src/vendor/native-xml-library.json -text
+/src/vendor/NATIVE-XML-LICENSES.txt -text
+# Frozen scheduling evidence is pinned by raw bytes on every checkout platform.
+/scripts/core-test-weights.json text eol=lf

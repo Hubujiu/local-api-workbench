@@ -1,0 +1,7 @@
+.local-api/
+node_modules/
+test-results/
+*.log
+
+dist/
+production/

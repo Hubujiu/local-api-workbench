@@ -1,0 +1,20 @@
+✔ multiple whitelisted fields import passively and reach actual Header, urlencoded, multipart, raw and JSON transports (7609.5449ms)
+✔ multiple-field frozen plans preserve source through live edits, Store reopen and backup restore (3902.507581ms)
+✔ multiple-expression custom functions and Query remain atomic import refusals with no transport (200.723601ms)
+✔ multiple fields retain JavaScript replacement symbols and the initial ordered expression list over real HTTP (1867.051562ms)
+✔ multiple fields preserve original ordered matches, including duplicate occurrences (2697.57304ms)
+✔ each original occurrence replaces the first match in accumulated text, not its original position (1113.793564ms)
+✔ multiple fields use native JS dollar, whole-match, prefix and suffix replacement semantics (3128.690725ms)
+✔ multiple fields reject Query and all custom-function stages before evaluating variable getters (1.261842ms)
+✔ multiple fields share request stage budgets and reject oversized accumulated output (601.348722ms)
+✔ synchronous builtin failure retains its prior value and later original expressions still run (1103.276554ms)
+✔ multiple expressions honor an already exhausted shared deadline before reading variables (0.574145ms)
+✔ dynamic editor accepts multiple Header expressions but rejects Query and custom mixtures without changing prior metadata (1.782026ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14172.475466

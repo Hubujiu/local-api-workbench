@@ -1,0 +1,24 @@
+{
+  "package": "postman-collection",
+  "version": "5.3.1",
+  "registryGitHead": "01d914a2a132420f5db1695b34cea2668d645947",
+  "sourceTarSHA256": "e486b4b4b61397bcc6aee2bbe5b0829c0bca6fb574a190d8a69d0266bc8e7275",
+  "scope": "URL, QueryParam, VariableList and supporting data classes only",
+  "patches": [
+    "PropertyList default reference index uses a null prototype",
+    "PropertyList.toObject defines own fields to preserve __proto__ as data"
+  ],
+  "files": {
+    "lib/collection/description.js": "fd35ba6e9b7960ccac574d80686e82eebd842b89005026b266870841ca7b2f86",
+    "lib/collection/property-base.js": "8d6e39f30b33534c160ec354ef28f2fd58b61fab294540f7355941f827bc9e27",
+    "lib/collection/property-list.js": "876ee04067cb733235cc4e0300366ea0d65e85833763715ba9b2c039c15657fe",
+    "lib/collection/property.js": "8692af1f608ce15a02e3620819c2296dc4414c2ba2eaeb90b09da3c67d845727",
+    "lib/collection/query-param.js": "c4088476ae03a6ce6f9c25130ed01bc9fe5947fc8764128011ffc45ffd589fa3",
+    "lib/collection/url.js": "a0700f2a24397af63aca0a0bff0932c4090a57a69bfbdb426b1dfd59d0c3d520",
+    "lib/collection/variable-list.js": "516c61a05eb048b27fe82b88d8b16f343bb5af6dba8f982bcb57a100e32d3749",
+    "lib/collection/variable.js": "cff2b6788ae2984ced3ddff53c1ef190cab83acf395631e0edaeddd9b2a5b4a5",
+    "lib/superstring/index.js": "6728c90c1330f4269ffe02c59a158ee33f35a2095c326c7586bff01d243de16a",
+    "lib/util.js": "4554f39d6ef41a6dcfb250c36420c6fe4b051aebfbf3dbf152028cc975412bfa",
+    "LICENSE.md": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "source": "postman-collection@5.3.1",
+  "versions": {
+    "lodash": "4.18.1",
+    "postman-url-encoder": "3.0.8"
+  },
+  "excluded": [
+    "legacy faker",
+    "legacy uuid",
+    "iconv-lite",
+    "default dynamic generators"
+  ],
+  "outputs": [
+    {
+      "filename": "url-sdk.js",
+      "bytes": 99447,
+      "sha256": "d0d4065e7350ac33d216007280083bdc9e8dc334aaf143bb827791f078e85278",
+      "inputs": [
+        "node_modules/lodash/lodash.js",
+        "url-sdk-shim:iconv-lite",
+        "scripts/vendor/postman-url-sdk/lib/util.js",
+        "node_modules/postman-url-encoder/parser/replacement-tracker.js",
+        "node_modules/postman-url-encoder/parser/index.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property-base.js",
+        "url-sdk-shim:uuid",
+        "scripts/vendor/postman-url-sdk/lib/collection/description.js",
+        "url-sdk-shim:dynamic",
+        "scripts/vendor/postman-url-sdk/lib/superstring/index.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property-list.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/query-param.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/variable.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/variable-list.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/url.js",
+        "scripts/url-sdk-entry.cjs"
+      ]
+    },
+    {
+      "filename": "url-sdk-host.js",
+      "bytes": 99428,
+      "sha256": "4990f5212bbfe1673c45945653a3c050e48688e1740883eae7f8e826a1883153",
+      "inputs": [
+        "node_modules/lodash/lodash.js",
+        "url-sdk-shim:iconv-lite",
+        "scripts/vendor/postman-url-sdk/lib/util.js",
+        "node_modules/postman-url-encoder/parser/replacement-tracker.js",
+        "node_modules/postman-url-encoder/parser/index.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property-base.js",
+        "url-sdk-shim:uuid",
+        "scripts/vendor/postman-url-sdk/lib/collection/description.js",
+        "url-sdk-shim:dynamic",
+        "scripts/vendor/postman-url-sdk/lib/superstring/index.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/property-list.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/query-param.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/variable.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/variable-list.js",
+        "scripts/vendor/postman-url-sdk/lib/collection/url.js",
+        "scripts/url-sdk-entry.cjs"
+      ]
+    }
+  ]
+}

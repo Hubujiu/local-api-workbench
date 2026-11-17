@@ -1,0 +1,44 @@
+✖ existing scalar selection errors retain their diagnostic contract (1.980425ms)
+✔ Header/Cookie object admission checks delegated fallbacks as well as selected examples (0.975456ms)
+✔ non-object schemas, unselected defaults and literal annotations retain precedence (0.309004ms)
+✔ Header/Cookie content serialization refuses distinctly even for scalar media (0.517848ms)
+✔ schema and array traversal is cycle-safe without walking literal object annotations (0.228663ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 135.791199
+
+✖ failing tests:
+
+test at tests/openapi-header-cookie-values.test.mjs:5:1
+✖ existing scalar selection errors retain their diagnostic contract (1.980425ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /OpenAPI标量参数/. Input:
+
+  'Error: OpenAPI Header 对象或含对象的复合参数值尚不支持；不能按普通文本导入'
+
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-header-cookie-values.test.mjs:13:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: OpenAPI Header 对象或含对象的复合参数值尚不支持；不能按普通文本导入
+        at fail (file:///workspace/scratch/75c2273f6a80/workbench-delivery/src/openapi-header-cookie-values.mjs:87:11)
+        at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-delivery/src/openapi-header-cookie-values.mjs:94:5)
+        at file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-header-cookie-values.test.mjs:14:15
+        at getActual (node:assert:611:5)
+        at strict.throws (node:assert:759:24)
+        at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-delivery/tests/openapi-header-cookie-values.test.mjs:13:14)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1402:25)
+        at Test.start (node:internal/test_runner/test:1262:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17),
+    expected: /OpenAPI标量参数/,
+    operator: 'throws',
+    diff: 'simple'
+  }

@@ -1,0 +1,2899 @@
+import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
+import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
+import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
+import {
+  hasLiveReferences,
+  materializeLivePlan,
+} from "./live-plan-materialize.mjs";
+import { prepareStagedLoad, runStagedLoad } from "./staged-load-plan.mjs";
+import {
+  assertCodeTarget,
+  generateRequestCode,
+} from "./request-code-generation.mjs";
+import {
+  previewDefinitionExport,
+  exportDefinitionSelection,
+} from "./scoped-definition-export.mjs";
+import { postmanRawExportDefinition } from "./postman-raw-body.mjs";
+import { manualImportError } from "./manual-import.mjs";
+import { projectOwnerResponse } from "./project-owner-projection.mjs";
+import { nativeOAuth2GrantInput } from "./native-oauth2-grant.mjs";
+import {
+  writeDebugVariables,
+  publishDebugVariables,
+  clearDebugVariables,
+} from "./debug-publication.mjs";
+import {
+  resolveNativeInheritance,
+  validateNativeInheritanceProject,
+} from "./native-inheritance.mjs";
+import { isDeepStrictEqual } from "node:util";
+import { modelNameMode as resolveModelNameMode } from "./apipost-model-name-mode.mjs";
+import { exportApipostDirectory } from "./apipost-directory-export.mjs";
+import { exportApipost } from "./apipost-export.mjs";
+import {
+  listImportedExecutionRuns,
+  getImportedExecutionRun,
+} from "./imported-execution-history.mjs";
+import {
+  ActiveProjectImports,
+  normalizeAutoImports,
+} from "./active-project-import.mjs";
+import { MCPDatabaseGrants } from "./mcp-database-grants.mjs";
+
+import { resolveNativeMockRoute } from "./native-mock-route.mjs";
+import { nativeMockResponse } from "./native-mock-runtime.mjs";
+
+import { sqliteProcessFailureDetails } from "./sqlite-process-diagnostics.mjs";
+import { GrpcSessions } from "./grpc-sessions.mjs";
+import { GrpcSlots } from "./grpc-slots.mjs";
+import { installNodeShutdown } from "./host-shutdown.mjs";
+import { createNativeWriteOwner } from "./native-write-owner.mjs";
+import {
+  createNativeWriteExecution,
+  finishNativeWrite,
+} from "./native-write-execution.mjs";
+import { finalizeSocketIOSession } from "./socketio-evidence.mjs";
+import {
+  appendExecutionRecord,
+  recordSaveFailure,
+  recordSaveSuccess,
+} from "./execution-evidence.mjs";
+
+import { createOwnerProjectPutOutcome } from "./owner-project-put-outcome.mjs";
+import { publicProjectCommitOutcome } from "./project-commit-outcome.mjs";
+import { MCPHTTPSessions } from "./mcp-http-sessions.mjs";
+import { saveProjectArchive } from "./project-archive-grants.mjs";
+import { createWireSessionRecorder } from "./wire-session-recorder.mjs";
+import { executeWireFlow } from "./wire-plan.mjs";
+import { MCPGrpcSessions } from "./mcp-grpc-sessions.mjs";
+import { MCPWebSocketSessions } from "./mcp-websocket-sessions.mjs";
+import { prepareWireExecution, makeWireRecord } from "./wire-evidence.mjs";
+import { executeSocketIOFlow } from "./socketio-plan.mjs";
+import { SocketIOSessions, normalizeSocketIODefinition } from "./socketio.mjs";
+import { recordPlanRun } from "./plan-evidence.mjs";
+import { reflectGrpc } from "./grpc-reflection.mjs";
+import { generateGrpcRequestExample } from "./grpc-request-example.mjs";
+import {
+  inspectGrpcSchema,
+  normalizeGrpcDefinition,
+  executeGrpc,
+} from "./grpc.mjs";
+import {
+  assertSDKCurlDefinition,
+  sdkCurlDefinition,
+} from "./script-url-export.mjs";
+import { applySharedScripts } from "./shared-scripts.mjs";
+import {
+  DatabaseSessions,
+  assertDatabaseBindingRequirements,
+} from "./database-sessions.mjs";
+import { OAuth1Manager } from "./oauth1-flow.mjs";
+import { applySharedAuth } from "./shared-auth.mjs";
+import { applyGlobalParameters } from "./global-parameters.mjs";
+import { projectCookieSession } from "./cookie-jar.mjs";
+import { runLoad } from "./load-runner.mjs";
+import { readMCPActivities } from "./mcp-activity.mjs";
+import {
+  resolveDynamicValue,
+  resolveDynamicRequest,
+} from "./dynamic-values.mjs";
+import { previewFunction } from "./custom-functions.mjs";
+import { parseErrorCodeList } from "./error-codes.mjs";
+import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
+import { scopedExecution, scopeMap } from "./variable-scopes.mjs";
+import {
+  parseParameterImport,
+  previewParameterImport,
+} from "./parameter-dictionary.mjs";
+import {
+  MCPConfigPublication,
+  immediateMCPReduction,
+} from "./mcp-config-publication.mjs";
+import { loadMCPConfig, saveMCPConfig } from "./mcp-config-store.mjs";
+import { selectMockResponse } from "./mock.mjs";
+import { snapshotCase } from "./cases.mjs";
+import { versionPlan } from "./plan-version.mjs";
+import {
+  environmentVariables,
+  selectedEnvironment,
+  resolveServiceRequest,
+  createServiceRequestResolver,
+  freezeServiceBinding,
+  debugEnvironment,
+  debugEnvironmentFingerprint,
+  manageEnvironment,
+} from "./environments.mjs";
+import {
+  createMCP,
+  requestDefinitionHistoryChangeInput,
+  requestDefinitionHistoryChangeResult,
+} from "./mcp.mjs";
+import {
+  listRequestDefinitionHistory,
+  getRequestDefinitionVersion,
+} from "./request-definition-history.mjs";
+import { OAuthManager } from "./oauth.mjs";
+import { ProtocolSessions } from "./protocol-sessions.mjs";
+import { queryRemoteDatabase } from "./remote-database.mjs";
+import { mutatePostgres } from "./postgres-write.mjs";
+import { mutateMySQL } from "./mysql-write.mjs";
+import { mutateRedis } from "./redis.mjs";
+import { captureSSE, exchangeTCP, exchangeWebSocket } from "./protocols.mjs";
+import { querySQLiteBounded, mutateSQLiteBounded } from "./database.mjs";
+import http from "node:http";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { randomBytes, createHash } from "node:crypto";
+import { Store, executeRequest } from "./runtime.mjs";
+import {
+  id,
+  normalizeRequest,
+  interpolate,
+  importDocument,
+  importIntoProject,
+  exportOpenAPI,
+  snapshotPlan,
+  runPlan,
+  toCurl,
+} from "./core.mjs";
+const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+export async function createApp({
+  root = process.env.LOCAL_API_DATA || ".local-api",
+  port = Number(process.env.PORT) || 4318,
+} = {}) {
+  const requestedPort = port;
+  const store = new Store(path.resolve(root));
+  await store.init();
+  const autoImports = new ActiveProjectImports({
+    store,
+    request: executeRequest,
+  });
+  const saveWireSession = createWireSessionRecorder(store);
+  const protocolSessions = new ProtocolSessions({ onFinish: saveWireSession });
+  const protocolIntents = new ProtocolSessionIntents(protocolSessions);
+
+  const grpcSlots = new GrpcSlots();
+  const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
+  const socketioSessions = new SocketIOSessions();
+  const oauth = new OAuthManager();
+  const oauth1 = new OAuth1Manager();
+  const databaseSessions = new DatabaseSessions({
+    resolveProject: (id) => store.get(id),
+  });
+  const mcpDatabaseGrants = new MCPDatabaseGrants(
+    () => mcp,
+    (id) => store.get(id),
+  );
+  const nativeWriteOwner = createNativeWriteOwner({
+    store,
+    databaseSessions,
+    async runPrepared(handle, target, { signal }) {
+      const capability = createNativeWriteExecution(handle, target, { signal });
+      let single, scoped, failure;
+      try {
+        const frozen = handle.snapshot;
+        const project = structuredClone(frozen.projectSnapshot);
+        scoped = scopedExecution(
+          store,
+          project,
+          frozen.environmentId,
+          frozen.variables,
+        );
+        single = await runPlan(frozen.plan, frozen.variables, executeRequest, {
+          ...scoped,
+          nativeWrite: capability,
+          signal,
+          databaseQuery: (operation, querySignal) =>
+            databaseSessions.query(handle.projectId, operation, querySignal),
+          cookieSession: projectCookieSession(
+            store,
+            project,
+            frozen.environmentId,
+          ),
+          prepareRequest: (request) =>
+            resolveServiceRequest(project, request, frozen.environmentId),
+        });
+      } catch {
+        failure = "原生写入执行已停止；请核对写入凭据，不要自动重放";
+      }
+      // Independent of worker response, cancellation and persistence. Only this
+      // already-owned mutation may drain; no additional execution occurs here.
+      const writeReceipts = await finishNativeWrite(capability);
+      const status = signal.aborted ? "cancelled" : single?.status || "failed";
+      const result = single?.results?.[0];
+      const saved = await appendExecutionRecord(
+        store,
+        handle.projectId,
+        "history",
+        {
+          id: handle.runId,
+          runId: handle.runId,
+          createdAt: new Date().toISOString(),
+          name: handle.snapshot.plan.name,
+          ...(result || {}),
+          status,
+          source: "manual-native-write",
+          writeReceipts,
+          durationMs: single?.durationMs || 0,
+          ...(failure ? { error: failure } : {}),
+        },
+      );
+      return {
+        ...(result?.response || {}),
+        status,
+        ...saved,
+        writeReceipts,
+        ...(failure ? { error: failure } : {}),
+        variableWrites: scoped?.receipt() || [],
+        assertions: result?.assertions || [],
+        logs: result?.logs || [],
+        databaseQueries: result?.databaseQueries || [],
+      };
+    },
+  });
+  const debugEnvironments = new Map();
+  const mcpActivities = new Map();
+  const mcpHTTPSessions = new MCPHTTPSessions();
+  const mcpWebSocketSessions = new MCPWebSocketSessions({
+    sessions: protocolSessions,
+    store,
+    owns: (owner) => mcpHTTPSessions.owns(owner),
+  });
+  const mcpGrpcSessions = new MCPGrpcSessions({
+    sessions: grpcSessions,
+    store,
+    owns: (owner) => mcpHTTPSessions.owns(owner),
+  });
+  mcpHTTPSessions.onDispose = (owner, reason) =>
+    Promise.all([
+      mcpWebSocketSessions.dispose(owner, reason),
+      mcpGrpcSessions.dispose(owner, reason),
+    ]);
+  let mcp = { enabled: false, projects: [], write: false, execute: false },
+    mcpSessionProjects = [],
+    mcpToken = "",
+    mcpLastActivity = null;
+  const persistedMCP = await loadMCPConfig(path.resolve(root));
+  let mcpWarning = persistedMCP?.warning || "";
+  if (persistedMCP && !mcpWarning) {
+    const {
+      token: savedToken,
+      port: savedPort,
+      ...configuration
+    } = persistedMCP;
+    mcp = configuration;
+    mcpToken = savedToken;
+    if (port === 0) port = savedPort;
+  }
+  const rememberedMCPSnapshot = () =>
+    mcp.remember
+      ? {
+          ...mcp,
+          projects: [...mcp.projects],
+          token: mcpToken,
+          port: server.address().port,
+        }
+      : null;
+  const persistMCP = (value) => saveMCPConfig(path.resolve(root), value);
+  const mcpPublication = new MCPConfigPublication({
+    identity: () => mcp,
+    snapshot: rememberedMCPSnapshot,
+    write: persistMCP,
+  });
+  const manualImportInstanceId = randomBytes(32).toString("hex");
+  const manualImportControllers = new Set();
+  let manualImportClosed = false;
+  const closeManualImports = () => {
+    manualImportClosed = true;
+    for (const controller of manualImportControllers) controller.abort();
+  };
+  const token = randomBytes(32).toString("hex"),
+    controllers = new Map();
+  const claimRun = (candidate) => {
+    const runId = candidate ?? id();
+    if (
+      typeof runId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+      controllers.has(runId)
+    )
+      throw Error("运行标识无效或正在使用");
+    const controller = new AbortController();
+    controllers.set(runId, controller);
+    return { runId, controller };
+  };
+  let wireActive = 0;
+  const withWireSlot = async (operation) => {
+    if (wireActive >= 5) throw Error("最多同时执行5个通用协议调用");
+    wireActive++;
+    try {
+      return await operation();
+    } finally {
+      wireActive--;
+    }
+  };
+  const executePlanWire = (input, signal) =>
+    withWireSlot(() => executeWireFlow(input, signal));
+  const withGrpcTask = async (candidate, operation) => {
+    const runId = candidate || id();
+    if (
+      typeof runId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,100}$/.test(runId) ||
+      controllers.has(runId)
+    )
+      throw Error("gRPC运行标识无效或正在使用");
+    const releaseGrpc = grpcSlots.acquire();
+    const controller = new AbortController();
+    controllers.set(runId, controller);
+    try {
+      return await operation(runId, controller.signal);
+    } finally {
+      controllers.delete(runId);
+      releaseGrpc();
+    }
+  };
+  const executePlanGrpc = (input, parentSignal) =>
+    withGrpcTask(undefined, (_id, childSignal) =>
+      executeGrpc(
+        input,
+        parentSignal
+          ? AbortSignal.any([parentSignal, childSignal])
+          : childSignal,
+      ),
+    );
+  // OAuth POSTs belong to the incoming caller; a completed request body does
+  // not mean its response connection is still alive.
+  const withOAuthCaller = async (req, res, operation) => {
+    const controller = new AbortController();
+    const abort = () => {
+      if (!res.writableFinished) controller.abort();
+    };
+    req.once("aborted", abort);
+    res.once("close", abort);
+    if (req.aborted || res.destroyed) abort();
+    try {
+      return await operation(controller.signal);
+    } finally {
+      req.off("aborted", abort);
+      res.off("close", abort);
+    }
+  };
+  let server;
+  const json = (res, status, data, { completeProject = false } = {}) => {
+    res.writeHead(status, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(
+      JSON.stringify(completeProject ? data : projectOwnerResponse(data)),
+    );
+  };
+  async function body(req, maxMiB = 12) {
+    let bytes = 0,
+      chunks = [];
+    for await (const c of req) {
+      bytes += c.length;
+      if (bytes > maxMiB * 1024 * 1024)
+        throw Error("输入超过 " + maxMiB + " MiB");
+      chunks.push(c);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString() || "{}");
+  }
+  server = http.createServer(async (req, res) => {
+    let ownerPutOutcome = null;
+    try {
+      const base = `http://127.0.0.1:${server.address().port}`,
+        host = req.headers.host;
+      if (
+        ![
+          `127.0.0.1:${server.address().port}`,
+          `localhost:${server.address().port}`,
+        ].includes(host)
+      )
+        return json(res, 403, { error: "Host rejected" });
+      const origin = req.headers.origin;
+      if (
+        origin &&
+        ![base, `http://localhost:${server.address().port}`].includes(origin)
+      )
+        return json(res, 403, { error: "Origin rejected" });
+      const u = new URL(req.url, base),
+        parts = u.pathname.split("/").filter(Boolean);
+      const requestDatabaseEpoch = mcpDatabaseGrants.capture();
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Referrer-Policy", "no-referrer");
+      if (u.pathname === "/api/session" && req.method === "GET") {
+        if (req.headers["x-local-token"] !== token)
+          return json(res, 403, {
+            error: "请使用启动时生成的本地链接打开工作台",
+          });
+        return json(res, 200, {
+          token,
+          version: "0.1.0",
+          instanceId: protocolIntents.instanceId,
+        });
+      }
+      if (/^\/oauth1\/callback\/[a-f0-9]{48}$/.test(u.pathname)) {
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'none'; frame-ancestors 'none'",
+        );
+        if (req.method !== "GET") {
+          res.setHeader("Allow", "GET");
+          res.writeHead(405);
+          return res.end("OAuth1 callback requires GET.");
+        }
+        try {
+          if (u.origin !== base || u.hash || !req.url.startsWith("/"))
+            throw Error("Invalid callback target");
+          await withOAuthCaller(req, res, (signal) =>
+            oauth1.callback(u.pathname, u.search, signal),
+          );
+          res.writeHead(200);
+          return res.end(
+            "OAuth1 authorization completed. Return to Local API Workbench.",
+          );
+        } catch {
+          // Never reflect verifier, temporary credentials, provider errors or local token.
+          res.writeHead(400);
+          return res.end(
+            "OAuth1 callback failed or expired. Return to Local API Workbench.",
+          );
+        }
+      }
+      if (u.pathname === "/oauth/callback" && req.method === "GET") {
+        // URLSearchParams repairs malformed percent/UTF-8 input. Reject raw
+        // encoding errors before that repaired value can consume state or be
+        // exchanged as a different credential. Valid encoded U+FFFD is allowed.
+        try {
+          decodeURIComponent(u.search.replace(/\+/g, " "));
+        } catch {
+          throw Error("OAuth 回调参数编码无效");
+        }
+        for (const key of ["state", "code", "error", "error_description"])
+          if (u.searchParams.getAll(key).length > 1)
+            throw Error("OAuth 回调参数重复");
+        await withOAuthCaller(req, res, (signal) =>
+          oauth.complete(Object.fromEntries(u.searchParams), signal),
+        );
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'none'",
+        });
+        return res.end(
+          "<!doctype html><meta charset=utf-8><title>授权完成</title><p>授权完成。请回到 Local API 工作台；可以关闭此页。</p>",
+        );
+      }
+      if (u.pathname === "/mcp") {
+        if (!mcp.enabled || req.headers.authorization !== "Bearer " + mcpToken)
+          return json(res, 403, { error: "MCP disabled or unauthorized" });
+        const sessionHeader = req.headers["mcp-session-id"];
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
+        if (req.method === "DELETE" && sessionHeader !== undefined) {
+          mcpHTTPSessions.delete(sessionHeader);
+          await mcpHTTPSessions.drain();
+          res.writeHead(204);
+          return res.end();
+        }
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST, DELETE");
+          return json(res, 405, {
+            error: "Only POST and session DELETE are supported",
+          });
+        }
+        const mcpEpoch = mcpDatabaseGrants.capture();
+        const requestEpoch = mcpHTTPSessions.capture();
+        const incomingToken = mcpToken;
+        const message = await body(req);
+        if (
+          mcpEpoch !== mcpDatabaseGrants.capture() ||
+          requestEpoch !== mcpHTTPSessions.capture() ||
+          incomingToken !== mcpToken
+        )
+          return json(res, 403, { error: "MCP authorization changed" });
+        if (sessionHeader !== undefined && !mcpHTTPSessions.get(sessionHeader))
+          return json(res, 404, { error: "Unknown MCP session" });
+        if (!message || Array.isArray(message) || message.jsonrpc !== "2.0")
+          return json(res, 400, { error: "Invalid JSON-RPC request" });
+        let sessionId = sessionHeader;
+        if (message.method === "initialize" && message.id !== undefined) {
+          if (sessionId !== undefined)
+            return json(res, 400, { error: "Session already initialized" });
+          sessionId = mcpHTTPSessions.create(message.id);
+          res.setHeader("Mcp-Session-Id", sessionId);
+        }
+        if (
+          message.method === "notifications/cancelled" &&
+          message.id === undefined
+        ) {
+          if (sessionId !== undefined)
+            mcpHTTPSessions.cancel(sessionId, message.params?.requestId);
+          res.writeHead(202);
+          return res.end();
+        }
+        const isExecution =
+          message.method === "tools/call" &&
+          [
+            "localapi_execute_api",
+            "localapi_execute_flow",
+            "localapi_run_plan",
+            "apipost_execute_api",
+            "apipost_execute_flow",
+          ].includes(message.params?.name);
+        const isDefinitionHistoryMutation =
+          message.method === "tools/call" &&
+          [
+            "localapi_tag_api_definition_version",
+            "localapi_restore_api_definition",
+            "localapi_clear_api_definition_history",
+          ].includes(message.params?.name);
+        const isManualImport =
+          message.method === "tools/call" &&
+          ["localapi_preview_import", "localapi_apply_import"].includes(
+            message.params?.name,
+          );
+        const isScopedExport =
+          message.method === "tools/call" &&
+          [
+            "localapi_preview_project_export",
+            "localapi_export_project_selection",
+          ].includes(message.params?.name);
+        const cancellable =
+          isExecution ||
+          isDefinitionHistoryMutation ||
+          isManualImport ||
+          isScopedExport;
+        const execution =
+          sessionId !== undefined && message.id !== undefined
+            ? mcpHTTPSessions.begin(sessionId, message.id, cancellable)
+            : message.id !== undefined && cancellable
+              ? mcpHTTPSessions.beginTransient()
+              : { signal: undefined, finish() {} };
+        const activityId = id();
+        if (message.method === "tools/call") {
+          const active = [...mcpActivities.values()].filter(
+            (a) => a.status === "running",
+          );
+          if (active.length >= 10) {
+            execution.finish();
+            return json(res, 429, { error: "MCP并发任务达到上限" });
+          }
+          mcpActivities.set(activityId, {
+            id: activityId,
+            tool: message.params?.name,
+            projectId:
+              message.params?.arguments?.projectId ??
+              message.params?.arguments?.project_id,
+            planId:
+              message.params?.arguments?.planId ??
+              message.params?.arguments?.flow_id,
+            status: "running",
+            startedAt: new Date().toISOString(),
+            completed: 0,
+          });
+        }
+        // History writes belong to both the MCP grant/session and the incoming
+        // HTTP caller. Existing execution tools retain their evidence lifecycle.
+        const callerController =
+          isDefinitionHistoryMutation || isManualImport
+            ? new AbortController()
+            : undefined;
+        const disconnected = () => {
+          if (!res.writableFinished) callerController?.abort();
+        };
+        if (callerController) {
+          req.once("aborted", disconnected);
+          res.once("close", disconnected);
+          if (req.aborted || res.destroyed) disconnected();
+        }
+        const signal = callerController
+          ? AbortSignal.any(
+              [execution.signal, callerController.signal].filter(Boolean),
+            )
+          : execution.signal;
+        const dispatchPolicy = mcp;
+        let result;
+        try {
+          const dispatch = createMCP({
+            store,
+            ...mcp,
+            sessionProjects: mcpSessionProjects,
+            debugEnvironments,
+            databasePreflight: (projectId, ids, signal) =>
+              mcpDatabaseGrants.preflight(mcpEpoch, projectId, ids, signal),
+            databaseExecutor: (projectId, operation, signal) =>
+              mcpDatabaseGrants.query(mcpEpoch, projectId, operation, signal),
+            grpcExecutor: executePlanGrpc,
+            protocolExecutor: executePlanWire,
+            websocketSessions: mcpWebSocketSessions,
+            tcpSessions: mcpWebSocketSessions.forProtocol("tcp"),
+            grpcSessions: mcpGrpcSessions,
+            socketioExecutor: (projectId, input, signal) =>
+              executeSocketIOFlow(input, signal, {
+                projectId,
+                sessions: socketioSessions,
+              }),
+            onProgress: (progress) => {
+              const activity = mcpActivities.get(activityId);
+              if (activity)
+                Object.assign(activity, {
+                  ...progress,
+                  ...(progress.finished === true &&
+                  ["passed", "failed", "cancelled"].includes(progress.status)
+                    ? { executionStatus: progress.status }
+                    : {}),
+                  status: "running",
+                });
+            },
+          });
+          result = await dispatch(message, {
+            signal,
+            grpcOwner:
+              sessionId === undefined
+                ? undefined
+                : mcpHTTPSessions.owner(sessionId),
+            websocketOwner:
+              sessionId === undefined
+                ? undefined
+                : mcpHTTPSessions.owner(sessionId),
+            manualImportSessionId:
+              sessionId === undefined
+                ? undefined
+                : `${manualImportInstanceId}:mcp:${sessionId}:${requestEpoch}:${mcpEpoch}`,
+          });
+        } catch {
+          result = {
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "MCP执行异常；请检查活动与历史，不要自动重放",
+                },
+              ],
+            },
+          };
+        } finally {
+          req.off("aborted", disconnected);
+          res.off("close", disconnected);
+          execution.finish();
+        }
+        if (message.method === "tools/call") {
+          const activity = mcpActivities.get(activityId);
+          let output;
+          try {
+            output = JSON.parse(result?.result?.content?.[0]?.text);
+          } catch {}
+          const outcome = isExecution ? output?.status : undefined;
+          const recordSaved = isExecution
+            ? (output?.recordSaved ?? output?.record_saved)
+            : undefined;
+          Object.assign(activity, {
+            status:
+              recordSaved === false
+                ? "failed"
+                : outcome === "cancelled"
+                  ? "cancelled"
+                  : result?.result?.isError || outcome === "failed"
+                    ? "failed"
+                    : "completed",
+            ...(typeof recordSaved === "boolean" ? { recordSaved } : {}),
+            ...(recordSaved === false
+              ? {
+                  executionStatus: outcome,
+                  persistenceError:
+                    "执行记录保存失败，请检查项目存储；不会重新执行请求",
+                }
+              : {}),
+            finishedAt: new Date().toISOString(),
+          });
+          mcpLastActivity = activity;
+          if (
+            mcp.remember &&
+            message.params?.name === "localapi_create_project" &&
+            !result?.result?.isError
+          )
+            await mcpPublication.persist(dispatchPolicy);
+          const completed = [...mcpActivities.values()].filter(
+            (a) => a.status !== "running",
+          );
+          for (const old of completed.slice(
+            0,
+            Math.max(0, completed.length - 20),
+          ))
+            mcpActivities.delete(old.id);
+        }
+        if (result === null || execution.cancelledByNotification) {
+          res.writeHead(202);
+          return res.end();
+        }
+        if (requestEpoch !== mcpHTTPSessions.capture())
+          return json(res, 200, {
+            jsonrpc: "2.0",
+            id: message.id,
+            error: {
+              code: -32000,
+              message:
+                "MCP authorization changed; inspect authorized history for operation outcome",
+            },
+          });
+        return json(res, 200, result);
+      }
+      const nativeMockAlias =
+        parts[0] === "app" && parts[1] === "mock" && parts[2] === "project";
+      if (parts[0] === "mock" || nativeMockAlias) {
+        const offset = nativeMockAlias ? 3 : 1;
+        const p = await store.get(parts[offset]);
+        // The old ID route keeps priority and its query arguments stay ordinary data.
+        let r =
+          !nativeMockAlias && parts.length === 3
+            ? p.requests.find((r) => r.id === parts[2] && !r.deletedAt)
+            : undefined;
+        if (!r) {
+          try {
+            r = resolveNativeMockRoute(
+              p,
+              req.method,
+              "/" + parts.slice(offset + 1).join("/"),
+              u.searchParams,
+            );
+          } catch (error) {
+            if (error.statusCode === 409)
+              return json(res, 409, { error: error.message });
+            throw error;
+          }
+        }
+        if (!r) return json(res, 404, { error: "Mock not found" });
+        if (p.settings?.mockEnabled === false)
+          return json(res, 503, { error: "Mock服务已关闭" });
+        const chunks = [];
+        let bytes = 0;
+        for await (const chunk of req) {
+          bytes += chunk.length;
+          if (bytes > 8 * 1024 * 1024) throw Error("Mock请求体超过8MiB");
+          chunks.push(chunk);
+        }
+        const raw = Buffer.concat(chunks).toString("utf8");
+        let incoming = raw;
+        try {
+          incoming = JSON.parse(raw);
+        } catch {}
+        if (
+          r.nativeMock === undefined &&
+          u.searchParams.getAll("example").length > 1
+        )
+          throw Error("Mock示例索引不能重复");
+        const selected =
+          r.nativeMock !== undefined
+            ? await nativeMockResponse(p, r, {
+                query: Object.fromEntries(u.searchParams),
+                headers: req.headers,
+                body: incoming,
+              })
+            : selectMockResponse(
+                r,
+                {
+                  method: req.method,
+                  query: Object.fromEntries(u.searchParams),
+                  headers: req.headers,
+                  body: incoming,
+                },
+                () => schemaMockResponse(p, r),
+              );
+        if (selected.delayMs)
+          await new Promise((resolve) => setTimeout(resolve, selected.delayMs));
+        res.writeHead(selected.status, {
+          "Content-Type": "application/json",
+          ...selected.headers,
+          "Content-Security-Policy":
+            "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+        });
+        return res.end(
+          [204, 205, 304].includes(selected.status) ? "" : selected.body,
+        );
+      }
+      if (parts[0] === "api") {
+        if (req.headers["x-local-token"] !== token)
+          return json(res, 403, { error: "Session token required" });
+        if (parts[1] === "protocol-session-intents") {
+          res.setHeader("Cache-Control", "no-store");
+          try {
+            const id = parts[2];
+            if (
+              u.search ||
+              u.pathname !==
+                `/api/protocol-session-intents/${id}${parts[3] === "stop" ? "/stop" : ""}`
+            )
+              return json(res, 400, { error: "连接意图路径无效" });
+            if (parts.length === 3 && req.method === "GET")
+              return json(res, 200, protocolIntents.read(id));
+            if (
+              req.method !== "POST" ||
+              !(
+                parts.length === 3 ||
+                (parts.length === 4 && parts[3] === "stop")
+              )
+            )
+              return json(res, 400, { error: "连接意图操作无效" });
+            const input = await body(req);
+            return json(
+              res,
+              200,
+              parts[3] === "stop"
+                ? protocolIntents.stop(id, input.instanceId)
+                : protocolIntents.start(id, input.instanceId, input.definition),
+            );
+          } catch (error) {
+            return json(res, error.intentStatus || 400, {
+              error: error.message,
+              retry_safe: false,
+            });
+          }
+        }
+        if (u.pathname === "/api/protocol-sessions" && req.method === "POST") {
+          const input = await body(req);
+          if (
+            input.projectId !== undefined ||
+            input.templateMode !== undefined ||
+            input.environmentId !== undefined
+          )
+            throw Error("项目会话请使用项目专属入口");
+          return json(res, 200, protocolSessions.start(input));
+        }
+        if (parts[1] === "protocol-sessions" && parts[2]) {
+          if (protocolSessions.get(parts[2]).projectId)
+            throw Error("项目会话不能通过全局入口访问");
+          if (req.method === "GET")
+            return json(res, 200, protocolSessions.snapshot(parts[2]));
+          const data = await body(req);
+          if (parts[3] === "send")
+            return json(
+              res,
+              200,
+              protocolSessions.send(parts[2], data.message),
+            );
+          if (parts[3] === "stop") {
+            protocolSessions.stop(parts[2]);
+            return json(res, 200, protocolSessions.snapshot(parts[2]));
+          }
+        }
+        if (u.pathname === "/api/oauth1/start" && req.method === "POST")
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, async (signal) =>
+              oauth1.start(await body(req), base, signal),
+            ),
+          );
+        if (u.pathname === "/api/oauth1/complete" && req.method === "POST")
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, async (signal) =>
+              oauth1.complete(await body(req), signal),
+            ),
+          );
+        if (
+          parts[1] === "oauth1" &&
+          parts[2] === "status" &&
+          parts.length === 4 &&
+          req.method === "GET"
+        )
+          return json(res, 200, oauth1.status(parts[3]));
+        if (u.pathname === "/api/oauth1/cancel" && req.method === "POST")
+          return json(res, 200, oauth1.cancel((await body(req)).id));
+        if (u.pathname === "/api/oauth/native/start" && req.method === "POST") {
+          const { config } = nativeOAuth2GrantInput(await body(req), "start");
+          return json(res, 200, oauth.start(config, base));
+        }
+        if (
+          u.pathname === "/api/oauth/native/refresh" &&
+          req.method === "POST"
+        ) {
+          const { config, grant } = nativeOAuth2GrantInput(
+            await body(req),
+            "refresh",
+          );
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, (signal) =>
+              oauth.exchange(config, grant, signal),
+            ),
+          );
+        }
+        if (u.pathname === "/api/oauth/start" && req.method === "POST")
+          return json(res, 200, oauth.start(await body(req), base));
+        if (
+          parts[1] === "oauth" &&
+          parts[2] === "status" &&
+          req.method === "GET"
+        )
+          return json(res, 200, oauth.status(parts[3]));
+        if (u.pathname === "/api/oauth/token" && req.method === "POST") {
+          const config = await body(req);
+          const grantType = config.grantType || "client_credentials";
+          if (!["client_credentials", "refresh_token"].includes(grantType))
+            throw Error(
+              "OAuth token 入口仅支持 client_credentials 或 refresh_token",
+            );
+          if (
+            grantType === "refresh_token" &&
+            (typeof config.refreshToken !== "string" ||
+              !config.refreshToken.trim())
+          )
+            throw Error("OAuth refresh token 不能为空");
+          const grant =
+            grantType === "refresh_token"
+              ? {
+                  grant_type: "refresh_token",
+                  refresh_token: config.refreshToken,
+                }
+              : { grant_type: "client_credentials" };
+          return json(
+            res,
+            200,
+            await withOAuthCaller(req, res, (signal) =>
+              oauth.exchange(config, grant, signal),
+            ),
+          );
+        }
+        if (u.pathname === "/api/mcp/config") {
+          if (req.method === "POST") {
+            const generation = mcpPublication.captureRevocation();
+            const config = await body(req);
+            mcpPublication.assertRevocation(generation);
+            const reduction = immediateMCPReduction(mcp, config);
+            if (reduction) {
+              mcp = reduction;
+              mcpSessionProjects = [];
+              mcpDatabaseGrants.invalidate();
+              mcpHTTPSessions.advance({ dropSessions: !mcp.enabled });
+              if (!mcp.enabled) mcpToken = "";
+              const reducedGeneration = mcpPublication.advanceRevocation();
+              await mcpHTTPSessions.drain();
+              mcpWarning =
+                "当前进程已限制MCP权限，持久化尚未确认；重启可能恢复旧授权。";
+              try {
+                await mcpPublication.run(async () => {
+                  mcpPublication.assertRevocation(reducedGeneration);
+                  await persistMCP({
+                    ...mcp,
+                    projects: [...mcp.projects],
+                    token: mcpToken,
+                    port: server.address().port,
+                  });
+                  mcpPublication.assertRevocation(reducedGeneration);
+                  mcpWarning = "";
+                });
+              } catch (error) {
+                throw Error(
+                  "当前进程已限制MCP权限，但持久化未确认；重启可能恢复旧授权。" +
+                    error.message,
+                );
+              }
+            } else
+              await mcpPublication.run(async () => {
+                mcpPublication.assertRevocation(generation);
+                if (!Array.isArray(config.projects))
+                  throw Error("项目授权列表无效");
+                const existing = new Set(
+                  (await store.list())
+                    .filter((project) => !project.archived && !project.error)
+                    .map((project) => project.id),
+                );
+                if (config.projects.some((id) => !existing.has(id)))
+                  throw Error("不能授权不存在、已归档或不可读取的项目");
+                mcpPublication.assertRevocation(generation);
+                const next = {
+                  enabled: config.enabled === true,
+                  remember: config.remember === true,
+                  projects: config.projects,
+                  write: config.write === true,
+                  execute: config.write === true && config.execute === true,
+                };
+                const nextToken = next.enabled
+                  ? !mcpToken || config.rotate === true
+                    ? randomBytes(32).toString("hex")
+                    : mcpToken
+                  : "";
+                await saveMCPConfig(path.resolve(root), {
+                  ...next,
+                  token: nextToken,
+                  port: server.address().port,
+                });
+                mcpPublication.assertRevocation(generation);
+                mcpDatabaseGrants.invalidate();
+                mcpHTTPSessions.advance({
+                  dropSessions: !next.enabled || nextToken !== mcpToken,
+                });
+                mcp = next;
+                mcpSessionProjects = [];
+                mcpToken = nextToken;
+                mcpWarning = "";
+                await mcpHTTPSessions.drain();
+              });
+          } else if (req.method !== "GET")
+            return json(res, 405, { error: "Method not allowed" });
+          return json(res, 200, {
+            ...mcp,
+            endpoint: base + "/mcp",
+            dataRoot: store.root,
+            warning: mcpWarning,
+            token: mcpToken,
+            lastActivity: mcpLastActivity,
+            activities: [
+              ...mcpActivities.values(),
+              ...(await readMCPActivities(store.root)),
+            ],
+          });
+        }
+        if (u.pathname === "/api/projects" && req.method === "GET")
+          return json(res, 200, await store.list());
+        if (u.pathname === "/api/projects" && req.method === "POST") {
+          const b = await body(req);
+          return json(res, 201, await store.create(b.name, b.directory));
+        }
+        if (u.pathname === "/api/restore" && req.method === "POST") {
+          // Full backups have a dedicated bounded transport. Normal owner/MCP
+          // input keeps its existing 12 MiB ceiling. This is not a disk quota.
+          const b = await body(req, 64);
+          const restored = await store.restore(b.document);
+          return json(res, 201, restored);
+        }
+        if (u.pathname === "/api/cancel" && req.method === "POST") {
+          const b = await body(req);
+          controllers.get(b.id)?.abort();
+          return json(res, 200, { ok: true });
+        }
+        if (
+          parts[1] === "projects" &&
+          parts[2] &&
+          parts[3] === "native-write"
+        ) {
+          // This dispatch deliberately precedes store.get: owned terminal
+          // receipts remain readable after archive or a storage failure.
+          if (req.method !== "POST" || parts.length !== 5 || u.search)
+            return json(res, 405, {
+              error: "Native write owner route requires POST body",
+            });
+          const action = parts[4],
+            data = await body(req);
+          if (
+            !["prepare", "authorize", "execute", "revoke", "status"].includes(
+              action,
+            )
+          )
+            return json(res, 404, {
+              error: "Native write operation not found",
+            });
+          if (action !== "execute")
+            return json(
+              res,
+              200,
+              await nativeWriteOwner[action](parts[2], data),
+            );
+          const { controller, runId } = claimRun();
+          const disconnected = () => {
+            if (!res.writableEnded) controller.abort();
+          };
+          res.once("close", disconnected);
+          if (res.destroyed || req.aborted) disconnected();
+          try {
+            return json(
+              res,
+              200,
+              await nativeWriteOwner.execute(parts[2], data, {
+                signal: controller.signal,
+              }),
+            );
+          } finally {
+            res.removeListener("close", disconnected);
+            controllers.delete(runId);
+          }
+        }
+        if (parts[1] === "projects" && parts[2]) {
+          const action = parts[3];
+          if (!action && req.method === "PUT")
+            ownerPutOutcome = createOwnerProjectPutOutcome(parts[2]);
+          // Existing terminal evidence must remain readable while its project
+          // storage is damaged or requires recovery. Ownership is checked below;
+          // only observation/terminal storage actions bypass a project read,
+          // never start/send execution.
+          const evidenceOnly =
+            parts[4] &&
+            ((action === "protocol-sessions" &&
+              ((req.method === "GET" && !parts[5]) ||
+                (req.method === "POST" && parts[5] === "stop"))) ||
+              (action === "grpc-sessions" &&
+                ((req.method === "GET" && !parts[5]) ||
+                  (req.method === "POST" &&
+                    ["cancel", "reconcile"].includes(parts[5])))));
+          const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
+          ownerPutOutcome?.validatedRead();
+          if (action === "load-reports") {
+            if (req.method !== "GET" || parts.length > 5 || u.search)
+              return json(res, 400, {
+                error: "压测报告仅支持无查询参数的读取",
+              });
+            res.setHeader("Cache-Control", "no-store");
+            if (!parts[4]) return json(res, 200, { records: p.loadRuns ?? [] });
+            const record = p.loadRuns?.find((item) => item.id === parts[4]);
+            return record
+              ? json(res, 200, record)
+              : json(res, 404, { error: "压测报告不存在" });
+          }
+          if (
+            action === "native-inheritance-edit" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("继承图操作不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.editNativeInheritance(p.id, await body(req)),
+            );
+          }
+          if (["import-preview", "import-apply"].includes(action)) {
+            if (parts.length !== 4 || u.searchParams.size)
+              return json(res, 400, {
+                error: "手动导入不接受额外路径或查询参数",
+              });
+            if (req.method !== "POST") {
+              res.setHeader("Allow", "POST");
+              return json(res, 405, { error: "手动导入仅支持POST" });
+            }
+            if (manualImportClosed)
+              return json(res, 400, { error: "手动导入宿主已关闭" });
+            const { runId, controller } = claimRun();
+            manualImportControllers.add(controller);
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            try {
+              const input = await body(req);
+              controller.signal.throwIfAborted();
+              const method =
+                action === "import-preview"
+                  ? "previewManualImport"
+                  : "applyManualImport";
+              return json(
+                res,
+                200,
+                await store[method](p.id, input, {
+                  sessionId: `${manualImportInstanceId}:owner`,
+                  signal: controller.signal,
+                }),
+              );
+            } catch (error) {
+              throw manualImportError(error);
+            } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+              manualImportControllers.delete(controller);
+            }
+          }
+          if (action === "definition-history") {
+            const version = parts.length === 5 && parts[4] === "version";
+            if (parts.length !== 4 && !version)
+              return json(res, 404, { error: "接口定义历史路径无效" });
+            if (req.method === "GET") {
+              try {
+                decodeURIComponent(u.search.replace(/\+/g, " "));
+              } catch {
+                throw Error("接口定义历史查询编码无效");
+              }
+              const options = {};
+              const fields = version
+                ? ["requestId", "lineageId", "historyId"]
+                : [
+                    "requestId",
+                    "lineageId",
+                    "offset",
+                    "limit",
+                    "lineageOffset",
+                    "lineageLimit",
+                  ];
+              for (const [key, value] of u.searchParams) {
+                if (!fields.includes(key) || Object.hasOwn(options, key))
+                  throw Error("接口定义历史查询参数无效或重复");
+                if (
+                  ["offset", "limit", "lineageOffset", "lineageLimit"].includes(
+                    key,
+                  )
+                ) {
+                  if (!/^(0|[1-9][0-9]*)$/.test(value))
+                    throw Error("接口定义历史分页参数无效");
+                  options[key] = Number(value);
+                } else options[key] = value;
+              }
+              return json(res, 200, {
+                projectId: p.id,
+                revision: p.revision,
+                configRevision: p.configRevision,
+                ...(version
+                  ? getRequestDefinitionVersion(p, options)
+                  : listRequestDefinitionHistory(p, options)),
+              });
+            }
+            if (req.method !== "POST" || version) {
+              res.setHeader("Allow", version ? "GET" : "GET, POST");
+              return json(res, 405, { error: "接口定义历史方法无效" });
+            }
+            if (u.searchParams.size)
+              throw Error("接口定义历史操作不接受查询参数");
+            const { runId, controller } = claimRun();
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            try {
+              const input = requestDefinitionHistoryChangeInput(
+                await body(req),
+              );
+              controller.signal.throwIfAborted();
+              const saved = await store.changeRequestDefinitionHistory(
+                p.id,
+                input,
+                {
+                  signal: controller.signal,
+                },
+              );
+              return json(
+                res,
+                200,
+                requestDefinitionHistoryChangeResult(saved, input),
+              );
+            } finally {
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+            }
+          }
+          if (action === "imported-execution-runs") {
+            if (req.method !== "GET")
+              return json(res, 405, { error: "原始记录查询仅支持GET" });
+            if (parts.length === 4) {
+              const options = {};
+              for (const [key, value] of u.searchParams) {
+                if (
+                  !["sourceProjectId", "offset", "limit"].includes(key) ||
+                  Object.hasOwn(options, key)
+                )
+                  throw Error("原始记录查询参数无效或重复");
+                options[key] =
+                  key === "sourceProjectId" ? value : Number(value);
+              }
+              return json(res, 200, listImportedExecutionRuns(p, options));
+            }
+            if (parts.length === 6 && u.searchParams.size === 0) {
+              const result = getImportedExecutionRun(
+                p,
+                decodeURIComponent(parts[4]),
+                decodeURIComponent(parts[5]),
+              );
+              return result
+                ? json(res, 200, result)
+                : json(res, 404, { error: "原始执行记录不存在" });
+            }
+            return json(res, 404, { error: "原始记录查询路径无效" });
+          }
+
+          if (
+            action === "api-resource-restore" &&
+            parts.length === 4 &&
+            req.method === "POST"
+          ) {
+            if (u.searchParams.size) throw Error("资源恢复不接受查询参数");
+            return json(
+              res,
+              200,
+              await store.restoreAPIResources(p.id, await body(req)),
+            );
+          }
+          if (action === "cookies") {
+            const b = req.method === "POST" ? await body(req) : {};
+            const jar = projectCookieSession(
+              store,
+              p,
+              b.environmentId || u.searchParams.get("environmentId"),
+            );
+            if (req.method === "POST") {
+              if (b.operation === "configure") await jar.configure(b);
+              else if (b.operation === "set")
+                await jar.setCookie(b.url, b.cookie, b);
+              else if (b.operation === "remove") await jar.remove(b);
+              else if (b.operation === "clear") await jar.clear(b);
+              else throw Error("未知Cookie操作");
+            } else if (req.method !== "GET") throw Error("Cookie方法无效");
+            return json(res, 200, await jar.inspect());
+          }
+
+          if (action === "error-codes-preview" && req.method === "POST") {
+            const data = await body(req);
+            return json(res, 200, { codes: parseErrorCodeList(data.source) });
+          }
+          if (
+            action === "debug-variables" &&
+            ["GET", "PUT"].includes(req.method)
+          ) {
+            const data = req.method === "PUT" ? await body(req) : {};
+            const context = debugEnvironment(
+              p,
+              data.environmentId || u.searchParams.get("environmentId"),
+              debugEnvironments,
+              data.postmanCollectionId ??
+                u.searchParams.get("postmanCollectionId") ??
+                undefined,
+            );
+            const runtimeFingerprint = createHash("sha256")
+              .update(JSON.stringify(context.variables))
+              .digest("hex");
+            if (req.method === "PUT") {
+              if (data.runtimeFingerprint !== runtimeFingerprint)
+                throw Error("运行时变量已变化，请重新读取");
+              if (data.fingerprint !== context.fingerprint)
+                throw Error("环境变量已变化，请重新读取运行时变量");
+              if (!data.variables || Object.keys(data.variables).length > 10000)
+                throw Error("运行时变量最多10000项");
+              const variables = scopeMap(data.variables);
+              writeDebugVariables(debugEnvironments, p.id, context.cacheKey, {
+                fingerprint: context.fingerprint,
+                variables,
+              });
+              return json(res, 200, { ok: true });
+            }
+            return json(res, 200, {
+              environmentId: context.environment.id,
+              ...(context.collectionId === undefined
+                ? {}
+                : { postmanCollectionId: context.collectionId }),
+              fingerprint: context.fingerprint,
+              runtimeFingerprint,
+              variables: context.variables,
+            });
+          }
+          if (action === "clear-session" && req.method === "POST") {
+            clearDebugVariables(debugEnvironments, p.id);
+            return json(res, 200, { ok: true });
+          }
+          if (action === "location" && req.method === "GET")
+            return json(res, 200, { path: store.file(p.id) });
+          if (!action && req.method === "GET") return json(res, 200, p);
+          if (!action && req.method === "PUT") {
+            const b = await body(req);
+            if (b.id !== p.id) throw Error("项目 ID 不匹配");
+            if (
+              !Array.isArray(b.requests) ||
+              !Array.isArray(b.environments) ||
+              !Array.isArray(b.plans)
+            )
+              throw Error("无效项目结构");
+            if (
+              b.environments.some(
+                (environment) =>
+                  !environment ||
+                  typeof environment.id !== "string" ||
+                  !environment.variables ||
+                  typeof environment.variables !== "object" ||
+                  Array.isArray(environment.variables),
+              )
+            )
+              throw Error("环境变量必须是对象");
+            if (!Array.isArray(b.documents) || !Array.isArray(b.dictionary))
+              throw Error("文档或数据字典格式无效");
+            if (
+              b.documents.some(
+                (document) =>
+                  !document ||
+                  typeof document.title !== "string" ||
+                  typeof document.content !== "string",
+              )
+            )
+              throw Error("文档格式无效");
+            const nativeState = validateNativeInheritanceProject(p);
+            const archivedRequests = new Map(
+              (nativeState?.recycled || []).flatMap(({ requestIds }) =>
+                requestIds.map((requestId) => [
+                  requestId,
+                  p.requests.find((request) => request.id === requestId),
+                ]),
+              ),
+            );
+            b.requests = b.requests.map((request) => {
+              const archived = archivedRequests.get(request?.id);
+              if (!archived) return normalizeRequest(request);
+              // Compare before normalization: do not silently drop unknown input
+              // fields or fill defaults into an immutable archived definition.
+              if (!isDeepStrictEqual(request, archived))
+                throw Error("回收目录内接口定义不可修改，请先整批恢复");
+              return request;
+            });
+            b.plans = b.plans.map((plan) =>
+              versionPlan(
+                p.plans.find((old) => old.id === plan.id),
+                plan,
+                "manual",
+                b,
+              ),
+            );
+            b.runs = p.runs;
+            b.history = p.history;
+            const importSessionChanged =
+              b.archived ||
+              JSON.stringify(normalizeAutoImports(b.settings?.autoImports)) !==
+                JSON.stringify(normalizeAutoImports(p.settings?.autoImports));
+            let importLease = null;
+            if (b.archived) await autoImports.deactivate(p.id);
+            else if (importSessionChanged)
+              importLease = await autoImports.suspend(p.id);
+            let websocketArchiveDrain;
+            const saveWithArchiveRevocation = async () => {
+              const saved = await saveProjectArchive(
+                b,
+                () => ownerPutOutcome.save(() => store.save(b)),
+                (projectId) => {
+                  // Dispatchers retain these arrays. Remove in place without
+                  // promoting grants from a replaced owner policy/session.
+                  for (const projects of [mcp.projects, mcpSessionProjects])
+                    for (let i = projects.length - 1; i >= 0; i--)
+                      if (projects[i] === projectId) projects.splice(i, 1);
+                  websocketArchiveDrain = Promise.all([
+                    mcpWebSocketSessions.revokeProject(projectId),
+                    mcpGrpcSessions.revokeProject(projectId),
+                  ]);
+                },
+              );
+              if (b.archived && mcp.remember)
+                await persistMCP(rememberedMCPSnapshot());
+              return saved;
+            };
+            let saved;
+            try {
+              saved = b.archived
+                ? await mcpPublication.run(saveWithArchiveRevocation)
+                : await saveWithArchiveRevocation();
+              await autoImports.reactivate(importLease);
+            } finally {
+              await websocketArchiveDrain;
+              autoImports.discard(importLease);
+            }
+            return json(res, 200, saved);
+          }
+          if (action === "auto-imports") {
+            if (req.method === "GET")
+              return json(res, 200, {
+                definitions: normalizeAutoImports(p.settings?.autoImports),
+                runs: p.settings?.autoImportRuns || [],
+                session: autoImports.snapshot(),
+              });
+            if (req.method === "PUT") {
+              const data = await body(req);
+              if (
+                !Array.isArray(data.definitions) ||
+                Object.keys(data).some((k) => k !== "definitions")
+              )
+                throw Error("自动导入配置字段无效");
+              const definitions = normalizeAutoImports(data.definitions);
+              const importLease = await autoImports.suspend(p.id);
+              p.settings ??= {};
+              p.settings.autoImports = definitions;
+              try {
+                await store.save(p);
+                await autoImports.reactivate(importLease);
+              } finally {
+                autoImports.discard(importLease);
+              }
+              return json(res, 200, {
+                definitions,
+                session: autoImports.snapshot(),
+              });
+            }
+            return json(res, 405, { error: "Method not allowed" });
+          }
+          if (action === "auto-import-session" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some(
+                (k) => !["action", "credentials"].includes(k),
+              ) ||
+              (data.action === "deactivate" &&
+                data.credentials !== undefined) ||
+              !["activate", "deactivate"].includes(data.action)
+            )
+              throw Error("自动导入会话操作无效");
+            return json(
+              res,
+              200,
+              await (data.action === "activate"
+                ? autoImports.activate(p.id, data.credentials)
+                : autoImports.deactivate(p.id)),
+            );
+          }
+          if (action === "auto-import-run" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some((k) => k !== "sourceId") ||
+              typeof data.sourceId !== "string"
+            )
+              throw Error("数据源标识无效");
+            return json(res, 200, await autoImports.run(p.id, data.sourceId));
+          }
+          if (action === "import" && req.method === "POST") {
+            const b = await body(req);
+            requirePostmanEnvironmentText(b.document);
+            importIntoProject(p, b.document, {
+              postmanVariableMode: b.postmanVariableMode,
+              modelNameMode: b.modelNameMode,
+              inheritanceMode: b.inheritanceMode,
+            });
+            await store.save(p);
+            return json(res, 200, p);
+          }
+          if (["export-preview", "export-selection"].includes(action)) {
+            if (parts.length !== 4)
+              return json(res, 404, { error: "选择导出路径无效" });
+            if (req.method !== "POST")
+              return json(res, 405, { error: "选择导出仅支持 POST" });
+            if (u.searchParams.size) throw Error("选择导出不接受查询参数");
+            const input = await body(req);
+            // The request body may have arrived after an earlier configuration
+            // read. Use a fresh locked Store snapshot for preview and export.
+            const current = await store.get(p.id);
+            return json(
+              res,
+              200,
+              (action === "export-preview"
+                ? previewDefinitionExport
+                : exportDefinitionSelection)(current, input),
+            );
+          }
+          if (action === "export" && req.method === "GET") {
+            // A typo or unsupported scope must never silently become a full backup.
+            // Keep diagnostics fixed: query names/values may themselves be secrets.
+            for (const key of u.searchParams.keys()) {
+              if (!["format", "modelNameMode", "databaseMode"].includes(key))
+                throw Error("项目导出不接受此查询参数");
+              if (u.searchParams.getAll(key).length !== 1)
+                throw Error("项目导出查询参数不得重复");
+            }
+            const format = u.searchParams.get("format") ?? "native";
+            if (
+              ![
+                "native",
+                "backup",
+                "apipost",
+                "apipost-directory",
+                "openapi",
+              ].includes(format)
+            )
+              throw Error("项目导出格式无效");
+            const apipostFormat = ["apipost", "apipost-directory"].includes(
+              format,
+            );
+            const modelNameMode =
+              u.searchParams.get("modelNameMode") ?? undefined;
+            const databaseMode =
+              u.searchParams.get("databaseMode") ?? undefined;
+            if (
+              !apipostFormat &&
+              (modelNameMode !== undefined || databaseMode !== undefined)
+            )
+              throw Error("项目导出选项仅支持Apipost原生格式");
+            resolveModelNameMode(modelNameMode);
+            if (databaseMode !== undefined && databaseMode !== "rebind")
+              throw Error("数据库导出模式仅支持显式 rebind");
+            return json(
+              res,
+              200,
+              format === "apipost-directory"
+                ? exportApipostDirectory(p, {
+                    modelNameMode,
+                    databaseMode,
+                  })
+                : format === "apipost"
+                  ? exportApipost(p, {
+                      modelNameMode,
+                      databaseMode,
+                    })
+                  : format === "openapi"
+                    ? exportOpenAPI(p)
+                    : p,
+              { completeProject: true },
+            );
+          }
+          if (action === "grpc-reflection" && req.method === "POST") {
+            const { runId, ...input } = await body(req);
+            return await withGrpcTask(runId, async (runId, signal) =>
+              json(res, 200, { ...(await reflectGrpc(input, signal)), runId }),
+            );
+          }
+          if (action === "grpc-request-example" && req.method === "POST")
+            return json(res, 200, generateGrpcRequestExample(await body(req)));
+          if (action === "grpc-schema" && req.method === "POST")
+            return json(res, 200, inspectGrpcSchema(await body(req)));
+          if (action === "grpc-definitions") {
+            const definitions = p.settings.grpcDefinitions || [];
+            if (req.method === "GET") return json(res, 200, definitions);
+            if (req.method === "POST") {
+              const definition = normalizeGrpcDefinition(await body(req));
+              const index = definitions.findIndex(
+                (item) => item.id === definition.id,
+              );
+              const next = definitions.slice();
+              if (index < 0) next.push(definition);
+              else next[index] = definition;
+              p.settings.grpcDefinitions = next;
+              await store.save(p);
+              return json(res, 200, {
+                definition,
+                projectRevision: p.revision,
+              });
+            }
+            if (req.method === "DELETE") {
+              const data = await body(req);
+              if (!definitions.some((item) => item.id === data.id))
+                throw Error("gRPC定义不存在");
+              p.settings.grpcDefinitions = definitions.filter(
+                (item) => item.id !== data.id,
+              );
+              await store.save(p);
+              return json(res, 200, { deleted: true });
+            }
+          }
+          if (action === "socketio-definitions") {
+            const definitions = p.settings.socketioDefinitions || [];
+            if (req.method === "GET") return json(res, 200, definitions);
+            if (req.method === "POST") {
+              const definition = normalizeSocketIODefinition(await body(req));
+              const next = definitions.slice(),
+                index = next.findIndex((x) => x.id === definition.id);
+              if (index < 0) next.push(definition);
+              else next[index] = definition;
+              p.settings.socketioDefinitions = next;
+              await store.save(p);
+              return json(res, 200, {
+                definition,
+                projectRevision: p.revision,
+              });
+            }
+            if (req.method === "DELETE") {
+              const { id: definitionId } = await body(req);
+              if (!definitions.some((x) => x.id === definitionId))
+                throw Error("Socket.IO定义不存在");
+              p.settings.socketioDefinitions = definitions.filter(
+                (x) => x.id !== definitionId,
+              );
+              await store.save(p);
+              return json(res, 200, { deleted: true });
+            }
+          }
+          if (action === "socketio-runs" && req.method === "GET")
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter((x) => x.type === "socketio"),
+            );
+          if (action === "socketio-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (req.method === "GET")
+              return json(
+                res,
+                200,
+                sessionId
+                  ? socketioSessions.snapshot(p.id, sessionId)
+                  : socketioSessions.list(p.id),
+              );
+            if (req.method === "POST") {
+              const data = await body(req);
+              if (!sessionId) {
+                if (
+                  Object.keys(data).some(
+                    (k) =>
+                      ![
+                        "definitionId",
+                        "auth",
+                        "query",
+                        "headers",
+                        "tls",
+                        "connectTimeoutMs",
+                        "transport",
+                      ].includes(k),
+                  )
+                )
+                  throw Error("Socket.IO连接字段无效，目标须通过定义保存");
+                const definition = (p.settings.socketioDefinitions || []).find(
+                  (x) => x.id === data.definitionId,
+                );
+                if (!definition) throw Error("Socket.IO定义不存在");
+                const { definitionId, ...input } = data;
+                return json(
+                  res,
+                  200,
+                  socketioSessions.start(p.id, { ...definition, ...input }),
+                );
+              }
+              if (operation === "send")
+                return json(
+                  res,
+                  200,
+                  await socketioSessions.send(p.id, sessionId, data),
+                );
+              if (operation === "ack")
+                return json(
+                  res,
+                  200,
+                  socketioSessions.acknowledge(p.id, sessionId, data),
+                );
+              if (operation === "watch") {
+                if (Object.keys(data).some((k) => k !== "events"))
+                  throw Error("Socket.IO监听字段无效");
+                return json(
+                  res,
+                  200,
+                  socketioSessions.watch(p.id, sessionId, data.events),
+                );
+              }
+              if (operation === "stop") {
+                if (Object.keys(data).length)
+                  throw Error("Socket.IO停止不接受额外字段");
+                const session = socketioSessions.get(p.id, sessionId);
+                socketioSessions.stop(p.id, sessionId);
+                session.finalSnapshot ??= socketioSessions.snapshot(
+                  p.id,
+                  sessionId,
+                );
+                const result = session.finalSnapshot;
+                if (session.recordSaved)
+                  return json(res, 200, {
+                    ...result,
+                    ...recordSaveSuccess(sessionId),
+                  });
+                const pending = (session.recordPromise ??= (async () => {
+                  try {
+                    await finalizeSocketIOSession(store, p.id, session, result);
+                    session.recordSaved = true;
+                    return {
+                      ...result,
+                      ...recordSaveSuccess(sessionId),
+                    };
+                  } catch (error) {
+                    return {
+                      ...result,
+                      ...recordSaveFailure(p.id, sessionId, error),
+                    };
+                  }
+                })());
+                const recorded = await pending;
+                if (!session.recordSaved && session.recordPromise === pending)
+                  session.recordPromise = null;
+                return json(res, 200, recorded);
+              }
+            }
+          }
+          if (action === "grpc-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (parts.length > 6) throw Error("gRPC会话路径无效");
+            if (sessionId && req.method === "GET" && !operation)
+              return json(res, 200, grpcSessions.snapshot(p.id, sessionId));
+            if (req.method !== "POST") throw Error("gRPC会话操作无效");
+            const input = await body(req);
+            if (!input || typeof input !== "object" || Array.isArray(input))
+              throw Error("gRPC会话参数必须为对象");
+            if (!sessionId) {
+              if (
+                Object.keys(input).some(
+                  (key) =>
+                    !["definitionId", "message", "metadata", "tls"].includes(
+                      key,
+                    ),
+                )
+              )
+                throw Error("gRPC会话仅接受已保存定义及临时消息/凭据");
+              const definition = (p.settings.grpcDefinitions || []).find(
+                (item) => item.id === input.definitionId,
+              );
+              if (!definition) throw Error("gRPC定义不存在或不属于此项目");
+              const options = Object.fromEntries(
+                ["message", "metadata", "tls"]
+                  .filter((key) => Object.hasOwn(input, key))
+                  .map((key) => [key, input[key]]),
+              );
+              return json(
+                res,
+                200,
+                grpcSessions.start(p.id, definition, options),
+              );
+            }
+            // Check ownership even for an invalid operation; IDs never cross projects.
+            grpcSessions.get(p.id, sessionId);
+            if (operation === "send") {
+              if (
+                Object.keys(input).some((key) => key !== "message") ||
+                !Object.hasOwn(input, "message")
+              )
+                throw Error("gRPC会话send须且仅须message");
+              return json(
+                res,
+                200,
+                grpcSessions.send(p.id, sessionId, input.message),
+              );
+            }
+            if (Object.keys(input).length)
+              throw Error("gRPC会话终止操作不接受额外字段");
+            if (operation === "half-close")
+              return json(res, 200, grpcSessions.halfClose(p.id, sessionId));
+            if (operation === "cancel")
+              return json(res, 200, await grpcSessions.cancel(p.id, sessionId));
+            if (operation === "reconcile")
+              return json(
+                res,
+                200,
+                await grpcSessions.reconcile(p.id, sessionId),
+              );
+            throw Error("未知gRPC会话操作");
+          }
+          if (action === "grpc-runs" && req.method === "GET")
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter((item) => item.type === "grpc"),
+            );
+          if (action === "grpc-run" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              Object.keys(data).some(
+                (key) =>
+                  ![
+                    "definitionId",
+                    "service",
+                    "method",
+                    "timeoutMs",
+                    "messages",
+                    "metadata",
+                    "tls",
+                    "runId",
+                  ].includes(key),
+              )
+            )
+              throw Error("gRPC执行字段无效，地址及proto须通过定义保存");
+            const source = (p.settings.grpcDefinitions || []).find(
+              (item) => item.id === data.definitionId,
+            );
+            if (!source) throw Error("gRPC定义不存在");
+            const definition = normalizeGrpcDefinition({
+              ...source,
+              ...Object.fromEntries(
+                ["service", "method", "timeoutMs"]
+                  .filter((key) => data[key] !== undefined)
+                  .map((key) => [key, data[key]]),
+              ),
+            });
+            return await withGrpcTask(data.runId, async (runId, signal) => {
+              const request = Object.fromEntries(
+                [
+                  "target",
+                  "proto",
+                  "files",
+                  "protoName",
+                  "schema",
+                  "service",
+                  "method",
+                  "timeoutMs",
+                  "requiredMetadata",
+                ]
+                  .filter((key) => definition[key] !== undefined)
+                  .map((key) => [key, definition[key]]),
+              );
+              const result = await executeGrpc(
+                {
+                  ...request,
+                  ...Object.fromEntries(
+                    ["messages", "metadata", "tls"]
+                      .filter((key) => data[key] !== undefined)
+                      .map((key) => [key, data[key]]),
+                  ),
+                },
+                signal,
+              );
+              const record = {
+                id: result.id,
+                runId,
+                type: "grpc",
+                createdAt: new Date().toISOString(),
+                definition,
+                definitionHash: createHash("sha256")
+                  .update(JSON.stringify(definition))
+                  .digest("hex"),
+                requestMessages: structuredClone(data.messages ?? [{}]),
+                result: { ...result, metadata: [], trailers: [] },
+                status:
+                  result.status.code === 0
+                    ? "passed"
+                    : result.status.code === 1
+                      ? "cancelled"
+                      : "failed",
+              };
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "protocolRuns",
+                record,
+              );
+              return json(res, 200, {
+                ...result,
+                runId,
+                ...receipt,
+              });
+            });
+          }
+          if (action === "protocol-sessions") {
+            const sessionId = parts[4],
+              operation = parts[5];
+            if (!sessionId && req.method === "POST") {
+              const input = await body(req);
+              if (
+                [
+                  "duration",
+                  "maxEvents",
+                  "maxMessages",
+                  "runId",
+                  "projectId",
+                ].some((key) => input[key] !== undefined)
+              )
+                throw Error("交互协议会话使用固定生命周期，不接受单次捕获选项");
+              const prepared = prepareWireExecution(p, input),
+                result = protocolSessions.start(prepared.request, {
+                  templateContext: prepared.templateContext,
+                  templateProvenance: prepared.templateProvenance,
+                  projectId: p.id,
+                  definition: prepared.definition,
+                }),
+                session = protocolSessions.get(result.id);
+              return json(res, 200, {
+                ...protocolSessions.snapshot(session.id),
+                projectId: p.id,
+                ...(session.receipt || { recordSaved: false }),
+              });
+            }
+            const session = protocolSessions.get(sessionId);
+            if (session.projectId !== p.id)
+              throw Error("协议会话不存在或不属于此项目");
+            if (req.method === "GET" && !operation)
+              return json(res, 200, {
+                ...protocolSessions.snapshot(sessionId),
+                projectId: p.id,
+                ...(session.receipt || { recordSaved: false }),
+              });
+            if (req.method !== "POST") throw Error("协议会话操作无效");
+            const input = await body(req);
+            if (operation === "send") {
+              if (Object.keys(input).some((key) => key !== "message"))
+                throw Error("协议会话发送字段无效");
+              return json(res, 200, {
+                ...protocolSessions.send(sessionId, input.message),
+                projectId: p.id,
+              });
+            }
+            if (operation === "stop") {
+              if (Object.keys(input).length)
+                throw Error("协议停止不接受额外字段");
+              // A previous completed failure may retry storage, never transport.
+              // Capture before stop: stop itself can synchronously start the first save.
+              if (
+                session.receipt &&
+                !session.recordSaved &&
+                !session.recordPending &&
+                !protocolSessions.closing
+              )
+                session.recordPromise = null;
+              protocolSessions.stop(sessionId);
+              const receipt = await saveWireSession(session);
+              return json(res, 200, {
+                ...session.finalSnapshot,
+                projectId: p.id,
+                ...receipt,
+              });
+            }
+            throw Error("未知协议会话操作");
+          }
+          if (action === "protocol-runs" && req.method === "GET") {
+            const type = u.searchParams.get("type");
+            if (
+              type &&
+              !["tcp", "websocket", "sse", "grpc", "socketio"].includes(type)
+            )
+              throw Error("未知协议记录类型");
+            return json(
+              res,
+              200,
+              (p.protocolRuns || []).filter(
+                (record) => !type || record.type === type,
+              ),
+            );
+          }
+          if (action === "protocol" && req.method === "POST") {
+            const input = await body(req),
+              prepared = prepareWireExecution(p, input);
+            const fn = {
+              sse: captureSSE,
+              tcp: exchangeTCP,
+              websocket: exchangeWebSocket,
+            }[prepared.definition.type];
+            const { controller, runId } = claimRun(input.runId),
+              startedAt = Date.now();
+            let result, error;
+            try {
+              try {
+                result = await withWireSlot(() =>
+                  fn(prepared.request, controller.signal),
+                );
+              } catch (failure) {
+                error = failure;
+              }
+              let record, receipt;
+              try {
+                record = makeWireRecord(
+                  prepared,
+                  runId,
+                  startedAt,
+                  result,
+                  error,
+                  controller.signal.aborted,
+                );
+                await store.append(p.id, "protocolRuns", record);
+                receipt = recordSaveSuccess(record.id);
+              } catch (failure) {
+                receipt = recordSaveFailure(p.id, record?.id ?? null, failure);
+              }
+              return json(res, error ? 400 : 200, {
+                ...(result || {}),
+                ...(error ? { error: error.message } : {}),
+                runId,
+                ...receipt,
+              });
+            } finally {
+              controllers.delete(runId);
+            }
+          }
+          if (action === "mcp-database-connections") {
+            const epoch = requestDatabaseEpoch;
+            mcpDatabaseGrants.assertProject(p.id, epoch);
+            if (req.method === "GET")
+              return json(res, 200, mcpDatabaseGrants.list(p.id, epoch));
+            if (req.method === "POST")
+              return json(
+                res,
+                200,
+                mcpDatabaseGrants.register(p, await body(req), epoch),
+              );
+            if (req.method === "DELETE") {
+              mcpDatabaseGrants.revoke(p.id, (await body(req)).id, epoch);
+              return json(res, 200, { revoked: true });
+            }
+            return json(res, 405, { error: "Method not allowed" });
+          }
+          if (action === "database-connections") {
+            if (req.method === "GET")
+              return json(res, 200, databaseSessions.list(p.id));
+            if (req.method === "POST") {
+              const config = await body(req);
+              if (config.bindingId !== undefined) {
+                const source = p.settings?.apipostDatabases?.find(
+                  (item) => item.id === config.bindingId,
+                );
+                assertDatabaseBindingRequirements(source, config);
+              }
+              return json(res, 200, databaseSessions.register(p.id, config));
+            }
+            if (req.method === "DELETE") {
+              databaseSessions.revoke(p.id, (await body(req)).id);
+              return json(res, 200, { revoked: true });
+            }
+          }
+          if (action === "database" && req.method === "POST") {
+            const b = await body(req);
+            if (b.allowWrite !== undefined && typeof b.allowWrite !== "boolean")
+              throw Error("写入标识必须为布尔值");
+            if ((!b.type || b.type === "sqlite") && b.ssh !== undefined)
+              throw Error("SQLite暂不支持SSH；已拒绝本地执行");
+            if (b.allowWrite === true) {
+              if (b.type === "postgres")
+                return json(res, 200, await mutatePostgres(b));
+              if (b.type === "mysql")
+                return json(res, 200, await mutateMySQL(b));
+              if (b.type === "redis")
+                return json(res, 200, await mutateRedis(b));
+              if (b.type && b.type !== "sqlite")
+                throw Error(
+                  "显式写入目前仅支持 SQLite / PostgreSQL / MySQL / Redis SET",
+                );
+              return json(
+                res,
+                200,
+                await mutateSQLiteBounded(
+                  b.filename,
+                  b.sql,
+                  b.parameters || [],
+                ),
+              );
+            }
+
+            // Only the read branch is disconnect-cancellable. Explicit writes
+            // retain their acknowledged/uncertain outcome contract.
+            const controller = new AbortController();
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            res.once("close", disconnected);
+            if (res.destroyed) disconnected();
+            try {
+              const result =
+                b.type && b.type !== "sqlite"
+                  ? await queryRemoteDatabase(b, { signal: controller.signal })
+                  : await querySQLiteBounded(
+                      b.filename,
+                      b.sql,
+                      b.parameters || [],
+                      { signal: controller.signal },
+                    );
+              if (!res.destroyed) return json(res, 200, result);
+              return;
+            } finally {
+              res.removeListener("close", disconnected);
+            }
+          }
+          if (action === "dictionary-preview" && req.method === "POST") {
+            const data = await body(req);
+            return json(
+              res,
+              200,
+              previewParameterImport(
+                parseParameterImport(data.source, data.format),
+                p.parameterDictionary || [],
+              ),
+            );
+          }
+          if (action === "sample" && req.method === "POST") {
+            const b = await body(req);
+            return json(res, 200, {
+              sample: sampleProjectSchema(p, b.schema ?? {}),
+            });
+          }
+          if (action === "environments" && req.method === "POST") {
+            const b = await body(req);
+            const allowedOperations = [
+              "list_environments",
+              "switch_environment",
+              "create_environment",
+              "update_environment",
+              "delete_environment",
+              "list_environment_servers",
+              "create_environment_server",
+              "update_environment_server",
+              "delete_environment_server",
+              "get_environment_variables",
+              "upsert_environment_variable",
+              "delete_environment_variable",
+              "get_global_variables",
+              "upsert_global_variable",
+              "delete_global_variable",
+            ];
+            if (!allowedOperations.includes(b.operation))
+              throw Error("环境操作不存在");
+            const result = manageEnvironment(p, b.operation, b.arguments || {});
+            if (
+              !b.operation.startsWith("list_") &&
+              !b.operation.startsWith("get_")
+            )
+              await store.save(p);
+            return json(res, 200, { result, project: p });
+          }
+          if (action === "dynamic-preview" && req.method === "POST") {
+            const b = await body(req);
+            const context = debugEnvironment(
+              p,
+              b.environmentId,
+              debugEnvironments,
+              b.postmanCollectionId,
+            );
+            return json(res, 200, {
+              value: await resolveDynamicValue(
+                b.spec,
+                context.variables,
+                b.functions || p.settings?.functions || [],
+              ),
+            });
+          }
+          if (action === "function-preview" && req.method === "POST") {
+            const b = await body(req);
+            return json(res, 200, await previewFunction(b.function, b.value));
+          }
+          if (
+            ["curl", "code-generation"].includes(action) &&
+            req.method === "POST"
+          ) {
+            const data = await body(req);
+            if (action === "code-generation")
+              assertCodeTarget(data.target, data.client);
+            const inheritedRequest = resolveNativeInheritance(p, data.request);
+            const exportRequest =
+              inheritedRequest?.scriptURLMode === "sdk" ||
+              inheritedRequest?.postmanRawBody !== undefined
+                ? applySharedScripts(p, inheritedRequest)
+                : inheritedRequest;
+            assertSDKCurlDefinition(exportRequest);
+            postmanRawExportDefinition(
+              exportRequest?.postmanRawBody !== undefined
+                ? applyGlobalParameters(p, exportRequest)
+                : exportRequest,
+            );
+            const context = debugEnvironment(
+              p,
+              data.environmentId,
+              debugEnvironments,
+              data.request?.postmanCollectionId,
+            );
+            const resolved = resolveServiceRequest(
+              p,
+              sdkCurlDefinition(
+                await resolveDynamicRequest(
+                  applySharedAuth(p, applyGlobalParameters(p, exportRequest)),
+                  context.variables,
+                  p.settings?.functions || [],
+                  interpolate,
+                ),
+              ),
+              context.environment.id,
+            );
+            return json(
+              res,
+              200,
+              action === "curl"
+                ? { curl: toCurl(resolved, { collectionResolved: true }) }
+                : generateRequestCode(resolved, data.target, data.client, {
+                    collectionResolved: true,
+                  }),
+            );
+          }
+          if (action === "execute" && req.method === "POST") {
+            const b = await body(req),
+              { controller, runId } = claimRun(b.runId);
+            try {
+              const context = debugEnvironment(
+                p,
+                b.environmentId,
+                debugEnvironments,
+                b.request?.postmanCollectionId,
+              );
+              const env = context.variables;
+              const request = normalizeRequest(
+                freezeServiceBinding(p, b.request),
+              );
+              const scoped = scopedExecution(
+                store,
+                p,
+                context.environment.id,
+                env,
+                request.postmanCollectionId,
+              );
+              const single = await runPlan(
+                snapshotPlan({
+                  name: request.name,
+                  functions: b.functions || p.settings?.functions || [],
+                  steps: [{ request }],
+                }),
+                env,
+                executeRequest,
+                {
+                  ...scoped,
+                  databaseQuery: (operation, signal) =>
+                    databaseSessions.query(p.id, operation, signal),
+                  cookieSession: projectCookieSession(
+                    store,
+                    p,
+                    context.environment.id,
+                  ),
+                  signal: controller.signal,
+                  prepareRequest: createServiceRequestResolver(
+                    p,
+                    context.environment.id,
+                  ),
+                },
+              );
+              const result = single.results[0];
+              if (result?.response)
+                publishDebugVariables(debugEnvironments, context.publication, {
+                  fingerprint: debugEnvironmentFingerprint(
+                    p,
+                    context.environment.id,
+                    request.postmanCollectionId,
+                  ),
+                  variables: structuredClone(single.variables),
+                });
+              if (!result) throw Error("请求已取消");
+              const receipt = await appendExecutionRecord(
+                store,
+                p.id,
+                "history",
+                {
+                  id: id(),
+                  runId,
+                  createdAt: new Date().toISOString(),
+                  name: request.name,
+                  ...result,
+                  source: "manual",
+                  durationMs: single.durationMs,
+                },
+              );
+              return json(res, 200, {
+                ...result.response,
+                runId,
+                ...receipt,
+                outcome: result.status,
+                failure: result.failure,
+                redirectFailure: result.redirectFailure,
+                variableWrites: scoped.receipt(),
+                ...(result.scopeCommit
+                  ? { scopeCommit: result.scopeCommit }
+                  : {}),
+                assertions: result.assertions,
+                extracted: { ...single.variables, ...result.extracted },
+                logs: result.logs,
+                subrequests: result.subrequests,
+                databaseQueries: result.databaseQueries,
+                visualization: result.visualization,
+                scriptResponse: result.scriptResponse,
+                scriptStage: result.scriptStage,
+                scriptScope: result.scriptScope,
+                scriptDiagnostics: result.scriptDiagnostics,
+                error: result.error,
+              });
+            } finally {
+              controllers.delete(runId);
+            }
+          }
+          if (action === "cases" && req.method === "POST") {
+            const data = await body(req);
+            if (
+              !p.requests.some(
+                (request) =>
+                  request.id === data.sourceRequestId && !request.deletedAt,
+              )
+            )
+              throw Error("来源接口不存在");
+            const item = snapshotCase({
+              ...data,
+              request: freezeServiceBinding(p, data.request, {
+                allowNativeSnapshot: Boolean(
+                  p.cases?.some((item) => item.id === data.id),
+                ),
+              }),
+              functions: data.functions || p.settings?.functions || [],
+            });
+            p.cases ??= [];
+            const index = p.cases.findIndex(
+              (existing) => existing.id === item.id,
+            );
+            if (index < 0) {
+              if (p.cases.length >= 1000) throw Error("用例最多1000个");
+              p.cases.push(item);
+            } else p.cases[index] = item;
+            await store.save(p);
+            return json(res, 200, { item, project: p });
+          }
+          if (action === "plans-validate") {
+            if (req.method !== "POST" || parts.length !== 4 || u.search)
+              return json(res, 400, {
+                error: "计划预检仅支持精确路径 POST 且不能含查询参数",
+              });
+            const b = await body(req);
+            if (
+              (b.projectConfigRevision ?? b.projectRevision) !== undefined &&
+              (b.projectConfigRevision ?? b.projectRevision) !==
+                (p.configRevision ?? p.revision)
+            )
+              throw Error("项目已有其他修改，请重新加载");
+            // This checks the candidate definition only. Reading the project may
+            // recover an existing journal; no candidate write or execution occurs.
+            // Freeze/normalization results must never replace the caller's draft.
+            const project = structuredClone(p),
+              input = structuredClone(b);
+            versionPlan(
+              project.plans.find((item) => item.id === input.id),
+              {
+                ...input,
+                functions: input.functions || project.settings?.functions || [],
+              },
+              "manual",
+              project,
+            );
+            return json(res, 200, {
+              valid: true,
+              project_id: p.id,
+              projectConfigRevision: p.configRevision ?? p.revision,
+            });
+          }
+          if (action === "plans" && req.method === "POST") {
+            if (parts.length !== 4 || u.search)
+              return json(res, 400, {
+                error: "计划保存仅支持精确路径且不能含查询参数",
+              });
+            const b = await body(req);
+            if (
+              (b.projectConfigRevision ?? b.projectRevision) !== undefined &&
+              (b.projectConfigRevision ?? b.projectRevision) !==
+                (p.configRevision ?? p.revision)
+            )
+              throw Error("项目已有其他修改，请重新加载");
+            const plan = versionPlan(
+              p.plans.find((item) => item.id === b.id),
+              { ...b, functions: b.functions || p.settings?.functions || [] },
+              "manual",
+              p,
+            );
+            const index = p.plans.findIndex((x) => x.id === plan.id);
+            if (index < 0) p.plans.push(plan);
+            else p.plans[index] = plan;
+            await store.save(p);
+            return json(res, 200, {
+              ...plan,
+              projectRevision: p.revision,
+              projectConfigRevision: p.configRevision,
+              projectFingerprint: p._diskFingerprint,
+            });
+          }
+          if (action === "run" && req.method === "POST") {
+            const b = await body(req);
+            const { controller, runId } = claimRun(b.runId || undefined);
+            try {
+              let executionProject = p;
+              let definition = p.plans.find((x) => x.id === b.planId);
+              if (!definition) throw Error("计划不存在");
+              if (hasLiveReferences(definition)) {
+                executionProject = await store.get(p.id);
+                controller.signal.throwIfAborted();
+                definition = executionProject.plans.find(
+                  (x) => x.id === b.planId,
+                );
+                if (!definition) throw Error("计划不存在");
+              }
+              const { plan, bindings } = materializeLivePlan(
+                executionProject,
+                definition,
+                { allowRuntimeRows: true },
+              );
+              controller.signal.throwIfAborted();
+              const environmentId = selectedEnvironment(
+                executionProject,
+                b.environmentId || plan.environmentId,
+              ).id;
+              const env = environmentVariables(executionProject, environmentId);
+              const run = await runPlan(plan, env, executeRequest, {
+                allowRuntimeRows: true,
+                executeGrpc: executePlanGrpc,
+                grpcCredentials: b.grpcCredentials,
+                executeProtocol: executePlanWire,
+                protocolCredentials: b.protocolCredentials,
+                executeSocketIO: (input, signal) =>
+                  executeSocketIOFlow(input, signal, {
+                    projectId: p.id,
+                    sessions: socketioSessions,
+                  }),
+                socketioCredentials: b.socketioCredentials,
+                ...scopedExecution(store, executionProject, environmentId),
+                // Manual sessions authorize all potential declarative reads.
+                // This checks grants only; each actual query checks them again.
+                databasePreflight: (ids, signal) =>
+                  databaseSessions.assertAuthorizedMany(p.id, ids, signal),
+                databaseQuery: (operation, signal) =>
+                  databaseSessions.query(p.id, operation, signal),
+                cookieSession: projectCookieSession(
+                  store,
+                  executionProject,
+                  environmentId,
+                ),
+                signal: controller.signal,
+                prepareRequest: createServiceRequestResolver(
+                  executionProject,
+                  environmentId,
+                ),
+              });
+              run.environmentId = environmentId;
+              if (bindings.length) run.liveBindings = bindings;
+              return json(
+                res,
+                200,
+                await recordPlanRun(store, p.id, run, "manual"),
+              );
+            } finally {
+              controllers.delete(runId);
+            }
+          }
+          if (action === "staged-load" && req.method === "POST") {
+            const b = await body(req);
+            if (
+              b.persistReport !== undefined &&
+              typeof b.persistReport !== "boolean"
+            )
+              throw Error("persistReport 必须是布尔值");
+            const { controller, runId } = claimRun(b.runId);
+            let pendingReport, reportReceipt;
+            const finishReport = async (result) => {
+              if (pendingReport) {
+                const pending = pendingReport;
+                pendingReport = undefined;
+                reportReceipt = await finishLoadReport(
+                  store,
+                  p.id,
+                  pending,
+                  result,
+                  controller.signal.aborted,
+                );
+              }
+              return reportReceipt;
+            };
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            const emit = (event, data) => {
+              if (res.destroyed) throw Error("客户端已断开");
+              res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            };
+            try {
+              if (b.persistReport) {
+                const begun = await beginLoadReport(store, p.id, "staged");
+                if (!begun.record) return json(res, 503, begun.receipt);
+                pendingReport = begun.record;
+              }
+              let executionProject = p;
+              let definition = p.plans.find((item) => item.id === b.planId);
+              if (!definition) throw Error("计划不存在");
+              if (hasLiveReferences(definition)) {
+                executionProject = await store.get(p.id);
+                definition = executionProject.plans.find(
+                  (item) => item.id === b.planId,
+                );
+                if (!definition) throw Error("计划不存在");
+              }
+              const { plan } = materializeLivePlan(
+                executionProject,
+                definition,
+                { allowRuntimeRows: true },
+              );
+              const prepared = prepareStagedLoad(
+                executionProject,
+                plan,
+                b.schedule,
+                {
+                  environmentId: b.environmentId,
+                },
+              );
+              const context = debugEnvironment(
+                executionProject,
+                prepared.selected.id,
+                debugEnvironments,
+              );
+              const cookieState = controller.signal.aborted
+                ? undefined
+                : await projectCookieSession(
+                    store,
+                    executionProject,
+                    prepared.selected.id,
+                  ).inspect();
+              if (res.destroyed) return;
+              res.writeHead(200, {
+                "Content-Type": "text/event-stream; charset=utf-8",
+                "Cache-Control": "no-store",
+              });
+              emit("start", {
+                runId,
+                ...(pendingReport ? { recordId: pendingReport.id } : {}),
+              });
+              const result = await runStagedLoad(executionProject, prepared, {
+                signal: controller.signal,
+                variables: context.variables,
+                cookieState,
+                onProgress: (progress) => {
+                  if (b.persistReport && res.destroyed) return;
+                  emit("report", progress);
+                },
+              });
+              await finishReport(result);
+              if (!res.destroyed) {
+                // Explicit cancellation may happen while the caller remains connected.
+                res.write(
+                  `event: reportEnd\ndata: ${JSON.stringify({ ...result, ...reportReceipt })}\n\n`,
+                );
+                res.write(
+                  `event: complete\ndata: ${JSON.stringify({ stopReason: result.stopReason })}\n\n`,
+                );
+                res.end();
+              }
+              return;
+            } catch (error) {
+              await finishReport();
+              if (!res.headersSent) {
+                if (b.persistReport && !res.destroyed)
+                  return json(res, 400, {
+                    error: "STAGED_LOAD_FAILED",
+                    ...reportReceipt,
+                  });
+                throw error;
+              }
+              if (!res.destroyed) {
+                res.write(
+                  `event: error\ndata: ${JSON.stringify({ code: "STAGED_LOAD_FAILED", ...reportReceipt })}\n\n`,
+                );
+                res.end();
+              }
+              return;
+            } finally {
+              await finishReport();
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+            }
+          }
+          if (action === "load" && req.method === "POST") {
+            const b = await body(req);
+            if (
+              b.persistReport !== undefined &&
+              typeof b.persistReport !== "boolean"
+            )
+              throw Error("persistReport 必须是布尔值");
+            const context = debugEnvironment(
+              p,
+              b.environmentId,
+              debugEnvironments,
+              b.request?.postmanCollectionId,
+            );
+            const { controller, runId } = claimRun(b.runId);
+            let pendingReport, reportReceipt;
+            const finishReport = async (result) => {
+              if (pendingReport) {
+                const pending = pendingReport;
+                pendingReport = undefined;
+                reportReceipt = await finishLoadReport(
+                  store,
+                  p.id,
+                  pending,
+                  result,
+                  controller.signal.aborted,
+                );
+              }
+              return reportReceipt;
+            };
+            const disconnected = () => {
+              if (!res.writableFinished) controller.abort();
+            };
+            req.once("aborted", disconnected);
+            res.once("close", disconnected);
+            if (req.aborted || res.destroyed) disconnected();
+            try {
+              if (b.persistReport) {
+                const begun = await beginLoadReport(store, p.id, "one-shot");
+                if (!begun.record) return json(res, 503, begun.receipt);
+                pendingReport = begun.record;
+              }
+              const result = await runLoad(p, b.request, {
+                cookieState: await projectCookieSession(
+                  store,
+                  p,
+                  context.environment.id,
+                ).inspect(),
+                mode: b.mode,
+                durationSeconds: b.durationSeconds,
+                dataCSV: b.dataCSV,
+                count: b.count,
+                concurrency: b.concurrency,
+                environmentId: context.environment.id,
+                variables: context.variables,
+                signal: controller.signal,
+              });
+              await finishReport(result);
+              if (!res.destroyed)
+                return json(
+                  res,
+                  200,
+                  reportReceipt ? { ...result, ...reportReceipt } : result,
+                );
+              return;
+            } catch (error) {
+              await finishReport();
+              if (!b.persistReport) throw error;
+              if (!res.destroyed)
+                return json(res, 400, {
+                  error: "LOAD_FAILED",
+                  ...reportReceipt,
+                });
+            } finally {
+              await finishReport();
+              req.off("aborted", disconnected);
+              res.off("close", disconnected);
+              controllers.delete(runId);
+            }
+          }
+        }
+        return json(res, 404, { error: "API not found" });
+      }
+      const pathname = u.pathname === "/" ? "/index.html" : u.pathname;
+      const file = path.resolve(publicDir, "." + pathname);
+      if (!file.startsWith(publicDir))
+        return json(res, 403, { error: "Path rejected" });
+      const data = await readFile(file);
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'",
+      );
+      res.setHeader(
+        "Content-Type",
+        {
+          ".html": "text/html; charset=utf-8",
+          ".css": "text/css",
+          ".js": "text/javascript",
+          ".svg": "image/svg+xml",
+        }[path.extname(file)] || "application/octet-stream",
+      );
+      res.end(data);
+    } catch (e) {
+      json(res, e.code === "ENOENT" ? 404 : 400, {
+        error: e.message,
+        ...sqliteProcessFailureDetails(e),
+        ...publicProjectCommitOutcome(e),
+        ...ownerPutOutcome?.public(e),
+      });
+    }
+  });
+  let protocolShutdown;
+  const beginProtocolShutdown = () => (
+    protocolIntents.close(),
+    (protocolShutdown ??= Promise.all([
+      protocolSessions.close(),
+      grpcSessions.close(),
+      mcpHTTPSessions.drain(),
+    ]).then(([protocolSessions, grpcSessions]) => ({
+      protocolSessions,
+      grpcSessions,
+    })))
+  );
+  server.on("close", () => {
+    closeManualImports();
+    void autoImports.close();
+    mcpHTTPSessions.close();
+    beginProtocolShutdown();
+    socketioSessions.close();
+    oauth.close();
+    oauth1.close();
+    nativeWriteOwner.close();
+    databaseSessions.close();
+    mcpDatabaseGrants.invalidate();
+  });
+  // Preserve Node's server API while making its completion callback acknowledge
+  // graceful transport finalization and the one automatic persistence attempt.
+  const closeServer = server.close.bind(server);
+  server.close = (callback) => {
+    closeManualImports();
+    mcpHTTPSessions.close();
+    nativeWriteOwner.close();
+    // Abort held provider requests before waiting for HTTP close.
+    oauth.close();
+    oauth1.close();
+    beginProtocolShutdown();
+    return closeServer((error) => {
+      Promise.resolve(protocolShutdown).then(() => callback?.(error));
+    });
+  };
+  const listen = (listenPort) =>
+    new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(listenPort, "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+  try {
+    await listen(port);
+  } catch (error) {
+    if (
+      error.code !== "EADDRINUSE" ||
+      requestedPort !== 0 ||
+      !persistedMCP?.remember
+    )
+      throw error;
+    await mcpPublication.run(async () => {
+      mcp.enabled = false;
+      mcpToken = "";
+      mcpWarning =
+        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
+      await listen(0);
+      await saveMCPConfig(path.resolve(root), {
+        ...mcp,
+        token: "",
+        port: server.address().port,
+      });
+    });
+  }
+
+  let appClose;
+  const close = () =>
+    (appClose ??= new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING")
+          return reject(error);
+        Promise.resolve(protocolShutdown).then(
+          ({ protocolSessions, grpcSessions }) =>
+            resolve({
+              allRecordsSaved: [...protocolSessions, ...grpcSessions].every(
+                (receipt) => receipt.recordSaved,
+              ),
+              protocolSessions,
+              grpcSessions,
+            }),
+          reject,
+        );
+      });
+    }));
+  return {
+    close,
+    server,
+    store,
+    oauthAllowed: (url) => oauth.allowed(url) || oauth1.allowed(url),
+    launchUrl: `http://127.0.0.1:${server.address().port}/#token=${token}`,
+    token,
+    url: `http://127.0.0.1:${server.address().port}`,
+  };
+}
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const starting = createApp();
+  installNodeShutdown(starting);
+  try {
+    const app = await starting;
+    console.log(
+      `Local API Workbench: ${app.launchUrl}\nData: ${path.resolve(process.env.LOCAL_API_DATA || ".local-api")}`,
+    );
+  } catch {
+    console.error("LOCAL_API_STARTUP_FAILED");
+    process.exitCode = 2;
+  }
+}

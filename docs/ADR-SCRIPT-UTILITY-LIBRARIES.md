@@ -1,0 +1,9 @@
+# Isolated script utility libraries
+
+The public Apipost built-in library documentation lists lodash (_) and uuid globals: https://v7-wiki.apipost.cn/docs/200/ . The original package also declares Moment, and Postman-compatible scripts commonly use require('moment'). Add pinned browser bundles for lodash, Moment and uuid inside the existing QuickJS isolate, not as host objects. Preserve the VM memory/stack limits, active-execution and total deadlines, Promise rejection accounting, timer caps and network grants. No dynamic npm imports, filesystem or arbitrary module resolution.
+
+Expose _ / moment / uuid plus exact require aliases lodash/moment/uuid. Moment defaults to English with bundled zh-cn locale explicitly selectable; no timezone database or external locale loading. UUID entropy uses the existing bounded crypto.getRandomValues bridge, not host identity or network data. Lodash delayed/debounced functions use the same bounded VM timer wrappers. Function/template evaluation remains entirely in the VM.
+
+Fixed acceptance before implementation: collection/chain/deep comparison; leap-day UTC arithmetic and Chinese locale; RFC UUID generation/validation/version plus deterministic v5 vector; exact require aliases; debounce completion; denied filesystem imports and absent host globals; template runaway interruption. Actual packaged desktop smoke must exercise the bundled libraries; generated bundle and licenses must reproduce in CI. This extends compatibility, not a claim that the entire original SDK is complete.
+
+Pinned versions: lodash4.18.1, moment2.31.0, uuid14.0.3. Licenses are included in src/vendor/THIRD-PARTY-LICENSES.txt; only the generated browser bundle is required at runtime. A new red-first regression also corrected the script-output limit from code-unit length to actual UTF-8 bytes; a multibyte payload can no longer exceed the documented1MiB cap.

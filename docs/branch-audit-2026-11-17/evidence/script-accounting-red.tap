@@ -1,0 +1,45 @@
+✖ compatibility CPU observations cannot spend the shared guest allowance (1163.386748ms)
+✖ the final serialization CPU observation cannot reject an already bounded output (826.531686ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2131.098823
+
+✖ failing tests:
+
+test at tests/script-observer-accounting.test.mjs:33:1
+✖ compatibility CPU observations cannot spend the shared guest allowance (1163.386748ms)
+  AssertionError [ERR_ASSERTION]: {"success":false,"message":"脚本执行超时","scriptStage":"script","scriptScope":"b","scriptDiagnostics":{"hostLifecycle":{"version":1,"spawnMs":1,"timerArmMs":1,"timerTargetMs":1654,"onlineMs":52,"librariesMs":92,"engineMs":102,"bootstrapMs":111,"compatibilityMs":217,"scriptMs":530,"terminalMs":536,"finishMs":537,"exitMs":537,"settleMs":538,"exitCode":0,"terminalKind":"error","finishReason":"worker-exit"},"hostSequence":{"version":1,"stageIndex":1,"completed":1,"elapsedMs":885,"priorWorkerMs":346,"priorSpawnMs":2,"priorExitWaitMs":5},"compatibilityOperation":"compatibility-eval","compatMockAssetMs":4,"compatMockAssetCPUUs":5446,"compatMockInstallMs":3,"compatMockInstallCPUUs":885,"compatSourceBuildMs":0,"compatSourceBuildCPUUs":0,"compatEvaluationMs":9,"compatEvaluationCPUUs":7813,"activityBudgetMs":231.99717799999894,"fakerCalls":0,"timerCount":0,"requestCount":0,"compatibilityCPUUs":8698,"functionLibraryCPUUs":0,"compatibilityMs":317,"fakerLoadMs":0,"functionLibraryMs":0,"userScriptMs":0,"microtaskMs":0,"callbackMs":0,"promiseStateMs":0,"serializationMs":0,"activityOperation":"function-library","lastWorkerStage":"script","elapsedMs":537},"sequenceActivity":[{"stageIndex":0,"activityBudgetMs":250,"fakerCalls":0,"mockCalls":0,"mockNodes":0,"mockBytes":0,"timerCount":60,"requestCount":0,"compatibilityCPUUs":12001,"functionLibraryCPUUs":0,"userScriptCPUUs":4222,"microtaskCPUUs":1603,"callbackCPUUs":0,"promiseStateCPUUs":1860,"serializationCPUUs":0,"compatibilityMs":11,"fakerLoadMs":0,"functionLibraryMs":0,"userScriptMs":3,"microtaskMs":2,"callbackMs":1,"promiseStateMs":1,"serializationMs":0,"activityMs":18.00282200000106,"elapsedMs":346}]}
+      at TestContext.<anonymous> (file:///workspace/scratch/01aad5b30f1d/script-accounting-baseline/tests/script-observer-accounting.test.mjs:36:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '脚本执行超时',
+    expected: /最多100次/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/script-observer-accounting.test.mjs:44:1
+✖ the final serialization CPU observation cannot reject an already bounded output (826.531686ms)
+  AssertionError [ERR_ASSERTION]: {"success":false,"message":"脚本执行超时","scriptStage":"serialization","scriptDiagnostics":{"hostLifecycle":{"version":1,"spawnMs":2,"timerArmMs":2,"timerTargetMs":2002,"onlineMs":65,"librariesMs":110,"engineMs":121,"bootstrapMs":132,"compatibilityMs":278,"scriptMs":290,"asyncMs":297,"serializationMs":297,"terminalMs":630,"finishMs":632,"exitMs":632,"settleMs":633,"exitCode":0,"terminalKind":"error","finishReason":"worker-exit"},"compatibilityOperation":"compatibility-eval","compatMockAssetMs":4,"compatMockAssetCPUUs":7699,"compatMockInstallMs":3,"compatMockInstallCPUUs":4005,"compatSourceBuildMs":0,"compatSourceBuildCPUUs":0,"compatEvaluationMs":9,"compatEvaluationCPUUs":7833,"activityBudgetMs":250,"fakerCalls":0,"timerCount":0,"requestCount":0,"compatibilityCPUUs":11838,"functionLibraryCPUUs":0,"userScriptCPUUs":7993,"promiseStateCPUUs":0,"serializationCPUUs":24282,"compatibilityMs":16,"fakerLoadMs":0,"functionLibraryMs":0,"userScriptMs":6,"microtaskMs":0,"callbackMs":0,"promiseStateMs":0,"serializationMs":21,"activityOperation":"serialization","lastWorkerStage":"serialization","elapsedMs":631}}
+
+  false !== true
+
+      at TestContext.<anonymous> (file:///workspace/scratch/01aad5b30f1d/script-accounting-baseline/tests/script-observer-accounting.test.mjs:46:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

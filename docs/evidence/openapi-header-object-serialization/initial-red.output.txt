@@ -1,0 +1,100 @@
+✖ OAS3 Header flat objects use RFC6570 simple/explode and preserve definitions on roundtrip (3.065363ms)
+✖ Header object interpolation escapes JSON grammar before serializing components (0.697377ms)
+✖ Header object dynamic values, MCP temporary values and frozen snapshots retain codec (0.504648ms)
+✖ Header object marker rejects relocation, corruption and malformed or nested values, including disabled rows (0.29985ms)
+✖ Header object selection supports defaults, one explicit example and empty objects (0.84597ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 359.039025
+
+✖ failing tests:
+
+test at tests/openapi-header-objects.test.mjs:12:1
+✖ OAS3 Header flat objects use RFC6570 simple/explode and preserve definitions on roundtrip (3.065363ms)
+  Error: OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入
+      at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:87:11)
+      at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:92:41)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:62:13
+      at Array.map (<anonymous>)
+      at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:56:8)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1954:22
+      at Array.map (<anonymous>)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1891:10
+      at Array.flatMap (<anonymous>)
+      at importDocument (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1884:43)
+
+test at tests/openapi-header-objects.test.mjs:24:1
+✖ Header object interpolation escapes JSON grammar before serializing components (0.697377ms)
+  Error: OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入
+      at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:87:11)
+      at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:92:41)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:62:13
+      at Array.map (<anonymous>)
+      at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:56:8)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1954:22
+      at Array.map (<anonymous>)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1891:10
+      at Array.flatMap (<anonymous>)
+      at importDocument (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1884:43)
+
+test at tests/openapi-header-objects.test.mjs:33:1
+✖ Header object dynamic values, MCP temporary values and frozen snapshots retain codec (0.504648ms)
+  Error: OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入
+      at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:87:11)
+      at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:92:41)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:62:13
+      at Array.map (<anonymous>)
+      at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:56:8)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1954:22
+      at Array.map (<anonymous>)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1891:10
+      at Array.flatMap (<anonymous>)
+      at importDocument (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1884:43)
+
+test at tests/openapi-header-objects.test.mjs:48:1
+✖ Header object marker rejects relocation, corruption and malformed or nested values, including disabled rows (0.29985ms)
+  Error: OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入
+      at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:87:11)
+      at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:92:41)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:62:13
+      at Array.map (<anonymous>)
+      at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:56:8)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1954:22
+      at Array.map (<anonymous>)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1891:10
+      at Array.flatMap (<anonymous>)
+      at importDocument (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1884:43)
+
+test at tests/openapi-header-objects.test.mjs:69:1
+✖ Header object selection supports defaults, one explicit example and empty objects (0.84597ms)
+  AssertionError [ERR_ASSERTION]: Got unwanted exception.
+  Actual message: "OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入"
+      at TestContext.<anonymous> (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/tests/openapi-header-objects.test.mjs:70:101)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: Error: OpenAPI Header 对象参数序列化尚不支持或不明确；不能按普通文本导入
+        at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:87:11)
+        at importOpenAPIHeaderCookieValue (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-cookie-values.mjs:92:41)
+        at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:62:13
+        at Array.map (<anonymous>)
+        at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:56:8)
+        at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1954:22
+        at Array.map (<anonymous>)
+        at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1891:10
+        at Array.flatMap (<anonymous>)
+        at importDocument (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1884:43),
+    expected: undefined,
+    operator: 'doesNotThrow',
+    diff: 'simple'
+  }

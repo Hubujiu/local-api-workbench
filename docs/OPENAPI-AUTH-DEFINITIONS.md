@@ -1,0 +1,16 @@
+# OpenAPI authentication definition export
+
+OpenAPI export describes mechanisms, not credential transport or an executable authentication round trip.
+
+- Explicit canonical `basic`, `bearer`, and `apiKey` (`key`, `in: header|query`; omitted `in` means header) replace stale imported operation security. `username`, `password`, `token`, and API key `value` are never copied into generated schemes or diagnostics.
+- Existing JWT/ASAP projections and `localapi_jwt_` scheme names remain unchanged. JWT signing secrets/private keys are not exported.
+- `inheritAuth:false` or `authSnapshot:true` with no executable auth emits `security:[]`, overriding imported requirements. A nonempty closed snapshot describes its saved auth, not current shared settings.
+- Preserved native inheritance graphs (`settings.nativeInheritance` or request `nativeInheritance`) reject OpenAPI export: the graph also supplies headers/query/form, so projecting only auth would be misleading. Use native backup or explicitly flattened requests instead; flattened requests remain supported.
+- Native definitions without imported security resolve existing global/folder/recursive auth precedence. No scripts, providers, credentials, or remote endpoints are evaluated.
+- Untouched imported security is **metadata-only**. OR alternatives, AND requirements, `{}` optional alternatives and original empty security remain untouched, even when current shared runtime auth coexists. This compatibility boundary deliberately does not reinterpret imported security as executable auth or replace it with an inherited overlay.
+- Reimport does not create executable auth or credentials from a nonempty security definition. To execute a reimported request with authentication, explicitly configure credentials. Native project backup is the separate fidelity channel.
+- Unsupported selected canonical mechanisms (Digest, NTLM, OAuth1/2, AWS, Hawk, EdgeGrid) reject export rather than falsely advertise a complete definition mapping. This is not a claim that their request execution is unsupported. Untouched imported metadata for such mechanisms can still be retained.
+
+Names hash public scheme definitions only, equal generated definitions share a name (new Basic/Bearer/APIKey registry comparisons ignore object-key ordering but reject additional properties; legacy JWT/ASAP retains its existing strict JSON comparator), and conflicting generated-name entries or invalid `securitySchemes` registries fail before a document is returned. API Key names are bounded to 256 UTF-16 code units, reject controls/malformed Unicode and unresolved `{{...}}` key-name templates (no environment evaluation), and header names must be HTTP tokens. Null registries are now explicitly rejected as malformed instead of being defaulted to an empty registry by the legacy JWT path. Source projects and registries remain unchanged on success/error. Unrelated original components/annotations are preserved; this is **not global secret sanitization** of user-authored OpenAPI documents, URLs, headers, or annotations.
+
+Validation evidence must distinguish pure projection tests from owner HTTP/save/restart/backup and actual loopback authentication workflow tests. The latter are ordinary CI tests and must not be claimed passed from a local pure check.

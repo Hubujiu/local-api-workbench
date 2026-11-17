@@ -1,0 +1,15 @@
+test_unreadable_extra_subtree_cannot_pass_complete_download_verification (test_portable_download.DownloadGateTests.test_unreadable_extra_subtree_cannot_pass_complete_download_verification) ... FAIL
+
+======================================================================
+FAIL: test_unreadable_extra_subtree_cannot_pass_complete_download_verification (test_portable_download.DownloadGateTests.test_unreadable_extra_subtree_cannot_pass_complete_download_verification)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/01aad5b30f1d/local-api-workbench/tests/test_portable_download.py", line 85, in test_unreadable_extra_subtree_cannot_pass_complete_download_verification
+    with self.assertRaisesRegex(PermissionError, 'subtree scan denied'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: PermissionError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)

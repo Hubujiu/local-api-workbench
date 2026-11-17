@@ -1,0 +1,118 @@
+{
+  "status": "success",
+  "message": "",
+  "data": {
+    "project": {
+      "name": "Local compatibility fixture",
+      "description": ""
+    },
+    "apis": [
+      {
+        "name": "Users",
+        "target_type": "folder",
+        "description": "User APIs",
+        "children": [
+          {
+            "name": "Read user",
+            "tags": [],
+            "target_type": "api",
+            "url": "fixture.example.test/v1/users/{id}",
+            "mock_url": "/v1/users/{id}",
+            "method": "GET",
+            "request": {
+              "description": "",
+              "body": {
+                "mode": "json",
+                "parameter": [],
+                "raw": "",
+                "raw_para": []
+              },
+              "resful": [
+                {
+                  "is_checked": "1",
+                  "type": "Text",
+                  "key": "id",
+                  "value": 7,
+                  "not_null": "1",
+                  "description": "",
+                  "field_type": "integer"
+                }
+              ],
+              "query": [
+                {
+                  "is_checked": "1",
+                  "type": "Text",
+                  "key": "q",
+                  "value": "search",
+                  "not_null": "-1",
+                  "description": "",
+                  "field_type": "string"
+                }
+              ],
+              "header": [
+                {
+                  "is_checked": "1",
+                  "type": "Text",
+                  "key": "X-Test",
+                  "value": "fixture",
+                  "not_null": "-1",
+                  "description": "",
+                  "field_type": "string"
+                }
+              ]
+            },
+            "response": {
+              "success": {
+                "parameter": [
+                  {
+                    "key": "id",
+                    "value": 0,
+                    "description": "",
+                    "not_null": "-1",
+                    "field_type": "Integer",
+                    "type": "Text",
+                    "is_checked": 1
+                  }
+                ],
+                "raw": "{\"id\":0}",
+                "expect": {
+                  "name": "成功",
+                  "isDefault": 1,
+                  "code": "200",
+                  "contentType": "json",
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "mock": "",
+                  "verifyType": "schema"
+                }
+              },
+              "error": {
+                "parameter": [],
+                "raw": "",
+                "expect": {
+                  "name": "失败",
+                  "isDefault": -1,
+                  "code": "404",
+                  "contentType": "json",
+                  "schema": {},
+                  "mock": "",
+                  "verifyType": "schema"
+                }
+              }
+            },
+            "sort": 1
+          }
+        ],
+        "sort": 1
+      }
+    ],
+    "env": [],
+    "dataModel": []
+  }
+}

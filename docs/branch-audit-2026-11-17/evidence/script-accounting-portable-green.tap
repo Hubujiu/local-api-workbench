@@ -1,0 +1,14 @@
+✔ compatibility CPU observations cannot spend the shared guest allowance (1123.210151ms)
+✔ the final serialization CPU observation cannot reject an already bounded output (774.648875ms)
+✔ host JSON parsing still consumes active wall time and cannot publish a late result (759.801518ms)
+✔ real guest execution retains the unchanged active wall limit (690.6858ms)
+✔ native assertion evidence conversion cannot escape the active wall allowance (742.146236ms)
+✔ the outer total deadline still terminates a blocked diagnostic observer (2201.050272ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6383.50544

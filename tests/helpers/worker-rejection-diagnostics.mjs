@@ -1,0 +1,240 @@
+import { AssertionError } from "node:assert";
+import { isProxy } from "node:util/types";
+
+// Test-only snapshot of src/script-diagnostics.mjs and raw script-worker fields.
+// Native completion labels also occur in the reviewed integration worker. Keep
+// this explicit: never serialize an Error or copy an arbitrary diagnostic object.
+const stages = new Set([
+  "starting",
+  "loading-libraries",
+  "loading-engine",
+  "bootstrap",
+  "compatibility",
+  "script",
+  "async-completion",
+  "serialization",
+  "total-deadline",
+  "cancelled",
+  "response-override",
+  "sequence-budget",
+  "sequence-output",
+]);
+const operations = new Set([
+  "bootstrap",
+  "compatibility",
+  "function-library",
+  "user-script",
+  "microtasks",
+  "promise-state",
+  "pending-tasks",
+  "http-callback",
+  "timer-callback",
+  "serialization",
+  "pick-vars-completion",
+  "native-assertion-completion",
+  "native-assertion-evidence",
+  "native-wait-completion",
+]);
+// Snapshot of PR3 src/script-bootstrap-diagnostics.mjs at
+// 00fd43ddab9398a428a7f24b53cac5db015069e5; do not import runtime modules here.
+const bootstrapOperations = new Set([
+  "context-and-bindings",
+  "input-transfer",
+  "setup",
+  "url-tools",
+  "trusted-libraries",
+  "optional-facade",
+  "lazy-installers",
+]);
+const bootstrapCounters = {
+  bootstrapElapsedMs: 60000,
+  bootstrapOperationMs: 60000,
+  bootstrapCPUUs: 60000000,
+  bootstrapOperationCPUUs: 60000000,
+};
+const counters = {
+  activityBudgetMs: 250,
+  fakerCalls: 1001,
+  timerCount: 101,
+  requestCount: 11,
+};
+const milliseconds = [
+  "compatibilityMs",
+  "functionLibraryMs",
+  "userScriptMs",
+  "microtaskMs",
+  "callbackMs",
+  "promiseStateMs",
+  "serializationMs",
+  "fakerLoadMs",
+];
+const microseconds = [
+  "compatibilityUs",
+  "functionLibraryUs",
+  "userScriptUs",
+  "microtaskUs",
+  "callbackUs",
+  "promiseStateUs",
+  "serializationUs",
+];
+const prefix = "\nWORKER_REJECTION_METADATA ";
+const maxSuffixBytes = 2048;
+
+function ownData(object, key) {
+  if (!object || typeof object !== "object" || isProxy(object)) return;
+  const descriptor = Object.getOwnPropertyDescriptor(object, key);
+  return descriptor && Object.hasOwn(descriptor, "value")
+    ? descriptor.value
+    : undefined;
+}
+
+function copyNumber(target, source, key, max) {
+  const value = ownData(source, key);
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= max &&
+    (key === "activityBudgetMs" || Number.isInteger(value))
+  )
+    target[key] = value;
+}
+
+export function workerFailureMetadata(error) {
+  // Null prototypes prevent inherited toJSON hooks during serialization.
+  const result = Object.create(null);
+  for (const key of ["scriptStage", "lastWorkerStage"]) {
+    const value = ownData(error, key);
+    if (stages.has(value)) result[key] = value;
+  }
+  const operation = ownData(error, "activityOperation");
+  if (operations.has(operation)) result.activityOperation = operation;
+  copyNumber(result, error, "elapsedMs", 60000);
+  for (const [key, limits] of [
+    ["scriptDiagnostics", Object.entries(counters)],
+    ["activityMetrics", milliseconds.map((name) => [name, 60000])],
+    ["activityCPUTimeUs", microseconds.map((name) => [name, 60000000])],
+  ]) {
+    const source = ownData(error, key);
+    const values = Object.create(null);
+    for (const [name, max] of limits) copyNumber(values, source, name, max);
+    if (key === "scriptDiagnostics" && result.scriptStage === "bootstrap") {
+      const operation = ownData(source, "bootstrapOperation");
+      if (bootstrapOperations.has(operation)) {
+        values.bootstrapOperation = operation;
+        for (const [name, max] of Object.entries(bootstrapCounters))
+          copyNumber(values, source, name, max);
+      }
+    }
+    if (Object.keys(values).length) result[key] = values;
+  }
+  const breakdown = ownData(error, "compatibilityDiagnostics");
+  const version = ownData(breakdown, "version"),
+    phase = ownData(breakdown, "operation");
+  if (
+    version === 1 &&
+    [
+      "mock-asset",
+      "mock-install",
+      "source-build",
+      "compatibility-eval",
+    ].includes(phase)
+  ) {
+    const values = Object.create(null);
+    values.version = 1;
+    values.operation = phase;
+    for (const prefix of [
+      "mockAsset",
+      "mockInstall",
+      "sourceBuild",
+      "evaluation",
+    ]) {
+      copyNumber(values, breakdown, prefix + "Ms", 60000);
+      copyNumber(values, breakdown, prefix + "CPUUs", 60000000);
+    }
+    result.compatibilityDiagnostics = values;
+  }
+  for (const [key, names] of [
+    [
+      "hostLifecycle",
+      [
+        "spawnMs",
+        "timerArmMs",
+        "timerTargetMs",
+        "onlineMs",
+        "librariesMs",
+        "engineMs",
+        "bootstrapMs",
+        "compatibilityMs",
+        "scriptMs",
+        "asyncMs",
+        "serializationMs",
+        "terminalMs",
+        "timerFireMs",
+        "finishMs",
+        "terminateMs",
+        "exitMs",
+        "settleMs",
+      ],
+    ],
+    [
+      "hostSequence",
+      ["elapsedMs", "priorWorkerMs", "priorSpawnMs", "priorExitWaitMs"],
+    ],
+  ]) {
+    const source = ownData(error, key);
+    if (ownData(source, "version") !== 1) continue;
+    const out = Object.create(null);
+    out.version = 1;
+    for (const name of names) copyNumber(out, source, name, 60000);
+    if (key === "hostLifecycle") {
+      copyNumber(out, source, "exitCode", 255);
+      const terminal = ownData(source, "terminalKind"),
+        reason = ownData(source, "finishReason");
+      if (["result", "error"].includes(terminal)) out.terminalKind = terminal;
+      if (
+        [
+          "total-deadline",
+          "cancelled",
+          "worker-error",
+          "worker-exit",
+          "host-error",
+        ].includes(reason)
+      )
+        out.finishReason = reason;
+    } else {
+      copyNumber(out, source, "stageIndex", 34);
+      copyNumber(out, source, "completed", 34);
+    }
+    result[key] = out;
+  }
+  return result;
+}
+
+// The caller retains its original assert.rejects call/regex and phase input.
+// Observe one rejection without changing it; only an assertion failure receives
+// metadata. Successful assertions do not even inspect the worker's fields.
+export async function withWorkerRejectionDiagnostics(assertion) {
+  let rejection;
+  const captureRejection = (error) => {
+    rejection = error;
+    throw error;
+  };
+  try {
+    await assertion(captureRejection);
+  } catch (failure) {
+    if (!isProxy(failure) && failure instanceof AssertionError) {
+      const message = Object.getOwnPropertyDescriptor(failure, "message");
+      if (message && typeof message.value === "string" && message.writable) {
+        const suffix =
+          prefix + JSON.stringify(workerFailureMetadata(rejection));
+        if (Buffer.byteLength(suffix, "utf8") <= maxSuffixBytes)
+          Object.defineProperty(failure, "message", {
+            ...message,
+            value: message.value + suffix,
+          });
+      }
+    }
+    throw failure;
+  }
+}

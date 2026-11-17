@@ -1,0 +1,49 @@
+✖ empty and all-disabled multipart curl preserves zero-part framing over POSIX shell and JSON serialization (13.718015ms)
+✖ empty multipart rejects ambiguous framing after auth and retains existing export restrictions (0.800692ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 587.342603
+
+✖ failing tests:
+
+test at tests/curl-empty-multipart.test.mjs:32:1
+✖ empty and all-disabled multipart curl preserves zero-part framing over POSIX shell and JSON serialization (13.718015ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /--data-binary/. Input:
+
+  "curl --disable --globoff --noproxy '*' --http1.1 -X POST 'http://127.0.0.1:35559/empty?encoded=%E4%B8%AD&x=%2f' -H 'accept:' -H 'content-type: wrong/header' -H 'content-length: 999' -H 'x-marker: it'\\''s \\ literal' --max-time 2"
+
+      at TestContext.<anonymous> (file:///workspace/scratch/01aad5b30f1d/local-api-workbench/tests/curl-empty-multipart.test.mjs:90:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "curl --disable --globoff --noproxy '*' --http1.1 -X POST 'http://127.0.0.1:35559/empty?encoded=%E4%B8%AD&x=%2f' -H 'accept:' -H 'content-type: wrong/header' -H 'content-length: 999' -H 'x-marker: it'\\''s \\ literal' --max-time 2",
+    expected: /--data-binary/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/curl-empty-multipart.test.mjs:123:1
+✖ empty multipart rejects ambiguous framing after auth and retains existing export restrictions (0.800692ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///workspace/scratch/01aad5b30f1d/local-api-workbench/tests/curl-empty-multipart.test.mjs:130:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /API-key/,
+    operator: 'throws',
+    diff: 'simple'
+  }

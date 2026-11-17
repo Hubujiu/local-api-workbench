@@ -1,0 +1,25 @@
+# Digest auth-int entity replay
+
+The existing challenge path signed the first serialized request entity, then recursively rebuilt the authenticated request. Multipart serialization generates a fresh boundary, so the Authorization value did not match the bytes actually sent. An independently authored loopback SHA-256 verifier reproduced JSON success and multipart failure.
+
+The retry now receives module-private prepared entity state: the exact body bytes, generated Content-Type and original absolute network/authentication deadline. Serialized request definitions cannot supply this state. A separate connection is still prepared for the authenticated attempt, preserving Connection: close, proxy headers and TLS behavior. Cookie handling remains per session. Both connection preparation and request I/O use the remaining original budget, rather than allowing normalization's minimum timeout to extend the second round.
+
+There is still at most one retry, only for an explicit supported Digest 401 challenge. A failed authenticated response, timeout, abort or uncertain network outcome never starts a third request. Request size limits and TLS verification remain in place. New user executions serialize independently; no prepared retry state is added to saved request/plan definitions. Existing execution wire evidence intentionally retains transmitted headers/body display.
+
+Tests verify actual received bytes independently for multipart text/files/empty forms, raw, JSON, MessagePack, binary and URL-encoded data; concurrent identities, bad passwords, cookies, cancellation/deadline exhaustion and an HTTP proxy. Actual application plan execution, disk persistence, restore and server restart are exercised. This is standards-based Workbench evidence, not a new original Apipost runtime comparison.
+
+Reference: RFC 7616 section 3.4.3 specifies the entity-body hash for auth-int: https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4.3 . Implementation and fixtures are independently authored; no proprietary source is copied.
+
+## Multiple authentication challenges
+
+A second independent loopback test exposed two selection defects: Basic before Digest prevented a retry, while Basic after Digest overwrote the Digest realm. Merely inspecting an Authorization prefix did not prove authentication; the new fixture independently verifies the response hash against the intended challenge and the entity actually received.
+
+The contract follows RFC 9110 §§5.6, 11.2–11.3, 11.6.1 and RFC 7616 §§3.3, 3.7: retain server order and choose the first supported **Digest** challenge, ignoring unsupported algorithms/qop without falling back to Basic or another scheme. MD5, SHA-256, SHA-512-256 and their session variants remain supported; omitted algorithm means MD5 and omitted qop retains legacy compatibility. Within a qop list the existing auth-before-auth-int preference is unchanged. Challenge selection is not a new local strongest-algorithm policy.
+
+An original bounded scanner handles combined/repeated fields, token68 distractors, full HTTP tokens, quoted commas and quoted-pairs, optional/bad whitespace around auth-param equals signs, and reasonable empty list elements. Fields never cross a challenge boundary. Case-insensitive duplicate parameters, Digest token68, empty/invalid algorithm tokens and missing required realm/nonce on supported candidates are rejected before sending credentials; an explicitly empty realm is valid. Unsupported algorithms/qop can be skipped, but a malformed preferred supported challenge cannot silently downgrade. Unresolvable syntax anywhere in the combined field fails closed, rather than guessing a safe boundary. Other schemes are parsed only to delimit challenges, never selected. Missing/valid non-Digest challenges return the original 401 without replay. Errors do not echo challenge values or credentials.
+
+The parser is limited to 16,384 Latin-1 code units in total (including separators), 64 field lines/challenges, 64 parameters per challenge and 513 comma-delimited segments. Existing installed authentication libraries do not provide the required combined-field selection contract; no new dependency was added. Node crypto remains the hash implementation. This does not add credential caching, stale retries, proxy-Digest support, TLS exceptions, or changes to NTLM.
+
+`tests/digest-challenges.test.mjs` first reproduced 18 failures among 27 tests against the prior implementation. The fixed suite adds real owner HTTP and official MCP SDK HTTP/stdio executions, including project/owner denial, malformed challenge failure, no-Digest 401, disk-persisted definition isolation, exact request counts, byte-identical multipart replay and independent authentication acceptance. Existing entity replay, persistence/restart, concurrency, proxy, deadline and cancellation tests remain applicable.
+
+Primary references: https://www.rfc-editor.org/rfc/rfc9110.html#section-11.6.1 and https://www.rfc-editor.org/rfc/rfc7616.html#section-3.7 . This is standards-based local Workbench evidence, not a new original Apipost or external identity-provider comparison.

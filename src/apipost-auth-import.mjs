@@ -1,0 +1,157 @@
+import { importApipostOAuth2 } from "./apipost-oauth2-auth.mjs";
+import { importApipostOAuth1 } from "./apipost-oauth1-auth.mjs";
+import { importApipostNtlm } from "./apipost-ntlm-auth.mjs";
+import { importApipostDigest } from "./apipost-digest-auth.mjs";
+import { importApipostAsap } from "./apipost-asap-auth.mjs";
+import { validateHeaderName } from "node:http";
+const object = (value) =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+function section(auth, name, keys) {
+  if (!object(auth) || Buffer.byteLength(JSON.stringify(auth), "utf8") > 65536)
+    throw Error("Apipost认证配置必须为最多64KiB的对象");
+  const value = auth[name];
+  if (!object(value) || Object.keys(value).some((key) => !keys.includes(key)))
+    throw Error("Apipost认证包含未知字段或无效配置");
+  return value;
+}
+function strings(value, names) {
+  const result = {};
+  for (const name of names) {
+    if (value[name] !== undefined && typeof value[name] !== "string")
+      throw Error("Apipost认证字段必须为字符串: " + name);
+    result[name] = value[name] ?? "";
+  }
+  return result;
+}
+/** Pure format conversion only. Never obtains tokens or makes network requests. */
+export function importExtendedApipostAuth(auth) {
+  if (auth && typeof auth === "object") {
+    const type = Object.getOwnPropertyDescriptor(auth, "type");
+    if ((!type && "type" in auth) || (type && !Object.hasOwn(type, "value")))
+      throw Error("原生认证导入不接受访问器定义");
+    if (type?.value === "oauth2") {
+      const section = Object.getOwnPropertyDescriptor(auth, "oauth2");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生 OAuth2 定义无法保真映射，请使用项目备份");
+      return importApipostOAuth2(section.value);
+    }
+    if (type?.value === "oauth1") {
+      const section = Object.getOwnPropertyDescriptor(auth, "oauth1");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error(
+          "原生OAuth1认证 definition 无法安全规范映射；请使用项目备份",
+        );
+      return importApipostOAuth1(section.value);
+    }
+    if (type?.value === "ntlm") {
+      const section = Object.getOwnPropertyDescriptor(auth, "ntlm");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生NTLM认证 definition 无效");
+      return importApipostNtlm(section.value);
+    }
+    if (type?.value === "digest") {
+      const section = Object.getOwnPropertyDescriptor(auth, "digest");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生Digest认证 definition 无效");
+      return importApipostDigest(section.value);
+    }
+    if (type?.value === "asap") {
+      const section = Object.getOwnPropertyDescriptor(auth, "asap");
+      if (!section?.enumerable || !Object.hasOwn(section, "value"))
+        throw Error("原生ASAP认证 definition 无效");
+      return importApipostAsap(section.value);
+    }
+  }
+  if (auth?.type === "kv") {
+    const value = section(auth, "kv", ["in", "key", "value"]);
+    const result = strings(value, ["in", "key", "value"]);
+    if (
+      !["header", "query"].includes(result.in) ||
+      !result.key ||
+      /[\r\n\0]/.test(result.key)
+    )
+      throw Error("Apipost私密键值对位置或名称无效");
+    if (result.in === "header" && !result.key.includes("{{"))
+      validateHeaderName(result.key);
+    return {
+      type: "apiKey",
+      ...result,
+      ...(result.in === "query" ? { queryEncoding: "apipost" } : {}),
+    };
+  }
+  if (auth?.type === "awsv4") {
+    const names = [
+      "accessKey",
+      "secretKey",
+      "sessionToken",
+      "region",
+      "service",
+    ];
+    const value = section(auth, "awsv4", [...names, "addAuthDataToQuery"]);
+    if (
+      value.addAuthDataToQuery !== undefined &&
+      typeof value.addAuthDataToQuery !== "boolean"
+    )
+      throw Error("Apipost AWS Query开关必须为布尔值");
+    if (value.addAuthDataToQuery === true && value.service !== "s3")
+      throw Error(
+        "Apipost AWS Query认证目前仅支持明确S3服务，不会替换为Header签名",
+      );
+    return {
+      type: "aws",
+      ...strings(value, names),
+      ...(value.addAuthDataToQuery !== undefined
+        ? { addAuthDataToQuery: value.addAuthDataToQuery }
+        : {}),
+    };
+  }
+  if (auth?.type === "hawk") {
+    const names = [
+      "algorithm",
+      "app",
+      "authId",
+      "authKey",
+      "delegation",
+      "extraData",
+      "nonce",
+      "timestamp",
+      "user",
+    ];
+    const value = section(auth, "hawk", [...names, "includePayloadHash"]);
+    const fields = strings(value, names);
+    if (!["sha1", "sha256"].includes(fields.algorithm) || fields.user)
+      throw Error("Apipost Hawk算法或user扩展尚未支持");
+    if (
+      value.includePayloadHash !== undefined &&
+      typeof value.includePayloadHash !== "boolean"
+    )
+      throw Error("Apipost Hawk载荷散列开关必须为布尔值");
+    return {
+      type: "hawk",
+      algorithm: fields.algorithm,
+      id: fields.authId,
+      key: fields.authKey,
+      app: fields.app,
+      dlg: fields.delegation,
+      ext: fields.extraData,
+      nonce: fields.nonce,
+      timestamp: fields.timestamp,
+      payloadHash: value.includePayloadHash === true ? "enabled" : "disabled",
+    };
+  }
+  if (auth?.type === "edgegrid") {
+    const names = [
+      "accessToken",
+      "baseURi",
+      "clientSecret",
+      "clientToken",
+      "headersToSign",
+      "nonce",
+      "timestamp",
+    ];
+    const fields = strings(section(auth, "edgegrid", names), names);
+    const { baseURi, ...rest } = fields;
+    return { type: "edgegrid", ...rest, baseURL: baseURi };
+  }
+  return undefined;
+}

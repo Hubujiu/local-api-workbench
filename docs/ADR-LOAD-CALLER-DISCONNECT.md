@@ -1,0 +1,5 @@
+# Cancel load when its caller disconnects
+
+The owner `POST /api/projects/:id/load` belongs to its HTTP caller. If the request or response connection closes before completion, abort the existing load controller, stop scheduling iterations, and propagate its signal to in-flight scripts and HTTP. Release the run ID and detach listeners in all terminal paths. Do not attempt to send a result on a destroyed response. A normal completed response does not trigger cancellation.
+
+This does not promise to retract an already dispatched request or undo remote side effects. Explicit `/api/cancel` behavior and load concurrency, count, duration and script budgets are unchanged. Local loopback tests cover a held primary request, a held pre-script child request, zero later iterations, and run-ID reuse after disconnect. A pre-fix loopback probe demonstrated that all eight iterations continued after the caller disconnected; the new primary-request contract times out against the old implementation and passes against this change.

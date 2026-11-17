@@ -1,0 +1,38 @@
+✔ variables substitute deeply and unresolved variables fail (1.31255ms)
+✔ JSON paths preserve falsy values and reject prototype traversal (0.258124ms)
+✔ assertions distinguish expected errors and missing values (0.309319ms)
+✔ OpenAPI import/export preserves HTTP definitions (1.233092ms)
+✔ plans snapshot request state and freeze evidence (1.41296ms)
+✔ plans continue after failure and extract variables (0.658719ms)
+✔ unsafe or invalid imports rejected (0.139988ms)
+✔ extraction failure retains actual request and response evidence (0.490719ms)
+✔ empty plan cannot falsely pass (0.295319ms)
+✔ backup restore preserves environments and plans without overwriting source (0.546902ms)
+✔ OpenAPI references resolve locally and never fetch remote documents (1.195777ms)
+✔ schema sample generation respects examples and falsy defaults (0.946667ms)
+✔ database reads use parameters and refuse writes (6.367101ms)
+✔ bounded worker returns database result (69.778054ms)
+✔ MCP advertises only granted capabilities (1.128687ms)
+✔ MCP filters projects and denies cross-project reads (0.394346ms)
+✔ MCP initialization and notification lifecycle (0.166077ms)
+✔ SSE captures explicit event boundaries and multiline data (28.888666ms)
+✔ TCP sends and receives actual local fixture bytes (7.399164ms)
+✔ protocol validation rejects unrelated protocols (0.853789ms)
+✔ WebSocket exchanges a message with a real local handshake (9.278527ms)
+✔ real HTTP body, query, auth and response evidence (18.117922ms)
+✔ disk store rejects traversal and survives reopening (6.647978ms)
+✔ non HTTP protocols blocked (0.597278ms)
+✔ stale saves rejected, history append preserves latest content (7.210534ms)
+✔ HTTP timeout and cancellation produce explicit failures (123.54035ms)
+✔ compressed responses are decoded with a size limit (4.997095ms)
+✔ multipart files preserve binary bytes (2.877917ms)
+✔ slow drip cannot evade the total timeout (101.482718ms)
+✔ session, project persistence, permission boundary, mock and snapshot plan (84.911671ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 369.973089

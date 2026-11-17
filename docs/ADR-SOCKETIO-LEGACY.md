@@ -1,0 +1,24 @@
+# Bounded legacy Socket.IO backend
+
+Saved definitions may explicitly select version 2; absent version continues to use version 4. The legacy path supports Engine.IO 3 over WebSocket, bounded polling, or polling-to-WebSocket upgrade, named namespaces, query/header credentials, strict TLS/mTLS, text/binary events, outbound and inbound acknowledgements, frozen plans and result persistence. V4-style auth objects are rejected before connection. There is no protocol-version downgrade, reconnection or authentication fallback, and no new frontend work in this change.
+
+Reuse the official MIT socket.io-client 2.5.0 under a package alias. Its unmodified dependency graph brings the parseuri ReDoS advisory GHSA-6fx8-h7jm-663j. Override parseuri to the published MIT 3.0.2; a plain upgrade is NOT API compatible, so the adapter never passes a URI or host option to the old parser call sites. It constructs the manager from validated WHATWG URL hostname/port/secure options and selects the namespace explicitly. No exception is added to npm audit. The major-version override is deliberate and must retain its tests.
+
+The legacy alias has a separate Engine.IO module graph. Its transport factory is replaced only within that graph, leaving the modern client unchanged. Framing, packet codec, namespace state, heartbeat and ACK encoding stay with the official libraries. Acquisition uses the existing ws 8.21.3 with strict certificates, no redirects/compression, a 1 MiB receive cap and handshake deadline. The legacy transport also counts all frames, including filtered application events, against 8 MiB/10000-frame session budgets. Engine.IO 3 has no maxPayload negotiation; its checked handshake uses our local cap while retaining SID/heartbeat validation. Closure terminates the owned socket; malformed input cannot escape transport error handling.
+
+The adapter supplies the onAny/offAny and acknowledgement-timeout surfaces expected by the common session/plan engine. It maps legacy error events into the shared error path, removes timed-out ACK callbacks, rejects events before namespace connection, and preserves project/session isolation. The existing five-live-session, history, message structure, pending ACK and whole-plan deadline limits remain unchanged.
+
+Tests use a real Socket.IO 4.8.4 fixture configured with allowEIO3, not a simulated packet codec. They exercise an actual EIO=3 connection, namespace/query/header authorization, binary and server/client ACKs, authentication failure, late-ACK cleanup, strict TLS and client certificates, oversized frames, invalid handshake, filtered-event cumulative overflow, saved-definition reload, and a real CLI subprocess using temporary credentials and persistent results. These prove the supported legacy-wire subset; they do not establish every historical Socket.IO 2 server, native Apipost project migration or full original parity.
+
+Sources: https://github.com/socketio/socket.io-client/tree/2.5.0 ; https://github.com/advisories/GHSA-6fx8-h7jm-663j ; https://github.com/slevithan/parseuri . No proprietary implementation code copied.
+
+Legacy modules are initialized only when an explicitly version-2 connection starts. A fresh-process regression verifies that importing the modern backend loads no legacy alias modules. This avoids adding legacy cold-start work to unrelated HTTP/script/modern sessions; a single startup timing sample is not evidence that historical script timeout instability has been fixed.
+
+
+## Legacy polling and upgrade
+
+The legacy XHR request interface delegates to the same BoundedPolling HTTP acquisition method used by the modern backend, rather than implementing a second HTTP client. The official Engine.IO 3 parser still owns its length-framed payloads. Polling negotiates base64 binary transport, while an upgraded WebSocket may retain native binary frames. Response decoding stays inside the 1 MiB acquisition cap; strict TLS, no redirects/unnegotiated compression, and the shared 20-request pool remain in force. Closing aborts outstanding polling reads; only an already validated server session may receive the bounded two-second close POST. Pre-connect cancellation and malformed handshakes do not send a new close request.
+
+A connection-owned wire budget covers both polling and WebSocket probes/upgrades: switching transports does not reset the 8 MiB byte, 10000-frame or 10000-decoded-packet counters. Packet-limit exceptions terminate upstream payload decoding rather than allowing a large polling response to continue dispatching messages after closure.
+
+Real fixture checks cover both fixed polling and automatic upgrade, binary ACKs, namespace credentials, polling mTLS and cancellation, cleanup of the shared HTTP pool, oversized Content-Length, redirects without follow-up requests, malformed handshakes without close POSTs, and frozen CLI execution with an auto-transport definition. Modern polling regressions run alongside these cases.

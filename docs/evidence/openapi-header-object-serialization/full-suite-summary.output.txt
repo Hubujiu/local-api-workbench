@@ -1,0 +1,15 @@
+Command: npm test
+Source code: 2eb346a2c9248021a10f9a5e834361e178f30170
+Exit code: 0
+Full log SHA256: 88ccb24b6311b20f1e60c4a2abae1379ddae6b6aa1b086df15ce510fb5e9c361
+
+Exact summary and skipped-test lines from the full run:
+﹣ Go example sends the intended literal request on the local wire (4.406461ms) # Go toolchain is not available on this host
+ℹ tests 5723
+ℹ suites 0
+ℹ pass 5722
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 1227388.19132

@@ -1,0 +1,91 @@
+{
+  "records": [
+    {
+      "detail_file": "executions/runs/run_1792937433512_jatt2lk5.json",
+      "elapsed_ms": 1503,
+      "environment_id": "1",
+      "finished_at": "2026-10-25T14:10:33.512Z",
+      "flow_id": "flow_1792937049044",
+      "flow_name": "Native Script Plan",
+      "project_id": "10f7386134404a",
+      "run_id": "run_1792937433512_jatt2lk5",
+      "scope": "flow",
+      "source": "manual",
+      "started_at": "2026-10-25T14:10:32.009Z",
+      "status": "failed",
+      "steps": [
+        {
+          "elapsed_ms": 468,
+          "error": "接口返回状态码 503，期望 200",
+          "method": "POST",
+          "name": "Native Echo",
+          "network_elapsed_ms": 4,
+          "status": "failed",
+          "status_code": 503,
+          "step_id": "flow_step_1792937095487_0_k3l8cs",
+          "target_id": "10f7b2a5b4404e",
+          "url": "http://127.0.0.1:18766/echo?fixture=original"
+        },
+        {
+          "elapsed_ms": 1033,
+          "method": "POST",
+          "name": "Native Echo",
+          "network_elapsed_ms": 7,
+          "status": "passed",
+          "status_code": 200,
+          "step_id": "flow_step_1792937128939_0_dmd161",
+          "target_id": "10f7b2a5b4404e",
+          "url": "http://127.0.0.1:18766/echo?fixture=original"
+        }
+      ],
+      "target_ids": [
+        "10f7b2a5b4404e",
+        "10f7b2a5b4404e"
+      ]
+    },
+    {
+      "detail_file": "executions/runs/run_1792937212505_yhs05vvi.json",
+      "elapsed_ms": 1810,
+      "environment_id": "1",
+      "finished_at": "2026-10-25T14:06:52.505Z",
+      "flow_id": "flow_1792937049044",
+      "flow_name": "Native Script Plan",
+      "project_id": "10f7386134404a",
+      "run_id": "run_1792937212505_yhs05vvi",
+      "scope": "flow",
+      "source": "manual",
+      "started_at": "2026-10-25T14:06:50.695Z",
+      "status": "passed",
+      "steps": [
+        {
+          "elapsed_ms": 643,
+          "method": "POST",
+          "name": "Native Echo",
+          "network_elapsed_ms": 4,
+          "status": "passed",
+          "status_code": 200,
+          "step_id": "flow_step_1792937095487_0_k3l8cs",
+          "target_id": "10f7b2a5b4404e",
+          "url": "http://127.0.0.1:18766/echo?fixture=original"
+        },
+        {
+          "elapsed_ms": 1166,
+          "method": "POST",
+          "name": "Native Echo",
+          "network_elapsed_ms": 3,
+          "status": "passed",
+          "status_code": 200,
+          "step_id": "flow_step_1792937128939_0_dmd161",
+          "target_id": "10f7b2a5b4404e",
+          "url": "http://127.0.0.1:18766/echo?fixture=original"
+        }
+      ],
+      "target_ids": [
+        "10f7b2a5b4404e",
+        "10f7b2a5b4404e"
+      ]
+    }
+  ],
+  "updated_at": "2026-10-25T14:10:33.516Z",
+  "version": 2
+}

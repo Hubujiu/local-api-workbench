@@ -1,0 +1,35 @@
+✔ OAS3 Header flat objects use RFC6570 simple/explode and preserve definitions on roundtrip (15.019618ms)
+✔ Header object interpolation escapes JSON grammar before serializing components (1.700284ms)
+✔ Header object dynamic values, MCP temporary values and frozen snapshots retain codec (4.211735ms)
+✔ Header object marker rejects relocation, corruption and malformed or nested values, including disabled rows (3.377193ms)
+✔ Header object selection supports defaults, one explicit example and empty objects (1.728967ms)
+✔ Header object reference and path inheritance preserve simple serialization (1.806603ms)
+✔ Header objects enforce marker data properties, individual and aggregate encoding limits (2.394176ms)
+✔ bare object schemas and typed dictionaries retain scalar property values without inference (2.118342ms)
+✔ OpenAPI cannot silently collapse repeated Header object/scalar rows (1.729678ms)
+✖ PR162 const/enum normalization keeps Header root and property constraints reimportable (1.161995ms)
+✔ Header enum-only intersections do not admit general composed or nested schemas (1.297299ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 10
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 300.026839
+
+✖ failing tests:
+
+test at tests/openapi-header-objects.test.mjs:293:1
+✖ PR162 const/enum normalization keeps Header root and property constraints reimportable (1.161995ms)
+  Error: OpenAPI Header对象: 须为明确的扁平对象Schema
+      at fail (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-objects.mjs:9:9)
+      at descriptor (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-objects.mjs:86:5)
+      at encodeHeaderObject (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-objects.mjs:153:18)
+      at importOpenAPIHeaderObject (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-header-objects.mjs:232:3)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:59:20
+      at Array.map (<anonymous>)
+      at importOpenAPIHeaders (file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/openapi-body.mjs:57:8)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1961:22
+      at Array.map (<anonymous>)
+      at file:///workspace/scratch/75c2273f6a80/workbench-header-objects/src/core.mjs:1898:10

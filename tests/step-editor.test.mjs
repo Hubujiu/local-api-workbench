@@ -1,0 +1,207 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { applyStepEdits, stepEditor } from "../public/step-editor.js";
+test("visual step edits preserve snapshot identity, metadata and untouched advanced settings", () => {
+  const step = {
+    id: "step",
+    name: "original",
+    enabled: true,
+    request: {
+      url: "https://example.test",
+      method: "GET",
+      headers: [
+        {
+          key: "x",
+          value: "old",
+          schema: { type: "string" },
+          description: "kept",
+        },
+      ],
+      auth: { type: "bearer", token: "{{token}}" },
+      form: [{ key: "file", type: "file", data: "abc" }],
+      assertions: [{ target: "status", value: 200 }],
+    },
+  };
+  const edited = applyStepEdits(
+    step,
+    {
+      name: "changed",
+      method: "POST",
+      body: "{}",
+      beforeScript: 'apt.setVar("x",1)',
+    },
+    {
+      headers: [
+        { index: 0, key: "x", value: "new", enabled: false },
+        { index: -1, key: "new", value: "value", enabled: true },
+      ],
+    },
+  );
+  assert.equal(edited.id, step.id);
+  assert.equal(edited.request.headers[0].description, "kept");
+  assert.equal(edited.request.headers[0].enabled, false);
+  assert.deepEqual(edited.request.auth, step.request.auth);
+  assert.deepEqual(edited.request.form, step.request.form);
+  assert.deepEqual(edited.request.assertions, step.request.assertions);
+  assert.equal(step.request.headers[0].value, "old");
+  assert.throws(() => applyStepEdits(step, { name: " " }, {}), /不能为空/);
+  assert(
+    !stepEditor({ ...step, name: "<img onerror=x>" }).includes(
+      "<img onerror=x>",
+    ),
+  );
+});
+test("advanced step edits preserve source metadata while editing auth assertions and extraction", () => {
+  const step = {
+    name: "step",
+    request: {
+      auth: { type: "basic", username: "source" },
+      assertions: [{ target: "$.x", op: "eq", value: null, note: "retained" }],
+      extract: [
+        {
+          name: "x",
+          source: "xml",
+          path: "/n:root",
+          namespaces: { n: "urn:test" },
+        },
+      ],
+    },
+  };
+  const next = applyStepEdits(
+    step,
+    { name: "step", auth: { type: "bearer", token: "step-token" } },
+    {},
+    {
+      assertions: [{ index: 0, target: "status", op: "eq", value: "200" }],
+      extract: [
+        {
+          index: 0,
+          name: "value",
+          source: "xml",
+          scope: "runtime",
+          path: "/n:root/text()",
+          group: "0",
+        },
+      ],
+    },
+  );
+  assert.equal(step.request.auth.type, "basic");
+  assert.equal(next.request.auth.type, "bearer");
+  assert.equal(next.request.assertions[0].value, 200);
+  assert.equal(next.request.assertions[0].note, "retained");
+  assert.deepEqual(next.request.extract[0].namespaces, { n: "urn:test" });
+  assert(stepEditor(step).includes('value="null"'));
+  assert(
+    !stepEditor({
+      name: "oauth",
+      request: { auth: { type: "oauth2" } },
+    }).includes('id="oauth-get"'),
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "step" },
+        {},
+        {
+          extract: [
+            {
+              index: -1,
+              name: "__proto__",
+              source: "json",
+              scope: "runtime",
+              group: 0,
+            },
+          ],
+        },
+      ),
+    /名称/,
+  );
+});
+
+test("step form and transport edits preserve metadata and do not mutate the saved source", () => {
+  const step = {
+    name: "source",
+    request: {
+      form: [
+        {
+          key: "file",
+          type: "file",
+          filename: "old.bin",
+          requiresFile: true,
+          value: "",
+          description: "keep",
+        },
+        { key: "text", type: "text", value: "old", schema: { type: "string" } },
+      ],
+      tls: { ca: "old", note: "preserve" },
+      timeout: 15000,
+      httpVersion: "1.1",
+    },
+  };
+  const next = applyStepEdits(
+    step,
+    {
+      name: "edited",
+      timeout: "3000",
+      httpVersion: "2",
+      proxy: "http://127.0.0.1:8080",
+      tls: {
+        ca: "fixture-ca",
+        proxyCa: "fixture-proxy-ca",
+        cert: "fixture-cert",
+        key: "fixture-key",
+        passphrase: "fixture-pass",
+      },
+    },
+    {
+      form: [
+        {
+          index: 0,
+          key: "file",
+          type: "file",
+          filename: "new.bin",
+          requiresFile: false,
+          value: "AAH/",
+          enabled: true,
+        },
+        { index: 1, key: "text", type: "text", value: "new", enabled: false },
+      ],
+    },
+  );
+  assert.equal(next.request.form[0].description, "keep");
+  assert.equal(next.request.form[0].filename, "new.bin");
+  assert.equal(next.request.form[0].value, "AAH/");
+  assert.equal(next.request.form[0].requiresFile, false);
+  assert.deepEqual(next.request.form[1].schema, { type: "string" });
+  assert.equal(next.request.form[1].enabled, false);
+  assert.equal(next.request.timeout, 3000);
+  assert.equal(next.request.httpVersion, "2");
+  assert.equal(next.request.proxy, "http://127.0.0.1:8080");
+  assert.equal(next.request.tls.note, "preserve");
+  assert.equal(next.request.tls.key, "fixture-key");
+  assert.equal(next.request.tls.proxyCa, "fixture-proxy-ca");
+  assert.equal(step.request.form[0].requiresFile, true);
+  assert.equal(step.request.tls.ca, "old");
+  assert.throws(
+    () => applyStepEdits(step, { name: "edited", timeout: "0" }, {}),
+    /超时/,
+  );
+  assert.throws(
+    () => applyStepEdits(step, { name: "edited", httpVersion: "3" }, {}),
+    /协议/,
+  );
+  assert.throws(
+    () =>
+      applyStepEdits(
+        step,
+        { name: "edited" },
+        {
+          form: [
+            { index: -1, key: "f", type: "unknown", value: "", enabled: true },
+          ],
+        },
+      ),
+    /表单/,
+  );
+});

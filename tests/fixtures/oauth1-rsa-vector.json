@@ -1,0 +1,6 @@
+{
+  "provenance": "Synthetic public test fixture; RFC5849 section3.4.3; signature computed independently with OpenSSL3.5.7 dgst -sha1 -sign tests/fixtures/localhost.key (PKCS1v1.5). Never use this public key pair for real credentials.",
+  "normalized": "oauth_consumer_key=fixture-consumer&oauth_nonce=fixture-nonce&oauth_signature_method=RSA-SHA1&oauth_timestamp=1700000000&oauth_token=fixture-token&x=one",
+  "baseString": "GET&https%3A%2F%2Fexample.test%2Frsa&oauth_consumer_key%3Dfixture-consumer%26oauth_nonce%3Dfixture-nonce%26oauth_signature_method%3DRSA-SHA1%26oauth_timestamp%3D1700000000%26oauth_token%3Dfixture-token%26x%3Done",
+  "signature": "uR/dZqYdnJGTCN8GymieZqP9RssxmFv/D6uasv+hu37RZDRcg1fYYTo09XOZ5RDxyGy6cHWH/6owGNNGpI+ZbHsFaGJ1ao6dc3W4W/CIErlJxRKsryc9gRbrqHXNNEhHzXFcmF4z2u86WhOKihDQGHyptLid2Cq3cNF24F0fdqekQiDU0JrduEufh/BsXJ3lsgKesaE4HMydc5YZrksG0HeSJ2L45IQ1iORrdtTnqBUVEiPEL2ZViZwGGJpDMD2Ie16FkqF68xNwV4BT+WPBvAGTETKETMOtGuADR+J4mC+FmnCowG9QNIE7g4fHcpn/Cbn2CBQqYgx4reeHVLsUfg=="
+}

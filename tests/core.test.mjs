@@ -1,0 +1,495 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  interpolate,
+  jsonPath,
+  evaluateAssertions,
+  importDocument,
+  exportOpenAPI,
+  snapshotPlan,
+  runPlan,
+  normalizeRequest,
+} from "../src/core.mjs";
+test("variables substitute deeply and unresolved variables fail", () => {
+  assert.equal(
+    interpolate("{{host}}/a", { host: "http://localhost" }),
+    "http://localhost/a",
+  );
+  assert.throws(() => interpolate("{{missing}}", {}), /missing/);
+});
+test("JSON paths preserve falsy values and reject prototype traversal", () => {
+  assert.equal(jsonPath({ a: [{ b: false }] }, "$.a[0].b"), false);
+  assert.throws(() => jsonPath({}, "__proto__.x"));
+});
+test("assertions distinguish expected errors and missing values", () => {
+  let r = { status: 404, body: '{"count":0}', duration: 5, headers: {} };
+  assert(
+    evaluateAssertions(r, [
+      { target: "status", op: "eq", value: 404 },
+      { target: "$.count", op: "eq", value: 0 },
+    ]).every((x) => x.passed),
+  );
+  assert.equal(
+    evaluateAssertions(r, [{ target: "$.none", op: "exists" }])[0].passed,
+    false,
+  );
+});
+test("OpenAPI import/export preserves HTTP definitions", () => {
+  const requests = importDocument({
+    openapi: "3.0.3",
+    info: { title: "Test" },
+    servers: [{ url: "http://localhost" }],
+    paths: {
+      "/users/{id}": {
+        get: {
+          summary: "Get user",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: { 200: { description: "ok" } },
+        },
+      },
+    },
+  });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, "GET");
+  assert(exportOpenAPI({ name: "Test", requests }).paths["/users/{id}"].get);
+});
+test("plans snapshot request state and freeze evidence", async () => {
+  const request = normalizeRequest({
+    name: "one",
+    url: "http://localhost",
+    assertions: [{ target: "status", op: "eq", value: 200 }],
+  });
+  let plan = snapshotPlan({ name: "flow", steps: [{ request }] });
+  request.url = "changed";
+  assert.equal(plan.steps[0].request.url, "http://localhost");
+  const run = await runPlan(plan, {}, async () => ({
+    status: 200,
+    body: "{}",
+    headers: {},
+    duration: 1,
+  }));
+  assert.equal(run.status, "passed");
+  assert.equal(run.results.length, 1);
+  assert.equal(run.planHash.length, 64);
+});
+test("plans continue after failure and extract variables", async () => {
+  const p = snapshotPlan({
+    name: "chain",
+    steps: [
+      {
+        request: {
+          url: "http://localhost/a",
+          extract: [{ name: "token", path: "$.token" }],
+        },
+      },
+      { request: { url: "http://localhost/{{token}}" } },
+    ],
+  });
+  let urls = [];
+  let r = await runPlan(p, {}, async (req) => {
+    urls.push(req.url);
+    return {
+      status: urls.length === 1 ? 500 : 200,
+      body: '{"token":"abc"}',
+      headers: {},
+      duration: 1,
+    };
+  });
+  assert.equal(r.status, "failed");
+  assert.equal(r.results.length, 2);
+  assert.equal(urls[1], "http://localhost/abc");
+});
+test("unsafe or invalid imports rejected", () => {
+  assert.throws(() => importDocument({ bad: true }));
+  assert.throws(() => normalizeRequest({ url: "file:///etc/passwd" }));
+});
+test("extraction failure retains actual request and response evidence", async () => {
+  const p = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url: "http://localhost",
+          extract: [{ name: "id", path: "$.missing" }],
+        },
+      },
+    ],
+  });
+  const r = await runPlan(p, {}, async () => ({
+    status: 200,
+    body: '{"hello":1}',
+    headers: {},
+    duration: 1,
+  }));
+  assert.equal(r.status, "failed");
+  assert.equal(r.results[0].response.body, '{"hello":1}');
+  assert.match(r.results[0].error, /无法提取/);
+});
+test("empty plan cannot falsely pass", async () => {
+  await assert.rejects(
+    runPlan(snapshotPlan({ steps: [] }), {}, async () => {}),
+    /没有可执行/,
+  );
+});
+test("backup restore preserves environments and plans without overwriting source", async () => {
+  const { restoreProject } = await import("../src/core.mjs");
+  const source = {
+    version: 1,
+    id: "old",
+    revision: 4,
+    name: "source",
+    requests: [{ url: "http://localhost" }],
+    environments: [{ id: "env", name: "local", variables: { a: "b" } }],
+    plans: [
+      { name: "plan", steps: [{ request: { url: "http://localhost" } }] },
+    ],
+  };
+  const copy = restoreProject(source);
+  assert.notEqual(copy.id, source.id);
+  assert.equal(copy.environments[0].variables.a, "b");
+  assert.equal(copy.plans.length, 1);
+  assert.equal(copy.revision, undefined);
+  assert.equal(source.revision, 4);
+});
+test("OpenAPI references resolve locally and never fetch remote documents", async () => {
+  const { resolveLocalReferences } = await import("../src/core.mjs");
+  const d = resolveLocalReferences({
+    components: {
+      schemas: {
+        User: { type: "object", properties: { id: { type: "integer" } } },
+      },
+    },
+    sample: { $ref: "#/components/schemas/User" },
+  });
+  assert.equal(d.sample.properties.id.type, "integer");
+  assert.throws(
+    () =>
+      resolveLocalReferences({ x: { $ref: "https://example.test/schema" } }),
+    /外部/,
+  );
+  assert.deepEqual(resolveLocalReferences({ a: { $ref: "#/a" } }).a, {
+    $ref: "#/a",
+  });
+});
+test("schema sample generation respects examples and falsy defaults", async () => {
+  const { sampleFromSchema } = await import("../src/core.mjs");
+  assert.deepEqual(
+    sampleFromSchema({
+      type: "object",
+      properties: {
+        count: { type: "integer", default: 0 },
+        active: { type: "boolean" },
+        name: { type: "string", example: "test" },
+      },
+    }),
+    { count: 0, active: false, name: "test" },
+  );
+});
+test("Postman import preserves auth, params, forms and script hierarchy", () => {
+  const requests = importDocument({
+    info: { name: "Collection" },
+    auth: { type: "bearer", bearer: [{ key: "token", value: "{{token}}" }] },
+    event: [
+      { listen: "prerequest", script: { exec: ['console.log("collection")'] } },
+    ],
+    item: [
+      {
+        name: "Folder",
+        item: [
+          {
+            name: "Update",
+            event: [
+              { listen: "test", script: { exec: ['console.log("test")'] } },
+            ],
+            request: {
+              method: "POST",
+              url: {
+                raw: "http://localhost/users/:id?a=1",
+                query: [{ key: "a", value: "1" }],
+                variable: [{ key: "id", value: "7" }],
+              },
+              body: {
+                mode: "formdata",
+                formdata: [
+                  { key: "file", type: "file", src: "/private/never-read.txt" },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(requests[0].auth.type, "bearer");
+  assert.equal(requests[0].url, "http://localhost/users/{id}");
+  assert.equal(requests[0].query.length, 1);
+  assert.equal(requests[0].form[0].requiresFile, true);
+  assert.match(requests[0].beforeScript, /collection/);
+  assert.match(requests[0].afterScript, /test/);
+});
+test("OpenAPI YAML imports without code execution or duplicate keys", () => {
+  const result = importDocument(
+    'openapi: 3.0.3\ninfo:\n  title: YAML\npaths:\n  /ping:\n    get:\n      summary: Ping\n      responses:\n        "200":\n          description: OK\n',
+  );
+  assert.equal(result[0].name, "Ping");
+  assert.throws(
+    () => importDocument("openapi: 3.0.3\nopenapi: 3.1.0\npaths: {}"),
+    /unique|duplicate/i,
+  );
+});
+test("malformed imports cannot persist fields that crash the workbench", () => {
+  assert.throws(() => normalizeRequest({ headers: { bad: true } }), /数组/);
+  assert.throws(() => normalizeRequest({ query: [null] }), /数组/);
+  assert.throws(() => normalizeRequest({ auth: [] }), /对象/);
+  assert.equal(normalizeRequest({ body: { ok: true } }).body, '{"ok":true}');
+});
+test("OpenAPI sync is idempotent and retains recursive schema components", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { name: "Sync", requests: [], environments: [] };
+  const document = {
+    openapi: "3.0.3",
+    info: { title: "Sync" },
+    components: {
+      schemas: {
+        Node: {
+          type: "object",
+          properties: { next: { $ref: "#/components/schemas/Node" } },
+        },
+      },
+    },
+    paths: {
+      "/nodes": {
+        post: {
+          operationId: "createNode",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Node" },
+              },
+            },
+          },
+          responses: { 200: { description: "OK" } },
+        },
+      },
+    },
+  };
+  const first = importIntoProject(project, document, { sync: true })[0].id;
+  document.paths["/nodes"].post.summary = "Changed";
+  importIntoProject(project, document, { sync: true });
+  assert.equal(project.requests.length, 1);
+  assert.equal(project.requests[0].id, first);
+  assert.equal(project.requests[0].name, "Changed");
+  assert(exportOpenAPI(project).components.schemas.Node);
+});
+test("Postman collection variables are retained as a separate environment", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { requests: [], environments: [] };
+  importIntoProject(project, {
+    info: { name: "Collection" },
+    variable: [{ key: "baseUrl", value: "http://localhost" }],
+    item: [],
+  });
+  assert.equal(project.environments[0].variables.baseUrl, "http://localhost");
+});
+test("invalid backup records are rejected before they can break the UI", async () => {
+  const { restoreProject } = await import("../src/core.mjs");
+  const base = { version: 1, requests: [], environments: [] };
+  assert.throws(() => restoreProject({ ...base, history: [null] }), /格式/);
+  assert.throws(
+    () => restoreProject({ ...base, runs: [{ id: "run" }] }),
+    /格式/,
+  );
+  assert.throws(
+    () => restoreProject({ ...base, documents: [{ title: "missing body" }] }),
+    /格式/,
+  );
+});
+test("OpenAPI metadata and paths cannot mutate object prototypes", async () => {
+  const { importIntoProject } = await import("../src/core.mjs");
+  const project = { requests: [], environments: [] };
+  const malicious = JSON.parse(
+    '{"openapi":"3.0.3","paths":{},"components":{"__proto__":{"polluted":"yes"}}}',
+  );
+  assert.throws(
+    () => importIntoProject(project, malicious, { sync: true }),
+    /不安全/,
+  );
+  assert.equal({}.polluted, undefined);
+  const exported = exportOpenAPI({
+    name: "Guard",
+    requests: [normalizeRequest({ url: "{{baseUrl}}__proto__" })],
+  });
+  assert(Object.hasOwn(exported.paths, "__proto__"));
+  assert.equal(Object.prototype.get, undefined);
+});
+test("cURL export and import preserve JSON headers, auth, query and quoted apostrophes", async () => {
+  const { toCurl, importCurl } = await import("../src/core.mjs");
+  const original = normalizeRequest({
+    url: "http://localhost/users/{id}",
+    method: "POST",
+    path: [{ key: "id", value: "7" }],
+    query: [{ key: "q", value: "a b" }],
+    auth: { type: "basic", username: "user", password: "secret" },
+    bodyType: "json",
+    body: JSON.stringify({ name: "O'Brien" }),
+  });
+  const command = toCurl(original);
+  const restored = importCurl(command);
+  assert.equal(restored.url, "http://localhost/users/7?q=a+b");
+  assert.equal(restored.auth.username, "user");
+  assert.equal(restored.body, original.body);
+  assert(
+    restored.headers.some(
+      (header) =>
+        header.key === "content-type" && header.value === "application/json",
+    ),
+  );
+  assert.throws(() => toCurl({ ...original, bodyType: "binary" }), /不等价/);
+});
+
+test("cURL preserves explicit GET bodies and rejects unimplemented file/redirect semantics", async () => {
+  const { importCurl } = await import("../src/core.mjs");
+  assert.equal(
+    importCurl("curl -X GET http://localhost -d hello").method,
+    "GET",
+  );
+  assert.equal(importCurl("curl http://localhost -d hello").method, "POST");
+  assert.throws(
+    () => importCurl("curl http://localhost -F file=@private.txt"),
+    /文件/,
+  );
+  assert.throws(
+    () => importCurl("curl http://localhost -d @private.txt"),
+    /文件/,
+  );
+  assert.equal(
+    importCurl("curl http://localhost --data-raw @literal").body,
+    "@literal",
+  );
+  assert.throws(() => importCurl("curl -L http://localhost"), /不支持/);
+  assert.throws(() => importCurl("curl http://localhost -H broken"), /Header/);
+});
+
+test("OpenAPI round trip preserves typed parameters, response schemas and examples", () => {
+  const responseSchema = {
+    type: "object",
+    properties: { id: { type: "integer" } },
+  };
+  const operation = {
+    operationId: "readUser",
+    parameters: [
+      {
+        in: "path",
+        name: "id",
+        required: true,
+        description: "User ID",
+        schema: { type: "integer" },
+        example: 7,
+      },
+    ],
+    responses: {
+      200: {
+        description: "User",
+        content: {
+          "application/json": { schema: responseSchema, example: { id: 7 } },
+        },
+      },
+    },
+  };
+  const source = {
+    openapi: "3.0.3",
+    info: { title: "Typed", version: "1" },
+    servers: [{ url: "https://api.example" }],
+    paths: {
+      "/users/{id}": {
+        parameters: [
+          {
+            in: "query",
+            name: "limit",
+            schema: { type: "integer" },
+            example: 10,
+          },
+        ],
+        get: operation,
+      },
+    },
+  };
+  const requests = importDocument(source);
+  const exported = exportOpenAPI({ name: "Typed", requests }).paths[
+    "/users/{id}"
+  ].get;
+  assert.equal(exported.operationId, "readUser");
+  assert.equal(exported.servers[0].url, "https://api.example");
+  assert.equal(
+    exported.parameters.find((p) => p.name === "id").schema.type,
+    "integer",
+  );
+  assert.equal(
+    exported.parameters.find((p) => p.name === "id").description,
+    "User ID",
+  );
+  assert.deepEqual(
+    exported.responses["200"].content["application/json"].schema,
+    responseSchema,
+  );
+  assert.deepEqual(
+    exported.responses["200"].content["application/json"].example,
+    { id: 7 },
+  );
+});
+
+test("explicit original-compatible plan status policy requires 200 even for expected error assertions", async () => {
+  for (const status of [200, 201, 404]) {
+    const plan = snapshotPlan({
+      statusPolicy: "strict200",
+      steps: [
+        {
+          expectedStatus: status,
+          request: {
+            url: "http://localhost",
+            assertions: [{ target: "status", op: "eq", value: status }],
+          },
+        },
+      ],
+    });
+    const result = await runPlan(plan, {}, async () => ({
+      status,
+      body: "{}",
+      headers: {},
+      duration: 1,
+    }));
+    assert.equal(result.status, status === 200 ? "passed" : "failed");
+    assert.equal(result.results[0].assertions[0].passed, true);
+  }
+  const legacy = snapshotPlan({
+    steps: [
+      {
+        request: {
+          url: "http://localhost",
+          assertions: [{ target: "status", op: "eq", value: 404 }],
+        },
+      },
+    ],
+  });
+  assert.equal(
+    (
+      await runPlan(legacy, {}, async () => ({
+        status: 404,
+        body: "{}",
+        headers: {},
+        duration: 1,
+      }))
+    ).status,
+    "passed",
+  );
+  assert.throws(
+    () => snapshotPlan({ statusPolicy: "ignore", steps: [] }),
+    /未知/,
+  );
+});

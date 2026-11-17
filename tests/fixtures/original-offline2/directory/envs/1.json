@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-10-25T13:27:25.023Z",
+  "env_id": "1",
+  "env_var_list": {
+    "native_after": {
+      "description": "",
+      "value": ""
+    },
+    "native_value": {
+      "description": "",
+      "value": ""
+    }
+  },
+  "is_private": -1,
+  "name": "默认环境",
+  "project_id": "10f7386134404a",
+  "server_list": [
+    {
+      "name": "默认服务",
+      "server_id": "1",
+      "sort": 1000,
+      "uri": ""
+    }
+  ],
+  "sort": 1000,
+  "updated_at": "2026-10-25T13:42:30.972Z"
+}

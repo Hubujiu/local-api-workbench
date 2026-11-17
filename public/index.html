@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local API · 本地接口工作台</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="toast" role="status"></div>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <form method="dialog">
+        <header>
+          <strong id="dialog-title"></strong
+          ><button value="cancel" aria-label="关闭">×</button>
+        </header>
+        <div id="dialog-content"></div>
+        <footer>
+          <button value="cancel">取消</button
+          ><button id="dialog-save" type="button" class="primary">确定</button>
+        </footer>
+      </form>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

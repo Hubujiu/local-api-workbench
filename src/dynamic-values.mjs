@@ -1,0 +1,449 @@
+import {
+  renderGraphQLVariableTemplate,
+  validateGraphQLVariableTemplate,
+} from "./graphql-variable-template.mjs";
+import {
+  hasQueryObjectSerialization,
+  parseQueryObject,
+} from "./openapi-query-objects.mjs";
+import {
+  hasReservedQuerySerialization,
+  encodeReservedQueryValue,
+} from "./openapi-query-reserved.mjs";
+import {
+  hasCookieSerialization,
+  parseCookieObject,
+  validateCookieObjectRequest,
+} from "./openapi-cookie-objects.mjs";
+import {
+  hasHeaderSerialization,
+  parseHeaderObject,
+  validateHeaderObjectRequest,
+} from "./openapi-header-objects.mjs";
+import { performance } from "node:perf_hooks";
+import {
+  bindPathTemplates,
+  assertPathValue,
+  validatePathSerialization,
+} from "./path-serialization.mjs";
+import {
+  hasQuerySerialization,
+  parseQueryArray,
+  validateQueryArrayRequest,
+} from "./openapi-query-arrays.mjs";
+import { nativeOAuth2Definition } from "../public/native-oauth2-model.js";
+import {
+  postmanOAuth2Definition,
+  resolvePostmanOAuth2,
+} from "../public/postman-oauth2-model.js";
+import { resolveApipostFunctionTemplate } from "./apipost-function-templates.mjs";
+import {
+  validateApipostTemplateRequest,
+  parseApipostFunctionTemplate,
+  apipostTemplateStages,
+  isApipostFunctionSource,
+  apipostFunctionSourceGroups,
+} from "../public/apipost-function-template.js";
+import { finalBodyLiteral } from "./script-final-body.mjs";
+import { resolveSDKURLRequest } from "./script-url-resolve.mjs";
+import { normalizeScriptURLMode } from "../public/script-url-mode.js";
+import { randomInt } from "node:crypto";
+import { sampleProjectSchema } from "./mock-fields.mjs";
+import { previewFunction } from "./custom-functions.mjs";
+// Elapsed execution budgets must not follow civil-clock adjustments.
+const monotonicNow = performance.now.bind(performance);
+
+export async function resolveDynamicValue(
+  spec,
+  variables,
+  functions = [],
+  deadline,
+) {
+  if (
+    !spec ||
+    ![
+      "fixed",
+      "variable",
+      "mock",
+      "apipost-function",
+      "apipost-header-function",
+      "apipost-form-function",
+      "apipost-body-function",
+    ].includes(spec.source)
+  )
+    throw Error("动态值来源无效");
+  const chain = spec.functions || [];
+  if (
+    !Array.isArray(chain) ||
+    chain.length > 10 ||
+    chain.some((name) => typeof name !== "string")
+  )
+    throw Error("动态值最多10个处理函数");
+  if (isApipostFunctionSource(spec.source)) {
+    if (chain.length) throw Error("原版函数模板暂不支持额外加工链");
+    return resolveApipostFunctionTemplate(
+      spec.value,
+      functions,
+      apipostFunctionSourceGroups[spec.source],
+      variables,
+      deadline,
+    );
+  }
+  let value;
+  if (spec.source === "variable") {
+    if (
+      typeof spec.value !== "string" ||
+      ["__proto__", "constructor", "prototype"].includes(spec.value) ||
+      !Object.hasOwn(variables, spec.value)
+    )
+      throw Error("动态值引用未定义变量");
+    value = variables[spec.value];
+  } else if (spec.source === "mock") {
+    if (
+      typeof spec.value !== "string" ||
+      !["string", "number", "integer", "boolean", "object", "array"].includes(
+        spec.type || "string",
+      )
+    )
+      throw Error("Mock动态值类型或表达式无效");
+    value = sampleProjectSchema(
+      { settings: { mockSeed: spec.seed ?? randomInt(0, 4294967296) } },
+      { type: spec.type || "string", mock: spec.value },
+    );
+  } else value = spec.value;
+  const bounded = (value) => {
+    const serialized = JSON.stringify(value, (_key, item) => {
+      if (
+        ["undefined", "function", "symbol", "bigint"].includes(typeof item) ||
+        (typeof item === "number" && !Number.isFinite(item))
+      )
+        throw Error("动态值必须是有限JSON值");
+      return item;
+    });
+    if (
+      serialized === undefined ||
+      Buffer.byteLength(serialized, "utf8") > 65536
+    )
+      throw Error("动态值须为不超过64KiB的JSON值");
+    return value;
+  };
+  bounded(value);
+  for (const name of chain) {
+    const fn = functions.find((item) => item.name === name);
+    if (!fn) throw Error("动态值函数不存在: " + name);
+    value = (await previewFunction(fn, value)).value;
+  }
+  return bounded(value);
+}
+async function resolveDynamicRequestBase(
+  request,
+  variables,
+  functions,
+  interpolate,
+  literalBody,
+  inheritedDeadline,
+) {
+  validateApipostTemplateRequest(request);
+  const postmanOAuth2 = postmanOAuth2Definition(request.auth);
+  const nativeOAuth2 = nativeOAuth2Definition(request.auth);
+  const clone = bindPathTemplates(structuredClone(request), variables),
+    specs = [];
+  const arrayValues = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (!hasQuerySerialization(row)) continue;
+    // Remove JSON text before generic interpolation; interpolate parsed scalar
+    // elements and reserialize so quotes/backslashes cannot alter the grammar.
+    if (!row.dynamic || row.enabled === false)
+      arrayValues.push({ index, value: parseQueryArray(row) });
+    row.value = "[]";
+  }
+  const queryObjectValues = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (!hasQueryObjectSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      queryObjectValues.push({ index, value: parseQueryObject(row) });
+    row.value = "{}";
+  }
+  const objectValues = [];
+  for (const [index, row] of (clone.headers || []).entries()) {
+    if (!hasHeaderSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      objectValues.push({ index, value: parseHeaderObject(row) });
+    row.value = "{}";
+  }
+  const cookieValues = [];
+  for (const [index, row] of (clone.cookies || []).entries()) {
+    if (!hasCookieSerialization(row)) continue;
+    if (!row.dynamic || row.enabled === false)
+      cookieValues.push({ index, value: parseCookieObject(row) });
+    row.value = "{}";
+  }
+  for (const group of ["query", "headers", "path", "cookies", "form"]) {
+    for (const [index, row] of (clone[group] || []).entries()) {
+      if (!row.dynamic) continue;
+      if (row.enabled !== false) {
+        if (row.type === "file") throw Error("文件参数不能配置动态文本值");
+        specs.push({ group, index, spec: row.dynamic });
+        row.value = "";
+      }
+      delete row.dynamic;
+    }
+  }
+  const body = String(clone.body || "");
+  const definitions = clone.bodyDynamic || {};
+  const parts =
+    literalBody === undefined
+      ? body.split(/(\{\{@value:[A-Za-z0-9_-]{1,100}\}\})/g)
+      : [literalBody];
+  const bodySpecs = [];
+  for (const [index, part] of parts.entries()) {
+    if (literalBody !== undefined) continue;
+    const match = /^\{\{@value:([A-Za-z0-9_-]{1,100})\}\}$/.exec(part);
+    if (!match) continue;
+    if (!Object.hasOwn(definitions, match[1]))
+      throw Error("Body动态值定义不存在: " + match[1]);
+    const spec = definitions[match[1]];
+    if (!["json", "text"].includes(spec.format))
+      throw Error("Body动态值输出格式无效");
+    bodySpecs.push({ index, spec });
+  }
+  clone.body = "";
+  delete clone.bodyDynamic;
+  if (specs.length + bodySpecs.length > 100)
+    throw Error("每个请求最多100个动态值");
+  const transforms = [...specs, ...bodySpecs].reduce(
+    (total, { spec }) =>
+      total +
+      (isApipostFunctionSource(spec.source)
+        ? apipostTemplateStages(parseApipostFunctionTemplate(spec.value)).length
+        : 0) +
+      (Array.isArray(spec.functions) ? spec.functions.length : 0),
+    0,
+  );
+  if (transforms > 20) throw Error("每个请求最多20次动态函数处理");
+  const deadline = inheritedDeadline ?? monotonicNow() + 5000;
+  // Scripts resolve templates explicitly at execution time, including post-extraction scopes.
+  const scriptSources = {};
+  for (const key of [
+    "beforeScript",
+    "afterScript",
+    "sharedBeforeScripts",
+    "sharedAfterScripts",
+    "nativeTasks",
+    "importedScriptTasks",
+    "importedNativeTaskSource",
+  ])
+    if (Object.hasOwn(clone, key)) {
+      scriptSources[key] = clone[key];
+      delete clone[key];
+    }
+  if (postmanOAuth2 !== undefined) delete clone.auth.postmanOAuth2;
+  // Native grant metadata is stored, never interpolated or executed here.
+  if (nativeOAuth2 !== undefined) delete clone.auth.nativeOAuth2;
+  // The retained OpenAPI operation is import/export provenance. Execution uses
+  // normalized URL/auth/rows; interpolating stale source examples would make an
+  // otherwise complete temporary override depend on an unused original value.
+  const operation = Object.hasOwn(clone, "openapiOperation")
+    ? { openapiOperation: clone.openapiOperation }
+    : {};
+  delete clone.openapiOperation;
+  const cookieSchemas = [];
+  for (const [index, row] of (clone.cookies || []).entries()) {
+    if (!hasCookieSerialization(row)) continue;
+    // This codec admits only literal primitive type declarations. Its schema
+    // example/default is definition metadata, not a second runtime value.
+    cookieSchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
+  const querySchemas = [];
+  for (const [index, row] of (clone.query || []).entries()) {
+    if (
+      !hasReservedQuerySerialization(row) &&
+      !hasQuerySerialization(row) &&
+      !hasQueryObjectSerialization(row)
+    )
+      continue;
+    querySchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
+  // Marked arrays and Header objects admit literal type/shape schemas. Their
+  // examples/defaults are source metadata, not additional active input values.
+  // Restore before the existing resolved-value validation; ordinary schemas and
+  // all other runtime interpolation remain on their established paths.
+  const headerSchemas = [];
+  for (const [index, row] of (clone.headers || []).entries()) {
+    if (!hasHeaderSerialization(row)) continue;
+    headerSchemas.push({ index, schema: row.schema });
+    delete row.schema;
+  }
+  const resolved = {
+    ...interpolate(clone, variables),
+    ...scriptSources,
+    ...operation,
+  };
+  for (const { index, schema } of headerSchemas)
+    resolved.headers[index].schema = schema;
+  for (const { index, schema } of querySchemas)
+    resolved.query[index].schema = schema;
+  for (const { index, schema } of cookieSchemas)
+    resolved.cookies[index].schema = schema;
+  for (const { index, value } of queryObjectValues)
+    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+  for (const { index, value } of arrayValues)
+    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+  for (const { index, value } of objectValues)
+    resolved.headers[index].value = JSON.stringify(
+      interpolate(value, variables),
+    );
+  for (const { index, value } of cookieValues)
+    resolved.cookies[index].value = JSON.stringify(
+      interpolate(value, variables),
+    );
+  if (nativeOAuth2 !== undefined) {
+    const selected = nativeOAuth2.addTokenTo;
+    if (selected && nativeOAuth2.access_token) {
+      nativeOAuth2.access_token = interpolate(
+        nativeOAuth2.access_token,
+        variables,
+      );
+      if (
+        selected === "header" &&
+        nativeOAuth2.access_token &&
+        nativeOAuth2.headerPrefix
+      )
+        nativeOAuth2.headerPrefix = interpolate(
+          nativeOAuth2.headerPrefix,
+          variables,
+        );
+    }
+    resolved.auth.nativeOAuth2 = nativeOAuth2;
+  }
+  if (postmanOAuth2 !== undefined)
+    resolved.auth.postmanOAuth2 = resolvePostmanOAuth2(
+      request.auth,
+      interpolate,
+      variables,
+    );
+  for (const { group, index, spec } of specs) {
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
+    const value = await resolveDynamicValue(
+      spec,
+      variables,
+      functions,
+      deadline,
+    );
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
+    if (
+      spec.source === "apipost-function" &&
+      value === "" &&
+      request.queryAddEqual === false
+    )
+      throw Error("原版Query函数空结果与省略等号组合尚未兼容");
+    if (
+      group === "query" &&
+      hasReservedQuerySerialization(resolved[group][index]) &&
+      !["string", "number", "boolean"].includes(typeof value)
+    )
+      throw Error("OpenAPI allowReserved: 动态输入须为primitive值");
+    if (
+      group === "query" &&
+      hasReservedQuerySerialization(resolved[group][index])
+    )
+      encodeReservedQueryValue(value);
+    if (
+      group === "query" &&
+      hasQueryObjectSerialization(resolved[group][index]) &&
+      (value === null || typeof value !== "object" || Array.isArray(value))
+    )
+      throw Error("OpenAPI Query对象动态输入须为对象");
+    resolved[group][index].value =
+      group === "path" &&
+      Object.hasOwn(resolved[group][index], "pathSerialization")
+        ? assertPathValue(resolved[group][index], value)
+        : typeof value === "string"
+          ? value
+          : JSON.stringify(value);
+  }
+  for (const [index, part] of parts.entries()) {
+    const dynamic = bodySpecs.find((item) => item.index === index);
+    if (!dynamic) {
+      parts[index] =
+        literalBody === undefined ? interpolate(part, variables) : part;
+      continue;
+    }
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
+    const value = await resolveDynamicValue(
+      dynamic.spec,
+      variables,
+      functions,
+      deadline,
+    );
+    if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
+    parts[index] =
+      dynamic.spec.format === "json" || typeof value !== "string"
+        ? JSON.stringify(value)
+        : value;
+  }
+  if (inheritedDeadline !== undefined && monotonicNow() > deadline)
+    throw Error("动态值处理超过5秒总预算");
+  resolved.body = parts.join("");
+  if (bodySpecs.length && resolved.body.length > 1024 * 1024)
+    throw Error("动态Body超过1MiB");
+  validateQueryArrayRequest(resolved);
+  validateHeaderObjectRequest(resolved);
+  validateCookieObjectRequest(resolved);
+  return resolved;
+}
+
+export async function resolveDynamicRequest(
+  request,
+  variables,
+  functions,
+  interpolate,
+  finalBody,
+) {
+  validateQueryArrayRequest(request);
+  validateHeaderObjectRequest(request);
+  validateCookieObjectRequest(request);
+  validatePathSerialization(request);
+  nativeOAuth2Definition(request.auth);
+  postmanOAuth2Definition(request.auth);
+  validateApipostTemplateRequest(request);
+  if (
+    finalBody !== undefined &&
+    Object.values(request.bodyDynamic || {}).some(
+      (spec) => spec?.source === "apipost-body-function",
+    )
+  )
+    throw Error("原版正文函数模板不支持脚本最终正文覆盖");
+  const graphqlDeadline = Object.hasOwn(request, "graphqlVariableTemplate")
+    ? monotonicNow() + 5000
+    : undefined;
+  if (validateGraphQLVariableTemplate(request) && finalBody !== undefined)
+    throw Error("GraphQL变量模板不支持脚本最终正文覆盖");
+  const literalBody =
+    renderGraphQLVariableTemplate(request, variables) ??
+    finalBodyLiteral(finalBody, request);
+  if (Object.hasOwn(request, "graphqlVariableTemplate")) {
+    request = structuredClone(request);
+    delete request.graphqlVariableTemplate;
+  }
+  const resolve = (request, variables, functions, interpolate) =>
+    resolveDynamicRequestBase(
+      request,
+      variables,
+      functions,
+      interpolate,
+      literalBody,
+      graphqlDeadline,
+    );
+  if (normalizeScriptURLMode(request.scriptURLMode) === "sdk")
+    return resolveSDKURLRequest(
+      request,
+      variables,
+      functions,
+      interpolate,
+      resolve,
+    );
+  return resolve(request, variables, functions, interpolate);
+}

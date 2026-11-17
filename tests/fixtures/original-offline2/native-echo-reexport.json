@@ -1,0 +1,411 @@
+{
+	"project_id": "10f7386134404a",
+	"name": "Workbench Restored Fixture",
+	"intro": "",
+	"global": {
+		"envs": [
+			{
+				"env_id": "1",
+				"env_var_list": {},
+				"name": "默认环境",
+				"server_list": [
+					{
+						"name": "默认服务",
+						"server_id": "1",
+						"sort": 1000,
+						"uri": ""
+					}
+				],
+				"is_private": -1,
+				"sort": 1000
+			}
+		],
+		"servers": [
+			{
+				"server_id": "1",
+				"name": "默认服务",
+				"sort": 1000
+			}
+		],
+		"global_vars": {},
+		"global_param": {
+			"auth": {
+				"asap": {
+					"alg": "",
+					"aud": "",
+					"claims": "",
+					"exp": "",
+					"iss": "",
+					"kid": "",
+					"privateKey": "",
+					"sub": ""
+				},
+				"awsv4": {
+					"accessKey": "",
+					"addAuthDataToQuery": false,
+					"region": "",
+					"secretKey": "",
+					"service": "",
+					"sessionToken": ""
+				},
+				"basic": {
+					"password": "",
+					"username": ""
+				},
+				"bearer": {
+					"key": ""
+				},
+				"digest": {
+					"algorithm": "",
+					"cnonce": "",
+					"nc": "",
+					"nonce": "",
+					"opaque": "",
+					"password": "",
+					"qop": "",
+					"realm": "",
+					"username": ""
+				},
+				"edgegrid": {
+					"accessToken": "",
+					"baseURi": "",
+					"clientSecret": "",
+					"clientToken": "",
+					"headersToSign": "",
+					"nonce": "",
+					"timestamp": ""
+				},
+				"hawk": {
+					"algorithm": "",
+					"authId": "",
+					"authKey": "",
+					"default": "",
+					"delegation": "",
+					"extraData": "",
+					"includePayloadHash": false,
+					"nonce": "",
+					"timestamp": "",
+					"user": ""
+				},
+				"jwt": {
+					"addTokenTo": "",
+					"algorithm": "",
+					"header": "",
+					"headerPrefix": "",
+					"isSecretBase64Encoded": false,
+					"payload": "",
+					"queryParamKey": "",
+					"secret": ""
+				},
+				"kv": {
+					"in": "",
+					"key": "",
+					"value": ""
+				},
+				"ntlm": {
+					"disableRetryRequest": false,
+					"entity": "",
+					"password": "",
+					"username": "",
+					"workstation": ""
+				},
+				"oauth1": {
+					"addEmptyParamsToSign": false,
+					"addParamsToHeader": false,
+					"callback": "",
+					"consumerKey": "",
+					"consumerSecret": "",
+					"disableHeaderEncoding": false,
+					"includeBodyHash": false,
+					"nonce": "",
+					"realm": "",
+					"signatureMethod": "",
+					"timestamp": "",
+					"token": "",
+					"tokenSecret": "",
+					"verifier": "",
+					"version": ""
+				},
+				"type": "noauth"
+			},
+			"body": {
+				"parameter": []
+			},
+			"cookie": {
+				"parameter": []
+			},
+			"header": {
+				"parameter": []
+			},
+			"post_tasks": [],
+			"pre_tasks": [],
+			"query": {
+				"parameter": []
+			}
+		},
+		"codes": [],
+		"marks": [
+			{
+				"color": "#2857FF",
+				"is_default_mark": 1,
+				"is_sys_default": 1,
+				"mark_id": "1",
+				"name": "开发中",
+				"project_id": "10f7386134404a"
+			},
+			{
+				"color": "#26CEA4",
+				"is_default_mark": -1,
+				"is_sys_default": 1,
+				"mark_id": "2",
+				"name": "已完成",
+				"project_id": "10f7386134404a"
+			},
+			{
+				"color": "#FFC01E",
+				"is_default_mark": -1,
+				"is_sys_default": 1,
+				"mark_id": "3",
+				"name": "需修改",
+				"project_id": "10f7386134404a"
+			},
+			{
+				"color": "#FF2200",
+				"is_default_mark": -1,
+				"is_sys_default": 1,
+				"mark_id": "4",
+				"name": "已废弃",
+				"project_id": "10f7386134404a"
+			}
+		],
+		"attributes": [],
+		"mock_custom_rules": [],
+		"db_link": [],
+		"describe_library": [],
+		"custom_func": []
+	},
+	"apis": [
+		{
+			"attribute_info": {},
+			"description": "",
+			"mark_id": "1",
+			"method": "POST",
+			"name": "Native Echo",
+			"parent_id": "0",
+			"project_id": "10f7386134404a",
+			"protocol": "http/1.1",
+			"request": {
+				"auth": {
+					"asap": {
+						"alg": "HS256",
+						"aud": "",
+						"claims": "",
+						"exp": "",
+						"iss": "",
+						"kid": "",
+						"privateKey": "",
+						"sub": ""
+					},
+					"awsv4": {
+						"accessKey": "",
+						"addAuthDataToQuery": false,
+						"region": "",
+						"secretKey": "",
+						"service": "",
+						"sessionToken": ""
+					},
+					"basic": {
+						"password": "",
+						"username": ""
+					},
+					"bearer": {
+						"key": ""
+					},
+					"digest": {
+						"algorithm": "MD5",
+						"cnonce": "",
+						"disableRetryRequest": false,
+						"nc": "",
+						"nonce": "",
+						"opaque": "",
+						"password": "",
+						"qop": "",
+						"realm": "",
+						"username": ""
+					},
+					"edgegrid": {
+						"accessToken": "",
+						"baseURi": "",
+						"clientSecret": "",
+						"clientToken": "",
+						"headersToSign": "",
+						"nonce": "",
+						"timestamp": ""
+					},
+					"hawk": {
+						"algorithm": "",
+						"app": "",
+						"authId": "",
+						"authKey": "",
+						"delegation": "",
+						"extraData": "",
+						"includePayloadHash": false,
+						"nonce": "",
+						"timestamp": "",
+						"user": ""
+					},
+					"jwt": {
+						"addTokenTo": "header",
+						"algorithm": "HS256",
+						"header": "",
+						"headerPrefix": "Bearer",
+						"isSecretBase64Encoded": false,
+						"payload": "",
+						"queryParamKey": "token",
+						"secret": ""
+					},
+					"kv": {
+						"in": "header",
+						"key": "",
+						"value": ""
+					},
+					"ntlm": {
+						"disableRetryRequest": false,
+						"domain": "",
+						"password": "",
+						"username": "",
+						"workstation": ""
+					},
+					"oauth1": {
+						"addEmptyParamsToSign": true,
+						"addParamsToHeader": false,
+						"callback": "",
+						"consumerKey": "",
+						"consumerSecret": "",
+						"disableHeaderEncoding": false,
+						"includeBodyHash": true,
+						"nonce": "",
+						"realm": "",
+						"signatureMethod": "HMAC-SHA1",
+						"timestamp": "",
+						"token": "",
+						"tokenSecret": "",
+						"verifier": "",
+						"version": "1.0"
+					},
+					"oauth2": {
+						"accessTokenUrl": "",
+						"access_token": "",
+						"addTokenTo": "header",
+						"authRequestParams": [],
+						"authUrl": "",
+						"challengeAlgorithm": "S256",
+						"clientId": "",
+						"clientSecret": "",
+						"client_authentication": "header",
+						"code_verifier": "Bearer",
+						"grant_type": "authorization_code",
+						"headerPrefix": "Bearer",
+						"password": "",
+						"redirect_uri": "",
+						"refreshRequestParams": [],
+						"refreshTokenUrl": "",
+						"scope": "",
+						"state": "",
+						"tokenRequestParams": [],
+						"username": ""
+					},
+					"type": "inherit"
+				},
+				"body": {
+					"binary": null,
+					"mode": "json",
+					"parameter": [],
+					"raw": "{\"message\":\"fictional\",\"number\":7}",
+					"raw_parameter": [],
+					"raw_schema": {
+						"type": "object"
+					}
+				},
+				"cookie": {
+					"parameter": []
+				},
+				"header": {
+					"parameter": []
+				},
+				"post_tasks": [],
+				"pre_tasks": [],
+				"query": {
+					"parameter": [
+						{
+							"description": "",
+							"field_type": "String",
+							"is_checked": 1,
+							"key": "fixture",
+							"not_null": 1,
+							"param_id": "10f794faf4404d",
+							"schema": {},
+							"value": "original"
+						}
+					]
+				},
+				"restful": {
+					"parameter": []
+				}
+			},
+			"response": {
+				"example": [
+					{
+						"example_id": "1",
+						"expect": {
+							"code": "200",
+							"content_type": "json",
+							"is_default": 1,
+							"mock": "",
+							"name": "成功",
+							"schema": {
+								"properties": {},
+								"type": "object"
+							},
+							"verify_type": "schema"
+						},
+						"headers": [],
+						"raw": "",
+						"raw_parameter": []
+					},
+					{
+						"example_id": "2",
+						"expect": {
+							"code": "404",
+							"content_type": "json",
+							"is_default": -1,
+							"mock": "",
+							"name": "失败",
+							"schema": {
+								"properties": {},
+								"type": "object"
+							},
+							"verify_type": "schema"
+						},
+						"headers": [],
+						"raw": "",
+						"raw_parameter": []
+					}
+				],
+				"is_check_result": 1
+			},
+			"sort": 1,
+			"target_id": "10f7b2a5b4404e",
+			"target_type": "api",
+			"url": "http://127.0.0.1:18766/echo?fixture=original",
+			"version": 2,
+			"is_exampled": 0,
+			"status": 1,
+			"is_changed": -1,
+			"has_changed": -1
+		}
+	],
+	"samples": [],
+	"models": [],
+	"automated_testings": []
+}

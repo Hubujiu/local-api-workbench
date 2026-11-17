@@ -1,0 +1,33 @@
+✔ recursive 3.1 references retain sibling constraints at every recursion boundary (179.084733ms)
+✔ 3.0 schema export uses composition instead of ignored Reference Object siblings (1.161566ms)
+✔ recursive sibling constraints survive project persistence, export and reimport (61.996249ms)
+✔ export does not repair invalid allOf siblings or non-string references (0.929406ms)
+✔ recursive siblings still resolve their own schema children, but never payload references (31.652562ms)
+✔ reference export preserves existing allOf and property-local constraints without flattening (24.612941ms)
+✔ OpenAPI 3.1 resolved schemas preserve independent JSON Schema 2020 validation results (175.858171ms)
+✔ portable reference sibling constraints survive OpenAPI export and reimport (21.590325ms)
+✔ annotation-only referenced multipart fields retain file classification (0.867764ms)
+✔ composed form roots and fields reject instead of becoming empty or text-only forms (0.702535ms)
+✔ malformed allOf siblings are not repaired silently by inserting the reference (0.887464ms)
+✔ legacy unmarked reference helper keeps its established overlay contract (0.508844ms)
+✔ non-null JSON constants export as equivalent singleton enums (150.134621ms)
+✔ constant and existing enum/allOf remain an intersection, including impossible schemas (67.443263ms)
+✔ numeric exclusive bounds preserve the stricter inclusive or exclusive constraint (117.003297ms)
+✔ bound intersections agree at negative, fractional, zero, and extreme finite boundaries (763.9806ms)
+✔ nested const/bounds support positive/negative composition, items and additional properties (77.333954ms)
+✔ reference siblings keep constant and bounds constraints as Schema Object conjunctions (18.714188ms)
+✔ all OpenAPI Schema positions convert while schema-looking data stays opaque (1.43056ms)
+✔ imported OpenAPI 3.1 request schemas can export and reimport without value-set changes (25.093602ms)
+✔ workflow fixture preserves referenced components, parameter and response constraints through pure project roundtrip (7.575833ms)
+✔ existing OpenAPI 3.0 boolean exclusivity stays unchanged (0.520161ms)
+✔ null constants and unrelated unsupported dialect constructs still reject (0.755836ms)
+✔ new conversions reject nonfinite numbers and malformed companion bounds (1.821697ms)
+✔ constant literal traversal retains existing depth/node bounds (57.915928ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2249.904976

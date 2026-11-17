@@ -1,0 +1,21 @@
+✔ one-shot owner report states its legacy policy without changing 404 positive assertions or ordinary 2xx (154.459589ms)
+✔ one-shot owner report separates assertion and execution failures without VM scripts (71.105723ms)
+✔ staged owner report states its legacy policy without changing 404 positive assertions or ordinary 2xx (195.605017ms)
+✔ staged owner report separates assertion and execution failures without VM scripts (188.411368ms)
+✔ staged owner SSE counts each failure class once per iteration while retaining each failed step (96.770036ms)
+✔ one-shot owner report classifies redirect refusal without treating an intermediate 302 as terminal status failure (69.664437ms)
+✔ one-shot explicit owner cancellation returns a terminal cancellation class rather than execution failure (46.025593ms)
+✔ staged owner report classifies redirect refusal without treating an intermediate 302 as terminal status failure (68.797243ms)
+✔ staged explicit owner cancellation returns a terminal cancellation class rather than execution failure (72.000348ms)
+✔ new load report classification does not rewrite pre-existing owner run history or label it version 1 (158.561842ms)
+✔ classification preserves existing status policies and separates assertions (2.132099ms)
+✔ fixed vocabulary cannot carry remote messages and errors are not parsed (0.410018ms)
+✔ classification is a read-only projection of execution records (0.233807ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1827.06134

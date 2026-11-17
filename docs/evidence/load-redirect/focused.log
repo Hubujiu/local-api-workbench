@@ -1,0 +1,32 @@
+✔ shared capability never refunds reservations; untrusted JSON is not authority (2.165951ms)
+✔ exhaustion rejects before the next connection and retains actual response (25.767268ms)
+✔ redirect admission rejects every active executable dynamic source without evaluating it (3.098551ms)
+✔ redirect admission permits fixed/variable values without processing chains (1.453531ms)
+✔ redirect admission checks nonredirect leaves in a mixed plan and never evaluates script text (0.988534ms)
+✔ no-redirect admission retains the old execution contract and adds no dynamic restrictions (0.263532ms)
+✔ mixed redirect worst-hop admission is conservative and exact at its 100-operation bound (0.406348ms)
+✔ load network capability cannot be reconstructed from JSON and exhausted reservations cannot start new work (1.151268ms)
+✔ one-shot redirect load rejects 51x2 before network and admits exactly 50x2 with one shared budget (141.201487ms)
+✔ one-shot redirect load refuses cross-origin before any target hit (6.301315ms)
+✔ one-shot redirect load preserves the complete supported status/method matrix (20.760698ms)
+✔ one-shot redirect load cancellation interrupts the second hop and starts no later iteration (4.655695ms)
+✔ one-shot redirect load shares cookies only within an iteration and never mutates its seed (19.29221ms)
+✔ staged redirect load rejects 51x2 before network and admits exactly 50x2 with one shared budget (92.123944ms)
+✔ staged redirect load refuses cross-origin before any target hit (3.727183ms)
+✔ staged redirect load preserves the complete supported status/method matrix (20.320207ms)
+✔ staged redirect load cancellation interrupts the second hop and starts no later iteration (3.541005ms)
+✔ staged redirect load shares cookies only within an iteration and never mutates its seed (9.621118ms)
+✔ one-shot redirect load rejects script and native-task definitions before network or VM execution (1.483497ms)
+✔ staged redirect load rejects script and native-task definitions before network or VM execution (2.443579ms)
+✔ one-shot redirect load timeout on an incomplete second response never starts its advertised next hop (154.24018ms)
+✔ staged redirect load timeout on an incomplete second response never starts its advertised next hop (153.126172ms)
+✔ staged mixed redirect and ordinary leaves count logical requests separately from shared network hops (12.542938ms)
+✔ staged progress reports share a monotonic network budget across a VU stage transition (2034.444089ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3189.812668

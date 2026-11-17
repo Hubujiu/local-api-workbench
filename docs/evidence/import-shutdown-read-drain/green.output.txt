@@ -1,0 +1,15 @@
+✔ close drains a successful locked poll read without late state or requests (71.692087ms)
+✔ close drains a failing locked poll read without late state or requests (45.536035ms)
+✔ close drains a successful locked activate read without late state or requests (49.071627ms)
+✔ close drains a failing locked activate read without late state or requests (46.551003ms)
+✔ close drains a successful locked reactivate read without late state or requests (39.512154ms)
+✔ close drains a failing locked reactivate read without late state or requests (46.965733ms)
+✔ actual interval poll remains owned by shutdown until its Store guard is released (1041.25087ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1667.183322

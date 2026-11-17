@@ -1,0 +1,13 @@
+# MCP settings: visible status and explicit local configuration preview
+
+The official reference https://offline.apipost.net/images/mcp-connection.png shows a service status card, authorization area and six client tabs on the settings page. The former implementation put almost everything in separate dialogs. The new page makes actual service state, last activity and authorized project names visible, and adds client tabs with inline configuration preview. It is an independent implementation, not a claim of pixel-identical layout or complete external-client interoperability.
+
+Reading this page changes no authorization. Editing service, write/execute access, retained authorization and key rotation still uses the existing explicit Apply dialog; cancellation leaves permissions unchanged. The generic project Save/Archive controls are omitted from this machine-wide service pane to avoid implying that they apply MCP permissions.
+
+Connection keys are hidden by default, including after navigation or re-render. Viewing is explicit and fetches current configuration. Copying is explicit, rechecks that the service/key/endpoint still match, and only uses the local clipboard. Polling invalidates a displayed obsolete key without rebuilding the whole page or stealing tab focus. Late preview/copy reads after hiding or leaving the page are ignored. No external agent is contacted or configured automatically. Screenshots are captured only after hiding the key.
+
+Six tabs retain the existing client templates. They support keyboard arrows, Home and End. Template generation is not evidence of real-client acceptance. The existing separate post-authorization configuration dialog remains available; full native format and transport equivalence are still out of scope for this increment.
+
+Coverage includes escaped project names, no secret in initial markup, unknown/disabled state, interrupted copy and navigation, key revocation, repeated open/cancel, actual browser preview/tab/hide flows, and the existing HTTP authorization tests. Final verification is tied to the exact submitted commit and its CI, not to this document's presence.
+
+The first browser CI on 1b91d0c failed the immediate checked-state read after reopening the authorization dialog. Its trace shows the server still returned enabled:true, while isChecked sampled the old hidden unchecked input before asynchronous dialog replacement. The test now waits for the prior dialog to hide and the reopened dialog to become visible before the unchanged checked-state assertion. It does not apply permissions, loosen assertions, or convert a failure to a pass.

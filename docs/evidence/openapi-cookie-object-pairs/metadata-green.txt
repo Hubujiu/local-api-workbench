@@ -1,0 +1,16 @@
+✔ temporary Cookie input and fixed dynamic values do not evaluate replaced source examples (15.82027ms)
+✔ only operation provenance and marked Cookie schema are opaque; other existing runtime interpolation stays unchanged (2.175447ms)
+✔ explicit Cookie pairs preserve owner/SDK HTTP+stdio wire, OpenAPI roundtrip and frozen backup/restart (2211.373915ms)
+✔ Cookie objects interpolate parsed values and reject dynamic malformed or colliding values before network (15.333391ms)
+✔ Cookie pairs reach real HTTP/1.1, HTTP/2 and curl; empty objects produce no pairs (29.874685ms)
+✔ real Cookie jar retains priority over object pairs and removes the header when enabled but empty (45.01816ms)
+✔ unsupported Cookie object imports reject atomically via owner and official SDK without disk or network changes (743.883279ms)
+✔ official SDK HTTP and stdio replace Cookie source templates without defining unused variables (1553.964186ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5410.600039

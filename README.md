@@ -1,1 +1,179 @@
-# local-api-workbench
+# Local API Workbench
+
+> 分支收敛入口（2026-11-17）：[336 个分支的逐项审查与 main 整合记录](docs/branch-audit-2026-11-17.md)。本次以最新完整候选为基础，补回遗漏的空 JSON / 空 multipart 导出修复与 MCP 回归，补齐 main CI 和完整包遍历失败检查，并修复脚本诊断采样误计、原生断言证据转换漏计活动预算的问题，减少 XML 完整防篡改检查的重复计算。整合 PR 与 main 的实际运行状态以 GitHub Actions 为准；这次开发主线整合不代表完整产品交付或正式发行。
+
+开发中，尚未完成 Apipost 全功能复刻验收。交付缺口见 [交付矩阵](docs/DELIVERY-STATUS.md)，旧阶段功能边界与遗留证据见 [历史后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)。历史逐项清单与交付候选记录仅代表各自版本，不作为当前能力或最新验收结论。统一开发主线为 `main`；普通功能从 `main` 创建短期分支并通过独立 PR 回到 `main`。历史分支的包含关系、遗漏修复、隔离实验和验证限制见上方审查记录，临时组合分支不再替代主线。
+
+本地优先的 API 工作台。独立实现，非 Apipost 官方产品，不包含其品牌素材、二进制、许可证或付费服务。以 Apipost 单机版公开操作文档和工作台布局为参考。
+
+历史 0.1.0 候选记录见 [历史交付清单](docs/DELIVERY.md)，旧逐项清单见 [历史功能对照](docs/PARITY-CURRENT.md) 与 [历史核验摘要](docs/CURRENT-PARITY.md)。可运行、某次 CI 通过或下面的能力列表均不等于完整复刻交付。
+
+## 启动
+
+安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
+
+```
+npm ci
+npm start
+```
+
+浏览器打开终端打印的本地链接（带本次启动的访问令牌，进入页面后自动从地址栏清除）。不要分享该链接。Windows 可双击 `scripts/start.cmd`。默认数据位于启动目录 `.local-api/`；用 `LOCAL_API_DATA` 指定目录。每个项目使用独立 ID 目录，apis/envs/settings/plans/cases 分文件保存；history 默认不纳入新建项目的 Git 跟踪。写入使用事务日志恢复、项目锁与冲突检测。旧版单个 JSON 在第一次保存时迁移，原文件保留为备份。不要把包含密钥、历史或响应的运行目录提交到 Git。
+
+### 用 Git 共享本地项目
+
+用项目里的「打开位置」找到项目 ID 目录，在该目录初始化 Git。接收方把仓库克隆到自己的数据根目录下，克隆目录名与仓库 `project.json` 的 `id` 一致，然后在 Workbench 中选择该项目。例如浏览器版可将仓库克隆为 `<LOCAL_API_DATA>/<项目ID>`。不要用克隆覆盖已有的同 ID 项目。
+
+Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认证等定义是否包含凭据；默认忽略本地历史、历史清单和事务日志，但不会替你取消已有追踪记录。需要恢复历史时，请在应用内导出完整项目备份。新版在成功保存时把旧有文件布局升级为格式 3，保留完整本地历史；旧版程序不能打开格式 3。升级前如需回退，先保留完整备份和旧目录的副本，不用 Git 克隆替代备份。
+
+桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
+
+以下两段保留旧阶段记录，不是当前候选结论；最新精确状态以上方验收入口为准。
+
+该历史阶段最后完整已验证根为 `da97a0e9` / CI `40549158177`（19项通过，实际提交／树及产物已核）。较新的结构编辑组合 `6c238a41` / CI `40551216982` 为18通过／1失败：macOS脚本跨作用域配额测试的scope为project而非request，底层原因未记录，仍未知。新增结构编辑流程通过不抵消该失败，不以旧绿灯或单功能CI宣布新根已验收。
+
+历史阶段候选记录（对应上一段所述阶段，不是 2026-11-13 当前状态）：补保图API软回收／恢复：保留binding、请求ID、own配置和旧case／plan／history；stored tombstone阻断live／cURL及伪造旧bound调用，精确已存冻结请求仍可执行。owner、既有MCP回收权限、真实CLI、备份重启与repeat交叉已本地验证；普通PUT不能切换回收状态，native批次历史不静默清除。永久清除、解绑、目录回收仍拒绝，原生出口不冒充完整历史备份。另仅为配额断言增加失败诊断，未改runtime／预算或降低预期，不声称已修根因。**该历史记录时点的组合 CI 尚待；当前精确状态见顶部验收入口，不将此句视作最新 CI 状态。**
+
+仍未完整交付：原生automated_testings装配/非空项目样本缺证；部分协议和原生交换语义不能保真；SQL Server、Oracle、达梦provider尚未实现（不只是差测试），SQL Server运行许可确认另行待定；原版完整 GUI 与暂停专项未完成；旧阶段前端暂停描述不代表当前开发状态。SQLite额外能力不抵消原版数据库缺口。六模块已验证流程及剩余拒绝边界见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)，不按测试数量折算完成率。
+
+## 已实现的核心
+
+- 多级目录树与整棵子树原子改名/移除；可明确开启祖先参数/认证/脚本继承，默认保持精确目录，旧快照不变。
+- 隔离脚本支持有界 Promise/await、HTTP、定时器、await $.ajax/异步回调、CSV/XML响应解析；所有作用域共享原运行配额。
+- Schema支持常用约束、局部引用、元组以及保守的allOf交集样例；无法安全求解时明确要求example。
+- 文档可插入有大小/像素限制的本地PNG/JPEG，离线HTML/Markdown保留图片；不自动加载远程图片或执行原始HTML。
+- OAuth1 提供显式 OOB/PIN 和有界本机回调流程，包含单次领取、取消和过期处理；临时秘密仅在内存，交换后仍须显式保存接口，不自动取得第三方账号授权。
+
+- 项目/精确目录共享前后置脚本：异步完成后再进入下一作用域、单独关闭继承、用例冻结；计划仅执行显式代码，不自动加入共享脚本。见 [顺序与隔离边界](docs/ADR-SHARED-SCRIPTS.md)。
+
+- 项目/目录共享认证：显式作用域覆盖、none阻止上层、接口认证优先和单独关闭继承；不自动获取令牌或读取系统凭据。见 [认证继承边界](docs/ADR-SHARED-AUTH.md)。
+
+- 项目/精确目录 Header / Query / Cookie / 表单文本：集中编辑、接口覆盖/关闭继承，新计划与用例冻结，旧快照不漂移；共享认证支持单独继承/禁用并冻结快照，共享脚本采用明确作用域次序及统一预算，执行计划不自动继承。见 [范围与优先级](docs/ADR-GLOBAL-PARAMETERS.md)。
+
+### 后端完整流程与范围
+
+- **项目与往返：** 本地持久化、事务恢复、备份及受支持原生 JSON／目录定义导入导出，衔接冻结执行、再导出、恢复重启和项目隔离。不能表达的语义明确拒绝；原生交换不等于完整备份，输出身份可能重新映射。
+- **请求与认证：** 支持已列明的协议、认证、超时和取消。原生两格式、Postman、OpenAPI 的明确无认证声明不会被目标共享认证覆盖。原生导出不能保留 SDK URL 对象模式时明确拒绝，不静默丢失行为；旧保存记录不猜测迁移。
+- **前后置任务：** 有界脚本、等待、数据库查询、原生提取和断言可按受支持顺序混排。提取有十类来源的限定子集，断言有十一类来源、十五种比较；阶段限制、状态隔离、完成性检查及共享预算保持，不代表全量原版 SDK。
+- **Mock 与数据库：** 受支持的条件 Mock 定义可导出再导入并真实调用。数据库默认只读；SQLite／PostgreSQL／MySQL 有限写入须逐次明确授权。CLI／MCP 可取得限定临时只读权限，不因此获得写权限。
+- **计划与结果：** 冻结配置不随 live 修改漂移，结果记录实际执行环境，同时保留计划默认值。成功、失败、保存失败、未知提交和恢复分别保留真实证据；不把保存失败说成请求失败，也不自动重放网络操作。
+- **MCP 后端：** 官方 SDK HTTP／stdio 的协商、项目及权限隔离、原生交换和冻结计划执行，与实际 CLI、持久化和恢复衔接；并非所有外部宿主客户端都已实机验收。
+
+另外提供有界压测（最大100请求、10并发），禁止用于未授权目标；现有工作台无 CDN、遥测或内置云模型。本文不把测试数量换算成交付率，具体提交的验收仍以后端检查点为准。
+
+## MCP
+
+```
+node src/mcp.mjs --project <project-id>
+```
+
+默认只读；`--write` 允许项目变更；再加 `--execute` 才能执行保存的计划。项目 allowlist 必须显式给定。不要把这些参数配置给不信任的 Agent。MCP 本身不提供 AI 推理；可供用户已有 Agent 使用。按 MCP 2025-06-18 stdio JSON-RPC 协议实现。
+
+stdio 的 `--write --execute --project <id>` 也提供已保存 WebSocket 定义的有界交互工具，须先 initialize。启动项目授权固定，HTTP 端修改授权或令牌不会撤销独立 stdio 进程；撤权须终止该进程。连接配额和操作去重按实例独立，不承诺跨进程 exactly-once，EOF/传输错误会关闭连接并等待保存尝试。详见 [stdio WebSocket 边界](docs/ADR-MCP-STDIO-WEBSOCKET-SESSIONS.md)。
+
+HTTP MCP 另提供已保存 gRPC 双向流的交互工具，需初始化及项目 write/execute 授权；与 owner gRPC 共用五个活动槽，保留定义的最长30秒总期限，无自动重放。原 HTTP 首片当时未包含 stdio；后续 stdio 扩展见下一段。其他交互流类型及临时凭据覆写仍不支持。详见 [HTTP gRPC 双向流边界](docs/ADR-MCP-HTTP-GRPC-BIDI-SESSIONS.md)。
+
+同一 stdio 启动授权也可交互调用已保存的 gRPC bidi 定义，有限 gRPC 调用与交互流共用每实例五槽。保留定义的 50–30000ms 总期限，不提供续租，不扩大为其他流式形态。退出等待原保存尝试而不重试网络或存储；授权快照、信号/崩溃及跨进程限制见 [stdio gRPC bidi 边界](docs/ADR-MCP-STDIO-GRPC-BIDI-SESSIONS.md)。
+
+HTTP/stdio MCP 也提供已保存 TCP 的有界持久交互：与各自现有 WS 共用连接池和操作账本，严格隔离协议类型，不自动发送默认消息或重连。仅显式文本发送，接收可按保存定义选择 UTF-8/hex/base64；TCP chunk 不保证业务消息边界，written 不等于远端确认。未证明的完成规则、临时端点、TLS与脚本字段拒绝。详见 [TCP MCP 边界](docs/ADR-MCP-TCP-SESSIONS.md)。
+
+授权项目可用 `localapi_export_project` 导出、以 `--write` 使用 `localapi_import_project` 合并导入；显式格式仅 `apipost` / `apipost-directory`，内联 JSON 最多 4 MiB，不读文件、不抓取 URL、不清空或新建项目、不执行请求。导出可能包含已保存的凭据，分享前须检查。详见 [MCP 项目定义往返边界](docs/ADR-MCP-PROJECT-INTERCHANGE.md)。
+
+工作台可从“导出 → 选择资源导出定义”选择已保存的接口、目录等资源，先查看最终范围、必需依赖和敏感信息警告，再明确确认下载。默认不选择任何资源，未保存草稿不会自动保存；定义文件不是完整备份或脱敏文件。完整备份仍使用原“本地项目 JSON”选项。
+
+后端还提供显式选择导出：owner `POST /api/projects/:id/export-preview` / `export-selection`，或只读 MCP `localapi_preview_project_export` / `localapi_export_project_selection`。先预览非空资源选择及必需依赖，再使用返回的配置版本、内容摘要和全部依赖身份导出。支持上述两种原生格式和受限 Postman Collection 2.1（后者仅选接口/目录，不含环境及全局变量值，不能保证独立重放），目录选择包含完整子树；空选择不退回整项目。原有完整导出保持不变，定义历史、执行记录、计划和回收站不属于该选择范围。选择图成立不代表所有资源可表达，未证明可保真的原生语义仍拒绝。详见 [选择定义导出合同](docs/ADR-SCOPED-DEFINITION-EXPORT.md)。
+
+## 固定验收
+
+```
+npm run check
+npm test
+node tests/ui-smoke.mjs
+```
+
+最后一个命令需要 Playwright/Chromium。CI 重复这些固定步骤，并保留截图证据。测试只访问临时本地 fixture，不访问第三方业务服务。计划与边界见 `docs/PLAN.md`。
+
+## 当前差距（不隐藏）
+
+- 原版 GUI 的当前完整流程尚未验收，像素一致性和签名发行未完成；已新增的协议界面及历史旅程以精确候选证据为准，不能代替完整 GUI 验收。
+- 独立 XML／运行时专项未完成；PR37 实验默认关闭、未进入生产组合。历史失败不因后续 CI 通过而改判，既有 Windows XML 预算超时的根因不宣称已解决。
+- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server／Oracle／达梦的provider与实际验证仍缺失，许可和运行条件须另行确认，不冒充完成。
+- 本地循环 OpenAPI 引用可保留，外部引用不自动拉取。原生定义交换无法保留的依赖、历史来源或配置明确拒绝，完整状态使用 Workbench 备份。
+- SSE/WebSocket/TCP 提供有界采集与交互会话，最长15分钟、总计8MiB、最近200条消息，不代表全部协议扩展。
+- 不包含付款、License 激活、在线团队/账号协同或商业 AI 服务，不绕过原版授权。
+
+功能与修复按各自 draft PR 保存，组合验证按精确提交单独记账；未经批准不合入 main、不部署。
+
+## 脚本
+
+前后置脚本运行在独立 QuickJS/WASM 工作线程中，不暴露 Node、文件或任意模块。支持变量作用域、pm.request/response、pm.test/Chai、CryptoJS、apt.assert与console.log。新增有界pm.sendRequest(config, callback)：最多10次、同时4次，仅HTTP(S)，单请求1500ms、请求64KiB、响应256KiB；支持回调（含async回调）或省略回调取得Promise，并支持顶层await。只有真实接口前后置脚本启用网络，纯函数预览/动态值/正则提取不启用。累计脚本运行预算250ms（墙钟时间，不含网络等待）、VM内存16MiB、整个工作线程仍限2秒。子请求及失败证据保留在计划记录中。
+
+支持有界 setTimeout/clearTimeout（单次0–1000ms，累计100次/同时32次）及 done 回调断言；定时器与HTTP共同等待完成，不延长总截止时间。支持有限 $.ajax 的 success/error/complete 回调、JSON字符串和标量表单/查询数据，沿用同一HTTP代理。支持Promise断言和定时器async回调；未处理的Promise拒绝使执行失败。async:false、$.ajax的Promise返回/async回调及setInterval仍不支持。异步执行与引擎可复现构建见 docs/ADR-PROMISE-SCRIPTS.md。具体边界见 docs/ADR-CALLBACK-ASSERTIONS.md 和 docs/ADR-AJAX-CALLBACKS.md。
+
+## OAuth2 与 Digest
+
+支持 Digest MD5/SHA-256/SHA-512-256 与 auth/auth-int challenge；OAuth2 提供 client_credentials、refresh_token、授权码 PKCE S256。授权码回调地址在界面显示，需要在提供方登记。凭据只发往用户输入的 endpoint，优先使用 HTTPS；本地保存令牌前仍需用户点击保存。
+
+HTTP MCP 可在项目配置中按需启用，默认关闭；可显式勾选跨重启保留授权、端口和密钥，不勾选时每次启动重新授权；提供单独的连接令牌、项目 allowlist 和读写/执行权限。关闭即撤销令牌。TLS 证书校验始终开启，支持自定义 CA、客户端 PEM 证书/私钥与 HTTP/HTTPS CONNECT 代理。
+
+## Cookie管理器
+
+请求的Cookie标签可管理当前项目/环境的本机Cookie。默认关闭；开启后自动保存和发送匹配Cookie，并覆盖手工Cookie输入。本机明文存储（界面遮蔽值），Cookie库文件不进入项目导出/备份，但请求响应历史可能含Cookie，分享前必须检查；请勿将数据目录公开。调试、计划、CLI及授权MCP共享所选环境的Cookie；压测每次迭代使用隔离副本且不写回。详见 docs/ADR-COOKIE-JAR.md。
+
+## 常用内置动态变量
+
+URL、Header、Body等字段支持 {{$guid}}、{{$randomUUID}}、{{$timestamp}}、{{$isoTimestamp}}、{{$randomInt}}、{{$randomBoolean}} 等163个可选名称（含别名）的基础及英文Faker目录占位符；同名显式变量优先。脚本中用 pm.variables.replaceIn 或 apt.variables.replaceIn，后置脚本可读取刚提取的变量。参数助手可选择并插入，未知变量仍报错；不是完整Faker API、历史版本或多语言目录。见 docs/ADR-BUILTIN-VARIABLES.md。
+
+## 数据库查询与逐次授权写入
+
+SQLite、PostgreSQL、MySQL、Redis、MongoDB、ClickHouse 默认只读，具体命令／查询子集及参数限制见各自 ADR。SQLite／PostgreSQL／MySQL 的受限单语句 DML 须逐次明确确认，保留事务、超时、取消、锁与结果限额；结果不确定时先查证，不能自动重试。连接凭据不自动永久保存，不开放任意脚本。只操作可信数据库并先备份。详见 [SQLite 写入](docs/ADR-SQLITE-WRITES.md)、[PostgreSQL 写入](docs/ADR-POSTGRES-WRITES.md)、[MySQL 写入](docs/ADR-MYSQL-WRITES.md)。
+
+## 参数化压测
+
+一键压测可粘贴或导入 UTF-8 CSV。首行为变量名，数据行按执行序号循环，覆盖该次执行的运行时变量，用 {{变量名}} 或 apt.getVar 读取。限64 KiB/100行/50列，不改变100次主请求和10并发上限。数据仅存在当前页面会话，不写回项目；无效CSV在发请求前拒绝。详见 docs/ADR-LOAD-DATA.md。
+
+## 现代 Apipost JSON 导入
+
+现代 Apipost JSON 和 Offline2 原生目录支持各自列明的有界资源、环境、模型、用例／计划及前后置任务迁移。受支持任务保持声明顺序，并可进入冻结计划、真实执行和受支持定义往返；导入本身不执行请求、不恢复数据库凭据。请求提取仅支持前置配置快照，其中正文复用已有 JSON5 解析器并保留结构/数值/字节限制，none/精确空正文为空对象快照（不改变发送正文）；响应提取仅支持后置；未知任务、资源依赖或无法保留的语义整批拒绝。完整范围见后端检查点及对应 ADR，不代表全资源或跨版本完全兼容。
+
+活动文档的标题、正文、目录和当前状态可进行受限原生定义往返；历史来源身份精确保留用完整备份。复用模型图支持空目录、可验证的局部/整模型引用和请求/响应关联，缺省 `modelNameMode: "namespaced"` 仍要求模型名满足当前项目名称空间的可逆条件。调用方可在 owner 导入 body、owner 原生导出 query 或 MCP 两个项目工具中显式选择 `modelNameMode: "preserve"`，使用原生 name/display_name 保留任意合法模型名，支持项目改名；导出与回读两端须分别选择，不从文件自动启用，也不存为项目设置。原样名称须为有效 Unicode、非空且最多 200 个 UTF-16 单位，冲突或超限拒绝；外部引用、跨模型子路径及不能验证的依赖拒绝。模型本身可为布尔定义，API直接布尔schema不在原生出口支持范围内。这里是静态定义转换，不代表新增schema执行能力。见 [原生出口边界](docs/ADR-NATIVE-PROJECT-EXPORT.md)。
+
+## NTLMv2（有限旧服务兼容）
+
+认证面板支持显式用户名/密码/域/工作站的 NTLMv2，仅HTTP/1.1直连，在同一隔离连接完成握手。沿用TLS证书校验、总超时、取消和响应大小限制；不使用系统凭据、不降级NTLMv1/LM、不跨连接重放。有界MIC扩展已实现字节路径与端到端验收规格（普通CI待验证），详见 docs/ADR-NTLMV2-MIC.md；EPA/通道绑定/SPN或会话签名/封装/密钥交换，以及代理/HTTP2仍明确拒绝。NTLM本身属于旧协议，请优先使用HTTPS和现代认证。保存凭据为本地明文，历史可含认证响应，请勿公开。详见 docs/ADR-NTLMV2.md。
+
+## 脚本工具库
+
+工作中候选：单参数 `Mock.mock(JSON模板)`，仅有界纯 JSON、数字和数组整数规则；含 `@` 的字符串值、增量/引用、函数、XHR及任意模块均拒绝。基于已固定 MIT 公开核心的允许分支做窄适配，在原脚本 VM 与阶段配额内执行；不是项目 Mock 新模式或完整 Mock.js 兼容。首轮普通 CI 暴露全库 eager 成本回归，现改为小型许可子集，未放宽预算；新候选仍待精确 CI 验证。见 [契约与验收边界](docs/ADR-SCRIPT-MOCK-TEMPLATES.md)。
+
+隔离脚本可直接使用 lodash（\_）、moment 和 uuid，并支持 require('lodash') / require('moment') / require('uuid')。Moment包含英文和中文locale，不含timezone数据库；不开放任意npm模块或外部locale加载。延迟/防抖使用已有有界定时器，模板执行仍在QuickJS内。保留VM及总时限，脚本输出上限按UTF-8字节计数。版本与许可证随本地bundle固定，详见 docs/ADR-SCRIPT-UTILITY-LIBRARIES.md。
+
+### 响应可视化
+
+后置脚本支持 apt.visualizer.set(template, data) / pm.visualizer.set 与 clear，采用固定 Handlebars 4.7.10，在现有 QuickJS 配额内执行。响应区“可视化”展示隔离的静态表格/列表；丢弃脚本、图片、链接、用户CSS和外部资源，只加载本工具内置样式。不支持完整动态图表或旧 Visualizing API。模板/数据/输出限制及验证入口见 docs/ADR-RESPONSE-VISUALIZER.md。
+
+### 数据库前后置操作
+
+数据库页可明确授权本项目的临时会话连接，再在前/后执行操作中添加只读查询、参数绑定和结果变量提取。连接凭据只存应用进程内存，不随项目保存；重启后重新配置并绑定。默认没有授权，MCP/CLI/压测不自动获得权限；CLI/MCP 可分别显式获得限定临时只读权限，凭据不随项目备份恢复。支持范围、顺序、撤销和验证见 docs/ADR-DATABASE-OPERATIONS.md。
+
+ClickHouse HTTP/HTTPS只读查询支持类型化参数：数组第0项使用 {p0:String}，命名对象可用 {name:String}。默认端口8123/TLS8443，证书校验不可关闭。GET URL会包含SQL与参数，请注意数据库/代理日志；凭据仅放认证头。限制与真实服务验证见 docs/ADR-CLICKHOUSE-READS.md。
+
+### 有界固定次数循环计划（候选）
+
+canonical计划的顶层步骤可保存 `{type:"repeat", id, count, steps:[HTTP步骤]}`。所有叶子先冻结，变量仍按当前运行环境解析；按轮次串行执行并共享既有作用域，不自动重试。禁用定义也计入潜在200步／4MiB配置上限，但不产生执行结果。实际结果保留groupId、childId、零起始iteration和occurrenceId，计划hash保留循环意图。仅循环计划的完成记录累计超过8MiB后，在下一请求前停止；保留已完成证据，不是8MiB硬输出保证，过大的MCP响应仍可能在保存后被现有帧上限拒绝，须查历史而非重放。CLI数据库连接仍需每次显式授权，不把循环变成持久授权。详见[循环合同](docs/ADR-BOUNDED-PLAN-REPEAT.md)。
+
+### 显式保留原生 HTTP 继承图
+
+后端 owner `POST /api/projects/:id/import` 可传 `{document, inheritanceMode:"preserve"}`，仅向空业务项目导入有界 HTTP 项目→目录→API 的认证和 Header/Query/Cookie 自有层；不传仍按原方式导入时展开。保存的父层修改影响后续 live 请求，创建计划/用例时保存当时合并后的配置并移除 live 绑定；环境占位符仍按运行时所选环境解析。原生 JSON/目录出口自动保图，首片含计划/用例的图项目须用完整项目备份，不静默丢图。暂不支持图资源移动/删除/解绑、追加导入、共享 Body、源任务或其他未知继承字段；不从旧展开项目猜父值。保存/恢复验证项目内完整绑定，来源 ID 不是跨项目授权。无新增前端。详见 [继承图合同](docs/ADR-NATIVE-INHERITANCE-GRAPH.md)。
+
+### Apipost Faker 占位符
+
+支持已列明的 $fakerjs.Company.name、$fakerjs.Internet.displayName/password 等固定无参数路径，并提供沙箱内 mockExp(text)。沿用英文Faker及原有大小/次数/执行预算，不开放任意属性路径或完整Mock.js语法。完整可选名单由参数助手展示，具体兼容范围见 docs/ADR-APIPOST-FAKER-ALIASES.md。
+
+### 脚本执行上下文
+
+apt.info / pm.info 提供实际脚本阶段、请求ID/名称与迭代编号；普通调试为0/1，压测使用真实迭代和CSV行。apt.iterationData / pm.iterationData 支持只读 has/get/toObject/replaceIn，不能修改测试数据。原变量优先级和脚本配额不变，见 docs/ADR-SCRIPT-EXECUTION-CONTEXT.md。
+
+OpenAPI 3 scalar path parameters retain bounded `simple`/`label`/`matrix`
+serialization across HTTP, cURL and definition export. Missing examples stay
+unbound; compound/empty values, partial segments and SDK URL combinations fail
+explicitly. See [the scalar path contract](docs/ADR-OPENAPI-SCALAR-PATH.md).

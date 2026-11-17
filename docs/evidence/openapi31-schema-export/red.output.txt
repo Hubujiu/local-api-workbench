@@ -1,0 +1,30 @@
+✖ non-null JSON constants export as equivalent singleton enums (2.37692ms)
+✖ constant and existing enum/allOf remain an intersection, including impossible schemas (0.246421ms)
+✖ numeric exclusive bounds preserve the stricter inclusive or exclusive constraint (0.277086ms)
+✖ bound intersections agree at negative, fractional, zero, and extreme finite boundaries (0.296585ms)
+✖ nested const/bounds support positive/negative composition, items and additional properties (0.391488ms)
+✖ reference siblings keep constant and bounds constraints as Schema Object conjunctions (0.345399ms)
+✖ all OpenAPI Schema positions convert while schema-looking data stays opaque (0.593031ms)
+✖ imported OpenAPI 3.1 request schemas can export and reimport without value-set changes (8.61403ms)
+✔ existing OpenAPI 3.0 boolean exclusivity stays unchanged (1.476448ms)
+✔ null constants and unrelated unsupported dialect constructs still reject (0.683227ms)
+✔ new conversions reject nonfinite numbers and malformed companion bounds (0.871719ms)
+✖ constant literal traversal retains existing depth/node bounds (0.823607ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 3
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 632.800169
+✖ failing tests:
+✖ non-null JSON constants export as equivalent singleton enums (2.37692ms)
+✖ constant and existing enum/allOf remain an intersection, including impossible schemas (0.246421ms)
+✖ numeric exclusive bounds preserve the stricter inclusive or exclusive constraint (0.277086ms)
+✖ bound intersections agree at negative, fractional, zero, and extreme finite boundaries (0.296585ms)
+✖ nested const/bounds support positive/negative composition, items and additional properties (0.391488ms)
+✖ reference siblings keep constant and bounds constraints as Schema Object conjunctions (0.345399ms)
+✖ all OpenAPI Schema positions convert while schema-looking data stays opaque (0.593031ms)
+✖ imported OpenAPI 3.1 request schemas can export and reimport without value-set changes (8.61403ms)
+✖ constant literal traversal retains existing depth/node bounds (0.823607ms)

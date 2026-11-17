@@ -1,0 +1,14 @@
+✔ live references freeze all current definitions once per owner run (1330.698952ms)
+✔ official MCP SDK, CLI and restored project materialize the same project-local reference (899.274674ms)
+✔ cancel during live snapshot refresh prevents every request and releases run ID (65.912771ms)
+✔ cancel during staged live refresh retains the complete zero-work SSE report (74.176062ms)
+✔ staged live references freeze the whole definition once across iterations (77.962002ms)
+✔ pre-cancelled MCP live plan saves cancelled evidence without sending HTTP (42.371602ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3196.962599

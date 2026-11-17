@@ -1,0 +1,29 @@
+✖ native assertion evidence conversion cannot escape the active wall allowance (811.354702ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 946.714493
+
+✖ failing tests:
+
+test at tests/script-observer-accounting.test.mjs:68:1
+✖ native assertion evidence conversion cannot escape the active wall allowance (811.354702ms)
+  AssertionError [ERR_ASSERTION]: {"success":true,"activityMs":24.5330120000001,"activityMetrics":{"compatibilityMs":19,"functionLibraryMs":0,"userScriptMs":4,"microtaskMs":0,"callbackMs":0,"promiseStateMs":0,"serializationMs":1,"fakerLoadMs":0}}
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///workspace/scratch/01aad5b30f1d/xml-diagnostic-review/tests/script-observer-accounting.test.mjs:70:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,168 @@
+import { liveRequestId } from "./live-plan-reference.mjs";
+import { readPlanFailurePolicy } from "./plan-failure-policy.mjs";
+import { validatePlanStepTypes } from "./plan-step-types.mjs";
+import {
+  linearPlanStepIds,
+  ownStepProvenance,
+} from "./plan-step-identities.mjs";
+import {
+  validateRepeatGraph,
+  hasRepeatSteps,
+  mapPlanLeaves,
+  planLeaves,
+} from "./plan-repeat.mjs";
+import { isDeepStrictEqual } from "node:util";
+import { readImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
+import { freezeWireStep } from "./wire-plan.mjs";
+import { freezeSocketIOStep } from "./socketio-plan.mjs";
+import { freezeGrpcStep } from "./grpc-plan.mjs";
+import { freezeServiceBinding } from "./environments.mjs";
+import { snapshotPlan } from "./core.mjs";
+export function versionPlan(previous, input, source = "manual", project) {
+  const policy = readPlanFailurePolicy(input);
+  const oldPolicy = previous ? readPlanFailurePolicy(previous) : undefined;
+  const selectedPolicy = Object.hasOwn(input, "failurePolicy")
+    ? policy
+    : oldPolicy;
+  validatePlanStepTypes(input.steps);
+  for (const step of planLeaves(input.steps || [])) liveRequestId(step);
+  if (
+    !validateRepeatGraph(input.steps, {
+      allowRuntimeRows: hasRepeatSteps(input.steps),
+    })
+  )
+    linearPlanStepIds(input.steps);
+  if (
+    previous &&
+    !validateRepeatGraph(previous.steps, {
+      allowRuntimeRows: hasRepeatSteps(previous.steps),
+    })
+  )
+    linearPlanStepIds(previous.steps);
+  const importedNativeFlowSource =
+    readImportedNativeFlowSource(input) ??
+    (previous ? readImportedNativeFlowSource(previous) : undefined);
+  if (source === "manual" && previous && Array.isArray(input.steps)) {
+    input = {
+      ...input,
+      steps: mapPlanLeaves(input.steps, (step) => {
+        const old = step.id
+          ? planLeaves(previous.steps).find((s) => s.id === step.id)
+          : undefined;
+        if (
+          old?.nativeMCP &&
+          isDeepStrictEqual(step.nativeMCP, old.nativeMCP) &&
+          !isDeepStrictEqual(step.request, old.request)
+        ) {
+          const copy = structuredClone(step);
+          delete copy.nativeMCP;
+          copy.request.importNotes = [
+            ...(copy.request.importNotes || []),
+            "手工编辑已解除原版MCP输入基线；当前步骤按独立Workbench快照执行。",
+          ];
+          return copy;
+        }
+        return step;
+      }),
+    };
+  }
+  if (project && Array.isArray(input.steps))
+    input = {
+      ...input,
+      steps: mapPlanLeaves(input.steps, (step) => {
+        if (step.type === "protocol") return freezeWireStep(project, step);
+        if (step.type === "grpc") return freezeGrpcStep(project, step);
+        if (step.type === "socketio") return freezeSocketIOStep(project, step);
+        const oldStep =
+          previous?.steps &&
+          planLeaves(previous.steps).find(
+            (item) => item.id && item.id === step.id,
+          );
+        const request =
+          oldStep && !Object.hasOwn(step.request || {}, "serviceSnapshot")
+            ? { ...step.request, serviceSnapshot: true }
+            : step.request;
+        return {
+          ...step,
+          request: freezeServiceBinding(
+            project,
+            {
+              ...(request || {}),
+              ...(oldStep && !Object.hasOwn(step.request || {}, "authSnapshot")
+                ? { authSnapshot: true }
+                : {}),
+              ...(oldStep &&
+              !Object.hasOwn(step.request || {}, "parametersSnapshot")
+                ? { parametersSnapshot: true }
+                : {}),
+            },
+            {
+              includeSharedScripts: false,
+              allowNativeSnapshot: Boolean(oldStep),
+            },
+          ),
+        };
+      }),
+    };
+  const nextInput = { ...input };
+  delete nextInput.failurePolicy;
+  const next = snapshotPlan(
+    {
+      ...nextInput,
+      ...(selectedPolicy ? { failurePolicy: selectedPolicy } : {}),
+      ...(importedNativeFlowSource === undefined
+        ? {}
+        : { importedNativeFlowSource }),
+      statusPolicy:
+        input.statusPolicy ??
+        previous?.statusPolicy ??
+        (previous ? "assertions" : "strict200"),
+      source,
+      updatedAt: new Date().toISOString(),
+    },
+    { allowRuntimeRows: hasRepeatSteps(input.steps) },
+  );
+  const old = previous
+    ? snapshotPlan(previous, {
+        allowRuntimeRows: hasRepeatSteps(previous.steps),
+      })
+    : {};
+  if (
+    previous &&
+    [
+      "name",
+      "description",
+      "environmentId",
+      "statusPolicy",
+      "failurePolicy",
+      "functions",
+      "steps",
+      "importedNativeFlowSource",
+    ].every(
+      (field) => JSON.stringify(next[field]) === JSON.stringify(old[field]),
+    )
+  )
+    return structuredClone(previous);
+  const provenance = {
+    fields: { ...(old.provenance?.fields || {}) },
+    steps: {},
+  };
+  for (const field of [
+    "name",
+    "description",
+    "environmentId",
+    "statusPolicy",
+    "failurePolicy",
+  ])
+    if (JSON.stringify(next[field]) !== JSON.stringify(old[field]))
+      provenance.fields[field] = source;
+  for (const step of next.steps) {
+    const oldStep = (old.steps || []).find((item) => item.id === step.id);
+    provenance.steps[step.id] =
+      JSON.stringify(oldStep) !== JSON.stringify(step)
+        ? source
+        : ownStepProvenance(old.provenance?.steps, step.id) || "manual";
+  }
+  next.provenance = provenance;
+  return next;
+}

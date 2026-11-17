@@ -1,0 +1,17 @@
+{
+  "records": [
+    {
+      "created_at": "2026-10-25T14:05:53.662Z",
+      "description": "Two local echo steps for scope and result persistence.",
+      "environment_id": "1",
+      "flow_id": "flow_1792937049044",
+      "name": "Native Script Plan",
+      "project_id": "10f7386134404a",
+      "source": "manual",
+      "step_count": 2,
+      "updated_at": "2026-10-25T14:05:53.662Z"
+    }
+  ],
+  "updated_at": "2026-10-25T14:05:53.662Z",
+  "version": 2
+}

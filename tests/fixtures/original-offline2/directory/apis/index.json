@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "created_at": "2026-10-25T13:29:06.628Z",
+      "is_exampled": 0,
+      "mark_id": "1",
+      "method": "POST",
+      "name": "Native Echo",
+      "parent_id": "0",
+      "project_id": "10f7386134404a",
+      "sort": 1,
+      "status": 1,
+      "tag": "",
+      "target_id": "10f7b2a5b4404e",
+      "target_type": "api",
+      "updated_at": "2026-10-25T13:42:28.498Z",
+      "url": "http://127.0.0.1:18766/echo?fixture=original",
+      "version": 4
+    }
+  ],
+  "project_id": "10f7386134404a"
+}

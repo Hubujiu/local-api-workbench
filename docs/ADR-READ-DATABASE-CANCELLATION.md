@@ -1,0 +1,161 @@
+# Read-only database cancellation and owned transport lifetime
+
+This slice is based on explicit PostgreSQL identity isolation (PR18). It does
+not import the native/MCP/CLI feature branches or modify Mongo's implementation.
+Their existing signal propagation is combined and verified separately.
+
+## Contract
+
+`queryRemoteDatabase(input, { signal })` now cancels PostgreSQL, MySQL, Redis and
+ClickHouse reads. `querySQLiteBounded(filename, sql, parameters, { signal })`
+passes cancellation to the existing SQLite process supervisor. Pre-aborted calls
+open no connection/process. A cancellation error is distinct from a query timeout.
+Each operation closes only its own resource, not another project's query or a
+saved grant. Revocation still invalidates grants/results; it is not a new
+all-active-I/O cancellation operation.
+
+PostgreSQL receives a caller-owned unconnected `net.Socket` through its public
+stream option and connects it itself. MySQL receives a caller-owned connecting
+stream via public `config.stream`; the public core connection supplies a promise
+wrapper, with an error listener installed before awaiting authentication.
+Neither path reaches into driver-private transport state. They destroy the owned
+transport and await its close, rather than relying on MySQL `destroy()` (currently
+a graceful `end()`), an already-closed PG `end()`, or an abandoned Promise race.
+TLS remains the driver's normal wrapper over that transport, with certificate
+and hostname verification enabled. The existing explicit PG identity/startup
+factory, precision parsers, parameters, read-only transactions and result limits
+are retained.
+
+After every awaited setup/driver operation, cancellation is checked before any
+next command. This includes driver imports, SSH establishment, authentication,
+BEGIN/SET/START and the user query. Destruction alone is insufficient: a Node
+Socket can otherwise be reconnected by a late driver continuation. No retries,
+KILL/admin SQL or invented server-side cancellation commands are added.
+
+The caller adds an eight-second total deadline, retaining the SSH total bound;
+connection/authentication has a three-second bound. Each SQL initialization and
+query phase has a two-second deadline. In particular MySQL's existing execute
+timeout does not cover PREPARE; the owned-stream deadline now does. Existing PG
+server statement_timeout=2000, driver query_timeout=3000, MySQL connectTimeout=3000
+remain set. SQL reads use only the owned two-second phase deadline, not mysql2's
+redundant command timer (which survives forced disconnect in the installed driver
+and delays process exit). The query budget is not increased. These deadlines
+are not extensions or proof that a database engine stopped executing SQL.
+
+SSH uses its public `sock` option with a caller-owned transport. The existing
+five-connection process-wide lease is released only after transport close. Abort
+also covers opening/forwarding, and late callbacks may not create/revive a DB
+channel. The SHA256 host pin, TLS hostname restriction and no-direct-fallback
+policy are unchanged. Existing write callers do not supply an abort signal.
+
+Redis keeps its command whitelist/TLS/response bounds and checks state before
+sending AUTH/SELECT/query continuations; abort destroys its owned socket.
+ClickHouse uses the HTTP client's AbortSignal, existing five-second deadline,
+strict TLS and bounded result reader, and waits for local request close.
+SQLite read cancellation kills the existing process and waits for close; it does
+not rely on Worker.terminate interrupting synchronous native SQLite. Its existing
+two-second deadline remains. Mutating SQLite calls retain the separate uncertain
+write-outcome contract and are not newly signal-cancellable.
+
+The direct project HTTP database **read** endpoint aborts when the response peer
+disconnects, with listener cleanup in finally. The write branch remains outside
+this behavior. This direct inspection route has no persisted execution record by
+existing design; it must not be described as creating a cancelled plan/history.
+
+## Evidence and non-guarantees
+
+Independent loopback protocol peers exercise the real pg/mysql2 clients, with
+connection/handshake/SQL stages held independently. They are not database engines
+and cannot prove remote statement termination or transaction rollback. Tests
+observe actual peer closure, prevent delayed handshake/setup from producing a
+later command, distinguish pre-abort zero I/O, keep another project's connection
+alive, verify SSH pin/capacity, and observe an actual SQLite child exit. Existing
+real-service PG/MySQL/SSH and TLS/precision suites must still run in CI.
+
+Closing a client socket does not withdraw bytes already sent, guarantee remote
+query termination, or establish rollback. No write is replayed. Native execution
+layers already suppress late scope results and record interrupted DB tasks; they
+may finish/persist before all asynchronous transport cleanup has completed.
+Their integration acceptance must separately observe eventual actual socket or
+process closure, rather than treating an SDK's local AbortError as that proof.
+
+## Session revocation extension
+
+The original contract above intentionally limited grant revocation to invalidating
+permissions and results. Session reads now additionally receive the captured
+session controller signal, combined with the original caller signal through
+Node's `AbortSignal.any`. This is a new behavior, not a correction to the original
+scope. `revoke(projectId, id)` cancels all reads using that exact captured grant;
+`close()` invalidates and cancels all current grants, including MCP policy
+invalidation and CLI cleanup. The same sessions object may subsequently register
+fresh grants. A replacement with the same binding ID does not revive old reads.
+
+The synchronous revoke/close return confirms invalidation and cancellation
+signalling, not completed resource cleanup. Existing driver read promises settle
+following their owned resource close. Project-source resolver waits are not newly
+interruptible: a pending resolver must return before its existing identity/source
+checks finish. Successful results already returned are not retroactively changed.
+Both pre-query and post-query source checks and captured-object checks remain.
+
+This extension adds cancellation to read transports. The integrated backend
+already uses the same grant controller for captured native Redis write targets;
+that existing write revocation contract is preserved, not replaced or newly
+extended to manual write APIs. PostgreSQL/MySQL/Redis retain their
+checks between asynchronous setup stages; after observing abort they do not issue
+a later setup/query command. ClickHouse authentication and query share one HTTP
+request. SQLite process and Mongo Worker termination are retained, without a new
+cross-thread dispatch barrier. Bytes already sent, driver commands already
+submitted, and server-side execution may precede local termination. No guarantee
+of server query cancellation, rollback, or absence of effects is made. No query
+is replayed, no admin cancellation command is sent, and write APIs/receipts are
+unchanged.
+
+The merged signal does not cancel the entire plan. In DatabaseSessions, an
+original caller abort retains the existing cancellation error; otherwise a revoked
+captured grant is reported as revoked, with no driver/abort-reason disclosure.
+MCP retains its existing outer authorization/epoch-first check and redaction;
+re-registration may therefore surface a generic failed read rather than a revoked
+message. Normal plan failure/continuation and cancellation policy are unchanged.
+No new permission, persisted connection secret, dependency or server license is
+introduced. Root integration must reuse its existing native-write session
+controller, leaving generation, captured write targets and write receipts intact.
+
+Session-specific loopback tests hold PG authentication/BEGIN/query and MySQL
+handshake/SET/START/PREPARE, plus Redis AUTH/SELECT. SSH tests fill five leases,
+revoke a held authentication or forwarding operation, observe closure, then admit
+a sixth connection. They prove owned capacity reclamation; the existing separate
+SSH regression suite supplies the no-direct-fallback contract. Mongo/ClickHouse
+observe actual socket close, and SQLite observes actual child close. Source gates,
+replacement binding grants, simultaneous caller/session abort, actual SDK HTTP
+history and CLI grant cleanup are covered independently. A public PG driver-seam
+case controls error-before-cleanup-abort precedence only; it is not a new server
+or session-wrapper wire test. Full remote-engine and root-composition acceptance
+remain separate from these local loopback observations.
+
+
+## Integrated backend authorization boundaries
+
+The integrated backend retains each grant's existing generation, shared
+controller, frozen native Redis target and write receipt ledger. Only the
+`DatabaseSessions.query` read-signal and transport-error handling are imported
+from the session-read extension. A reissued binding cannot revive either an old
+read or an old prepared native write. Previously acknowledged or uncertain write
+outcomes are not changed into rollback claims and are never automatically replayed.
+
+Single-connection deletion is not whole-plan cancellation. A held read fails with
+a revoked-grant result; an omitted or explicit `continue` policy can enter later
+IF/repeat children, whereas `stop` records the first ordinary failing leaf. MCP
+configuration reduction/token rotation additionally advances the existing HTTP
+session epoch and aborts active callers. Those cases retain cancellation, stop
+before the next child/iteration, and reject output to the old SDK authorization.
+An SDK cancellation is likewise distinct from a grant-only failure. Mandatory
+root stop conditions remain higher priority than optional failure policy.
+
+The root consumer contract uses the official HTTP SDK, a held independent RESP
+peer, real IF/repeat execution, actual Store append completion and reopened
+history. It checks accepted earlier HTTP effects/scope commits, no late DB result
+or command, native-task interrupted versus failed evidence, peer project bytes,
+missing-required-file save refusal, and restart without replay. These are test
+contracts, not a claim of successful execution on this composition: acceptance
+must cite the exact integrated tree's executed tests and CI. The PR93 fixed-base
+CI cannot substitute for this root composition.

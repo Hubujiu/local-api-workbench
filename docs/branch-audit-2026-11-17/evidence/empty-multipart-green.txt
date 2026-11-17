@@ -1,0 +1,10 @@
+✔ empty and all-disabled multipart curl preserves zero-part framing over POSIX shell and JSON serialization (110.345619ms)
+✔ empty multipart rejects ambiguous framing after auth and retains existing export restrictions (2.658865ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 696.703574

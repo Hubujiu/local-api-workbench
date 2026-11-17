@@ -1,0 +1,48 @@
+{
+  "sourceFile": "/workspace/scratch/01aad5b30f1d/http-extraction-diagnostic-review/tests/http-extraction-entrypoints.test.mjs",
+  "scope": "Exact tracked assertion block with synthetic result rows; does not reproduce the unknown CI runtime error",
+  "cases": [
+    {
+      "label": "missing-after-assertions",
+      "retainedOriginalFailure": true,
+      "actual": 0,
+      "expected": 1,
+      "packet": {
+        "version": 1,
+        "availability": "observed",
+        "status": "failed",
+        "errorClass": "script-timeout",
+        "scriptStage": "script",
+        "scriptDiagnostics": {
+          "activityBudgetMs": 250,
+          "compatibilityMs": 28,
+          "functionLibraryMs": 246,
+          "activityOperation": "user-script"
+        }
+      }
+    },
+    {
+      "label": "failed-after-assertion",
+      "retainedOriginalFailure": true,
+      "actual": false,
+      "expected": true,
+      "packet": {
+        "version": 1,
+        "availability": "observed",
+        "status": "failed",
+        "errorClass": "script-timeout",
+        "scriptStage": "script",
+        "scriptDiagnostics": {
+          "activityBudgetMs": 250,
+          "compatibilityMs": 28,
+          "functionLibraryMs": 246,
+          "activityOperation": "user-script"
+        }
+      }
+    },
+    {
+      "label": "successful-after-assertion",
+      "preservedSuccess": true
+    }
+  ]
+}

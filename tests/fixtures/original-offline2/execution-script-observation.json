@@ -1,0 +1,33 @@
+{
+  "version": "Offline2 2.0.0",
+  "method": "UI-controlled current environment vs saved and live scripts; all HTTP on local fixture",
+  "snapshotPreScript": "apt.environment.set(\"native_value\", \"from-before\"); console.log(\"native-before\");",
+  "livePreScriptSavedWithoutDebugSending": "apt.environment.set(\"native_value\", \"flow-live-probe\"); console.log(\"flow-live-probe\");",
+  "runs": [
+    {
+      "runId": "run_1792938610253_gxe8rydo",
+      "startedAt": "2026-10-25T14:30:08.648Z",
+      "requestBodies": [
+        "{\n  \"message\": \"live-source-edited\",\n  \"number\": 7\n}",
+        "{\n  \"message\": \"live-source-edited\",\n  \"number\": 7\n}"
+      ],
+      "environmentValues": [
+        "live-source-edited",
+        "live-source-edited"
+      ]
+    },
+    {
+      "runId": "run_1792938825917_jda3df4s",
+      "startedAt": "2026-10-25T14:33:44.221Z",
+      "requestBodies": [
+        "{\n  \"message\": \"live-source-edited\",\n  \"number\": 7\n}",
+        "{\n  \"message\": \"live-source-edited\",\n  \"number\": 7\n}"
+      ],
+      "environmentValues": [
+        "live-source-edited",
+        "live-source-edited"
+      ]
+    }
+  ],
+  "note": "Both runs retained live-source-edited, not snapshot from-before or newly saved flow-live-probe. Original task execution was not inferred from earlier matching environment values."
+}

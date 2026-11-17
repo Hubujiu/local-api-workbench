@@ -1,0 +1,86 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-api-workbench@0.1.0 test
+> node --test tests/*.test.mjs
+
+✔ JSON highlight retains escaped text and never creates active markup (1.507328ms)
+✔ custom CA works without disabling TLS verification (36.886411ms)
+✔ HTTP proxy receives absolute URL and separate proxy authorization (8.500116ms)
+✔ HTTPS proxy CONNECT keeps target TLS validation and does not forward proxy credentials (11.401674ms)
+✔ variables substitute deeply and unresolved variables fail (4.569675ms)
+✔ JSON paths preserve falsy values and reject prototype traversal (0.373167ms)
+✔ assertions distinguish expected errors and missing values (0.438684ms)
+✔ OpenAPI import/export preserves HTTP definitions (6.12177ms)
+✔ plans snapshot request state and freeze evidence (2.310826ms)
+✔ plans continue after failure and extract variables (0.750799ms)
+✔ unsafe or invalid imports rejected (0.213859ms)
+✔ extraction failure retains actual request and response evidence (0.432105ms)
+✔ empty plan cannot falsely pass (0.343743ms)
+✔ backup restore preserves environments and plans without overwriting source (0.667185ms)
+✔ OpenAPI references resolve locally and never fetch remote documents (0.412135ms)
+✔ schema sample generation respects examples and falsy defaults (1.082474ms)
+✔ Postman import preserves auth, params, forms and script hierarchy (0.588487ms)
+✔ OpenAPI YAML imports without code execution or duplicate keys (8.80366ms)
+✔ malformed imports cannot persist fields that crash the workbench (0.380467ms)
+✔ database reads use parameters and refuse writes (6.28317ms)
+✔ bounded worker returns database result (74.350143ms)
+✔ Digest MD5 matches the published challenge/response vector (3.196608ms)
+✔ unknown digest algorithms fail explicitly (1.802678ms)
+✔ standalone documentation escapes untrusted markup and has no remote assets (2.292279ms)
+✔ MCP advertises only granted capabilities (1.556742ms)
+✔ MCP filters projects and denies cross-project reads (0.518694ms)
+✔ MCP initialization and notification lifecycle (0.216072ms)
+✔ OAuth PKCE validates state and exchanges the code once (35.85313ms)
+✔ OAuth client-credentials uses a POST body, not URL secrets (4.376056ms)
+✔ creating a plan step does not inherit interface-page scripts (1.816699ms)
+✔ interactive TCP retains multiple sends and closes deterministically (26.974499ms)
+✔ SSE captures explicit event boundaries and multiline data (35.741023ms)
+✔ TCP sends and receives actual local fixture bytes (10.270887ms)
+✔ protocol validation rejects unrelated protocols (1.106189ms)
+✔ WebSocket exchanges a message with a real local handshake (9.884441ms)
+✔ real HTTP body, query, auth and response evidence (18.926075ms)
+✔ disk store rejects traversal and survives reopening (9.880305ms)
+✔ non HTTP protocols blocked (0.466826ms)
+✔ stale saves rejected, history append preserves latest content (6.241908ms)
+✔ HTTP timeout and cancellation produce explicit failures (122.60658ms)
+✔ compressed responses are decoded with a size limit (4.261085ms)
+✔ multipart files preserve binary bytes (2.241192ms)
+✔ slow drip cannot evade the total timeout (100.222568ms)
+✔ custom project directory remains registered across restarts (8.172528ms)
+✔ parallel custom-directory registrations cannot lose projects (24.612576ms)
+✔ Digest performs one challenge round trip and returns authenticated evidence (4.095477ms)
+✔ background history does not conflict with configuration saves or disappear (4.43918ms)
+✖ MessagePack request and response match standard byte vectors (1.123536ms)
+✔ script can set variables and record deterministic assertions (94.855574ms)
+✔ script VM does not expose process, filesystem or network (86.047458ms)
+✔ infinite scripts are interrupted without hanging the runner (319.671925ms)
+✔ session, project persistence, permission boundary, mock and snapshot plan (92.595072ms)
+✔ HTTP MCP is disabled by default and enforces token, project and write grants (19.771046ms)
+✔ UI bootstrap token is not available to unauthenticated loopback clients (5.606281ms)
+✔ terminal launch never inserts project paths into command source (1.81053ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 54
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 785.616566
+
+✖ failing tests:
+
+test at tests/runtime.test.mjs:215:1
+✖ MessagePack request and response match standard byte vectors (1.123536ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@msgpack/msgpack' imported from /workspace/scratch/75c2273f6a80/api-workbench/src/runtime.mjs
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+      at packageResolve (node:internal/modules/esm/resolve:768:81)
+      at moduleResolve (node:internal/modules/esm/resolve:859:18)
+      at defaultResolve (node:internal/modules/esm/resolve:992:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+      at #resolve (node:internal/modules/esm/loader:683:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+      at node:internal/modules/esm/loader:632:32 {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
