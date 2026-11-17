@@ -101,11 +101,24 @@ async function fixture(t) {
       await invoke(client, "start", { definitionId: "ws", operationId }),
     );
     assert.equal(receipt.state, "started");
-    await waitFor(
-      async () =>
-        decode(await invoke(client, "get", { sessionId: receipt.sessionId }))
-          .state === "open",
-    );
+    // Client connect/open can precede the server process's connection callback.
+    // Bind this receipt to its server-issued nonce before observing pool size.
+    await waitFor(async () => {
+      const page = decode(
+        await invoke(client, "get", { sessionId: receipt.sessionId }),
+      );
+      const received = page.events
+        .filter((event) => event.direction === "received")
+        .map((event) => event.data)
+        .join("");
+      const connection = connections.find(
+        (entry) => received === "challenge:" + entry.nonce,
+      );
+      if (page.state !== "open" || !connection) return false;
+      assert.equal(connection.sessionId, undefined);
+      connection.sessionId = receipt.sessionId;
+      return true;
+    });
     return receipt.sessionId;
   };
   return { root, store, project, other, connections, connect, invoke, start };
@@ -258,6 +271,10 @@ test(
     const bId = await f.start(b, "a0");
     assert.notEqual(bId, aIds[0]);
     assert.equal(f.connections.length, 6);
+    assert.deepEqual(
+      new Set(f.connections.map((connection) => connection.sessionId)),
+      new Set([...aIds, bId]),
+    );
     assert.equal(
       (await f.invoke(b, "get", { sessionId: aIds[0] })).isError,
       true,
