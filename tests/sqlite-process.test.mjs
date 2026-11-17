@@ -103,15 +103,43 @@ for (const mode of ["read", "write"]) {
         );
       });
       await withSQLitePhase(sqliteTestPhases.independentWrite, async () => {
-        assert.equal(
-          (
-            await mutateSQLiteBounded(
-              file,
-              "UPDATE items SET value='after' WHERE id=1",
-            )
-          ).affectedRows,
-          1,
-        );
+        try {
+          assert.equal(
+            (
+              await mutateSQLiteBounded(
+                file,
+                "UPDATE items SET value='after' WHERE id=1",
+              )
+            ).affectedRows,
+            1,
+          );
+        } catch (error) {
+          try {
+            if (error?.code === "SQLITE_WRITE_OUTCOME_UNKNOWN") {
+              // The rejected mutation has already waited for process close.
+              // Inspect only this disposable fixture with the normal bounded
+              // read-only query; never replay the write or admit it as success.
+              let outcome = "read-failed";
+              try {
+                const { rows } = await querySQLiteBounded(
+                  file,
+                  "SELECT value FROM items WHERE id=1",
+                );
+                outcome =
+                  rows.length === 1 &&
+                  ["before", "after"].includes(rows[0].value)
+                    ? rows[0].value
+                    : "unexpected";
+              } catch {}
+              t.diagnostic(
+                `SQLITE_INDEPENDENT_WRITE_READBACK ${JSON.stringify({ mode, outcome })}`,
+              );
+            }
+          } catch {
+            // A diagnostic failure cannot replace the original write failure.
+          }
+          throw error;
+        }
       });
       await withSQLitePhase(sqliteTestPhases.finalRead, async () => {
         assert.equal(

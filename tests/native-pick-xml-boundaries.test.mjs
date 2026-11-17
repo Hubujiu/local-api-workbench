@@ -174,12 +174,24 @@ test("native XML reads only own body data, does not expose DOM/require, and pres
   );
 });
 
-test("native XML keeps exact UTF8, depth and combined node/attribute bounds within existing VM budgets", async () => {
+test("native XML keeps exact UTF8, depth and combined node/attribute bounds within existing VM budgets", async (t) => {
+  const observedPhase = async (label, body, tasks) => {
+    try {
+      return await phase(body, tasks);
+    } catch (error) {
+      // A fixed case label remains visible even if the Error stack was cached.
+      // Keep the original worker error, metadata, call count and budgets intact.
+      try {
+        t.diagnostic("NATIVE_XML_BOUNDARY " + label);
+      } catch {}
+      throw error;
+    }
+  };
   const prefix = "<login><token>",
     suffix = "</token></login>";
   const exact =
     prefix + "x".repeat(65536 - prefix.length - suffix.length) + suffix;
-  const ascii = await phase(exact);
+  const ascii = await observedPhase("xml-ascii-exact", exact);
   assert.equal(
     ascii.scopes.environment.token.length,
     65536 - prefix.length - suffix.length,
@@ -190,7 +202,8 @@ test("native XML keeps exact UTF8, depth and combined node/attribute bounds with
     "雪".repeat(Math.floor((65536 - prefix.length - suffix.length) / 3)) +
     suffix;
   assert.equal(
-    (await phase(utf8)).scopes.environment.token.length,
+    (await observedPhase("xml-utf8-exact", utf8)).scopes.environment.token
+      .length,
     utf8.length - prefix.length - suffix.length,
   );
   await rejectsWithDiagnostics(
@@ -211,7 +224,7 @@ test("native XML keeps exact UTF8, depth and combined node/attribute bounds with
   const nested = "<a>".repeat(32) + "leaf" + "</a>".repeat(32);
   assert.equal(
     (
-      await phase(nested, [
+      await observedPhase("xml-depth-exact", nested, [
         pick([row("token", "string(/" + Array(32).fill("a").join("/") + ")")]),
       ])
     ).scopes.environment.token,
@@ -224,7 +237,10 @@ test("native XML keeps exact UTF8, depth and combined node/attribute bounds with
   );
   // Document + login + token + text + 1996 empty sibling elements = 2,000.
   const many = "<login><token>ok</token>" + "<x/>".repeat(1996) + "</login>";
-  assert.equal((await phase(many)).scopes.environment.token, "ok");
+  assert.equal(
+    (await observedPhase("xml-node-exact", many)).scopes.environment.token,
+    "ok",
+  );
   await rejectsWithDiagnostics(
     phase(many.replace("</login>", "<x/></login>")),
     /节点/,

@@ -55,6 +55,17 @@
 
 逐项记录中的“原分支精确 head 的 CI”表示 workflow run 的 head_sha 与该分支固定 SHA 相符；pull_request 事件实际 checkout 可能是测试合并提交。除明确标注已核对同树的原候选外，本报告没有声称每次历史运行的 checkout tree 都与分支 head tree 相同。
 
+### 整合 PR #264 首轮发现与诊断补充
+
+[首轮 run 44104118453](https://github.com/Hubujiu/local-api-workbench/actions/runs/44104118453) 检出 `2fa863e20b9d35b85efd7eff0fc44d8ee172babd`，其 tree `fd2b571f2b8cb28fb20c4376e1b02d401aed8827` 与发布头 `f0f4bed9df5028fcee20c6cc94360678bf7bb560` 完全一致。最终 47 jobs 中 44 成功、3 失败、0 取消/跳过；其中两项是以下 Windows 核心测试失败，第三项是 required 正确汇总拒绝 core=failure，不是第三个独立缺陷。首轮失败保留为本次整合证据，不用后续运行覆盖。
+
+- Windows shard 1：[job 134111717662](https://github.com/Hubujiu/local-api-workbench/actions/runs/44104118453/job/134111717662) 的 native XML 边界测试耗尽 250ms 活动预算。取整诊断为 compatibility 96ms、userScript 154ms、promiseState 1ms；host settle 664ms，未触及约 2s 总期限。原日志无法在四个应成功边界中定位具体案例。
+- Windows shard 4：[job 134111717717](https://github.com/Hubujiu/local-api-workbench/actions/runs/44104118453/job/134111717717) 的 SQLite 超时恢复测试，在后续独立 UPDATE 阶段收到 SQLITE_WRITE_OUTCOME_UNKNOWN。worker ready 85ms，最后前置观察为 commit/98ms，总 elapsed 2334ms 后 SIGKILL、receivedResult=false；不能据此推断已提交、已回滚或某个具体锁泄漏。
+
+相关生产实现、原测试和预算与原候选逐 blob 一致；原候选同 Node 24.22.2、Windows 镜像 20261103.298.1 的同名测试曾成功。新增测试改变了分片分配，但这些对照不足以证明宿主调度、CPU 或磁盘争用就是根因。新补回测试本身未出现失败；导出与进程清理回归所在的三平台分片均已通过，SDK 回归所在 Windows shard 4 则由另一个旧用例失败导致整体未通过。Windows 的 POSIX cURL 子例仍按平台限制跳过，由 Linux/macOS 执行，不声称所有子测试零 skip。
+
+后续只补充针对性测试诊断：XML 四个成功边界失败时输出固定案例标签，原 Error 与全部调用/断言不变；SQLite 独立写发生未知结果时，仅用既有有界只读查询记录 before/after/unexpected/read-failed，再原样抛出原失败。没有重放写入、放宽 250ms/2s/12s 预算或把失败当成功。诊断改进与后续绿色运行均不等于已修复上述根因。首轮结果与失败摘录见 [integration-ci-initial.json](branch-audit-2026-11-17/evidence/integration-ci-initial.json)。
+
 ## 合并与后续分支管理
 
 先将最新候选与确认漏项组合在隔离 review 分支，保持旧分支不动；以正常 PR 面向 main 验证最终 merge tree。全部 required 条件满足后再合并，并核对 main push CI。不得对 main 使用强制推送，不得用 squash 丢掉本次需要追溯的历史关系。
