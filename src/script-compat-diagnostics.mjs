@@ -42,7 +42,8 @@ export function observeCompatibility(now, cpu) {
     enter(phase) {
       if (!phases.includes(phase) || active) return;
       try {
-        active = { phase, started: now(), cpu: cpuTime() };
+        const sampledCPU = cpuTime();
+        active = { phase, started: now(), cpu: sampledCPU };
         last = phase;
       } catch {
         active = undefined;

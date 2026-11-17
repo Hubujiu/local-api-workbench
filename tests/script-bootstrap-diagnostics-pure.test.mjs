@@ -142,7 +142,8 @@ test("source wiring keeps bootstrap deadline and resource limits, with failure-o
     "runtime.setMaxStackSize(512 * 1024);",
     "let deadline = monotonicNow() + 1000;",
     "runtime.setInterruptHandler(() => monotonicNow() > deadline);",
-    "deadline = monotonicNow() + workerData.activityBudgetMs;",
+    "let remaining = workerData.activityBudgetMs - mockLoadMs;",
+    "deadline = start + remaining;",
   ])
     assert(worker.includes(literal));
   assert(scripts.includes("activityBudgetMs = 250"));
@@ -214,13 +215,11 @@ test("host monotonic wiring preserves guest timestamps and unrounded activity en
     "earliest > monotonicNow()",
     "Math.max(0, earliest - monotonicNow())",
     "const now = monotonicNow();",
-    "let remaining = deadline - monotonicNow();",
+    "let remaining = workerData.activityBudgetMs - mockLoadMs;",
     'if (remaining <= 0) throw Error("脚本执行超时");',
     "const start = monotonicNow();",
     "deadline = start + remaining;",
     "remaining -= monotonicNow() - start;",
-    "const serializationStart = monotonicNow();",
-    "deadline = serializationStart + Math.max(0, remaining);",
     "if (outcome.result.activityMs > workerData.activityBudgetMs)",
     "activityMetrics[metric] += Math.max(0, monotonicNow() - started);",
     "Object.entries(activityMetrics).map",
@@ -245,10 +244,7 @@ test("host monotonic wiring preserves guest timestamps and unrounded activity en
     const end = source.indexOf("// Native JSON/string conversion", start);
     assert(start >= 0 && end > start);
     const charge = source.slice(start, end);
-    assert.match(
-      charge,
-      /workerData\.activityBudgetMs\s*-\s*remaining\s*\+\s*monotonicNow\(\)\s*-\s*serializationStart/,
-    );
+    assert.match(charge, /workerData\.activityBudgetMs\s*-\s*remaining/);
     assert(!charge.includes("Math.round"));
   }
 });

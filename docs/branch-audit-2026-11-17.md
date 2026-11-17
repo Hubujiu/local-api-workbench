@@ -66,11 +66,23 @@
 
 后续只补充针对性测试诊断：XML 四个成功边界失败时输出固定案例标签，原 Error 与全部调用/断言不变；SQLite 独立写发生未知结果时，仅用既有有界只读查询记录 before/after/unexpected/read-failed，再原样抛出原失败。没有重放写入、放宽 250ms/2s/12s 预算或把失败当成功。诊断改进与后续绿色运行均不等于已修复上述根因。首轮结果与失败摘录见 [integration-ci-initial.json](branch-audit-2026-11-17/evidence/integration-ci-initial.json)。
 
+### 继续排查并修复活动预算根因
+
+[第二轮 run 44107589801](https://github.com/Hubujiu/local-api-workbench/actions/runs/44107589801) 的 47 jobs 为 45 成功、2 失败；唯一实际失败是 macOS script-sequence 的跨阶段 timer 配额测试，另一个是 required 汇总拒绝。Windows 首轮 XML/SQLite 用例在此轮通过，但不能因此抹去旧失败。第二轮完整记录见 [integration-ci-second.json](branch-audit-2026-11-17/evidence/integration-ci-second.json)。
+
+后续定点故障注入确认了确定性的计费缺陷：兼容层的长 deadline 区间包含可信 CPU 诊断采样，序列化最终 activityMs 也会计入结束后的诊断采样。只延迟诊断、不增加 guest 工作，就能使正确的 60+60 timer 共享配额检查变成提前超时，也能使合法输出被误拒。原生断言证据的 getString/JSON.parse 又存在反向漏计，300ms 的真实宿主转换曾被报告成约 18–25ms 活动并成功返回。
+
+修复将兼容安装、源码构建、求值、序列化和原生断言证据转换的实际工作分别放入同一个共享剩余预算的 bounded 计费段；诊断采样置于计费段外。真实 VM 执行、Mock 读取与完整性校验、宿主 JSON 转换和证据处理仍按墙钟时间扣费。250ms 共享活动预算、2s 整体期限、100 次 timer 配额、内存和并发限制均不变。阻塞诊断仍会被父线程 2s 整体期限终止。
+
+修复的 6 项故障注入/安全回归及相关 11 文件共 72/72 通过、0 skip，原 quota/XML 断言保留；两个诊断误拒回归在原代码 0/2 通过，先 RED 后 GREEN。预算修复通过第二位审阅者的独立复核。方法和归因边界见 [ADR-SCRIPT-SEQUENCE-BUDGETS.md](ADR-SCRIPT-SEQUENCE-BUDGETS.md)，原始输出见 evidence/script-accounting-red.tap 和 evidence/script-accounting-green.tap。此因果实验确认代码中的诊断计费耦合，不声称已从历史 CI 日志识别出某一次具体 OS 停顿来源。
+
+另已发现两轮 macOS 使用不同的 Node patch/runner image：24.22.3 与 24.22.2。全部七处 setup-node 现固定为已发布的 24.22.3，以消除补丁版本漂移；这不是性能根因证明。版本证据见 [CI-NODE-RUNTIME-PIN-20261117.md](CI-NODE-RUNTIME-PIN-20261117.md)。SQLite 旧 unknown 事件的具体底层 I/O/调度来源仍未确认；不重放该写入、不降低持久性或放宽期限。修复后的整合头仍须通过其自身完整 CI。
+
 ## 合并与后续分支管理
 
 先将最新候选与确认漏项组合在隔离 review 分支，保持旧分支不动；以正常 PR 面向 main 验证最终 merge tree。全部 required 条件满足后再合并，并核对 main push CI。不得对 main 使用强制推送，不得用 squash 丢掉本次需要追溯的历史关系。
 
-本次不批量删除原有分支：祖先已包含、补丁等价、语义移植、未完成实验是不同状态。需要把界面最终清理为只保留 main 时，应先为未纳入实验和语义移植旧头建立可找回的归档引用，并依此清单处理；仅凭 `git branch --merged` 或全部旧 PR 关闭不能证明没有丢改动。
+首次审查保留原有分支，随后清理目标明确为只保留 main。执行顺序是：整合 PR 通过并合入 main、确认 main push CI、对所有待清理头建立可找回的 archive tag 并逐 SHA 核验、保存恢复清单/备份，再以每个 ref 的预期 SHA lease 做原子删除。main 永远排除；分支移头、归档冲突或平台保护拒绝均停止删除。祖先已包含、补丁等价、语义移植和未完成实验仍保留不同处置记录；仅凭 `git branch --merged` 或旧 PR 关闭不能证明没有丢改动。
 
 后续普通功能从 main 创建一个短期分支，PR 直接回 main；确有依赖时在 PR 写清依赖，优先合入前置 PR 后更新后续分支。集成分支只是临时验收，不继续无限堆叠替代主线。每次新增 CI job 时同步 required.needs 与期望任务集。
 

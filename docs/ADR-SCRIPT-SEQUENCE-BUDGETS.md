@@ -121,3 +121,79 @@ assertions remain required on the exact new commit. No local application, VM or
 XML workload was run for this change. There is no evidence that clock adjustment
 caused the previously observed CI timeout, and this hardening does not establish
 that timeout's root cause or accept timeout as content-validation success.
+
+## Keep diagnostic sampling outside active work (2026-11-17)
+
+Two deterministic accounting defects were found while investigating PR264's
+macOS timer-quota failure in run44107589801, job134124057422. That failure reached
+the second scope's function-library boundary before its timer loop ran. The
+compatibility breakdown observed 162 ms for evaluation and 7,914 microseconds of
+thread CPU. The observer started that wall interval before taking its initial
+CPU sample, so these figures do not isolate VM evaluation from diagnostic
+sampling. They do not prove that a particular system call or runner suspension
+caused the historical failure. The first and second macOS runs also used different
+Node patch versions and runner images; they are not a controlled comparison.
+
+The compatibility block set its active deadline before diagnostic CPU sampling
+and computed its remaining allowance after the final sample. Serialization
+similarly included its final CPU sample in the terminal active charge. These
+special paths differed from ordinary script/callback segments, whose existing
+`bounded` helper already separated active work from CPU observations. A trusted
+observer pause could therefore consume the guest allowance and change a valid
+result into a timeout, despite performing no guest or conversion work.
+
+The subprocess regression injects a fixed 300 ms pause only inside the real
+worker's CPU observer. On the unmodified 87d673ec baseline, the 60+60 timer fixture
+fails before the second scope issues a timer, instead of reaching the required
+100-timer shared limit. A separate pause in the final serialization CPU sample
+incorrectly rejects a valid 900,000-character output. Both positive regressions
+fail on that baseline. These are deliberate fault injections, not reruns accepted
+after a failure; no production switch enables them.
+
+Compatibility now uses the same fractional remaining allowance across three
+bounded work segments: eager Mock installation, compatibility source construction,
+and VM evaluation. CPU sampling and phase observers surround those segments. No
+remaining time is restored between them or between sequence scopes. The complete
+existing Mock asset read, manifest parse and integrity check charge is retained.
+Serialization charges its actual VM evaluation, string extraction, host JSON
+parse, native assertion evidence reconciliation and final size checks in one
+bounded segment. The final over-budget publication guard remains mandatory.
+
+The review also reproduced an adjacent undercharge: native assertion evidence
+was evaluated inside a bounded segment but converted to a host string and parsed
+outside it. A fixed 300 ms delay in that host parse still returned success with
+about 25 ms reported activity. Evidence evaluation, conversion, parsing and handle
+disposal now share one bounded segment, with `finally` disposal if conversion
+throws. The same delayed parse now exhausts the allowance and prevents result
+publication at the next budget boundary. That boundary is not evidence that the
+following serialization operation performed the slow work.
+
+The activity metrics exclude their own CPU start/finish samples; serialization's
+metric now includes its complete charged conversion tail. The compatibility
+phase observer also starts its wall interval after its own CPU start sample.
+Phase windows can still surround other diagnostic bookkeeping and are observation
+data, not debit inputs; do not sum them with activity metrics or treat them as CPU
+measurements. Actual debits continue to use monotonic elapsed wall time, never CPU
+time. Scheduling pauses within actual work still consume that allowance.
+
+The default and lower requested 250 ms active / 2 s total limits, fresh workers,
+16 MiB VM memory, 512 KiB VM stack, timer/network/Faker/assertion quotas, async idle
+policy and cancellation remain unchanged. The host total deadline still includes
+all diagnostic delay: a blocked observer is terminated by the same default 2 s
+deadline. The regressions also require a real infinite guest loop to be
+interrupted, a delayed host serialization parse to reject, and native evidence
+conversion to reject after consuming its active allowance. No XML boundary or
+quota assertion is weakened, and no CPU-based replacement clock is introduced.
+
+Local validation on Node24.22.1: all 72 cases pass across 11 targeted files,
+including all six subprocess accounting cases, the unchanged XML boundary
+fixtures, stage quotas, explicit lower budgets, final output guards, CPU/phase
+diagnostics and native response assertions. The original baseline's two observer
+cases fail, and the pre-fix evidence-conversion case fails by returning an
+incorrect success. There are no accepted retries, skipped cases or raised limits.
+
+The historical PR264 failures remain failures. Repairing this reproducible
+coupling and conversion undercharge does not prove the unique cause of every
+previous intermittent timeout, or establish cross-platform acceptance before
+the exact repaired commit finishes CI. Bootstrap accounting and unrelated
+network reply preparation are outside this focused change.

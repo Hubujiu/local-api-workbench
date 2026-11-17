@@ -78,11 +78,11 @@ test("script Mock source wiring charges read and eager install inside the existi
   );
   assert.match(
     worker,
-    /deadline = monotonicNow\(\) \+ workerData\.activityBudgetMs;\s+deadline -= mockLoadMs;/,
+    /let remaining = workerData\.activityBudgetMs - mockLoadMs;/,
   );
   const stage = worker.indexOf('scriptStage = "compatibility";');
   const charged = worker.indexOf(
-    'measureActivity("compatibility", "compatibilityMs", () => {',
+    'measuredBounded("compatibility", "compatibilityMs", () =>',
     stage,
   );
   const install = worker.indexOf(

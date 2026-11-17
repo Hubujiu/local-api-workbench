@@ -36,6 +36,22 @@ test("observer measures completed phases and the last phase even on errors", () 
   });
 });
 
+test("a phase observer excludes its own CPU sampling time from the phase wall metric", () => {
+  let time = 0;
+  const observer = observeCompatibility(
+    () => time,
+    () => {
+      time += 300;
+      return { user: 0, system: 0 };
+    },
+  );
+  observer.enter("compatibility-eval");
+  time += 7;
+  observer.leave();
+  assert.equal(observer.snapshot().evaluationMs, 7);
+  assert.equal(time, 607);
+});
+
 test("invalid CPU values are omitted and diagnostic errors never replace execution", () => {
   let time = 10;
   const observer = observeCompatibility(

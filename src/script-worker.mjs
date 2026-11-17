@@ -83,8 +83,8 @@ const compatibilityObservation = observeCompatibility(monotonicNow, threadCPU);
 const activityCPUTimeUs = {};
 const measureActivity = (operation, metric, fn) => {
   activityOperation = operation;
-  const started = monotonicNow(),
-    cpuStarted = threadCPU();
+  const cpuStarted = threadCPU(),
+    started = monotonicNow();
   try {
     return fn();
   } finally {
@@ -606,16 +606,28 @@ try {
   );
   scriptStage = "compatibility";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
-  deadline = monotonicNow() + workerData.activityBudgetMs;
-  deadline -= mockLoadMs;
-  if (mockLoadMs >= workerData.activityBudgetMs) throw Error("脚本执行超时");
-  measureActivity("compatibility", "compatibilityMs", () => {
-    // Eager installation is charged to the existing activity budget. Lexical
-    // parameters pin vendor globals against later top-level lexical shadowing;
-    // the facade additionally rejects descriptor/prototype mutations.
-    const mockGlobals =
-      "Object,Array,String,RegExp,Function,Number,Boolean,Math,JSON,Reflect,Symbol,parseInt,parseFloat,isNaN,isFinite,WeakSet,Error,globalThis";
-    compatibilityObservation.enter("mock-install");
+  let remaining = workerData.activityBudgetMs - mockLoadMs;
+  const bounded = (fn) => {
+    if (remaining <= 0) throw Error("脚本执行超时");
+    const start = monotonicNow();
+    deadline = start + remaining;
+    try {
+      return fn();
+    } finally {
+      remaining -= monotonicNow() - start;
+    }
+  };
+  const measuredBounded = (operation, metric, fn) =>
+    measureActivity(operation, metric, () => bounded(fn));
+  // Each actual work segment consumes the same fractional wall-time allowance.
+  // Trusted diagnostic sampling stays outside it, under the host's total wall
+  // deadline; a slow observer must not spend the guest's active allowance.
+  // Eager installation remains charged. Lexical parameters pin vendor globals
+  // against shadowing; the facade additionally rejects descriptor mutations.
+  const mockGlobals =
+    "Object,Array,String,RegExp,Function,Number,Boolean,Math,JSON,Reflect,Symbol,parseInt,parseFloat,isNaN,isFinite,WeakSet,Error,globalThis";
+  compatibilityObservation.enter("mock-install");
+  measuredBounded("compatibility", "compatibilityMs", () =>
     run(
       "Object.defineProperty(globalThis,'Mock',{value:((" +
         mockGlobals +
@@ -624,10 +636,13 @@ try {
         ";return ScriptMockLibrary.install(reserve);})(" +
         mockGlobals +
         ",globalThis.__scriptMockReserve),enumerable:true});delete globalThis.__scriptMockReserve;",
-    );
-    compatibilityObservation.leave();
-    compatibilityObservation.enter("source-build");
-    const compatibilitySources = [];
+    ),
+  );
+  compatibilityObservation.leave();
+  compatibilityObservation.enter("source-build");
+  let compatibilitySources;
+  measuredBounded("compatibility", "compatibilityMs", () => {
+    compatibilitySources = [];
     const install = (code) => compatibilitySources.push(code);
     install(
       "pm.expect = chai.expect; apt.expect = chai.expect; apt.test = pm.test;",
@@ -775,24 +790,13 @@ try {
           JSON.stringify(JSON.stringify(wireContext)) +
           "),pm,apt,request});",
       );
-    compatibilityObservation.leave();
-    compatibilityObservation.enter("compatibility-eval");
-    run(compatibilitySources.join(";\n"));
-    compatibilityObservation.leave();
   });
-  let remaining = deadline - monotonicNow();
-  const bounded = (fn) => {
-    if (remaining <= 0) throw Error("脚本执行超时");
-    const start = monotonicNow();
-    deadline = start + remaining;
-    try {
-      return fn();
-    } finally {
-      remaining -= monotonicNow() - start;
-    }
-  };
-  const measuredBounded = (operation, metric, fn) =>
-    measureActivity(operation, metric, () => bounded(fn));
+  compatibilityObservation.leave();
+  compatibilityObservation.enter("compatibility-eval");
+  measuredBounded("compatibility", "compatibilityMs", () =>
+    run(compatibilitySources.join(";\n")),
+  );
+  compatibilityObservation.leave();
   scriptStage = "script";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   for (const [index, code] of [
@@ -937,65 +941,73 @@ try {
     );
   let nativeAssertionEvidence = [];
   if (workerData.responseAssertions?.length) {
-    const result = measuredBounded(
+    nativeAssertionEvidence = measuredBounded(
       "native-assertion-evidence",
       "promiseStateMs",
-      () => context.evalCode("__readNativeAssertionEvidence()"),
+      () => {
+        const result = context.evalCode("__readNativeAssertionEvidence()");
+        if (result.error) {
+          result.error.dispose();
+          throw Error("原生断言证据不可读取");
+        }
+        try {
+          return JSON.parse(context.getString(result.value));
+        } finally {
+          result.value.dispose();
+        }
+      },
     );
-    if (result.error) {
-      result.error.dispose();
-      throw Error("原生断言证据不可读取");
-    }
-    nativeAssertionEvidence = JSON.parse(context.getString(result.value));
-    result.value.dispose();
   }
   if (workerData.nativeWaits?.length)
     measuredBounded("native-wait-completion", "promiseStateMs", () =>
       run("__readNativeWaitCompletion();"),
     );
-  const serializationStart = monotonicNow();
-  deadline = serializationStart + Math.max(0, remaining);
   scriptStage = "serialization";
   parentPort.postMessage({ kind: "stage", stage: scriptStage });
   finalizing = true;
-  const output = measureActivity("serialization", "serializationMs", () =>
-    context.evalCode(
-      "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, finalBody:__readFinalBody(), ...__readResponseMutation()})",
-    ),
+  const serializedResult = measuredBounded(
+    "serialization",
+    "serializationMs",
+    () => {
+      const output = context.evalCode(
+        "if(__readURLFacade)request.scriptURLRuntime=__readURLFacade(); applyLegacyVariables(scopeState, effectiveScopes(scopeState), variables); JSON.stringify({variables: effectiveScopes(scopeState), scopes: scopeState, localVariables, request, logs, tests, visualization, finalBody:__readFinalBody(), ...__readResponseMutation()})",
+      );
+      if (output.error) {
+        output.error.dispose();
+        throw Error("脚本输出不可序列化");
+      }
+      const json = context.getString(output.value);
+      output.value.dispose();
+      if (runtime.hasPendingJob() || tracked.unhandledCount())
+        throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
+      if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
+        throw Error("脚本输出超过 1 MiB");
+      const serializedResult = JSON.parse(json);
+      if (nativeAssertionEvidence.length) {
+        if (!Array.isArray(serializedResult.tests))
+          throw Error("脚本断言输出格式无效");
+        const claimed = new Set();
+        for (const entry of nativeAssertionEvidence) {
+          const target =
+            entry.index >= 0 &&
+            entry.index < serializedResult.tests.length &&
+            !claimed.has(entry.index)
+              ? entry.index
+              : serializedResult.tests.length;
+          serializedResult.tests[target] = entry.record;
+          claimed.add(target);
+        }
+        if (serializedResult.tests.length > workerData.assertionLimit)
+          throw Error("脚本断言输出超过本次共享断言预算");
+        if (
+          Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
+          1024 * 1024
+        )
+          throw Error("脚本输出超过 1 MiB");
+      }
+      return serializedResult;
+    },
   );
-  if (output.error) {
-    output.error.dispose();
-    throw Error("脚本输出不可序列化");
-  }
-  const json = context.getString(output.value);
-  output.value.dispose();
-  if (runtime.hasPendingJob() || tracked.unhandledCount())
-    throw Error("输出序列化期间产生异步任务或未处理的Promise拒绝");
-  if (Buffer.byteLength(json, "utf8") > 1024 * 1024)
-    throw Error("脚本输出超过 1 MiB");
-  const serializedResult = JSON.parse(json);
-  if (nativeAssertionEvidence.length) {
-    if (!Array.isArray(serializedResult.tests))
-      throw Error("脚本断言输出格式无效");
-    const claimed = new Set();
-    for (const entry of nativeAssertionEvidence) {
-      const target =
-        entry.index >= 0 &&
-        entry.index < serializedResult.tests.length &&
-        !claimed.has(entry.index)
-          ? entry.index
-          : serializedResult.tests.length;
-      serializedResult.tests[target] = entry.record;
-      claimed.add(target);
-    }
-    if (serializedResult.tests.length > workerData.assertionLimit)
-      throw Error("脚本断言输出超过本次共享断言预算");
-    if (
-      Buffer.byteLength(JSON.stringify(serializedResult), "utf8") >
-      1024 * 1024
-    )
-      throw Error("脚本输出超过 1 MiB");
-  }
   outcome = {
     result: {
       ...serializedResult,
@@ -1010,11 +1022,7 @@ try {
         ...readActivityMetrics(),
         fakerLoadMs: fakerProviderLoadMs(),
       },
-      activityMs:
-        workerData.activityBudgetMs -
-        remaining +
-        monotonicNow() -
-        serializationStart,
+      activityMs: workerData.activityBudgetMs - remaining,
     },
   };
   // Native JSON/string conversion can finish between QuickJS interrupt checks.

@@ -534,7 +534,7 @@ test("CI isolation has no selection filter and runtime diagnostics expose only e
       ),
     );
   assert.match(core, /fail-fast: false/);
-  assert.match(core, /node-version: "24"/);
+  assert.match(core, /node-version: "24\.22\.3"/);
   assert.match(core, /os: \[ubuntu-latest, windows-latest, macos-latest\]/);
   assert.match(
     core,
