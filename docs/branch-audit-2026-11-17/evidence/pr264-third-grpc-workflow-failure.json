@@ -1,0 +1,472 @@
+{
+  "run_id": 44116790576,
+  "job_id": 134156941440,
+  "test": "tests/grpc-plan-scripts-root-workflow.test.mjs",
+  "runtime": "{\"node\":\"v24.22.3\",\"platform\":\"darwin\",\"arch\":\"arm64\",\"availableParallelism\":3,\"cpus\":3,\"totalmem\":7516192768,\"ImageOS\":\"macos26\",\"ImageVersion\":\"20261112.0504.1\"}",
+  "results_count": 16,
+  "results": [
+    {
+      "index": 0,
+      "stepId": "a-start",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-start",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",0]],\"a-start\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 1,
+      "stepId": "rpc",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "rpc",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",0]],\"rpc\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 2,
+      "stepId": "b-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "b-consume",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",0]],\"b-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 3,
+      "stepId": "a-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-consume",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",0]],\"a-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 4,
+      "stepId": "a-start",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-start",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",1]],\"a-start\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 5,
+      "stepId": "rpc",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "rpc",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",1]],\"rpc\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 6,
+      "stepId": "b-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "b-consume",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",1]],\"b-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 7,
+      "stepId": "a-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-consume",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",0],[\"inner\",1]],\"a-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 0
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 8,
+      "stepId": "a-start",
+      "status": "failed",
+      "error": "脚本执行超时",
+      "scriptStage": "script",
+      "scriptScope": null,
+      "scriptDiagnostics": {
+        "hostLifecycle": {
+          "version": 1,
+          "spawnMs": 0,
+          "timerArmMs": 0,
+          "timerTargetMs": 2000,
+          "onlineMs": 31,
+          "librariesMs": 97,
+          "engineMs": 101,
+          "bootstrapMs": 118,
+          "compatibilityMs": 257,
+          "scriptMs": 285,
+          "terminalMs": 563,
+          "finishMs": 565,
+          "exitMs": 565,
+          "settleMs": 566,
+          "exitCode": 0,
+          "terminalKind": "error",
+          "finishReason": "worker-exit"
+        },
+        "compatibilityOperation": "compatibility-eval",
+        "compatMockAssetMs": 2,
+        "compatMockAssetCPUUs": 2161,
+        "compatMockInstallMs": 6,
+        "compatMockInstallCPUUs": 4246,
+        "compatSourceBuildMs": 1,
+        "compatSourceBuildCPUUs": 563,
+        "compatEvaluationMs": 21,
+        "compatEvaluationCPUUs": 10838,
+        "activityBudgetMs": 250,
+        "fakerCalls": 0,
+        "timerCount": 0,
+        "requestCount": 0,
+        "compatibilityCPUUs": 15125,
+        "functionLibraryCPUUs": 5054,
+        "userScriptCPUUs": 80,
+        "compatibilityMs": 28,
+        "fakerLoadMs": 0,
+        "functionLibraryMs": 246,
+        "userScriptMs": 0,
+        "microtaskMs": 0,
+        "callbackMs": 0,
+        "promiseStateMs": 0,
+        "serializationMs": 0,
+        "activityOperation": "user-script",
+        "lastWorkerStage": "script",
+        "elapsedMs": 565
+      },
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-start",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",0]],\"a-start\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 9,
+      "stepId": "rpc",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "rpc",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",0]],\"rpc\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 10,
+      "stepId": "b-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "b-consume",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",0]],\"b-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 11,
+      "stepId": "a-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-consume",
+        "iteration": 0,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",0]],\"a-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 0
+          }
+        ]
+      }
+    },
+    {
+      "index": 12,
+      "stepId": "a-start",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-start",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",1]],\"a-start\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 13,
+      "stepId": "rpc",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "rpc",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",1]],\"rpc\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 14,
+      "stepId": "b-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "b-consume",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",1]],\"b-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    },
+    {
+      "index": 15,
+      "stepId": "a-consume",
+      "status": "passed",
+      "error": null,
+      "scriptStage": null,
+      "scriptScope": null,
+      "scriptDiagnostics": null,
+      "sequenceActivity": null,
+      "repeat": {
+        "groupId": "inner",
+        "childId": "a-consume",
+        "iteration": 1,
+        "occurrenceId": "[[[\"outer\",1],[\"inner\",1]],\"a-consume\"]",
+        "path": [
+          {
+            "groupId": "outer",
+            "iteration": 1
+          },
+          {
+            "groupId": "inner",
+            "iteration": 1
+          }
+        ]
+      }
+    }
+  ]
+}

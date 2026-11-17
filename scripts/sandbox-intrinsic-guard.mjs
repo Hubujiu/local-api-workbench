@@ -50,14 +50,6 @@ export function intrinsicGuard() {
     "XMLSerializer",
     "XPathResult",
   ];
-  const fields = [
-    "value",
-    "get",
-    "set",
-    "enumerable",
-    "writable",
-    "configurable",
-  ];
   const visited = new Set(),
     snapshots = [],
     bindings = [];
@@ -101,16 +93,22 @@ export function intrinsicGuard() {
   }
   const equal = (current, initial) => {
     if (!current || !initial) return current === initial;
-    for (let at = 0; at < fields.length; at++) {
-      const field = fields[at],
-        a = hasOwn(current, field),
-        b = hasOwn(initial, field);
-      if (a !== b) return false;
-      // These are native-created descriptor records, whose own fields are data
-      // properties. Never read a missing field through a modified prototype.
-      if (a && !same(current[field], initial[field])) return false;
-    }
-    return true;
+    // The captured native descriptor function creates own enumerable/configurable
+    // fields and exactly one complete data or accessor shape. Check that shape
+    // before reading its own fields; never read absent fields through a poisoned
+    // prototype. This preserves every comparison without twelve ownership calls
+    // per descriptor on every XML task's complete intrinsic-graph walk.
+    if (
+      current.enumerable !== initial.enumerable ||
+      current.configurable !== initial.configurable
+    )
+      return false;
+    const data = hasOwn(current, "value");
+    if (data !== hasOwn(initial, "value")) return false;
+    return data
+      ? current.writable === initial.writable &&
+          same(current.value, initial.value)
+      : same(current.get, initial.get) && same(current.set, initial.set);
   };
   return () => {
     // No user-replaceable method, iterator or getter is invoked by this check.

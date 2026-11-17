@@ -78,6 +78,16 @@
 
 另已发现两轮 macOS 使用不同的 Node patch/runner image：24.22.3 与 24.22.2。全部七处 setup-node 现固定为已发布的 24.22.3，以消除补丁版本漂移；这不是性能根因证明。版本证据见 [CI-NODE-RUNTIME-PIN-20261117.md](CI-NODE-RUNTIME-PIN-20261117.md)。SQLite 旧 unknown 事件的具体底层 I/O/调度来源仍未确认；不重放该写入、不降低持久性或放宽期限。修复后的整合头仍须通过其自身完整 CI。
 
+### 第三轮真实执行开销与 XML 防护优化
+
+[第三轮 run 44116790576](https://github.com/Hubujiu/local-api-workbench/actions/runs/44116790576) 的完整 47 jobs 为 44 成功、3 失败：macOS shard 5 的 XML 比较器流程、macOS shard 7 的嵌套 HTTP/gRPC 流程，以及正确拒绝的 required。实际 checkout `16ac8bd2ad0bad757dbc2852d2f5d9e7df56995f` 与发布头 `84cf3d0a72df590ab1762e4eae7f71a54bdd7a52` 同树 `eeac2be2009a3b310c8fdded99250d49f8d6536e`。此前 XML/SQLite/timer 失败用例及新增六项诊断计费回归在本轮三平台均实际通过；不能因此忽略新的失败。完整记录见 [integration-ci-third.json](branch-audit-2026-11-17/evidence/integration-ci-third.json)。
+
+shard 5 的 41 字节 XML/七条断言消耗 compatibility 85ms、user 171ms。独立分段观测定位完整 intrinsic guard 约占该小正文 XML 工作的 78%，而七次 DOM 解析仅约 2ms。现按捕获的原生描述符保证的完整 data/accessor 形状比较字段，保留每个任务对全部键、标志、值、原型、符号和嵌套对象的检查，将每个描述符十二次存在性检查降为两次。没有缓存检查或 DOM、改变 XPath、减少断言或提高预算。七次完整检查的交替样本墙钟中位数由约 27.20ms 降至 11.76ms；保留全部样本与冷启动限制，不把该比例外推成 CI 端到端保证。
+
+新增三十种实际 tracked QuickJS 描述符/污染场景，旧版和新版 A/B 共 60/60 符合预期、getter/setter 零调用；十个相关 XML/工作流/预算回归文件共 94/94 通过、零跳过。XML bundle 已重建并通过可复现构建核对。详见 [ADR-NATIVE-XML-GUARD-COST-20261117.md](ADR-NATIVE-XML-GUARD-COST-20261117.md)。
+
+shard 7 是一个 HTTP 前置阶段的真实 utils 初始化：functionLibrary 246ms 墙钟、5.054ms CPU，加上 compatibility 28ms 后在用户脚本前耗尽预算。已核对 functions 为空，但仍有 33 字节的 const utils 初始化，不能删除其语义或移出计费。该路径不使用 XML guard；现有日志无法确定具体调度/原生等待来源，不宣称 XML 优化修复它。此轮所有失败保留，没有单独重跑失败作业；修订整树继续以自身完整 CI 为合并门槛。
+
 ## 合并与后续分支管理
 
 先将最新候选与确认漏项组合在隔离 review 分支，保持旧分支不动；以正常 PR 面向 main 验证最终 merge tree。全部 required 条件满足后再合并，并核对 main push CI。不得对 main 使用强制推送，不得用 squash 丢掉本次需要追溯的历史关系。

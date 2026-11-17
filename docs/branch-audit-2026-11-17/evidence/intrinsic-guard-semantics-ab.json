@@ -1,0 +1,675 @@
+{
+  "engine": "tracked QuickJS",
+  "node": "v24.22.1",
+  "platform": "linux",
+  "baselineCommit": "84cf3d0a",
+  "casesPerVariant": 30,
+  "sourceSHA256": {
+    "baseline": "255c19e6b05453b49cb29e50d8450ba685de41cb12c6e700949608671bc7da78",
+    "production": "40b3700d84e124f27d3adf7f9dab6d368b3786940d9eb6742678411901099d0a"
+  },
+  "passed": 60,
+  "failed": 0,
+  "rows": [
+    {
+      "variant": "baseline",
+      "name": "unchanged",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "NaN same value",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "positive to negative zero",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "negative to positive zero",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "data value identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "data to accessor",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "accessor to data",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "getter identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "setter identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "getter undefined to function",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "setter undefined to function",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "data enumerable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "data configurable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "data writable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "accessor enumerable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "accessor configurable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "missing global added",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "missing global accessor added",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "existing global removed",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "global getter",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "nested symbol identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "nested function data",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "prototype change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "iterator change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "own key order change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "captured descriptor replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "captured same replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "captured hasOwn replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "all six inherited before snapshot",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "baseline",
+      "name": "all six inherited after snapshot",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "unchanged",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "NaN same value",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "positive to negative zero",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "negative to positive zero",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "data value identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "data to accessor",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "accessor to data",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "getter identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "setter identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "getter undefined to function",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "setter undefined to function",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "data enumerable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "data configurable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "data writable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "accessor enumerable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "accessor configurable",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "missing global added",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "missing global accessor added",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "existing global removed",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "global getter",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "nested symbol identity",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "nested function data",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "prototype change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "iterator change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "own key order change",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "captured descriptor replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "captured same replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "captured hasOwn replaced",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "all six inherited before snapshot",
+      "expectedAccepted": true,
+      "observed": {
+        "accepted": true,
+        "getterCalls": 0,
+        "reason": ""
+      },
+      "passed": true
+    },
+    {
+      "variant": "production",
+      "name": "all six inherited after snapshot",
+      "expectedAccepted": false,
+      "observed": {
+        "accepted": false,
+        "getterCalls": 0,
+        "reason": "pickVars XML内建对象已被脚本修改"
+      },
+      "passed": true
+    }
+  ]
+}

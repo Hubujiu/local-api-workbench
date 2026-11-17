@@ -6,6 +6,8 @@ import vm from "node:vm";
 import { withWorkerRejectionDiagnostics } from "./helpers/worker-rejection-diagnostics.mjs";
 import { fileURLToPath } from "node:url";
 import { runNativeTaskPhase } from "../src/native-task-phase.mjs";
+import { trackedQuickJS } from "../src/tracked-quickjs.mjs";
+import { intrinsicGuard } from "../scripts/sandbox-intrinsic-guard.mjs";
 import {
   normalizePickVarsData,
   compilePickVarsOperations,
@@ -418,5 +420,246 @@ test("native XML seven current-body tasks retain concurrent phase budget headroo
     // Success is governed by the actual worker's unchanged 250ms activity / 2s
     // wall limits, not by a benchmark-only time allowance or a serial fallback.
     assert.equal(result.networkRequests.length, 0);
+  }
+});
+
+test("native XML intrinsic descriptors retain exact shape, SameValue and getter-free checks in tracked QuickJS", async () => {
+  const cases = [
+    {
+      name: "unchanged",
+      prep: "",
+      change: "",
+      pass: true,
+    },
+    {
+      name: "NaN same value",
+      prep: 'Object.defineProperty(Math,"probe",{value:NaN,writable:true,configurable:true});',
+      change: "Math.probe=NaN;",
+      pass: true,
+    },
+    {
+      name: "positive to negative zero",
+      prep: 'Object.defineProperty(Math,"probe",{value:0,writable:true,configurable:true});',
+      change: "Math.probe=-0;",
+      pass: false,
+    },
+    {
+      name: "negative to positive zero",
+      prep: 'Object.defineProperty(Math,"probe",{value:-0,writable:true,configurable:true});',
+      change: "Math.probe=0;",
+      pass: false,
+    },
+    {
+      name: "data value identity",
+      prep: "",
+      change: "Math.random=function(){};",
+      pass: false,
+    },
+    {
+      name: "data to accessor",
+      prep: "",
+      change: 'Object.defineProperty(Math,"random",{get:countGetter});',
+      pass: false,
+    },
+    {
+      name: "accessor to data",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,set:countSetter,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{value:undefined});',
+      pass: false,
+    },
+    {
+      name: "getter identity",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,set:countSetter,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{get:otherGetter});',
+      pass: false,
+    },
+    {
+      name: "setter identity",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,set:countSetter,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{set:otherSetter});',
+      pass: false,
+    },
+    {
+      name: "getter undefined to function",
+      prep: 'Object.defineProperty(globalThis,"document",{get:undefined,set:countSetter,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{get:countGetter});',
+      pass: false,
+    },
+    {
+      name: "setter undefined to function",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,set:undefined,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{set:countSetter});',
+      pass: false,
+    },
+    {
+      name: "data enumerable",
+      prep: "",
+      change: 'Object.defineProperty(Math,"random",{enumerable:true});',
+      pass: false,
+    },
+    {
+      name: "data configurable",
+      prep: "",
+      change: 'Object.defineProperty(Math,"random",{configurable:false});',
+      pass: false,
+    },
+    {
+      name: "data writable",
+      prep: "",
+      change: 'Object.defineProperty(Math,"random",{writable:false});',
+      pass: false,
+    },
+    {
+      name: "accessor enumerable",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,configurable:true});',
+      change: 'Object.defineProperty(globalThis,"document",{enumerable:true});',
+      pass: false,
+    },
+    {
+      name: "accessor configurable",
+      prep: 'Object.defineProperty(globalThis,"document",{get:countGetter,configurable:true});',
+      change:
+        'Object.defineProperty(globalThis,"document",{configurable:false});',
+      pass: false,
+    },
+    {
+      name: "missing global added",
+      prep: "",
+      change: "globalThis.document={};",
+      pass: false,
+    },
+    {
+      name: "missing global accessor added",
+      prep: "",
+      change: 'Object.defineProperty(globalThis,"document",{get:countGetter});',
+      pass: false,
+    },
+    {
+      name: "existing global removed",
+      prep: "",
+      change: "delete globalThis.parseInt;",
+      pass: false,
+    },
+    {
+      name: "global getter",
+      prep: "",
+      change: 'Object.defineProperty(globalThis,"String",{get:countGetter});',
+      pass: false,
+    },
+    {
+      name: "nested symbol identity",
+      prep: 'var symbolKey=Symbol("test");Math.random[symbolKey]=function(){};',
+      change: "Math.random[symbolKey]=function(){};",
+      pass: false,
+    },
+    {
+      name: "nested function data",
+      prep: "var nested=function(){};Math.random.probe=nested;",
+      change: "nested.extra=1;",
+      pass: false,
+    },
+    {
+      name: "prototype change",
+      prep: "",
+      change: "Object.setPrototypeOf(String.prototype,{});",
+      pass: false,
+    },
+    {
+      name: "iterator change",
+      prep: "",
+      change: "Object.getPrototypeOf([][Symbol.iterator]()).next=function(){};",
+      pass: false,
+    },
+    {
+      name: "own key order change",
+      prep: "Math.first=1;Math.second=2;",
+      change: "delete Math.first;Math.first=1;",
+      pass: false,
+    },
+    {
+      name: "captured descriptor replaced",
+      prep: "",
+      change:
+        'Object.getOwnPropertyDescriptor=function(){getterCalls++;throw "bad";};',
+      pass: false,
+    },
+    {
+      name: "captured same replaced",
+      prep: "",
+      change: "Object.is=function(){getterCalls++;return true;};",
+      pass: false,
+    },
+    {
+      name: "captured hasOwn replaced",
+      prep: "",
+      change: "Object.hasOwn=function(){getterCalls++;return true;};",
+      pass: false,
+    },
+    {
+      name: "all six inherited before snapshot",
+      prep: 'for(const key of ["value","get","set","enumerable","writable","configurable"]){var pd=Object.create(null);pd.get=countGetter;pd.configurable=true;Object.defineProperty(Object.prototype,key,pd);}',
+      change: "",
+      pass: true,
+    },
+    {
+      name: "all six inherited after snapshot",
+      prep: "",
+      change:
+        'for(const key of ["value","get","set","enumerable","writable","configurable"]){var pd=Object.create(null);pd.get=countGetter;pd.configurable=true;Object.defineProperty(Object.prototype,key,pd);}',
+      pass: false,
+    },
+  ];
+  const tracked = await trackedQuickJS();
+  for (const entry of cases) {
+    // Fresh production-engine realms keep each deliberate mutation isolated.
+    // Import the production guard itself; no alternate comparison is tested.
+    const runtime = tracked.engine.newRuntime();
+    runtime.setMemoryLimit(16 * 1024 * 1024);
+    runtime.setMaxStackSize(512 * 1024);
+    const context = runtime.newContext();
+    try {
+      const result = context.evalCode(`
+        const intrinsicGuard = (${intrinsicGuard.toString()});
+        let getterCalls = 0;
+        const countGetter = function () { getterCalls++; throw "getter called"; };
+        const countSetter = function () { getterCalls++; throw "setter called"; };
+        const otherGetter = function () { getterCalls++; throw "other getter called"; };
+        const otherSetter = function () { getterCalls++; throw "other setter called"; };
+        const encode = JSON.stringify;
+        ${entry.prep}
+        const check = intrinsicGuard();
+        check();
+        ${entry.change}
+        let accepted = true, reason = "";
+        try { check(); } catch (error) {
+          accepted = false;
+          reason = typeof error === "string" ? error : "unexpected error";
+        }
+        encode({ accepted, getterCalls, reason });
+      `);
+      if (result.error) {
+        const failure = context.dump(result.error);
+        result.error.dispose();
+        assert.fail(entry.name + ": " + JSON.stringify(failure));
+      }
+      let observed;
+      try {
+        observed = JSON.parse(context.getString(result.value));
+      } finally {
+        result.value.dispose();
+      }
+      assert.deepEqual(
+        observed,
+        {
+          accepted: entry.pass,
+          getterCalls: 0,
+          reason: entry.pass ? "" : "pickVars XML内建对象已被脚本修改",
+        },
+        entry.name,
+      );
+    } finally {
+      context.dispose();
+      runtime.dispose();
+    }
   }
 });
