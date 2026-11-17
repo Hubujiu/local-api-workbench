@@ -76,7 +76,7 @@ test("Store migrates legacy files on save while keeping the original backup", as
     JSON.parse(
       await readFile(path.join(root, "legacy", "project.json"), "utf8"),
     ).storageFormat,
-    2,
+    3,
   );
   assert.equal((await store.list()).length, 1);
 });

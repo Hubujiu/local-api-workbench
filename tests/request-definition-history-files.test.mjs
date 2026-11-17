@@ -80,7 +80,17 @@ test("definition history is a declared required file and round-trips independent
   const manifest = JSON.parse(
     await readFile(path.join(root, "project.json"), "utf8"),
   );
-  assert.equal(manifest.requestDefinitionHistoryFormat, 1);
+  assert.equal(manifest.storageFormat, 3);
+  assert.equal(
+    Object.hasOwn(manifest, "requestDefinitionHistoryFormat"),
+    false,
+  );
+  const localManifest = path.join(root, ".local-history.json");
+  assert.deepEqual(JSON.parse(await readFile(localManifest, "utf8")), {
+    version: 1,
+    projectId: project.id,
+    requestDefinitionHistoryFormat: 1,
+  });
   assert.equal(Object.hasOwn(manifest, "requestDefinitionHistory"), false);
   assert.deepEqual(
     JSON.parse(
@@ -98,13 +108,48 @@ test("definition history is a declared required file and round-trips independent
     Object.hasOwn(reopened, "requestDefinitionHistoryFormat"),
     false,
   );
+  const localBytes = await readFile(localManifest);
+  await rm(localManifest);
+  await assert.rejects(readProject(root, project.id), { code: "ENOENT" });
+  await writeFile(localManifest, localBytes);
   await rm(path.join(root, "history/definitions.json"));
   await assert.rejects(readProject(root, project.id), { code: "ENOENT" });
   await assert.rejects(readFile(path.join(root, ".transaction.json")), {
     code: "ENOENT",
   });
 });
-test("legacy projects without a definition-history marker read without creating a history file", async (t) => {
+test("format 2 reads its declared history strictly and upgrades only when saved", async (t) => {
+  const root = await directory(t),
+    project = fixture();
+  await writeProject(root, project);
+  const shared = path.join(root, "project.json");
+  const before = JSON.parse(await readFile(shared, "utf8"));
+  const old = {
+    ...before,
+    storageFormat: 2,
+    requestDefinitionHistoryFormat: 1,
+  };
+  await writeFile(shared, JSON.stringify(old));
+  await rm(path.join(root, ".local-history.json"));
+  assert.deepEqual(
+    (await readProject(root, project.id)).requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+  assert.deepEqual(JSON.parse(await readFile(shared, "utf8")), old);
+  const history = path.join(root, "history/definitions.json");
+  const bytes = await readFile(history);
+  await rm(history);
+  await assert.rejects(readProject(root, project.id), { code: "ENOENT" });
+  await writeFile(history, bytes);
+  await writeProject(root, await readProject(root, project.id));
+  assert.deepEqual(JSON.parse(await readFile(shared, "utf8")), before);
+  assert.deepEqual(
+    (await readProject(root, project.id)).requestDefinitionHistory,
+    project.requestDefinitionHistory,
+  );
+});
+
+test("projects without a definition-history marker read without creating a history file", async (t) => {
   const root = await directory(t),
     project = fixture();
   delete project.requestDefinitionHistory;

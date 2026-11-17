@@ -2,6 +2,7 @@ import { validateLoadRuns } from "./load-report-evidence.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { validateRequestDefinitionHistory } from "./request-definition-history.mjs";
 import {
+  lstat,
   mkdir,
   readFile,
   writeFile,
@@ -50,8 +51,15 @@ function validateLayout(project) {
   validateRequestDefinitionHistory(project);
   validateLoadRuns(project.loadRuns === undefined ? [] : project.loadRuns);
 }
-async function writeJSON(file, value, beforePublish, onPublicationPossible) {
-  const text = JSON.stringify(value, null, 2) + "\n";
+function writeJSON(file, value, beforePublish, onPublicationPossible) {
+  return writeText(
+    file,
+    JSON.stringify(value, null, 2) + "\n",
+    beforePublish,
+    onPublicationPossible,
+  );
+}
+async function writeText(file, text, beforePublish, onPublicationPossible) {
   try {
     if ((await readFile(file, "utf8")) === text) {
       onPublicationPossible?.();
@@ -75,15 +83,83 @@ async function writeJSON(file, value, beforePublish, onPublicationPossible) {
     throw error;
   }
 }
+const localHistoryFile = ".local-history.json";
+const historyFields = ["requestDefinitionHistoryFormat", "loadReportFormat"];
+const privateGitRules = [
+  "/history/",
+  "/.transaction.json",
+  "*.tmp",
+  "/" + localHistoryFile,
+];
+async function ensureGitIgnore(directory) {
+  const file = path.join(directory, ".gitignore");
+  let text;
+  try {
+    if (!(await lstat(file)).isFile())
+      throw Error("项目 Git 忽略规则必须是普通文件");
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    text = "";
+  }
+  if (
+    text.trimEnd().split(/\r?\n/).slice(-privateGitRules.length).join("\n") ===
+    privateGitRules.join("\n")
+  )
+    return;
+  await writeText(
+    file,
+    text +
+      (text === "" || text.endsWith("\n") ? "" : "\n") +
+      privateGitRules.join("\n") +
+      "\n",
+  );
+}
+
+async function historyManifest(directory, metadata) {
+  if (metadata.storageFormat === 2) return metadata;
+  if (historyFields.some((key) => Object.hasOwn(metadata, key)))
+    throw Error("本地历史清单格式无效");
+  let manifest;
+  try {
+    const file = path.join(directory, localHistoryFile);
+    if (!(await lstat(file)).isFile())
+      throw Error("本地历史清单必须是普通文件");
+    manifest = JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    // A definitions-only Git clone has neither this local manifest nor its
+    // ignored history tree. Missing only the manifest is not a clean clone.
+    try {
+      await lstat(path.join(directory, "history"));
+    } catch (historyError) {
+      if (historyError.code === "ENOENT") return {};
+      throw historyError;
+    }
+    throw error;
+  }
+  if (
+    !manifest ||
+    manifest.version !== 1 ||
+    manifest.projectId !== metadata.id ||
+    Object.keys(manifest).some(
+      (key) => !["version", "projectId", ...historyFields].includes(key),
+    )
+  )
+    throw Error("本地历史清单格式无效");
+  return manifest;
+}
+
 async function apply(directory, project) {
-  const metadata = { ...project, storageFormat: 2, collections: {} };
+  const metadata = { ...project, storageFormat: 3, collections: {} };
   delete metadata._diskFingerprint;
   delete metadata.loadReportFormat;
-  if (project.loadRuns !== undefined) metadata.loadReportFormat = 1;
   delete metadata.requestDefinitionHistory;
   delete metadata.requestDefinitionHistoryFormat;
+  const localHistory = { version: 1, projectId: project.id };
+  if (project.loadRuns !== undefined) localHistory.loadReportFormat = 1;
   if (project.requestDefinitionHistory !== undefined)
-    metadata.requestDefinitionHistoryFormat = 1;
+    localHistory.requestDefinitionHistoryFormat = 1;
   for (const [key, folder] of Object.entries(groups)) {
     const values = project[key] || [];
     if (!Array.isArray(values)) throw Error("项目集合格式无效");
@@ -137,16 +213,9 @@ async function apply(directory, project) {
       path.join(directory, "history/definitions.json"),
       project.requestDefinitionHistory,
     );
+  await ensureGitIgnore(directory);
+  await writeJSON(path.join(directory, localHistoryFile), localHistory);
   await writeJSON(path.join(directory, "project.json"), metadata);
-  try {
-    await writeFile(
-      path.join(directory, ".gitignore"),
-      "history/\n.transaction.json\n*.tmp\n",
-      { flag: "wx" },
-    );
-  } catch (error) {
-    if (error.code !== "EEXIST") throw error;
-  }
 }
 export async function recoverProject(directory, expectedId) {
   let journal;
@@ -223,23 +292,24 @@ export async function readProject(directory, expectedId) {
   const metadata = JSON.parse(
     await readFile(path.join(directory, "project.json"), "utf8"),
   );
-  if (metadata.id !== expectedId || metadata.storageFormat !== 2)
+  if (metadata.id !== expectedId || ![2, 3].includes(metadata.storageFormat))
     throw Error("项目清单格式或ID无效");
   const project = { ...metadata };
+  const history = await historyManifest(directory, metadata);
   delete project.loadRuns;
   if (
     Object.hasOwn(metadata, "loadRuns") ||
-    (Object.hasOwn(metadata, "loadReportFormat") &&
-      metadata.loadReportFormat !== 1)
+    (Object.hasOwn(history, "loadReportFormat") &&
+      history.loadReportFormat !== 1)
   )
     throw Error("压测报告清单格式无效");
   if (
     Object.hasOwn(metadata, "requestDefinitionHistory") ||
-    (metadata.requestDefinitionHistoryFormat !== undefined &&
-      metadata.requestDefinitionHistoryFormat !== 1)
+    (history.requestDefinitionHistoryFormat !== undefined &&
+      history.requestDefinitionHistoryFormat !== 1)
   )
     throw Error("接口定义历史清单格式无效");
-  if (metadata.requestDefinitionHistoryFormat === 1)
+  if (history.requestDefinitionHistoryFormat === 1)
     project.requestDefinitionHistory = JSON.parse(
       await readFile(path.join(directory, "history/definitions.json"), "utf8"),
     );
@@ -270,7 +340,7 @@ export async function readProject(directory, expectedId) {
     parameterDictionary: "settings/parameter-dictionary.json",
     folders: "settings/folders.json",
   })) {
-    if (key === "loadRuns" && metadata.loadReportFormat !== 1) continue;
+    if (key === "loadRuns" && history.loadReportFormat !== 1) continue;
     try {
       project[key] = JSON.parse(
         await readFile(path.join(directory, file), "utf8"),

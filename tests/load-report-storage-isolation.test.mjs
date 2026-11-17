@@ -234,7 +234,10 @@ test("load receipt manifest fails closed for missing evidence, embedded history 
   const manifestPath = path.join(dir, "project.json"),
     file = path.join(dir, "history/load-reports.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert.equal(manifest.loadReportFormat, 1);
+  assert.equal(Object.hasOwn(manifest, "loadReportFormat"), false);
+  const localManifestPath = path.join(dir, ".local-history.json");
+  const localManifest = JSON.parse(await readFile(localManifestPath, "utf8"));
+  assert.equal(localManifest.loadReportFormat, 1);
   assert.equal(
     Object.hasOwn(await readProject(dir, p.id), "loadReportFormat"),
     false,
@@ -242,19 +245,21 @@ test("load receipt manifest fails closed for missing evidence, embedded history 
   await rm(file);
   await assert.rejects(readProject(dir, p.id), /ENOENT/);
   for (const changed of [
-    { ...manifest, loadReportFormat: 2 },
-    { ...manifest, loadReportFormat: null },
-    { ...manifest, loadReportFormat: "1" },
-    { ...manifest, loadRuns: [] },
+    { ...localManifest, loadReportFormat: 2 },
+    { ...localManifest, loadReportFormat: null },
+    { ...localManifest, loadReportFormat: "1" },
   ]) {
-    await writeFile(manifestPath, JSON.stringify(changed));
+    await writeFile(localManifestPath, JSON.stringify(changed));
     await assert.rejects(readProject(dir, p.id), /压测报告清单/);
   }
+  await writeFile(localManifestPath, JSON.stringify(localManifest));
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, loadRuns: [] }));
+  await assert.rejects(readProject(dir, p.id), /压测报告清单/);
   // Full journal recovery re-establishes both manifest and evidence together.
   await writeFile(path.join(dir, ".transaction.json"), JSON.stringify(p));
   assert.deepEqual((await readProject(dir, p.id)).loadRuns, p.loadRuns);
-  const recovered = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert.equal(recovered.loadReportFormat, 1);
+  const recovered = JSON.parse(await readFile(localManifestPath, "utf8"));
+  assert.deepEqual(recovered, localManifest);
 });
 
 test("legacy unmarked projects do not gain evidence from an orphan history file", async (t) => {
