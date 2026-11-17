@@ -1,0 +1,7 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> local-api-workbench@0.1.0 format:check
+> prettier --check "src/**/*.mjs" "scripts/**/*.mjs" "tests/**/*.mjs" "public/*" "desktop/*.{mjs,cjs,json}" "*.json" ".github/workflows/*.yml"
+
+Checking formatting...
+All matched files use Prettier code style!

@@ -1,0 +1,12 @@
+✔ official SDK http: missing required API after a newer commit refuses stale sync, preserves peer and restores without replay (579.909519ms)
+✔ official SDK http: missing required settings/documents after a newer commit refuses stale sync, preserves peer and restores without replay (386.851484ms)
+✔ official SDK stdio: missing required API after a newer commit refuses stale sync, preserves peer and restores without replay (2241.985199ms)
+✔ official SDK stdio: missing required settings/documents after a newer commit refuses stale sync, preserves peer and restores without replay (1680.365784ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5674.970127

@@ -1,0 +1,43 @@
+✔ core shards exhaust the unchanged npm-test glob exactly once (1789.065604ms)
+✔ frozen weights preserve exact provenance, worst-known fallback and bounded parsing (17.835719ms)
+✔ refreshed 688-file allocation and future unknowns retain exhaustive six-way coverage (21.60831ms)
+✔ LPT is deterministic across additions, removals, stale weights and ties (12.172937ms)
+✔ shard arguments reject missing, malformed, duplicate and unsafe values (1.041688ms)
+✔ file discovery is stable across creation order, Unicode, LF/CRLF and platform paths (197.502384ms)
+✔ empty sets, empty shards and non-file matches fail before Node can ignore them (171.597655ms)
+✔ glob-like filenames cannot be silently ignored by Node (117.320963ms)
+✔ real shards execute every file and nested concurrent test exactly once with separate TAP evidence (1167.858923ms)
+✔ 6 CI shards execute every file and nested concurrent test exactly once with separate TAP evidence (1490.021358ms)
+✔ 7 CI shards execute every file and nested concurrent test exactly once with separate TAP evidence (1667.381367ms)
+✔ 12 CI shards execute every file and nested concurrent test exactly once with separate TAP evidence (2861.177558ms)
+✔ real assertion failures remain failed and keep the shard manifest/TAP (265.94381ms)
+Core test child terminated by SIGTERM
+Error: spawn /tmp/missing-core-test-node/node ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn /tmp/missing-core-test-node/node',
+  path: '/tmp/missing-core-test-node/node',
+  spawnargs: []
+}
+✔ Node child nonzero, signal termination and spawn errors cannot become success (112.169321ms)
+✔ interrupting the wrapper forwards cancellation and never accepts a child zero exit (113.1212ms)
+✔ CI isolation has no selection filter and runtime diagnostics expose only explicit fields (1.616517ms)
+✔ semantic boundary matrix is synthetic, distinct and nonempty for every refusal (4.770615ms)
+✔ synthetic complete native automation is atomically rejected by direct, owner and official MCP import entrypoints (2387.491452ms)
+✔ gate opts out by default, enabled missing config fails closed (1.226772ms)
+✔ strict disposable configuration requires distinct named DBs, credentials and verified TLS (1.871163ms)
+✔ permission gate rejects elevated, write-enabled, missing and unknown rights (0.424778ms)
+✔ paired databases must use same host and normalized port (0.55577ms)
+✔ shared real gate SELECT compiles with actual bounded compiler (79.20806ms)
+﹣ opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rejection (0.739052ms) # real service not opted in; no SQL Server acceptance evidence
+ℹ tests 24
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 13764.12492

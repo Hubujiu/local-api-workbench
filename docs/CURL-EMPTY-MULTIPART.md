@@ -13,8 +13,8 @@ line endings can change these bytes. Windows shell syntax is not added here.
 Explicit Content-Type and Content-Length headers are replaced by the generated
 framing headers, including mixed-case input. Empty multipart with Transfer-Encoding
 or Trailer is rejected, including API-key injection. API-key injection into
-Content-Type or Content-Length is also rejected: runtime retains injected key
-spelling and can send conflicting framing headers. Dynamic signing, files
+Content-Type or Content-Length also remains outside this supported export subset;
+the current runtime normalizes header spelling. Dynamic signing, files
 (including disabled file rows), and explicit part-media restrictions remain in
 place. Nonempty multipart behavior is unchanged. Node/Python/Go generation still
 rejects multipart.

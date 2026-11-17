@@ -2791,8 +2791,8 @@ export function toCurl(input, options = {}) {
     !r.form.some((field) => field.enabled !== false);
   let multipartBody;
   if (emptyMultipart) {
-    // Runtime API-key injection retains its key spelling, so differently cased
-    // entity headers can override generated framing at the transport boundary.
+    // Keep API-key framing-header injection outside this export subset until
+    // its interaction with generated multipart framing is explicitly supported.
     if (
       r.auth.type === "apiKey" &&
       r.auth.in !== "query" &&

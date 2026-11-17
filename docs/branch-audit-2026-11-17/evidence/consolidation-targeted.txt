@@ -1,0 +1,49 @@
+✔ empty and all-disabled multipart curl preserves zero-part framing over POSIX shell and JSON serialization (95.263238ms)
+✔ empty multipart rejects ambiguous framing after auth and retains existing export restrictions (2.893753ms)
+✔ load receipts have separate private history storage, survive reopen and journal recovery, and never affect definition fingerprint (32.313963ms)
+✔ legacy projects and restores do not acquire fabricated load receipts (10.562846ms)
+✔ backup restore preserves pending and terminal evidence unchanged under new project identity (0.490755ms)
+✔ invalid records are rejected before publication and during read/recovery/restore (12.845242ms)
+✔ owner and existing MCP project envelopes omit receipts without changing nested user literals (0.397948ms)
+✔ definition selection and native interchange cannot export or forge load receipts (22.964047ms)
+✔ existing MCP project-returning tools do not acquire load receipt visibility (2.369999ms)
+✔ Store restart and full restore preserve receipts without exposing them as project-list metadata (56.00285ms)
+✔ load receipt manifest fails closed for missing evidence, embedded history and unknown versions (31.541501ms)
+✔ legacy unmarked projects do not gain evidence from an orphan history file (27.814458ms)
+✔ split project files isolate API diffs and recover an interrupted transaction (30.04364ms)
+✔ Store migrates legacy files on save while keeping the original backup (32.653524ms)
+✔ external Git-style API edits are read and cannot be overwritten by a stale UI save (49.954468ms)
+✔ offline Git clone reopens a Workbench project and restores an API without importing runtime history (203.285575ms)
+✔ official SDK http: missing required API after a newer commit refuses stale sync, preserves peer and restores without replay (455.993466ms)
+✔ official SDK http: missing required settings/documents after a newer commit refuses stale sync, preserves peer and restores without replay (299.607173ms)
+✔ official SDK stdio: missing required API after a newer commit refuses stale sync, preserves peer and restores without replay (1772.669509ms)
+✔ official SDK stdio: missing required settings/documents after a newer commit refuses stale sync, preserves peer and restores without replay (1560.240545ms)
+✔ generation preserves literal raw bodies and encoded URLs without running a request (5.497164ms)
+✔ Node generated example sends the intended query, headers and literal body to a local fixture (82.050653ms)
+✔ rejects unsupported or unsafe inputs instead of silently changing them (3.157943ms)
+✔ Python standard-library example preserves raw JSON bytes on the wire (58.080102ms)
+✔ HTTP generation resolves the project environment without mutating the project (361.235661ms)
+﹣ Go example sends the intended literal request on the local wire (4.464402ms) # Go toolchain is not available on this host
+✔ Python UTF-8 bodies execute as exact bytes, not JSON or Python source (284.667752ms)
+✔ Python Unicode support retains transport boundaries and source budgets (43.299221ms)
+✔ definition history is a declared required file and round-trips independently of execution history (26.371137ms)
+✔ format 2 reads its declared history strictly and upgrades only when saved (21.820328ms)
+✔ projects without a definition-history marker read without creating a history file (9.69156ms)
+✔ invalid history owner fails before publishing a journal or changing current definition (15.814731ms)
+✔ recovery validates the full history before applying any pending project bytes (7.539442ms)
+✔ valid interrupted journal applies the exact history once without inventing versions (16.272506ms)
+✔ cancellation after temporary journal bytes but before publication preserves all committed files (11.585966ms)
+✔ published history journal remains recoverable after later cancellation, without rollback or replay (20.012018ms)
+✔ post-publication builtin rename barrier injects a real apply failure only after journal is readable (15.068119ms)
+✔ definition history preserves existing environment-before-history partial apply and exact unknown recovery (19.511214ms)
+✔ existing record-ID layout errors retain precedence while history still validates before any journal (17.756267ms)
+✔ Workbench Digest extension only patches defined credential fields, preserving challenge policy (2.655631ms)
+✔ saved repeated Digest steps keep independent credentials through update/reopen and real challenge execution (274.904442ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 9401.960896
