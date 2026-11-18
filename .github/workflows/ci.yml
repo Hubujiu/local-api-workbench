@@ -57,6 +57,9 @@ jobs:
       - run: node tests/ui-smoke.mjs
         env:
           PLAYWRIGHT_BUNDLED: "1"
+      - run: node tests/sqlserver-owner-ui.mjs
+        env:
+          PLAYWRIGHT_BUNDLED: "1"
       - run: node tests/gui-restart-journey.mjs
         env:
           PLAYWRIGHT_BUNDLED: "1"

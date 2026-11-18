@@ -3,9 +3,10 @@
 This change builds on the inert PR #126 contract at
 53acffadde503e934751be14ca9495eb949aeac5 and reviews the previous PR #45
 transport at 29a6ceeff2d32426d7d509a1f19da3767aee83e1. It adds internal,
-unregistered transport preparation only. No HTTP, MCP, CLI, database session,
-remote database dispatch or frontend registers SQL Server. The preparation
-runner has no default driver factory. Importing the modules opens no connection.
+transport preparation. The later [host-gated preview](sqlserver-preview-provider.md)
+connects owner HTTP, temporary sessions and explicit MCP grants through the owned
+process; default activation, CLI files and frontend selection remain closed. The
+low-level runner has no default driver factory. Imports open no connection.
 
 ## Dependency review
 
@@ -47,13 +48,14 @@ real certificate chain, hostname validation, TDS exchange or wire behavior.
 
 Connect/query deadlines force cancellation and socket destruction, but do not
 count as cleanup receipts. The low-level runner still waits for both driver end
-and socket close; it never fabricates either receipt. The unregistered process
+and socket close; it never fabricates either receipt. The internal process
 entrypoint now owns a separate child for each operation. That child's main
 thread supervises a worker containing the fixed Tedious implementation. The
 caller cannot choose a driver, worker URL, module, timeout or environment through
 its request. Credentials travel only in IPC, never argv, environment or logs;
 child stdin/stdout/stderr are ignored and ambient NODE_OPTIONS/credential-provider
-environment is not inherited. No public provider invokes this preparation.
+environment is not inherited. The preview wrapper is the only public entry to
+this supervisor; it cannot bypass the process or inject a driver.
 
 The parent admits at most two operations per module instance and never replaces
 or replays a failed child. It snapshots and compiles before sending fixed config

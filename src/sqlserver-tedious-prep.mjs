@@ -1,5 +1,5 @@
-// Internal WIP transport only. Not registered with HTTP/MCP/CLI or a default
-// runSQLServerReadPreparation factory. Importing/constructing does not open a socket.
+// Internal transport only; public preview goes through the owned supervisor.
+// No default read-preparation factory. Importing/constructing opens no socket.
 import { Socket } from "node:net";
 import { isDeepStrictEqual, types } from "node:util";
 import { Connection, Request, TYPES } from "tedious";
@@ -269,7 +269,8 @@ export function createTediousSQLServerPort(
       });
     },
     query(plan, sink) {
-      if (!connected || stopped || active || queryCount >= 2)
+      // READ_ONLY probe, optional bounded catalog, one data SELECT. No retries.
+      if (!connected || stopped || active || queryCount >= 3)
         return Promise.reject(failure());
       queryCount++;
       return new Promise((resolve, reject) => {
