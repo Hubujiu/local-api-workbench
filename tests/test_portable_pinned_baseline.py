@@ -21,7 +21,9 @@ class BaselineTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # macOS may report /var/folders through a system symlink. Use the
+        # physical test directory for the verifier's positive extraction cases.
+        self.root = Path(self.temp.name).resolve(strict=True)
         files = package()
         self.portable = self.zip('portable.zip', {'LocalAPI/' + k: v for k, v in files.items()})
         self.metadata = self.zip('metadata.zip', {'dist/LocalAPI/build-manifest.json': files['build-manifest.json']})
