@@ -616,3 +616,135 @@ for (const failure of ["throw", "callback", "late-callback"])
       assert.equal(sends, 1);
     },
   );
+
+test("refresh reconciles lost start response without reload or second POST", async () => {
+  let posts = 0;
+  const h = harness(async (path, method) => {
+    if (method === "POST") {
+      posts++;
+      throw Error("response lost after creation");
+    }
+    return receipt();
+  });
+  await assert.rejects(() => h.controller.connect(definition));
+  assert.equal(h.controller.status().phase, "uncertain-start");
+  await h.callbacks["#session-refresh"]();
+  assert.equal(h.controller.status().phase, "active");
+  assert.equal(h.controller.status().canSend, true);
+  assert.equal(h.timers.length, 1);
+  assert.equal(posts, 1);
+});
+
+test("terminal snapshots reconcile lost send or stop without replay or losing delivery warning", async () => {
+  for (const action of ["send", "stop"]) {
+    let terminal = false,
+      posts = 0;
+    const store = storage();
+    const h = harness(
+      async (path, method) => {
+        if (path.endsWith("/" + action)) {
+          posts++;
+          throw Error("lost response");
+        }
+        return receipt(terminal ? "closed" : "open");
+      },
+      { store },
+    );
+    await h.controller.connect(definition);
+    await assert.rejects(() => h.controller[action]("one"));
+    terminal = true;
+    await h.controller.poll();
+    assert.equal(h.controller.status().phase, "closed");
+    assert.equal(h.controller.status().canConnect, true);
+    assert.equal(h.controller.status().canSend, false);
+    assert.equal(posts, 1);
+    assert.equal(h.timers.length, 0);
+    if (action === "send") {
+      assert.equal(h.controller.status().uncertainDelivery, true);
+      const restored = harness(
+        async () => {
+          throw Error("no replay");
+        },
+        { store },
+      );
+      await restored.controller.restore();
+      assert.equal(restored.controller.status().uncertainDelivery, true);
+      assert.equal(restored.controller.status().phase, "closed");
+    }
+  }
+});
+
+test("unknown server start without terminal evidence remains blocked after refresh", async () => {
+  const h = harness(async () => ({ ...receipt(), phase: "unknown" }));
+  await h.controller.connect(definition);
+  await h.controller.poll();
+  assert.equal(h.controller.status().phase, "uncertain-start");
+  assert.equal(h.controller.status().canSend, false);
+  assert.equal(h.controller.status().canConnect, false);
+});
+
+test("expired receipt with live transport cannot unlock a new connection", async () => {
+  const h = harness(async () => receipt("open", "expired"));
+  await assert.rejects(() => h.controller.connect(definition));
+  assert.equal(h.controller.status().canConnect, false);
+  assert.equal(h.controller.status().canSend, false);
+});
+
+test(
+  "real HTTP lost connect response refreshes the one existing TCP connection",
+  { timeout: 15000 },
+  async (t) => {
+    const root = await mkdtemp(tmpdir() + "/protocol-read-reconcile-");
+    const sockets = new Set();
+    let connections = 0,
+      posts = 0;
+    const tcp = net.createServer((socket) => {
+      connections++;
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise((resolve) => tcp.listen(0, "127.0.0.1", resolve));
+    const app = await createApp({ root, port: 0 });
+    t.after(async () => {
+      await app.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => tcp.close(resolve));
+      await rm(root, { recursive: true, force: true });
+    });
+    const call = async (path, method = "GET", body) => {
+      const response = await fetch(app.url + "/api" + path, {
+        method,
+        headers: {
+          "x-local-token": app.token,
+          "content-type": "application/json",
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const { instanceId } = await call("/session");
+    const h = harness(
+      async (path, method, body) => {
+        const result = await call(path, method, body);
+        if (method === "POST") {
+          posts++;
+          throw Error("lost response after server committed connection");
+        }
+        return result;
+      },
+      { instanceId },
+    );
+    await assert.rejects(() =>
+      h.controller.connect({ ...definition, port: tcp.address().port }),
+    );
+    for (let i = 0; i < 100 && !h.controller.status().canSend; i++) {
+      await h.callbacks["#session-refresh"]();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(h.controller.status().phase, "active");
+    assert.equal(h.controller.status().canSend, true);
+    assert.equal(posts, 1);
+    assert.equal(connections, 1);
+  },
+);

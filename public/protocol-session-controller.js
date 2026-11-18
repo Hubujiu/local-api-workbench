@@ -107,8 +107,8 @@ export function createProtocolSessionController({
       value.retry_safe !== false
     )
       throw Error("连接意图回执不匹配");
-    if (value.phase === "cancelled" && live(value.session))
-      throw Error("取消回执仍显示活动会话");
+    if (["cancelled", "expired"].includes(value.phase) && live(value.session))
+      throw Error("终止回执仍显示活动会话");
     if (sessionId && value.sessionId !== sessionId)
       throw Error("会话身份不匹配");
     if (value.phase === "started" && value.session === null)
@@ -151,6 +151,9 @@ export function createProtocolSessionController({
         result.phase === "expired"
           ? "会话证据已过期；旧远端结果不因过期而得到确认"
           : "";
+    } else if (result.session && !live(result.session)) {
+      phase = "closed";
+      warning = "已确认本地会话结束；不会重放此前操作，远端业务结果须另行核对";
     } else if (result.phase === "unknown") {
       phase = phase.startsWith("uncertain-") ? phase : "uncertain-start";
       warning = "连接结果未确认，不会自动重连；可尝试断开此意图";
@@ -182,7 +185,11 @@ export function createProtocolSessionController({
     try {
       const value = await api(endpoint());
       if (epoch !== generation || owned !== intentId) return;
-      accept(value, { preserveUncertainty: phase.startsWith("uncertain-") });
+      accept(value, {
+        preserveUncertainty: ["uncertain-send", "uncertain-stop"].includes(
+          phase,
+        ),
+      });
     } catch (error) {
       if (epoch === generation) {
         warning = error.message + "。读取失败，未自动重连或重发";
