@@ -67,7 +67,7 @@ as real user data. The harness never recursively deletes an installed directory.
 It renames the retained foreign-sentinel directory before reinstall. If anything
 fails, it stops without retrying MSI, uninstalling uncertain state, or guessing at
 cleanup; owned test Electron processes are stopped and errors recorded. An MSI
-120-second timeout leaves service state explicitly uncertain for runner disposal.
+420-second timeout leaves service state explicitly uncertain for runner disposal.
 
 ## Limits / acceptance still outstanding
 
@@ -110,3 +110,22 @@ token: `product-runner-context.json` records the token classification and explic
 sets standard-user acceptance false. Evidence artifacts are retained for three days.
 A hosted successful run would establish only the assertions in this journey, not
 signature, ICE, injected product rollback, or standard-user acceptance.
+
+### First hosted product run and bounded timing correction
+
+Run `44230439530`, native job `134559218749`, failed the old 120-second
+harness deadline during upgrade, not a verified MSI error. Its SHA-256-verified
+evidence artifact `14395148631` (`3d6fca933847b06abc98db9f78fb4c8e11e03b21243e741bf5b9c08070f224bb`)
+shows the first real 18,144-file install completed in about 96 seconds. The
+upgrade's nested old-product removal lasted about 85 seconds, successfully
+finished `RemoveExistingProducts` at 03:45:18Z, and began new `InstallFinalize`
+at 03:45:27Z. The harness expired at 03:45:33Z while file-copy operations continued
+through the captured log's 03:45:35Z endpoint. Upgrade completion was not observed.
+
+Each full-product MSI operation now has a fixed seven-minute wall-clock deadline
+within the existing 25-minute native job limit. It is not extended by log activity.
+The receipt records start/end/elapsed time, operation, exit status or uncertain
+timeout, and log byte count. All registration, payload/profile/hash, GUI and export
+assertions remain unchanged. Timeout still aborts without retry, kill, uninstall,
+or cleanup of uncertain MSI service state. This correction requires a new clean
+hosted run; it does not turn the failed run into acceptance.

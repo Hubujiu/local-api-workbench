@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  MSI_OPERATION_TIMEOUT_MS,
+  waitForMsiExit,
+} from "./helpers/msi-process-deadline.mjs";
 import { createHash } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -141,6 +145,16 @@ async function install(item, label, remove = false) {
   );
   const before = await inventory(profile);
   const command = path.join(process.env.SystemRoot, "System32", "msiexec.exe");
+  const operation = {
+    label,
+    startedAt: new Date().toISOString(),
+    timeoutMs: MSI_OPERATION_TIMEOUT_MS,
+    outcome: "running",
+    profilePreserved: false,
+  };
+  steps.push(operation);
+  const started = performance.now();
+  console.log("MSI_OPERATION_START", JSON.stringify(operation));
   const child = spawn(
     command,
     [
@@ -154,26 +168,34 @@ async function install(item, label, remove = false) {
     ],
     { shell: false, windowsHide: true, stdio: "ignore" },
   );
-  const exited = once(child, "exit");
-  let code, signal;
   try {
-    [code, signal] = await bounded(
-      exited,
-      "MSI timeout: service state uncertain; do not retry or clean up",
-      120000,
+    const [code, signal] = await waitForMsiExit(child, label);
+    Object.assign(operation, { exitCode: code, signal, outcome: "exited" });
+    assert.equal(signal, null);
+    assert.equal(code, 0, "MSI operation failed: " + label);
+    assert.deepEqual(
+      await inventory(profile),
+      before,
+      "Installer must not mutate profile/project files",
     );
+    Object.assign(operation, { outcome: "passed", profilePreserved: true });
   } catch (error) {
-    child.unref();
+    operation.outcome =
+      error.code === "MSI_TIMEOUT" ? "uncertain-timeout" : "failed";
+    operation.error = error.message;
     throw error;
+  } finally {
+    operation.elapsedMs = Math.round(performance.now() - started);
+    operation.finishedAt = new Date().toISOString();
+    try {
+      operation.logBytes = (
+        await stat(path.join(evidence, label + ".log"))
+      ).size;
+    } catch {
+      /* Diagnostic only, never mask the operation outcome. */
+    }
+    console.log("MSI_OPERATION_END", JSON.stringify(operation));
   }
-  assert.equal(signal, null);
-  assert.equal(code, 0, "MSI operation failed: " + label);
-  assert.deepEqual(
-    await inventory(profile),
-    before,
-    "Installer must not mutate profile/project files",
-  );
-  steps.push({ label, exitCode: code, profilePreserved: true });
 }
 async function launch(item, generation, foreign) {
   await packageInventory(item, foreign);
