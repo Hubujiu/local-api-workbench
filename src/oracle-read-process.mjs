@@ -1,6 +1,8 @@
 // Internal and unregistered. Each invocation owns one child and never replays.
 import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import tls from "node:tls";
+import { validateOracleReadTrust } from "./oracle-read-trust.mjs";
 import { compileOracleRead } from "./oracle-read-contract.mjs";
 import { ORACLE_READ_BUDGET as budget } from "./oracle-read-process-policy.mjs";
 const owners = new Set();
@@ -12,7 +14,7 @@ const error = (code, reason = code) =>
 const check = (signal) => {
   if (signal?.aborted) throw error("ORACLE_READ_CANCELLED");
 };
-export async function queryOracleRead(input, { signal } = {}) {
+export async function queryOracleRead(input, { signal, trust } = {}) {
   check(signal);
   if (owners.size >= budget.capacity || [...owners].some((o) => o.quarantined))
     throw error("ORACLE_READ_BUSY");
@@ -22,6 +24,9 @@ export async function queryOracleRead(input, { signal } = {}) {
   let transferred = false;
   try {
     compileOracleRead(input);
+    trust = validateOracleReadTrust(input, trust);
+    if (trust && typeof tls.setDefaultCACertificates !== "function")
+      throw error("ORACLE_READ_TRUST_RUNTIME_UNSUPPORTED");
     input = structuredClone(input);
     check(signal);
     const remaining = budget.total - (performance.now() - started);
@@ -170,7 +175,7 @@ export async function queryOracleRead(input, { signal } = {}) {
       if (signal?.aborted) cancel();
       else {
         try {
-          child.send({ kind: "start", input }, (e) => {
+          child.send({ kind: "start", input, trust }, (e) => {
             if (e) stop("ORACLE_READ_IPC_FAILED");
           });
         } catch {

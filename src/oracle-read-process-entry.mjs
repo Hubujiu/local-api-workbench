@@ -37,7 +37,7 @@ process.on("message", (message) => {
     worker = new Worker(
       new URL("./oracle-read-execution-worker.mjs", import.meta.url),
       {
-        workerData: message.input,
+        workerData: { input: message.input, trust: message.trust },
         execArgv: [],
         resourceLimits: {
           maxOldGenerationSizeMb: 128,
