@@ -1,0 +1,87 @@
+name: Windows installer lifecycle fixture
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-installer-lifecycle.yml"
+      - "packaging/windows-msi/**"
+      - "scripts/*windows*.py"
+      - "scripts/windows_*.py"
+      - "scripts/verify_portable_download.py"
+      - "scripts/materialize_portable_download.py"
+      - "scripts/test_windows_msi_lifecycle.ps1"
+      - "scripts/windows_msi_registration.ps1"
+      - "tests/windows-msi-registration-contract.ps1"
+      - "tests/test_portable*.py"
+      - "docs/WINDOWS-LIFECYCLE-MSI-CANDIDATE.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-fixture:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Prepare disposable Debian host libraries
+        run: apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates git libglib2.0-0t64 libxml2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Materialize pinned Debian authoring tools without system installation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'msitools'
+          root.mkdir()
+          for item in json.loads(pathlib.Path('packaging/windows-msi/debian-toolchain-lock.json').read_text()):
+              path = root / pathlib.Path(item['Filename']).name
+              urllib.request.urlretrieve('https://deb.debian.org/debian/' + item['Filename'], path)
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['SHA256']
+              subprocess.run(['dpkg-deb', '-x', str(path), str(root / 'root')], check=True)
+          PY
+      - name: Compile and inspect two inert fixture versions
+        id: build
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/msitools/root/usr/lib/x86_64-linux-gnu"
+          export LOCALAPI_MSI_TOOLS="$RUNNER_TEMP/msitools/root/usr/bin"
+          python3 -m unittest discover -s tests -p test_portable_lifecycle_msi.py -v
+          python3 scripts/build_windows_lifecycle_fixture.py --output "$RUNNER_TEMP/msi-fixture" --tools "$LOCALAPI_MSI_TOOLS"
+          printf 'fixture_path=%s\n' "$RUNNER_TEMP/msi-fixture" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: inert-msi-fixture
+          path: ${{ steps.build.outputs.fixture_path }}
+          retention-days: 7
+          if-no-files-found: error
+  native-lifecycle:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 15
+    needs: build-fixture
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: inert-msi-fixture
+          path: ${{ runner.temp }}/msi-fixture
+      - name: Check fail-closed registration observation contract
+        shell: pwsh
+        run: ./tests/windows-msi-registration-contract.ps1
+      - name: Native install upgrade rollback and uninstall of inert fixture only
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'msi-fixture'
+          $evidence = Join-Path $env:RUNNER_TEMP 'msi-evidence'
+          ./scripts/test_windows_msi_lifecycle.ps1 -FixtureDirectory $fixture -EvidenceDirectory $evidence -ExecuteInDisposableRunner
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-msi-evidence
+          path: ${{ runner.temp }}/msi-evidence
+          retention-days: 7
+          if-no-files-found: warn
