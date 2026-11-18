@@ -1,3 +1,11 @@
+import {
+  prepareApipostDatabaseExport,
+  readDatabaseExportMode,
+} from "./apipost-database-export.mjs";
+import {
+  exportFrozenTaskSource,
+  verifyFrozenTaskSource,
+} from "./apipost-flow-task-source-export.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { postmanRawBodyPolicy } from "./postman-raw-body.mjs";
 import {
@@ -38,6 +46,12 @@ export function exportApipostDirectory(project, options = {}) {
   const base = { ...project, plans: extended.derivedPlans };
   const document = exportApipost(base, options);
   const projectId = document.project_id;
+  const databaseExport = prepareApipostDatabaseExport(
+    project,
+    readDatabaseExportMode(options),
+    projectId,
+    apipostExportId,
+  );
   const scoped = (kind, value) =>
     apipostExportId(kind, projectId + "\0" + value);
   const timestamp =
@@ -165,11 +179,11 @@ export function exportApipostDirectory(project, options = {}) {
         request.scriptDialect !== "apipost8"
       )
         throw Error("原生目录步骤脚本须为Apipost方言");
-      if (request.importedNativeTaskSource !== undefined)
-        throw Error("原生目录尚不支持数据库混合任务来源往返；请使用项目备份");
+      const taskSource = exportFrozenTaskSource(request, databaseExport);
       const source = request.importedScriptTasks;
       const snapshotRequest = { ...request, beforeScript: "", afterScript: "" };
       delete snapshotRequest.importedScriptTasks;
+      delete snapshotRequest.importedNativeTaskSource;
       // Reuse all HTTP/auth/URL/body rejection guards without confusing inert
       // API source code with the step's actual executable code.
       const snapshotSettings = { ...base.settings };
@@ -201,6 +215,10 @@ export function exportApipostDirectory(project, options = {}) {
         ["before", "pre_tasks"],
         ["after", "post_tasks"],
       ]) {
+        if (taskSource) {
+          api.request[field] = structuredClone(taskSource[phase]);
+          continue;
+        }
         api.request[field] = (source?.[phase] || []).map((task, i) => {
           if (task.origin || task.type !== "customScript")
             throw Error("原生目录尚不支持继承作用域或数据库任务来源");
@@ -443,13 +461,27 @@ export function exportApipostDirectory(project, options = {}) {
   const ordinary = verifyExtendedProtocolExport(project, check);
   if (ordinary.plans.length !== plans.length)
     throw Error("原生目录计划回读不完整");
+  const connectionMap = new Map(
+    [...databaseExport.connections].map(([id, native]) => [
+      id,
+      check.settings?.apipostDatabases?.find(
+        (entry) => entry.sourceId === native.id,
+      )?.id,
+    ]),
+  );
   for (const [i, plan] of ordinary.plans.entries())
-    for (const [j, step] of plan.steps.entries())
+    for (const [j, step] of plan.steps.entries()) {
+      verifyFrozenTaskSource(
+        plans[i].steps[j].request.importedNativeTaskSource,
+        step.request.importedNativeTaskSource,
+        connectionMap,
+      );
       if (
         step.request.beforeScript !== flows[i].steps[j].pre_script ||
         step.request.afterScript !== flows[i].steps[j].post_script
       )
         throw Error("原生目录步骤脚本回读不一致");
+    }
   if (project.settings?.nativeInheritance)
     verifyInheritancePlans(project, check, flows);
   return result;
