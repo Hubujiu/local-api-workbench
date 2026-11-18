@@ -1,14 +1,18 @@
 # 交付状态与验收索引
 
-## 当前集成候选
+## 主线交付入口
 
-开发与逐次验收集中在 [整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280)。主线的实时便携下载及 SHA-256 可由 `node scripts/delivery-index.mjs` 读取。下面的历史检查点保留各自的版本和适用范围。
+运行 `node scripts/delivery-index.mjs` 获取此刻 main 的提交、源码树，以及同一次成功构建的三平台下载地址、外层 ZIP 摘要和到期时间。按索引返回的提交核对包内清单。[下载与校验](PORTABLE-QUICKSTART.md) · [main 构建记录](https://github.com/Hubujiu/local-api-workbench/actions/workflows/ci.yml?query=branch%3Amain)
+
+## 0.1.1 功能与验收
+
+以下记录对应整合 PR 的最终源码树 `47fdb8329893d3cace23af374f116462030cd319`，合入 main 的提交为 `f3254e6aa61d399acc8b4d1485d787a537a75251`。[整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280)
 
 | 范围 | 已实现与实测 | 尚需的证据 |
 | --- | --- | --- |
-| 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可以根据各自的回执重查。Socket.IO 的真实网络用例覆盖创建和发送响应丢失、重复提交拒绝。 | 当前集成提交的三平台界面与桌面运行 |
-| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 的 TLS、精确 DECIMAL、时区偏移和只读限制，以及 Oracle 26ai Free 23.26.4 的 TCPS、精确 NUMBER、撤权和证书拒绝，已在同一提交通过[实库检查](https://github.com/Hubujiu/local-api-workbench/actions/runs/44260395802/job/134652032306)。DM8 开发版已在本机隔离环境通过双向 TLS、精确 DECIMAL、二进制、绑定顺序、撤权及错误 CA 实测。 | 各提交对应的平台、版本和运行记录见整合 PR；复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 |
-| Windows | 已开发每用户 MSI 的安装、升级、失败回滚、卸载、重装、正式产品系列及开始菜单入口。0.1.0 → 0.1.1 的完整候选操作已在托管 Windows 成功。[原始运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/job/134573838947) | 当前候选的普通用户运行、最终签名介质及正式环境实测 |
+| 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可按项目重查回执。Socket.IO 的真实网络测试覆盖创建和发送响应丢失、重复提交拒绝。[最终候选三平台 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268568032) | 各平台的浏览器与便携包重启记录可在对应构建查看。 |
+| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 验证了 TLS、精确 DECIMAL、时区偏移与只读限制，Oracle 26ai Free 23.26.4 验证了 TCPS、精确 NUMBER、撤权和证书拒绝。DM8 开发版在本机隔离环境通过双向 TLS、精确 DECIMAL、二进制、绑定顺序、撤权和错误 CA 实测。[SQL Server 与 Oracle 主线实库](https://github.com/Hubujiu/local-api-workbench/actions/runs/44273438063) | 平台、版本、达梦实测记录和复现命令见[整合 PR](https://github.com/Hubujiu/local-api-workbench/pull/280)及[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 |
+| Windows | 每用户 MSI 已在 Windows Server x64 和 Windows 11 ARM 普通账号（运行 x64 包）完成 0.1.0 首装、升级失败恢复、升级到 0.1.1、卸载和重装，保留原项目。[最终候选的安装记录](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567980) | 最终发布者签名介质和独立普通用户 x64 机器的正式发行验收。 |
 | 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 原厂同版本运行证据及非空原生自动化图的设置、引用与调度语义 |
 
 数据库字段与实库复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。签名和草稿入口见 [Windows 正式发行](WINDOWS-RELEASE.md)。
@@ -18,13 +22,13 @@
 
 更新：2026-11-18。当前单机版基线、免费边界和待闭环验收见[单机功能对照](STANDALONE-PARITY.md)。下列各次历史 CI 仍按原日期记账。这里区分“已实现”“精确候选已验证”和“完整产品已交付”。当前仍在开发，尚未正式发行；不按 PR 数量或测试数量计算完成率。
 
-## 当前整合基线
+### 0.1.0 整合基线
 
-- `main` 精确提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 [#264](https://github.com/Hubujiu/local-api-workbench/pull/264) 合并；[主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功，46 个产物。不能把当前文档 PR 或后续功能 PR 视为继承这一结果。
+- 0.1.0 提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 #264 合并。该版 CI 的 47 项检查全部通过，生成 46 个产物。[0.1.0 主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449)
 - [Windows 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852416)、[macOS 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852333)、[Linux 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852444)及[汇总闸门](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134215707659) 均成功。平台包、外层摘要和到期时间见[单一下载入口](PORTABLE-QUICKSTART.md)。这不是原生 Windows 生命周期、完整产品验收或正式发行。
 - [历史分支归档及清理](https://github.com/Hubujiu/local-api-workbench/actions/runs/44219019196)成功；新功能仍以 `main` 开短期任务分支。仓库端规则与 CI 是不同机制；已核对 `main` 的有效规则和检查绑定，见 [main 保护配置](MAIN-PROTECTION.md)。
 
-## 开发候选的增量验收（未合入 main）
+### 合入 #280 前的增量验收
 
 - [MCP 数据库授权与撤销 #272](https://github.com/Hubujiu/local-api-workbench/pull/272)：
   head `8130184a1289e21bf645a32f47a6e48abfc85dd3` 的 [浏览器 job](https://github.com/Hubujiu/local-api-workbench/actions/runs/44230620400/job/134557143937)

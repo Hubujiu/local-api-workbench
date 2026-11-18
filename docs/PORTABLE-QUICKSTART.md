@@ -2,51 +2,45 @@
 
 本指南适用于开发候选的便携 ZIP，下载后手动校验和解压。每用户 MSI 的升级、卸载、回滚和签名流程见 [Windows 安装与发行](WINDOWS-RELEASE.md)。各平台与版本的实测范围见[交付矩阵](DELIVERY-STATUS.md)。
 
-## 查询当前 main
+## 下载当前 main 的便携包
 
-运行 `node scripts/delivery-index.mjs` 可获取 GitHub 上当前 main 的精确提交、源码树、成功的 CI 运行、三个下载地址、到期时间和 SHA-256。产物过期或 main 尚在构建时，命令会报告具体原因。[Windows 正式发行入口](WINDOWS-RELEASE.md)
+打开 main 的最新提交，记下完整 SHA，再打开同一提交的成功构建。该运行的 Artifacts 区提供三个便携包，下载时 GitHub 可能要求登录。[main 最新提交](https://github.com/Hubujiu/local-api-workbench/commits/main/) · [main 构建记录](https://github.com/Hubujiu/local-api-workbench/actions/workflows/ci.yml?query=branch%3Amain)
 
-## 选择一个精确候选
+| 平台 | 下载项 | 完整展开后的入口 |
+| --- | --- | --- |
+| Windows x64 | `LocalAPI-Windows-portable` | `LocalAPI/LocalAPI.exe` |
+| macOS arm64 | `LocalAPI-macOS-portable` | `LocalAPI/LocalAPI.app` |
+| Linux x64 | `LocalAPI-Linux-portable` | `LocalAPI/LocalAPI` |
 
-不要从不同运行混用可执行文件、manifest 或证据。通过 `main` 的原 Actions 运行下载对应平台 artifact；可能需要 GitHub 登录。过期或缺少产物就停止，不拿旧包替代这一基线。
-
-当前试用基线：`main` 整合提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，[原运行 44130790449](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功。该运行的三平台下载验证与重启 jobs 均通过。这是开发候选，不是 release。
-
-| 平台与便携包下载                                                                                             | 到期（UTC）          | 完整展开后的入口        |
-| ------------------------------------------------------------------------------------------------------------ | -------------------- | ----------------------- |
-| [Windows x64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14350955078) | 2026-11-24T16:56:47Z | `LocalAPI/LocalAPI.exe` |
-| [macOS arm64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14348309920) | 2026-11-24T16:56:25Z | `LocalAPI/LocalAPI.app` |
-| [Linux x64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14349842125)   | 2026-11-24T16:54:50Z | `LocalAPI/LocalAPI`     |
-
-不要误下 metadata 或验证日志包。架构以包内 `LocalAPI/build-manifest.json` 为准。以下为 GitHub 公布的外层 artifact ZIP SHA-256，不是内部压缩包或可执行文件的摘要，也不是发布者签名。本次更新未重新下载这三个 ZIP 计算字节摘要。
-
-- `LocalAPI-Linux-portable`：`sha256:1f60da065d87e9617c2fd2355ee4a69ba28d71187ac1dc2c5b6e6517624b30f0`
-- `LocalAPI-Windows-portable`：`sha256:380da9823403679ff7ead1a24a62f38f4526bc0046e4b0bc73c3326ca829b1bb`
-- `LocalAPI-macOS-portable`：`sha256:252ae1fcde6176be4bfb9a518ee86c751be6b84af53f5da87d9ee0d2271df2b0`
-
-旧候选请查[历史验收记录](DELIVERY-STATUS.md)，不作为当前下载。
+在源码目录运行 `node scripts/delivery-index.mjs` 可直接取得三个下载链接。保存此次输出，后面的校验都使用其中同一个 `head`。索引同时给出源码树、成功的构建编号、各平台外层 ZIP 的 SHA-256 和到期时间。主线正在构建或包已过期时，命令会报告原因。[验收索引](DELIVERY-STATUS.md)
 
 CI 的协议草稿关闭旅程通过真实 Electron 关闭事件和取消结果验证，但 OS 对话框响应由测试适配；不代表人工点击原生安全警告/系统模态已验。便携包仍非安装器，无正式签名/公证保证，完整产品未交付。
 
 ## 核对与展开
 
-Windows 可先核对下载 ZIP（路径换成实际文件）：
+在 Windows PowerShell 中可把索引保留在当前会话，然后核对实际下载的文件。将示例路径换成自己的 ZIP 路径。
 
 ```powershell
-Get-FileHash -Algorithm SHA256 'C:\Downloads\LocalAPI-Windows-portable.zip'
+$index = node scripts/delivery-index.mjs | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $index.head) { throw '未取得主线索引' }
+$windows = $index.downloads | Where-Object platform -eq 'Windows'
+$windows.url
+# 下载这个链接中的 ZIP 后继续
+$actual = (Get-FileHash -Algorithm SHA256 'C:\Downloads\LocalAPI-Windows-portable.zip').Hash
+if ($actual -ine $windows.sha256) { throw 'ZIP 的 SHA-256 与索引不符' }
 ```
 
-输出 Hash 应与上方 Windows SHA-256 完全一致（忽略大小写，不含 `sha256:` 前缀）。不一致就停止。此步骤只核外层 ZIP，不替代以下包内 manifest 校验。
+macOS 可用 `shasum -a 256`，Linux 可用 `sha256sum`，将结果与索引中对应平台的 `sha256` 比对。一致后再核对包内清单。
 
 1. 使用新建的空目录解压外层 artifact ZIP，不覆盖现有程序或项目。Windows 包含 `LocalAPI/`。macOS/Linux 外层包含 `LocalAPI-<平台>.tar.gz` 和 manifest；保留外层结构供校验。
 2. **进阶完整性检查**：从同一精确提交取得源码，安装 Python 3.12（仅此校验工具需要；运行桌面程序不需要 Node/npm/Python）。在源码根目录执行以下命令，将平台换成 `win32`、`darwin` 或 `linux`，路径换成自己的绝对路径：
 
    ```text
-   python scripts/verify_portable_download.py "<外层ZIP解压目录>" --platform <平台> --head f59b11ac3dc96c567db155dd871ef08ba445937c
-   python scripts/materialize_portable_download.py "<外层ZIP解压目录>" "<不存在的新启动目录>" --platform <平台> --head f59b11ac3dc96c567db155dd871ef08ba445937c
+   python scripts/verify_portable_download.py "<外层ZIP解压目录>" --platform <平台> --head <本次索引的完整head>
+   python scripts/materialize_portable_download.py "<外层ZIP解压目录>" "<不存在的新启动目录>" --platform <平台> --head <本次索引的完整head>
    ```
 
-   若系统仅提供 `python3`，将命令中的 `python` 换成 `python3`。校验和展开期间不要修改输入目录。新启动目录的父目录必须已存在、由你控制，且各级路径不能是符号链接或 Windows reparse point。后一个命令在新启动目录中直接放置程序内容，因此入口没有额外的 `LocalAPI/` 前缀。任一校验失败就停止，不跳过、不补文件凑通过。哈希只能证明一致性，不是发布者数字签名。
+   在上面的 PowerShell 会话中，`--head` 可直接传 `$index.head`。若系统仅提供 `python3`，将命令中的 `python` 换成 `python3`。校验和展开期间保持输入目录不变。新启动目录的父目录须已存在、由你控制，各级路径须为实际目录。展开工具将程序直接放在新启动目录中，入口省去上表的 `LocalAPI/` 前缀。任一校验失败就停止。
 
 3. 不使用校验工具时，macOS/Linux 仍需在独立空目录完整解开内部 tar.gz，保留符号链接和可执行权限，不能只复制 `.app` 内某个文件或执行文件。此人工路径不等于执行了上述完整校验。
 4. 若系统阻止未知或未签名应用，停止并核实来源；本指南不提供关闭安全机制、移除隔离属性或绕过系统警告的命令。
