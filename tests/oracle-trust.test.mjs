@@ -47,7 +47,10 @@ const trustFor = (input, root = ca) => ({
 test("operator trust validates bounded exact endpoint and root without invoking accessors", () => {
   const input = oracleInput(),
     trust = trustFor(input);
-  assert.equal(validateOracleReadTrust(input, trust).ca, ca);
+  assert.equal(
+    validateOracleReadTrust(input, trust).ca,
+    rootCertificate.toString(),
+  );
   assert.equal(validateOracleReadTrust(input, undefined), undefined);
   for (const patch of [
     { host: "other.invalid" },
@@ -79,6 +82,18 @@ test("operator trust validates bounded exact endpoint and root without invoking 
     /TRUST_INVALID/,
   );
   assert.equal(invoked, false);
+});
+test("operator trust preserves certificate identity across LF and CRLF PEM inputs", () => {
+  const input = oracleInput();
+  for (const newline of ["\n", "\r\n"]) {
+    const pem = ca.replace(/\r?\n/g, newline);
+    const trust = trustFor(input, pem);
+    const result = validateOracleReadTrust(input, trust);
+    assert.equal(result.ca, rootCertificate.toString());
+    assert.deepEqual(new X509Certificate(result.ca).raw, rootCertificate.raw);
+    assert.equal(trust.ca, pem);
+    assert.deepEqual(result, { ...trust, ca: rootCertificate.toString() });
+  }
 });
 async function probe({
   certificate = valid,
