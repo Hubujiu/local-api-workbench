@@ -12,12 +12,24 @@ if ($Child) {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   $principal = [Security.Principal.WindowsPrincipal]::new($identity)
   if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Standard Windows account required' }
-  $local = [Environment]::GetFolderPath('LocalApplicationData', [Environment+SpecialFolderOption]::Create)
-  $env:LOCALAPPDATA = (& $Node -p "require('node:fs').realpathSync.native(process.argv[1])" $local).Trim()
-  if ($LASTEXITCODE -ne 0 -or -not $env:LOCALAPPDATA) { throw 'Local user profile was not initialized' }
+  # Start-Process loads this account's registry hive but can inherit the runner's
+  # environment. Resolve the fresh profile by its logged-in SID before expanding paths.
+  $profileKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$($identity.User.Value)"
+  $env:USERPROFILE = (Get-ItemProperty -LiteralPath $profileKey -Name ProfileImagePath).ProfileImagePath
+  if (-not [IO.Path]::IsPathFullyQualified($env:USERPROFILE) -or -not [IO.Directory]::Exists($env:USERPROFILE)) { throw 'Standard account profile was not loaded' }
+  $env:USERDOMAIN, $env:USERNAME = $identity.Name -split '\\', 2
+  $env:HOMEDRIVE = [IO.Path]::GetPathRoot($env:USERPROFILE).TrimEnd('\')
+  $env:HOMEPATH = $env:USERPROFILE.Substring($env:HOMEDRIVE.Length)
+  $env:APPDATA = Join-Path $env:USERPROFILE 'AppData\Roaming'
+  $local = Join-Path $env:USERPROFILE 'AppData\Local'
+  [IO.Directory]::CreateDirectory($env:APPDATA) | Out-Null
+  [IO.Directory]::CreateDirectory($local) | Out-Null
+  $resolvedLocal = & $Node -p "require('node:fs').realpathSync.native(process.argv[1])" $local
+  if ($LASTEXITCODE -ne 0 -or -not $resolvedLocal) { throw 'Local user profile could not be verified' }
+  $env:LOCALAPPDATA = $resolvedLocal.Trim()
   $env:TEMP = $Evidence
   $env:TMP = $Evidence
-  $context = @{ standardUserAcceptance=$false; isAdministrator=$false; accountSid=$identity.User.Value; os=[Environment]::OSVersion.VersionString; node=(& $Node -v) }
+  $context = @{ standardUserAcceptance=$false; isAdministrator=$false; accountSid=$identity.User.Value; userProfile=$env:USERPROFILE; localAppData=$env:LOCALAPPDATA; os=[Environment]::OSVersion.VersionString; node=(& $Node -v) }
   $record = Join-Path $Evidence 'standard-context.json'
   $context | ConvertTo-Json | Set-Content -LiteralPath $record
   $arguments = @('tests/desktop-installed-product-journey.mjs','--plan',$Plan,'--expected-plan-sha256',$PlanSha,'--execute-in-disposable-windows')
