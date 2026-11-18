@@ -1,3 +1,4 @@
+import { GrpcCreationIntents } from "./grpc-creation-intents.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
@@ -176,6 +177,7 @@ export async function createApp({
 
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
+  const grpcCreationIntents = new GrpcCreationIntents(grpcSessions);
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
@@ -1130,9 +1132,12 @@ export async function createApp({
           // never start/send execution.
           const evidenceOnly =
             parts[4] &&
-            ((action === "protocol-sessions" &&
-              ((req.method === "GET" && !parts[5]) ||
-                (req.method === "POST" && parts[5] === "stop"))) ||
+            ((action === "grpc-creation-intents" &&
+              req.method === "GET" &&
+              parts.length === 6) ||
+              (action === "protocol-sessions" &&
+                ((req.method === "GET" && !parts[5]) ||
+                  (req.method === "POST" && parts[5] === "stop"))) ||
               (action === "grpc-sessions" &&
                 ((req.method === "GET" && !parts[5]) ||
                   (req.method === "POST" &&
@@ -1807,7 +1812,34 @@ export async function createApp({
               }
             }
           }
+          if (action === "grpc-creation-intents") {
+            res.setHeader("Cache-Control", "no-store");
+            if (req.method === "GET" && parts.length === 6)
+              return json(
+                res,
+                200,
+                grpcCreationIntents.read(p.id, parts[5], parts[4]),
+              );
+            if (req.method !== "POST" || parts.length !== 4)
+              throw Error("gRPC创建意图路径无效");
+            const input = await body(req);
+            if (
+              !input ||
+              Object.keys(input).some((key) => key !== "definitionId")
+            )
+              throw Error("gRPC创建意图仅接受定义ID");
+            const definition = (p.settings.grpcDefinitions || []).find(
+              (item) => item.id === input.definitionId,
+            );
+            if (!definition) throw Error("gRPC定义不存在或不属于此项目");
+            return json(
+              res,
+              200,
+              grpcCreationIntents.acquire(p.id, definition),
+            );
+          }
           if (action === "grpc-sessions") {
+            res.setHeader("Cache-Control", "no-store");
             const sessionId = parts[4],
               operation = parts[5];
             if (parts.length > 6) throw Error("gRPC会话路径无效");
@@ -1821,9 +1853,13 @@ export async function createApp({
               if (
                 Object.keys(input).some(
                   (key) =>
-                    !["definitionId", "message", "metadata", "tls"].includes(
-                      key,
-                    ),
+                    ![
+                      "definitionId",
+                      "message",
+                      "metadata",
+                      "tls",
+                      "creationIntent",
+                    ].includes(key),
                 )
               )
                 throw Error("gRPC会话仅接受已保存定义及临时消息/凭据");
@@ -1839,7 +1875,14 @@ export async function createApp({
               return json(
                 res,
                 200,
-                grpcSessions.start(p.id, definition, options),
+                input.creationIntent
+                  ? grpcCreationIntents.start(
+                      p.id,
+                      definition,
+                      options,
+                      input.creationIntent,
+                    )
+                  : grpcSessions.start(p.id, definition, options),
               );
             }
             // Check ownership even for an invalid operation; IDs never cross projects.
