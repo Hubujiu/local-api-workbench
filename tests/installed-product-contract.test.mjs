@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
 import {
+  readFile,
   mkdtemp,
   mkdir,
   writeFile,
@@ -12,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  assertTargetPathBudget,
   compareMsiVersions,
   containedPath,
   inventory,
@@ -170,4 +172,74 @@ test("runner refuses non-Windows before dependency loading or installation", asy
   });
   assert.notEqual(missingOptIn.status, 0);
   assert.match(missingOptIn.stderr, /Use --plan/);
+});
+
+test("Win32 file budget uses UTF-16 259/260, including surrogate pairs", () => {
+  const target = "C:\\Users\\synthetic\\AppData\\Local\\LocalAPI-Q-" + family;
+  const check = (name) =>
+    assertTargetPathBudget(target, [
+      { fileHashes: { [name]: "a" }, directories: [] },
+    ]);
+  for (const suffix of ["x", "😀"]) {
+    const name = "a".repeat(259 - target.length - 1 - suffix.length) + suffix;
+    check(name);
+    assert.throws(() => check(name + "x"), /path budget/);
+  }
+  for (const name of [
+    "../escape",
+    "x/../escape",
+    "C:/escape",
+    "x\\escape",
+    "x//empty",
+    "x/",
+    "x.",
+  ])
+    assert.throws(() => check(name), /Unsafe/);
+  const dir = "a".repeat(247 - target.length - 1);
+  assertTargetPathBudget(target, [
+    { fileHashes: { file: "a" }, directories: [dir] },
+  ]);
+  assert.throws(
+    () =>
+      assertTargetPathBudget(target, [
+        { fileHashes: { file: "a" }, directories: [dir + "x"] },
+      ]),
+    /path budget/,
+  );
+});
+test("observed 260-character fixture regression is rejected before MSI", () => {
+  const local = "C:\\Users\\localapi17c41b29db\\AppData\\Local\\";
+  const relative =
+    "resources/app/node_modules/@azure/msal-browser/types/custom_auth/core/auth_flow/v2/result/AuthMethodVerificationSubmitChallengeResultV2.d.ts.map";
+  const contracts = [{ fileHashes: { [relative]: "a" }, directories: [] }];
+  const legacy = local + "LocalAPI-Lifecycle-Candidate-Fixture-" + family;
+  assert.equal((legacy + "\\" + relative).length, 260);
+  assert.throws(() => assertTargetPathBudget(legacy, contracts), /path budget/);
+  assertTargetPathBudget(local + "LocalAPI-Q-" + family, contracts);
+});
+
+test("budget checks both pinned versions, empty directories and runner ordering", async () => {
+  const target = "C:\\Users\\synthetic\\AppData\\Local\\LocalAPI-Q-" + family;
+  const good = { fileHashes: { "ok.txt": "a" }, directories: [] };
+  const bad = {
+    fileHashes: { ["a".repeat(260 - target.length - 1)]: "a" },
+    directories: [],
+  };
+  assert.throws(
+    () => assertTargetPathBudget(target, [good, bad]),
+    /path budget/,
+  );
+  assert.throws(
+    () => assertTargetPathBudget(target, [{ fileHashes: good.fileHashes }]),
+    /assertion|false/i,
+  );
+  const source = await readFile(
+    new URL("./desktop-installed-product-journey.mjs", import.meta.url),
+    "utf8",
+  );
+  const checked = source.search(/assertTargetPathBudget\(\s*target,/);
+  assert.ok(checked > source.indexOf("const plan = await loadProductPlan"));
+  assert.ok(checked < source.indexOf("const root = await mkdtemp"));
+  assert.ok(source.includes('"Existing installation refused"'));
+  assert.ok(source.includes('"Existing retained directory refused"'));
 });

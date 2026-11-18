@@ -238,3 +238,50 @@ export function assertProductRollbackLog(text) {
     "Rollback activity evidence required",
   );
 }
+
+// Legacy Win32 budget, measured in UTF-16 code units (JS string length).
+// Do not enable OS long paths or depend on an elevated/shorter user profile.
+export function assertTargetPathBudget(target, contracts) {
+  assert.match(target, /^[A-Za-z]:\\/);
+  assert.ok(!target.includes("/"));
+  const check = (name, directory = false) => {
+    const parts = name.split("/");
+    assert.ok(
+      parts.every(
+        (p) =>
+          p.length &&
+          p !== "." &&
+          p !== ".." &&
+          !/[\\:\x00-\x1f<>"|?*]/.test(p) &&
+          !/[. ]$/.test(p),
+      ),
+      "Unsafe inventory path",
+    );
+    const destination = target + "\\" + parts.join("\\");
+    assert.ok(
+      destination.length <= (directory ? 247 : 259),
+      "MSI target exceeds conservative Win32 UTF-16 path budget",
+    );
+    for (let i = 1; i < parts.length; i++)
+      assert.ok(
+        (target + "\\" + parts.slice(0, i).join("\\")).length <= 247,
+        "MSI target directory exceeds conservative Win32 path budget",
+      );
+  };
+  assert.ok(
+    (target + ".retained-foreign").length <= 247,
+    "Fixture root path too long",
+  );
+  for (const contract of contracts) {
+    assert.ok(contract.fileHashes && Object.keys(contract.fileHashes).length);
+    for (const name of Object.keys(contract.fileHashes)) check(name);
+    assert.ok(Array.isArray(contract.directories));
+    for (const name of contract.directories) check(name, true);
+  }
+  check("foreign-product-journey-sentinel.txt");
+  assert.ok(
+    (target + ".retained-foreign\\foreign-product-journey-sentinel.txt")
+      .length <= 259,
+    "Retained sentinel path exceeds Win32 budget",
+  );
+}
