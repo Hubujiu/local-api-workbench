@@ -536,9 +536,14 @@ export class SocketIOSessions {
     if (!pending || pending.deadline <= monotonicNow())
       throw socketIOError("Socket.IO确认标识不存在或已过期");
     const args = jsonData(input.args, true);
-    this.record(s, "ack-sent", "ack", input.args, { ackId: input.ackId });
+    this.record(s, "ack-sent", "ack", input.args, {
+      ackId: input.ackId,
+      localSubmission: "unknown",
+    });
+    const receipt = s.events.at(-1);
     s.pending.delete(input.ackId);
     pending.callback(...args);
+    receipt.localSubmission = "submitted";
     return { acknowledged: true };
   }
   stop(projectId, id) {

@@ -560,3 +560,73 @@ test("incoming ack local receipt quota fails closed without dropping evidence", 
   assert.equal(f.requests.length, 0);
   assert.equal(f.state.incomingAckReceipts.length, 1000);
 });
+test("only exact submitted incoming ack receipt resolves its unknown marker", async () => {
+  for (const mode of [
+    "submitted",
+    "unknown",
+    "missing",
+    "different-ack",
+    "different-session",
+    "stop-problem",
+    "unknown-start",
+    "storage-failure",
+  ]) {
+    const value = snap();
+    value.events =
+      mode === "missing"
+        ? []
+        : [
+            {
+              direction: "ack-sent",
+              ackId: mode === "different-ack" ? "other" : "a",
+              localSubmission: mode === "unknown" ? "unknown" : "submitted",
+            },
+          ];
+    const f = fixture({
+      get: async () => value,
+      persistEvidence: () => mode !== "storage-failure",
+    });
+    f.state.session = snap();
+    f.state.pendingAckRecovery = {
+      sessionId: mode === "different-session" ? "other" : "s",
+      ackId: "a",
+    };
+    f.state.uncertainSessions = ["s"];
+    if (mode === "stop-problem") f.state.stopProblems = ["s"];
+    if (mode === "unknown-start") f.state.uncertainStart = true;
+    await f.controller.poll();
+    assert.equal(
+      f.state.uncertainSessions.length,
+      mode === "submitted" ? 0 : 1,
+      mode,
+    );
+  }
+});
+test("a new outbound send discards stale ack proof before network so it cannot clear unknown send", async () => {
+  const value = snap();
+  value.events = [
+    { direction: "ack-sent", ackId: "old", localSubmission: "submitted" },
+  ];
+  const f = fixture({
+    post: async () => {
+      throw Error("lost send");
+    },
+    get: async () => value,
+  });
+  f.state.session = snap();
+  f.state.pendingAckRecovery = { sessionId: "s", ackId: "old" };
+  f.state.event = "new-event";
+  await f.controller.send();
+  assert.equal(f.state.pendingAckRecovery, null);
+  await f.controller.poll();
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+});
+test("ack correlation is persisted before dispatch and persistence refusal sends nothing", async () => {
+  const f = fixture({ persistEvidence: () => false });
+  f.state.session = snap();
+  f.state.session.events = [{ direction: "received", ackId: "a" }];
+  f.state.incomingAckId = "a";
+  await f.controller.acknowledge();
+  assert.equal(f.requests.length, 0);
+  assert.deepEqual(f.state.uncertainSessions, ["s"]);
+});

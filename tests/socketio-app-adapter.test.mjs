@@ -336,3 +336,34 @@ test("actual ack late result cannot mutate departed view and stop still dispatch
   assert.equal(r.state.result, null);
   assert.deepEqual(r.state.stopProblems, ["session-id"]);
 });
+test("actual adapter persists ack identity only and restores lost response correlation", async () => {
+  const { runtime: r, calls, storage } = harness();
+  r.state.session = structuredClone(snapshot);
+  r.state.session.events = [{ direction: "received", ackId: "original-ack" }];
+  r.state.incomingAckId = "original-ack";
+  r.state.incomingAckArgs = '["PRIVATE_ACK_BODY"]';
+  const pending = r.controller.acknowledge();
+  assert.equal(calls.length, 1);
+  assert.deepEqual(r.restore().pendingAckRecovery, {
+    sessionId: "session-id",
+    ackId: "original-ack",
+  });
+  assert.doesNotMatch([...storage.values()].join(), /PRIVATE_ACK_BODY/);
+  calls[0].reject(Error("lost response"));
+  await pending;
+  const read = r.controller.poll();
+  calls[1].resolve({
+    ...snapshot,
+    events: [
+      {
+        direction: "ack-sent",
+        ackId: "original-ack",
+        localSubmission: "submitted",
+      },
+    ],
+  });
+  await read;
+  assert.deepEqual(r.state.uncertainSessions, []);
+  assert.equal(r.restore().pendingAckRecovery, null);
+  assert.equal(calls.length, 2);
+});
