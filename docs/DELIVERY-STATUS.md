@@ -1,14 +1,20 @@
 # 交付状态与验收索引
 
-更新：2026-11-17。当前单机版基线、免费边界和待闭环验收见[单机功能对照](STANDALONE-PARITY.md)。下列各次历史 CI 仍按原日期记账。这里区分“已实现”“精确候选已验证”和“完整产品已交付”。当前仍在开发，尚未正式发行；不按 PR 数量或测试数量计算完成率。
+更新：2026-11-18。当前单机版基线、免费边界和待闭环验收见[单机功能对照](STANDALONE-PARITY.md)。下列各次历史 CI 仍按原日期记账。这里区分“已实现”“精确候选已验证”和“完整产品已交付”。当前仍在开发，尚未正式发行；不按 PR 数量或测试数量计算完成率。
 
-## 精确已验证候选
+## 当前整合基线
 
-| 候选                                                                                       | 精确 head                                  | 原 CI                                                                                            | 已核结果                                                                                                                                                          |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [#247](https://github.com/Hubujiu/local-api-workbench/pull/247) 手动执行历史刷新及延迟 GET | `794cff388991bcb4535aebc3810e8bac118ddaca` | [43674731764](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764) attempt 1 | 46/46 成功；真实浏览器 GUI 先开再 MCP、延迟 GET 往返标签/无隐藏采用；三平台下载后正常及崩溃重启通过。当前便携下载、摘要与到期见[试用指南](PORTABLE-QUICKSTART.md) |
-| [#235](https://github.com/Hubujiu/local-api-workbench/pull/235) 协议历史筛选               | `ad2182e9582421d3dfa38548ef80720f1e4c9bb7` | [43425542187](https://github.com/Hubujiu/local-api-workbench/actions/runs/43425542187)           | 46/46 jobs 成功；真实筛选浏览器旅程、历史详情/显式导出及 Socket.IO 旅程，三平台 Electron 正常/崩溃重启及下载归档通过                                              |
-| [#234](https://github.com/Hubujiu/local-api-workbench/pull/234) 单条已保存记录显式导出     | `2dffce796b8233b64d29a5a0d5ea0ff0d6305c5a` | [43415860765](https://github.com/Hubujiu/local-api-workbench/actions/runs/43415860765)           | 独立的 46/46 jobs 成功；真实导出浏览器、三平台重启与下载归档通过                                                                                                  |
+- `main` 精确提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 [#264](https://github.com/Hubujiu/local-api-workbench/pull/264) 合并；[主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功，46 个产物。不能把当前文档 PR 或后续功能 PR 视为继承这一结果。
+- [Windows 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852416)、[macOS 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852333)、[Linux 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852444)及[汇总闸门](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134215707659) 均成功。平台包、外层摘要和到期时间见[单一下载入口](PORTABLE-QUICKSTART.md)。这不是原生 Windows 生命周期、完整产品验收或正式发行。
+- [历史分支归档及清理](https://github.com/Hubujiu/local-api-workbench/actions/runs/44219019196)成功；新功能仍以 `main` 开短期任务分支。仓库端规则与 CI 是不同机制，见 [main 保护配置](MAIN-PROTECTION.md)。
+
+## 历史精确已验证候选
+
+| 候选                                                                                       | 精确 head                                  | 原 CI                                                                                            | 已核结果                                                                                                                    |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| [#247](https://github.com/Hubujiu/local-api-workbench/pull/247) 手动执行历史刷新及延迟 GET | `794cff388991bcb4535aebc3810e8bac118ddaca` | [43674731764](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764) attempt 1 | 46/46 成功；真实浏览器 GUI 先开再 MCP、延迟 GET 往返标签/无隐藏采用；三平台下载后正常及崩溃重启通过。已由当前 main 基线替代 |
+| [#235](https://github.com/Hubujiu/local-api-workbench/pull/235) 协议历史筛选               | `ad2182e9582421d3dfa38548ef80720f1e4c9bb7` | [43425542187](https://github.com/Hubujiu/local-api-workbench/actions/runs/43425542187)           | 46/46 jobs 成功；真实筛选浏览器旅程、历史详情/显式导出及 Socket.IO 旅程，三平台 Electron 正常/崩溃重启及下载归档通过        |
+| [#234](https://github.com/Hubujiu/local-api-workbench/pull/234) 单条已保存记录显式导出     | `2dffce796b8233b64d29a5a0d5ea0ff0d6305c5a` | [43415860765](https://github.com/Hubujiu/local-api-workbench/actions/runs/43415860765)           | 独立的 46/46 jobs 成功；真实导出浏览器、三平台重启与下载归档通过                                                            |
 
 #247 tree：`f3eff2505633cc2afb013834f70ceddd057e6280`；CI checkout merge commit `a71e019b9c399fa2b9c11a2ee9fd47178e17ebc0` 经 API 核对与 head 同树。browser job `132692289722` 有 2 次 `PLAN_HISTORY_REFRESH_HELD_BROWSER_PASS` 及成功/失败停止两条 `PLAN_HISTORY_REFRESH_BROWSER_PASS`。三平台实际下载旅程 jobs 为 Windows `132693804325`、Linux `132693804346`、macOS `132693804383`，均有正常/崩溃重启 marker。元数据与日志已于 2026-11-15 读取；这不是本机浏览器或完整本地全量通过声明。本次 docs-only 提交不继承该 head 的 CI 状态。
 
@@ -25,7 +31,7 @@
 | 范围                                   | 验收口径                                                                                                                                              | 当前边界                                                                                        |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Apipost 单机版基础对照                 | [官方单机帮助](https://offline.apipost.net/help/)列出常用 API 工作流，区分其未保留的测试角色自动化/在线协作，并明确新增 MCP。不能因此推断没有 CLI/MCP | 按用户已约定基础功能逐项对照，网页描述不是本产品验收证据                                        |
-| Workbench 原生 Agent 执行计划          | 用户明确要求，现行[单机 AI 执行计划](https://offline.apipost.net/help/executions/)也列入对照，独立验收正式 MCP、可视化计划、执行证据和人可读界面                                                                            | 不因单机对照产品的范围而取消；现有局部旅程仍须精确整体验收                                      |
+| Workbench 原生 Agent 执行计划          | 用户明确要求，现行[单机 AI 执行计划](https://offline.apipost.net/help/executions/)也列入对照，独立验收正式 MCP、可视化计划、执行证据和人可读界面      | 不因单机对照产品的范围而取消；现有局部旅程仍须精确整体验收                                      |
 | 联网版非空 automated_testings 格式迁移 | [联网版定价页](https://www.apipost.cn/pricing/)把自动化列在个人版能力中；该页面不能用于推导单机版合同或免费格式兼容许可                               | 当前额外格式迁移仍不支持；已有结构样本但未闭合执行/往返语义，继续按明确用户范围推进而非冒称兼容 |
 
 总览和联网定价页面于 2026-11-15 只读核对；2026-11-17 再核实单机 MCP 2.0 与 AI 执行计划官方专页。单机产品定位、联网服务定价、Workbench 用户需求是三个不同来源，不互相覆盖。
@@ -37,7 +43,7 @@
 | 已加载协议历史筛选        | 已实现且 #235 CI 验证。协议、原始状态/会话状态、完整保存 JSON 字面查询作 AND 筛选；只筛已加载记录，非服务端全历史搜索，不发送业务请求 | #235 原运行中的 `PROTOCOL_HISTORY_FILTER_BROWSER_PASS`                                                       |
 | 历史详情与单条导出        | 已实现且上述候选 CI 验证。稳定 ID 定位，先查看再显式确认；取消不下载、确认下载一条原始记录，不重发业务；不承诺脱敏                    | `PROTOCOL_HISTORY_BROWSER_PASS` / `PROTOCOL_HISTORY_EXPORT_BROWSER_PASS`；#234 与 #235 分别核验              |
 | 协议会话                  | 已有 gRPC unary/流式、Socket.IO 等限定界面旅程；不把一个协议的通过扩大为所有扩展/客户端兼容                                           | 对应功能 ADR、精确 PR 与浏览器日志；Socket.IO 入站 ack 只证明本地处理及 fixture 观察，不代表远端业务恰好一次 |
-| 桌面便携包                | 当前 #247 三平台真实下载后正常/崩溃重启通过；#235 历史证据保留。无安装器/正式签名保证，未验证人工 OS 模态按钮                         | 同一原运行的平台 jobs、构建 head、旅程日志及归档证据；上传成功本身不等于包内容验收                           |
+| 桌面便携包                | 当前 main 三平台下载验证 jobs 通过；#247 / #235 历史证据保留。无安装器/正式签名保证，未验证人工 OS 模态按钮                           | 同一原运行的平台 jobs、构建 head、旅程日志及归档证据；上传成功本身不等于包内容验收                           |
 | 完整 GUI / 原版全功能对照 | 待完整验收，局部真实旅程不能替代全流程；不是已交付                                                                                    | 按下方矩阵补齐场景、边界与精确证据                                                                           |
 
 协议未知结果不得自动重连或重发；“单实例单 intent 至多一次启动尝试”仅指 #226 支持的会话入口，不泛化到 Socket.IO/gRPC 或其他协议入口；该有限保证也不是远端业务恰好一次。临时凭据不因界面能力而自动持久化；历史与导出可能含敏感内容，分享前须检查。
