@@ -21,6 +21,20 @@
   SHA-256 `3d6fca933847b06abc98db9f78fb4c8e11e03b21243e741bf5b9c08070f224bb`：
   到期后 Windows Installer 服务仍记录文件复制，未确认升级终态；此轮不重试、不拆除证据，升级、卸载、回滚及普通用户均不能据此记为通过。
 
+- **正常安装路径通过**：[#277 head](https://github.com/Hubujiu/local-api-workbench/commit/05f23d5b509c501b928c222971765b820e36da26)
+  的 [新 Windows job](https://github.com/Hubujiu/local-api-workbench/actions/runs/44233231100/job/134572045298)
+  安装、0.1.0 → 0.1.1 实际升级、卸载、重装和最终卸载均通过；启动实际已安装应用并保留原项目和历史。
+  升级耗时 263,108 毫秒。[证据归档 14397653574](https://github.com/Hubujiu/local-api-workbench/actions/runs/44233231100/artifacts/14397653574)
+  已下载核对，ZIP SHA-256 为 `03e5810694a59c4c4762bb280606844a3345ca4f1d0e515e700849ebc6c38b85`。
+- **实际产品故障回滚路径通过**：[#279 head](https://github.com/Hubujiu/local-api-workbench/commit/77c4e29e304c4c11084e0f98812ebf23ddd2f724)
+  的 [Windows job](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/job/134573838947)
+  在移除旧包后注入故障（预期 1603），确认旧安装恢复，0.1.0 GUI 可重新启动，原项目和历史仍在；
+  随后正常升级、卸载与重装也通过。[证据归档 14398017186](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/artifacts/14398017186)
+  已下载核对，ZIP SHA-256 为 `8d3f70205911a4ce0926f434948246cd3d9a45ecaa30cb93619bbd95b161cbf8`。
+- 两次均使用 **GitHub 托管 Windows 管理员账号**。每用户安装范围不等于 Windows 标准用户验收；
+  结果未覆盖标准用户、正式签名、ICE 验证或物理设备。测试版本不是更新源，也未发布正式下载。托管
+  环境限制见 [GitHub 文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#administrative-privileges)。
+
 ## 历史精确已验证候选
 
 | 候选                                                                                       | 精确 head                                  | 原 CI                                                                                            | 已核结果                                                                                                                    |
