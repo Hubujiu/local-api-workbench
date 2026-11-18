@@ -20,8 +20,13 @@ export class GrpcOwnerOperations {
     return entry;
   }
   snapshot(projectId, sessionId) {
-    const session = this.sessions.snapshot(projectId, sessionId);
-    const e = this.entry(projectId, sessionId);
+    return this.withReceipts(
+      projectId,
+      this.sessions.snapshot(projectId, sessionId),
+    );
+  }
+  withReceipts(projectId, session) {
+    const e = this.entry(projectId, session.id);
     return {
       ...session,
       ownerOperations: {

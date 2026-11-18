@@ -130,7 +130,7 @@ test(
     assert.equal(messages, 0);
     let active = restored;
     let controller = createGrpcStreamController({ ...options, state: active });
-    await controller.poll();
+    assert.equal(active.session.ownerOperations.sequence, 0);
     active.message = JSON.stringify({ text: "one local fixture message" });
     await controller.send();
     assert.ok(active.uncertainSessions.includes(active.sessionId));

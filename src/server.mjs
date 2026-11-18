@@ -1816,12 +1816,26 @@ export async function createApp({
           }
           if (action === "grpc-creation-intents") {
             res.setHeader("Cache-Control", "no-store");
-            if (req.method === "GET" && parts.length === 6)
+            if (req.method === "GET" && parts.length === 6) {
+              const receipt = grpcCreationIntents.read(
+                p.id,
+                parts[5],
+                parts[4],
+              );
               return json(
                 res,
                 200,
-                grpcCreationIntents.read(p.id, parts[5], parts[4]),
+                receipt.session
+                  ? {
+                      ...receipt,
+                      session: grpcOwnerOperations.withReceipts(
+                        p.id,
+                        receipt.session,
+                      ),
+                    }
+                  : receipt,
               );
+            }
             if (req.method !== "POST" || parts.length !== 4)
               throw Error("gRPC创建意图路径无效");
             const input = await body(req);
@@ -1878,17 +1892,18 @@ export async function createApp({
                   .filter((key) => Object.hasOwn(input, key))
                   .map((key) => [key, input[key]]),
               );
+              const opened = input.creationIntent
+                ? grpcCreationIntents.start(
+                    p.id,
+                    definition,
+                    options,
+                    input.creationIntent,
+                  )
+                : grpcSessions.start(p.id, definition, options);
               return json(
                 res,
                 200,
-                input.creationIntent
-                  ? grpcCreationIntents.start(
-                      p.id,
-                      definition,
-                      options,
-                      input.creationIntent,
-                    )
-                  : grpcSessions.start(p.id, definition, options),
+                grpcOwnerOperations.withReceipts(p.id, opened),
               );
             }
             // Check ownership even for an invalid operation; IDs never cross projects.
@@ -1912,7 +1927,10 @@ export async function createApp({
                       input.message,
                       input.ownerOperation,
                     )
-                  : grpcSessions.send(p.id, sessionId, input.message),
+                  : grpcOwnerOperations.withReceipts(
+                      p.id,
+                      grpcSessions.send(p.id, sessionId, input.message),
+                    ),
               );
             }
             if (
@@ -1933,17 +1951,20 @@ export async function createApp({
               );
             if (Object.keys(input).length)
               throw Error("gRPC会话终止操作不接受额外字段");
-            if (operation === "half-close")
-              return json(res, 200, grpcSessions.halfClose(p.id, sessionId));
-            if (operation === "cancel")
-              return json(res, 200, await grpcSessions.cancel(p.id, sessionId));
-            if (operation === "reconcile")
-              return json(
-                res,
-                200,
-                await grpcSessions.reconcile(p.id, sessionId),
-              );
-            throw Error("未知gRPC会话操作");
+            const result =
+              operation === "half-close"
+                ? grpcSessions.halfClose(p.id, sessionId)
+                : operation === "cancel"
+                  ? await grpcSessions.cancel(p.id, sessionId)
+                  : operation === "reconcile"
+                    ? await grpcSessions.reconcile(p.id, sessionId)
+                    : null;
+            if (!result) throw Error("未知gRPC会话操作");
+            return json(
+              res,
+              200,
+              grpcOwnerOperations.withReceipts(p.id, result),
+            );
           }
           if (action === "grpc-runs" && req.method === "GET")
             return json(
