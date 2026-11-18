@@ -548,6 +548,12 @@ export function createMCP({
       ...projectArg,
       format: projectFormat,
       modelNameMode: { type: "string", enum: ["namespaced", "preserve"] },
+      automationMode: {
+        type: "string",
+        enum: ["desktop-replay"],
+        description:
+          "Apipost 8.2.7 桌面回放，固定轮数使用循环，冻结副本展开为独立 HTTP 步骤",
+      },
     },
     ["projectId", "format"],
   );

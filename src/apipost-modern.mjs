@@ -20,6 +20,7 @@ import {
 } from "../public/apipost-function-template.js";
 import { mergeApipostFunctions } from "./apipost-functions.mjs";
 import { prepareModernSamples } from "./apipost-samples.mjs";
+import { readAutomationDefinitions } from "./apipost-automation.mjs";
 import { mergeApipostDescriptions } from "./apipost-descriptions.mjs";
 import {
   prepareApipostAttributes,
@@ -254,7 +255,7 @@ export function parseApipostScriptTasks(value, phase, internalOrigins = false) {
 export function importModernApipost(
   source,
   project,
-  { sync = false, modelNameMode } = {},
+  { sync = false, modelNameMode, withAutomation = false } = {},
 ) {
   if (sync) throw Error("Apipost现代JSON暂不支持同步覆盖，请使用完整项目导入");
   if (!isModernApipost(source)) throw Error("Apipost现代JSON结构不完整");
@@ -273,7 +274,8 @@ export function importModernApipost(
     )
       reject(value, key);
   const resource = apipostResourceFactory(source.project_id);
-  for (const name of ["automated_testings"]) reject(source[name], name);
+  if (!withAutomation) reject(source.automated_testings, "automated_testings");
+  const automation = readAutomationDefinitions(source);
   const models = prepareApipostModels(source.models, resource, source.name, {
     modelNameMode,
   });
@@ -1114,6 +1116,7 @@ export function importModernApipost(
   validateModelFolders({ dictionary, modelFolders });
   return {
     ...legacy,
+    automation,
     nativeProtocolPlans: nativeProtocols.plans,
     samples: sampleCases,
     caseFolders: samples.folders,

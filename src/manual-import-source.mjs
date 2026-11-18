@@ -563,6 +563,25 @@ export function buildManualImportSourceGraph(input, context) {
     project.plans.forEach((plan, index) => {
       identity(plans, "plan", ["plans", index, "id"]);
       ref(plans, "environment", ["plans", index, "environmentId"]);
+      if (plan.apipostAutomation)
+        for (const [
+          eventIndex,
+          event,
+        ] of plan.apipostAutomation.events.entries())
+          if (event.requestId !== null)
+            ref(
+              plans,
+              "api",
+              [
+                "plans",
+                index,
+                "apipostAutomation",
+                "events",
+                eventIndex,
+                "requestId",
+              ],
+              { optional: false },
+            );
       if (!Array.isArray(plan.steps)) fail("计划步骤数组");
       walk(plan.steps, ["plans", index, "steps"], new Set());
       plan.createdAt = instant;
@@ -1023,8 +1042,6 @@ export async function prepareManualImportSource(
     fail("声明格式与文档不一致");
   const payload =
     apipost && document.status === "success" ? document.data : document;
-  if (populated(payload.automated_testings))
-    fail("不支持非空automated_testings");
   const modern =
     apipost &&
     (object(payload.global) ||
@@ -1034,6 +1051,18 @@ export async function prepareManualImportSource(
   // Modern unknown test_cases remains the converter's fail-closed decision. Do
   // not reinterpret it as samples. Other converters would ignore the field.
   if (!modern && populated(payload.test_cases)) fail("未知非空test_cases");
+  if (
+    populated(payload.automated_testings) &&
+    !(
+      apipost &&
+      typeof payload.project_id === "string" &&
+      typeof payload.name === "string" &&
+      object(payload.global) &&
+      Array.isArray(payload.models) &&
+      Array.isArray(payload.samples)
+    )
+  )
+    fail("未知非空automated_testings");
   if (apipost) {
     if (document !== payload) exact(document, ["status", "message", "data"]);
     exact(

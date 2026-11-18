@@ -3475,15 +3475,22 @@ function bind() {
     ),
   );
   on("#export", "click", () => {
+    const automationOptions = project.plans?.some(
+      (plan) => plan.apipostAutomation,
+    )
+      ? '<option value="apipost">Apipost JSON（保留自动化引用与副本）</option><option value="desktop-replay">Apipost 8.2.7 桌面回放（固定次数循环，副本展开为独立 HTTP 步骤）</option>'
+      : "";
     modal(
       "导出项目",
-      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
+      `<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option>${automationOptions}</select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>`,
       async () => {
         await save();
         const format = $("#export-format").value;
-        const data = await api(
-          "/projects/" + project.id + "/export?format=" + format,
-        );
+        const query = new URLSearchParams({
+          format: format === "desktop-replay" ? "apipost" : format,
+        });
+        if (format === "desktop-replay") query.set("automationMode", format);
+        const data = await api("/projects/" + project.id + "/export?" + query);
         download(project.name + "." + format + ".json", data);
       },
       "导出",

@@ -98,6 +98,11 @@ import {
 } from "./imported-native-task-source.mjs";
 import { prepareDirectoryPlans } from "./apipost-execution-plans.mjs";
 import {
+  importAutomationPlans,
+  readAutomationMetadata,
+  scheduleAutomationRequests,
+} from "./apipost-automation.mjs";
+import {
   mergeDirectoryArtifacts,
   normalizeDirectoryArtifacts,
 } from "./apipost-directory-artifacts.mjs";
@@ -251,7 +256,11 @@ import { importJwtConfig } from "../public/jwt-auth-model.js";
 import { validateModelFolders } from "../public/model-folders.js";
 import { normalizeScriptDialect } from "../public/script-dialect.js";
 import { scriptStages } from "../public/shared-scripts.js";
-import { isModernApipost, importModernApipost } from "./apipost-modern.mjs";
+import {
+  isModernApipost,
+  importModernApipost,
+  apipostResourceFactory,
+} from "./apipost-modern.mjs";
 import { builtinVariable } from "./builtin-variables.mjs";
 import { apipostDocument, importApipost } from "./apipost-import.mjs";
 import { validateAuth } from "../public/auth-model.js";
@@ -660,6 +669,9 @@ export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
   validatePlanProtocolScripts(plan.steps);
   validatePlanGrpcScripts(plan.steps);
   const snapshot = {
+    ...(plan.apipostAutomation === undefined
+      ? {}
+      : { apipostAutomation: readAutomationMetadata(plan.apipostAutomation) }),
     ...(importedNativeFlowSource === undefined
       ? {}
       : { importedNativeFlowSource }),
@@ -944,10 +956,13 @@ export async function runPlan(
     failureStop,
     scopeCommitStopped = false;
   const conditionResults = [];
-  const occurrences = planOccurrences(snapshot.steps, {
-    controls: true,
-    runtimeRows: allowRuntimeRows,
-  });
+  const occurrences = scheduleAutomationRequests(
+    snapshot,
+    planOccurrences(snapshot.steps, {
+      controls: true,
+      runtimeRows: allowRuntimeRows,
+    }),
+  );
   const runtimeFrames = new Map();
   let runtimeRowsFailure;
   if (!occurrences.some((occurrence) => !occurrence.wait)) {
@@ -3262,7 +3277,11 @@ export function importIntoProject(
     : null;
   const source = apipostDocument(original);
   const modern = isModernApipost(source)
-    ? importModernApipost(source, project, { sync, modelNameMode })
+    ? importModernApipost(source, project, {
+        sync,
+        modelNameMode,
+        withAutomation: true,
+      })
     : null;
   if (modern?.nativeProtocolPlans?.length) {
     const plans = structuredClone(project.plans || []);
@@ -3338,9 +3357,35 @@ export function importIntoProject(
     }
   }
   const importedRequestIds =
-    modern?.samples?.length || modern?.caseFolders?.length
+    modern?.samples?.length ||
+    modern?.caseFolders?.length ||
+    modern?.automation?.length
       ? new Map(requests.map((request) => [request.sourceOperationId, id()]))
       : null;
+  if (modern?.automation?.length) {
+    const plans = [...(modern.metadata.plans || project.plans || [])];
+    const existing = new Set(plans.map((p) => p.id));
+    const additions = importAutomationPlans(
+      source,
+      modern.automation,
+      requests,
+      importedRequestIds,
+      apipostResourceFactory(source.project_id),
+      {
+        snapshotPlan,
+        convertCopies: (doc) =>
+          importModernApipost(doc, {}, { modelNameMode }).requests.map(
+            normalizeRequest,
+          ),
+      },
+    );
+    if (
+      plans.length + additions.length > 1000 ||
+      additions.some((p) => existing.has(p.id))
+    )
+      throw Error("Apipost automated_testings 用例标识重复或超过计划上限");
+    modern.metadata.plans = [...plans, ...additions];
+  }
   const sampleFunctions = modern?.metadata?.settings?.functions || [];
   if (
     (modern?.samples?.length || 0) *

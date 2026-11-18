@@ -268,7 +268,10 @@ export function buildManualImportPlan(
       node.kind === "plan-bundle" &&
       node.references.some(
         (ref) =>
-          ref.kind === "api" && !ref.key && ref.path.at(-1) === "liveRequestId",
+          ref.kind === "api" &&
+          !ref.key &&
+          ref.path.at(-1) === "liveRequestId" &&
+          !graph.project.plans?.[ref.path[1]]?.apipostAutomation,
       )
     ) {
       block(node, "live_plan_import_unsupported");

@@ -109,6 +109,10 @@ export function versionPlan(previous, input, source = "manual", project) {
   const next = snapshotPlan(
     {
       ...nextInput,
+      ...(previous?.apipostAutomation !== undefined &&
+      input.apipostAutomation === undefined
+        ? { apipostAutomation: previous.apipostAutomation }
+        : {}),
       ...(selectedPolicy ? { failurePolicy: selectedPolicy } : {}),
       ...(importedNativeFlowSource === undefined
         ? {}
@@ -138,6 +142,7 @@ export function versionPlan(previous, input, source = "manual", project) {
       "functions",
       "steps",
       "importedNativeFlowSource",
+      "apipostAutomation",
     ].every(
       (field) => JSON.stringify(next[field]) === JSON.stringify(old[field]),
     )

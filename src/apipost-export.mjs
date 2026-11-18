@@ -44,6 +44,10 @@ import { prepareApipostModelExport } from "./apipost-model-export.mjs";
 import { exportApipostDocuments } from "./apipost-document-export.mjs";
 import { exportApipostMock } from "./apipost-mock-export.mjs";
 import { exportApipostResponses } from "./apipost-response-export.mjs";
+import {
+  cloudAutomationIds,
+  exportAutomationPlans,
+} from "./apipost-automation.mjs";
 import { createHash } from "node:crypto";
 import { normalizeRequest, importIntoProject } from "./core.mjs";
 import { variableRows } from "../public/variable-definitions.js";
@@ -225,12 +229,7 @@ export function exportApipost(project, options = {}) {
   )
     throw Error("原生继承图含已回收接口；请恢复后导出或使用完整项目备份");
   // This is a definition interchange, not a backup, execution archive or grant.
-  for (const key of [
-    "plans",
-    "apiResourceTrash",
-    "parameterDictionary",
-    "models",
-  ])
+  for (const key of ["apiResourceTrash", "parameterDictionary", "models"])
     unsupported(project[key], key);
   // false is meaningful here: absence enables Mock serving. Native definitions
   // have no verified project-wide equivalent, so never silently reopen it.
@@ -296,21 +295,25 @@ export function exportApipost(project, options = {}) {
       }
     }
   const codes = exportApipostCodes(project.settings?.statusCodes);
-  const projectId = apipostExportId("project", project.id);
+  const cloudAutomation = project.plans?.some((plan) => plan.apipostAutomation);
+  const idForExport = cloudAutomation
+    ? cloudAutomationIds(project)
+    : apipostExportId;
+  const projectId = idForExport("project", project.id);
   const descriptions = exportApipostDescriptions(
     project.settings?.parameterDescriptions,
-    { projectId, id: apipostExportId },
+    { projectId, id: idForExport },
   );
   const databaseExport = prepareApipostDatabaseExport(
     project,
     readDatabaseExportMode(options),
     projectId,
-    apipostExportId,
+    idForExport,
   );
   const attributeExport = prepareApipostAttributeExport(project, projectId);
   const modelExport = prepareApipostModelExport(
     project,
-    (kind, value) => apipostExportId(kind, projectId + "\0" + value),
+    (kind, value) => idForExport(kind, projectId + "\0" + value),
     options,
   );
   if ((project.servers || []).length > 1)
@@ -326,7 +329,7 @@ export function exportApipost(project, options = {}) {
   if (!servers.length)
     servers.push({ server_id: "1", name: "默认服务", sort: 1000 });
   const marks = (project.settings?.statuses || []).map((s) => ({
-    mark_id: apipostExportId("m", s.id),
+    mark_id: idForExport("m", s.id),
     name: s.name,
     color: s.color,
     project_id: projectId,
@@ -336,7 +339,7 @@ export function exportApipost(project, options = {}) {
   const markIds = new Set((project.settings?.statuses || []).map((s) => s.id));
   const protocolExport = prepareProtocolExport(project, {
     projectId,
-    id: apipostExportId,
+    id: idForExport,
   });
   const apis = [],
     folders = new Map(protocolExport.folders);
@@ -354,7 +357,7 @@ export function exportApipost(project, options = {}) {
     )
       throw Error("Apipost导出目录路径无效");
     const parent_id = folder(parts.slice(0, -1).join("/"));
-    const target_id = apipostExportId("f", name);
+    const target_id = idForExport("f", name);
     folders.set(name, target_id);
     apis.push({
       target_id,
@@ -460,7 +463,7 @@ export function exportApipost(project, options = {}) {
       (suffix ? "?" + suffix : "");
 
     return {
-      target_id: apipostExportId("a", r.id),
+      target_id: idForExport("a", r.id),
       project_id: projectId,
       parent_id: folder(r.folder),
       target_type: "api",
@@ -474,7 +477,7 @@ export function exportApipost(project, options = {}) {
       status: 1,
       attribute_info: attributeExport.values(input.attributes),
       ...(r.serviceId ? { server_id: serverIds.get(r.serviceId) } : {}),
-      ...(r.statusId ? { mark_id: apipostExportId("m", r.statusId) } : {}),
+      ...(r.statusId ? { mark_id: idForExport("m", r.statusId) } : {}),
       request: {
         auth: auth(r.auth),
         header: { parameter: rows(r.headers, "header") },
@@ -500,10 +503,11 @@ export function exportApipost(project, options = {}) {
       },
       response: exportApipostResponses(r, {
         rewriteSchema: modelExport.rewrite,
+        cloudAutomation,
       }),
       ...exportApipostMock(r.nativeMock, {
         projectId,
-        targetId: apipostExportId("a", r.id),
+        targetId: idForExport("a", r.id),
       }),
     };
   }
@@ -511,19 +515,19 @@ export function exportApipost(project, options = {}) {
     apis.push(requestNode(input));
   const samples = prepareSampleExport(project, {
     projectId,
-    id: apipostExportId,
+    id: idForExport,
     encodeRequest: requestNode,
   });
   apis.push(
     ...exportApipostDocuments(project, {
       projectId,
-      id: apipostExportId,
+      id: idForExport,
       folder,
     }),
   );
   apis.push(
     ...protocolExport.emit(folder),
-    ...extended.emit(projectId, apipostExportId),
+    ...extended.emit(projectId, idForExport),
   );
   if (apis.length > 5000) throw Error("Apipost最多5000条资源");
   const document = {
@@ -532,7 +536,7 @@ export function exportApipost(project, options = {}) {
     intro: project.description || "",
     global: {
       envs: project.environments.map((env, index) => ({
-        env_id: apipostExportId("e", env.id),
+        env_id: idForExport("e", env.id),
         name: env.name,
         is_private: -1,
         sort: (index + 1) * 1000,
@@ -576,14 +580,19 @@ export function exportApipost(project, options = {}) {
     automated_testings: [],
   };
   applyNativeInheritanceExport(project, document, {
-    id: apipostExportId,
+    id: idForExport,
     auth,
     rows,
+  });
+  document.automated_testings = exportAutomationPlans(project, document, {
+    id: idForExport,
+    encodeRequest: requestNode,
+    automationMode: options.automationMode,
   });
   verifyNativeInheritanceExport(
     project,
     document,
-    (id) => apipostExportId("a", id),
+    (id) => idForExport("a", id),
     options,
   );
   if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024)
@@ -607,7 +616,7 @@ export function exportApipost(project, options = {}) {
     };
     importIntoProject(check, JSON.parse(JSON.stringify(document)), options);
     verifyApipostAttributeExport(project, check, attributeExport, (id) =>
-      apipostExportId("a", id),
+      idForExport("a", id),
     );
     verifyApipostCodeDefinitions(
       project.settings?.statusCodes,
@@ -617,7 +626,7 @@ export function exportApipost(project, options = {}) {
       project.settings?.parameterDescriptions,
       check.settings?.parameterDescriptions,
     );
-    verifySampleDefinitions(project, check, (id) => apipostExportId("a", id));
+    verifySampleDefinitions(project, check, (id) => idForExport("a", id));
     verifyExtendedProtocolExport(originalProject, check);
   }
   return document;

@@ -64,6 +64,18 @@ export function prepareNativeMock(node, { projectId, headers, rewriteSchema }) {
   )
     throw Error("原版Mock条件树无效");
   const examples = new Map();
+  // Cloud 8.2.7 writes an unconfigured condition tree for an ordinary HTTP API.
+  // Its response definitions are imported separately below the project converter.
+  if (
+    !node.nativeMockConfig &&
+    tree.list.length === 0 &&
+    tree.none_math_expect_id === "" &&
+    tree.none_math_example === null &&
+    config.mock_server_enable === 1 &&
+    config.mock_ip_white_list_enable === -1 &&
+    config.mock_show_target_id === 0
+  )
+    return undefined;
   for (const example of node.response?.example || []) {
     if (
       !safe(String(example.example_id)) ||

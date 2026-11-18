@@ -1,50 +1,40 @@
-# 非空原生自动化：可复现语义验收边界
+# Apipost 8.2.7 联网版自动化迁移
 
-基线 #251 tree `7a79f59f1e339604c000551015958ad6d90fbef1`。
-本轮不增加兼容导入、不运行原厂软件、不下载专有内容、不执行导入请求。
-原生非空 automated_testings 仍明确不支持，不能称为只差实测。
+Workbench 能将联网版项目 JSON 中的手动 HTTP 测试用例导入执行计划。支持按序执行的实时引用、冻结副本、独立 HTTP 步骤、禁用步骤、固定轮数、逐请求间隔和一个固定次数的根循环。每个用例保留执行环境和遇错策略。
 
-## 证据来源及限度
+## 2026-11-18 同版本对照
 
-本次只复用 [既有静态证据记录](NATIVE-AUTOMATION-STATIC-GAPS.md)，未重新获取原始材料：
+在 Windows x64 的 Apipost 8.2.7 协作版中新建独立项目。三个 GET 接口仅访问本机回环地址。用例按“第二个接口实时引用、第一个接口实时引用、第一个接口的冻结副本、已禁用接口”排列。对照使用同一个桌面客户端执行和导出。安装介质 SHA-256 为 `4f52f43ef0402f119d1ac2f8e9c6760177768e275ef7f074cc297e05cc4b08dd`，桌面原始项目出口为 `be912df319994cda91b1054f0514ecd85964631efc371b8504911237dff4d303`。[官方下载安装入口](https://www.apipost.cn/download.html) · [8.2.7 安装介质记录](https://github.com/microsoft/winget-pkgs/blob/master/manifests/a/Apipost/ApiPost/8.2.7/Apipost.ApiPost.installer.yaml)
 
-- 公开第三方 [transcription-service 固定提交](https://github.com/dabiaoge252/transcription-service/tree/0a1fa719078f3177f0ea961aa8116abb9a751616)，
-  blob `6eb1e120cfc2cba9b6cd1a40f8a999f439357018`，SHA256
-  `4fe6820c21865b7ef8351191131e59e3ca1faf46e124014f941b2b3c6b470f07`。
-  已记录事实是 1 项 automation、7 个根 API 事件；数组和 sort 同序、live 引用、apiData=null。
-  不是官方或同版本原厂执行证明；仓库无许可证，不复制原始文件、身份、URL、凭据或实现。
-- 已记录的 [EchoAPI 适配器固定提交](https://github.com/EchoAPI-Team/echoapi-for-vscode/tree/bc8ecb58271ac7a8b0289fad2f0455745b4562f1)
-  只提供文件夹运行配置与根 API 事件的静态调用链，不提供 saved automated_testings 图转换证明。
-  本轮不复制其代码或内嵌 runtime。
+| 操作 | 回环服务收到的请求 |
+| --- | --- |
+| 首次手动执行一轮 | `/second → /first → /first` |
+| 将第一个接口地址改为 `/first-new`，再手动执行两轮 | `/second → /first-new → /first`，重复两次，共 6 次，失败 0 次 |
+| Workbench 导入原厂出口、执行，再导出到第二个项目重导入执行 | 两次运行分别得到相同的 6 次请求。导入和预览期间请求数为 0 |
+| 8.2.7 自己重导原文件 | 外层执行次数重置为 1；实时引用和冻结副本均指向修改后的当前接口 |
+| 8.2.7 导入带原生固定次数循环和独立 HTTP 步骤的回放文件，再执行 | `/second → /first-new → /first`，重复两次，失败 0 次。原厂报告记为 1 次外层执行、6 个成功请求 |
+| 8.2.7 平铺用例中设置外层两轮和 800 毫秒间隔 | 连续五个到达时间差为 1008、1006、1005、1012、1002 毫秒。零间隔对照约为 200 毫秒。间隔作用于连续已启用的请求，跨轮边界也生效 |
 
-## 哪些证据才足以启用下一步
+实时步骤的缓存 `data.url` 在修改源接口后仍可保留旧地址。运行时按 `target_id` 解析当前请求。冻结步骤按 `data.apiData` 还原，后续源接口修改不会覆盖它。
 
-| 边界                         | 现有事实不能推出                         | 未来必须取得的可核验结果                                          |
-| ---------------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
-| 数组与 sort 冲突、缺省、重复 | 任一排序优先级或默认值                   | 同版本输入、确切有序执行轨迹、保存后再导出结果；每种冲突独立结论  |
-| parent 缺失、成环、嵌套      | 自动升根、修图或父先子后规则             | 原厂拒绝或规范化行为，以及合法层级的 ordered children 装配链      |
-| live API、apiData、父层依赖  | live/snapshot 优先级或补依赖方式         | 具有明确来源的配置变化前后执行请求快照、引用解析和往返证据        |
-| settings/env/data            | execute_count 等保存值等于 runner option | 保存→加载→runner 参数转换，默认与覆盖优先级、失败停止及变量作用域 |
-| manual + 非空 frequency      | 调度可忽略或必须执行                     | 官方同版本调度含义；禁止把导入解释成启动任务                      |
-| disabled 非空图              | 安全丢弃它就等于兼容                     | 原厂保存/导出保留与执行排除语义；未证前不能静默丢数据             |
+手动用例导出的 `scenario` 为 `manual`，同时带有默认的五小时频率预设。原厂把定时任务列在独立页面，启用需要本地发送代理。Workbench 导入、预览、保存与重启均不注册后台任务。活动定时任务、非默认频率、测试数据集、用例间依赖、任意嵌套控制图、顺序歧义及悬空引用会在写入前报错。[原厂测试用例编辑说明](https://wiki.apipost.cn/docs/test/edit/)
 
-不是索取笼统的运行许可，也不是要求复制未知专有格式。仅在合法可用参考环境和明确测试范围内补证；
-在此之前，Workbench 自有 canonical repeat/if 只能声称自己的语义。
+## 操作入口
 
-## 当前可执行门禁
+1. 在目标项目选择「导入」，打开 Apipost 项目 JSON，或在手动导入中预览并应用选择。进入执行计划，确认环境后运行。
+2. 在「导出项目」的整项目格式中选择「Apipost JSON（保留自动化引用与副本）」，可供 Workbench 重导入，保留原始引用关系、冻结请求与两轮配置。
+3. 要交回官方 8.2.7 执行，选择「Apipost 8.2.7 桌面回放」。实时引用仍随接口变化。冻结副本展开为独立 HTTP 步骤，失去回到原接口的编辑关联。外层轮数写入原生固定次数循环。该选项仅接收已验证可展开的根级副本和零逐请求间隔。
+
+Owner 整项目出口使用 `GET /api/projects/{id}/export?format=apipost`。追加 `automationMode=desktop-replay` 可生成原厂回放定义。已授权的 MCP `export_project` 接受同名选项，`import_project` 支持相同项目 JSON。自动化支持范围限定于此处列出的结构和版本。
+
+## 复现
+
+`node scripts/observe-apipost-automation.mjs <单独的输出目录>` 启动仅监听回环的记录器，写出一份含三个接口的 Postman 集合。导入原工具后按上表顺序新建手动用例，保存、执行、修改第一个接口，再执行和导出。接收器仅记录上述测试路径、HTTP 方法和到达时间。
+
+仓库中的 [脱敏原厂出口](../tests/fixtures/apipost-cloud-827.json) 保留步骤、引用关系、运行配置和响应定义。项目标识、环境地址与监听端口已替换。回归使用临时项目和随机回环端口，并核对真实网络到达顺序、逐请求延时和两个出口的重导入。
 
 ```sh
-node --test tests/native-automation-boundaries.test.mjs tests/native-automation-rejection.test.mjs
+node --test tests/apipost-cloud-automation.test.mjs tests/native-automation-boundaries.test.mjs tests/native-automation-rejection.test.mjs
 ```
 
-原创合成 fixture 保留 1 项/7 事件的结构规模，11 个独立变体覆盖上述未知处。
-这些变体刻意不是“有效原厂出口”，也不定义它们应该怎样执行。
-每个变体沿已有 direct、owner import/preview/apply、正式 MCP import/preview/apply 入口：
-
-- 明确拒绝；失败预览不发可用 token；已有空 automation 预览 token 不能用于替换后的来源。
-- 输入对象、两个项目对象、完整持久化文件字节和重开 Store 结果不变。
-- 真实 loopback 业务请求计数不增加，不把拒绝当自动修复、忽略或重放许可。
-
-本轮没有更改泛化错误合同。给公开预览增加“可迁移项/数量”会涉及 owner/MCP 结构与敏感内容展示合同，
-不能绕过当前整块拒绝，或让用户误以为已经支持自动化。
-测试通过仅证明上述失败关闭边界，不代表原生执行/往返兼容已通过。
+更早的第三方静态样本只用于生成拒绝变体。缺失或冲突的排序、未知父节点、定时与沙盒变体继续测试失败后的持久化状态及零网络副作用。[历史静态分析](NATIVE-AUTOMATION-STATIC-GAPS.md)
