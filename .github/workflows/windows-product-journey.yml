@@ -12,6 +12,11 @@ on:
       - "public/**"
       - "package*.json"
   workflow_dispatch:
+    inputs:
+      exercise_rollback:
+        description: "Also create and execute the isolated TEST-ONLY full-product rollback fault"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -77,6 +82,7 @@ jobs:
       actions: read
     outputs:
       plan_sha: ${{ steps.bundle.outputs.plan_sha }}
+      rollback_enabled: ${{ steps.bundle.outputs.rollback_enabled }}
     steps:
       - run: apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates git libglib2.0-0t64 libxml2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -108,6 +114,7 @@ jobs:
         id: bundle
         shell: bash
         env:
+          EXERCISE_ROLLBACK: ${{ (inputs.exercise_rollback || contains(github.event.pull_request.labels.*.name, 'run-windows-product-rollback')) && 'true' || 'false' }}
           NEW_HEAD: ${{ needs.build-product.outputs.head }}
           NEW_MANIFEST_SHA: ${{ needs.build-product.outputs.manifest_sha }}
         run: |
@@ -123,7 +130,7 @@ jobs:
   native-product:
     needs: [build-product, author-pair]
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ needs.author-pair.outputs.rollback_enabled == 'true' && 55 || 40 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -141,13 +148,17 @@ jobs:
         shell: pwsh
         env:
           PLAN_SHA: ${{ needs.author-pair.outputs.plan_sha }}
+          EXERCISE_ROLLBACK: ${{ needs.author-pair.outputs.rollback_enabled }}
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
         run: |
           $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
           @{ runner='GitHub-hosted windows-latest'; isAdministrator=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); standardUserAcceptance=$false; imageVersion=$env:ImageVersion } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'product-runner-context.json')
           $plan = Join-Path $env:RUNNER_TEMP 'product-bundle/product-plan.json'
-          node tests/desktop-installed-product-journey.mjs --plan $plan --expected-plan-sha256 $env:PLAN_SHA --execute-in-disposable-windows
+          $journeyArgs = @('tests/desktop-installed-product-journey.mjs', '--plan', $plan, '--expected-plan-sha256', $env:PLAN_SHA, '--execute-in-disposable-windows')
+          if ($env:EXERCISE_ROLLBACK -eq 'true') { $journeyArgs += '--exercise-product-rollback' }
+          elseif ($env:EXERCISE_ROLLBACK -ne 'false') { throw 'Invalid rollback opt-in output' }
+          node @journeyArgs
           if ($LASTEXITCODE -ne 0) { throw 'Native installed product journey failed; inspect retained evidence' }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

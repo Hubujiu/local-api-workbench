@@ -77,8 +77,8 @@ single current 0.1.0 package cannot establish a genuine version upgrade. No host
 product job is wired yet. Code signing, ICE validation, standard-user-token
 acceptance, locked-file/concurrent installer races, data migration compatibility,
 and product-level injected failure recovery remain separate gates. This harness
-never sets signature/ICE success. Native rollback is covered only by the separate
-inert transaction harness until a product-specific failure scenario is implemented.
+never sets signature/ICE success. Native rollback acceptance remains proven only for the separate inert transaction
+harness until the optional full-product rollback scenario below passes natively.
 
 ## Hosted opt-in derivative
 
@@ -123,9 +123,63 @@ at 03:45:27Z. The harness expired at 03:45:33Z while file-copy operations contin
 through the captured log's 03:45:35Z endpoint. Upgrade completion was not observed.
 
 Each full-product MSI operation now has a fixed seven-minute wall-clock deadline
-within the existing 25-minute native job limit. It is not extended by log activity.
+within a bounded native job limit. It is not extended by log activity.
 The receipt records start/end/elapsed time, operation, exit status or uncertain
 timeout, and log byte count. All registration, payload/profile/hash, GUI and export
 assertions remain unchanged. Timeout still aborts without retry, kill, uninstall,
 or cleanup of uncertain MSI service state. This correction requires a new clean
 hosted run; it does not turn the failed run into acceptance.
+
+## Optional real-product rollback probe (not yet natively verified)
+
+The default MSI generator and two normal installers do not contain a failure action.
+Old plans and default product runs remain compatible and do not execute this probe.
+To opt in on a same-repository PR, keep `run-windows-product-journey` and additionally
+apply `run-windows-product-rollback`. For manual dispatch choose `exercise_rollback`.
+The Linux job then creates a separately named **TEST-ONLY-ROLLBACK-FAILURE.msi** under
+`faults/`; only the native runner's explicit `--exercise-product-rollback` argument
+permits its execution. A requested rollback test with no pinned fault fixture fails
+before installation. Do not distribute the test-only MSI as a product installer.
+
+For a locally prepared trusted bundle, the equivalent authoring command is:
+
+```sh
+python scripts/prepare_product_rollback_fixture.py \
+  --bundle /verified/product-bundle --build /verified/new-build \
+  --msi-sha256 NEW_MSI_SHA256 --receipt-sha256 NEW_BUILD_INPUT_SHA256 \
+  --tools /verified/msitools/bin --create-test-only-rollback-fixture
+```
+
+Use its **new** plan SHA-256 when launching the runner with the extra rollback flag.
+This operation augments the test bundle only. It requires the new MSI/build receipt
+already be pinned in that bundle and requires an isolated UUIDv4 installation family.
+It rechecks the full extracted product inventory and source receipt, clones the MSI,
+adds precisely one conditional Type-19 error action at sequence 4001 after native
+`RemoveExistingProducts` and `InstallFiles` scheduling, and assigns a different
+PackageCode so the failing MSI cannot stand in for the normal new package's cache
+identity. The condition is `OLDERPRODUCTS`; the source MSI has no custom actions.
+Every other table is compared with the source, every cabinet stream must be
+byte-identical, other summary properties must be unchanged, and the original normal
+MSI must still have its independent digest. The resulting clone and verification
+receipt receive separate SHA-256 pins in the optional `rollbackFixture` plan field.
+
+At the existing UI restart boundary, the old real app already contains synthetic
+projects and execution history. The runner saves their complete exports, cleanly
+closes the app, attempts the failing upgrade, and requires exit 1603 plus ordered
+log evidence: successful old-product removal, the specific intentional action
+failing, then actual `Executing op: RollbackInfo` (not merely `DisableRollback=0`).
+It then requires old-version registration, new-version absence, every old program
+file restored, foreign sentinel retained, and byte-identical synthetic profile.
+It launches the **old actual Electron executable** again, checks its live identity,
+reads complete exports/history, compares them with the pre-failure snapshot, records
+a screenshot, and prohibits traffic replay. Only after those checks and clean old-app
+exit does it attempt the ordinary successful upgrade with the untouched new MSI.
+
+A test timeout or unexpected error stops the sequence without guessing at cleanup
+or proceeding to the success path. The seven-minute per-MSI bound remains unchanged. The native job allows 40 minutes
+for five ordinary MSI operations or 55 minutes with the sixth rollback operation,
+leaving setup/GUI time beyond the aggregate operation deadlines. `productRollbackVerified` stays false until all rollback checks
+pass; local authoring/contract tests do not set it. This scenario tests rollback of
+an installer failure after owned-file removal, **not** a failure after a new app has
+run data migrations. Real native execution of this optional full-product scenario
+is still required, as are signing, ICE, and genuine standard-user acceptance.
