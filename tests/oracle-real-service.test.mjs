@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { OracleReadSessions } from "../src/oracle-read-sessions.mjs";
+import { DatabaseSessions } from "../src/database-sessions.mjs";
 test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => {
   if (
     process.env.LOCALAPI_ORACLE_REAL === undefined ||
@@ -19,6 +20,9 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
     throw Error("ORACLE_REAL_GATE_CONFIG_REQUIRED");
   let stage = "config";
   const sessions = new OracleReadSessions({ enabled: true });
+  const projectSessions = new DatabaseSessions();
+  const previousPreview = process.env.LOCALAPI_ORACLE_PREVIEW;
+  process.env.LOCALAPI_ORACLE_PREVIEW = "read-only";
   try {
     const config = JSON.parse(
       await readFile(process.env.LOCALAPI_ORACLE_REAL_CONFIG, "utf8"),
@@ -71,9 +75,43 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
       query("SELECT privilege FROM sys.session_privs"),
       /ORACLE_SESSION_UNAVAILABLE/,
     );
+    stage = "workbench-session";
+    const relation = "workbench_gate.workbench_oracle_gate";
+    const grant = {
+      ...config.connection,
+      type: "oracle",
+      name: "TLS fixture",
+      relations: [relation],
+    };
+    const project = "real-disposable";
+    const actualQuery = (connectionId) =>
+      projectSessions.query(project, {
+        connectionId,
+        sql: "SELECT exact_amount FROM workbench_gate.workbench_oracle_gate WHERE id=:p0",
+        parameters: [1],
+      });
+    const registered = projectSessions.register(project, grant);
+    assert.deepEqual((await actualQuery(registered.id)).rows, [
+      { EXACT_AMOUNT: "9007199254740993.123456789012345678" },
+    ]);
+    projectSessions.revoke(project, registered.id);
+    await assert.rejects(actualQuery(registered.id));
+    stage = "wrong-dn";
+    const mismatched = projectSessions.register(project, {
+      ...grant,
+      serverDN: "CN=wrong-name.invalid",
+    });
+    await assert.rejects(actualQuery(mismatched.id));
+    console.log(
+      "ORACLE_REAL_READ_GATE_PASS verified-TCPS/exact-NUMBER/project-grant/revocation/DN-rejection",
+    );
   } catch {
     throw Error(`ORACLE_REAL_GATE_NO_ACCEPTANCE:${stage}`);
   } finally {
     sessions.close();
+    projectSessions.close();
+    if (previousPreview === undefined)
+      delete process.env.LOCALAPI_ORACLE_PREVIEW;
+    else process.env.LOCALAPI_ORACLE_PREVIEW = previousPreview;
   }
 });

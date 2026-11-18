@@ -9,12 +9,13 @@ import path from "node:path";
 import { _electron as electron } from "playwright";
 import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
 import { desktopJourneyOptions } from "./helpers/desktop-journey-options.mjs";
+import { recordReleaseProjects } from "./helpers/release-profile-receipt.mjs";
 import { exerciseRestartJourney } from "./helpers/restart-journey-ui.mjs";
 import {
   assertCleanDesktopExit,
   assertCrashDesktopExit,
 } from "./helpers/desktop-restart-receipt.mjs";
-const { crash, downloaded, executable } = desktopJourneyOptions(
+const { crash, downloaded, executable, profileReceipt } = desktopJourneyOptions(
   process.argv.slice(2),
 );
 const root = await mkdtemp(path.join(tmpdir(), "packaged-restart-journey-"));
@@ -260,12 +261,15 @@ try {
   }
   if (!failures.length) {
     try {
-      await rm(root, {
-        recursive: true,
-        force: true,
-        maxRetries: 5,
-        retryDelay: 100,
-      });
+      if (!failed && profileReceipt)
+        await recordReleaseProjects(root, profileReceipt);
+      else
+        await rm(root, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
     } catch {
       failures.push(Error("Desktop root cleanup failed"));
     }

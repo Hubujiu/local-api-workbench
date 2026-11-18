@@ -6143,7 +6143,7 @@ function updateDatabaseFields() {
       : "执行只读查询";
   show("#db-params", !["redis", "mongodb"].includes(type));
   show("#db-auth-source", type === "mongodb");
-  show("#db-ca", !["sqlite", "oracle"].includes(type) && $("#db-tls").checked);
+  show("#db-ca", type !== "sqlite" && $("#db-tls").checked);
   show("#db-name", !["sqlite", "dameng"].includes(type));
   show("#db-server-dn", type === "oracle");
   show("#db-relations", type === "oracle" || type === "dameng");

@@ -1,4 +1,5 @@
 import { types } from "node:util";
+import { databaseCertificates } from "./database-ca.mjs";
 const fail = () => {
   throw Error("ORACLE_READ_INPUT_INVALID");
 };
@@ -42,6 +43,7 @@ export function compileOracleRead(input) {
     "database",
     "ssl",
     "serverDN",
+    "ca",
   ]);
   if (
     !/^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$/.test(text(c.host, 253)) ||
@@ -124,6 +126,7 @@ export function compileOracleRead(input) {
   }
   return {
     relation: `${m[2].toUpperCase()}.${m[3].toUpperCase()}`,
+    certificates: databaseCertificates(c.ca, "ORACLE_READ_INPUT_INVALID"),
     config: {
       user: c.user,
       password: c.password,

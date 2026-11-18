@@ -2,13 +2,17 @@ import { compileOracleRead } from "./oracle-read-contract.mjs";
 import { databaseRows } from "./database-values.mjs";
 export async function executeOracleRead(
   input,
-  { driver, signal, onClosing = () => {} } = {},
+  { driver, signal, onClosing = () => {}, setTrustedCertificates } = {},
 ) {
   const cancelled = () => {
     if (signal?.aborted) throw Error("ORACLE_READ_CANCELLED");
   };
   cancelled();
   const plan = compileOracleRead(input);
+  if (plan.certificates.length) {
+    if (!setTrustedCertificates) throw Error("ORACLE_ISOLATED_TRUST_REQUIRED");
+    setTrustedCertificates(plan.certificates);
+  }
   driver ??= (await import("oracledb")).default;
   if (driver.thin !== true) throw Error("ORACLE_THIN_REQUIRED");
   let connection,

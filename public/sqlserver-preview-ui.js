@@ -62,7 +62,7 @@ export function readDatabasePreviewConnection(
     ...(type !== "dameng" && { database: read("#db-name").value }),
     ssl: true,
     ...(port === undefined ? {} : { port }),
-    ...(type !== "oracle" && ca !== "" && { ca }),
+    ...(ca !== "" && { ca }),
     ...(type === "oracle" && { serverDN: read("#db-server-dn").value }),
     ...(type !== "sqlserver" && {
       relations: read("#db-relations")

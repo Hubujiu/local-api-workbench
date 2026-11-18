@@ -163,7 +163,9 @@ jobs:
           retention-days: 3
   native-standard-user:
     needs: [build-product, author-pair]
-    runs-on: windows-latest
+    # Hosted Windows Server disallows unmanaged MSI installs for ordinary users
+    # (DisableMSI=1). The client image runs the same x64 media with Windows 11 emulation.
+    runs-on: windows-11-arm
     timeout-minutes: ${{ needs.author-pair.outputs.rollback_enabled == 'true' && 55 || 40 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

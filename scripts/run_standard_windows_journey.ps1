@@ -29,7 +29,7 @@ if ($Child) {
   $env:LOCALAPPDATA = $resolvedLocal.Trim()
   $env:TEMP = $Evidence
   $env:TMP = $Evidence
-  $context = @{ standardUserAcceptance=$false; isAdministrator=$false; accountSid=$identity.User.Value; userProfile=$env:USERPROFILE; localAppData=$env:LOCALAPPDATA; os=[Environment]::OSVersion.VersionString; node=(& $Node -v) }
+  $context = @{ standardUserAcceptance=$false; isAdministrator=$false; accountSid=$identity.User.Value; userProfile=$env:USERPROFILE; localAppData=$env:LOCALAPPDATA; os=[Environment]::OSVersion.VersionString; architecture=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString(); packageArchitecture='x64'; node=(& $Node -v) }
   $record = Join-Path $Evidence 'standard-context.json'
   $context | ConvertTo-Json | Set-Content -LiteralPath $record
   $arguments = @('tests/desktop-installed-product-journey.mjs','--plan',$Plan,'--expected-plan-sha256',$PlanSha,'--execute-in-disposable-windows')

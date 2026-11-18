@@ -116,7 +116,6 @@ export function bindMCPDatabase(
     find("#mcp-db-server-dn").hidden = type !== "oracle";
     for (const [name, visible] of [
       ["authSource", type === "mongodb"],
-      ["ca", type !== "oracle"],
       ["database", type !== "dameng"],
       ["ssh", ["postgres", "mysql", "redis"].includes(type)],
     ]) {

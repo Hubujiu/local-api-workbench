@@ -194,6 +194,7 @@ jobs:
             gh release download $previous.tag_name --pattern $name --dir media
             if ($LASTEXITCODE -or (Get-FileHash "media/$name").Hash -ne $asset[0].digest.Substring(7)) { throw 'Previous release download failed integrity check' }
             $opts.PreviousMedia = (Resolve-Path "media/$name").Path
+            $opts.PreviousVersion = $v
           }
           ./scripts/accept_windows_release.ps1 -Media "media/LocalAPI-$env:VERSION-windows-x64.msi" -ExpectedSha $env:DIGEST -ManifestSha $env:MANIFEST @opts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -231,8 +232,14 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
           mapfile -t receipts < <(find acceptance -type f -name release-acceptance.json)
           test "${#receipts[@]}" -eq 1
-          jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" '.head==$head and .standardUser==true and (.sha256|ascii_downcase)==$sha and (.manifestSha256|ascii_downcase)==$manifest' "${receipts[0]}"
-          jq --arg ci "$CI_RUN" --arg journey "$JOURNEY_RUN" --arg run "$GITHUB_RUN_ID" --arg version "$VERSION" +            '{head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded} + {version:$version,ciRun:$ci,journeyRun:$journey,releaseRun:$run}' "${receipts[0]}" > media/verification.json
+          jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" '
+            .head==$head and .standardUser==true and .projectFilesPreserved==true and
+            .registrationVerified==true and (.sha256|ascii_downcase)==$sha and (.manifestSha256|ascii_downcase)==$manifest
+          ' "${receipts[0]}"
+          jq --arg ci "$CI_RUN" --arg journey "$JOURNEY_RUN" --arg run "$GITHUB_RUN_ID" --arg version "$VERSION" '
+            {head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded,projectFilesPreserved,registrationVerified} +
+            {version:$version,ciRun:$ci,journeyRun:$journey,releaseRun:$run}
+          ' "${receipts[0]}" > media/verification.json
           cd media
           file="LocalAPI-$VERSION-windows-x64.msi"
           printf '%s  %s\n' "$DIGEST" "$file" > SHA256SUMS
@@ -243,7 +250,9 @@ jobs:
           drafts=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100")
           existing=$(jq -c --arg tag "v$VERSION" '[.[][] | select(.tag_name==$tag)]' <<< "$drafts")
           if [[ "$existing" != '[]' ]]; then
-            jq -e --arg head "$GITHUB_SHA" --arg file "$file" --arg sha "sha256:$DIGEST" +              'length==1 and .[0].draft and .[0].target_commitish==$head and any(.[0].assets[]; .name==$file and .digest==$sha)' <<< "$existing"
+            jq -e --arg head "$GITHUB_SHA" --arg file "$file" --arg sha "sha256:$DIGEST" '
+              length==1 and .[0].draft and .[0].target_commitish==$head and any(.[0].assets[]; .name==$file and .digest==$sha)
+            ' <<< "$existing"
             test "$(jq '.[0].assets | length' <<< "$existing")" -eq 3
             for receipt in verification.json SHA256SUMS; do
               expected="sha256:$(sha256sum "$receipt" | cut -d" " -f1)"

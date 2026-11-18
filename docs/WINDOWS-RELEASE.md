@@ -6,4 +6,4 @@
 
 签名机使用标签 `workbench-signing` 和环境 `windows-signing`，Windows SDK 的 SignTool 从当前用户证书存储使用授权的证书。设置仓库变量 `WORKBENCH_PUBLISHER_THUMBPRINT` 与 `WORKBENCH_TIMESTAMP_URL`。标准用户验收机使用标签 `workbench-disposable-standard-user`、环境 `windows-acceptance` 和机器变量 `LOCALAPI_DISPOSABLE_RELEASE_VM=1`，在启用正常 Windows 信任策略的全新一次性系统中运行。两个专用 runner 只接受受保护的发布工作流。交互信任提示按[安装验收协议](INSTALLER-RELEASE-ACCEPTANCE.md)记录。
 
-正式介质在标准账号安装后逐文件核对，再运行已安装程序的真实桌面重启旅程。已有公开 MSI 时先核对上一版签名和摘要，再用新版升级。卸载、重装和最终卸载都检查安装目录与快捷方式。所有步骤成功后，`windows-release` 环境允许生成附带最终 MSI 和 SHA256SUMS 的草稿，由维护者决定公开时间。当前公开版本见 [GitHub Releases](https://github.com/Hubujiu/local-api-workbench/releases)。
+正式介质在标准账号安装后逐文件核对，再运行已安装程序的真实桌面重启旅程。已有公开 MSI 时先核对上一版签名、摘要、产品系列和版本，在上一版保存测试项目与执行历史后升级。每次升级、卸载与重装前后逐文件核对已保存项目，并通过 Windows Installer 的当前用户注册信息确认新旧版本的安装状态。最终卸载还检查安装目录与开始菜单入口。所有步骤成功后，`windows-release` 环境允许生成附带最终 MSI、SHA256SUMS 和 verification.json 的草稿，由维护者决定公开时间。当前公开版本见 [GitHub Releases](https://github.com/Hubujiu/local-api-workbench/releases)。
