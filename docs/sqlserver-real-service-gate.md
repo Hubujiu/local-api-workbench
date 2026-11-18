@@ -56,6 +56,7 @@ LOCALAPI_SQLSERVER_REAL=1 LOCALAPI_SQLSERVER_REAL_CONFIG=/absolute/private/gate.
 门禁先以真实连接核对 SELECT 权限及已列举的高权限/表写权限为零，再执行：
 
 - READ_ONLY：真实内部编译→Tedious→查询，匹配固定列与合成行；另验证原隔离进程准备入口返回一致结果。
+- 精确 decimal 参数：通过子进程路径匹配固定的 `decimal(38,18)` 合成值，并确认最后一位相邻值不匹配。旧 fixture 需要由操作员在已批准的隔离环境重新准备；测试不会迁移现有表。
 - READ_WRITE：真实服务必须返回 READ_WRITE。包裹真实 factory 的只观察记录器确认仅调用一次导出的
   `SQLSERVER_READONLY_PROBE`，不调用提交的 SELECT，且不发布结果、无重连。
 

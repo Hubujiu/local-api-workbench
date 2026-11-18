@@ -129,6 +129,21 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
         parameters: [1],
       }),
     );
+    stage = "exact-decimal-process";
+    const decimalQuery =
+      "SELECT id, payload FROM dbo.workbench_sqlserver_gate WHERE exact_amount=@p0";
+    for (const [value, match] of [
+      ["9007199254740993.123456789012345678", true],
+      ["9007199254740993.123456789012345679", false],
+    ]) {
+      const result = await runSQLServerPreparationProcess({
+        connection: config.readOnly,
+        sql: decimalQuery,
+        parameters: [{ type: "decimal", value, precision: 38, scale: 18 }],
+      });
+      if (match) exactResult(result);
+      else requireGate(result.rows.length === 0 && result.truncated === false);
+    }
     stage = "read-write";
     const negative = await dispatch(config.readWrite);
     requireGate(

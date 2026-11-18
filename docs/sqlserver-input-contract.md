@@ -23,7 +23,7 @@ parsing, instance-name resolution or alternate target interpretation is added.
 Precise host/driver semantics still need real-wire validation before activation.
 
 Parameters retain the existing null/Unicode/boolean/int32/exact int64 subset and
-all compiler limits. No generic database parameter converter is applied. The
+add the explicit exact decimal predicate input described below, retaining compiler limits. No generic database parameter converter is applied. The
 compiler snapshots before awaiting; connection configuration is copied. Errors
 are fixed text, with no input, credential, cause or cancellation-reason echo.
 Pre-aborted calls do not inspect inputs; cancellation during compilation discards
@@ -50,3 +50,29 @@ There is no execution token, transport or grant to revoke here.
 An "experimental/not live-tested" label alone is not a safety control and does not
 justify opening public execution before the TLS/target/read-only prerequisites.
 No EULA or restricted service is needed for the current fake/compiler tests.
+
+## Exact decimal predicate parameters
+
+The internal compiler now accepts `{ "type": "decimal", "value": "9007199254740993.123456789012345678", "precision": 38, "scale": 18 }`.
+Precision is an integer from 1 to 38; scale is an integer from 0 to precision.
+Values must be canonical signed decimal strings, without exponent, whitespace,
+leading plus or redundant leading zeros. Values requiring rounding or overflow
+reject before opening a connection. Fractional digits are not silently removed,
+even if the extra digits are zero.
+
+The value stays an NVarChar binding through Tedious. Only the compiler emits
+`CONVERT(decimal(p,s), @pN)` with validated integer precision/scale. It never
+interpolates the value into SQL or uses the driver's Number-based Decimal path.
+Repeated references use the same conversion and binding. Connection isolation,
+cancellation, READ_ONLY probe, budgets and public-provider gate are unchanged.
+Decimal result columns and temporal values remain rejected pending exact result
+projection work. This is not full SQL Server support or real-service acceptance.
+
+The real-service fixture now includes `exact_amount decimal(38,18)` and checks
+both the exact 34-digit value and a one-unit-in-the-last-place nonmatch through
+the child-process execution path. Existing fixtures without that column must be
+recreated by the operator in an approved disposable instance; the test never
+changes them. A skipped real-service gate is still no acceptance evidence.
+
+References: [Microsoft decimal precision and rounding](https://learn.microsoft.com/en-us/sql/t-sql/data-types/decimal-and-numeric-transact-sql),
+[Tedious datatype representations](https://tediousjs.github.io/tedious/api-datatypes.html).

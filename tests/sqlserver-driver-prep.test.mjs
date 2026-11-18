@@ -433,3 +433,19 @@ test("prep binds only compiler-produced null, Unicode, bit, int32 and exact int6
     ["p4", TYPES.BigInt, "-9223372036854775808"],
   ]);
 });
+
+test("exact decimal reaches Tedious as NVarChar, never Decimal Number", async () => {
+  const f = fixture();
+  const value = "9007199254740993.123456789012345678";
+  await runSQLServerReadPreparation(
+    {
+      ...input,
+      sql: "SELECT id FROM dbo.items WHERE amount=@p0",
+      parameters: [{ type: "decimal", value, precision: 38, scale: 18 }],
+    },
+    { factory: f.factory },
+  );
+  assert.match(f.requests[1].sql, /CONVERT\(decimal\(38,18\), @p0\)/);
+  assert.deepEqual(f.requests[1].parameters, [["p0", TYPES.NVarChar, value]]);
+  assert.equal(f.connections.length, 1);
+});

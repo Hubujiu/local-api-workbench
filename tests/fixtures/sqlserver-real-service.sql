@@ -6,7 +6,8 @@ IF OBJECT_ID('dbo.workbench_sqlserver_gate') IS NOT NULL
   THROW 51001, 'Fixture object already exists; inspect instead of overwriting', 1;
 CREATE TABLE dbo.workbench_sqlserver_gate (
   id int NOT NULL PRIMARY KEY,
-  payload nvarchar(64) NOT NULL
+  payload nvarchar(64) NOT NULL,
+  exact_amount decimal(38,18) NOT NULL
 );
-INSERT INTO dbo.workbench_sqlserver_gate(id, payload)
-VALUES (1, N'workbench-sqlserver-real-gate');
+INSERT INTO dbo.workbench_sqlserver_gate(id, payload, exact_amount)
+VALUES (1, N'workbench-sqlserver-real-gate', CONVERT(decimal(38,18), N'9007199254740993.123456789012345678'));

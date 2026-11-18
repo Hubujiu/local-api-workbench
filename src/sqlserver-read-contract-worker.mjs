@@ -148,7 +148,11 @@ function compileSQLServerRead(sql, parameters) {
     const i = Number(r.column.slice(2));
     if (i >= parameters.length) fail("missing parameter");
     used.add(i);
-    return `${lhs} ${n.operator} @p${i}`;
+    const p = parameters[i];
+    const rhs = p.decimal
+      ? `CONVERT(decimal(${p.decimal.precision},${p.decimal.scale}), @p${i})`
+      : `@p${i}`;
+    return `${lhs} ${n.operator} ${rhs}`;
   };
   const predicate = ast.where == null ? "" : ` WHERE ${where(ast.where)}`;
   if (used.size !== parameters.length) fail("unused parameters");
@@ -168,7 +172,7 @@ function compileSQLServerRead(sql, parameters) {
   }
   return {
     sql: `SELECT TOP (1001) ${columns.join(", ")} FROM ${from}${predicate}${order}`,
-    parameters,
+    parameters: parameters.map(({ decimal, ...binding }) => binding),
     requiredDatabaseUpdateability: "READ_ONLY",
     schema: table.db,
     table: table.table,
